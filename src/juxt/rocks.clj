@@ -10,7 +10,6 @@
   (.getBytes v java.nio.charset.StandardCharsets/UTF_8))
 
 (defn bytes-> [b]
-  ;;(nippy/thaw b)
   (String. b java.nio.charset.StandardCharsets/UTF_8))
 
 (defn- make-key [k ts]
@@ -36,14 +35,6 @@
   ([db k v ts]
    (.put db (make-key k ts) (->bytes v))))
 
-(defn rocks-iterator->seq [i]
-  (lazy-seq
-   (when (.isValid i)
-     (let [k (.key i)
-           v (.value i)]
-       (.next i)
-       (cons [(bytes-> k) (bytes-> v)] (rocks-iterator->seq i))))))
-
 (defn -get-at
   ([c k] (-get-at c k (java.util.Date.)))
   ([c k ts]
@@ -55,6 +46,14 @@
        (finally
          (.close i))))))
 
+(defn rocks-iterator->seq [i]
+  (lazy-seq
+   (when (.isValid i)
+     (let [k (.key i)
+           v (.value i)]
+       (.next i)
+       (cons [(bytes-> k) (bytes-> v)] (rocks-iterator->seq i))))))
+
 (comment
   (defn print-all []
     (let [i (.newIterator c)]
@@ -64,21 +63,3 @@
           (println v))
         (finally
           (.close i))))))
-
-(comment
-  (do
-    (def c (open-db "comment"))
-    (-put c "Foo" "Bar4")
-    (-put c "Foo" "Bar5")
-    (-put c "Foo" "Bar6")
-    (-put c "Tar" "Tar4")
-    (-put c "Tar" "Tar5")
-    (-put c "Tar" "Tar6")
-    (-put c "Tar" "Tar7")
-    (-put c "Tar" "Tar8")
-    (-get-at c "Foo")
-    (-put c "Foo" "Bar7")
-    (-put c "Foo" "Bar8")
-    (-get-at c "Foo")
-    (-get-at c "Tar"))
-  (.close c))
