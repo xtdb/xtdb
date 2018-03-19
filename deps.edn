@@ -1,0 +1,30 @@
+{:paths ["src" "resources"]
+ :deps
+ {com.taoensso/nippy {:mvn/version "2.13.0"}
+  org.rocksdb/rocksdbjni {:mvn/version "5.11.3"}
+
+  reloaded.repl {:mvn/version "0.2.4"}
+  org.clojure/clojure {:mvn/version "1.9.0-alpha17"}}
+
+ :aliases
+ {:dev
+  {:extra-paths ["dev" "test"]
+   :extra-deps
+   {integrant/repl {:mvn/version "0.3.1"}
+    cider/cider-nrepl {:mvn/version "0.16.0"}
+    refactor-nrepl {:mvn/version "2.3.1"}
+    org.clojure/tools.nrepl {:mvn/version "0.2.12"}}}
+
+  :build {:extra-deps
+          {io.dominic/krei.alpha {:git/url "https://github.com/SevereOverfl0w/krei.alpha.git"
+                                  :sha "a18a13e83f81fde9eb437ec08c0426e90f0a8161"}}}
+
+  :test {:extra-paths ["test"]
+         :extra-deps
+         {com.cognitect/test-runner
+          {:git/url "https://github.com/cognitect-labs/test-runner.git"
+           :sha "5fb4fc46ad0bf2e0ce45eba5b9117a2e89166479"}}
+         :main-opts ["-m" "cognitect.test-runner"]}
+
+  :dev/rebel {:extra-deps {com.bhauman/rebel-readline {:mvn/version "0.1.1"}}
+              :main-opts ["-m" "rebel-readline.main"]}}}
