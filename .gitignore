@@ -1,2 +1,5 @@
 notes.md
 .cpcache
+/.nrepl-port
+/.lein-repl-history
+target
