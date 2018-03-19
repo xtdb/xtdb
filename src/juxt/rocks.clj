@@ -38,7 +38,6 @@
        (.next i)
        (cons [(bytes-> k) (bytes-> v)] (rocks-iterator->seq i))))))
 
-;; Some prefix thing needed?
 (defn -get-at
   ([c k] (-get-at c k (java.util.Date.)))
   ([c k ts]
@@ -71,7 +70,6 @@
     (-put c "Tar" "Tar6")
     (-put c "Tar" "Tar7")
     (-put c "Tar" "Tar8")
-    (-get c "Foo")
     (-get-at c "Foo")
     (-put c "Foo" "Bar7")
     (-put c "Foo" "Bar8")
