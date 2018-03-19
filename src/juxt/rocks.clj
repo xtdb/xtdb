@@ -17,12 +17,18 @@
   (let [a-id (schema k)]
     (byte-array (mapcat seq [(.toByteArray (biginteger a-id)) (.toByteArray (biginteger (.getTime ts)))]))))
 
+(defn- db-path [db-name]
+  (str "/tmp/" (name db-name) ".db"))
+
 (defn open-db [db-name]
   ;; Open database
   (RocksDB/loadLibrary)
   (let [opts (doto (Options.)
                (.setCreateIfMissing true))]
-    (RocksDB/open opts (str "/tmp/" (name db-name) ".db"))))
+    (RocksDB/open opts (db-path db-name))))
+
+(defn destroy-db [db-name]
+  (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))
 
 (defn -put
   ([db k v]
