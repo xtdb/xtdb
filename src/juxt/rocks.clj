@@ -45,8 +45,8 @@
          k (make-key k ts)]
      (try
        (.seekForPrev i k)
-       (when (and (.isValid i) (= (biginteger (byte-array (take 8 k)))
-                                  (biginteger (byte-array (take 8 (.key i))))))
+       (when (and (.isValid i) (= (take 8 k)
+                                  (take 8 (.key i))))
          (bytes-> (.value i)))
        (finally
          (.close i))))))
