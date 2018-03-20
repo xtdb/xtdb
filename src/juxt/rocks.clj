@@ -14,8 +14,10 @@
   (String. b java.nio.charset.StandardCharsets/UTF_8))
 
 (defn- make-key [k ts]
-  (let [a-id (schema k)]
-    (byte-array (mapcat seq [(.toByteArray (biginteger a-id)) (.toByteArray (biginteger (.getTime ts)))]))))
+  (-> (java.nio.ByteBuffer/allocate 12)
+      (.putInt (schema k))
+      (.putLong (.getTime ts))
+      (.array)))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
@@ -39,10 +41,12 @@
 (defn -get-at
   ([c k] (-get-at c k (java.util.Date.)))
   ([c k ts]
-   (let [i (.newIterator c)]
+   (let [i (.newIterator c)
+         k (make-key k ts)]
      (try
-       (.seekForPrev i (make-key k ts))
-       (when (.isValid i)
+       (.seekForPrev i k)
+       (when (and (.isValid i) (= (biginteger (byte-array (take 8 k)))
+                                  (biginteger (byte-array (take 8 (.key i))))))
          (bytes-> (.value i)))
        (finally
          (.close i))))))
