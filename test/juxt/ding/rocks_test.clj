@@ -34,3 +34,8 @@
   (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 2))
   (juxt.rocks/-put *rocks-db* :foo "Bar4" (java.util.Date. 1 1 3))
   (t/is (not (juxt.rocks/-get-at *rocks-db* :foo (java.util.Date. 1 1 0)))))
+
+(t/deftest test-can-get-nil-outside-of-range
+  (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 1))
+  (juxt.rocks/-put *rocks-db* :tar "Bar4" (java.util.Date. 1 1 1))
+  (t/is (not (juxt.rocks/-get-at *rocks-db* :tar (java.util.Date. 1 1 0)))))

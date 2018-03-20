@@ -3,7 +3,8 @@
   (:import [org.rocksdb RocksDB Options]))
 
 ;; The single, unconfigurable schema to rule them all..
-(def schema {:foo 1})
+(def schema {:foo 1
+             :tar 2})
 
 (defn ->bytes [v]
   ;;(nippy/freeze v)
