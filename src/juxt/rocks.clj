@@ -3,17 +3,23 @@
             [juxt.byte-utils :refer :all])
   (:import [org.rocksdb RocksDB Options]))
 
-(def key-entity-id (long->bytes 3))
+(def temp-id -1)
+
+(def key-entity-id 1)
+(def key-index-eat 2)
 
 ;; The single, unconfigurable schema to rule them all..
 (def schema {:foo 1
              :tar 2})
 
 (defn- make-key
-  ([k]
-   (make-key k (java.util.Date.)))
-  ([k ts]
-   (-> (java.nio.ByteBuffer/allocate 12)
+  "Make a key, using <index-id><entity-id><attribute-id><timestamp>"
+  ([eid k]
+   (make-key eid k (java.util.Date.)))
+  ([eid k ts]
+   (-> (java.nio.ByteBuffer/allocate 24)
+       (.putInt key-index-eat)
+       (.putLong eid)
        (.putInt (schema k))
        (.putLong (.getTime ts))
        (.array))))
@@ -32,28 +38,32 @@
 (defn destroy-db [db-name]
   (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))
 
-(defn -put
-  ([db k v]
-   (-put db k v (java.util.Date.)))
-  ([db k v ts]
-   (.put db (make-key k ts) (->bytes v))))
-
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
-    (.merge db key-entity-id (long->bytes 1))
-    (bytes->long (.get db key-entity-id))))
+    (let [key-entity-id (long->bytes key-entity-id)]
+      (.merge db key-entity-id (long->bytes 1))
+      (bytes->long (.get db key-entity-id)))))
+
+(defn -put
+  "Put an attribute/value tuple against an entity ID. If the supplied
+  entity ID is -1, then a new entity-id will be generated."
+  ([db eid k v]
+   (-put db eid k v (java.util.Date.)))
+  ([db eid k v ts]
+   (let [eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
+     (.put db (make-key eid k ts) (->bytes v)))))
 
 (defn -get-at
-  ([c k] (-get-at c k (java.util.Date.)))
-  ([c k ts]
+  ([c eid k] (-get-at c eid k (java.util.Date.)))
+  ([c eid k ts]
    (let [i (.newIterator c)
-         k (make-key k ts)]
+         k (make-key eid k ts)]
      (try
        (.seekForPrev i k)
-       (when (and (.isValid i) (= (take 8 k)
-                                  (take 8 (.key i))))
+       (when (and (.isValid i) (= (take 16 k)
+                                  (take 16 (.key i))))
          (bytes-> (.value i)))
        (finally
          (.close i))))))

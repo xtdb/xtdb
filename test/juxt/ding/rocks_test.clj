@@ -15,30 +15,32 @@
 
 (t/use-fixtures :each start-system)
 
+(def test-eid 1)
+
 (t/deftest test-can-get-at-now
-  (juxt.rocks/-put *rocks-db* :foo "Bar4")
-  (juxt.rocks/-put *rocks-db* :foo "Bar5")
-  (t/is (= "Bar5" (juxt.rocks/-get-at *rocks-db* :foo))))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar4")
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar5")
+  (t/is (= "Bar5" (juxt.rocks/-get-at *rocks-db* test-eid :foo))))
 
 (t/deftest test-can-get-at-t
-  (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 0))
-  (juxt.rocks/-put *rocks-db* :foo "Bar4" (java.util.Date. 1 1 2))
-  (juxt.rocks/-put *rocks-db* :foo "Bar5" (java.util.Date. 1 1 3))
-  (juxt.rocks/-put *rocks-db* :foo "Bar6" (java.util.Date. 1 1 4))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 0))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar4" (java.util.Date. 1 1 2))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar5" (java.util.Date. 1 1 3))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar6" (java.util.Date. 1 1 4))
 
-  (t/is (= "Bar3" (juxt.rocks/-get-at *rocks-db* :foo (java.util.Date. 1 1 1))))
-  (t/is (= "Bar4" (juxt.rocks/-get-at *rocks-db* :foo (java.util.Date. 1 1 2))))
-  (t/is (= "Bar6" (juxt.rocks/-get-at *rocks-db* :foo (java.util.Date. 1 1 5)))))
+  (t/is (= "Bar3" (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 1))))
+  (t/is (= "Bar4" (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 2))))
+  (t/is (= "Bar6" (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 5)))))
 
 (t/deftest test-can-get-nil-before-range
-  (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 2))
-  (juxt.rocks/-put *rocks-db* :foo "Bar4" (java.util.Date. 1 1 3))
-  (t/is (not (juxt.rocks/-get-at *rocks-db* :foo (java.util.Date. 1 1 0)))))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 2))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar4" (java.util.Date. 1 1 3))
+  (t/is (not (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 0)))))
 
 (t/deftest test-can-get-nil-outside-of-range
-  (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 1))
-  (juxt.rocks/-put *rocks-db* :tar "Bar4" (java.util.Date. 1 1 1))
-  (t/is (not (juxt.rocks/-get-at *rocks-db* :tar (java.util.Date. 1 1 0)))))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 1))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (java.util.Date. 1 1 1))
+  (t/is (not (juxt.rocks/-get-at *rocks-db* test-eid :tar (java.util.Date. 1 1 0)))))
 
 (t/deftest test-entity-ids
   (t/is (= 1 (juxt.rocks/next-entity-id *rocks-db*)))
