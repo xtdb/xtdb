@@ -1,6 +1,7 @@
 (ns juxt.rocks
   (:require [taoensso.nippy :as nippy]
-            [juxt.byte-utils :refer :all])
+            [juxt.byte-utils :refer :all]
+            [clojure.set])
   (:import [org.rocksdb RocksDB Options]))
 
 (def temp-id -1)
@@ -12,6 +13,8 @@
 (def schema {:foo 1
              :tar 2})
 
+(def schema-attribute-by-ids (clojure.set/map-invert schema))
+
 (defn- make-key
   "Make a key, using <index-id><entity-id><attribute-id><timestamp>"
   ([eid k]
@@ -20,8 +23,8 @@
    (-> (java.nio.ByteBuffer/allocate 24)
        (.putInt key-index-eat)
        (.putLong eid)
-       (.putInt (schema k))
-       (.putLong (.getTime ts))
+       (.putInt (or (schema k) 0))
+       (.putLong (or (and ts (.getTime ts)) 0))
        (.array))))
 
 (defn- db-path [db-name]
@@ -74,16 +77,26 @@
      (let [k (.key i)
            v (.value i)]
        (.next i)
-       (cons [(bytes-> k) (bytes-> v)] (rocks-iterator->seq i))))))
+       (cons [(get schema-attribute-by-ids (.getInt (java.nio.ByteBuffer/wrap k) 12))
+              (bytes-> v)]
+             (rocks-iterator->seq i))))))
+
+(defn entity "Return an entity" [db eid]
+  (let [i (.newIterator db)]
+    (try
+      (.seek i (make-key eid nil nil))
+      (into {} (rocks-iterator->seq i))
+      (finally
+        (.close i)))))
 
 (comment
-  (def c (open-db "sd3"))
+  (def c (open-db "repldb"))
   (.close c)
-  (defn print-all []
-    (let [i (.newIterator c)]
-      (try
-        (.seekToFirst i)
-        (doseq [v (rocks-iterator->seq i)]
-          (println v))
-        (finally
-          (.close i))))))
+  ;; Print all keys:
+  (let [i (.newIterator c)]
+    (try
+      (.seekToFirst i)
+      (doseq [v (rocks-iterator->seq i)]
+        (println v))
+      (finally
+        (.close i)))))

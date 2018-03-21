@@ -50,3 +50,15 @@
     (juxt.rocks/next-entity-id *rocks-db*))
 
   (t/is (= 1003 (juxt.rocks/next-entity-id *rocks-db*))))
+
+(t/deftest test-fetch-entity
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 2))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (java.util.Date. 1 1 2))
+
+  (t/is (= {:tar "Bar4" :foo "Bar3"}
+           (juxt.rocks/entity *rocks-db* test-eid))))
+
+;; Test TODOs:
+;; test try diff data types for the value
+;; ensure fetch-entity returns only one attribute per timestamp..
+;; fetch-entity for a given timestamp
