@@ -39,3 +39,12 @@
   (juxt.rocks/-put *rocks-db* :foo "Bar3" (java.util.Date. 1 1 1))
   (juxt.rocks/-put *rocks-db* :tar "Bar4" (java.util.Date. 1 1 1))
   (t/is (not (juxt.rocks/-get-at *rocks-db* :tar (java.util.Date. 1 1 0)))))
+
+(t/deftest test-entity-ids
+  (t/is (= 1 (juxt.rocks/next-entity-id *rocks-db*)))
+  (t/is (= 2 (juxt.rocks/next-entity-id *rocks-db*)))
+
+  (dotimes [n 1000]
+    (juxt.rocks/next-entity-id *rocks-db*))
+
+  (t/is (= 1003 (juxt.rocks/next-entity-id *rocks-db*))))

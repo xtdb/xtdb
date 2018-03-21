@@ -1,23 +1,22 @@
 (ns juxt.rocks
-  (:require [taoensso.nippy :as nippy])
+  (:require [taoensso.nippy :as nippy]
+            [juxt.byte-utils :refer :all])
   (:import [org.rocksdb RocksDB Options]))
+
+(def key-entity-id (long->bytes 3))
 
 ;; The single, unconfigurable schema to rule them all..
 (def schema {:foo 1
              :tar 2})
 
-(defn ->bytes [v]
-  ;;(nippy/freeze v)
-  (.getBytes v java.nio.charset.StandardCharsets/UTF_8))
-
-(defn bytes-> [b]
-  (String. b java.nio.charset.StandardCharsets/UTF_8))
-
-(defn- make-key [k ts]
-  (-> (java.nio.ByteBuffer/allocate 12)
-      (.putInt (schema k))
-      (.putLong (.getTime ts))
-      (.array)))
+(defn- make-key
+  ([k]
+   (make-key k (java.util.Date.)))
+  ([k ts]
+   (-> (java.nio.ByteBuffer/allocate 12)
+       (.putInt (schema k))
+       (.putLong (.getTime ts))
+       (.array))))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
@@ -26,7 +25,8 @@
   ;; Open database
   (RocksDB/loadLibrary)
   (let [opts (doto (Options.)
-               (.setCreateIfMissing true))]
+               (.setCreateIfMissing true)
+               (.setMergeOperatorName "uint64add"))]
     (RocksDB/open opts (db-path db-name))))
 
 (defn destroy-db [db-name]
@@ -37,6 +37,13 @@
    (-put db k v (java.util.Date.)))
   ([db k v ts]
    (.put db (make-key k ts) (->bytes v))))
+
+(def o (Object.))
+
+(defn next-entity-id "Return the next entity ID" [db]
+  (locking o
+    (.merge db key-entity-id (long->bytes 1))
+    (bytes->long (.get db key-entity-id))))
 
 (defn -get-at
   ([c k] (-get-at c k (java.util.Date.)))
@@ -60,6 +67,8 @@
        (cons [(bytes-> k) (bytes-> v)] (rocks-iterator->seq i))))))
 
 (comment
+  (def c (open-db "sd3"))
+  (.close c)
   (defn print-all []
     (let [i (.newIterator c)]
       (try
