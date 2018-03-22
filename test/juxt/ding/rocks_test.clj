@@ -88,3 +88,8 @@
     (catch IllegalArgumentException e
       (t/is (= "Unrecognised schema attribute: :unknown-attribute"
                (.getMessage e))))))
+
+(t/deftest test-transact-schema-attribute
+  (juxt.rocks/transact-schema! *rocks-db* {:attr/ident :new-ident})
+  (juxt.rocks/-put *rocks-db* test-eid :new-ident "foo1")
+  (t/is (= "foo1" (juxt.rocks/-get-at *rocks-db* test-eid :new-ident))))

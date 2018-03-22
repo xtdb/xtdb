@@ -8,6 +8,7 @@
 
 (def key-entity-id 1)
 (def key-index-eat 2)
+(def key-index-attr 3)
 
 ;; The single, unconfigurable schema to rule them all..
 (def schema {:foo 1
@@ -109,6 +110,19 @@
         (println v))
       (finally
         (.close i)))))
+
+(defn- ident->hash [ident]
+  (hash (str (namespace ident) (name ident))))
+
+(defn transact-schema! "This might be merged with a future fn to
+  transact any type of entity."
+  [db {:keys [:attr/ident]}]
+  (let [attr-id (next-entity-id db)
+        attr->-id-key (-> (java.nio.ByteBuffer/allocate 8)
+                          (.putInt (int key-index-attr))
+                          (.putInt (ident->hash ident))
+                          (.array))]
+    (.put db attr->-id-key (long->bytes attr-id))))
 
 (comment
   (def c (open-db "repldb"))
