@@ -5,15 +5,9 @@
   (:import [org.rocksdb RocksDB Options]))
 
 (def temp-id -1)
-
 (def key-entity-id 1)
 (def key-index-eat 2)
 (def key-index-attr 3)
-
-;; The single, unconfigurable schema to rule them all..
-(def schema {:foo 1
-             :tar 2})
-
 (def schema-attribute-by-ids (clojure.set/map-invert schema))
 
 (defn- make-key
@@ -24,7 +18,7 @@
    (-> (java.nio.ByteBuffer/allocate 24)
        (.putInt key-index-eat)
        (.putLong eid)
-       (.putInt (or (schema k) 0))
+       (.putInt (or (schema k) 0)) ;; TODO not sure why this is nil?
        (.putLong (or (and ts (.getTime ts)) 0))
        (.array))))
 
@@ -56,22 +50,49 @@
       (.merge db key-entity-id (long->bytes 1))
       (bytes->long (.get db key-entity-id)))))
 
+(defn- ident->hash [ident]
+  (hash (str (namespace ident) (name ident))))
+
+(defn- attr->key [ident]
+  (-> (java.nio.ByteBuffer/allocate 8)
+      (.putInt (int key-index-attr))
+      (.putInt (ident->hash ident))
+      (.array)))
+
+(defn transact-schema! "This might be merged with a future fn to
+  transact any type of entity."
+  [db {:keys [:attr/ident]}]
+  (.put db (attr->key ident) (long->bytes (next-entity-id db))))
+
+(defn- attr-schema [db ident]
+  (let [i (.newIterator db)
+        k (attr->key ident)]
+    (try
+      (.seek i k)
+      (if (and (.isValid i)
+               ;; TODO understand and simplify
+               (= (bytes->int (byte-array (drop 4 (.key i)))) (bytes->int (byte-array (drop 4 k)))))
+        (bytes->long (.value i))
+        (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident))))
+      (finally
+        (.close i)))))
+
 (defn -put
   "Put an attribute/value tuple against an entity ID. If the supplied
   entity ID is -1, then a new entity-id will be generated."
   ([db eid k v]
    (-put db eid k v (java.util.Date.)))
   ([db eid k v ts]
-   (when (not (schema k))
-     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " k))))
-   (let [eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
-     (.put db (make-key eid k ts) (->bytes v)))))
+   (let [aid (attr-schema db k)
+         eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
+     (.put db (make-key eid aid ts) (->bytes v)))))
 
 (defn -get-at
-  ([c eid k] (-get-at c eid k (java.util.Date.)))
-  ([c eid k ts]
-   (let [i (.newIterator c)
-         k (make-key eid k ts)]
+  ([db eid k] (-get-at db eid k (java.util.Date.)))
+  ([db eid k ts]
+   (let [aid (attr-schema db k)
+         i (.newIterator db)
+         k (make-key eid aid ts)]
      (try
        (.seekForPrev i k)
        (when (and (.isValid i) (= (take 16 k)
@@ -110,19 +131,6 @@
         (println v))
       (finally
         (.close i)))))
-
-(defn- ident->hash [ident]
-  (hash (str (namespace ident) (name ident))))
-
-(defn transact-schema! "This might be merged with a future fn to
-  transact any type of entity."
-  [db {:keys [:attr/ident]}]
-  (let [attr-id (next-entity-id db)
-        attr->-id-key (-> (java.nio.ByteBuffer/allocate 8)
-                          (.putInt (int key-index-attr))
-                          (.putInt (ident->hash ident))
-                          (.array))]
-    (.put db attr->-id-key (long->bytes attr-id))))
 
 (comment
   (def c (open-db "repldb"))

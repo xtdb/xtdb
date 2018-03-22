@@ -18,3 +18,9 @@
                       (.order (java.nio.ByteOrder/nativeOrder)))
               (.put data 0 8)
               (.flip))))
+
+(defn bytes->int [data]
+  (.getInt (doto (-> (java.nio.ByteBuffer/allocate 4)
+                     (.order (java.nio.ByteOrder/nativeOrder)))
+             (.put data 0 4)
+             (.flip))))
