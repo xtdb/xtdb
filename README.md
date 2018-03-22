@@ -1,6 +1,6 @@
 DING - Data Ingestion for Graphs
 
-A mutable Clojure graph database currently sitting on top of RocksDB. Inspired by Datomic.
+An experimental mutable Clojure graph database currently sitting on top of RocksDB. Inspired by Datomic.
 
 ## References
 
