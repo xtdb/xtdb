@@ -61,6 +61,8 @@
   ([db eid k v]
    (-put db eid k v (java.util.Date.)))
   ([db eid k v ts]
+   (when (not (schema k))
+     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " k))))
    (let [eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
      (.put db (make-key eid k ts) (->bytes v)))))
 

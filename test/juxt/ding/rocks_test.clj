@@ -80,3 +80,11 @@
   (juxt.rocks/-put *rocks-db* test-eid :tar "tar2" (c/to-date (time/date-time 1986 10 23)))
   (t/is (= {:tar "tar2" :foo "foo2"}
            (juxt.rocks/entity *rocks-db* test-eid))))
+
+(t/deftest test-invalid-attribute-exception
+  (try
+    (juxt.rocks/-put *rocks-db* test-eid :unknown-attribute "foo1" (c/to-date (time/date-time 1986 10 22)))
+    (assert false "Exception expected")
+    (catch IllegalArgumentException e
+      (t/is (= "Unrecognised schema attribute: :unknown-attribute"
+               (.getMessage e))))))
