@@ -1,6 +1,9 @@
 (ns juxt.rocks-test
   (:require [clojure.test :as t]
-            [juxt.rocks]))
+            [juxt.rocks]
+            [juxt.byte-utils :refer :all]
+            [clj-time.core :as time]
+            [clj-time.coerce :as c]))
 
 (def ^:dynamic *rocks-db*)
 
@@ -19,11 +22,23 @@
 
 (t/deftest test-can-get-at-now
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar4")
+  (t/is (= "Bar4" (juxt.rocks/-get-at *rocks-db* test-eid :foo)))
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar5")
+  (t/is (= "Bar5" (juxt.rocks/-get-at *rocks-db* test-eid :foo)))
+
+  ;; Insert into past
+  (juxt.rocks/-put *rocks-db* test-eid :foo "foo1" (java.util.Date. 2000 1 2))
   (t/is (= "Bar5" (juxt.rocks/-get-at *rocks-db* test-eid :foo))))
+
+(t/deftest test-can-get-at-now-for-old-entry
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 110 1 2))
+  (juxt.rocks/all-keys *rocks-db*)
+  (t/is (= "Bar3" (juxt.rocks/-get-at *rocks-db* test-eid :foo))))
 
 (t/deftest test-can-get-at-t
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 0))
+  (t/is (= "Bar3" (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 1))))
+
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar4" (java.util.Date. 1 1 2))
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar5" (java.util.Date. 1 1 3))
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar6" (java.util.Date. 1 1 4))
@@ -52,13 +67,16 @@
   (t/is (= 1003 (juxt.rocks/next-entity-id *rocks-db*))))
 
 (t/deftest test-fetch-entity
-  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 2))
-  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (java.util.Date. 1 1 2))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (c/to-date (time/date-time 1986 10 22)))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (c/to-date (time/date-time 1986 10 22)))
 
   (t/is (= {:tar "Bar4" :foo "Bar3"}
            (juxt.rocks/entity *rocks-db* test-eid))))
 
-;; Test TODOs:
-;; test try diff data types for the value
-;; ensure fetch-entity returns only one attribute per timestamp..
-;; fetch-entity for a given timestamp
+(t/deftest test-fetch-entity-at-t
+  (juxt.rocks/-put *rocks-db* test-eid :foo "foo1" (c/to-date (time/date-time 1986 10 22)))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "tar1" (c/to-date (time/date-time 1986 10 22)))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "foo2" (c/to-date (time/date-time 1986 10 23)))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "tar2" (c/to-date (time/date-time 1986 10 23)))
+  (t/is (= {:tar "tar2" :foo "foo2"}
+           (juxt.rocks/entity *rocks-db* test-eid))))

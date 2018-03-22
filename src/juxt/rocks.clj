@@ -27,6 +27,12 @@
        (.putLong (or (and ts (.getTime ts)) 0))
        (.array))))
 
+(defn- parse-key "Transform back the key byte-array" [k]
+  (let [key-byte-buffer (java.nio.ByteBuffer/wrap k)]
+    [(.getLong key-byte-buffer 4)
+     (get schema-attribute-by-ids (.getInt key-byte-buffer 12))
+     (java.util.Date. (.getLong key-byte-buffer 16))]))
+
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
 
@@ -76,16 +82,29 @@
    (when (.isValid i)
      (let [k (.key i)
            v (.value i)]
-       (.next i)
-       (cons [(get schema-attribute-by-ids (.getInt (java.nio.ByteBuffer/wrap k) 12))
-              (bytes-> v)]
-             (rocks-iterator->seq i))))))
+       (cons (conj (parse-key k) v)
+             (do (.next i)
+                 (rocks-iterator->seq i)))))))
 
-(defn entity "Return an entity" [db eid]
+(defn entity "Return an entity. Currently iterates through a list of
+  known schema attributes. Another approach for consideration is
+  iterate over all keys for a given entity and build up the map as we
+  go. Unclear currently what the pros/cons are."
+  ([db eid]
+   (entity db eid (java.util.Date.)))
+  ([db eid ts]
+   (into {}
+         (for [[k _] schema
+               :let [v (-get-at db eid k ts)]]
+           [k v]))))
+
+(defn all-keys [db]
   (let [i (.newIterator db)]
     (try
-      (.seek i (make-key eid nil nil))
-      (into {} (rocks-iterator->seq i))
+      (.seekToFirst i)
+      (println "Keys in the DB:")
+      (doseq [v (rocks-iterator->seq i)]
+        (println v))
       (finally
         (.close i)))))
 
@@ -93,10 +112,4 @@
   (def c (open-db "repldb"))
   (.close c)
   ;; Print all keys:
-  (let [i (.newIterator c)]
-    (try
-      (.seekToFirst i)
-      (doseq [v (rocks-iterator->seq i)]
-        (println v))
-      (finally
-        (.close i)))))
+  (all-keys db))
