@@ -8,24 +8,39 @@
 (def key-entity-id 1)
 (def key-index-eat 2)
 (def key-index-attr 3)
-(def schema-attribute-by-ids (clojure.set/map-invert schema))
+(def key-index-aid->hash 4)
 
-(defn- make-key
+(defn- ident->hash [ident]
+  (hash (str (namespace ident) (name ident))))
+
+(defn- attr->key [ident]
+  (-> (java.nio.ByteBuffer/allocate 8)
+      (.putInt (int key-index-attr))
+      (.putInt (ident->hash ident))
+      (.array)))
+
+(defn- attr-aid->key [aid]
+  (-> (java.nio.ByteBuffer/allocate 12)
+      (.putInt (int key-index-aid->hash))
+      (.putLong aid)
+      (.array)))
+
+(defn- eat->key
   "Make a key, using <index-id><entity-id><attribute-id><timestamp>"
-  ([eid k]
-   (make-key eid k (java.util.Date.)))
-  ([eid k ts]
-   (-> (java.nio.ByteBuffer/allocate 24)
+  ([eid aid]
+   (eat->key eid aid (java.util.Date.)))
+  ([eid aid ts]
+   (-> (java.nio.ByteBuffer/allocate 28)
        (.putInt key-index-eat)
        (.putLong eid)
-       (.putInt (or (schema k) 0)) ;; TODO not sure why this is nil?
+       (.putLong aid)
        (.putLong (or (and ts (.getTime ts)) 0))
        (.array))))
 
 (defn- parse-key "Transform back the key byte-array" [k]
   (let [key-byte-buffer (java.nio.ByteBuffer/wrap k)]
-    [(.getLong key-byte-buffer 4)
-     (get schema-attribute-by-ids (.getInt key-byte-buffer 12))
+    [(.getLong key-byte-buffer 4) ;; The entity ID
+     (.getLong key-byte-buffer 12) ;; The attribute ID
      (java.util.Date. (.getLong key-byte-buffer 16))]))
 
 (defn- db-path [db-name]
@@ -50,19 +65,16 @@
       (.merge db key-entity-id (long->bytes 1))
       (bytes->long (.get db key-entity-id)))))
 
-(defn- ident->hash [ident]
-  (hash (str (namespace ident) (name ident))))
-
-(defn- attr->key [ident]
-  (-> (java.nio.ByteBuffer/allocate 8)
-      (.putInt (int key-index-attr))
-      (.putInt (ident->hash ident))
-      (.array)))
-
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
   [db {:keys [:attr/ident]}]
-  (.put db (attr->key ident) (long->bytes (next-entity-id db))))
+  (let [aid (next-entity-id db)]
+    ;; to go from k -> aid
+    (.put db (attr->key ident) (long->bytes aid))
+    ;; to go from aid -> k
+    (.put db (attr-aid->key aid) (->bytes (if (namespace ident)
+                                            (str (namespace ident) "/" (name ident))
+                                            (name ident))))))
 
 (defn- attr-schema [db ident]
   (let [i (.newIterator db)
@@ -77,6 +89,18 @@
       (finally
         (.close i)))))
 
+(defn- attr-aid->schema [db aid]
+  (let [i (.newIterator db)
+        k (attr-aid->key aid)]
+    (try
+      (.seek i k)
+      (if (and (.isValid i)
+               (= (bytes->int (byte-array (drop 4 (.key i)))) (bytes->int (byte-array (drop 4 k)))))
+        (keyword (bytes-> (.value i)))
+        (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid))))
+      (finally
+        (.close i)))))
+
 (defn -put
   "Put an attribute/value tuple against an entity ID. If the supplied
   entity ID is -1, then a new entity-id will be generated."
@@ -85,49 +109,56 @@
   ([db eid k v ts]
    (let [aid (attr-schema db k)
          eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
-     (.put db (make-key eid aid ts) (->bytes v)))))
+     (.put db (eat->key eid aid ts) (->bytes v)))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
   ([db eid k ts]
    (let [aid (attr-schema db k)
          i (.newIterator db)
-         k (make-key eid aid ts)]
+         k (eat->key eid aid ts)]
      (try
        (.seekForPrev i k)
-       (when (and (.isValid i) (= (take 16 k)
-                                  (take 16 (.key i))))
+       (when (and (.isValid i) (= (take 20 k)
+                                  (take 20 (.key i))))
          (bytes-> (.value i)))
        (finally
          (.close i))))))
 
-(defn rocks-iterator->seq [i]
+(defn rocks-iterator->seq [i pred?]
   (lazy-seq
-   (when (.isValid i)
-     (let [k (.key i)
-           v (.value i)]
-       (cons (conj (parse-key k) v)
-             (do (.next i)
-                 (rocks-iterator->seq i)))))))
+   (when (and (.isValid i) (or (not pred?) (pred? i)))
+     (cons (conj [(.key i) (.value i)])
+           (do (.next i)
+               (rocks-iterator->seq i pred?))))))
 
-(defn entity "Return an entity. Currently iterates through a list of
-  known schema attributes. Another approach for consideration is
-  iterate over all keys for a given entity and build up the map as we
-  go. Unclear currently what the pros/cons are."
+(defn entity "Return an entity. Currently iterates through all keys of
+  an entity."
   ([db eid]
    (entity db eid (java.util.Date.)))
   ([db eid ts]
-   (into {}
-         (for [[k _] schema
-               :let [v (-get-at db eid k ts)]]
-           [k v]))))
+   (let [eid-key (-> (java.nio.ByteBuffer/allocate 12)
+                     (.putInt key-index-eat)
+                     (.putLong eid)
+                     (.array))]
+     (let [i (.newIterator db)]
+       (try
+         (.seek i eid-key)
+         (into {}
+               (for [[k v] (rocks-iterator->seq i (fn [i] (= (take 12 eid-key)
+                                                             (take 12 (.key i)))))
+                     :let [[eid aid _] (parse-key k)
+                           attr-k (attr-aid->schema db aid)]]
+                 [attr-k (bytes-> v)]))
+         (finally
+           (.close i)))))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]
     (try
       (.seekToFirst i)
       (println "Keys in the DB:")
-      (doseq [v (rocks-iterator->seq i)]
+      (doseq [v (rocks-iterator->seq i nil)]
         (println v))
       (finally
         (.close i)))))

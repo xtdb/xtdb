@@ -10,9 +10,9 @@
 (defn- start-system [f]
   (let [db-name :test]
     (binding [*rocks-db* (juxt.rocks/open-db db-name)]
-      (juxt.rocks/transact-schema! *rocks-db* {:attr/ident :foo})
-      (juxt.rocks/transact-schema! *rocks-db* {:attr/ident :tar})
       (try
+        (juxt.rocks/transact-schema! *rocks-db* {:attr/ident :foo})
+        (juxt.rocks/transact-schema! *rocks-db* {:attr/ident :tar})
         (f)
         (finally
           (.close *rocks-db*)
@@ -55,9 +55,9 @@
   (t/is (not (juxt.rocks/-get-at *rocks-db* test-eid :foo (java.util.Date. 1 1 0)))))
 
 (t/deftest test-can-get-nil-outside-of-range
-  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (java.util.Date. 1 1 1))
-  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (java.util.Date. 1 1 1))
-  (t/is (not (juxt.rocks/-get-at *rocks-db* test-eid :tar (java.util.Date. 1 1 0)))))
+  (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (c/to-date (time/date-time 1986 10 22)))
+  (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (c/to-date (time/date-time 1986 10 22)))
+  (t/is (not (juxt.rocks/-get-at *rocks-db* test-eid :tar (c/to-date (time/date-time 1986 10 21))))))
 
 (t/deftest test-entity-ids
   (t/is (= 3 (juxt.rocks/next-entity-id *rocks-db*)))
@@ -71,7 +71,6 @@
 (t/deftest test-fetch-entity
   (juxt.rocks/-put *rocks-db* test-eid :foo "Bar3" (c/to-date (time/date-time 1986 10 22)))
   (juxt.rocks/-put *rocks-db* test-eid :tar "Bar4" (c/to-date (time/date-time 1986 10 22)))
-
   (t/is (= {:tar "Bar4" :foo "Bar3"}
            (juxt.rocks/entity *rocks-db* test-eid))))
 
