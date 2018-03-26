@@ -68,9 +68,11 @@
 
   (t/is (= 1005 (juxt.rocks/next-entity-id db))))
 
-(t/deftest test-fetch-entity
-  (juxt.rocks/-put db [test-eid :foo "Bar3"] (c/to-date (time/date-time 1986 10 22)))
-  (juxt.rocks/-put db [test-eid :tar "Bar4"] (c/to-date (time/date-time 1986 10 22)))
+(t/deftest test-write-and-fetch-entity
+  (juxt.rocks/-put db {:juxt.rocks/id test-eid
+                       :foo "Bar3"
+                       :tar "Bar4"}
+                   (c/to-date (time/date-time 1986 10 22)))
   (t/is (= {:tar "Bar4" :foo "Bar3"}
            (juxt.rocks/entity db test-eid))))
 

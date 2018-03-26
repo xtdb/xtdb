@@ -92,10 +92,15 @@
   entity ID is -1, then a new entity-id will be generated."
   ([db tx]
    (-put db tx (java.util.Date.)))
-  ([db [eid k v] ts]
-   (let [aid (attr-schema db k)
-         eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
-     (.put db (eat->key eid aid ts) (->bytes v)))))
+  ([db tx ts]
+   (let [txs (if (map? tx)
+               (for [[k v] (dissoc tx ::id)]
+                 [(::id tx) k v])
+               [tx])]
+     (doseq [[eid k v] txs]
+       (let [aid (attr-schema db k)
+             eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
+         (.put db (eat->key eid aid ts) (->bytes v)))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
