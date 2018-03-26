@@ -43,20 +43,6 @@
      (.getLong key-byte-buffer 12) ;; The attribute ID
      (java.util.Date. (.getLong key-byte-buffer 16))]))
 
-(defn- db-path [db-name]
-  (str "/tmp/" (name db-name) ".db"))
-
-(defn open-db [db-name]
-  ;; Open database
-  (RocksDB/loadLibrary)
-  (let [opts (doto (Options.)
-               (.setCreateIfMissing true)
-               (.setMergeOperatorName "uint64add"))]
-    (RocksDB/open opts (db-path db-name))))
-
-(defn destroy-db [db-name]
-  (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))
-
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
@@ -162,6 +148,20 @@
         (println v))
       (finally
         (.close i)))))
+
+(defn- db-path [db-name]
+  (str "/tmp/" (name db-name) ".db"))
+
+(defn open-db [db-name]
+  ;; Open database
+  (RocksDB/loadLibrary)
+  (let [opts (doto (Options.)
+               (.setCreateIfMissing true)
+               (.setMergeOperatorName "uint64add"))]
+    (RocksDB/open opts (db-path db-name))))
+
+(defn destroy-db [db-name]
+  (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))
 
 (comment
   (def c (open-db "repldb"))
