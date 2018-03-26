@@ -19,3 +19,4 @@ Motivation: a database with the following characteristics:
 + https://clojure.github.io/clojure-contrib/doc/datalog.html
 + https://github.com/tonsky/datascript
 + https://en.wikipedia.org/wiki/Jena_(framework)
++ https://arxiv.org/abs/1402.2237
