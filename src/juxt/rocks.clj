@@ -90,13 +90,13 @@
 (defn -put
   "Put an attribute/value tuple against an entity ID. If the supplied
   entity ID is -1, then a new entity-id will be generated."
-  ([db tx]
-   (-put db tx (java.util.Date.)))
-  ([db tx ts]
-   (let [txs (if (map? tx)
-               (for [[k v] (dissoc tx ::id)]
-                 [(::id tx) k v])
-               [tx])]
+  ([db txs]
+   (-put db txs (java.util.Date.)))
+  ([db txs ts]
+   (let [txs (if (map? txs)
+               (for [[k v] (dissoc txs ::id)]
+                 [(::id txs) k v])
+               txs)]
      (doseq [[eid k v] txs]
        (let [aid (attr-schema db k)
              eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
