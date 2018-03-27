@@ -1,10 +1,10 @@
 (ns juxt.byte-utils)
 
-(defn ->bytes [v]
+(defn str->bytes [v]
   ;;(nippy/freeze v)
   (.getBytes v java.nio.charset.StandardCharsets/UTF_8))
 
-(defn bytes-> [b]
+(defn bytes->str [b]
   (String. b java.nio.charset.StandardCharsets/UTF_8))
 
 (defn long->bytes [l]
@@ -24,3 +24,12 @@
                      (.order (java.nio.ByteOrder/nativeOrder)))
              (.put data 0 4)
              (.flip))))
+
+(comment
+  (bytes->int (-> (java.nio.ByteBuffer/allocate 4)
+                  (.putInt 1)
+                  (.array)))
+
+  (biginteger (-> (java.nio.ByteBuffer/allocate 8)
+                  (.putLong 1)
+                  (.array))))

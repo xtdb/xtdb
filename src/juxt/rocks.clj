@@ -1,7 +1,10 @@
 (ns juxt.rocks
   (:require [taoensso.nippy :as nippy]
             [juxt.byte-utils :refer :all]
-            [clojure.set])
+            [clojure.set]
+            [byte-streams :as bs]
+            [gloss.core :as g]
+            [gloss.io :refer [encode decode contiguous]])
   (:import [org.rocksdb RocksDB Options]))
 
 (def temp-id -1)
@@ -9,6 +12,15 @@
 (def key-index-eat 2)
 (def key-index-attr 3)
 (def key-index-aid->hash 4)
+
+(def attr-types {::Long {:id 1
+                         :->bytes long->bytes
+                         :<-bytes bytes->long}
+                 ::String {:id 2
+                           :->bytes str->bytes
+                           :<-bytes bytes->str}})
+
+(def attr-types-by-id (into {} (map (juxt (comp :id val) val) attr-types)))
 
 (defn- ident->hash [ident]
   (hash (str (namespace ident) (name ident))))
@@ -19,11 +31,18 @@
       (.putInt (ident->hash ident))
       (.array)))
 
+(def key-attribute-schema-frame (g/compile-frame {:index-id :int16
+                                                  :aid :uint32}))
+
+(g/defcodec val-attribute-schema-frame (g/ordered-map
+                                        :attr/type :int16
+                                        :attr/ident (g/string :utf-8)))
+
 (defn- attr-aid->key [aid]
-  (-> (java.nio.ByteBuffer/allocate 12)
-      (.putInt (int key-index-aid->hash))
-      (.putLong aid)
-      (.array)))
+  (->> {:index-id key-index-aid->hash ;; todo use an enum
+        :aid aid}
+       (encode key-attribute-schema-frame)
+       (bs/to-byte-array)))
 
 (defn- eat->key
   "Make a key, using <index-id><entity-id><attribute-id><timestamp>"
@@ -43,6 +62,11 @@
      (.getLong key-byte-buffer 12) ;; The attribute ID
      (java.util.Date. (.getLong key-byte-buffer 16))]))
 
+(defn- parse-attr "Transform attribute from the byte-array" [k]
+  (let [bb (java.nio.ByteBuffer/wrap k)]
+    [(.getInt 0)
+     (.getString bb 4)]))
+
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
@@ -53,14 +77,21 @@
 
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
-  [db {:keys [:attr/ident]}]
+  [db {:keys [:attr/ident :attr/type]}]
+  {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (.put db (attr->key ident) (long->bytes aid))
     ;; to go from aid -> k
-    (.put db (attr-aid->key aid) (->bytes (if (namespace ident)
-                                            (str (namespace ident) "/" (name ident))
-                                            (name ident))))))
+    (let [k (attr-aid->key aid)]
+      (.put db k (let [stringified-k (if (namespace ident)
+                                       (str (namespace ident) "/" (name ident))
+                                       (name ident))]
+                   (->> {:attr/type ((attr-types type) :id) ;; todo use an enum
+                         :attr/ident stringified-k}
+                        (encode val-attribute-schema-frame)
+                        (bs/to-byte-array)))))
+    aid))
 
 (defn- attr-schema [db ident]
   (let [i (.newIterator db)
@@ -75,15 +106,16 @@
       (finally
         (.close i)))))
 
-(defn- attr-aid->schema [db aid]
+(defn attr-aid->schema [db aid]
   (let [i (.newIterator db)
         k (attr-aid->key aid)]
     (try
       (.seek i k)
-      (if (and (.isValid i)
-               (= (bytes->int (byte-array (drop 4 (.key i)))) (bytes->int (byte-array (drop 4 k)))))
-        (keyword (bytes-> (.value i)))
-        (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid))))
+      (let [found-k (and (.isValid i)
+                         (decode key-attribute-schema-frame (.key i)))]
+        (if (and found-k (= aid (:aid found-k)))
+          (update (decode val-attribute-schema-frame (.value i)) :attr/ident keyword)
+          (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
       (finally
         (.close i)))))
 
@@ -99,20 +131,23 @@
                txs)]
      (doseq [[eid k v] txs]
        (let [aid (attr-schema db k)
+             attr-schema (attr-aid->schema db aid)
+             attr-schema-def (get attr-types-by-id (:attr/type attr-schema))
              eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
-         (.put db (eat->key eid aid ts) (->bytes v)))))))
+         (.put db (eat->key eid aid ts) ((:->bytes attr-schema-def) v)))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
   ([db eid k ts]
    (let [aid (attr-schema db k)
+         attr-schema (attr-aid->schema db aid)
          i (.newIterator db)
          k (eat->key eid aid ts)]
      (try
        (.seekForPrev i k)
        (when (and (.isValid i) (= (take 20 k)
                                   (take 20 (.key i))))
-         (bytes-> (.value i)))
+         ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) (.value i)))
        (finally
          (.close i))))))
 
@@ -139,8 +174,10 @@
                (for [[k v] (rocks-iterator->seq i (fn [i] (= (take 12 eid-key)
                                                              (take 12 (.key i)))))
                      :let [[eid aid _] (parse-key k)
-                           attr-k (attr-aid->schema db aid)]]
-                 [attr-k (bytes-> v)]))
+                           attr-schema (attr-aid->schema db aid)
+                           _ (println aid attr-schema)]]
+                 ;; Todo, pull this out into a fn
+                 [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))
          (finally
            (.close i)))))))
 
