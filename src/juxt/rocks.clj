@@ -39,6 +39,15 @@
                                         :attr/type :int16
                                         :attr/ident (g/string :utf-8)))
 
+(g/defcodec key-eid-frame (g/ordered-map :index-id :int32
+                                         :eid :uint64))
+
+;; TODO revise this down, we don't need minus numbers, can halve the mofo
+(g/defcodec key-eid-aid-ts-frame (g/ordered-map :index-id :int32
+                                                :eid :int64
+                                                :aid :int64
+                                                :ts :int64))
+
 (defn- attr-aid->key [aid]
   (->> {:index-id key-index-aid->hash ;; todo use an enum
         :aid aid}
@@ -50,12 +59,22 @@
   ([eid aid]
    (eat->key eid aid (java.util.Date.)))
   ([eid aid ts]
-   (-> (java.nio.ByteBuffer/allocate 28)
-       (.putInt key-index-eat)
-       (.putLong eid)
-       (.putLong aid)
-       (.putLong (or (and ts (.getTime ts)) 0))
-       (.array))))
+   (->> {:index-id key-index-eat
+         :eid eid
+         :aid aid
+         :ts (.getTime ts)}
+        (encode key-eid-aid-ts-frame)
+        (bs/to-byte-array))))
+
+;; was 28 (int, long 4, long 4, long 4)
+
+(->> {:index-id 0
+      :eid 23
+      :aid 12
+      :ts (.getTime (java.util.Date.))}
+     (encode key-eid-aid-ts-frame)
+     (bs/to-byte-array)
+     count)
 
 (defn- parse-key "Transform back the key byte-array" [k]
   (let [key-byte-buffer (java.nio.ByteBuffer/wrap k)]
@@ -148,23 +167,23 @@
   ([db eid]
    (entity db eid (java.util.Date.)))
   ([db eid ts]
-   (let [eid-key (-> (java.nio.ByteBuffer/allocate 12)
-                     (.putInt key-index-eat)
-                     (.putLong eid)
-                     (.array))]
-     (let [i (.newIterator db)]
-       (try
-         (.seek i eid-key)
-         (into {}
-               (for [[k v] (rocks-iterator->seq i (fn [i] (= (take 12 eid-key)
-                                                             (take 12 (.key i)))))
-                     :let [[eid aid _] (parse-key k)
-                           attr-schema (attr-aid->schema db aid)
-                           _ (println aid attr-schema)]]
-                 ;; Todo, pull this out into a fn
-                 [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))
-         (finally
-           (.close i)))))))
+   (let [i (.newIterator db)
+         eid-key (->> {:index-id key-index-eat
+                       :eid eid}
+                      (encode key-eid-frame)
+                      (bs/to-byte-array))]
+     (try
+       (.seek i eid-key)
+       (into {}
+             (for [[k v] (rocks-iterator->seq i (fn [i] (= (take 12 eid-key)
+                                                           (take 12 (.key i)))))
+                   :let [[eid aid _] (parse-key k)
+                         attr-schema (attr-aid->schema db aid)
+                         _ (println aid attr-schema)]]
+               ;; Todo, pull this out into a fn
+               [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))
+       (finally
+         (.close i))))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]
