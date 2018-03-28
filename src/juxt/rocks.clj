@@ -40,7 +40,7 @@
                                         :attr/ident (g/string :utf-8)))
 
 (g/defcodec key-eid-frame (g/ordered-map :index-id :int32
-                                         :eid :uint64))
+                                         :eid :int64))
 
 ;; TODO revise this down, we don't need minus numbers, can halve the mofo
 (g/defcodec key-eid-aid-ts-frame (g/ordered-map :index-id :int32
@@ -155,42 +155,27 @@
        (finally
          (.close i))))))
 
-(defn rocks-iterator->seq [i pred?]
-  (lazy-seq
-   (when (and (.isValid i) (or (not pred?) (pred? i)))
-     (cons (conj [(.key i) (.value i)])
-           (do (.next i)
-               (rocks-iterator->seq i pred?))))))
-
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
   ([db eid]
    (entity db eid (java.util.Date.)))
   ([db eid ts]
-   (let [i (.newIterator db)
-         eid-key (->> {:index-id key-index-eat
-                       :eid eid}
-                      (encode key-eid-frame)
-                      (bs/to-byte-array))]
-     (try
-       (.seek i eid-key)
-       (into {}
-             (for [[k v] (rocks-iterator->seq i (fn [i] (= (take 12 eid-key)
-                                                           (take 12 (.key i)))))
-                   :let [[eid aid _] (parse-key k)
-                         attr-schema (attr-aid->schema db aid)
-                         _ (println aid attr-schema)]]
-               ;; Todo, pull this out into a fn
-               [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))
-       (finally
-         (.close i))))))
+   (into {}
+         (for [[k v] (rocksdb/seek-and-iterate db (->> {:index-id key-index-eat
+                                                        :eid eid}
+                                                       (encode key-eid-frame)
+                                                       (bs/to-byte-array)))
+               :let [[eid aid _] (parse-key k)
+                     attr-schema (attr-aid->schema db aid)]]
+           ;; Todo, pull this out into a fn
+           [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]
     (try
       (.seekToFirst i)
       (println "Keys in the DB:")
-      (doseq [v (rocks-iterator->seq i nil)]
+      (doseq [v (rocksdb/rocks-iterator->seq i nil)]
         (println v))
       (finally
         (.close i)))))
