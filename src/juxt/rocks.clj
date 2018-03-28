@@ -26,14 +26,18 @@
 (defn- ident->hash [ident]
   (hash (str (namespace ident) (name ident))))
 
-(defn- attr->key [ident]
-  (-> (java.nio.ByteBuffer/allocate 8)
-      (.putInt (int key-index-attr))
-      (.putInt (ident->hash ident))
-      (.array)))
+(g/defcodec key-attribute-ident-frame {:index-id :int16
+                                       :ident-hash :uint32})
 
-(def key-attribute-schema-frame (g/compile-frame {:index-id :int16
-                                                  :aid :uint32}))
+(defn- key->bytes [{:keys [:juxt.rocks/k-id :attr/type] :as m}]
+  (->> m
+       (encode (case k-id
+                 ::key-attribute-ident-frame
+                 key-attribute-ident-frame))
+       (bs/to-byte-array)))
+
+(g/defcodec key-attribute-schema-frame {:index-id :int16
+                                        :aid :uint32})
 
 (g/defcodec val-attribute-schema-frame (g/ordered-map
                                         :attr/type :int16
@@ -91,7 +95,10 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (.put db (attr->key ident) (long->bytes aid))
+    (.put db (key->bytes {::k-id ::key-attribute-ident-frame
+                          :index-id key-index-attr
+                          :ident-hash (ident->hash ident)})
+          (long->bytes aid))
     ;; to go from aid -> k
     (let [k (attr-aid->key aid)]
       (.put db k (let [stringified-k (if (namespace ident)
@@ -104,7 +111,9 @@
     aid))
 
 (defn- attr-schema [db ident]
-  (if-let [[_ v] (rocksdb/get db (attr->key ident))]
+  (if-let [[_ v] (rocksdb/get db (key->bytes {::k-id ::key-attribute-ident-frame
+                                              :index-id key-index-attr
+                                              :ident-hash (ident->hash ident)}))]
     (bytes->long v)
     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
