@@ -4,7 +4,8 @@
             [clojure.set]
             [byte-streams :as bs]
             [gloss.core :as g]
-            [gloss.io :refer [encode decode contiguous]])
+            [gloss.io :refer [encode decode contiguous]]
+            [juxt.rocksdb :as rocksdb])
   (:import [org.rocksdb RocksDB Options]))
 
 (def temp-id -1)
@@ -94,30 +95,14 @@
     aid))
 
 (defn- attr-schema [db ident]
-  (let [i (.newIterator db)
-        k (attr->key ident)]
-    (try
-      (.seek i k)
-      (if (and (.isValid i)
-               ;; TODO understand and simplify
-               (= (bytes->int (byte-array (drop 4 (.key i)))) (bytes->int (byte-array (drop 4 k)))))
-        (bytes->long (.value i))
-        (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident))))
-      (finally
-        (.close i)))))
+  (if-let [[_ v] (rocksdb/get db (attr->key ident))]
+    (bytes->long v)
+    (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (let [i (.newIterator db)
-        k (attr-aid->key aid)]
-    (try
-      (.seek i k)
-      (let [found-k (and (.isValid i)
-                         (decode key-attribute-schema-frame (.key i)))]
-        (if (and found-k (= aid (:aid found-k)))
-          (update (decode val-attribute-schema-frame (.value i)) :attr/ident keyword)
-          (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
-      (finally
-        (.close i)))))
+  (if-let [[k v ] (rocksdb/get db (attr-aid->key aid))]
+    (update (decode val-attribute-schema-frame v) :attr/ident keyword)
+    (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn -put
   "Put an attribute/value tuple against an entity ID. If the supplied
