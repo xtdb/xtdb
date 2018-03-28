@@ -4,16 +4,11 @@
             [clojure.set]
             [byte-streams :as bs]
             [gloss.core :as g]
-            [gloss.io :refer [encode decode contiguous]]
+            [gloss.io]
             [juxt.rocksdb :as rocksdb])
   (:import [org.rocksdb RocksDB Options]))
 
-(def temp-id -1)
-(def key-entity-id 1)
-(def key-index-eat 2)
-(def key-index-attr 3)
-(def key-index-aid->hash 4)
-
+;; Todo, combine the below into gloss also:
 (def attr-types {::Long {:id 1
                          :->bytes long->bytes
                          :<-bytes bytes->long}
@@ -26,66 +21,40 @@
 (defn- ident->hash [ident]
   (hash (str (namespace ident) (name ident))))
 
-(g/defcodec key-attribute-ident-frame {:index-id :int16
-                                       :ident-hash :uint32})
+(def db-keys {::key-entity-id {:index 1
+                               :codec (g/compile-frame {:index-id :int16})}
+              ::key-eid-aid-ts-frame {:index 2
+                                      ;; TODO revise this down, we don't need minus numbers, can halve the size:
+                                      :codec (g/compile-frame (g/ordered-map :index-id :int32
+                                                                             :eid :int64
+                                                                             :aid :int64
+                                                                             :ts :int64))}
+              ::key-eid-frame {:index 2
+                               :codec (g/ordered-map :index-id :int32
+                                                     :eid :int64)}
+              ::key-attribute-ident-frame {:index 3
+                                           :codec (g/compile-frame {:index-id :int16
+                                                                    :ident-hash :uint32})}
+              ::key-index-aid->hash-frame {:index 4
+                                           :codec (g/compile-frame {:index-id :int16
+                                                                    :aid :uint32})}
+              ::val-attribute-schema-frame {:codec (g/ordered-map
+                                                    :attr/type :int16
+                                                    :attr/ident (g/string :utf-8))}})
 
-(defn- key->bytes [{:keys [:juxt.rocks/k-id :attr/type] :as m}]
-  (->> m
-       (encode (case k-id
-                 ::key-attribute-ident-frame
-                 key-attribute-ident-frame))
+(defn- key->bytes [k-id & [m]]
+  (->> (assoc m :index-id (get-in db-keys [k-id :index]))
+       (gloss.io/encode (get-in db-keys [k-id :codec]))
        (bs/to-byte-array)))
 
-(g/defcodec key-attribute-schema-frame {:index-id :int16
-                                        :aid :uint32})
-
-(g/defcodec val-attribute-schema-frame (g/ordered-map
-                                        :attr/type :int16
-                                        :attr/ident (g/string :utf-8)))
-
-(g/defcodec key-eid-frame (g/ordered-map :index-id :int32
-                                         :eid :int64))
-
-;; TODO revise this down, we don't need minus numbers, can halve the mofo
-(g/defcodec key-eid-aid-ts-frame (g/ordered-map :index-id :int32
-                                                :eid :int64
-                                                :aid :int64
-                                                :ts :int64))
-
-(defn- attr-aid->key [aid]
-  (->> {:index-id key-index-aid->hash ;; todo use an enum
-        :aid aid}
-       (encode key-attribute-schema-frame)
-       (bs/to-byte-array)))
-
-(defn- eat->key
-  "Make a key, using <index-id><entity-id><attribute-id><timestamp>"
-  ([eid aid]
-   (eat->key eid aid (java.util.Date.)))
-  ([eid aid ts]
-   (->> {:index-id key-index-eat
-         :eid eid
-         :aid aid
-         :ts (.getTime ts)}
-        (encode key-eid-aid-ts-frame)
-        (bs/to-byte-array))))
-
-(defn- parse-key "Transform back the key byte-array" [k]
-  (let [key-byte-buffer (java.nio.ByteBuffer/wrap k)]
-    [(.getLong key-byte-buffer 4) ;; The entity ID
-     (.getLong key-byte-buffer 12) ;; The attribute ID
-     (java.util.Date. (.getLong key-byte-buffer 16))]))
-
-(defn- parse-attr "Transform attribute from the byte-array" [k]
-  (let [bb (java.nio.ByteBuffer/wrap k)]
-    [(.getInt 0)
-     (.getString bb 4)]))
+(defn- decode [k-id v]
+  (gloss.io/decode (get-in db-keys [k-id :codec]) v))
 
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
-    (let [key-entity-id (long->bytes key-entity-id)]
+    (let [key-entity-id (key->bytes ::key-entity-id)]
       (.merge db key-entity-id (long->bytes 1))
       (bytes->long (.get db key-entity-id)))))
 
@@ -95,31 +64,27 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (.put db (key->bytes {::k-id ::key-attribute-ident-frame
-                          :index-id key-index-attr
-                          :ident-hash (ident->hash ident)})
+    (.put db (key->bytes ::key-attribute-ident-frame {:ident-hash (ident->hash ident)})
           (long->bytes aid))
     ;; to go from aid -> k
-    (let [k (attr-aid->key aid)]
+    (let [k (key->bytes ::key-index-aid->hash-frame {:aid aid})]
+      ;; TODO move ident hacking to pre and post in the db-keys schema
       (.put db k (let [stringified-k (if (namespace ident)
                                        (str (namespace ident) "/" (name ident))
                                        (name ident))]
-                   (->> {:attr/type ((attr-types type) :id) ;; todo use an enum
-                         :attr/ident stringified-k}
-                        (encode val-attribute-schema-frame)
-                        (bs/to-byte-array)))))
+                   (key->bytes ::val-attribute-schema-frame
+                               {:attr/type ((attr-types type) :id) ;; todo use an enum
+                                :attr/ident stringified-k}))))
     aid))
 
 (defn- attr-schema [db ident]
-  (if-let [[_ v] (rocksdb/get db (key->bytes {::k-id ::key-attribute-ident-frame
-                                              :index-id key-index-attr
-                                              :ident-hash (ident->hash ident)}))]
+  (if-let [[_ v] (rocksdb/get db (key->bytes ::key-attribute-ident-frame {:ident-hash (ident->hash ident)}))]
     (bytes->long v)
     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (if-let [[k v ] (rocksdb/get db (attr-aid->key aid))]
-    (update (decode val-attribute-schema-frame v) :attr/ident keyword)
+  (if-let [[k v ] (rocksdb/get db (key->bytes ::key-index-aid->hash-frame {:aid aid}))]
+    (update (decode ::val-attribute-schema-frame v) :attr/ident keyword)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn -put
@@ -136,8 +101,11 @@
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
              attr-schema-def (get attr-types-by-id (:attr/type attr-schema))
-             eid (or (and (= temp-id eid) (next-entity-id db)) eid)]
-         (.put db (eat->key eid aid ts) ((:->bytes attr-schema-def) v)))))))
+             eid (or (and (= -1 eid) (next-entity-id db)) eid)]
+         (.put db (key->bytes ::key-eid-aid-ts-frame {:eid eid
+                                                      :aid aid
+                                                      :ts (.getTime ts)})
+               ((:->bytes attr-schema-def) v)))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
@@ -145,7 +113,9 @@
    (let [aid (attr-schema db k)
          attr-schema (attr-aid->schema db aid)
          i (.newIterator db)
-         k (eat->key eid aid ts)]
+         k (key->bytes ::key-eid-aid-ts-frame {:eid eid
+                                               :aid aid
+                                               :ts (.getTime ts)})]
      (try
        (.seekForPrev i k)
        (when (and (.isValid i) (= (take 20 k)
@@ -160,11 +130,8 @@
    (entity db eid (java.util.Date.)))
   ([db eid ts]
    (into {}
-         (for [[k v] (rocksdb/seek-and-iterate db (->> {:index-id key-index-eat
-                                                        :eid eid}
-                                                       (encode key-eid-frame)
-                                                       (bs/to-byte-array)))
-               :let [[eid aid _] (parse-key k)
+         (for [[k v] (rocksdb/seek-and-iterate db (key->bytes ::key-eid-frame {:eid eid}))
+               :let [{:keys [eid aid]} (decode ::key-eid-aid-ts-frame k)
                      attr-schema (attr-aid->schema db aid)]]
            ;; Todo, pull this out into a fn
            [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))))
