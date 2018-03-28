@@ -1,5 +1,8 @@
 (ns juxt.byte-utils)
 
+(defn hash-keyword [k]
+  (hash (str (namespace k) (name k))))
+
 (defn str->bytes [v]
   ;;(nippy/freeze v)
   (.getBytes v java.nio.charset.StandardCharsets/UTF_8))

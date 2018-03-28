@@ -33,14 +33,19 @@
                                            :codec (g/compile-frame {:index-id :int16
                                                                     :ident-hash :uint32}
                                                                    (fn [{:keys [ident] :as m}]
-                                                                     (assoc m :ident-hash (hash (str (namespace ident) (name ident)))))
+                                                                     (assoc m :ident-hash (hash-keyword ident)))
                                                                    identity)}
               ::key-index-aid->hash-frame {:index 4
                                            :codec (g/compile-frame {:index-id :int16
                                                                     :aid :uint32})}
-              ::val-attribute-schema-frame {:codec (g/ordered-map
-                                                    :attr/type :int16
-                                                    :attr/ident (g/string :utf-8))}})
+              ::val-attribute-schema-frame {:codec (g/compile-frame
+                                                    (g/ordered-map
+                                                     :attr/type :int16
+                                                     :attr/ident (g/string :utf-8))
+                                                    (fn [m]
+                                                      (update m :attr/ident #(subs (str %) 1)))
+                                                    (fn [m]
+                                                      (update m :attr/ident keyword)))}})
 
 (defn- key->bytes [k-id & [m]]
   (->> (assoc m :index-id (get-in db-keys [k-id :index]))
@@ -68,13 +73,9 @@
           (long->bytes aid))
     ;; to go from aid -> k
     (let [k (key->bytes ::key-index-aid->hash-frame {:aid aid})]
-      ;; TODO move ident hacking to pre and post in the db-keys schema
-      (.put db k (let [stringified-k (if (namespace ident)
-                                       (str (namespace ident) "/" (name ident))
-                                       (name ident))]
-                   (key->bytes ::val-attribute-schema-frame
-                               {:attr/type ((attr-types type) :id) ;; todo use an enum
-                                :attr/ident stringified-k}))))
+      (.put db k (key->bytes ::val-attribute-schema-frame
+                             {:attr/type ((attr-types type) :id) ;; todo use an enum
+                              :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
@@ -84,7 +85,7 @@
 
 (defn attr-aid->schema [db aid]
   (if-let [[k v ] (rocksdb/get db (key->bytes ::key-index-aid->hash-frame {:aid aid}))]
-    (update (decode ::val-attribute-schema-frame v) :attr/ident keyword)
+    (decode ::val-attribute-schema-frame v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn -put
