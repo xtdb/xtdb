@@ -66,16 +66,6 @@
         (encode key-eid-aid-ts-frame)
         (bs/to-byte-array))))
 
-;; was 28 (int, long 4, long 4, long 4)
-
-(->> {:index-id 0
-      :eid 23
-      :aid 12
-      :ts (.getTime (java.util.Date.))}
-     (encode key-eid-aid-ts-frame)
-     (bs/to-byte-array)
-     count)
-
 (defn- parse-key "Transform back the key byte-array" [k]
   (let [key-byte-buffer (java.nio.ByteBuffer/wrap k)]
     [(.getLong key-byte-buffer 4) ;; The entity ID
