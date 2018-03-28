@@ -18,9 +18,6 @@
 
 (def attr-types-by-id (into {} (map (juxt (comp :id val) val) attr-types)))
 
-(defn- ident->hash [ident]
-  (hash (str (namespace ident) (name ident))))
-
 (def db-keys {::key-entity-id {:index 1
                                :codec (g/compile-frame {:index-id :int16})}
               ::key-eid-aid-ts-frame {:index 2
@@ -34,7 +31,10 @@
                                                      :eid :int64)}
               ::key-attribute-ident-frame {:index 3
                                            :codec (g/compile-frame {:index-id :int16
-                                                                    :ident-hash :uint32})}
+                                                                    :ident-hash :uint32}
+                                                                   (fn [{:keys [ident] :as m}]
+                                                                     (assoc m :ident-hash (hash (str (namespace ident) (name ident)))))
+                                                                   identity)}
               ::key-index-aid->hash-frame {:index 4
                                            :codec (g/compile-frame {:index-id :int16
                                                                     :aid :uint32})}
@@ -64,7 +64,7 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (.put db (key->bytes ::key-attribute-ident-frame {:ident-hash (ident->hash ident)})
+    (.put db (key->bytes ::key-attribute-ident-frame {:ident ident})
           (long->bytes aid))
     ;; to go from aid -> k
     (let [k (key->bytes ::key-index-aid->hash-frame {:aid aid})]
@@ -78,7 +78,7 @@
     aid))
 
 (defn- attr-schema [db ident]
-  (if-let [[_ v] (rocksdb/get db (key->bytes ::key-attribute-ident-frame {:ident-hash (ident->hash ident)}))]
+  (if-let [[_ v] (rocksdb/get db (key->bytes ::key-attribute-ident-frame {:ident ident}))]
     (bytes->long v)
     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
