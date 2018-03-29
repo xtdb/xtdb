@@ -11,8 +11,8 @@
   (let [db-name :test]
     (binding [db (juxt.rocks/open-db db-name)]
       (try
-        (juxt.rocks/transact-schema! db {:attr/ident :foo :attr/type :juxt.rocks/String})
-        (juxt.rocks/transact-schema! db {:attr/ident :tar :attr/type :juxt.rocks/String})
+        (juxt.rocks/transact-schema! db {:attr/ident :foo :attr/type :string})
+        (juxt.rocks/transact-schema! db {:attr/ident :tar :attr/type :string})
         (f)
         (finally
           (.close db)
@@ -93,13 +93,13 @@
 
 (t/deftest test-transact-schema-attribute
   (juxt.rocks/transact-schema! db {:attr/ident :new-ident
-                                   :attr/type :juxt.rocks/String})
+                                   :attr/type :string})
   (juxt.rocks/-put db [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (juxt.rocks/-get-at db test-eid :new-ident)))
 
 
   (let [aid (juxt.rocks/transact-schema! db {:attr/ident :new-ident2
-                                             :attr/type :juxt.rocks/Long})]
+                                             :attr/type :long})]
     (t/is (= :new-ident2 (:attr/ident (juxt.rocks/attr-aid->schema db aid)))))
 
   (juxt.rocks/-put db [[test-eid :new-ident2 1]])

@@ -8,15 +8,8 @@
             [juxt.rocksdb :as rocksdb])
   (:import [org.rocksdb RocksDB Options]))
 
-;; Todo, combine the below into gloss also:
-(def attr-types {::Long {:id 1
-                         :->bytes long->bytes
-                         :<-bytes bytes->long}
-                 ::String {:id 2
-                           :->bytes str->bytes
-                           :<-bytes bytes->str}})
-
-(def attr-types-by-id (into {} (map (juxt (comp :id val) val) attr-types)))
+(def data-types {:long (g/compile-frame {:type :long, :v :int64})
+                 :string (g/compile-frame {:type :string, :v (g/string :utf-8)})})
 
 (def db-keys {::key-entity-id {:index 1
                                :codec (g/compile-frame {:index-id :int16})}
@@ -40,12 +33,17 @@
                                                                     :aid :uint32})}
               ::val-attribute-schema-frame {:codec (g/compile-frame
                                                     (g/ordered-map
-                                                     :attr/type :int16
+                                                     :attr/type (apply g/enum :byte (keys data-types))
                                                      :attr/ident (g/string :utf-8))
                                                     (fn [m]
                                                       (update m :attr/ident #(subs (str %) 1)))
                                                     (fn [m]
-                                                      (update m :attr/ident keyword)))}})
+                                                      (update m :attr/ident keyword)))}
+              ::eat-val {:codec (g/compile-frame
+                                 (g/header
+                                  (g/compile-frame (apply g/enum :byte (keys data-types)))
+                                  data-types
+                                  :type))}})
 
 (defn- key->bytes [k-id & [m]]
   (->> (assoc m :index-id (get-in db-keys [k-id :index]))
@@ -74,7 +72,7 @@
     ;; to go from aid -> k
     (let [k (key->bytes ::key-index-aid->hash-frame {:aid aid})]
       (.put db k (key->bytes ::val-attribute-schema-frame
-                             {:attr/type ((attr-types type) :id) ;; todo use an enum
+                             {:attr/type type
                               :attr/ident ident})))
     aid))
 
@@ -101,12 +99,12 @@
      (doseq [[eid k v] txs]
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
-             attr-schema-def (get attr-types-by-id (:attr/type attr-schema))
              eid (or (and (= -1 eid) (next-entity-id db)) eid)]
          (.put db (key->bytes ::key-eid-aid-ts-frame {:eid eid
                                                       :aid aid
                                                       :ts (.getTime ts)})
-               ((:->bytes attr-schema-def) v)))))))
+               (key->bytes ::eat-val {:type (:attr/type attr-schema)
+                                      :v v})))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
@@ -121,7 +119,7 @@
        (.seekForPrev i k)
        (when (and (.isValid i) (= (take 20 k)
                                   (take 20 (.key i))))
-         ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) (.value i)))
+         (:v (decode ::eat-val (.value i))))
        (finally
          (.close i))))))
 
@@ -134,8 +132,7 @@
          (for [[k v] (rocksdb/seek-and-iterate db (key->bytes ::key-eid-frame {:eid eid}))
                :let [{:keys [eid aid]} (decode ::key-eid-aid-ts-frame k)
                      attr-schema (attr-aid->schema db aid)]]
-           ;; Todo, pull this out into a fn
-           [(:attr/ident attr-schema) ((:<-bytes (get attr-types-by-id (:attr/type attr-schema))) v)]))))
+           [(:attr/ident attr-schema) (:v (decode ::eat-val v))]))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]
