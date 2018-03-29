@@ -107,3 +107,9 @@
 
   ;; test insertion of invalid type and consequent exception
   )
+
+(t/deftest test-retract-attribute
+  (juxt.rocks/-put db [[test-eid :foo "foo1"]] (c/to-date (time/date-time 1986 10 22)))
+  (juxt.rocks/-put db [[test-eid :foo nil]])
+  (t/is (not (juxt.rocks/-get-at db test-eid :foo)))
+  (t/is (= "foo1" (juxt.rocks/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))

@@ -9,7 +9,8 @@
   (:import [org.rocksdb RocksDB Options]))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
-                 :string (g/compile-frame {:type :string, :v (g/string :utf-8)})})
+                 :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
+                 :retracted (g/compile-frame {:type :retracted})})
 
 (def indices (g/compile-frame (g/enum :byte :eat :eid :aid :ident)))
 
@@ -104,7 +105,7 @@
                                 :eid eid
                                 :aid aid
                                 :ts (.getTime ts)})
-               (encode :val/eat {:type (:attr/type attr-schema) :v v})))))))
+               (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
