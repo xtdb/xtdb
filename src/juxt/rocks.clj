@@ -11,53 +11,52 @@
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})})
 
-(def db-keys {::key-entity-id {:index 1
-                               :codec (g/compile-frame {:index-id :int16})}
-              ::key-eid-aid-ts-frame {:index 2
-                                      ;; TODO revise this down, we don't need minus numbers, can halve the size:
-                                      :codec (g/compile-frame (g/ordered-map :index-id :int32
-                                                                             :eid :int64
-                                                                             :aid :int64
-                                                                             :ts :int64))}
-              ::key-eid-frame {:index 2
-                               :codec (g/ordered-map :index-id :int32
-                                                     :eid :int64)}
-              ::key-attribute-ident-frame {:index 3
-                                           :codec (g/compile-frame {:index-id :int16
-                                                                    :ident-hash :uint32}
-                                                                   (fn [{:keys [ident] :as m}]
-                                                                     (assoc m :ident-hash (hash-keyword ident)))
-                                                                   identity)}
-              ::key-index-aid->hash-frame {:index 4
-                                           :codec (g/compile-frame {:index-id :int16
-                                                                    :aid :uint32})}
-              ::val-attribute-schema-frame {:codec (g/compile-frame
-                                                    (g/ordered-map
-                                                     :attr/type (apply g/enum :byte (keys data-types))
-                                                     :attr/ident (g/string :utf-8))
-                                                    (fn [m]
-                                                      (update m :attr/ident #(subs (str %) 1)))
-                                                    (fn [m]
-                                                      (update m :attr/ident keyword)))}
-              ::eat-val {:codec (g/compile-frame
-                                 (g/header
-                                  (g/compile-frame (apply g/enum :byte (keys data-types)))
-                                  data-types
-                                  :type))}})
+(def indices (g/compile-frame (g/enum :byte :eat :eid :aid :ident)))
+
+(def db-keys {::key (g/compile-frame
+                     (g/header
+                      indices
+                      {:eid  (g/compile-frame {:index :eat})
+                       :eat (g/compile-frame (g/ordered-map :index :eat
+                                                            :eid :int64 ;; todo review down
+                                                            :aid :int64 ;; todo review down
+                                                            :ts :int64)) ;;25 bytes (8, 8 ,8 ,1)
+                       :aid (g/compile-frame {:index :aid
+                                              :aid :uint32})
+                       :ident (g/compile-frame {:index :ident
+                                                :ident :uint32}
+                                               #(update % :ident hash-keyword)
+                                               identity)}
+                      :index))
+              ::key-eid-frame (g/ordered-map :index indices
+                                             :eid :int64)
+              ::val-attribute-schema-frame (g/compile-frame
+                                            (g/ordered-map
+                                             :attr/type (apply g/enum :byte (keys data-types))
+                                             :attr/ident (g/string :utf-8))
+                                            (fn [m]
+                                              (update m :attr/ident #(subs (str %) 1)))
+                                            (fn [m]
+                                              (update m :attr/ident keyword)))
+              ::eat-val (g/compile-frame
+                         (g/header
+                          (g/compile-frame (apply g/enum :byte (keys data-types)))
+                          data-types
+                          :type))})
 
 (defn- key->bytes [k-id & [m]]
-  (->> (assoc m :index-id (get-in db-keys [k-id :index]))
-       (gloss.io/encode (get-in db-keys [k-id :codec]))
+  (->> m
+       (gloss.io/encode (db-keys k-id))
        (bs/to-byte-array)))
 
 (defn- decode [k-id v]
-  (gloss.io/decode (get-in db-keys [k-id :codec]) v))
+  (gloss.io/decode (get db-keys k-id) v))
 
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
-    (let [key-entity-id (key->bytes ::key-entity-id)]
+    (let [key-entity-id (key->bytes ::key {:index :eid})]
       (.merge db key-entity-id (long->bytes 1))
       (bytes->long (.get db key-entity-id)))))
 
@@ -67,22 +66,22 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (.put db (key->bytes ::key-attribute-ident-frame {:ident ident})
+    (.put db (key->bytes ::key {:index :ident :ident ident})
           (long->bytes aid))
     ;; to go from aid -> k
-    (let [k (key->bytes ::key-index-aid->hash-frame {:aid aid})]
+    (let [k (key->bytes ::key {:index :aid :aid aid})]
       (.put db k (key->bytes ::val-attribute-schema-frame
                              {:attr/type type
                               :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
-  (if-let [[_ v] (rocksdb/get db (key->bytes ::key-attribute-ident-frame {:ident ident}))]
+  (if-let [[_ v] (rocksdb/get db (key->bytes ::key {:index :ident :ident ident}))]
     (bytes->long v)
     (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (if-let [[k v ] (rocksdb/get db (key->bytes ::key-index-aid->hash-frame {:aid aid}))]
+  (if-let [[k v ] (rocksdb/get db (key->bytes ::key {:index :aid :aid aid}))]
     (decode ::val-attribute-schema-frame v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -100,9 +99,10 @@
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
              eid (or (and (= -1 eid) (next-entity-id db)) eid)]
-         (.put db (key->bytes ::key-eid-aid-ts-frame {:eid eid
-                                                      :aid aid
-                                                      :ts (.getTime ts)})
+         (.put db (key->bytes ::key {:index :eat
+                                     :eid eid
+                                     :aid aid
+                                     :ts (.getTime ts)})
                (key->bytes ::eat-val {:type (:attr/type attr-schema)
                                       :v v})))))))
 
@@ -112,13 +112,14 @@
    (let [aid (attr-schema db k)
          attr-schema (attr-aid->schema db aid)
          i (.newIterator db)
-         k (key->bytes ::key-eid-aid-ts-frame {:eid eid
-                                               :aid aid
-                                               :ts (.getTime ts)})]
+         k (key->bytes ::key {:index :eat
+                              :eid eid
+                              :aid aid
+                              :ts (.getTime ts)})]
      (try
        (.seekForPrev i k)
-       (when (and (.isValid i) (= (take 20 k)
-                                  (take 20 (.key i))))
+       (when (and (.isValid i) (let [km (decode ::key (.key i))]
+                                 (and (= eid (:eid km)) (= aid (:aid km)))))
          (:v (decode ::eat-val (.value i))))
        (finally
          (.close i))))))
@@ -129,8 +130,8 @@
    (entity db eid (java.util.Date.)))
   ([db eid ts]
    (into {}
-         (for [[k v] (rocksdb/seek-and-iterate db (key->bytes ::key-eid-frame {:eid eid}))
-               :let [{:keys [eid aid]} (decode ::key-eid-aid-ts-frame k)
+         (for [[k v] (rocksdb/seek-and-iterate db (key->bytes ::key-eid-frame {:index :eat :eid eid}))
+               :let [{:keys [eid aid]} (decode ::key k)
                      attr-schema (attr-aid->schema db aid)]]
            [(:attr/ident attr-schema) (:v (decode ::eat-val v))]))))
 
