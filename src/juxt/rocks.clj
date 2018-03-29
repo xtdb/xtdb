@@ -18,9 +18,9 @@
                       indices
                       {:eid  (g/compile-frame {:index :eat})
                        :eat (g/compile-frame (g/ordered-map :index :eat
-                                                            :eid :int64 ;; todo review down
-                                                            :aid :int64 ;; todo review down
-                                                            :ts :int64)) ;;25 bytes (8, 8 ,8 ,1)
+                                                            :eid :int32
+                                                            :aid :int32
+                                                            :ts :int64))
                        :aid (g/compile-frame {:index :aid
                                               :aid :uint32})
                        :ident (g/compile-frame {:index :ident
@@ -28,8 +28,7 @@
                                                #(update % :ident hash-keyword)
                                                identity)}
                       :index))
-              ::key-eid-frame (g/ordered-map :index indices
-                                             :eid :int64)
+              ::key-eid-frame (g/ordered-map :index indices :eid :int32)
               ::val-attribute-schema-frame (g/compile-frame
                                             (g/ordered-map
                                              :attr/type (apply g/enum :byte (keys data-types))
