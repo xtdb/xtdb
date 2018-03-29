@@ -41,7 +41,8 @@
                         (fn [m]
                           (update m :attr/ident #(subs (str %) 1)))
                         (fn [m]
-                          (update m :attr/ident keyword)))})
+                          (update m :attr/ident keyword)))
+             :val/ident (g/compile-frame {:aid :int32})})
 
 (defn- encode [f m]
   (->> m (gloss.io/encode (frames f)) (bs/to-byte-array)))
@@ -64,7 +65,7 @@
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (.put db (encode :key {:index :ident :ident ident})
-          (long->bytes aid))
+          (encode :val/ident {:aid aid}))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
       (.put db k (encode :val/attr {:attr/type type
@@ -72,9 +73,13 @@
     aid))
 
 (defn- attr-schema [db ident]
-  (if-let [[_ v] (rocksdb/get db (encode :key {:index :ident :ident ident}))]
-    (bytes->long v)
-    (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
+  (or (some->> {:index :ident :ident ident}
+               (encode :key)
+               (rocksdb/get db)
+               second
+               (decode :val/ident)
+               :aid)
+      (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
   (if-let [[k v ] (rocksdb/get db (encode :key {:index :aid :aid aid}))]
