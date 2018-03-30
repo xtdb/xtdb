@@ -113,3 +113,11 @@
   (juxt.rocks/-put db [[test-eid :foo nil]])
   (t/is (not (juxt.rocks/-get-at db test-eid :foo)))
   (t/is (= "foo1" (juxt.rocks/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
+
+(t/deftest test-basic-query
+  (juxt.rocks/-put db {:juxt.rocks/id 2 :foo "bar"})
+  (juxt.rocks/-put db {:juxt.rocks/id 3 :foo "tar"})
+
+  (t/is (= #{2} (juxt.rocks/query db [:foo "bar"])))
+  (t/is (= #{3} (juxt.rocks/query db [:foo "tar"])))
+  (t/is (= #{2 3} (juxt.rocks/query db [:foo]))))

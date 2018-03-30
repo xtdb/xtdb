@@ -29,6 +29,7 @@
                                              #(update % :ident hash-keyword)
                                              identity)}
                     :index))
+             :key/index-prefix (g/ordered-map :index indices)
              :key/eat-prefix (g/ordered-map :index indices :eid :int32)
              :val/eat (g/compile-frame
                        (g/header
@@ -145,6 +146,18 @@
         (println v))
       (finally
         (.close i)))))
+
+(defn query
+  "For now, uses AET for all cases which is inefficient."
+  [db [k query-v]]
+  (let [aid (attr-schema db k)]
+    (into #{}
+          (for [[k v] (rocksdb/seek-and-iterate db (encode :key/index-prefix {:index :eat}))
+                :let [{:keys [eid] :as k} (decode :key k)]
+                :when (and (= aid (:aid k))
+                           (or (not query-v)
+                               (= query-v (:v (decode :val/eat v)))))]
+            eid))))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
