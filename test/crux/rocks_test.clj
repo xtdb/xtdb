@@ -68,18 +68,18 @@
   (t/is (= 1005 (cr/next-entity-id db))))
 
 (t/deftest test-write-and-fetch-entity
-  (cr/-put db {:cr/id test-eid
-                       :foo "Bar3"
-                       :tar "Bar4"}
-                   (c/to-date (time/date-time 1986 10 22)))
+  (cr/-put db {:crux.rocks/id test-eid
+               :foo "Bar3"
+               :tar "Bar4"}
+           (c/to-date (time/date-time 1986 10 22)))
   (t/is (= {:tar "Bar4" :foo "Bar3"}
            (cr/entity db test-eid))))
 
 (t/deftest test-fetch-entity-at-t
   (cr/-put db [[test-eid :foo "foo1"]
-                       [test-eid :tar "tar1"]] (c/to-date (time/date-time 1986 10 22)))
+               [test-eid :tar "tar1"]] (c/to-date (time/date-time 1986 10 22)))
   (cr/-put db [[test-eid :foo "foo2"]
-                       [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 23)))
+               [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 23)))
   (t/is (= {:tar "tar2" :foo "foo2"}
            (cr/entity db test-eid))))
 
@@ -93,13 +93,13 @@
 
 (t/deftest test-transact-schema-attribute
   (cr/transact-schema! db {:attr/ident :new-ident
-                                   :attr/type :string})
+                           :attr/type :string})
   (cr/-put db [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (cr/-get-at db test-eid :new-ident)))
 
 
   (let [aid (cr/transact-schema! db {:attr/ident :new-ident2
-                                             :attr/type :long})]
+                                     :attr/type :long})]
     (t/is (= :new-ident2 (:attr/ident (cr/attr-aid->schema db aid)))))
 
   (cr/-put db [[test-eid :new-ident2 1]])
@@ -115,8 +115,8 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (cr/-put db {:cr/id 2 :foo "bar"})
-  (cr/-put db {:cr/id 3 :foo "tar"})
+  (cr/-put db {:crux.rocks/id 2 :foo "bar"})
+  (cr/-put db {:crux.rocks/id 3 :foo "tar"})
 
   (t/is (= #{2} (cr/query db [:foo "bar"])))
   (t/is (= #{3} (cr/query db [:foo "tar"])))
