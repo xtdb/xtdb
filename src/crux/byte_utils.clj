@@ -1,4 +1,4 @@
-(ns juxt.byte-utils)
+(ns crux.byte-utils)
 
 (defn hash-keyword [k]
   (hash (str (namespace k) (name k))))

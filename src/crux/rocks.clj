@@ -1,11 +1,11 @@
-(ns juxt.rocks
+(ns crux.rocks
   (:require [taoensso.nippy :as nippy]
-            [juxt.byte-utils :refer :all]
+            [crux.byte-utils :refer :all]
             [clojure.set]
             [byte-streams :as bs]
             [gloss.core :as g]
             [gloss.io]
-            [juxt.rocksdb :as rocksdb])
+            [crux.rocksdb :as rocksdb])
   (:import [org.rocksdb RocksDB Options]))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})

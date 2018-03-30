@@ -1,4 +1,4 @@
-(ns juxt.rocksdb
+(ns crux.rocksdb
   (:require [byte-streams :as bs]))
 
 (defn get [db k]

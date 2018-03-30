@@ -1,6 +1,6 @@
 (defproject ding "0.1.0-SNAPSHOT"
   :description "A Clojure library that gives graph query over RocksDB"
-  :url "https://github.com/juxt/ding"
+  :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.9.0"]

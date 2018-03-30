@@ -1,4 +1,4 @@
-DING - Data Ingestion for Graphs
+Crux
 
 An experimental mutable Clojure graph database currently sitting on top of RocksDB.
 
