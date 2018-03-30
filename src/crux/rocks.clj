@@ -3,10 +3,14 @@
             [crux.byte-utils :refer :all]
             [clojure.set]
             [byte-streams :as bs]
+            [clj-time.core :as time]
+            [clj-time.coerce :as c]
             [gloss.core :as g]
             [gloss.io]
             [crux.rocksdb :as rocksdb])
   (:import [org.rocksdb RocksDB Options]))
+
+(def max-timestamp (.getTime #inst "9999-12-30"))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
@@ -21,7 +25,9 @@
                      :eat (g/compile-frame (g/ordered-map :index :eat
                                                           :eid :int32
                                                           :aid :int32
-                                                          :ts :int64))
+                                                          :ts :int64)
+                                           #(update % :ts (partial - max-timestamp))
+                                           identity)
                      :aid (g/compile-frame {:index :aid
                                             :aid :uint32})
                      :ident (g/compile-frame {:index :ident
@@ -119,7 +125,7 @@
                          :aid aid
                          :ts (.getTime ts)})]
      (try
-       (.seekForPrev i k)
+       (.seek i k)
        (when (and (.isValid i) (let [km (decode :key (.key i))]
                                  (and (= eid (:eid km)) (= aid (:aid km)))))
          (:v (decode :val/eat (.value i))))
@@ -131,11 +137,13 @@
   ([db eid]
    (entity db eid (java.util.Date.)))
   ([db eid ts]
-   (into {}
-         (for [[k v] (rocksdb/seek-and-iterate db (encode :key/eat-prefix {:index :eat :eid eid}))
-               :let [{:keys [eid aid]} (decode :key k)
-                     attr-schema (attr-aid->schema db aid)]]
-           [(:attr/ident attr-schema) (:v (decode :val/eat v))]))))
+   (reduce (fn [m [k v]]
+             (let [{:keys [eid aid]} (decode :key k)
+                   attr-schema (attr-aid->schema db aid)
+                   ident (:attr/ident attr-schema)]
+               (if (ident m) m (assoc m ident (:v (decode :val/eat v))))))
+           {}
+           (rocksdb/seek-and-iterate db (encode :key/eat-prefix {:index :eat :eid eid})))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]

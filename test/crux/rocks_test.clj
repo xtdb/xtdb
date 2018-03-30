@@ -29,7 +29,7 @@
   (t/is (= "Bar5" (cr/-get-at db test-eid :foo)))
 
   ;; Insert into past
-  (cr/-put db [[test-eid :foo "foo1"]] (java.util.Date. 2000 1 2))
+  (cr/-put db [[test-eid :foo "foo1"]](java.util.Date. 2000 1 2))
   (t/is (= "Bar5" (cr/-get-at db test-eid :foo))))
 
 (t/deftest test-can-get-at-now-for-old-entry
@@ -58,6 +58,8 @@
   (cr/-put db [[test-eid :tar "Bar4"]] (c/to-date (time/date-time 1986 10 22)))
   (t/is (not (cr/-get-at db test-eid :tar (c/to-date (time/date-time 1986 10 21))))))
 
+(.getTime (c/to-date (time/date-time 2030 12 30)))
+
 (t/deftest test-entity-ids
   (t/is (= 3 (cr/next-entity-id db)))
   (t/is (= 4 (cr/next-entity-id db)))
@@ -81,7 +83,10 @@
   (cr/-put db [[test-eid :foo "foo2"]
                [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 23)))
   (t/is (= {:tar "tar2" :foo "foo2"}
-           (cr/entity db test-eid))))
+           (cr/entity db test-eid)))
+
+  ;; TODO NEEDS MORE TESTS, IGNORES T!
+  )
 
 (t/deftest test-invalid-attribute-exception
   (try
