@@ -119,18 +119,13 @@
   ([db eid k ts]
    (let [aid (attr-schema db k)
          attr-schema (attr-aid->schema db aid)
-         i (.newIterator db)
          k (encode :key {:index :eat
                          :eid eid
                          :aid aid
                          :ts (.getTime ts)})]
-     (try
-       (.seek i k)
-       (when (and (.isValid i) (let [km (decode :key (.key i))]
-                                 (and (= eid (:eid km)) (= aid (:aid km)))))
-         (:v (decode :val/eat (.value i))))
-       (finally
-         (.close i))))))
+     (when-let [[_ v] (rocksdb/get db k (fn [i] (let [km (decode :key (.key i))]
+                                                  (and (= eid (:eid km)) (= aid (:aid km))))))]
+       (:v (decode :val/eat v))))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."

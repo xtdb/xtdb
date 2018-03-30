@@ -1,11 +1,11 @@
 (ns crux.rocksdb
   (:require [byte-streams :as bs]))
 
-(defn get [db k]
+(defn get [db k & [pred]]
   (let [i (.newIterator db)]
     (try
       (.seek i k)
-      (when (and (.isValid i) (bs/bytes= (.key i) k))
+      (when (and (.isValid i) (if pred (pred i) (bs/bytes= (.key i) k)))
         [(.key i) (.value i)])
       (finally
         (.close i)))))

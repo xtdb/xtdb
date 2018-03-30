@@ -86,6 +86,7 @@
            (cr/entity db test-eid)))
 
   ;; TODO NEEDS MORE TESTS, IGNORES T!
+  ;; TODO validate date passed isn't above max-value for sanity reasons
   )
 
 (t/deftest test-invalid-attribute-exception
