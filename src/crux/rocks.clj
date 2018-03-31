@@ -142,16 +142,6 @@
                                      (encode :key/eat-prefix {:index :eat :eid eid})
                                      (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn all-keys [db]
-  (let [i (.newIterator db)]
-    (try
-      (.seekToFirst i)
-      (println "Keys in the DB:")
-      (doseq [v (rocksdb/rocks-iterator->seq i)]
-        (println v))
-      (finally
-        (.close i)))))
-
 (defn- filter-attr [db eids [query-k query-v]]
   (into #{}
         (let [aid (attr-schema db query-k)]
@@ -184,9 +174,3 @@
 
 (defn destroy-db [db-name]
   (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))
-
-(comment
-  (def c (open-db "repldb"))
-  (.close c)
-  ;; Print all keys:
-  (all-keys db))
