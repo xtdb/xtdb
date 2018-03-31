@@ -131,12 +131,15 @@
   an entity."
   ([db eid]
    (entity db eid (java.util.Date.)))
-  ([db eid ts]
+  ([db eid at-ts]
    (reduce (fn [m [k v]]
-             (let [{:keys [eid aid]} (decode :key k)
+             (let [{:keys [eid aid ts]} (decode :key k)
                    attr-schema (attr-aid->schema db aid)
                    ident (:attr/ident attr-schema)]
-               (if (ident m) m (assoc m ident (:v (decode :val/eat v))))))
+               (if (or (ident m)
+                       (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
+                 m
+                 (assoc m ident (:v (decode :val/eat v))))))
            {}
            (rocksdb/seek-and-iterate db
                                      (encode :key/eat-prefix {:index :eat :eid eid})

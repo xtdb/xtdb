@@ -81,13 +81,12 @@
   (cr/-put db [[test-eid :foo "foo1"]
                [test-eid :tar "tar1"]] (c/to-date (time/date-time 1986 10 22)))
   (cr/-put db [[test-eid :foo "foo2"]
-               [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 23)))
-  (t/is (= {:tar "tar2" :foo "foo2"}
-           (cr/entity db test-eid)))
+               [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 24)))
 
-  ;; TODO NEEDS MORE TESTS, IGNORES T!
-  ;; TODO validate date passed isn't above max-value for sanity reasons
-  )
+  (t/is (= {:tar "tar1" :foo "foo1"}
+           (cr/entity db test-eid (c/to-date (time/date-time 1986 10 23)))))
+  (t/is (= {:tar "tar2" :foo "foo2"}
+           (cr/entity db test-eid))))
 
 (t/deftest test-invalid-attribute-exception
   (try
@@ -127,6 +126,8 @@
   (t/is (= #{2} (cr/query db [[:foo "bar"]])))
   (t/is (= #{3} (cr/query db [[:foo "tar"]])))
   (t/is (= #{2 3} (cr/query db [[:foo]]))))
+
+;; TODO test query at t
 
 (t/deftest test-multiple-query-clauses
   (cr/-put db {:crux.rocks/id 2 :foo "bar"})
