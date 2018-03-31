@@ -18,8 +18,12 @@
            (do (.next i)
                (rocks-iterator->seq i))))))
 
-(defn seek-and-iterate [db k upper-bound]
-  (let [i (.newIterator db (.setIterateUpperBound (ReadOptions.) (Slice. upper-bound)))]
+(defn seek-and-iterate
+  "TODO, improve by getting prefix-same-as-start to work, so we don't
+  need an upper-bound."
+  [db k upper-bound]
+  (let [read-options (ReadOptions.)
+        i (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
     (try
       (.seek i k)
       (doall (rocks-iterator->seq i))
