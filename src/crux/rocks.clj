@@ -152,19 +152,24 @@
       (finally
         (.close i)))))
 
-(defn query
-  "For now, uses AET for all cases which is inefficient."
-  [db [k query-v]]
-  (let [aid (attr-schema db k)]
-    (into #{}
+(defn- filter-attr [db eids [query-k query-v]]
+  (into #{}
+        (let [aid (attr-schema db query-k)]
           (for [[k v] (rocksdb/seek-and-iterate db
                                                 (encode :key/index-prefix {:index :eat})
                                                 (encode :key/index-prefix {:index :eid}))
                 :let [{:keys [eid] :as k} (decode :key k)]
-                :when (and (= aid (:aid k))
-                           (or (not query-v)
-                               (= query-v (:v (decode :val/eat v)))))]
+                :when (and (or (not eids) (contains? eids eid))
+                           (= aid (:aid k))
+                           (or (not query-v) (= query-v (:v (decode :val/eat v)))))]
             eid))))
+
+(defn query
+  "For now, uses AET for all cases which is inefficient. Also
+  inefficient because there is no short circuiting or intelligent
+  movement across the EAT index."
+  [db q]
+  (reduce (partial filter-attr db) nil q))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))

@@ -124,6 +124,14 @@
   (cr/-put db {:crux.rocks/id 2 :foo "bar"})
   (cr/-put db {:crux.rocks/id 3 :foo "tar"})
 
-  (t/is (= #{2} (cr/query db [:foo "bar"])))
-  (t/is (= #{3} (cr/query db [:foo "tar"])))
-  (t/is (= #{2 3} (cr/query db [:foo]))))
+  (t/is (= #{2} (cr/query db [[:foo "bar"]])))
+  (t/is (= #{3} (cr/query db [[:foo "tar"]])))
+  (t/is (= #{2 3} (cr/query db [[:foo]]))))
+
+(t/deftest test-multiple-query-clauses
+  (cr/-put db {:crux.rocks/id 2 :foo "bar"})
+  (cr/-put db {:crux.rocks/id 2 :tar "zar"})
+  (cr/-put db {:crux.rocks/id 3 :foo "bar"})
+
+  (t/is (= #{2} (cr/query db [[:foo "bar"]
+                              [:tar "zar"]]))))
