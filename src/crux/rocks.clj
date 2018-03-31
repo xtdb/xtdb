@@ -138,14 +138,16 @@
                    ident (:attr/ident attr-schema)]
                (if (ident m) m (assoc m ident (:v (decode :val/eat v))))))
            {}
-           (rocksdb/seek-and-iterate db (encode :key/eat-prefix {:index :eat :eid eid})))))
+           (rocksdb/seek-and-iterate db
+                                     (encode :key/eat-prefix {:index :eat :eid eid})
+                                     (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
 (defn all-keys [db]
   (let [i (.newIterator db)]
     (try
       (.seekToFirst i)
       (println "Keys in the DB:")
-      (doseq [v (rocksdb/rocks-iterator->seq i nil)]
+      (doseq [v (rocksdb/rocks-iterator->seq i)]
         (println v))
       (finally
         (.close i)))))
@@ -155,7 +157,9 @@
   [db [k query-v]]
   (let [aid (attr-schema db k)]
     (into #{}
-          (for [[k v] (rocksdb/seek-and-iterate db (encode :key/index-prefix {:index :eat}))
+          (for [[k v] (rocksdb/seek-and-iterate db
+                                                (encode :key/index-prefix {:index :eat})
+                                                (encode :key/index-prefix {:index :eid}))
                 :let [{:keys [eid] :as k} (decode :key k)]
                 :when (and (= aid (:aid k))
                            (or (not query-v)

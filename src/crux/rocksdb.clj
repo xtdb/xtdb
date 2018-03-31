@@ -1,5 +1,6 @@
 (ns crux.rocksdb
-  (:require [byte-streams :as bs]))
+  (:require [byte-streams :as bs])
+  (:import [org.rocksdb ReadOptions Slice]))
 
 (defn get [db k & [pred]]
   (let [i (.newIterator db)]
@@ -10,19 +11,17 @@
       (finally
         (.close i)))))
 
-(defn rocks-iterator->seq [i pred?]
+(defn rocks-iterator->seq [i]
   (lazy-seq
-   (when (and (.isValid i) (or (not pred?) (pred? i)))
+   (when (and (.isValid i))
      (cons (conj [(.key i) (.value i)])
            (do (.next i)
-               (rocks-iterator->seq i pred?))))))
+               (rocks-iterator->seq i))))))
 
-
-(defn seek-and-iterate [db k]
-  (let [i (.newIterator db)]
+(defn seek-and-iterate [db k upper-bound]
+  (let [i (.newIterator db (.setIterateUpperBound (ReadOptions.) (Slice. upper-bound)))]
     (try
       (.seek i k)
-      (doall (rocks-iterator->seq i (fn [i]
-                                      (bs/bytes= k (byte-array (take (count k) (.key i)))))))
+      (doall (rocks-iterator->seq i))
       (finally
         (.close i)))))
