@@ -127,8 +127,6 @@
   (t/is (= #{3} (cr/query db [[:foo "tar"]])))
   (t/is (= #{2 3} (cr/query db [[:foo]]))))
 
-;; TODO test query at t
-
 (t/deftest test-multiple-query-clauses
   (cr/-put db {:crux.rocks/id 2 :foo "bar"})
   (cr/-put db {:crux.rocks/id 2 :tar "zar"})
@@ -136,3 +134,14 @@
 
   (t/is (= #{2} (cr/query db [[:foo "bar"]
                               [:tar "zar"]]))))
+
+(t/deftest test-basic-query-at-t
+  (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
+  (cr/-put db [[test-eid :tar "tar"]] (c/to-date (time/date-time 1986 10 24)))
+
+  (t/is (= #{} (cr/query db [[:foo "foo"]
+                             [:tar "tar"]]
+                         (c/to-date (time/date-time 1986 10 23)))))
+
+  (t/is (= #{test-eid} (cr/query db [[:foo "foo"]
+                                     [:tar "tar"]]))))

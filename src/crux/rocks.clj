@@ -145,15 +145,16 @@
                                      (encode :key/eat-prefix {:index :eat :eid eid})
                                      (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn- filter-attr [db eids [query-k query-v]]
+(defn- filter-attr [db at-ts eids [query-k query-v]]
   (into #{}
         (let [aid (attr-schema db query-k)]
           (for [[k v] (rocksdb/seek-and-iterate db
                                                 (encode :key/index-prefix {:index :eat})
                                                 (encode :key/index-prefix {:index :eid}))
-                :let [{:keys [eid] :as k} (decode :key k)]
+                :let [{:keys [eid ts] :as k} (decode :key k)]
                 :when (and (or (not eids) (contains? eids eid))
                            (= aid (:aid k))
+                           (>= ts (- max-timestamp (.getTime at-ts)))
                            (or (not query-v) (= query-v (:v (decode :val/eat v)))))]
             eid))))
 
@@ -161,8 +162,10 @@
   "For now, uses AET for all cases which is inefficient. Also
   inefficient because there is no short circuiting or intelligent
   movement across the EAT index."
-  [db q]
-  (reduce (partial filter-attr db) nil q))
+  ([db q]
+   (query db q (java.util.Date.)))
+  ([db q ts]
+   (reduce (partial filter-attr db ts) nil q)))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
