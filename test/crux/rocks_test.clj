@@ -132,7 +132,14 @@
   (cr/-put db {:crux.rocks/id 3 :foo "bar"})
 
   (t/is (= #{2} (cr/query db [[:e :foo "bar"]
-                              [:e :tar "zar"]]))))
+                              [:e :tar "zar"]])))
+
+  (t/is (= #{2} (cr/query db [[:e :foo "bar"]
+                              [:e :tar "zar"]])))
+
+  (t/testing "Negate query based on subsequent non-matching clause"
+    (t/is (= #{} (cr/query db [[:e :foo "bar"]
+                               [:e :tar "BAH"]])))))
 
 (t/deftest test-basic-query-at-t
   (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
@@ -152,3 +159,14 @@
   (t/is (= #{test-eid 2} (cr/query db [[:a :foo "bar"]
                                        [:a :tar "tar"]
                                        [:b :tar "zar"]]))))
+
+(t/deftest test-query-across-entities-using-join
+  (cr/-put db {:crux.rocks/id 1 :foo "bar" :tar "tar"})
+  (cr/-put db {:crux.rocks/id 2 :foo "baz" :tar "bar"})
+
+  (t/is (= #{1 2} (cr/query db [[:a :foo 'v]
+                                [:a :foo "bar"]
+                                [:b :tar 'v]])))
+
+  ;; todo test above with multiple possibilities for binding
+  )

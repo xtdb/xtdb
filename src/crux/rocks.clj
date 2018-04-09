@@ -145,9 +145,7 @@
                                      (encode :key/eat-prefix {:index :eat :eid eid})
                                      (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-;; Could build up separate sets as we go for each :e, then do a merge at the end
-
-(defn- filter-attr [db at-ts results [query-e query-k query-v]]
+(defn- filter-attr [db at-ts bindings results [query-e query-k query-v]]
   (update results query-e
           (fn [eids]
             (into #{}
@@ -159,7 +157,19 @@
                           :when (and (or (not eids) (contains? eids eid))
                                      (= aid (:aid k))
                                      (>= ts (- max-timestamp (.getTime at-ts)))
-                                     (or (not query-v) (= query-v (:v (decode :val/eat v)))))]
+                                     (cond (not query-v)
+                                           true
+
+                                           (and (symbol? query-v) (not (@bindings query-v)))
+                                           (do
+                                             (swap! bindings assoc query-v (:v (decode :val/eat v)))
+                                             true)
+
+                                           (and (symbol? query-v) (@bindings query-v))
+                                           (= (@bindings query-v) (:v (decode :val/eat v)))
+
+                                           :else
+                                           (= query-v (:v (decode :val/eat v)))))]
                       eid))))))
 
 (defn query
@@ -169,7 +179,7 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce into #{} (vals (reduce (partial filter-attr db ts) nil q)))))
+   (reduce into #{} (vals (reduce (partial filter-attr db ts (atom {})) nil q)))))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
