@@ -123,25 +123,32 @@
   (cr/-put db {:crux.rocks/id 2 :foo "bar"})
   (cr/-put db {:crux.rocks/id 3 :foo "tar"})
 
-  (t/is (= #{2} (cr/query db [[:foo "bar"]])))
-  (t/is (= #{3} (cr/query db [[:foo "tar"]])))
-  (t/is (= #{2 3} (cr/query db [[:foo]]))))
+  (t/is (= #{2} (cr/query db [[:e :foo "bar"]])))
+  (t/is (= #{3} (cr/query db [[:e :foo "tar"]])))
+  (t/is (= #{2 3} (cr/query db [[:e :foo]]))))
 
 (t/deftest test-multiple-query-clauses
-  (cr/-put db {:crux.rocks/id 2 :foo "bar"})
-  (cr/-put db {:crux.rocks/id 2 :tar "zar"})
+  (cr/-put db {:crux.rocks/id 2 :foo "bar" :tar "zar"})
   (cr/-put db {:crux.rocks/id 3 :foo "bar"})
 
-  (t/is (= #{2} (cr/query db [[:foo "bar"]
-                              [:tar "zar"]]))))
+  (t/is (= #{2} (cr/query db [[:e :foo "bar"]
+                              [:e :tar "zar"]]))))
 
 (t/deftest test-basic-query-at-t
   (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
   (cr/-put db [[test-eid :tar "tar"]] (c/to-date (time/date-time 1986 10 24)))
 
-  (t/is (= #{} (cr/query db [[:foo "foo"]
-                             [:tar "tar"]]
+  (t/is (= #{} (cr/query db [[:e :foo "foo"]
+                             [:e :tar "tar"]]
                          (c/to-date (time/date-time 1986 10 23)))))
 
-  (t/is (= #{test-eid} (cr/query db [[:foo "foo"]
-                                     [:tar "tar"]]))))
+  (t/is (= #{test-eid} (cr/query db [[:e :foo "foo"]
+                                     [:e :tar "tar"]]))))
+
+(t/deftest test-query-across-entities
+  (cr/-put db {:crux.rocks/id test-eid :foo "bar" :tar "tar"})
+  (cr/-put db {:crux.rocks/id 2 :foo "bar" :tar "zar"})
+
+  (t/is (= #{test-eid 2} (cr/query db [[:a :foo "bar"]
+                                       [:a :tar "tar"]
+                                       [:b :tar "zar"]]))))

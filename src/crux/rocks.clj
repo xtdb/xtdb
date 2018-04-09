@@ -145,18 +145,22 @@
                                      (encode :key/eat-prefix {:index :eat :eid eid})
                                      (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn- filter-attr [db at-ts eids [query-k query-v]]
-  (into #{}
-        (let [aid (attr-schema db query-k)]
-          (for [[k v] (rocksdb/seek-and-iterate db
-                                                (encode :key/index-prefix {:index :eat})
-                                                (encode :key/index-prefix {:index :eid}))
-                :let [{:keys [eid ts] :as k} (decode :key k)]
-                :when (and (or (not eids) (contains? eids eid))
-                           (= aid (:aid k))
-                           (>= ts (- max-timestamp (.getTime at-ts)))
-                           (or (not query-v) (= query-v (:v (decode :val/eat v)))))]
-            eid))))
+;; Could build up separate sets as we go for each :e, then do a merge at the end
+
+(defn- filter-attr [db at-ts results [query-e query-k query-v]]
+  (update results query-e
+          (fn [eids]
+            (into #{}
+                  (let [aid (attr-schema db query-k)]
+                    (for [[k v] (rocksdb/seek-and-iterate db
+                                                          (encode :key/index-prefix {:index :eat})
+                                                          (encode :key/index-prefix {:index :eid}))
+                          :let [{:keys [eid ts] :as k} (decode :key k)]
+                          :when (and (or (not eids) (contains? eids eid))
+                                     (= aid (:aid k))
+                                     (>= ts (- max-timestamp (.getTime at-ts)))
+                                     (or (not query-v) (= query-v (:v (decode :val/eat v)))))]
+                      eid))))))
 
 (defn query
   "For now, uses AET for all cases which is inefficient. Also
@@ -165,7 +169,7 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce (partial filter-attr db ts) nil q)))
+   (reduce into #{} (vals (reduce (partial filter-attr db ts) nil q)))))
 
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
