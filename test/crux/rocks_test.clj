@@ -1,6 +1,6 @@
-(ns crux.rocks-test
+(ns crux.core-test
   (:require [clojure.test :as t]
-            [crux.rocks :as cr]
+            [crux.core :as cr]
             [crux.byte-utils :refer :all]
             [clj-time.core :as time]
             [clj-time.coerce :as c]))
@@ -70,7 +70,7 @@
   (t/is (= 1005 (cr/next-entity-id db))))
 
 (t/deftest test-write-and-fetch-entity
-  (cr/-put db {:crux.rocks/id test-eid
+  (cr/-put db {:crux.core/id test-eid
                :foo "Bar3"
                :tar "Bar4"}
            (c/to-date (time/date-time 1986 10 22)))
@@ -120,16 +120,16 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (cr/-put db {:crux.rocks/id 2 :foo "bar"})
-  (cr/-put db {:crux.rocks/id 3 :foo "tar"})
+  (cr/-put db {:crux.core/id 2 :foo "bar"})
+  (cr/-put db {:crux.core/id 3 :foo "tar"})
 
   (t/is (= #{2} (cr/query db [[:e :foo "bar"]])))
   (t/is (= #{3} (cr/query db [[:e :foo "tar"]])))
   (t/is (= #{2 3} (cr/query db [[:e :foo]]))))
 
 (t/deftest test-multiple-query-clauses
-  (cr/-put db {:crux.rocks/id 2 :foo "bar" :tar "zar"})
-  (cr/-put db {:crux.rocks/id 3 :foo "bar"})
+  (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
+  (cr/-put db {:crux.core/id 3 :foo "bar"})
 
   (t/is (= #{2} (cr/query db [[:e :foo "bar"]
                               [:e :tar "zar"]])))
@@ -153,16 +153,16 @@
                                      [:e :tar "tar"]]))))
 
 (t/deftest test-query-across-entities
-  (cr/-put db {:crux.rocks/id test-eid :foo "bar" :tar "tar"})
-  (cr/-put db {:crux.rocks/id 2 :foo "bar" :tar "zar"})
+  (cr/-put db {:crux.core/id test-eid :foo "bar" :tar "tar"})
+  (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
 
   (t/is (= #{test-eid 2} (cr/query db [[:a :foo "bar"]
                                        [:a :tar "tar"]
                                        [:b :tar "zar"]]))))
 
 (t/deftest test-query-across-entities-using-join
-  (cr/-put db {:crux.rocks/id 1 :foo "bar" :tar "tar"})
-  (cr/-put db {:crux.rocks/id 2 :foo "baz" :tar "bar"})
+  (cr/-put db {:crux.core/id 1 :foo "bar" :tar "tar"})
+  (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
 
   (t/is (= #{1 2} (cr/query db [[:a :foo 'v]
                                 [:a :foo "bar"]

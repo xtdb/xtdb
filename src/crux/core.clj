@@ -1,4 +1,4 @@
-(ns crux.rocks
+(ns crux.core
   (:require [taoensso.nippy :as nippy]
             [crux.byte-utils :refer :all]
             [clojure.set]
