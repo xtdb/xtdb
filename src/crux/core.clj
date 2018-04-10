@@ -1,14 +1,13 @@
 (ns crux.core
   (:require [taoensso.nippy :as nippy]
             [crux.byte-utils :refer :all]
+            [crux.kv :as kv]
             [clojure.set]
             [byte-streams :as bs]
             [clj-time.core :as time]
             [clj-time.coerce :as c]
             [gloss.core :as g]
-            [gloss.io]
-            [crux.rocksdb :as rocksdb])
-  (:import [org.rocksdb RocksDB Options]))
+            [gloss.io]))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
 
@@ -63,8 +62,8 @@
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
     (let [key-entity-id (encode :key {:index :eid})]
-      (.merge db key-entity-id (long->bytes 1))
-      (bytes->long (.get db key-entity-id)))))
+      (kv/merge! db key-entity-id (long->bytes 1))
+      (bytes->long (kv/seek db key-entity-id)))))
 
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
@@ -72,25 +71,24 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (.put db (encode :key {:index :ident :ident ident})
-          (encode :val/ident {:aid aid}))
+    (kv/store db (encode :key {:index :ident :ident ident})
+              (encode :val/ident {:aid aid}))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
-      (.put db k (encode :val/attr {:attr/type type
-                                    :attr/ident ident})))
+      (kv/store db k (encode :val/attr {:attr/type type
+                                        :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
   (or (some->> {:index :ident :ident ident}
                (encode :key)
-               (rocksdb/get db)
-               second
+               (kv/seek db)
                (decode :val/ident)
                :aid)
       (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (if-let [[k v ] (rocksdb/get db (encode :key {:index :aid :aid aid}))]
+  (if-let [v (kv/seek db (encode :key {:index :aid :aid aid}))]
     (decode :val/attr v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -108,24 +106,20 @@
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
              eid (or (and (= -1 eid) (next-entity-id db)) eid)]
-         (.put db (encode :key {:index :eat
-                                :eid eid
-                                :aid aid
-                                :ts (.getTime ts)})
-               (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
+         (kv/store db (encode :key {:index :eat
+                                  :eid eid
+                                  :aid aid
+                                  :ts (.getTime ts)})
+                 (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
   ([db eid k ts]
-   (let [aid (attr-schema db k)
-         attr-schema (attr-aid->schema db aid)
-         k (encode :key {:index :eat
-                         :eid eid
-                         :aid aid
-                         :ts (.getTime ts)})]
-     (when-let [[_ v] (rocksdb/get db k (fn [i] (let [km (decode :key (.key i))]
-                                                  (and (= eid (:eid km)) (= aid (:aid km))))))]
-       (:v (decode :val/eat v))))))
+   (let [aid (attr-schema db k)]
+     (some->> (kv/seek-and-iterate db
+                                   (encode :key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
+                                   (encode :key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
+              first second (decode :val/eat) :v))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
@@ -141,18 +135,18 @@
                  m
                  (assoc m ident (:v (decode :val/eat v))))))
            {}
-           (rocksdb/seek-and-iterate db
-                                     (encode :key/eat-prefix {:index :eat :eid eid})
-                                     (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
+           (kv/seek-and-iterate db
+                                (encode :key/eat-prefix {:index :eat :eid eid})
+                                (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
 (defn- filter-attr [db at-ts bindings results [query-e query-k query-v]]
   (update results query-e
           (fn [eids]
             (into #{}
                   (let [aid (attr-schema db query-k)]
-                    (for [[k v] (rocksdb/seek-and-iterate db
-                                                          (encode :key/index-prefix {:index :eat})
-                                                          (encode :key/index-prefix {:index :eid}))
+                    (for [[k v] (kv/seek-and-iterate db
+                                                     (encode :key/index-prefix {:index :eat})
+                                                     (encode :key/index-prefix {:index :eid}))
                           :let [{:keys [eid ts] :as k} (decode :key k)]
                           :when (and (or (not eids) (contains? eids eid))
                                      (= aid (:aid k))
@@ -180,17 +174,3 @@
    (query db q (java.util.Date.)))
   ([db q ts]
    (reduce into #{} (vals (reduce (partial filter-attr db ts (atom {})) nil q)))))
-
-(defn- db-path [db-name]
-  (str "/tmp/" (name db-name) ".db"))
-
-(defn open-db [db-name]
-  ;; Open database
-  (RocksDB/loadLibrary)
-  (let [opts (doto (Options.)
-               (.setCreateIfMissing true)
-               (.setMergeOperatorName "uint64add"))]
-    (RocksDB/open opts (db-path db-name))))
-
-(defn destroy-db [db-name]
-  (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.)))

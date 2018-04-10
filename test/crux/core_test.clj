@@ -3,20 +3,22 @@
             [crux.core :as cr]
             [crux.byte-utils :refer :all]
             [clj-time.core :as time]
-            [clj-time.coerce :as c]))
+            [clj-time.coerce :as c]
+            [crux.kv :as kv]
+            [crux.rocksdb]))
 
 (def ^:dynamic db)
 
 (defn- start-system [f]
   (let [db-name :test]
-    (binding [db (cr/open-db db-name)]
+    (binding [db (kv/open (crux.rocksdb/crux-rocks-kv db-name))]
       (try
         (cr/transact-schema! db {:attr/ident :foo :attr/type :string})
         (cr/transact-schema! db {:attr/ident :tar :attr/type :string})
         (f)
         (finally
-          (.close db)
-          (cr/destroy-db db-name))))))
+          (kv/close db)
+          (kv/destroy db))))))
 
 (t/use-fixtures :each start-system)
 
