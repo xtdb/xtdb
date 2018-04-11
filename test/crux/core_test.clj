@@ -170,5 +170,11 @@
                                 [:a :foo "bar"]
                                 [:b :tar 'v]])))
 
-  ;; todo test above with multiple possibilities for binding
-  )
+  (t/is (= #{1 2} (cr/query db [[:a :foo 'v]
+                                [:b :tar 'v]])))
+
+  (cr/-put db {:crux.core/id 3 :foo "bar2" :tar "tar2"})
+  (cr/-put db {:crux.core/id 4 :foo "baz2" :tar "bar2"})
+
+  (t/is (= #{1 2 3 4} (cr/query db [[:a :foo 'v]
+                                    [:b :tar 'v]]))))

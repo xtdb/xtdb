@@ -140,31 +140,35 @@
                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
 (defn- filter-attr [db at-ts bindings results [query-e query-k query-v]]
-  (update results query-e
-          (fn [eids]
-            (into #{}
-                  (let [aid (attr-schema db query-k)]
-                    (for [[k v] (kv/seek-and-iterate db
-                                                     (encode :key/index-prefix {:index :eat})
-                                                     (encode :key/index-prefix {:index :eid}))
-                          :let [{:keys [eid ts] :as k} (decode :key k)]
-                          :when (and (or (not eids) (contains? eids eid))
-                                     (= aid (:aid k))
-                                     (>= ts (- max-timestamp (.getTime at-ts)))
-                                     (cond (not query-v)
-                                           true
+  (let [binding (atom #{})
+        results (update results query-e
+                        (fn [eids]
+                          (into #{}
+                                (let [aid (attr-schema db query-k)]
+                                  (for [[k v] (kv/seek-and-iterate db
+                                                                   (encode :key/index-prefix {:index :eat})
+                                                                   (encode :key/index-prefix {:index :eid}))
+                                        :let [{:keys [eid ts] :as k} (decode :key k)]
+                                        :when (and (or (not eids) (contains? eids eid))
+                                                   (= aid (:aid k))
+                                                   (>= ts (- max-timestamp (.getTime at-ts)))
+                                                   (cond (not query-v)
+                                                         true
 
-                                           (and (symbol? query-v) (not (@bindings query-v)))
-                                           (do
-                                             (swap! bindings assoc query-v (:v (decode :val/eat v)))
-                                             true)
+                                                         (and (symbol? query-v) (not (@bindings query-v)))
+                                                         (do
+                                                           (swap! binding conj (:v (decode :val/eat v)))
+                                                           true)
 
-                                           (and (symbol? query-v) (@bindings query-v))
-                                           (= (@bindings query-v) (:v (decode :val/eat v)))
+                                                         (and (symbol? query-v) (@bindings query-v))
+                                                         (contains? (@bindings query-v) (:v (decode :val/eat v)))
 
-                                           :else
-                                           (= query-v (:v (decode :val/eat v)))))]
-                      eid))))))
+                                                         :else
+                                                         (= query-v (:v (decode :val/eat v)))))]
+                                    eid)))))]
+    (when (symbol? query-v)
+      (swap! bindings assoc query-v @binding))
+    results))
 
 (defn query
   "For now, uses AET for all cases which is inefficient. Also
