@@ -139,36 +139,39 @@
                                 (encode :key/eat-prefix {:index :eat :eid eid})
                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn- filter-attr [db at-ts bindings results [query-e query-k query-v]]
+(defn- filter-attr [db at-ts bindings results [query-e aid query-v]]
   (let [binding (atom #{})
         results (update results query-e
                         (fn [eids]
                           (into #{}
-                                (let [aid (attr-schema db query-k)]
-                                  (for [[k v] (kv/seek-and-iterate db
-                                                                   (encode :key/index-prefix {:index :eat})
-                                                                   (encode :key/index-prefix {:index :eid}))
-                                        :let [{:keys [eid ts] :as k} (decode :key k)]
-                                        :when (and (or (not eids) (contains? eids eid))
-                                                   (= aid (:aid k))
-                                                   (>= ts (- max-timestamp (.getTime at-ts)))
-                                                   (cond (not query-v)
-                                                         true
+                                (for [[k v] (kv/seek-and-iterate db
+                                                                 (encode :key/index-prefix {:index :eat})
+                                                                 (encode :key/index-prefix {:index :eid}))
+                                      :let [{:keys [eid ts] :as k} (decode :key k)]
+                                      :when (and (or (not eids) (contains? eids eid))
+                                                 (= aid (:aid k))
+                                                 (>= ts (- max-timestamp (.getTime at-ts)))
+                                                 (cond (not query-v)
+                                                       true
 
-                                                         (and (symbol? query-v) (not (@bindings query-v)))
-                                                         (do
-                                                           (swap! binding conj (:v (decode :val/eat v)))
-                                                           true)
+                                                       (and (symbol? query-v) (not (@bindings query-v)))
+                                                       (do
+                                                         (swap! binding conj (:v (decode :val/eat v)))
+                                                         true)
 
-                                                         (and (symbol? query-v) (@bindings query-v))
-                                                         (contains? (@bindings query-v) (:v (decode :val/eat v)))
+                                                       (and (symbol? query-v) (@bindings query-v))
+                                                       (contains? (@bindings query-v) (:v (decode :val/eat v)))
 
-                                                         :else
-                                                         (= query-v (:v (decode :val/eat v)))))]
-                                    eid)))))]
+                                                       :else
+                                                       (= query-v (:v (decode :val/eat v)))))]
+                                  eid))))]
     (when (symbol? query-v)
       (swap! bindings assoc query-v @binding))
     results))
+
+(defn- preprocess-terms [db terms]
+  (for [[e a v] terms]
+    [e (attr-schema db a) v]))
 
 (defn query
   "For now, uses AET for all cases which is inefficient. Also
@@ -177,4 +180,4 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce into #{} (vals (reduce (partial filter-attr db ts (atom {})) nil q)))))
+   (reduce into #{} (vals (reduce (partial filter-attr db ts (atom {})) nil (preprocess-terms db q))))))
