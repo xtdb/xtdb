@@ -149,36 +149,29 @@
                       (>= ts (- max-timestamp (.getTime at-ts))))))
        (map (fn [[{:keys [eid aid]} v]] [eid aid v]))))
 
-(defn- match-terms [bindings binding [term-e term-aid term-v] [eid aid v]]
+(defn- match-terms [binding [_ _ term-v] [_ _ v]]
   (cond (not term-v)
         true
 
-        (and (symbol? term-v) (not (@bindings term-v)))
-        (do
-          (swap! binding conj v)
-          true)
+        (and binding (nil? @binding))
+        true
 
-        (and (symbol? term-v) (@bindings term-v))
-        (contains? (@bindings term-v) v)
+        (and binding)
+        (contains? @binding v)
 
         :else
         (= term-v v)))
 
-(defn- filter-attr [db at-ts bindings results [term-e _ term-v :as term]]
-  (let [binding (atom #{})
-        results (update results term-e
-                        (fn [eids]
-                          (->> (candidate-terms db at-ts term)
-                               (filter (partial match-terms bindings binding term))
-                               (map first)
-                               (into #{}))))]
-    (when (symbol? term-v)
-      (swap! bindings assoc term-v @binding))
-    results))
+(defn- filter-attr [db at-ts bindings results [term-e _ term-v binding :as term]]
+  (let [matchin-terms (->> (candidate-terms db at-ts term)
+                           (filter (partial match-terms binding term)))]
+    (when (and binding (nil? @binding))
+      (reset! binding (set (map #(nth % 2) matchin-terms))))
+    (assoc results term-e (->> matchin-terms (map first) set))))
 
 (defn- preprocess-terms [db terms]
   (for [[e a v] terms]
-    [e (attr-schema db a) v]))
+    [e (attr-schema db a) v (when (symbol? v) (atom nil))]))
 
 (defn query
   "For now, uses AET for all cases which is inefficient. Also
