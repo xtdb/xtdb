@@ -149,50 +149,39 @@
                             (encode :key/index-prefix {:index :eid}))
        (map (fn [[k _]] (decode :key k)))
        (map :eid)
+       (map vector)
        (into #{})))
 
-(defn- match-terms [[_ _ term-v binding] [_ v]]
-  (cond (not term-v)
-        true
-
-        (and binding (nil? @binding))
-        true
-
-        (and binding)
-        (contains? @binding v)
-
-        :else
-        (= term-v v)))
-
-(defn- filter-attr [db at-ts results [term-e term-aid _ binding :as term]]
-  (let [tuples (->> (or (get results term-e) (entity-ids db))
-                    (map (fn [eid] [eid (-get-at db eid term-aid at-ts)]))
-                    (filter last)
-                    (filter (partial match-terms term)))]
-    (when (and binding (nil? @binding))
-      (reset! binding (set (map second tuples))))
-    (assoc results term-e (map first tuples))))
+(defn- filter-attr [db at-ts results [term-e term-aid term-v]]
+  (update results term-e (fn [results]
+                           (->> (or results (entity-ids db))
+                                (keep (fn [[eid bindings]]
+                                        (let [v (-get-at db eid term-aid at-ts)]
+                                          (when (and v (or (not term-v) (symbol? term-v) (= term-v v)))
+                                            [eid (if (symbol? term-v)
+                                                   (assoc bindings term-v v)
+                                                   bindings)]))))))))
 
 (defn- preprocess-terms [db terms]
-  (let [v-bindings (into {} (for [[_ _ v] terms
-                                  :when (symbol? v)]
-                              [v (atom nil)]))]
-    (for [[e a v] terms]
-      [e (attr-schema db a) v (when (symbol? v) (v-bindings v))])))
+  (for [[e a v] terms]
+    [e (attr-schema db a) v]))
 
 (defn query
-  "For now, uses AET for all cases which is inefficient. Also
-  inefficient because there is no short circuiting or intelligent
-  movement across the EAT index."
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
    (let [eids (reduce (partial filter-attr db ts) nil (preprocess-terms db q))]
      ;; unify the sets of EIDs
-     (into #{} (reduce (fn [results [term-e eids]]
-                         (if (nil? results)
-                           (map #(hash-map term-e %) eids)
-                           (for [m results
-                                 eid eids]
-                             (assoc m term-e eid))))
-                       nil eids)))))
+     (into #{} (->> eids
+                    (reduce (fn [results [term-e eids]]
+                              (if (nil? results)
+                                (map #(hash-map term-e (first %) :bindings (second %)) eids)
+                                (for [m results
+                                      [eid bindings] eids
+                                      :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
+                                                                                           (set (keys (:bindings m))))]
+                                      :when (= (select-keys bindings intersected-bindings)
+                                               (select-keys (:bindings m) intersected-bindings))]
+                                  (assoc m term-e eid))))
+                            nil)
+                    (map #(dissoc % :bindings)))))))
