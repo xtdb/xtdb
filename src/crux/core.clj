@@ -167,7 +167,9 @@
                            (filter (partial match-terms term)))]
     (when (and binding (nil? @binding))
       (reset! binding (set (map #(nth % 2) matchin-terms))))
-    (assoc results term-e (->> matchin-terms (map first) set))))
+    (into results (map (fn [[eid]]
+                         {term-e eid})
+                       matchin-terms))))
 
 (defn- preprocess-terms [db terms]
   (let [v-bindings (into {} (for [[_ _ v] terms
@@ -183,4 +185,4 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce into #{} (vals (reduce (partial filter-attr db ts) nil (preprocess-terms db q))))))
+   (reduce (partial filter-attr db ts) #{} (preprocess-terms db q))))
