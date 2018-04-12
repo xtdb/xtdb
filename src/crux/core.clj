@@ -170,8 +170,11 @@
     (assoc results term-e (->> matchin-terms (map first) set))))
 
 (defn- preprocess-terms [db terms]
-  (for [[e a v] terms]
-    [e (attr-schema db a) v (when (symbol? v) (atom nil))]))
+  (let [v-bindings (into {} (for [[_ _ v] terms
+                                  :when (symbol? v)]
+                              [v (atom nil)]))]
+    (for [[e a v] terms]
+      [e (attr-schema db a) v (when (symbol? v) (v-bindings v))])))
 
 (defn query
   "For now, uses AET for all cases which is inefficient. Also
