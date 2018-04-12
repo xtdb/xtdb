@@ -171,8 +171,7 @@
   (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
   (cr/-put db {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"})
 
-  (t/is (= #{{:a 1 :b 2}
-             {:a 2 :b 1}} (cr/query db [[:a :foo 'v]
+  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
                                         [:b :tar 'v]])))
 
   ;;  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
