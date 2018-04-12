@@ -170,18 +170,17 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (let [eids (reduce (partial filter-attr db ts) nil (preprocess-terms db q))]
-     ;; unify the sets of EIDs
-     (into #{} (->> eids
-                    (reduce (fn [results [term-e eids]]
-                              (if (nil? results)
-                                (map #(hash-map term-e (first %) :bindings (second %)) eids)
-                                (for [m results
-                                      [eid bindings] eids
-                                      :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
-                                                                                           (set (keys (:bindings m))))]
-                                      :when (= (select-keys bindings intersected-bindings)
-                                               (select-keys (:bindings m) intersected-bindings))]
-                                  (assoc m term-e eid))))
-                            nil)
-                    (map #(dissoc % :bindings)))))))
+   (into #{} (->> (preprocess-terms db q)
+                  (reduce (partial filter-attr db ts) nil)
+                  (reduce (fn [results [term-e eids]]
+                            (if (nil? results)
+                              (map #(hash-map term-e (first %) :bindings (second %)) eids)
+                              (for [m results
+                                    [eid bindings] eids
+                                    :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
+                                                                                         (set (keys (:bindings m))))]
+                                    :when (= (select-keys bindings intersected-bindings)
+                                             (select-keys (:bindings m) intersected-bindings))]
+                                (assoc m term-e eid))))
+                          nil)
+                  (map #(dissoc % :bindings))))))
