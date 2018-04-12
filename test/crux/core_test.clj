@@ -136,6 +136,9 @@
   (t/is (= #{2} (cr/query db [[:e :foo "bar"]
                               [:e :tar "zar"]])))
 
+  ;;#{{:e 2}}
+  ;;{:e #{2}}
+
   (t/is (= #{2} (cr/query db [[:e :foo "bar"]
                               [:e :tar "zar"]])))
 

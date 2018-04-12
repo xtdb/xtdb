@@ -139,33 +139,41 @@
                                 (encode :key/eat-prefix {:index :eat :eid eid})
                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn- filter-attr [db at-ts bindings results [query-e aid query-v]]
+(defn- candidate-terms [db at-ts [_ term-aid _]]
+  (->> (kv/seek-and-iterate db
+                            (encode :key/index-prefix {:index :eat})
+                            (encode :key/index-prefix {:index :eid}))
+       (map (fn [[k v]] [(decode :key k) (:v (decode :val/eat v))]))
+       (filter (fn [[{:keys [ts aid] :as k} _]]
+                 (and (= term-aid aid)
+                      (>= ts (- max-timestamp (.getTime at-ts))))))
+       (map (fn [[{:keys [eid aid]} v]] [eid aid v]))))
+
+(defn- match-terms [bindings binding [term-e term-aid term-v] [eid aid v]]
+  (cond (not term-v)
+        true
+
+        (and (symbol? term-v) (not (@bindings term-v)))
+        (do
+          (swap! binding conj v)
+          true)
+
+        (and (symbol? term-v) (@bindings term-v))
+        (contains? (@bindings term-v) v)
+
+        :else
+        (= term-v v)))
+
+(defn- filter-attr [db at-ts bindings results [term-e _ term-v :as term]]
   (let [binding (atom #{})
-        results (update results query-e
+        results (update results term-e
                         (fn [eids]
-                          (into #{}
-                                (for [[k v] (kv/seek-and-iterate db
-                                                                 (encode :key/index-prefix {:index :eat})
-                                                                 (encode :key/index-prefix {:index :eid}))
-                                      :let [{:keys [eid ts] :as k} (decode :key k)]
-                                      :when (and (= aid (:aid k))
-                                                 (>= ts (- max-timestamp (.getTime at-ts)))
-                                                 (cond (not query-v)
-                                                       true
-
-                                                       (and (symbol? query-v) (not (@bindings query-v)))
-                                                       (do
-                                                         (swap! binding conj (:v (decode :val/eat v)))
-                                                         true)
-
-                                                       (and (symbol? query-v) (@bindings query-v))
-                                                       (contains? (@bindings query-v) (:v (decode :val/eat v)))
-
-                                                       :else
-                                                       (= query-v (:v (decode :val/eat v)))))]
-                                  eid))))]
-    (when (symbol? query-v)
-      (swap! bindings assoc query-v @binding))
+                          (->> (candidate-terms db at-ts term)
+                               (filter (partial match-terms bindings binding term))
+                               (map first)
+                               (into #{}))))]
+    (when (symbol? term-v)
+      (swap! bindings assoc term-v @binding))
     results))
 
 (defn- preprocess-terms [db terms]
