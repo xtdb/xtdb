@@ -148,8 +148,7 @@
                                                                  (encode :key/index-prefix {:index :eat})
                                                                  (encode :key/index-prefix {:index :eid}))
                                       :let [{:keys [eid ts] :as k} (decode :key k)]
-                                      :when (and (or (not eids) (contains? eids eid))
-                                                 (= aid (:aid k))
+                                      :when (and (= aid (:aid k))
                                                  (>= ts (- max-timestamp (.getTime at-ts)))
                                                  (cond (not query-v)
                                                        true
