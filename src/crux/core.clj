@@ -187,7 +187,12 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (into #{}
-         (for [[k eids] (reduce (partial filter-attr db ts) nil (preprocess-terms db q))
-               eid eids]
-           {k eid}))))
+   (let [eids (reduce (partial filter-attr db ts) nil (preprocess-terms db q))]
+     ;; unify the sets of EIDs
+     (into #{} (reduce (fn [results [term-e eids]]
+                         (if (nil? results)
+                           (map #(hash-map term-e %) eids)
+                           (for [m results
+                                 eid eids]
+                             (assoc m term-e eid))))
+                       nil eids)))))
