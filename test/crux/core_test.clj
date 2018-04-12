@@ -174,13 +174,13 @@
   (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
                                         [:b :tar 'v]])))
 
-  ;;  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
-  ;;                                       [:b :tar 'v]])))
+  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
+                                        [:b :tar 'v]
+                                        [:a :foo "bar"]])))
 
-  ;; (cr/-put db {:crux.core/id 3 :foo "bar2" :tar "tar2"})
-  ;; (cr/-put db {:crux.core/id 4 :foo "baz2" :tar "bar2"})
+  (cr/-put db {:crux.core/id 3 :foo "bar2" :tar "tar2"})
+  (cr/-put db {:crux.core/id 4 :foo "baz2" :tar "bar2"})
 
-  ;; (t/is (= #{1 2 3 4} (cr/query db [[:a :foo 'v]
-  ;;                                   [:b :tar 'v]])))
-
-  )
+  (t/is (= #{{:a 1 :b 2}
+             {:a 3 :b 4}} (cr/query db [[:a :foo 'v]
+                                        [:b :tar 'v]]))))
