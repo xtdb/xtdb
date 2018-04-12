@@ -160,7 +160,11 @@
 
   (t/is (= #{{:a test-eid :b 2}} (cr/query db [[:a :foo "bar"]
                                                [:a :tar "tar"]
-                                               [:b :tar "zar"]]))))
+                                               [:b :tar "zar"]])))
+
+  (t/testing "Should not unify on empty set"
+    (t/is (= #{} (cr/query db [[:a :foo "bar"]
+                               [:b :tar "NUTTING"]])))))
 
 ;; (t/deftest test-query-across-entities-using-join
 ;;   (cr/-put db {:crux.core/id 1 :foo "bar" :tar "tar"})
