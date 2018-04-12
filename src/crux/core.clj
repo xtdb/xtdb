@@ -149,7 +149,7 @@
                       (>= ts (- max-timestamp (.getTime at-ts))))))
        (map (fn [[{:keys [eid aid]} v]] [eid aid v]))))
 
-(defn- match-terms [binding [_ _ term-v] [_ _ v]]
+(defn- match-terms [[_ _ term-v binding] [_ _ v]]
   (cond (not term-v)
         true
 
@@ -162,9 +162,9 @@
         :else
         (= term-v v)))
 
-(defn- filter-attr [db at-ts bindings results [term-e _ term-v binding :as term]]
+(defn- filter-attr [db at-ts results [term-e _ _ binding :as term]]
   (let [matchin-terms (->> (candidate-terms db at-ts term)
-                           (filter (partial match-terms binding term)))]
+                           (filter (partial match-terms term)))]
     (when (and binding (nil? @binding))
       (reset! binding (set (map #(nth % 2) matchin-terms))))
     (assoc results term-e (->> matchin-terms (map first) set))))
@@ -183,4 +183,4 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce into #{} (vals (reduce (partial filter-attr db ts (atom {})) nil (preprocess-terms db q))))))
+   (reduce into #{} (vals (reduce (partial filter-attr db ts) nil (preprocess-terms db q))))))
