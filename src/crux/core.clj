@@ -115,7 +115,7 @@
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
   ([db eid k ts]
-   (let [aid (attr-schema db k)]
+   (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
      (some->> (kv/seek-and-iterate db
                                    (encode :key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
                                    (encode :key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
@@ -139,17 +139,19 @@
                                 (encode :key/eat-prefix {:index :eat :eid eid})
                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
 
-(defn- candidate-terms [db at-ts [_ term-aid _]]
+(defn- entity-ids
+  "Sequence of all entities in the DB. If this approach sticks, it
+  could be a performance gain to replace this with a dedicate EID
+  index that could be lazy."
+  [db]
   (->> (kv/seek-and-iterate db
                             (encode :key/index-prefix {:index :eat})
                             (encode :key/index-prefix {:index :eid}))
-       (map (fn [[k v]] [(decode :key k) (:v (decode :val/eat v))]))
-       (filter (fn [[{:keys [ts aid] :as k} _]]
-                 (and (= term-aid aid)
-                      (>= ts (- max-timestamp (.getTime at-ts))))))
-       (map (fn [[{:keys [eid aid]} v]] [eid aid v]))))
+       (map (fn [[k _]] (decode :key k)))
+       (map :eid)
+       (into #{})))
 
-(defn- match-terms [[_ _ term-v binding] [_ _ v]]
+(defn- match-terms [[_ _ term-v binding] [_ v]]
   (cond (not term-v)
         true
 
@@ -162,14 +164,14 @@
         :else
         (= term-v v)))
 
-(defn- filter-attr [db at-ts results [term-e _ _ binding :as term]]
-  (let [matchin-terms (->> (candidate-terms db at-ts term)
-                           (filter (partial match-terms term)))]
+(defn- filter-attr [db at-ts results [term-e term-aid _ binding :as term]]
+  (let [tuples (->> (or (get results term-e) (entity-ids db))
+                    (map (fn [eid] [eid (-get-at db eid term-aid at-ts)]))
+                    (filter last)
+                    (filter (partial match-terms term)))]
     (when (and binding (nil? @binding))
-      (reset! binding (set (map #(nth % 2) matchin-terms))))
-    (into results (map (fn [[eid]]
-                         {term-e eid})
-                       matchin-terms))))
+      (reset! binding (set (map second tuples))))
+    (assoc results term-e (map first tuples))))
 
 (defn- preprocess-terms [db terms]
   (let [v-bindings (into {} (for [[_ _ v] terms
@@ -185,4 +187,7 @@
   ([db q]
    (query db q (java.util.Date.)))
   ([db q ts]
-   (reduce (partial filter-attr db ts) #{} (preprocess-terms db q))))
+   (into #{}
+         (for [[k eids] (reduce (partial filter-attr db ts) nil (preprocess-terms db q))
+               eid eids]
+           {k eid}))))
