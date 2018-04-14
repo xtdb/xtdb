@@ -4,24 +4,11 @@
             [crux.byte-utils :refer :all]
             [clj-time.core :as time]
             [clj-time.coerce :as c]
-            [crux.fixtures :as f]
+            [crux.fixtures :as f :refer [db]]
             [crux.kv :as kv]
             [crux.rocksdb]))
 
-(def ^:dynamic db)
-
-(defn- start-system [f]
-  (let [db-name :test]
-    (binding [db (kv/open (crux.rocksdb/crux-rocks-kv db-name))]
-      (try
-        (cr/transact-schema! db {:attr/ident :foo :attr/type :string})
-        (cr/transact-schema! db {:attr/ident :tar :attr/type :string})
-        (f)
-        (finally
-          (kv/close db)
-          (kv/destroy db))))))
-
-(t/use-fixtures :each start-system)
+(t/use-fixtures :each f/start-system)
 
 (def test-eid 1)
 
@@ -61,16 +48,14 @@
   (cr/-put db [[test-eid :tar "Bar4"]] (c/to-date (time/date-time 1986 10 22)))
   (t/is (not (cr/-get-at db test-eid :tar (c/to-date (time/date-time 1986 10 21))))))
 
-(.getTime (c/to-date (time/date-time 2030 12 30)))
-
 (t/deftest test-entity-ids
-  (t/is (= 3 (cr/next-entity-id db)))
-  (t/is (= 4 (cr/next-entity-id db)))
+  (t/is (= 7 (cr/next-entity-id db)))
+  (t/is (= 8 (cr/next-entity-id db)))
 
   (dotimes [n 1000]
     (cr/next-entity-id db))
 
-  (t/is (= 1005 (cr/next-entity-id db))))
+  (t/is (= 1009 (cr/next-entity-id db))))
 
 (t/deftest test-write-and-fetch-entity
   (cr/-put db {:crux.core/id test-eid
@@ -123,12 +108,12 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (cr/-put db {:crux.core/id 2 :foo "bar"})
-  (cr/-put db {:crux.core/id 3 :foo "tar"})
+  (doseq [p (map #(assoc %1 :name %2) (take 2 f/people) ["Ivan" "Petr"])]
+    (cr/-put db p))
 
-  (t/is (= #{{:e 2}} (cr/q db [[:e :foo "bar"]])))
-  (t/is (= #{{:e 3}} (cr/q db [[:e :foo "tar"]])))
-  (t/is (= #{{:e 2} {:e 3}} (cr/q db [[:e :foo]]))))
+  (t/is (= #{{:e 1001}} (cr/q db [[:e :name "Ivan"]])))
+  (t/is (= #{{:e 1002}} (cr/q db [[:e :name "Petr"]])))
+  (t/is (= #{{:e 1001} {:e 1002}} (cr/q db [[:e :name]]))))
 
 (t/deftest test-multiple-query-clauses
   (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
@@ -189,7 +174,6 @@
              {:a 3 :b 4}} (cr/q db [[:a :foo 'v]
                                     [:b :tar 'v]])))
 
-  (f/transact-schemas! db)
   (doseq [p (map #(assoc %1 :name %2) (take 5 f/people) ["Ivan" "Petr" "Sergei" "Denis" "Denis"])]
     (cr/-put db p))
 

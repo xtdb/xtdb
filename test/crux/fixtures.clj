@@ -1,5 +1,6 @@
 (ns crux.fixtures
-  (:require [crux.core :as cr]))
+  (:require [crux.core :as cr]
+            [crux.kv :as kv]))
 
 ;; From Datascript:
 
@@ -20,3 +21,17 @@
                         :salary    (rand-int 100000)})
 
 (def people (repeatedly random-person))
+
+(def ^:dynamic db)
+
+(defn start-system [f]
+  (let [db-name :test]
+    (binding [db (kv/open (crux.rocksdb/crux-rocks-kv db-name))]
+      (try
+        (cr/transact-schema! db {:attr/ident :foo :attr/type :string})
+        (cr/transact-schema! db {:attr/ident :tar :attr/type :string})
+        (transact-schemas! db)
+        (f)
+        (finally
+          (kv/close db)
+          (kv/destroy db))))))
