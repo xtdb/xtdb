@@ -49,13 +49,11 @@
   (t/is (not (cr/-get-at db test-eid :tar (c/to-date (time/date-time 1986 10 21))))))
 
 (t/deftest test-entity-ids
-  (t/is (= 7 (cr/next-entity-id db)))
-  (t/is (= 8 (cr/next-entity-id db)))
+  (let [eid (cr/next-entity-id db)]
+    (dotimes [n 1000]
+      (cr/next-entity-id db))
 
-  (dotimes [n 1000]
-    (cr/next-entity-id db))
-
-  (t/is (= 1009 (cr/next-entity-id db))))
+    (t/is (= (+ eid 1001) (cr/next-entity-id db)))))
 
 (t/deftest test-write-and-fetch-entity
   (cr/-put db {:crux.core/id test-eid
