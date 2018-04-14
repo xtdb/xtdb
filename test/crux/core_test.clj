@@ -62,15 +62,13 @@
              (cr/entity db (:crux.core/id person))))))
 
 (t/deftest test-fetch-entity-at-t
-  (cr/-put db [[test-eid :foo "foo1"]
-               [test-eid :tar "tar1"]] (c/to-date (time/date-time 1986 10 22)))
-  (cr/-put db [[test-eid :foo "foo2"]
-               [test-eid :tar "tar2"]] (c/to-date (time/date-time 1986 10 24)))
-
-  (t/is (= {:tar "tar1" :foo "foo1"}
-           (cr/entity db test-eid (c/to-date (time/date-time 1986 10 23)))))
-  (t/is (= {:tar "tar2" :foo "foo2"}
-           (cr/entity db test-eid))))
+  (let [person (first f/people)]
+    (cr/-put db (assoc person :name "Fred") (c/to-date (time/date-time 1986 10 22)))
+    (cr/-put db (assoc person :name "Freda") (c/to-date (time/date-time 1986 10 24)))
+    (t/is (= "Fred"
+             (:name (cr/entity db (:crux.core/id person) (c/to-date (time/date-time 1986 10 23))))))
+    (t/is (= "Freda"
+             (:name (cr/entity db (:crux.core/id person)))))))
 
 (t/deftest test-invalid-attribute-exception
   (try
@@ -149,8 +147,7 @@
                            [:b :tar "NUTTING"]])))))
 
 (t/deftest test-query-across-entities-using-join
-
-  ;; TODO deprecate this hard to read test code
+  ;; TODO cleanup this hard to read test code, in lieu of people fixtures
 
   (cr/-put db {:crux.core/id 1 :foo "bar" :tar "tar"})
   (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
