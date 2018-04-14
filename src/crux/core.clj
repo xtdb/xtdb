@@ -166,11 +166,12 @@
   (for [[e a v] terms]
     [e (attr-schema db a) v]))
 
-(defn query
-  ([db q]
-   (query db q (java.util.Date.)))
-  ([db q ts]
-   (into #{} (->> (preprocess-terms db q)
+(defn q
+  ([db terms]
+   (q db terms (java.util.Date.)))
+  ([db terms ts]
+   (into #{} (->> terms
+                  (preprocess-terms db)
                   (reduce (partial filter-attr db ts) nil)
                   (reduce (fn [results [term-e eids]]
                             (if (nil? results)

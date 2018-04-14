@@ -126,46 +126,46 @@
   (cr/-put db {:crux.core/id 2 :foo "bar"})
   (cr/-put db {:crux.core/id 3 :foo "tar"})
 
-  (t/is (= #{{:e 2}} (cr/query db [[:e :foo "bar"]])))
-  (t/is (= #{{:e 3}} (cr/query db [[:e :foo "tar"]])))
-  (t/is (= #{{:e 2} {:e 3}} (cr/query db [[:e :foo]]))))
+  (t/is (= #{{:e 2}} (cr/q db [[:e :foo "bar"]])))
+  (t/is (= #{{:e 3}} (cr/q db [[:e :foo "tar"]])))
+  (t/is (= #{{:e 2} {:e 3}} (cr/q db [[:e :foo]]))))
 
 (t/deftest test-multiple-query-clauses
   (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
   (cr/-put db {:crux.core/id 3 :foo "bar"})
 
-  (t/is (= #{{:e 2}} (cr/query db [[:e :foo "bar"]
-                                   [:e :tar "zar"]])))
+  (t/is (= #{{:e 2}} (cr/q db [[:e :foo "bar"]
+                               [:e :tar "zar"]])))
 
-  (t/is (= #{{:e 2}} (cr/query db [[:e :foo "bar"]
-                                   [:e :tar "zar"]])))
+  (t/is (= #{{:e 2}} (cr/q db [[:e :foo "bar"]
+                               [:e :tar "zar"]])))
 
   (t/testing "Negate query based on subsequent non-matching clause"
-    (t/is (= #{} (cr/query db [[:e :foo "bar"]
-                               [:e :tar "BAH"]])))))
+    (t/is (= #{} (cr/q db [[:e :foo "bar"]
+                           [:e :tar "BAH"]])))))
 
 (t/deftest test-basic-query-at-t
   (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
   (cr/-put db [[test-eid :tar "tar"]] (c/to-date (time/date-time 1986 10 24)))
 
-  (t/is (= #{} (cr/query db [[:e :foo "foo"]
-                             [:e :tar "tar"]]
-                         (c/to-date (time/date-time 1986 10 23)))))
+  (t/is (= #{} (cr/q db [[:e :foo "foo"]
+                         [:e :tar "tar"]]
+                     (c/to-date (time/date-time 1986 10 23)))))
 
-  (t/is (= #{{:e test-eid}} (cr/query db [[:e :foo "foo"]
-                                          [:e :tar "tar"]]))))
+  (t/is (= #{{:e test-eid}} (cr/q db [[:e :foo "foo"]
+                                      [:e :tar "tar"]]))))
 
 (t/deftest test-query-across-entities
   (cr/-put db {:crux.core/id test-eid :foo "bar" :tar "tar"})
   (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
 
-  (t/is (= #{{:a test-eid :b 2}} (cr/query db [[:a :foo "bar"]
-                                               [:a :tar "tar"]
-                                               [:b :tar "zar"]])))
+  (t/is (= #{{:a test-eid :b 2}} (cr/q db [[:a :foo "bar"]
+                                           [:a :tar "tar"]
+                                           [:b :tar "zar"]])))
 
   (t/testing "Should not unify on empty set"
-    (t/is (= #{} (cr/query db [[:a :foo "bar"]
-                               [:b :tar "NUTTING"]])))))
+    (t/is (= #{} (cr/q db [[:a :foo "bar"]
+                           [:b :tar "NUTTING"]])))))
 
 (t/deftest test-query-across-entities-using-join
 
@@ -175,29 +175,29 @@
   (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
   (cr/-put db {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"})
 
-  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
-                                        [:b :tar 'v]])))
+  (t/is (= #{{:a 1 :b 2}} (cr/q db [[:a :foo 'v]
+                                    [:b :tar 'v]])))
 
-  (t/is (= #{{:a 1 :b 2}} (cr/query db [[:a :foo 'v]
-                                        [:b :tar 'v]
-                                        [:a :foo "bar"]])))
+  (t/is (= #{{:a 1 :b 2}} (cr/q db [[:a :foo 'v]
+                                    [:b :tar 'v]
+                                    [:a :foo "bar"]])))
 
   (cr/-put db {:crux.core/id 3 :foo "bar2" :tar "tar2"})
   (cr/-put db {:crux.core/id 4 :foo "baz2" :tar "bar2"})
 
   (t/is (= #{{:a 1 :b 2}
-             {:a 3 :b 4}} (cr/query db [[:a :foo 'v]
-                                        [:b :tar 'v]])))
+             {:a 3 :b 4}} (cr/q db [[:a :foo 'v]
+                                    [:b :tar 'v]])))
 
   (f/transact-schemas! db)
   (doseq [p (map #(assoc %1 :name %2) (take 5 f/people) ["Ivan" "Petr" "Sergei" "Denis" "Denis"])]
     (cr/-put db p))
 
   (t/testing "Five people, without a join"
-    (t/is (= 5 (count (cr/query db [[:p1 :name 'name]
-                                    [:p1 :age 'age]
-                                    [:p1 :salary 'salary]])))))
+    (t/is (= 5 (count (cr/q db [[:p1 :name 'name]
+                                [:p1 :age 'age]
+                                [:p1 :salary 'salary]])))))
 
   (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 7 (count (cr/query db [[:p1 :name 'name]
-                                    [:p2 :name 'name]]))))))
+    (t/is (= 7 (count (cr/q db [[:p1 :name 'name]
+                                [:p2 :name 'name]]))))))
