@@ -57,14 +57,14 @@
 
 (t/deftest test-write-and-fetch-entity
   (let [person (first f/people)
-        eid (first (vals (cr/-put db person (c/to-date (time/date-time 1986 10 22)))))]
+        eid (first (vals (cr/-put db [person] (c/to-date (time/date-time 1986 10 22)))))]
     (t/is (= (dissoc person :crux.core/id)
              (dissoc (cr/entity db eid) :crux.core/id)))))
 
 (t/deftest test-fetch-entity-at-t
   (let [person (first f/people)
-        eid (first (vals (cr/-put db (assoc person :name "Fred") (c/to-date (time/date-time 1986 10 22)))))]
-    (cr/-put db (assoc person :name "Freda" :crux.core/id eid) (c/to-date (time/date-time 1986 10 24)))
+        eid (first (vals (cr/-put db [(assoc person :name "Fred")] (c/to-date (time/date-time 1986 10 22)))))]
+    (cr/-put db [(assoc person :name "Freda" :crux.core/id eid)] (c/to-date (time/date-time 1986 10 24)))
     (t/is (= "Fred"
              (:name (cr/entity db eid (c/to-date (time/date-time 1986 10 23))))))
     (t/is (= "Freda"
@@ -102,7 +102,7 @@
 
 (t/deftest test-basic-query
   (let [[ivan petr :as people] (map #(assoc %1 :name %2) (take 2 f/people) ["Ivan" "Petr"])
-        ids (apply merge (map #(cr/-put db %) people))]
+        ids (cr/-put db people)]
     (t/is (= #{{:e (get ids (:crux.core/id ivan))}} (cr/q db [[:e :name "Ivan"]])))
     (t/is (= #{{:e (get ids (:crux.core/id petr))}} (cr/q db [[:e :name "Petr"]])))
     (t/is (= #{{:e (get ids (:crux.core/id ivan))}
@@ -110,8 +110,8 @@
              (cr/q db [[:e :name]])))))
 
 (t/deftest test-multiple-query-clauses
-  (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
-  (cr/-put db {:crux.core/id 3 :foo "bar"})
+  (cr/-put db [{:crux.core/id 2 :foo "bar" :tar "zar"}
+               {:crux.core/id 3 :foo "bar"}])
 
   (t/is (= #{{:e 2}} (cr/q db [[:e :foo "bar"]
                                [:e :tar "zar"]])))
@@ -135,8 +135,8 @@
                                       [:e :tar "tar"]]))))
 
 (t/deftest test-query-across-entities
-  (cr/-put db {:crux.core/id test-eid :foo "bar" :tar "tar"})
-  (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})
+  (cr/-put db [{:crux.core/id test-eid :foo "bar" :tar "tar"}
+               {:crux.core/id 2 :foo "bar" :tar "zar"}])
 
   (t/is (= #{{:a test-eid :b 2}} (cr/q db [[:a :foo "bar"]
                                            [:a :tar "tar"]
@@ -149,9 +149,9 @@
 (t/deftest test-query-across-entities-using-join
   ;; TODO cleanup this hard to read test code, in lieu of people fixtures
 
-  (cr/-put db {:crux.core/id 1 :foo "bar" :tar "tar"})
-  (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
-  (cr/-put db {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"})
+  (cr/-put db [{:crux.core/id 1 :foo "bar" :tar "tar"}
+               {:crux.core/id 2 :foo "baz" :tar "bar"}
+               {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"}])
 
   (t/is (= #{{:a 1 :b 2}} (cr/q db [[:a :foo 'v]
                                     [:b :tar 'v]])))
@@ -160,16 +160,17 @@
                                     [:b :tar 'v]
                                     [:a :foo "bar"]])))
 
-  (cr/-put db {:crux.core/id 3 :foo "bar2" :tar "tar2"})
-  (cr/-put db {:crux.core/id 4 :foo "baz2" :tar "bar2"})
+  (cr/-put db [{:crux.core/id 3 :foo "bar2" :tar "tar2"}
+               {:crux.core/id 4 :foo "baz2" :tar "bar2"}])
 
   (t/is (= #{{:a 1 :b 2}
              {:a 3 :b 4}} (cr/q db [[:a :foo 'v]
                                     [:b :tar 'v]])))
 
   ;; Five people, two of which share the same name:
-  (doseq [p (map #(assoc %1 :name %2) (take 5 f/people) ["Ivan" "Petr" "Sergei" "Denis" "Denis"])]
-    (cr/-put db p))
+  (->> ["Ivan" "Petr" "Sergei" "Denis" "Denis"]
+       (map #(assoc %1 :name %2) (take 5 f/people))
+       (cr/-put db))
 
   (t/testing "Five people, without a join"
     (t/is (= 5 (count (cr/q db [[:p1 :name 'name]

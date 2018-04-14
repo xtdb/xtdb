@@ -95,18 +95,20 @@
     (decode :val/attr v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
+(defn- entity->txes [tx]
+  (if (map? tx)
+    (for [[k v] (dissoc tx ::id)]
+      [(::id tx) k v])
+    [tx]))
+
 (defn -put
   "Put an attribute/value tuple against an entity ID. If the supplied
   entity ID is -1, then a new entity-id will be generated."
   ([db txs]
    (-put db txs (java.util.Date.)))
   ([db txs ts]
-   (let [txs (if (map? txs)
-               (for [[k v] (dissoc txs ::id)]
-                 [(::id txs) k v])
-               txs)
-         tmp-ids->ids (atom {})]
-     (doseq [[eid k v] txs]
+   (let [tmp-ids->ids (atom {})]
+     (doseq [[eid k v] (mapcat entity->txes txs)]
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
              eid (or (and (pos? eid) eid)
