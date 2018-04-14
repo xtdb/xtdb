@@ -56,12 +56,10 @@
     (t/is (= (+ eid 1001) (cr/next-entity-id db)))))
 
 (t/deftest test-write-and-fetch-entity
-  (cr/-put db {:crux.core/id test-eid
-               :foo "Bar3"
-               :tar "Bar4"}
-           (c/to-date (time/date-time 1986 10 22)))
-  (t/is (= {:tar "Bar4" :foo "Bar3"}
-           (cr/entity db test-eid))))
+  (let [person (first f/people)]
+    (cr/-put db person (c/to-date (time/date-time 1986 10 22)))
+    (t/is (= person
+             (cr/entity db (:crux.core/id person))))))
 
 (t/deftest test-fetch-entity-at-t
   (cr/-put db [[test-eid :foo "foo1"]
@@ -172,6 +170,7 @@
              {:a 3 :b 4}} (cr/q db [[:a :foo 'v]
                                     [:b :tar 'v]])))
 
+  ;; Five people, two of which share the same name:
   (doseq [p (map #(assoc %1 :name %2) (take 5 f/people) ["Ivan" "Petr" "Sergei" "Denis" "Denis"])]
     (cr/-put db p))
 

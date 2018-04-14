@@ -13,6 +13,9 @@
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
+                 :keyword (g/compile-frame {:type :keyword, :v (g/string :utf-8)}
+                                           #(update % :v name)
+                                           #(update % :v keyword))
                  :retracted (g/compile-frame {:type :retracted})})
 
 (def indices (g/compile-frame (g/enum :byte :eat :eid :aid :ident)))
@@ -107,10 +110,10 @@
              attr-schema (attr-aid->schema db aid)
              eid (or (and (= -1 eid) (next-entity-id db)) eid)]
          (kv/store db (encode :key {:index :eat
-                                  :eid eid
-                                  :aid aid
-                                  :ts (.getTime ts)})
-                 (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
+                                    :eid eid
+                                    :aid aid
+                                    :ts (.getTime ts)})
+                   (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
@@ -126,18 +129,20 @@
   ([db eid]
    (entity db eid (java.util.Date.)))
   ([db eid at-ts]
-   (reduce (fn [m [k v]]
-             (let [{:keys [eid aid ts]} (decode :key k)
-                   attr-schema (attr-aid->schema db aid)
-                   ident (:attr/ident attr-schema)]
-               (if (or (ident m)
-                       (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
-                 m
-                 (assoc m ident (:v (decode :val/eat v))))))
-           {}
-           (kv/seek-and-iterate db
-                                (encode :key/eat-prefix {:index :eat :eid eid})
-                                (encode :key/eat-prefix {:index :eat :eid (inc eid)})))))
+   (some->
+    (reduce (fn [m [k v]]
+              (let [{:keys [eid aid ts]} (decode :key k)
+                    attr-schema (attr-aid->schema db aid)
+                    ident (:attr/ident attr-schema)]
+                (if (or (ident m)
+                        (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
+                  m
+                  (assoc m ident (:v (decode :val/eat v))))))
+            nil
+            (kv/seek-and-iterate db
+                                 (encode :key/eat-prefix {:index :eat :eid eid})
+                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))
+    (assoc ::id eid))))
 
 (defn- entity-ids
   "Sequence of all entities in the DB. If this approach sticks, it
