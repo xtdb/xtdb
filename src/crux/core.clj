@@ -104,16 +104,20 @@
    (let [txs (if (map? txs)
                (for [[k v] (dissoc txs ::id)]
                  [(::id txs) k v])
-               txs)]
+               txs)
+         tmp-ids->ids (atom {})]
      (doseq [[eid k v] txs]
        (let [aid (attr-schema db k)
              attr-schema (attr-aid->schema db aid)
-             eid (or (and (= -1 eid) (next-entity-id db)) eid)]
+             eid (or (and (pos? eid) eid)
+                     (get @tmp-ids->ids eid)
+                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))]
          (kv/store db (encode :key {:index :eat
                                     :eid eid
                                     :aid aid
                                     :ts (.getTime ts)})
-                   (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted}))))))))
+                   (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))))
+     @tmp-ids->ids)))
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))

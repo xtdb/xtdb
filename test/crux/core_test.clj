@@ -56,19 +56,19 @@
     (t/is (= (+ eid 1001) (cr/next-entity-id db)))))
 
 (t/deftest test-write-and-fetch-entity
-  (let [person (first f/people)]
-    (cr/-put db person (c/to-date (time/date-time 1986 10 22)))
-    (t/is (= person
-             (cr/entity db (:crux.core/id person))))))
+  (let [person (first f/people)
+        eid (first (vals (cr/-put db person (c/to-date (time/date-time 1986 10 22)))))]
+    (t/is (= (dissoc person :crux.core/id)
+             (dissoc (cr/entity db eid) :crux.core/id)))))
 
 (t/deftest test-fetch-entity-at-t
-  (let [person (first f/people)]
-    (cr/-put db (assoc person :name "Fred") (c/to-date (time/date-time 1986 10 22)))
-    (cr/-put db (assoc person :name "Freda") (c/to-date (time/date-time 1986 10 24)))
+  (let [person (first f/people)
+        eid (first (vals (cr/-put db (assoc person :name "Fred") (c/to-date (time/date-time 1986 10 22)))))]
+    (cr/-put db (assoc person :name "Freda" :crux.core/id eid) (c/to-date (time/date-time 1986 10 24)))
     (t/is (= "Fred"
-             (:name (cr/entity db (:crux.core/id person) (c/to-date (time/date-time 1986 10 23))))))
+             (:name (cr/entity db eid (c/to-date (time/date-time 1986 10 23))))))
     (t/is (= "Freda"
-             (:name (cr/entity db (:crux.core/id person)))))))
+             (:name (cr/entity db eid))))))
 
 (t/deftest test-invalid-attribute-exception
   (try
@@ -83,7 +83,6 @@
                            :attr/type :string})
   (cr/-put db [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (cr/-get-at db test-eid :new-ident)))
-
 
   (let [aid (cr/transact-schema! db {:attr/ident :new-ident2
                                      :attr/type :long})]
@@ -102,12 +101,13 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (doseq [p (map #(assoc %1 :name %2) (take 2 f/people) ["Ivan" "Petr"])]
-    (cr/-put db p))
-
-  (t/is (= #{{:e 1001}} (cr/q db [[:e :name "Ivan"]])))
-  (t/is (= #{{:e 1002}} (cr/q db [[:e :name "Petr"]])))
-  (t/is (= #{{:e 1001} {:e 1002}} (cr/q db [[:e :name]]))))
+  (let [[ivan petr :as people] (map #(assoc %1 :name %2) (take 2 f/people) ["Ivan" "Petr"])
+        ids (apply merge (map #(cr/-put db %) people))]
+    (t/is (= #{{:e (get ids (:crux.core/id ivan))}} (cr/q db [[:e :name "Ivan"]])))
+    (t/is (= #{{:e (get ids (:crux.core/id petr))}} (cr/q db [[:e :name "Petr"]])))
+    (t/is (= #{{:e (get ids (:crux.core/id ivan))}
+               {:e (get ids (:crux.core/id petr))}}
+             (cr/q db [[:e :name]])))))
 
 (t/deftest test-multiple-query-clauses
   (cr/-put db {:crux.core/id 2 :foo "bar" :tar "zar"})

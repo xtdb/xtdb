@@ -11,9 +11,9 @@
   (cr/transact-schema! db {:attr/ident :age       :attr/type :long})
   (cr/transact-schema! db {:attr/ident :salary    :attr/type :long}))
 
-(def next-eid (atom 1000))
+(def next-eid (atom 0))
 
-(defn random-person [] {:crux.core/id (swap! next-eid inc)
+(defn random-person [] {:crux.core/id (swap! next-eid dec)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
                         :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
                         :sex       (rand-nth [:male :female])
