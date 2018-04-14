@@ -4,6 +4,7 @@
             [crux.byte-utils :refer :all]
             [clj-time.core :as time]
             [clj-time.coerce :as c]
+            [crux.fixtures :as f]
             [crux.kv :as kv]
             [crux.rocksdb]))
 
@@ -167,6 +168,9 @@
                                [:b :tar "NUTTING"]])))))
 
 (t/deftest test-query-across-entities-using-join
+
+  ;; TODO deprecate this hard to read test code
+
   (cr/-put db {:crux.core/id 1 :foo "bar" :tar "tar"})
   (cr/-put db {:crux.core/id 2 :foo "baz" :tar "bar"})
   (cr/-put db {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"})
@@ -183,4 +187,17 @@
 
   (t/is (= #{{:a 1 :b 2}
              {:a 3 :b 4}} (cr/query db [[:a :foo 'v]
-                                        [:b :tar 'v]]))))
+                                        [:b :tar 'v]])))
+
+  (f/transact-schemas! db)
+  (doseq [p (map #(assoc %1 :name %2) (take 5 f/people) ["Ivan" "Petr" "Sergei" "Denis" "Denis"])]
+    (cr/-put db p))
+
+  (t/testing "Five people, without a join"
+    (t/is (= 5 (count (cr/query db [[:p1 :name 'name]
+                                    [:p1 :age 'age]
+                                    [:p1 :salary 'salary]])))))
+
+  (t/testing "Every person joins once, plus 2 more matches"
+    (t/is (= 7 (count (cr/query db [[:p1 :name 'name]
+                                    [:p2 :name 'name]]))))))
