@@ -168,7 +168,11 @@
                            (->> (or results (entity-ids db))
                                 (keep (fn [[eid bindings]]
                                         (let [v (-get-at db eid term-aid at-ts)]
-                                          (when (and v (or (not term-v) (symbol? term-v) (= term-v v)))
+                                          (when (and v (or (not term-v)
+                                                           (if (symbol? term-v)
+                                                             (or (nil? (get bindings term-v))
+                                                                 (= (get bindings term-v) v)))
+                                                           (= term-v v)))
                                             [eid (if (symbol? term-v)
                                                    (assoc bindings term-v v)
                                                    bindings)]))))))))

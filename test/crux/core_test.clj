@@ -101,13 +101,33 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (let [[ivan petr :as people] (map #(assoc %1 :name %2) (take 2 f/people) ["Ivan" "Petr"])
+  (let [[ivan petr :as people] (->> [{:name "Ivan"} {:name "Petr"}]
+                                    (map #(merge %1 %2) (take 2 f/people)))
         ids (cr/-put db people)]
-    (t/is (= #{{'e (get ids (:crux.core/id ivan))}} (cr/q db [['e :name "Ivan"]])))
-    (t/is (= #{{'e (get ids (:crux.core/id petr))}} (cr/q db [['e :name "Petr"]])))
-    (t/is (= #{{'e (get ids (:crux.core/id ivan))}
-               {'e (get ids (:crux.core/id petr))}}
-             (cr/q db [['e :name]])))))
+
+    (t/testing "Can query by single field"
+      (t/is (= #{{'e (get ids (:crux.core/id ivan))}} (cr/q db [['e :name "Ivan"]])))
+      (t/is (= #{{'e (get ids (:crux.core/id petr))}} (cr/q db [['e :name "Petr"]]))))
+
+    (t/testing "Can query for multiple results"
+      (t/is (= #{{'e (get ids (:crux.core/id ivan))}
+                 {'e (get ids (:crux.core/id petr))}}
+               (cr/q db [['e :name]]))))
+
+    (let [[smith :as people] (->> [{:name "Smith" :last-name "Smith"}]
+                                  (map #(merge %1 %2) (take 1 f/people)))
+          ids (cr/-put db people)]
+
+      (t/testing "Can query across fields for same value"
+        (t/is (= #{{'p1 (get ids (:crux.core/id smith))}}
+                 (cr/q db [['p1 :name 'name]
+                           ['p1 :last-name 'name]]))))
+
+      (t/testing "Can query across fields for same value when value is passed in"
+        (t/is (= #{{'p1 (get ids (:crux.core/id smith))}}
+                 (cr/q db [['p1 :name 'name]
+                           ['p1 :last-name 'name]
+                           ['p1 :name "Smith"]])))))))
 
 (t/deftest test-multiple-query-clauses
   (cr/-put db [{:crux.core/id 2 :foo "bar" :tar "zar"}
@@ -153,13 +173,6 @@
                {:crux.core/id 2 :foo "baz" :tar "bar"}
                {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"}])
 
-  (t/is (= #{{'a 1 'b 2}} (cr/q db [['a :foo 'v]
-                                    ['b :tar 'v]])))
-
-  (t/is (= #{{'a 1 'b 2}} (cr/q db [['a :foo 'v]
-                                    ['b :tar 'v]
-                                    ['a :foo "bar"]])))
-
   (cr/-put db [{:crux.core/id 3 :foo "bar2" :tar "tar2"}
                {:crux.core/id 4 :foo "baz2" :tar "bar2"}])
 
@@ -168,8 +181,8 @@
                                     ['b :tar 'v]])))
 
   ;; Five people, two of which share the same name:
-  (->> ["Ivan" "Petr" "Sergei" "Denis" "Denis"]
-       (map #(assoc %1 :name %2) (take 5 f/people))
+  (->> [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}]
+       (map #(merge %1 %2) (take 5 f/people))
        (cr/-put db))
 
   (t/testing "Five people, without a join"
