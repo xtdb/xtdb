@@ -184,8 +184,8 @@
 (defn q
   ([db terms]
    (q db terms (java.util.Date.)))
-  ([db terms ts]
-   (into #{} (->> terms
+  ([db {:keys [find where]} ts]
+   (into #{} (->> where
                   (preprocess-terms db)
                   (reduce (partial filter-attr db ts) nil)
                   (reduce (fn [results [term-e eids]]
@@ -199,4 +199,4 @@
                                              (select-keys (:bindings m) intersected-bindings))]
                                 (assoc m term-e eid))))
                           nil)
-                  (map #(dissoc % :bindings))))))
+                  (map #(select-keys (merge (:bindings %) (dissoc % :bindings)) find))))))

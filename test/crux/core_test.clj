@@ -103,46 +103,60 @@
 (t/deftest test-basic-query
   (let [[ivan petr] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
                                             {:name "Petr" :last-name "Petrov"}])]
+
     (t/testing "Can query by single field"
-      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db [['e :name "Ivan"]])))
-      (t/is (= #{{'e (:crux.core/id petr)}} (cr/q db [['e :name "Petr"]]))))
+      (t/is (= #{{'name "Ivan"}} (cr/q db {:find ['name]
+                                           :where [['e :name "Ivan"]
+                                                   ['e :name 'name]]})))
+      (t/is (= #{{'name "Petr"}} (cr/q db {:find ['name]
+                                           :where [['e :name "Petr"]
+                                                   ['e :name 'name]]}))))
+
+    (t/testing "Can query by single field"
+      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db {:find ['e]
+                                                      :where [['e :name "Ivan"]]})))
+      (t/is (= #{{'e (:crux.core/id petr)}} (cr/q db {:find ['e]
+                                                      :where [['e :name "Petr"]]}))))
 
     (t/testing "Can query using multiple terms"
-      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db [['e :name "Ivan"]
-                                                      ['e :last-name "Ivanov"]]))))
+      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db {:find ['e]
+                                                      :where [['e :name "Ivan"]
+                                                              ['e :last-name "Ivanov"]]}))))
 
     (t/testing "Negate query based on subsequent non-matching clause"
-      (t/is (= #{} (cr/q db [['e :name "Ivan"]
-                             ['e :last-name "Ivanov-does-not-match"]]))))
+      (t/is (= #{} (cr/q db {:find ['e]
+                             :where [['e :name "Ivan"]
+                                     ['e :last-name "Ivanov-does-not-match"]]}))))
 
     (t/testing "Can query for multiple results"
       (t/is (= #{{'e (:crux.core/id ivan)}
                  {'e (:crux.core/id petr)}}
-               (cr/q db [['e :name]])))
+               (cr/q db {:find ['e] :where [['e :name]]})))
 
       (let [[ivan2] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov2"}])]
         (t/is (= #{{'e (:crux.core/id ivan)}
                    {'e (:crux.core/id ivan2)}}
-                 (cr/q db [['e :name "Ivan"]])))))
+                 (cr/q db {:find ['e] :where [['e :name "Ivan"]]})))))
 
     (let [[smith] (f/transact-people! db [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
         (t/is (= #{{'p1 (:crux.core/id smith)}}
-                 (cr/q db [['p1 :name 'name]
-                           ['p1 :last-name 'name]]))))
+                 (cr/q db {:find ['p1] :where [['p1 :name 'name]
+                                               ['p1 :last-name 'name]]}))))
 
       (t/testing "Can query across fields for same value when value is passed in"
         (t/is (= #{{'p1 (:crux.core/id smith)}}
-                 (cr/q db [['p1 :name 'name]
-                           ['p1 :last-name 'name]
-                           ['p1 :name "Smith"]])))))))
+                 (cr/q db {:find ['p1] :where [['p1 :name 'name]
+                                               ['p1 :last-name 'name]
+                                               ['p1 :name "Smith"]]})))))))
 
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! db [{:name "Malcolm" :last-name "Sparks"}]
                                       (c/to-date (time/date-time 1986 10 22)))]
     (cr/-put db [[(:crux.core/id malcolm) :name "Malcolma"]] (c/to-date (time/date-time 1986 10 24)))
-    (let [q [['e :name "Malcolma"]
-             ['e :last-name "Sparks"]]]
+    (let [q {:find ['e]
+             :where [['e :name "Malcolma"]
+                     ['e :last-name "Sparks"]]}]
       (t/is (= #{} (cr/q db q (c/to-date (time/date-time 1986 10 23)))))
       (t/is (= #{{'e (:crux.core/id malcolm)}} (cr/q db q))))))
 
@@ -153,25 +167,27 @@
        (cr/-put db))
 
   (t/testing "Five people, without a join"
-    (t/is (= 5 (count (cr/q db [['p1 :name 'name]
-                                ['p1 :age 'age]
-                                ['p1 :salary 'salary]])))))
+    (t/is (= 5 (count (cr/q db {:find ['p1]
+                                :where [['p1 :name 'name]
+                                        ['p1 :age 'age]
+                                        ['p1 :salary 'salary]]})))))
 
   (t/testing "Five people, a cartesian product - joining without unification"
-    (t/is (= 25 (count (cr/q db [['p1 :name]
-                                 ['p2 :name]])))))
+    (t/is (= 25 (count (cr/q db {:find ['p1 'p2]
+                                 :where [['p1 :name]
+                                         ['p2 :name]]})))))
 
   (t/testing "A single first result, joined to all possible subsequent results in next term"
-    (t/is (= 5 (count (cr/q db [['p1 :name "Ivan"]
-                                ['p2 :name]])))))
+    (t/is (= 5 (count (cr/q db {:find ['p1 'p2]
+                                :where [['p1 :name "Ivan"]
+                                        ['p2 :name]]})))))
 
   (t/testing "A single first result, with no subsequent results in next term"
-    (t/is (= 0 (count (cr/q db [['p1 :name "Ivan"]
-                                ['p2 :name "does-not-match"]])))))
+    (t/is (= 0 (count (cr/q db {:find ['p1]
+                                :where [['p1 :name "Ivan"]
+                                        ['p2 :name "does-not-match"]]})))))
 
   (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 7 (count (cr/q db [['p1 :name 'name]
-                                ['p2 :name 'name]])))))
-
-  ;; test ^ more with pull syntax
-  )
+    (t/is (= 7 (count (cr/q db {:find ['p1 'p2]
+                                :where [['p1 :name 'name]
+                                        ['p2 :name 'name]]}))))))
