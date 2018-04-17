@@ -118,7 +118,12 @@
     (t/testing "Can query for multiple results"
       (t/is (= #{{'e (:crux.core/id ivan)}
                  {'e (:crux.core/id petr)}}
-               (cr/q db [['e :name]]))))
+               (cr/q db [['e :name]])))
+
+      (let [[ivan2] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov2"}])]
+        (t/is (= #{{'e (:crux.core/id ivan)}
+                   {'e (:crux.core/id ivan2)}}
+                 (cr/q db [['e :name "Ivan"]])))))
 
     (let [[smith] (f/transact-people! db [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
@@ -133,41 +138,15 @@
                            ['p1 :name "Smith"]])))))))
 
 (t/deftest test-basic-query-at-t
-  (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
-  (cr/-put db [[test-eid :tar "tar"]] (c/to-date (time/date-time 1986 10 24)))
-
-  (t/is (= #{} (cr/q db [['e :foo "foo"]
-                         ['e :tar "tar"]]
-                     (c/to-date (time/date-time 1986 10 23)))))
-
-  (t/is (= #{{'e test-eid}} (cr/q db [['e :foo "foo"]
-                                      ['e :tar "tar"]]))))
-
-(t/deftest test-query-across-entities
-  (cr/-put db [{:crux.core/id test-eid :foo "bar" :tar "tar"}
-               {:crux.core/id 2 :foo "bar" :tar "zar"}])
-
-  (t/is (= #{{'a test-eid 'b 2}} (cr/q db [['a :foo "bar"]
-                                           ['a :tar "tar"]
-                                           ['b :tar "zar"]])))
-
-  (t/testing "Should not unify on empty set"
-    (t/is (= #{} (cr/q db [['a :foo "bar"]
-                           ['b :tar "NUTTING"]])))))
+  (let [[malcolm] (f/transact-people! db [{:name "Malcolm" :last-name "Sparks"}]
+                                      (c/to-date (time/date-time 1986 10 22)))]
+    (cr/-put db [[(:crux.core/id malcolm) :name "Malcolma"]] (c/to-date (time/date-time 1986 10 24)))
+    (let [q [['e :name "Malcolma"]
+             ['e :last-name "Sparks"]]]
+      (t/is (= #{} (cr/q db q (c/to-date (time/date-time 1986 10 23)))))
+      (t/is (= #{{'e (:crux.core/id malcolm)}} (cr/q db q))))))
 
 (t/deftest test-query-across-entities-using-join
-  ;; TODO cleanup this hard to read test code, in lieu of people fixtures
-  (cr/-put db [{:crux.core/id 1 :foo "bar" :tar "tar"}
-               {:crux.core/id 2 :foo "baz" :tar "bar"}
-               {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"}])
-
-  (cr/-put db [{:crux.core/id 3 :foo "bar2" :tar "tar2"}
-               {:crux.core/id 4 :foo "baz2" :tar "bar2"}])
-
-  (t/is (= #{{'a 1 'b 2}
-             {'a 3 'b 4}} (cr/q db [['a :foo 'v]
-                                    ['b :tar 'v]])))
-
   ;; Five people, two of which share the same name:
   (->> [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}]
        (map #(merge %1 %2) (take 5 f/people))
@@ -178,6 +157,21 @@
                                 ['p1 :age 'age]
                                 ['p1 :salary 'salary]])))))
 
+  (t/testing "Five people, a cartesian product - joining without unification"
+    (t/is (= 25 (count (cr/q db [['p1 :name]
+                                 ['p2 :name]])))))
+
+  (t/testing "A single first result, joined to all possible subsequent results in next term"
+    (t/is (= 5 (count (cr/q db [['p1 :name "Ivan"]
+                                ['p2 :name]])))))
+
+  (t/testing "A single first result, with no subsequent results in next term"
+    (t/is (= 0 (count (cr/q db [['p1 :name "Ivan"]
+                                ['p2 :name "does-not-match"]])))))
+
   (t/testing "Every person joins once, plus 2 more matches"
     (t/is (= 7 (count (cr/q db [['p1 :name 'name]
-                                ['p2 :name 'name]]))))))
+                                ['p2 :name 'name]])))))
+
+  ;; test ^ more with pull syntax
+  )

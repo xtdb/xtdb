@@ -22,10 +22,13 @@
 
 (def people (repeatedly random-person))
 
-(defn transact-people! [db people-mixins]
-  (let [people (->> people-mixins (map #(merge %1 %2) people))
-        ids (->> people (cr/-put db))]
-    (map #(update % :crux.core/id ids) people)))
+(defn transact-people!
+  ([db people-mixins]
+   (transact-people! db people-mixins (java.util.Date.)))
+  ([db people-mixins ts]
+   (let [people (->> people-mixins (map #(merge %1 %2) people))
+         ids (cr/-put db people ts)]
+     (map #(update % :crux.core/id ids) people))))
 
 (def ^:dynamic db)
 
