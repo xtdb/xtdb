@@ -162,9 +162,7 @@
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
-  (->> [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}]
-       (map #(merge %1 %2) (take 5 f/people))
-       (cr/-put db))
+  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}])
 
   (t/testing "Five people, without a join"
     (t/is (= 5 (count (cr/q db {:find ['p1]
@@ -191,3 +189,10 @@
     (t/is (= 7 (count (cr/q db {:find ['p1 'p2]
                                 :where [['p1 :name 'name]
                                         ['p2 :name 'name]]}))))))
+
+(t/deftest test-blanks
+  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
+
+  (t/is (= #{{'name "Ivan"} {'name "Petr"} {'name "Sergei"}}
+           (cr/q db {:find ['name]
+                     :where [['_ :name 'name]]}))))
