@@ -159,7 +159,7 @@
              :where [['e :name "Malcolma"]
                      ['e :last-name "Sparks"]]}]
       (t/is (= #{} (cr/q db q (c/to-date (time/date-time 1986 10 23)))))
-      (t/is (= #{{'e (:crux.core/id malcolm)}} (cr/q db q))))))
+      (t/is (= #{[(:crux.core/id malcolm)]} (cr/q db q))))))
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
@@ -196,4 +196,11 @@
 
   (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
            (cr/q db {:find ['name]
+                     :where [['_ :name 'name]]}))))
+
+(t/deftest test-find-specification-return-first
+  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
+
+  (t/is (= #{"Sergei"}
+           (cr/q db {:find ['name '.]
                      :where [['_ :name 'name]]}))))

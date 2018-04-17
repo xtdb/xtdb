@@ -181,6 +181,13 @@
   (for [[e a v] terms]
     [e (attr-schema db a) v]))
 
+(defn- apply-find-specification [db find results]
+  (cond (= '. (last find))
+        (first results)
+
+        :else
+        results))
+
 (defn q
   ([db terms]
    (q db terms (java.util.Date.)))
@@ -201,5 +208,6 @@
                           nil)
                   (map #(merge (:bindings %) (dissoc % :bindings)))
                   (map (fn [result]
-                         (for [clause find]
-                           (get result clause))))))))
+                         (for [clause (remove #{'.} find)]
+                           (get result clause))))
+                  (apply-find-specification db find)))))
