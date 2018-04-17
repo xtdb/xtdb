@@ -208,6 +208,8 @@
                           nil)
                   (map #(merge (:bindings %) (dissoc % :bindings)))
                   (map (fn [result]
-                         (for [clause (remove #{'.} find)]
-                           (get result clause))))
+                         (if (= '... (last find))
+                           (get result (first find))
+                           (for [clause (remove #{'. '...} find)]
+                             (get result clause)))))
                   (apply-find-specification db find)))))

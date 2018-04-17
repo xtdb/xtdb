@@ -201,6 +201,12 @@
 (t/deftest test-find-specification-return-first
   (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
-  (t/is (= #{"Sergei"}
-           (cr/q db {:find ['name '.]
-                     :where [['_ :name 'name]]}))))
+  (t/testing "Single result returned"
+    (t/is (= #{"Sergei"}
+             (cr/q db {:find ['name '.]
+                       :where [['_ :name 'name]]}))))
+
+  (t/testing "Single variables instead of tuples"
+    (t/is (= #{"Sergei" "Ivan" "Petr"}
+             (cr/q db {:find ['name '...]
+                       :where [['_ :name 'name]]})))))
