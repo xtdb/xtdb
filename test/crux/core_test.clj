@@ -105,23 +105,25 @@
                                             {:name "Petr" :last-name "Petrov"}])]
 
     (t/testing "Can query by single field"
-      (t/is (= #{{'name "Ivan"}} (cr/q db {:find ['name]
-                                           :where [['e :name "Ivan"]
-                                                   ['e :name 'name]]})))
-      (t/is (= #{{'name "Petr"}} (cr/q db {:find ['name]
-                                           :where [['e :name "Petr"]
-                                                   ['e :name 'name]]}))))
+      (t/is (= #{["Ivan"]} (cr/q db {:find ['name]
+                                     :where [['e :name "Ivan"]
+                                             ['e :name 'name]]})))
+      (t/is (= #{["Petr"]} (cr/q db {:find ['name]
+                                     :where [['e :name "Petr"]
+                                             ['e :name 'name]]}))))
 
     (t/testing "Can query by single field"
-      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db {:find ['e]
-                                                      :where [['e :name "Ivan"]]})))
-      (t/is (= #{{'e (:crux.core/id petr)}} (cr/q db {:find ['e]
-                                                      :where [['e :name "Petr"]]}))))
+      (t/is (= #{[(:crux.core/id ivan)]} (cr/q db {:find ['e]
+                                                   :where [['e :name "Ivan"]]})))
+      (t/is (= #{[(:crux.core/id petr)]} (cr/q db {:find ['e]
+                                                   :where [['e :name "Petr"]]}))))
 
     (t/testing "Can query using multiple terms"
-      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db {:find ['e]
-                                                      :where [['e :name "Ivan"]
-                                                              ['e :last-name "Ivanov"]]}))))
+      (t/is (= #{["Ivan" "Ivanov"]} (cr/q db {:find ['name 'last-name]
+                                              :where [['e :name 'name]
+                                                      ['e :last-name 'last-name]
+                                                      ['e :name "Ivan"]
+                                                      ['e :last-name "Ivanov"]]}))))
 
     (t/testing "Negate query based on subsequent non-matching clause"
       (t/is (= #{} (cr/q db {:find ['e]
@@ -129,23 +131,22 @@
                                      ['e :last-name "Ivanov-does-not-match"]]}))))
 
     (t/testing "Can query for multiple results"
-      (t/is (= #{{'e (:crux.core/id ivan)}
-                 {'e (:crux.core/id petr)}}
-               (cr/q db {:find ['e] :where [['e :name]]})))
+      (t/is (= #{["Ivan"] ["Petr"]}
+               (cr/q db {:find ['name] :where [['e :name 'name]]})))
 
       (let [[ivan2] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov2"}])]
-        (t/is (= #{{'e (:crux.core/id ivan)}
-                   {'e (:crux.core/id ivan2)}}
+        (t/is (= #{[(:crux.core/id ivan)]
+                   [(:crux.core/id ivan2)]}
                  (cr/q db {:find ['e] :where [['e :name "Ivan"]]})))))
 
     (let [[smith] (f/transact-people! db [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
-        (t/is (= #{{'p1 (:crux.core/id smith)}}
+        (t/is (= #{[(:crux.core/id smith)]}
                  (cr/q db {:find ['p1] :where [['p1 :name 'name]
                                                ['p1 :last-name 'name]]}))))
 
       (t/testing "Can query across fields for same value when value is passed in"
-        (t/is (= #{{'p1 (:crux.core/id smith)}}
+        (t/is (= #{[(:crux.core/id smith)]}
                  (cr/q db {:find ['p1] :where [['p1 :name 'name]
                                                ['p1 :last-name 'name]
                                                ['p1 :name "Smith"]]})))))))
@@ -193,6 +194,6 @@
 (t/deftest test-blanks
   (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
-  (t/is (= #{{'name "Ivan"} {'name "Petr"} {'name "Sergei"}}
+  (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
            (cr/q db {:find ['name]
                      :where [['_ :name 'name]]}))))

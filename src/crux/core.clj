@@ -199,4 +199,7 @@
                                              (select-keys (:bindings m) intersected-bindings))]
                                 (assoc m term-e eid))))
                           nil)
-                  (map #(select-keys (merge (:bindings %) (dissoc % :bindings)) find))))))
+                  (map #(merge (:bindings %) (dissoc % :bindings)))
+                  (map (fn [result]
+                         (for [clause find]
+                           (get result clause))))))))
