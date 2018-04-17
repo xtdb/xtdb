@@ -101,30 +101,24 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (let [[ivan petr :as people] (->> [{:name "Ivan"} {:name "Petr"}]
-                                    (map #(merge %1 %2) (take 2 f/people)))
-        ids (cr/-put db people)]
-
+  (let [[ivan petr] (f/transact-people! db [{:name "Ivan"} {:name "Petr"}])]
     (t/testing "Can query by single field"
-      (t/is (= #{{'e (get ids (:crux.core/id ivan))}} (cr/q db [['e :name "Ivan"]])))
-      (t/is (= #{{'e (get ids (:crux.core/id petr))}} (cr/q db [['e :name "Petr"]]))))
+      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db [['e :name "Ivan"]])))
+      (t/is (= #{{'e (:crux.core/id petr)}} (cr/q db [['e :name "Petr"]]))))
 
     (t/testing "Can query for multiple results"
-      (t/is (= #{{'e (get ids (:crux.core/id ivan))}
-                 {'e (get ids (:crux.core/id petr))}}
+      (t/is (= #{{'e (:crux.core/id ivan)}
+                 {'e (:crux.core/id petr)}}
                (cr/q db [['e :name]]))))
 
-    (let [[smith :as people] (->> [{:name "Smith" :last-name "Smith"}]
-                                  (map #(merge %1 %2) (take 1 f/people)))
-          ids (cr/-put db people)]
-
+    (let [[smith] (f/transact-people! db [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
-        (t/is (= #{{'p1 (get ids (:crux.core/id smith))}}
+        (t/is (= #{{'p1 (:crux.core/id smith)}}
                  (cr/q db [['p1 :name 'name]
                            ['p1 :last-name 'name]]))))
 
       (t/testing "Can query across fields for same value when value is passed in"
-        (t/is (= #{{'p1 (get ids (:crux.core/id smith))}}
+        (t/is (= #{{'p1 (:crux.core/id smith)}}
                  (cr/q db [['p1 :name 'name]
                            ['p1 :last-name 'name]
                            ['p1 :name "Smith"]])))))))
@@ -168,7 +162,6 @@
 
 (t/deftest test-query-across-entities-using-join
   ;; TODO cleanup this hard to read test code, in lieu of people fixtures
-
   (cr/-put db [{:crux.core/id 1 :foo "bar" :tar "tar"}
                {:crux.core/id 2 :foo "baz" :tar "bar"}
                {:crux.core/id 99 :foo "CONTROL" :tar "CONTROL2"}])

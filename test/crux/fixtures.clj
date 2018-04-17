@@ -22,6 +22,11 @@
 
 (def people (repeatedly random-person))
 
+(defn transact-people! [db people-mixins]
+  (let [people (->> people-mixins (map #(merge %1 %2) people))
+        ids (->> people (cr/-put db))]
+    (map #(update % :crux.core/id ids) people)))
+
 (def ^:dynamic db)
 
 (defn start-system [f]
