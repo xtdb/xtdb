@@ -101,10 +101,19 @@
   (t/is (= "foo1" (cr/-get-at db test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
 
 (t/deftest test-basic-query
-  (let [[ivan petr] (f/transact-people! db [{:name "Ivan"} {:name "Petr"}])]
+  (let [[ivan petr] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                                            {:name "Petr" :last-name "Petrov"}])]
     (t/testing "Can query by single field"
       (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db [['e :name "Ivan"]])))
       (t/is (= #{{'e (:crux.core/id petr)}} (cr/q db [['e :name "Petr"]]))))
+
+    (t/testing "Can query using multiple terms"
+      (t/is (= #{{'e (:crux.core/id ivan)}} (cr/q db [['e :name "Ivan"]
+                                                      ['e :last-name "Ivanov"]]))))
+
+    (t/testing "Negate query based on subsequent non-matching clause"
+      (t/is (= #{} (cr/q db [['e :name "Ivan"]
+                             ['e :last-name "Ivanov-does-not-match"]]))))
 
     (t/testing "Can query for multiple results"
       (t/is (= #{{'e (:crux.core/id ivan)}
@@ -122,20 +131,6 @@
                  (cr/q db [['p1 :name 'name]
                            ['p1 :last-name 'name]
                            ['p1 :name "Smith"]])))))))
-
-(t/deftest test-multiple-query-clauses
-  (cr/-put db [{:crux.core/id 2 :foo "bar" :tar "zar"}
-               {:crux.core/id 3 :foo "bar"}])
-
-  (t/is (= #{{'e 2}} (cr/q db [['e :foo "bar"]
-                               ['e :tar "zar"]])))
-
-  (t/is (= #{{'e 2}} (cr/q db [['e :foo "bar"]
-                               ['e :tar "zar"]])))
-
-  (t/testing "Negate query based on subsequent non-matching clause"
-    (t/is (= #{} (cr/q db [['e :foo "bar"]
-                           ['e :tar "BAH"]])))))
 
 (t/deftest test-basic-query-at-t
   (cr/-put db [[test-eid :foo "foo"]] (c/to-date (time/date-time 1986 10 22)))
