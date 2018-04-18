@@ -221,3 +221,12 @@
 
   ;; deal when count is used with another attribute
   )
+
+(t/deftest test-exceptions
+  (t/testing "Unbound query variable"
+    (try
+      (count (cr/q db {:find ['bah]
+                       :where [['e :name]]}))
+      (t/is (= true false) "Expected exception"))
+    (catch IllegalArgumentException e
+      (t/is (= "Find clause references unbound variable: bah" (.getMessage e))))))

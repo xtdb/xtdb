@@ -181,20 +181,32 @@
   (for [[e a v] terms]
     [e (attr-schema db a) v]))
 
+(defn- count-clause? [clause]
+  (and (seq? clause) (= 'count (first clause))))
+
 (defn- apply-find-specification [db find results]
   (cond (= '. (last find))
         (first results)
 
-        (= (and (seq? (first find)) (= 'count (ffirst find))))
+        (and (count-clause? (first find)))
         [(count results)]
 
         :else
         results))
 
+(defn- validate-query [{:keys [find where]}]
+  (let [variables (reduce into #{}  (map (fn [[e _ v]] (if (symbol? v) [e v] [e])) where))]
+    (doseq [clause (->> find
+                        (remove #{'. '...})
+                        (remove count-clause?))]
+      (when-not (variables clause)
+        (throw (IllegalArgumentException. (str "Find clause references unbound variable: " clause)))))))
+
 (defn q
   ([db terms]
    (q db terms (java.util.Date.)))
-  ([db {:keys [find where]} ts]
+  ([db {:keys [find where] :as q} ts]
+   (validate-query q)
    (into #{} (->> where
                   (preprocess-terms db)
                   (reduce (partial filter-attr db ts) nil)
