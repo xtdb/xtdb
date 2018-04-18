@@ -1,13 +1,10 @@
 (ns crux.core
-  (:require [taoensso.nippy :as nippy]
+  (:require [byte-streams :as bs]
+            clojure.set
             [crux.byte-utils :refer :all]
             [crux.kv :as kv]
-            [clojure.set]
-            [byte-streams :as bs]
-            [clj-time.core :as time]
-            [clj-time.coerce :as c]
             [gloss.core :as g]
-            [gloss.io]))
+            gloss.io))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
 

@@ -1,6 +1,7 @@
 (ns crux.fixtures
   (:require [crux.core :as cr]
-            [crux.kv :as kv]))
+            [crux.kv :as kv]
+            crux.rocksdb))
 
 ;; From Datascript:
 

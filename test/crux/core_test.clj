@@ -1,12 +1,9 @@
 (ns crux.core-test
-  (:require [clojure.test :as t]
-            [crux.core :as cr]
-            [crux.byte-utils :refer :all]
+  (:require [clj-time.coerce :as c]
             [clj-time.core :as time]
-            [clj-time.coerce :as c]
-            [crux.fixtures :as f :refer [db]]
-            [crux.kv :as kv]
-            [crux.rocksdb]))
+            [clojure.test :as t]
+            [crux.core :as cr]
+            [crux.fixtures :as f :refer [db]]))
 
 (t/use-fixtures :each f/start-system)
 

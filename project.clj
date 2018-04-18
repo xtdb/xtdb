@@ -1,5 +1,5 @@
-(defproject ding "0.1.0-SNAPSHOT"
-  :description "A Clojure library that gives graph query over RocksDB"
+(defproject crux "0.1.0-SNAPSHOT"
+  :description "A Clojure library that gives graph query over a K/V store such as RocksDB"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
