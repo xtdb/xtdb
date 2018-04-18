@@ -165,10 +165,12 @@
 ;; Query handling
 
 (s/def ::count-expression (s/cat :operator #{'count} :symbol symbol?))
+(s/def ::sum-expression (s/cat :operator #{'sum} :symbol symbol?))
 (s/def ::binding (s/or :first (partial = '.)
                        :single (partial = '...)
                        :symbol ::symbol
-                       :count ::count-expression))
+                       :count ::count-expression
+                       :sum ::sum-expression))
 (s/def ::find (s/coll-of ::binding :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -196,6 +198,10 @@
 
         (= :count (ffirst find))
         [(count results)]
+
+        (= :sum (ffirst find))
+        (let [sym (-> find first second :symbol)]
+          [(reduce + (keep #(get % sym) results))])
 
         :else
         results))
@@ -239,5 +245,5 @@
                     (map (fn [result]
                            (if (= :single (first (last find)))
                              (get result (second (first find)))
-                             (map (partial get result) (find->bindings find))))
-                         (apply-find-specification db find)))))))
+                             (map (partial get result) (find->bindings find)))))
+                    (apply-find-specification db find))))))

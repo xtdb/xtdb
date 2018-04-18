@@ -219,6 +219,13 @@
   ;; deal when count is used with another attribute
   )
 
+(t/deftest test-sum
+  (f/transact-people! db [{:name "Ivan" :age 1} {:name "Petr" :age 10} {:name "Sergei" :age 100}])
+
+  (t/is (= 111
+           (first (cr/q db {:find ['(sum name)]
+                            :where [['_ :name 'name]]})))))
+
 (t/deftest test-exceptions
   (t/testing "Unbound query variable"
     (try
