@@ -210,3 +210,14 @@
     (t/is (= #{"Sergei" "Ivan" "Petr"}
              (cr/q db {:find ['name '...]
                        :where [['_ :name 'name]]})))))
+
+(t/deftest test-count
+  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
+
+  (t/testing "Count all unique results"
+    (t/is (= #{3}
+             (cr/q db {:find ['(count name)]
+                       :where [['_ :name 'name]]}))))
+
+  ;; deal when count is used with another attribute
+  )

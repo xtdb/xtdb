@@ -185,6 +185,9 @@
   (cond (= '. (last find))
         (first results)
 
+        (= (and (seq? (first find)) (= 'count (ffirst find))))
+        [(count results)]
+
         :else
         results))
 
