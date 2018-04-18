@@ -158,7 +158,6 @@
                             (encode :key/index-prefix {:index :eid}))
        (map (fn [[k _]] (decode :key k)))
        (map :eid)
-       (map vector)
        (into #{})))
 
 ;; --------------
@@ -175,18 +174,18 @@
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- filter-attr [db at-ts results [term-e term-aid term-v]]
-  (update results term-e (fn [results]
-                           (->> (or results (entity-ids db))
-                                (keep (fn [[eid bindings]]
-                                        (let [v (-get-at db eid term-aid at-ts)]
-                                          (when (and v (or (not term-v)
-                                                           (if (symbol? term-v)
-                                                             (or (nil? (get bindings term-v))
-                                                                 (= (get bindings term-v) v)))
-                                                           (= term-v v)))
-                                            [eid (if (symbol? term-v)
-                                                   (assoc bindings term-v v)
-                                                   bindings)]))))))))
+  (for [bindings (or results (map #(hash-map term-e %) (entity-ids db)))
+        eid (or (some-> (bindings term-e) vector) (entity-ids db))
+        :let [v (-get-at db eid term-aid at-ts)]
+        :when (and v (or (not term-v)
+                         (if (symbol? term-v)
+                           (or (nil? (get bindings term-v))
+                               (= (get bindings term-v) v)))
+                         (= term-v v)))]
+    (merge bindings
+           {term-e eid}
+           (when (symbol? term-v)
+             {term-v v}))))
 
 (defn- preprocess-terms [db terms]
   (for [[e a v] terms]
@@ -230,18 +229,6 @@
      (into #{} (->> where
                     (preprocess-terms db)
                     (reduce (partial filter-attr db ts) nil)
-                    (reduce (fn [results [term-e eids]]
-                              (if (nil? results)
-                                (map #(hash-map term-e (first %) :bindings (second %)) eids)
-                                (for [m results
-                                      [eid bindings] eids
-                                      :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
-                                                                                           (set (keys (:bindings m))))]
-                                      :when (= (select-keys bindings intersected-bindings)
-                                               (select-keys (:bindings m) intersected-bindings))]
-                                  (assoc m term-e eid))))
-                            nil)
-                    (map #(merge (:bindings %) (dissoc % :bindings)))
                     (map (fn [result]
                            (if (= :single (first (last find)))
                              (get result (second (first find)))

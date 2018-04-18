@@ -201,7 +201,12 @@
   (t/testing "Single result returned"
     (t/is (= #{"Sergei"}
              (cr/q db {:find ['name '.]
-                       :where [['_ :name 'name]]}))))
+                       :where [['_ :name 'name]
+                               ['_ :name "Sergei"]]})))
+
+    (t/is (#{"Sergdei" "Ivan" "Petr"}
+           (first (cr/q db {:find ['name '.]
+                            :where [['_ :name 'name]]})))))
 
   (t/testing "Single variables instead of tuples"
     (t/is (= #{"Sergei" "Ivan" "Petr"}
