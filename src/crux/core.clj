@@ -4,6 +4,7 @@
             [crux.byte-utils :refer :all]
             [crux.kv :as kv]
             [gloss.core :as g]
+            [clojure.spec.alpha :as s]
             gloss.io))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
@@ -160,6 +161,17 @@
        (map vector)
        (into #{})))
 
+;; --------------
+;; Query handling
+
+(s/def ::count-expression (s/cat :operator #{'count} :symbol symbol?))
+(s/def ::binding (s/or :first (partial = '.)
+                       :single (partial = '...)
+                       :symbol ::symbol
+                       :count ::count-expression))
+(s/def ::find (s/coll-of ::binding :kind vector?))
+(s/def ::query (s/keys :req-un [::find ::where]))
+
 (defn- filter-attr [db at-ts results [term-e term-aid term-v]]
   (update results term-e (fn [results]
                            (->> (or results (entity-ids db))
@@ -178,50 +190,54 @@
   (for [[e a v] terms]
     [e (attr-schema db a) v]))
 
-(defn- count-clause? [clause]
-  (and (seq? clause) (= 'count (first clause))))
-
 (defn- apply-find-specification [db find results]
-  (cond (= '. (last find))
+  (cond (= :first (first (last find)))
         (first results)
 
-        (and (count-clause? (first find)))
+        (= :count (ffirst find))
         [(count results)]
 
         :else
         results))
 
+(defn- find->bindings
+  "Given a find clause, return just the bindings"
+  [find]
+  (->> find
+       (filter (comp #{:symbol} first))
+       (map second)))
+
 (defn- validate-query [{:keys [find where]}]
-  (let [variables (reduce into #{}  (map (fn [[e _ v]] (if (symbol? v) [e v] [e])) where))]
-    (doseq [clause (->> find
-                        (remove #{'. '...})
-                        (remove count-clause?))]
-      (when-not (variables clause)
-        (throw (IllegalArgumentException. (str "Find clause references unbound variable: " clause)))))))
+  (let [variables (reduce into #{} (map (fn [[e _ v]] (if (symbol? v) [e v] [e])) where))]
+    (doseq [binding (find->bindings find)]
+      (when-not (variables binding)
+        (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding)))))))
 
 (defn q
   ([db terms]
    (q db terms (java.util.Date.)))
   ([db {:keys [find where] :as q} ts]
-   (validate-query q)
-   (into #{} (->> where
-                  (preprocess-terms db)
-                  (reduce (partial filter-attr db ts) nil)
-                  (reduce (fn [results [term-e eids]]
-                            (if (nil? results)
-                              (map #(hash-map term-e (first %) :bindings (second %)) eids)
-                              (for [m results
-                                    [eid bindings] eids
-                                    :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
-                                                                                         (set (keys (:bindings m))))]
-                                    :when (= (select-keys bindings intersected-bindings)
-                                             (select-keys (:bindings m) intersected-bindings))]
-                                (assoc m term-e eid))))
-                          nil)
-                  (map #(merge (:bindings %) (dissoc % :bindings)))
-                  (map (fn [result]
-                         (if (= '... (last find))
-                           (get result (first find))
-                           (for [clause (remove #{'. '...} find)]
-                             (get result clause)))))
-                  (apply-find-specification db find)))))
+   (let [{:keys [find where] :as q} (s/conform ::query q)]
+     (validate-query q)
+     (when (= :clojure.spec.alpha/invalid q)
+       (throw (ex-info "Invalid input" (s/explain-data ::query q))))
+     (into #{} (->> where
+                    (preprocess-terms db)
+                    (reduce (partial filter-attr db ts) nil)
+                    (reduce (fn [results [term-e eids]]
+                              (if (nil? results)
+                                (map #(hash-map term-e (first %) :bindings (second %)) eids)
+                                (for [m results
+                                      [eid bindings] eids
+                                      :let [intersected-bindings (clojure.set/intersection (set (keys bindings))
+                                                                                           (set (keys (:bindings m))))]
+                                      :when (= (select-keys bindings intersected-bindings)
+                                               (select-keys (:bindings m) intersected-bindings))]
+                                  (assoc m term-e eid))))
+                            nil)
+                    (map #(merge (:bindings %) (dissoc % :bindings)))
+                    (map (fn [result]
+                           (if (= :single (first (last find)))
+                             (get result (second (first find)))
+                             (map (partial get result) (find->bindings find))))
+                         (apply-find-specification db find)))))))
