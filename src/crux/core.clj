@@ -170,11 +170,9 @@
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
-(defn- term-matches? [[term-e term-a term-v] bindings v]
+(defn- term-matches? [term-v v]
   (and v (or (not term-v)
-             (if (symbol? term-v)
-               (or (nil? (get bindings term-v))
-                   (= (get bindings term-v) v)))
+             (symbol? term-v)
              (= term-v v))))
 
 (defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred]}]
@@ -188,8 +186,9 @@
           aid (attr-schema db term-a)]
       (for [bindings (or results (map #(hash-map term-e %) (entity-ids db)))
             eid (or (some-> (bindings term-e) vector) (entity-ids db))
-            :let [v (-get-at db eid aid at-ts)]
-            :when ((or pred term-matches?) t bindings v)]
+            :let [v (-get-at db eid aid at-ts)
+                  term-v (or (and (symbol? term-v) (bindings term-v)) term-v)]
+            :when ((or pred term-matches?) term-v v)]
         (merge bindings {term-e eid} (when (symbol? term-v) {term-v v}))))))
 
 (defn term-symbols [terms]

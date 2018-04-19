@@ -226,7 +226,10 @@
   (t/is (= 2 (count (cr/q db {:find ['e]
                               :where [['e :name 'name]
                                       ['e :name "Ivan"]
-                                      '(not [e :last-name "Ivannotov"])]})))))
+                                      '(not [e :last-name "Ivannotov"])]}))))
+
+  ;; test what happens if not contains a brand new var, uses diff entity etc
+  )
 
 (t/deftest test-or-query
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
