@@ -163,14 +163,7 @@
 ;; --------------
 ;; Query handling
 
-(s/def ::count-expression (s/cat :operator #{'count} :symbol symbol?))
-(s/def ::sum-expression (s/cat :operator #{'sum} :symbol symbol?))
-(s/def ::binding (s/or :first (partial = '.)
-                       :single (partial = '...)
-                       :symbol ::symbol
-                       :count ::count-expression
-                       :sum ::sum-expression))
-(s/def ::find (s/coll-of ::binding :kind vector?))
+(s/def ::find (s/coll-of symbol? :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- filter-attr [db at-ts results [term-e term-aid term-v]]
@@ -191,32 +184,14 @@
   (for [[e a v] terms]
     [e (attr-schema db a) v]))
 
-(defn- apply-find-specification [db find results]
-  (cond (= :first (first (last find)))
-        (first results)
-
-        (= :count (ffirst find))
-        [(count results)]
-
-        (= :sum (ffirst find))
-        (let [sym (-> find first second :symbol)]
-          [(reduce + (keep #(get % sym) results))])
-
-        :else
-        results))
-
-(defn- find->bindings
-  "Given a find clause, return just the bindings"
-  [find]
-  (->> find
-       (filter (comp #{:symbol} first))
-       (map second)))
-
 (defn- validate-query [{:keys [find where]}]
   (let [variables (reduce into #{} (map (fn [[e _ v]] (if (symbol? v) [e v] [e])) where))]
-    (doseq [binding (find->bindings find)]
+    (doseq [binding find]
       (when-not (variables binding)
         (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding)))))))
+
+(defn- find-projection [find result]
+  (map (partial get result) find))
 
 (defn q
   ([db terms]
@@ -229,8 +204,4 @@
      (into #{} (->> where
                     (preprocess-terms db)
                     (reduce (partial filter-attr db ts) nil)
-                    (map (fn [result]
-                           (if (= :single (first (last find)))
-                             (get result (second (first find)))
-                             (map (partial get result) (find->bindings find)))))
-                    (apply-find-specification db find))))))
+                    (map (partial find-projection find)))))))

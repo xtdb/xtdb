@@ -195,42 +195,6 @@
            (cr/q db {:find ['name]
                      :where [['_ :name 'name]]}))))
 
-(t/deftest test-find-specification-return-first
-  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
-
-  (t/testing "Single result returned"
-    (t/is (= #{"Sergei"}
-             (cr/q db {:find ['name '.]
-                       :where [['_ :name 'name]
-                               ['_ :name "Sergei"]]})))
-
-    (t/is (#{"Sergdei" "Ivan" "Petr"}
-           (first (cr/q db {:find ['name '.]
-                            :where [['_ :name 'name]]})))))
-
-  (t/testing "Single variables instead of tuples"
-    (t/is (= #{"Sergei" "Ivan" "Petr"}
-             (cr/q db {:find ['name '...]
-                       :where [['_ :name 'name]]})))))
-
-(t/deftest test-count
-  (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
-
-  (t/testing "Count all unique results"
-    (t/is (= #{3}
-             (cr/q db {:find ['(count name)]
-                       :where [['_ :name 'name]]}))))
-
-  ;; deal when count is used with another attribute
-  )
-
-(t/deftest test-sum
-  (f/transact-people! db [{:name "Ivan" :age 1} {:name "Petr" :age 10} {:name "Sergei" :age 100}])
-
-  (t/is (= 111
-           (first (cr/q db {:find ['(sum name)]
-                            :where [['_ :name 'name]]})))))
-
 (t/deftest test-exceptions
   (t/testing "Unbound query variable"
     (try
