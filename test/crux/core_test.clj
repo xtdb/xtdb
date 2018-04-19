@@ -227,3 +227,28 @@
                               :where [['e :name 'name]
                                       ['e :name "Ivan"]
                                       '(not [e :last-name "Ivannotov"])]})))))
+
+(t/deftest test-or-query
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivannotov"}])
+
+  (s/conform :crux.core/where [['e :name 'name]
+                               ['e :name "Ivan"]
+                               '(or [[e :last-name "Ivanov"]])])
+
+  (t/is (= 3 (count (cr/q db {:find ['e]
+                              :where [['e :name 'name]
+                                      ['e :name "Ivan"]
+                                      '(or [[e :last-name "Ivanov"]
+                                            [e :last-name "Ivanovov"]])]}))))
+
+  (t/testing "Or can take a single clause"
+    ;; Unsure of the utility
+    (t/is (= 1 (count (cr/q db {:find ['e]
+                                :where [['e :name 'name]
+                                        ['e :name "Ivan"]
+                                        '(or [[e :last-name "Ivanov"]])]})))))
+
+  ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
+  )
