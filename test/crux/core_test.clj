@@ -3,7 +3,8 @@
             [clj-time.core :as time]
             [clojure.test :as t]
             [crux.core :as cr]
-            [crux.fixtures :as f :refer [db]]))
+            [crux.fixtures :as f :refer [db]]
+            [clojure.spec.alpha :as s]))
 
 (t/use-fixtures :each f/start-system)
 
@@ -203,3 +204,26 @@
       (t/is (= true false) "Expected exception"))
     (catch IllegalArgumentException e
       (t/is (= "Find clause references unbound variable: bah" (.getMessage e))))))
+
+(t/deftest test-not-query
+  (t/is (= [[:term ['e :name 'name]]
+            [:term ['e :name "Ivan"]]
+            [:exp {:operator 'not, :term [:term ['e :last-name "Ivannotov"]]}]]
+
+           (s/conform :crux.core/where [['e :name 'name]
+                                        ['e :name "Ivan"]
+                                        '(not [e :last-name "Ivannotov"])])))
+
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivannotov"}])
+
+  (t/is (= 1 (count (cr/q db {:find ['e]
+                              :where [['e :name 'name]
+                                      ['e :name "Ivan"]
+                                      '(not [e :last-name "Ivanov"])]}))))
+
+  (t/is (= 2 (count (cr/q db {:find ['e]
+                              :where [['e :name 'name]
+                                      ['e :name "Ivan"]
+                                      '(not [e :last-name "Ivannotov"])]})))))

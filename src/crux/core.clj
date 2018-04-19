@@ -164,28 +164,43 @@
 ;; Query handling
 
 (s/def ::find (s/coll-of symbol? :kind vector?))
+(s/def ::term (s/or :term (s/coll-of any? :kind vector?)
+                    :exp (s/cat :operator #{'not}
+                                :term ::term)))
+(s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
-(defn- filter-attr [db at-ts results [term-e term-aid term-v]]
-  (for [bindings (or results (map #(hash-map term-e %) (entity-ids db)))
-        eid (or (some-> (bindings term-e) vector) (entity-ids db))
-        :let [v (-get-at db eid term-aid at-ts)]
-        :when (and v (or (not term-v)
-                         (if (symbol? term-v)
-                           (or (nil? (get bindings term-v))
-                               (= (get bindings term-v) v)))
-                         (= term-v v)))]
-    (merge bindings
-           {term-e eid}
-           (when (symbol? term-v)
-             {term-v v}))))
+(defn- term-matches? [[term-e term-a term-v] bindings v]
+  (and v (or (not term-v)
+             (if (symbol? term-v)
+               (or (nil? (get bindings term-v))
+                   (= (get bindings term-v) v)))
+             (= term-v v))))
 
-(defn- preprocess-terms [db terms]
-  (for [[e a v] terms]
-    [e (attr-schema db a) v]))
+(defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred]}]
+  (condp = op
+    :exp
+    (condp = (:operator t)
+      'not
+      (filter-attr db at-ts results (:term t) :pred (complement term-matches?)))
+    :term
+    (let [[term-e term-a term-v] t
+          aid (attr-schema db term-a)]
+      (for [bindings (or results (map #(hash-map term-e %) (entity-ids db)))
+            eid (or (some-> (bindings term-e) vector) (entity-ids db))
+            :let [v (-get-at db eid aid at-ts)]
+            :when ((or pred term-matches?) t bindings v)]
+        (merge bindings {term-e eid} (when (symbol? term-v) {term-v v}))))))
+
+(defn term-symbols [terms]
+  (reduce into #{}
+          (for [[type term] terms]
+            (if (= :term type)
+              (filter symbol? term)
+              (term-symbols [(:term term)])))))
 
 (defn- validate-query [{:keys [find where]}]
-  (let [variables (reduce into #{} (map (fn [[e _ v]] (if (symbol? v) [e v] [e])) where))]
+  (let [variables (term-symbols where)]
     (doseq [binding find]
       (when-not (variables binding)
         (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding)))))))
@@ -201,7 +216,7 @@
      (validate-query q)
      (when (= :clojure.spec.alpha/invalid q)
        (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-     (into #{} (->> where
-                    (preprocess-terms db)
-                    (reduce (partial filter-attr db ts) nil)
-                    (map (partial find-projection find)))))))
+     (->> where
+          (reduce (partial filter-attr db ts) nil)
+          (map (partial find-projection find))
+          (into #{})))))
