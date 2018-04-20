@@ -208,7 +208,7 @@
 (t/deftest test-not-query
   (t/is (= [[:term ['e :name 'name]]
             [:term ['e :name "Ivan"]]
-            [:exp {:operator 'not, :term [:term ['e :last-name "Ivannotov"]]}]]
+            [:not {:operator 'not, :term [:term ['e :last-name "Ivannotov"]]}]]
 
            (s/conform :crux.core/where [['e :name 'name]
                                         ['e :name "Ivan"]
@@ -237,16 +237,13 @@
                           {:name "Ivan" :last-name "Ivannotov"}
                           {:name "Bob" :last-name "Controlguy"}])
 
-  (comment
-    ;; Here for dev reasons, delete when appropiate
-    (s/conform :crux.core/where [['e :name 'name]
-                                 ['e :name "Ivan"]
-                                 '(or [[e :last-name "Ivanov"]])])
-
-    [[:term [e :name name]]
-     [:term [e :name "Ivan"]]
-     [:exp {:operator or, :term [:term [[e :last-name "Ivanov"]]]}]])
-
+  ;; Here for dev reasons, delete when appropiate
+  (t/is (= '[[:term [e :name name]]
+            [:term [e :name "Ivan"]]
+            [:or {:operator or, :terms [[:term [e :last-name "Ivanov"]]]}]]
+           (s/conform :crux.core/where [['e :name 'name]
+                                        ['e :name "Ivan"]
+                                        '(or [[e :last-name "Ivanov"]])])))
 
   (t/testing "Or works as expected"
     (t/is (= 3 (count (cr/q db {:find ['e]

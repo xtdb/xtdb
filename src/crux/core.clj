@@ -164,9 +164,14 @@
 ;; Query handling
 
 (s/def ::find (s/coll-of symbol? :kind vector?))
-(s/def ::term (s/or :term (s/coll-of any? :kind vector?)
-                    :exp (s/cat :operator #{'not 'or}
-                                :term ::term)))
+(s/def ::term (s/or :term (s/coll-of #(or (keyword? %)
+                                          (symbol? %)
+                                          (string? %))
+                                     :kind vector?)
+                    :not (s/cat :operator #{'not}
+                                :term ::term)
+                    :or (s/cat :operator #{'or}
+                               :terms ::where)))
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -190,19 +195,17 @@
 
 (defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred] :or {pred term-matches?}}]
   (condp = op
-    :exp
-    (condp = (:operator t)
-      'not
-      (filter-attr db at-ts results (:term t) :pred (complement term-matches?))
-      'or
-      (->> results
-           (mapcat (fn [result]
-                     (let [[[term-e _ _] :as terms] (second (:term t))]
-                       (for [eid (or (some-> (result term-e) vector) (entity-ids db))
-                             :when (some (fn [[_ term-a term-v]]
-                                           (matching-value db at-ts result eid term-a term-v pred))
-                                         terms)]
-                         (merge result {term-e eid})))))))
+    :not
+    (filter-attr db at-ts results (:term t) :pred (complement term-matches?))
+    :or
+    (->> results
+         (mapcat (fn [result]
+                   (let [[[_ [term-e _ _]]] (:terms t)]
+                     (for [eid (or (some-> (result term-e) vector) (entity-ids db))
+                           :when (some (fn [[_ [_ term-a term-v]]]
+                                         (matching-value db at-ts result eid term-a term-v pred))
+                                       (:terms t))]
+                       (merge result {term-e eid}))))))
     :term
     (let [[term-e] t]
       (->> (or results (map #(hash-map term-e %) (entity-ids db)))
@@ -210,10 +213,11 @@
 
 (defn term-symbols [terms]
   (reduce into #{}
-          (for [[type term] terms]
-            (if (= :term type)
-              (filter symbol? term)
-              (term-symbols [(:term term)])))))
+          (for [[op t] terms]
+            (condp = op
+              :term (filter symbol? t)
+              :not (filter symbol? t)
+              :or (term-symbols (:terms t))))))
 
 (defn- validate-query [{:keys [find where]}]
   (let [variables (term-symbols where)]
