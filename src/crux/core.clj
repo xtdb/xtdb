@@ -165,7 +165,7 @@
 
 (s/def ::find (s/coll-of symbol? :kind vector?))
 (s/def ::term (s/or :term (s/coll-of any? :kind vector?)
-                    :exp (s/cat :operator #{'not}
+                    :exp (s/cat :operator #{'not 'or}
                                 :term ::term)))
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
@@ -175,21 +175,37 @@
              (symbol? term-v)
              (= term-v v))))
 
+(defn- unify-against [db at-ts [term-e term-a term-v] pred result]
+  (let [aid (attr-schema db term-a)]
+    (for [eid (or (some-> (result term-e) vector) (entity-ids db))
+          :let [v (-get-at db eid aid at-ts)
+                term-v (or (and (symbol? term-v) (result term-v)) term-v)]
+          :when ((or pred term-matches?) term-v v)]
+      (merge result {term-e eid} (when (symbol? term-v) {term-v v})))))
+
 (defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred]}]
   (condp = op
     :exp
     (condp = (:operator t)
       'not
-      (filter-attr db at-ts results (:term t) :pred (complement term-matches?)))
+      (filter-attr db at-ts results (:term t) :pred (complement term-matches?))
+      'or
+      (->> results
+           (mapcat (fn [result]
+                     (let [[[term-e _ _] :as terms] (second (:term t))]
+                       (println terms term-e (first terms))
+                       (for [eid (or (some-> (result term-e) vector) (entity-ids db))
+                             :when (some (fn [[_ term-a term-v]]
+                                           (let [aid (attr-schema db term-a)
+                                                 v (-get-at db eid aid at-ts)
+                                                 term-v (or (and (symbol? term-v) (result term-v)) term-v)]
+                                             (term-matches? term-v v)))
+                                         terms)]
+                         (merge result {term-e eid})))))))
     :term
-    (let [[term-e term-a term-v] t
-          aid (attr-schema db term-a)]
-      (for [bindings (or results (map #(hash-map term-e %) (entity-ids db)))
-            eid (or (some-> (bindings term-e) vector) (entity-ids db))
-            :let [v (-get-at db eid aid at-ts)
-                  term-v (or (and (symbol? term-v) (bindings term-v)) term-v)]
-            :when ((or pred term-matches?) term-v v)]
-        (merge bindings {term-e eid} (when (symbol? term-v) {term-v v}))))))
+    (let [[term-e] t]
+      (->> (or results (map #(hash-map term-e %) (entity-ids db)))
+           (mapcat (partial unify-against db at-ts t pred))))))
 
 (defn term-symbols [terms]
   (reduce into #{}

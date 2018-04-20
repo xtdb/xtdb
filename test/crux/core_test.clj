@@ -234,24 +234,40 @@
 (t/deftest test-or-query
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
                           {:name "Ivan" :last-name "Ivanov"}
-                          {:name "Ivan" :last-name "Ivannotov"}])
+                          {:name "Ivan" :last-name "Ivannotov"}
+                          {:name "Bob" :last-name "Controlguy"}])
 
-  (s/conform :crux.core/where [['e :name 'name]
-                               ['e :name "Ivan"]
-                               '(or [[e :last-name "Ivanov"]])])
+  (comment
+    ;; Here for dev reasons, delete when appropiate
+    (s/conform :crux.core/where [['e :name 'name]
+                                 ['e :name "Ivan"]
+                                 '(or [[e :last-name "Ivanov"]])])
 
-  (t/is (= 3 (count (cr/q db {:find ['e]
-                              :where [['e :name 'name]
-                                      ['e :name "Ivan"]
-                                      '(or [[e :last-name "Ivanov"]
-                                            [e :last-name "Ivanovov"]])]}))))
+    [[:term [e :name name]]
+     [:term [e :name "Ivan"]]
+     [:exp {:operator or, :term [:term [[e :last-name "Ivanov"]]]}]])
 
-  (t/testing "Or can take a single clause"
+
+  (t/testing "Or works as expected"
+    (t/is (= 3 (count (cr/q db {:find ['e]
+                                :where [['e :name 'name]
+                                        ['e :name "Ivan"]
+                                        '(or [[e :last-name "Ivanov"]
+                                              [e :last-name "Ivannotov"]])]}))))
+
+    (t/is (= 2 (count (cr/q db {:find ['e]
+                                :where [['e :name 'name]
+                                        ['e :name "Ivan"]
+                                        '(or [[e :last-name "Ivanov"]
+                                              [e :last-name "Controlguy"]])]})))))
+
+  (t/testing "Or edge case - can take a single clause"
     ;; Unsure of the utility
-    (t/is (= 1 (count (cr/q db {:find ['e]
+    (t/is (= 2 (count (cr/q db {:find ['e]
                                 :where [['e :name 'name]
                                         ['e :name "Ivan"]
                                         '(or [[e :last-name "Ivanov"]])]})))))
 
+  ;; TODO dig into edge cases some more:
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
