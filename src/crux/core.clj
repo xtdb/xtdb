@@ -177,16 +177,15 @@
 
 (defn- matching-value
   "Retrieve a value for the term, only if it matches."
-  [db at-ts eid term-a term-v pred]
-  (let [aid (attr-schema db term-a)
+  [db at-ts result eid term-a term-v pred]
+  (let [term-v (or (and (symbol? term-v) (result term-v)) term-v)
+        aid (attr-schema db term-a)
         v (-get-at db eid aid at-ts)]
     (when (pred term-v v) v)))
 
 (defn- unify-against [db at-ts [term-e term-a term-v] pred result]
   (for [eid (or (some-> (result term-e) vector) (entity-ids db))
-        :let [term-v (or (and (symbol? term-v) (result term-v)) term-v)
-              v (matching-value db at-ts eid term-a term-v pred)]
-        :when v]
+        :let [v (matching-value db at-ts result eid term-a term-v pred)] :when v]
     (merge result {term-e eid} (when (symbol? term-v) {term-v v}))))
 
 (defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred] :or {pred term-matches?}}]
@@ -201,8 +200,7 @@
                      (let [[[term-e _ _] :as terms] (second (:term t))]
                        (for [eid (or (some-> (result term-e) vector) (entity-ids db))
                              :when (some (fn [[_ term-a term-v]]
-                                           (let [term-v (or (and (symbol? term-v) (result term-v)) term-v)]
-                                             (matching-value db at-ts eid term-a term-v pred)))
+                                           (matching-value db at-ts result eid term-a term-v pred))
                                          terms)]
                          (merge result {term-e eid})))))))
     :term
