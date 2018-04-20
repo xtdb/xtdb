@@ -175,15 +175,21 @@
              (symbol? term-v)
              (= term-v v))))
 
-(defn- unify-against [db at-ts [term-e term-a term-v] pred result]
-  (let [aid (attr-schema db term-a)]
-    (for [eid (or (some-> (result term-e) vector) (entity-ids db))
-          :let [v (-get-at db eid aid at-ts)
-                term-v (or (and (symbol? term-v) (result term-v)) term-v)]
-          :when ((or pred term-matches?) term-v v)]
-      (merge result {term-e eid} (when (symbol? term-v) {term-v v})))))
+(defn- matching-value
+  "Retrieve a value for the term, only if it matches."
+  [db at-ts eid term-a term-v pred]
+  (let [aid (attr-schema db term-a)
+        v (-get-at db eid aid at-ts)]
+    (when (pred term-v v) v)))
 
-(defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred]}]
+(defn- unify-against [db at-ts [term-e term-a term-v] pred result]
+  (for [eid (or (some-> (result term-e) vector) (entity-ids db))
+        :let [term-v (or (and (symbol? term-v) (result term-v)) term-v)
+              v (matching-value db at-ts eid term-a term-v pred)]
+        :when v]
+    (merge result {term-e eid} (when (symbol? term-v) {term-v v}))))
+
+(defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred] :or {pred term-matches?}}]
   (condp = op
     :exp
     (condp = (:operator t)
@@ -193,13 +199,10 @@
       (->> results
            (mapcat (fn [result]
                      (let [[[term-e _ _] :as terms] (second (:term t))]
-                       (println terms term-e (first terms))
                        (for [eid (or (some-> (result term-e) vector) (entity-ids db))
                              :when (some (fn [[_ term-a term-v]]
-                                           (let [aid (attr-schema db term-a)
-                                                 v (-get-at db eid aid at-ts)
-                                                 term-v (or (and (symbol? term-v) (result term-v)) term-v)]
-                                             (term-matches? term-v v)))
+                                           (let [term-v (or (and (symbol? term-v) (result term-v)) term-v)]
+                                             (matching-value db at-ts eid term-a term-v pred)))
                                          terms)]
                          (merge result {term-e eid})))))))
     :term
