@@ -188,28 +188,46 @@
         v (-get-at db eid aid at-ts)]
     (when (pred term-v v) v)))
 
-(defn- unify-against [db at-ts [term-e term-a term-v] pred result]
-  (for [eid (or (some-> (result term-e) vector) (entity-ids db))
-        :let [v (matching-value db at-ts result eid term-a term-v pred)] :when v]
+(defn- unify-against [[term-e term-a term-v] pred db at-ts result eid]
+  (when-let [v (matching-value db at-ts result eid term-a term-v pred)]
     (merge result {term-e eid} (when (symbol? term-v) {term-v v}))))
 
-(defn- filter-attr [db at-ts results [op t :as r] & {:keys [pred] :or {pred term-matches?}}]
-  (condp = op
-    :not
-    (filter-attr db at-ts results (:term t) :pred (complement term-matches?))
-    :or
-    (->> results
-         (mapcat (fn [result]
-                   (let [[[_ [term-e _ _]]] (:terms t)]
-                     (for [eid (or (some-> (result term-e) vector) (entity-ids db))
-                           :when (some (fn [[_ [_ term-a term-v]]]
-                                         (matching-value db at-ts result eid term-a term-v pred))
-                                       (:terms t))]
-                       (merge result {term-e eid}))))))
-    :term
-    (let [[term-e] t]
-      (->> (or results (map #(hash-map term-e %) (entity-ids db)))
-           (mapcat (partial unify-against db at-ts t pred))))))
+(defn- query-terms->plan
+  "Converts a sequence of query terms into a sequence of executable
+  query stages."
+  [terms]
+  (for [[op t] terms]
+    (condp = op
+      :term
+      [(first t)
+       (partial unify-against t term-matches?)]
+
+      :not
+      (do
+        (let [[_ term] (:term t)]
+          [(first term)
+           (partial unify-against term (complement term-matches?))]))
+
+      :or
+      (let [e (-> t :terms first second first)]
+        [e
+         (fn [db at-ts result eid]
+           (when (some (fn [[_ [_ term-a term-v]]]
+                         (matching-value db at-ts result eid term-a term-v term-matches?))
+                       (:terms t))
+             (merge result {e eid})))]))))
+
+(defn- query-plan->results
+  "Reduce over the query plan, unifying the results across each
+  stage."
+  [db at-ts plan]
+  (reduce (fn [results [e unify-f]]
+            (->> (or results (map #(hash-map e %) (entity-ids db)))
+                 (map (fn [result]
+                        (->> (or (some-> (result e) vector) (entity-ids db))
+                             (keep (partial unify-f db at-ts result)))))
+                 (reduce into #{})))
+          nil plan))
 
 (defn term-symbols [terms]
   (reduce into #{}
@@ -237,6 +255,7 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (ex-info "Invalid input" (s/explain-data ::query q))))
      (->> where
-          (reduce (partial filter-attr db ts) nil)
+          (query-terms->plan)
+          (query-plan->results db ts)
           (map (partial find-projection find))
           (into #{})))))
