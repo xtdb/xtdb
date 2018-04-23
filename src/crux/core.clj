@@ -171,7 +171,10 @@
                     :not (s/cat :operator #{'not}
                                 :term ::term)
                     :or (s/cat :operator #{'or}
-                               :terms ::where)))
+                               :terms ::where)
+                    :not-join (s/cat :operator #{'not-join}
+                                     :bindings (s/coll-of symbol? :kind vector?)
+                                     :terms ::where)))
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -191,6 +194,18 @@
 (defn- unify-against [[term-e term-a term-v] pred db at-ts result eid]
   (when-let [v (matching-value db at-ts result eid term-a term-v pred)]
     (merge result {term-e eid} (when (symbol? term-v) {term-v v}))))
+
+(defn- query-plan->results
+  "Reduce over the query plan, unifying the results across each
+  stage."
+  [db at-ts plan]
+  (reduce (fn [results [e unify-f]]
+            (->> (or results (map #(hash-map e %) (entity-ids db)))
+                 (map (fn [result]
+                        (->> (or (some-> (result e) vector) (entity-ids db))
+                             (keep (partial unify-f db at-ts result)))))
+                 (reduce into #{})))
+          nil plan))
 
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
@@ -215,19 +230,17 @@
            (when (some (fn [[_ [_ term-a term-v]]]
                          (matching-value db at-ts result eid term-a term-v term-matches?))
                        (:terms t))
-             (merge result {e eid})))]))))
+             (merge result {e eid})))])
 
-(defn- query-plan->results
-  "Reduce over the query plan, unifying the results across each
-  stage."
-  [db at-ts plan]
-  (reduce (fn [results [e unify-f]]
-            (->> (or results (map #(hash-map e %) (entity-ids db)))
-                 (map (fn [result]
-                        (->> (or (some-> (result e) vector) (entity-ids db))
-                             (keep (partial unify-f db at-ts result)))))
-                 (reduce into #{})))
-          nil plan))
+      :not-join
+      (let [e (-> t :bindings first)]
+        [e
+         (let [query-plan (query-terms->plan (:terms t))
+               or-results (atom nil)]
+           (fn [db at-ts result eid]
+             (let [or-results (or @or-results (reset! or-results (query-plan->results db at-ts query-plan)))]
+               (when-not (some #(= (get result e) (get % e)) or-results)
+                 result))))]))))
 
 (defn term-symbols [terms]
   (reduce into #{}
@@ -235,7 +248,8 @@
             (condp = op
               :term (filter symbol? t)
               :not (filter symbol? t)
-              :or (term-symbols (:terms t))))))
+              :or (term-symbols (:terms t))
+              :not-join (term-symbols (:terms t))))))
 
 (defn- validate-query [{:keys [find where]}]
   (let [variables (term-symbols where)]

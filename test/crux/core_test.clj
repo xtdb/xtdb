@@ -268,3 +268,15 @@
   ;; TODO dig into edge cases some more:
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
+
+(t/deftest test-not-join
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Malcolm" :last-name "Ofsparks"}
+                          {:name "Dominic" :last-name "Monroe"}])
+
+  (t/testing "Rudimentary or-join"
+    (t/is (= #{["Ivan"] ["Malcolm"]}
+             (cr/q db {:find ['name]
+                       :where [['e :name 'name]
+                               '(not-join [e]
+                                          [[e :last-name "Monroe"]])]})))))
