@@ -163,6 +163,8 @@
 ;; --------------
 ;; Query handling
 
+(s/def ::pred-fn #(and (symbol? %)
+                       (-> % resolve var-get fn?)))
 (s/def ::find (s/coll-of symbol? :kind vector?))
 (s/def ::term (s/or :term (s/coll-of #(or (keyword? %)
                                           (symbol? %)
@@ -172,9 +174,11 @@
                                 :term ::term)
                     :or (s/cat :operator #{'or}
                                :terms ::where)
-                    :not-join (s/cat :operator #{'not-join}
+                    :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
-                                     :terms ::where)))
+                                     :terms ::where)
+                    :pred (s/cat ::pred-fn ::pred-fn
+                                 ::args (s/* any?))))
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -240,7 +244,10 @@
            (fn [db at-ts result eid]
              (let [or-results (or @or-results (reset! or-results (query-plan->results db at-ts query-plan)))]
                (when-not (some #(= (get result e) (get % e)) or-results)
-                 result))))]))))
+                 result))))])
+
+      :pred
+      ['e (fn [& args] []) (fn [& args])])))
 
 (defn term-symbols [terms]
   (reduce into #{}
@@ -249,7 +256,8 @@
               :term (filter symbol? t)
               :not (filter symbol? t)
               :or (term-symbols (:terms t))
-              :not-join (term-symbols (:terms t))))))
+              :not-join (term-symbols (:terms t))
+              :pred []))))
 
 (defn- validate-query [{:keys [find where]}]
   (let [variables (term-symbols where)]

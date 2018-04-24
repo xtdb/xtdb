@@ -280,3 +280,15 @@
                        :where [['e :name 'name]
                                '(not-join [e]
                                           [[e :last-name "Monroe"]])]})))))
+
+(t/deftest test-predicate-expression
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov" :age 30}
+                          {:name "Bob" :last-name "Ivanov" :age 40 }
+                          {:name "Dominic" :last-name "Monroe" :age 50}])
+
+  (t/testing "< predicate expression"
+    (t/is (= #{["Ivan"] ["Bob"]}
+             (cr/q db {:find ['name]
+                       :where [['e :name 'name]
+                               ['e :age 'age]
+                               '(< 'age 50)]})))))
