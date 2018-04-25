@@ -282,6 +282,10 @@
                                           [[e :last-name "Monroe"]])]})))))
 
 (t/deftest test-predicate-expression
+  (s/conform :crux.core/where [['e :name 'name]
+                               ['e :age 'age]
+                               '(< age 50)])
+
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov" :age 30}
                           {:name "Bob" :last-name "Ivanov" :age 40 }
                           {:name "Dominic" :last-name "Monroe" :age 50}])
@@ -291,4 +295,10 @@
              (cr/q db {:find ['name]
                        :where [['e :name 'name]
                                ['e :age 'age]
-                               '(< 'age 50)]})))))
+                               '(< age 50)]})))
+
+    (t/is (= #{["Dominic"]}
+             (cr/q db {:find ['name]
+                       :where [['e :name 'name]
+                               ['e :age 'age]
+                               '(>= age 50)]})))))
