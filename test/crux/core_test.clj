@@ -242,7 +242,7 @@
   ;; Here for dev reasons, delete when appropiate
   (t/is (= '[[:term [e :name name]]
              [:term [e :name "Ivan"]]
-             [:or {:operator or, :terms [[:term [e :last-name "Ivanov"]]]}]]
+             [:or [[:term [e :last-name "Ivanov"]]]]]
            (s/conform :crux.core/where [['e :name 'name]
                                         ['e :name "Ivan"]
                                         '(or [[e :last-name "Ivanov"]])])))

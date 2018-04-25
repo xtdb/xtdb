@@ -163,6 +163,12 @@
 ;; --------------
 ;; Query handling
 
+(defn- expression-spec [sym spec]
+  (s/and seq?
+         #(= sym (first %))
+         (s/conformer second)
+         spec))
+
 (s/def ::pred-fn (s/and symbol?
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
@@ -172,12 +178,8 @@
                               (string? %))
                          :kind vector?))
 (s/def ::term (s/or :term ::rule
-                    :not (s/and seq?
-                                #(= 'not (first %))
-                                (s/conformer second)
-                                ::rule)
-                    :or (s/cat :operator #{'or}
-                               :terms ::where)
+                    :not (expression-spec 'not ::rule)
+                    :or (expression-spec 'or ::where)
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
                                      :terms ::where)
@@ -240,13 +242,13 @@
        (fn [_ _ result] (not (value-matches? t result)))]
 
       :or
-      (let [e (-> t :terms first second first)]
+      (let [e (-> t first second first)]
         [e
-         (-> t :terms first second)
+         (-> t first second)
          (fn [_ _ result]
            (when (some (fn [[_ term]]
                          (value-matches? term result))
-                       (:terms t))
+                       t)
              result))])
 
       :not-join
