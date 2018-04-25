@@ -182,28 +182,28 @@
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
-(defn- term-matches? [term-v v]
-  (and v (or (not term-v)
-             (symbol? term-v)
-             (= term-v v))))
+(defn- value-matches? [[term-e term-a term-v] result]
+  (println [term-e term-a term-v] result)
+  (when-let [v (result term-a)]
+    (and v (or (not term-v)
+               (and (symbol? term-v) (= (result term-v) v))
+               (= term-v v)))))
 
-(defn- matching-value
-  "Retrieve a value for the term, only if it matches."
-  [db at-ts result term-e term-a term-v pred]
-  (let [term-v (or (and (symbol? term-v) (result term-v)) term-v)
-        aid (attr-schema db term-a)
-        v (-get-at db (result term-e) aid at-ts)]
-    (when (pred term-v v) v)))
-
-(defn- unify-against [[term-e term-a term-v] pred db at-ts result]
-  (when-let [v (matching-value db at-ts result term-e term-a term-v pred)]
-    (merge result (when (symbol? term-v) {term-v v}))))
+(defn- apply-bindings [db at-ts [term-e term-a term-v] result]
+  (if term-a
+    (let [aid (attr-schema db term-a)
+          v (-get-at db (result term-e) aid at-ts)
+          result (assoc result term-a v)]
+      (if (and (symbol? term-v) (not (result term-v)))
+        (assoc result term-v v)
+        result))
+    result))
 
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
   [db at-ts plan]
-  (reduce (fn [results [e unify-f]]
+  (reduce (fn [results [e bindings pred-f]]
             (let [results
                   (cond (not results)
                         (map #(hash-map e %) (entity-ids db))
@@ -215,7 +215,8 @@
                         (for [result results eid (entity-ids db)]
                           (assoc result e eid)))]
               (->> results
-                   (keep (partial unify-f db at-ts))
+                   (map (partial apply-bindings db at-ts bindings))
+                   (filter (partial pred-f db at-ts))
                    (into #{}))))
           nil plan))
 
@@ -227,26 +228,29 @@
     (condp = op
       :term
       [(first t)
-       (partial unify-against t term-matches?)]
+       t
+       (fn [_ _ result] (value-matches? t result))]
 
       :not
-      (do
-        (let [[_ term] (:term t)]
-          [(first term)
-           (partial unify-against term (complement term-matches?))]))
+      (let [[_ term] (:term t)]
+        [(first term)
+         term
+         (fn [_ _ result] (not (value-matches? term result)))])
 
       :or
       (let [e (-> t :terms first second first)]
         [e
-         (fn [db at-ts result]
-           (when (some (fn [[_ [term-e term-a term-v]]]
-                         (matching-value db at-ts result term-e term-a term-v term-matches?))
+         (-> t :terms first second)
+         (fn [_ _ result]
+           (when (some (fn [[_ term]]
+                         (value-matches? term result))
                        (:terms t))
              result))])
 
       :not-join
       (let [e (-> t :bindings first)]
         [e
+         nil
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
            (fn [db at-ts result]
@@ -255,7 +259,7 @@
                  result))))])
 
       :pred
-      ['e (fn [& args] []) (fn [& args])])))
+      ['e nil (fn [& args] []) (fn [& args])])))
 
 (defn term-symbols [terms]
   (reduce into #{}
