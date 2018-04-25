@@ -164,7 +164,8 @@
 ;; Query handling
 
 (s/def ::pred-fn (s/and symbol?
-                        #(-> % resolve var-get fn?)))
+                        (s/conformer #(some-> % resolve var-get))
+                        fn?))
 (s/def ::find (s/coll-of symbol? :kind vector?))
 (s/def ::term (s/or :term (s/coll-of #(or (keyword? %)
                                           (symbol? %)
@@ -262,7 +263,7 @@
       (let [{:keys [::args ::pred-fn]} t]
         ['e nil (fn [_ _ result]
                   (let [args (map #(or (and (symbol? %) (result %)) %) args)]
-                    (apply (-> pred-fn resolve var-get) args)))]))))
+                    (apply pred-fn args)))]))))
 
 (defn term-symbols [terms]
   (reduce into #{}
