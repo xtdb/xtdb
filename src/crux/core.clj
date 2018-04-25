@@ -189,26 +189,34 @@
 
 (defn- matching-value
   "Retrieve a value for the term, only if it matches."
-  [db at-ts result eid term-a term-v pred]
+  [db at-ts result term-e term-a term-v pred]
   (let [term-v (or (and (symbol? term-v) (result term-v)) term-v)
         aid (attr-schema db term-a)
-        v (-get-at db eid aid at-ts)]
+        v (-get-at db (result term-e) aid at-ts)]
     (when (pred term-v v) v)))
 
-(defn- unify-against [[term-e term-a term-v] pred db at-ts result eid]
-  (when-let [v (matching-value db at-ts result eid term-a term-v pred)]
-    (merge result {term-e eid} (when (symbol? term-v) {term-v v}))))
+(defn- unify-against [[term-e term-a term-v] pred db at-ts result]
+  (when-let [v (matching-value db at-ts result term-e term-a term-v pred)]
+    (merge result (when (symbol? term-v) {term-v v}))))
 
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
   [db at-ts plan]
   (reduce (fn [results [e unify-f]]
-            (->> (or results (map #(hash-map e %) (entity-ids db)))
-                 (map (fn [result]
-                        (->> (or (some-> (result e) vector) (entity-ids db))
-                             (keep (partial unify-f db at-ts result)))))
-                 (reduce into #{})))
+            (let [results
+                  (cond (not results)
+                        (map #(hash-map e %) (entity-ids db))
+
+                        (get (first results) e)
+                        results
+
+                        :else
+                        (for [result results eid (entity-ids db)]
+                          (assoc result e eid)))]
+              (->> results
+                   (keep (partial unify-f db at-ts))
+                   (into #{}))))
           nil plan))
 
 (defn- query-terms->plan
@@ -230,18 +238,18 @@
       :or
       (let [e (-> t :terms first second first)]
         [e
-         (fn [db at-ts result eid]
-           (when (some (fn [[_ [_ term-a term-v]]]
-                         (matching-value db at-ts result eid term-a term-v term-matches?))
+         (fn [db at-ts result]
+           (when (some (fn [[_ [term-e term-a term-v]]]
+                         (matching-value db at-ts result term-e term-a term-v term-matches?))
                        (:terms t))
-             (merge result {e eid})))])
+             result))])
 
       :not-join
       (let [e (-> t :bindings first)]
         [e
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
-           (fn [db at-ts result eid]
+           (fn [db at-ts result]
              (let [or-results (or @or-results (reset! or-results (query-plan->results db at-ts query-plan)))]
                (when-not (some #(= (get result e) (get % e)) or-results)
                  result))))])
