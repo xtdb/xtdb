@@ -208,7 +208,7 @@
 (t/deftest test-not-query
   (t/is (= [[:term ['e :name 'name]]
             [:term ['e :name "Ivan"]]
-            [:not {:operator 'not, :term [:term ['e :last-name "Ivannotov"]]}]]
+            [:not ['e :last-name "Ivannotov"]]]
 
            (s/conform :crux.core/where [['e :name 'name]
                                         ['e :name "Ivan"]
@@ -229,6 +229,8 @@
                                       '(not [e :last-name "Ivannotov"])]}))))
 
   ;; test what happens if not contains a brand new var, uses diff entity etc
+  ;; test what happens if not is nested, i.e. can you do (not (or ....))
+  ;; That would be good to test out the AST some more.
   )
 
 (t/deftest test-or-query

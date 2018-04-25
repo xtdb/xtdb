@@ -167,12 +167,15 @@
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
 (s/def ::find (s/coll-of symbol? :kind vector?))
-(s/def ::term (s/or :term (s/coll-of #(or (keyword? %)
-                                          (symbol? %)
-                                          (string? %))
-                                     :kind vector?)
-                    :not (s/cat :operator #{'not}
-                                :term ::term)
+(s/def ::rule (s/coll-of #(or (keyword? %)
+                              (symbol? %)
+                              (string? %))
+                         :kind vector?))
+(s/def ::term (s/or :term ::rule
+                    :not (s/and seq?
+                                #(= 'not (first %))
+                                (s/conformer second)
+                                ::rule)
                     :or (s/cat :operator #{'or}
                                :terms ::where)
                     :not-join (s/cat :pred #{'not-join}
@@ -184,7 +187,6 @@
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- value-matches? [[term-e term-a term-v] result]
-  (println [term-e term-a term-v] result)
   (when-let [v (result term-a)]
     (and v (or (not term-v)
                (and (symbol? term-v) (= (result term-v) v))
@@ -233,10 +235,9 @@
        (fn [_ _ result] (value-matches? t result))]
 
       :not
-      (let [[_ term] (:term t)]
-        [(first term)
-         term
-         (fn [_ _ result] (not (value-matches? term result)))])
+      [(first t)
+       t
+       (fn [_ _ result] (not (value-matches? t result)))]
 
       :or
       (let [e (-> t :terms first second first)]
