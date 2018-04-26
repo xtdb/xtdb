@@ -242,13 +242,14 @@
        (fn [_ _ result] (not (value-matches? t result)))]
 
       :or
-      (let [e (-> t first second first)]
+      (let [sub-plan (query-terms->plan t)
+            e (ffirst sub-plan)]
         [e
          (-> t first second)
-         (fn [_ _ result]
-           (when (some (fn [[_ term]]
-                         (value-matches? term result))
-                       t)
+         (fn [db at-ts result]
+           (when (some (fn [[_ _ pred-fn]]
+                         (pred-fn db at-ts result))
+                       sub-plan)
              result))])
 
       :not-join

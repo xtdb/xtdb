@@ -271,6 +271,25 @@
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
 
+(t/deftest test-mixing-expressions
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivanov"}
+                          {:name "Bob" :last-name "Ivannotov"}])
+
+  (t/testing "Or can use not expression"
+    (t/is (= #{["Ivan"] ["Bob"]}
+             (cr/q db {:find ['name]
+                       :where [['e :name 'name]
+                               '(or [[e :last-name "Ivanov"]
+                                     (not [e :name "Ivan"])])]})))))
+
+;; ;; query
+;; [:find (count ?artist) .
+;;  :where (or [?artist :artist/type :artist.type/group]
+;;             (and [?artist :artist/type :artist.type/person]
+;;                  [?artist :artist/gender :artist.gender/female]))]
+
+
 (t/deftest test-not-join
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
                           {:name "Malcolm" :last-name "Ofsparks"}
