@@ -271,18 +271,6 @@
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
 
-(t/deftest test-mixing-expressions
-  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
-                          {:name "Ivan" :last-name "Ivanov"}
-                          {:name "Bob" :last-name "Ivannotov"}])
-
-  (t/testing "Or can use not expression"
-    (t/is (= #{["Ivan"] ["Bob"]}
-             (cr/q db {:find ['name]
-                       :where [['e :name 'name]
-                               '(or [[e :last-name "Ivanov"]
-                                     (not [e :name "Ivan"])])]})))))
-
 ;; ;; query
 ;; [:find (count ?artist) .
 ;;  :where (or [?artist :artist/type :artist.type/group]
@@ -301,6 +289,29 @@
                        :where [['e :name 'name]
                                '(not-join [e]
                                           [[e :last-name "Monroe"]])]})))))
+
+(t/deftest test-mixing-expressions
+  (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Derek" :last-name "Ivanov"}
+                          {:name "Bob" :last-name "Ivannotov"}
+                          {:name "Fred" :last-name "Ivannotov"}])
+
+  (t/testing "Or can use not expression"
+    (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
+             (cr/q db {:find ['name]
+                       :where [['e :name 'name]
+                               '(or [[e :last-name "Ivanov"]
+                                     (not [[e :name "Bob"]])])]}))))
+
+  (s/conform :crux.core/where [['e :name 'name]
+                               '(not (or [[e :last-name "Ivanov"]
+                                          [e :name "Bob"]]))])
+
+  (t/testing "Not can use Or expression"
+    (t/is (= #{["Fred"]} (cr/q db {:find ['name]
+                                   :where [['e :name 'name]
+                                           '(not (or [[e :last-name "Ivanov"]
+                                                      [e :name "Bob"]]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov" :age 30}
