@@ -1,4 +1,4 @@
-(ns crux.core
+(ns crux.kv
   (:require [byte-streams :as bs]
             [crux.byte-utils :refer :all]
             crux.datasource

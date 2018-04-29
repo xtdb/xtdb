@@ -1,7 +1,7 @@
 (ns crux.query
   (:require [clojure.spec.alpha :as s]
             [crux.datasource]
-            [crux.core]))
+            [crux.kv]))
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -134,7 +134,7 @@
    (q db terms (java.util.Date.)))
   ([db {:keys [find where] :as q} ts]
    (let [{:keys [find where] :as q} (s/conform ::query q)
-         datasource (crux.core/map->KvDatasource {:db db :at-ts ts})]
+         datasource (crux.kv/map->KvDatasource {:db db :at-ts ts})]
      (validate-query q)
      (when (= :clojure.spec.alpha/invalid q)
        (throw (ex-info "Invalid input" (s/explain-data ::query q))))

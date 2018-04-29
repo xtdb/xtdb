@@ -1,5 +1,5 @@
 (ns crux.fixtures
-  (:require [crux.core :as cr]
+  (:require [crux.kv :as cr]
             [crux.kv-store :as kv-store]
             crux.rocksdb))
 
@@ -14,7 +14,7 @@
 
 (def next-eid (atom 0))
 
-(defn random-person [] {:crux.core/id (swap! next-eid dec)
+(defn random-person [] {:crux.kv/id (swap! next-eid dec)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
                         :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
                         :sex       (rand-nth [:male :female])
@@ -29,7 +29,7 @@
   ([db people-mixins ts]
    (let [people (->> people-mixins (map #(merge %1 %2) people))
          ids (cr/-put db people ts)]
-     (map #(update % :crux.core/id ids) people))))
+     (map #(update % :crux.kv/id ids) people))))
 
 (def ^:dynamic db)
 
