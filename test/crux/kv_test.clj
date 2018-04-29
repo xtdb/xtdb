@@ -1,4 +1,4 @@
-(ns crux.core-test
+(ns crux.kv-test
   (:require [clj-time.coerce :as c]
             [clj-time.core :as time]
             [clojure.test :as t]

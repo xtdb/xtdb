@@ -159,9 +159,6 @@
        (map :eid)
        (into #{})))
 
-;; --------------
-;; Query handling
-
 (defrecord KvEntity [eid db at-ts]
   crux.datasource/Entity
   (attr-val [{:keys [eid]} attr]
