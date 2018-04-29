@@ -13,12 +13,12 @@
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
 (s/def ::find (s/coll-of symbol? :kind vector?))
-(s/def ::rule (s/coll-of #(or (keyword? %)
+(s/def ::fact (s/coll-of #(or (keyword? %)
                               (symbol? %)
                               (string? %))
                          :kind vector?))
-(s/def ::term (s/or :term ::rule
-                    :not (expression-spec 'not ::rule)
+(s/def ::term (s/or :fact ::fact
+                    :not (expression-spec 'not ::term)
                     :or (expression-spec 'or ::where)
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
@@ -65,13 +65,17 @@
                    (into #{}))))
           nil plan))
 
+#_(s/conform :crux.query/where [['e :name 'name]
+                              '(not (or [[e :last-name "Ivanov"]
+                                         [e :name "Bob"]]))])
+
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
   query stages."
   [terms]
   (for [[op t] terms]
     (condp = op
-      :term
+      :fact
       [(first t)
        t
        (fn [_ result] (value-matches? t result))]
@@ -113,7 +117,7 @@
   (reduce into #{}
           (for [[op t] terms]
             (condp = op
-              :term (filter symbol? t)
+              :fact (filter symbol? t)
               :not (filter symbol? t)
               :or (term-symbols (:terms t))
               :not-join (term-symbols (:terms t))

@@ -119,8 +119,8 @@
       (t/is (= "Find clause references unbound variable: bah" (.getMessage e))))))
 
 (t/deftest test-not-query
-  (t/is (= [[:term ['e :name 'name]]
-            [:term ['e :name "Ivan"]]
+  (t/is (= [[:fact ['e :name 'name]]
+            [:fact ['e :name "Ivan"]]
             [:not ['e :last-name "Ivannotov"]]]
 
            (s/conform :crux.query/where [['e :name 'name]
@@ -153,9 +153,9 @@
                             {:name "Bob" :last-name "Controlguy"}])
 
   ;; Here for dev reasons, delete when appropiate
-  (t/is (= '[[:term [e :name name]]
-             [:term [e :name "Ivan"]]
-             [:or [[:term [e :last-name "Ivanov"]]]]]
+  (t/is (= '[[:fact [e :name name]]
+             [:fact [e :name "Ivan"]]
+             [:or [[:fact [e :last-name "Ivanov"]]]]]
            (s/conform :crux.query/where [['e :name 'name]
                                          ['e :name "Ivan"]
                                          '(or [[e :last-name "Ivanov"]])])))
