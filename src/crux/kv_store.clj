@@ -1,4 +1,4 @@
-(ns crux.kv)
+(ns crux.kv-store)
 
 (defprotocol CruxKv
   (open [this])

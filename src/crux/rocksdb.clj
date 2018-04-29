@@ -1,6 +1,6 @@
 (ns crux.rocksdb
   (:require [byte-streams :as bs]
-            [crux.kv :refer :all])
+            [crux.kv-store :refer :all])
   (:import [org.rocksdb Options ReadOptions RocksDB Slice]))
 
 (defn- -get [db k]

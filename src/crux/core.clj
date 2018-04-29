@@ -2,7 +2,7 @@
   (:require [byte-streams :as bs]
             [crux.byte-utils :refer :all]
             crux.datasource
-            [crux.kv :as kv]
+            [crux.kv-store :as kv-store]
             [gloss.core :as g]
             gloss.io))
 
@@ -62,8 +62,8 @@
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
     (let [key-entity-id (encode :key {:index :eid})]
-      (kv/merge! db key-entity-id (long->bytes 1))
-      (bytes->long (kv/seek db key-entity-id)))))
+      (kv-store/merge! db key-entity-id (long->bytes 1))
+      (bytes->long (kv-store/seek db key-entity-id)))))
 
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
@@ -71,24 +71,24 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (kv/store db (encode :key {:index :ident :ident ident})
+    (kv-store/store db (encode :key {:index :ident :ident ident})
               (encode :val/ident {:aid aid}))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
-      (kv/store db k (encode :val/attr {:attr/type type
+      (kv-store/store db k (encode :val/attr {:attr/type type
                                         :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
   (or (some->> {:index :ident :ident ident}
                (encode :key)
-               (kv/seek db)
+               (kv-store/seek db)
                (decode :val/ident)
                :aid)
       (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (if-let [v (kv/seek db (encode :key {:index :aid :aid aid}))]
+  (if-let [v (kv-store/seek db (encode :key {:index :aid :aid aid}))]
     (decode :val/attr v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -111,7 +111,7 @@
              eid (or (and (pos? eid) eid)
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))]
-         (kv/store db (encode :key {:index :eat
+         (kv-store/store db (encode :key {:index :eat
                                     :eid eid
                                     :aid aid
                                     :ts (.getTime ts)})
@@ -122,7 +122,7 @@
   ([db eid k] (-get-at db eid k (java.util.Date.)))
   ([db eid k ts]
    (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
-     (some->> (kv/seek-and-iterate db
+     (some->> (kv-store/seek-and-iterate db
                                    (encode :key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
                                    (encode :key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
               first second (decode :val/eat) :v))))
@@ -142,7 +142,7 @@
                   m
                   (assoc m ident (:v (decode :val/eat v))))))
             nil
-            (kv/seek-and-iterate db
+            (kv-store/seek-and-iterate db
                                  (encode :key/eat-prefix {:index :eat :eid eid})
                                  (encode :key/eat-prefix {:index :eat :eid (inc eid)})))
     (assoc ::id eid))))
@@ -152,7 +152,7 @@
   could be a performance gain to replace this with a dedicate EID
   index that could be lazy."
   [db]
-  (->> (kv/seek-and-iterate db
+  (->> (kv-store/seek-and-iterate db
                             (encode :key/index-prefix {:index :eat})
                             (encode :key/index-prefix {:index :eid}))
        (map (fn [[k _]] (decode :key k)))

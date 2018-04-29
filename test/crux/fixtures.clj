@@ -1,6 +1,6 @@
 (ns crux.fixtures
   (:require [crux.core :as cr]
-            [crux.kv :as kv]
+            [crux.kv-store :as kv-store]
             crux.rocksdb))
 
 ;; From Datascript:
@@ -35,12 +35,12 @@
 
 (defn start-system [f]
   (let [db-name :test]
-    (binding [db (kv/open (crux.rocksdb/crux-rocks-kv db-name))]
+    (binding [db (kv-store/open (crux.rocksdb/crux-rocks-kv db-name))]
       (try
         (cr/transact-schema! db {:attr/ident :foo :attr/type :string})
         (cr/transact-schema! db {:attr/ident :tar :attr/type :string})
         (transact-schemas! db)
         (f)
         (finally
-          (kv/close db)
-          (kv/destroy db))))))
+          (kv-store/close db)
+          (kv-store/destroy db))))))
