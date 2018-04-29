@@ -2,6 +2,7 @@
   (:require [clj-time.coerce :as c]
             [clj-time.core :as time]
             [clojure.test :as t]
+            [crux.query :as q]
             [crux.core :as cr]
             [crux.fixtures :as f :refer [db]]
             [clojure.spec.alpha :as s]))
@@ -103,51 +104,51 @@
                                             {:name "Petr" :last-name "Petrov"}])]
 
     (t/testing "Can query by single field"
-      (t/is (= #{["Ivan"]} (cr/q db {:find ['name]
-                                     :where [['e :name "Ivan"]
-                                             ['e :name 'name]]})))
-      (t/is (= #{["Petr"]} (cr/q db {:find ['name]
-                                     :where [['e :name "Petr"]
-                                             ['e :name 'name]]}))))
+      (t/is (= #{["Ivan"]} (q/q db {:find ['name]
+                                    :where [['e :name "Ivan"]
+                                            ['e :name 'name]]})))
+      (t/is (= #{["Petr"]} (q/q db {:find ['name]
+                                    :where [['e :name "Petr"]
+                                            ['e :name 'name]]}))))
 
     (t/testing "Can query by single field"
-      (t/is (= #{[(:crux.core/id ivan)]} (cr/q db {:find ['e]
-                                                   :where [['e :name "Ivan"]]})))
-      (t/is (= #{[(:crux.core/id petr)]} (cr/q db {:find ['e]
-                                                   :where [['e :name "Petr"]]}))))
+      (t/is (= #{[(:crux.core/id ivan)]} (q/q db {:find ['e]
+                                                  :where [['e :name "Ivan"]]})))
+      (t/is (= #{[(:crux.core/id petr)]} (q/q db {:find ['e]
+                                                  :where [['e :name "Petr"]]}))))
 
     (t/testing "Can query using multiple terms"
-      (t/is (= #{["Ivan" "Ivanov"]} (cr/q db {:find ['name 'last-name]
-                                              :where [['e :name 'name]
-                                                      ['e :last-name 'last-name]
-                                                      ['e :name "Ivan"]
-                                                      ['e :last-name "Ivanov"]]}))))
+      (t/is (= #{["Ivan" "Ivanov"]} (q/q db {:find ['name 'last-name]
+                                             :where [['e :name 'name]
+                                                     ['e :last-name 'last-name]
+                                                     ['e :name "Ivan"]
+                                                     ['e :last-name "Ivanov"]]}))))
 
     (t/testing "Negate query based on subsequent non-matching clause"
-      (t/is (= #{} (cr/q db {:find ['e]
-                             :where [['e :name "Ivan"]
-                                     ['e :last-name "Ivanov-does-not-match"]]}))))
+      (t/is (= #{} (q/q db {:find ['e]
+                            :where [['e :name "Ivan"]
+                                    ['e :last-name "Ivanov-does-not-match"]]}))))
 
     (t/testing "Can query for multiple results"
       (t/is (= #{["Ivan"] ["Petr"]}
-               (cr/q db {:find ['name] :where [['e :name 'name]]})))
+               (q/q db {:find ['name] :where [['e :name 'name]]})))
 
       (let [[ivan2] (f/transact-people! db [{:name "Ivan" :last-name "Ivanov2"}])]
         (t/is (= #{[(:crux.core/id ivan)]
                    [(:crux.core/id ivan2)]}
-                 (cr/q db {:find ['e] :where [['e :name "Ivan"]]})))))
+                 (q/q db {:find ['e] :where [['e :name "Ivan"]]})))))
 
     (let [[smith] (f/transact-people! db [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
         (t/is (= #{[(:crux.core/id smith)]}
-                 (cr/q db {:find ['p1] :where [['p1 :name 'name]
-                                               ['p1 :last-name 'name]]}))))
+                 (q/q db {:find ['p1] :where [['p1 :name 'name]
+                                              ['p1 :last-name 'name]]}))))
 
       (t/testing "Can query across fields for same value when value is passed in"
         (t/is (= #{[(:crux.core/id smith)]}
-                 (cr/q db {:find ['p1] :where [['p1 :name 'name]
-                                               ['p1 :last-name 'name]
-                                               ['p1 :name "Smith"]]})))))))
+                 (q/q db {:find ['p1] :where [['p1 :name 'name]
+                                              ['p1 :last-name 'name]
+                                              ['p1 :name "Smith"]]})))))))
 
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! db [{:name "Malcolm" :last-name "Sparks"}]
@@ -156,36 +157,36 @@
     (let [q {:find ['e]
              :where [['e :name "Malcolma"]
                      ['e :last-name "Sparks"]]}]
-      (t/is (= #{} (cr/q db q (c/to-date (time/date-time 1986 10 23)))))
-      (t/is (= #{[(:crux.core/id malcolm)]} (cr/q db q))))))
+      (t/is (= #{} (q/q db q (c/to-date (time/date-time 1986 10 23)))))
+      (t/is (= #{[(:crux.core/id malcolm)]} (q/q db q))))))
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
   (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}])
 
   (t/testing "Five people, without a join"
-    (t/is (= 5 (count (cr/q db {:find ['p1]
+    (t/is (= 5 (count (q/q db {:find ['p1]
                                 :where [['p1 :name 'name]
                                         ['p1 :age 'age]
                                         ['p1 :salary 'salary]]})))))
 
   (t/testing "Five people, a cartesian product - joining without unification"
-    (t/is (= 25 (count (cr/q db {:find ['p1 'p2]
+    (t/is (= 25 (count (q/q db {:find ['p1 'p2]
                                  :where [['p1 :name]
                                          ['p2 :name]]})))))
 
   (t/testing "A single first result, joined to all possible subsequent results in next term"
-    (t/is (= 5 (count (cr/q db {:find ['p1 'p2]
+    (t/is (= 5 (count (q/q db {:find ['p1 'p2]
                                 :where [['p1 :name "Ivan"]
                                         ['p2 :name]]})))))
 
   (t/testing "A single first result, with no subsequent results in next term"
-    (t/is (= 0 (count (cr/q db {:find ['p1]
+    (t/is (= 0 (count (q/q db {:find ['p1]
                                 :where [['p1 :name "Ivan"]
                                         ['p2 :name "does-not-match"]]})))))
 
   (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 7 (count (cr/q db {:find ['p1 'p2]
+    (t/is (= 7 (count (q/q db {:find ['p1 'p2]
                                 :where [['p1 :name 'name]
                                         ['p2 :name 'name]]}))))))
 
@@ -193,14 +194,14 @@
   (f/transact-people! db [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
   (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
-           (cr/q db {:find ['name]
-                     :where [['_ :name 'name]]}))))
+           (q/q db {:find ['name]
+                    :where [['_ :name 'name]]}))))
 
 (t/deftest test-exceptions
   (t/testing "Unbound query variable"
     (try
-      (cr/q db {:find ['bah]
-                :where [['e :name]]})
+      (q/q db {:find ['bah]
+               :where [['e :name]]})
       (t/is (= true false) "Expected exception"))
     (catch IllegalArgumentException e
       (t/is (= "Find clause references unbound variable: bah" (.getMessage e))))))
@@ -210,23 +211,23 @@
             [:term ['e :name "Ivan"]]
             [:not ['e :last-name "Ivannotov"]]]
 
-           (s/conform :crux.core/where [['e :name 'name]
-                                        ['e :name "Ivan"]
-                                        '(not [e :last-name "Ivannotov"])])))
+           (s/conform :crux.query/where [['e :name 'name]
+                                         ['e :name "Ivan"]
+                                         '(not [e :last-name "Ivannotov"])])))
 
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
                           {:name "Ivan" :last-name "Ivanov"}
                           {:name "Ivan" :last-name "Ivannotov"}])
 
-  (t/is (= 1 (count (cr/q db {:find ['e]
-                              :where [['e :name 'name]
-                                      ['e :name "Ivan"]
-                                      '(not [e :last-name "Ivanov"])]}))))
+  (t/is (= 1 (count (q/q db {:find ['e]
+                             :where [['e :name 'name]
+                                     ['e :name "Ivan"]
+                                     '(not [e :last-name "Ivanov"])]}))))
 
-  (t/is (= 2 (count (cr/q db {:find ['e]
-                              :where [['e :name 'name]
-                                      ['e :name "Ivan"]
-                                      '(not [e :last-name "Ivannotov"])]}))))
+  (t/is (= 2 (count (q/q db {:find ['e]
+                             :where [['e :name 'name]
+                                     ['e :name "Ivan"]
+                                     '(not [e :last-name "Ivannotov"])]}))))
 
   ;; test what happens if not contains a brand new var, uses diff entity etc
   ;; test what happens if not is nested, i.e. can you do (not (or ....))
@@ -243,28 +244,28 @@
   (t/is (= '[[:term [e :name name]]
              [:term [e :name "Ivan"]]
              [:or [[:term [e :last-name "Ivanov"]]]]]
-           (s/conform :crux.core/where [['e :name 'name]
-                                        ['e :name "Ivan"]
-                                        '(or [[e :last-name "Ivanov"]])])))
+           (s/conform :crux.query/where [['e :name 'name]
+                                         ['e :name "Ivan"]
+                                         '(or [[e :last-name "Ivanov"]])])))
 
   (t/testing "Or works as expected"
-    (t/is (= 3 (count (cr/q db {:find ['e]
-                                :where [['e :name 'name]
-                                        ['e :name "Ivan"]
-                                        '(or [[e :last-name "Ivanov"]
-                                              [e :last-name "Ivannotov"]])]}))))
+    (t/is (= 3 (count (q/q db {:find ['e]
+                               :where [['e :name 'name]
+                                       ['e :name "Ivan"]
+                                       '(or [[e :last-name "Ivanov"]
+                                             [e :last-name "Ivannotov"]])]}))))
 
-    (t/is (= 3 (count (cr/q db {:find ['e]
-                                :where [['e :name 'name]
-                                        '(or [[e :last-name "Ivanov"]
-                                              [e :name "Bob"]])]})))))
+    (t/is (= 3 (count (q/q db {:find ['e]
+                               :where [['e :name 'name]
+                                       '(or [[e :last-name "Ivanov"]
+                                             [e :name "Bob"]])]})))))
 
   (t/testing "Or edge case - can take a single clause"
     ;; Unsure of the utility
-    (t/is (= 2 (count (cr/q db {:find ['e]
-                                :where [['e :name 'name]
-                                        ['e :name "Ivan"]
-                                        '(or [[e :last-name "Ivanov"]])]})))))
+    (t/is (= 2 (count (q/q db {:find ['e]
+                               :where [['e :name 'name]
+                                       ['e :name "Ivan"]
+                                       '(or [[e :last-name "Ivanov"]])]})))))
 
   ;; TODO dig into edge cases some more:
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
@@ -284,10 +285,10 @@
 
   (t/testing "Rudimentary or-join"
     (t/is (= #{["Ivan"] ["Malcolm"]}
-             (cr/q db {:find ['name]
-                       :where [['e :name 'name]
-                               '(not-join [e]
-                                          [[e :last-name "Monroe"]])]})))))
+             (q/q db {:find ['name]
+                      :where [['e :name 'name]
+                              '(not-join [e]
+                                         [[e :last-name "Monroe"]])]})))))
 
 (t/deftest test-mixing-expressions
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov"}
@@ -297,20 +298,20 @@
 
   (t/testing "Or can use not expression"
     (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
-             (cr/q db {:find ['name]
-                       :where [['e :name 'name]
-                               '(or [[e :last-name "Ivanov"]
-                                     (not [[e :name "Bob"]])])]}))))
+             (q/q db {:find ['name]
+                      :where [['e :name 'name]
+                              '(or [[e :last-name "Ivanov"]
+                                    (not [[e :name "Bob"]])])]}))))
 
-  (s/conform :crux.core/where [['e :name 'name]
-                               '(not (or [[e :last-name "Ivanov"]
-                                          [e :name "Bob"]]))])
+  (s/conform :crux.query/where [['e :name 'name]
+                                '(not (or [[e :last-name "Ivanov"]
+                                           [e :name "Bob"]]))])
 
   (t/testing "Not can use Or expression"
-    (t/is (= #{["Fred"]} (cr/q db {:find ['name]
-                                   :where [['e :name 'name]
-                                           '(not (or [[e :last-name "Ivanov"]
-                                                      [e :name "Bob"]]))]})))))
+    (t/is (= #{["Fred"]} (q/q db {:find ['name]
+                                  :where [['e :name 'name]
+                                          '(not (or [[e :last-name "Ivanov"]
+                                                     [e :name "Bob"]]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! db [{:name "Ivan" :last-name "Ivanov" :age 30}
@@ -319,13 +320,16 @@
 
   (t/testing "< predicate expression"
     (t/is (= #{["Ivan"] ["Bob"]}
-             (cr/q db {:find ['name]
-                       :where [['e :name 'name]
-                               ['e :age 'age]
-                               '(< age 50)]})))
+             (q/q db {:find ['name]
+                      :where [['e :name 'name]
+                              ['e :age 'age]
+                              '(< age 50)]})))
 
     (t/is (= #{["Dominic"]}
-             (cr/q db {:find ['name]
-                       :where [['e :name 'name]
-                               ['e :age 'age]
-                               '(>= age 50)]})))))
+             (q/q db {:find ['name]
+                      :where [['e :name 'name]
+                              ['e :age 'age]
+                              '(>= age 50)]})))))
+
+;; TODO write:
+(t/deftest test-use-another-datasource)
