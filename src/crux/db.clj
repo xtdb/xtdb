@@ -1,4 +1,4 @@
-(ns crux.datasource)
+(ns crux.db)
 
 (defprotocol Datasource
   (entities [this]))

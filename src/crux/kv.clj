@@ -1,7 +1,7 @@
 (ns crux.kv
   (:require [byte-streams :as bs]
             [crux.byte-utils :refer :all]
-            crux.datasource
+            crux.db
             [crux.kv-store :as kv-store]
             [gloss.core :as g]
             gloss.io))
@@ -159,15 +159,16 @@
        (map :eid)
        (into #{})))
 
-(defrecord KvEntity [eid db at-ts]
-  crux.datasource/Entity
+(defrecord KvEntity [eid kv ts]
+  crux.db/Entity
   (attr-val [{:keys [eid]} attr]
-    (let [aid (attr-schema db attr)]
-      (-get-at db eid aid at-ts)))
+    (println "hi" kv attr)
+    (let [aid (attr-schema kv attr)]
+      (-get-at kv eid aid ts)))
   (raw-val [{:keys [eid]}]
     eid))
 
-(defrecord KvDatasource [db at-ts]
-  crux.datasource/Datasource
+(defrecord KvDatasource [kv ts]
+  crux.db/Datasource
   (entities [this]
-    (map (fn [eid] (KvEntity. eid db at-ts)) (entity-ids db))))
+    (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids kv))))

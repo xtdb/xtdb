@@ -1,6 +1,7 @@
 (ns crux.fixtures
   (:require [crux.kv :as cr]
             [crux.kv-store :as kv-store]
+            [crux.core]
             crux.rocksdb))
 
 ;; From Datascript:
@@ -31,16 +32,16 @@
          ids (cr/-put db people ts)]
      (map #(update % :crux.kv/id ids) people))))
 
-(def ^:dynamic db)
+(def ^:dynamic kv)
 
 (defn start-system [f]
   (let [db-name :test]
-    (binding [db (kv-store/open (crux.rocksdb/crux-rocks-kv db-name))]
+    (binding [kv (kv-store/open (crux.core/kv db-name))]
       (try
-        (cr/transact-schema! db {:attr/ident :foo :attr/type :string})
-        (cr/transact-schema! db {:attr/ident :tar :attr/type :string})
-        (transact-schemas! db)
+        (cr/transact-schema! kv {:attr/ident :foo :attr/type :string})
+        (cr/transact-schema! kv {:attr/ident :tar :attr/type :string})
+        (transact-schemas! kv)
         (f)
         (finally
-          (kv-store/close db)
-          (kv-store/destroy db))))))
+          (kv-store/close kv)
+          (kv-store/destroy kv))))))

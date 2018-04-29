@@ -1,6 +1,6 @@
 (ns crux.query
   (:require [clojure.spec.alpha :as s]
-            [crux.datasource]
+            [crux.db]
             [crux.kv]))
 
 (defn- expression-spec [sym spec]
@@ -37,7 +37,7 @@
 (defn- apply-bindings [[term-e term-a term-v] result]
   (if term-a
     (let [e (result term-e)
-          v (crux.datasource/attr-val e term-a)
+          v (crux.db/attr-val e term-a)
           result (assoc result term-a v)]
       (if (and (symbol? term-v) (not (result term-v)))
         (assoc result term-v v)
@@ -47,21 +47,21 @@
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
-  [datasource plan]
+  [db plan]
   (reduce (fn [results [e bindings pred-f]]
             (let [results
                   (cond (not results)
-                        (map #(hash-map e %) (crux.datasource/entities datasource))
+                        (map #(hash-map e %) (crux.db/entities db))
 
                         (get (first results) e)
                         results
 
                         :else
-                        (for [result results eid (crux.datasource/entities datasource)]
+                        (for [result results eid (crux.db/entities db)]
                           (assoc result e eid)))]
               (->> results
                    (map (partial apply-bindings bindings))
-                   (filter (partial pred-f datasource))
+                   (filter (partial pred-f db))
                    (into #{}))))
           nil plan))
 
@@ -86,9 +86,9 @@
             e (ffirst sub-plan)]
         [e
          (-> t first second)
-         (fn [datasource result]
+         (fn [db result]
            (when (some (fn [[_ _ pred-fn]]
-                         (pred-fn datasource result))
+                         (pred-fn db result))
                        sub-plan)
              result))])
 
@@ -98,8 +98,8 @@
          nil
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
-           (fn [datasource result]
-             (let [or-results (or @or-results (reset! or-results (query-plan->results datasource query-plan)))]
+           (fn [db result]
+             (let [or-results (or @or-results (reset! or-results (query-plan->results db query-plan)))]
                (when-not (some #(= (get result e) (get % e)) or-results)
                  result))))])
 
@@ -127,19 +127,16 @@
 
 (defn- find-projection [find result]
   (map (fn [k] (when-let [r (get result k)]
-                 (if (satisfies? crux.datasource/Entity r) (crux.datasource/raw-val r) r))) find))
+                 (if (satisfies? crux.db/Entity r) (crux.db/raw-val r) r))) find))
 
 (defn q
-  ([db terms]
-   (q db terms (java.util.Date.)))
-  ([db {:keys [find where] :as q} ts]
-   (let [{:keys [find where] :as q} (s/conform ::query q)
-         datasource (crux.kv/map->KvDatasource {:db db :at-ts ts})]
-     (validate-query q)
-     (when (= :clojure.spec.alpha/invalid q)
-       (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-     (->> where
-          (query-terms->plan)
-          (query-plan->results datasource)
-          (map (partial find-projection find))
-          (into #{})))))
+  [db {:keys [find where] :as q}]
+  (let [{:keys [find where] :as q} (s/conform ::query q)]
+    (validate-query q)
+    (when (= :clojure.spec.alpha/invalid q)
+      (throw (ex-info "Invalid input" (s/explain-data ::query q))))
+    (->> where
+         (query-terms->plan)
+         (query-plan->results db)
+         (map (partial find-projection find))
+         (into #{}))))
