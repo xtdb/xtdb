@@ -254,11 +254,10 @@
                                         '(or [[e :last-name "Ivanov"]
                                               [e :last-name "Ivannotov"]])]}))))
 
-    (t/is (= 2 (count (cr/q db {:find ['e]
+    (t/is (= 3 (count (cr/q db {:find ['e]
                                 :where [['e :name 'name]
-                                        ['e :name "Ivan"]
                                         '(or [[e :last-name "Ivanov"]
-                                              [e :last-name "Controlguy"]])]})))))
+                                              [e :name "Bob"]])]})))))
 
   (t/testing "Or edge case - can take a single clause"
     ;; Unsure of the utility

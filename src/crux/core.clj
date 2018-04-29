@@ -163,6 +163,26 @@
 ;; --------------
 ;; Query handling
 
+(defprotocol Datasource
+  (entities [this]))
+
+(defprotocol Entity
+  (attr-val [this attr])
+  (raw-val [this]))
+
+(defrecord KvEntity [eid db at-ts]
+  Entity
+  (attr-val [{:keys [eid]} attr]
+    (let [aid (attr-schema db attr)]
+      (-get-at db eid aid at-ts)))
+  (raw-val [{:keys [eid]}]
+    eid))
+
+(defrecord KvDatasource [db at-ts]
+  Datasource
+  (entities [this]
+    (map (fn [eid] (KvEntity. eid db at-ts)) (entity-ids db))))
+
 (defn- expression-spec [sym spec]
   (s/and seq?
          #(= sym (first %))
@@ -194,10 +214,10 @@
                (and (symbol? term-v) (= (result term-v) v))
                (= term-v v)))))
 
-(defn- apply-bindings [db at-ts [term-e term-a term-v] result]
+(defn- apply-bindings [[term-e term-a term-v] result]
   (if term-a
-    (let [aid (attr-schema db term-a)
-          v (-get-at db (result term-e) aid at-ts)
+    (let [e (result term-e)
+          v (attr-val e term-a)
           result (assoc result term-a v)]
       (if (and (symbol? term-v) (not (result term-v)))
         (assoc result term-v v)
@@ -207,21 +227,21 @@
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
-  [db at-ts plan]
+  [datasource plan]
   (reduce (fn [results [e bindings pred-f]]
             (let [results
                   (cond (not results)
-                        (map #(hash-map e %) (entity-ids db))
+                        (map #(hash-map e %) (entities datasource))
 
                         (get (first results) e)
                         results
 
                         :else
-                        (for [result results eid (entity-ids db)]
+                        (for [result results eid (entities datasource)]
                           (assoc result e eid)))]
               (->> results
-                   (map (partial apply-bindings db at-ts bindings))
-                   (filter (partial pred-f db at-ts))
+                   (map (partial apply-bindings bindings))
+                   (filter (partial pred-f datasource))
                    (into #{}))))
           nil plan))
 
@@ -234,21 +254,21 @@
       :term
       [(first t)
        t
-       (fn [_ _ result] (value-matches? t result))]
+       (fn [_ result] (value-matches? t result))]
 
       :not
       [(first t)
        t
-       (fn [_ _ result] (not (value-matches? t result)))]
+       (fn [_ result] (not (value-matches? t result)))]
 
       :or
       (let [sub-plan (query-terms->plan t)
             e (ffirst sub-plan)]
         [e
          (-> t first second)
-         (fn [db at-ts result]
+         (fn [datasource result]
            (when (some (fn [[_ _ pred-fn]]
-                         (pred-fn db at-ts result))
+                         (pred-fn datasource result))
                        sub-plan)
              result))])
 
@@ -258,14 +278,14 @@
          nil
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
-           (fn [db at-ts result]
-             (let [or-results (or @or-results (reset! or-results (query-plan->results db at-ts query-plan)))]
+           (fn [datasource result]
+             (let [or-results (or @or-results (reset! or-results (query-plan->results datasource query-plan)))]
                (when-not (some #(= (get result e) (get % e)) or-results)
                  result))))])
 
       :pred
       (let [{:keys [::args ::pred-fn]} t]
-        ['e nil (fn [_ _ result]
+        ['e nil (fn [_ result]
                   (let [args (map #(or (and (symbol? %) (result %)) %) args)]
                     (apply pred-fn args)))]))))
 
@@ -286,18 +306,20 @@
         (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding)))))))
 
 (defn- find-projection [find result]
-  (map (partial get result) find))
+  (map (fn [k] (when-let [r (get result k)]
+                 (if (satisfies? Entity r) (raw-val r) r))) find))
 
 (defn q
   ([db terms]
    (q db terms (java.util.Date.)))
   ([db {:keys [find where] :as q} ts]
-   (let [{:keys [find where] :as q} (s/conform ::query q)]
+   (let [{:keys [find where] :as q} (s/conform ::query q)
+         datasource (map->KvDatasource {:db db :at-ts ts})]
      (validate-query q)
      (when (= :clojure.spec.alpha/invalid q)
        (throw (ex-info "Invalid input" (s/explain-data ::query q))))
      (->> where
           (query-terms->plan)
-          (query-plan->results db ts)
+          (query-plan->results datasource)
           (map (partial find-projection find))
           (into #{})))))
