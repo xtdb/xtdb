@@ -183,6 +183,16 @@
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
 
+(t/deftest test-ors-must-use-same-vars
+  (try
+    (q/q (db kv) {:find ['e]
+                  :where [['e :name 'name]
+                          '(or [[e1 :last-name "Ivanov"]
+                                [e2 :last-name "Ivanov"]])]})
+    (t/is (= true false) "Expected assertion error")
+    (catch java.lang.AssertionError e
+      (t/is true))))
+
 ;; ;; query
 ;; [:find (count ?artist) .
 ;;  :where (or [?artist :artist/type :artist.type/group]

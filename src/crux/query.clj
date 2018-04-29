@@ -87,9 +87,13 @@
 
       :or
       (let [sub-plan (query-terms->plan t)
-            e (ffirst sub-plan)]
-        [e
-         (-> t first second)
+            e (ffirst sub-plan)
+            facts (filter #(= :fact (first %)) t)]
+        (assert (->> facts
+                     (map #(into #{} (filter symbol? (second %))))
+                     (apply =)))
+        [(-> facts first second first)
+         (-> facts first second)
          (fn [db result]
            (when (some (fn [[_ _ pred-fn]]
                          (pred-fn db result))
