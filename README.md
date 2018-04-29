@@ -12,6 +12,14 @@ Motivation: a database with the following characteristics:
 + Rapid data ingestion (using Kafka)
 + Scalable Query Engine using RocksDB
 
+## Design Notes
+
+Abstraction levels:
+
++ Db: high level db as a value (as-of)
++ Kv: Db implementation, exposes get and put, uses timestamps passed in as fn args
++ RocksDb: specific KV implementation
+
 ## References
 
 + https://www.datomic.com
