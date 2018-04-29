@@ -18,7 +18,7 @@
                               (string? %))
                          :kind vector?))
 (s/def ::term (s/or :fact ::fact
-                    :not (expression-spec 'not ::term)
+                    :not (expression-spec 'not ::fact)
                     :or (expression-spec 'or ::where)
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
