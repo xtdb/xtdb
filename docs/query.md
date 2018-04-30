@@ -95,6 +95,9 @@ and [SPARQL](https://en.wikipedia.org/wiki/SPARQL).
 **Note: unlike these languages, GraphQL isn't an actual query
 language. GraphQL requires extensions to do ad-hoc queries.**
 
++ [Dedalus: Datalog in Time and
+  Space](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-173.html)
+
 ### Datascript Compatibility
 
 #### Query Arguments

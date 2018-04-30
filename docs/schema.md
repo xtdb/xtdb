@@ -35,6 +35,9 @@ reason about for the user.**
 **Note: we're not talking about large binary documents here, just
 different ways of reasoning about entities.**
 
++ [RStore: A Distributed Multi-version Document
+  Store](https://arxiv.org/abs/1802.07693)
+
 ### Scalar Types and Indexing
 
 The scalar types can be assumed to be normal values or references to
@@ -89,6 +92,9 @@ to allow scaling without locks, while still provide strong eventual
 consistency using a model that is possible to reason about predictably
 for the user. This support would be built into the types of the schema
 itself. See [transactions](transactions.md) for more about this.
+
++ [Coordination Avoidance in Database
+  Systems](https://arxiv.org/abs/1402.2237)
 
 ### Additive Schema
 
