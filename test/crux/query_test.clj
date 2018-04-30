@@ -212,29 +212,28 @@
                                 '(not-join [e]
                                            [[e :last-name "Monroe"]])]})))))
 
-;; TODO, make work
-#_(t/deftest test-mixing-expressions
+(t/deftest test-mixing-expressions
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
-                            {:name "Derek" :last-name "Ivanov"}
-                            {:name "Bob" :last-name "Ivannotov"}
-                            {:name "Fred" :last-name "Ivannotov"}])
+                          {:name "Derek" :last-name "Ivanov"}
+                          {:name "Bob" :last-name "Ivannotov"}
+                          {:name "Fred" :last-name "Ivannotov"}])
 
   (t/testing "Or can use not expression"
     (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
              (q/q (db kv) {:find ['name]
-                        :where [['e :name 'name]
-                                '(or [[e :last-name "Ivanov"]
-                                      (not [[e :name "Bob"]])])]}))))
+                           :where [['e :name 'name]
+                                   '(or [[e :last-name "Ivanov"]
+                                         (not [e :name "Bob"])])]}))))
 
-  (s/conform :crux.query/where [['e :name 'name]
+  #_(s/conform :crux.query/where [['e :name 'name]
                                 '(not (or [[e :last-name "Ivanov"]
                                            [e :name "Bob"]]))])
 
-  (t/testing "Not can use Or expression"
-    (t/is (= #{["Fred"]} (q/q (db kv) {:find ['name]
-                                    :where [['e :name 'name]
-                                            '(not (or [[e :last-name "Ivanov"]
-                                                       [e :name "Bob"]]))]})))))
+  #_(t/testing "Not can use Or expression"
+      (t/is (= #{["Fred"]} (q/q (db kv) {:find ['name]
+                                         :where [['e :name 'name]
+                                                 '(not (or [[e :last-name "Ivanov"]
+                                                            [e :name "Bob"]]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov" :age 30}
