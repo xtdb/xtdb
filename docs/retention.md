@@ -35,8 +35,8 @@ separate mutable store.
 
 Data will always come from somewhere, and the retention rules might be
 defined upstream. Most likely other downstream systems, if nothing
-else, the query indexes, will been derived from the log itself. When
-something is deleted, it will need also need to be purged from these
+else, Crux own indexes, will been derived from the log itself. When
+something is deleted, it will also need to be purged from these
 systems. Sometimes that might not be possible, which might inform the
 decision of feeding those systems in the first place.
 
@@ -61,7 +61,8 @@ do this on its own, based on provenance and retention meta-data.
 
 Compacting the log is intimately related to building the indexes, as
 it's only in the realised indexes that one can get the correct
-bitemporal visibility needed to compact the data.
+bitemporal visibility needed to compact the data as of a certain point
+in time.
 
 ### Immutable Log Replay
 
