@@ -97,6 +97,8 @@ language. GraphQL requires extensions to do ad-hoc queries.**
 
 + [Dedalus: Datalog in Time and
   Space](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-173.html)
++ [SPARQL
+  S-Expressions](https://jena.apache.org/documentation/notes/sse.html)
 
 ### Datascript Compatibility
 
