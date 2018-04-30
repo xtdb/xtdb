@@ -39,16 +39,21 @@
   (bind-key [this])
   (bind [this db results]))
 
-(defrecord EntityBinding [e]
+(defrecord EntityBinding [e a v]
   Binding
   (bind-key [this] e)
   (bind [this db results]
-    (if (empty? (keys (first results)))
-      ;; First entity, assign this to every potential entity in the DB
-      (map #(hash-map e %) (crux.db/entities db))
-      ;; New entity, join the results (todo, look at hash-join algos)
-      (for [result results eid (crux.db/entities db)]
-        (assoc result e eid)))))
+    ;; Could be an issue hanging on to the head:
+    (let [entities (if (and v (not (symbol? v)))
+                     (crux.db/entities-for-attribute-value db a v)
+                     (crux.db/entities db))]
+      (println entities)
+      (if (empty? results)
+        ;; First entity, assign this to every potential entity in the DB
+        (map #(hash-map e %) entities)
+        ;; New entity, join the results (todo, look at hash-join algos)
+        (for [result results eid entities]
+          (assoc result e eid))))))
 
 (defrecord VarBinding [e a s]
   Binding
@@ -58,7 +63,7 @@
          (map #(assoc % s (crux.db/attr-val (get % e) a))))))
 
 (defn- fact->entity-binding [[e a v]]
-  (EntityBinding. e))
+  (EntityBinding. e a v))
 
 (defn- fact->var-binding [[e a v]]
   (when (and v (symbol? v))
@@ -119,7 +124,7 @@
 
       :not-join
       (let [e (-> t :bindings first)]
-        [(map #(EntityBinding. %) (:bindings t))
+        [(map #(EntityBinding. % nil nil) (:bindings t))
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
            (fn [db result]

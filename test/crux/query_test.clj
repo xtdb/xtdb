@@ -61,6 +61,12 @@
                                                    ['p1 :last-name 'name]
                                                    ['p1 :name "Smith"]]})))))))
 
+(t/deftest test-multiple-results
+  (f/transact-people! kv [{:name "Ivan" :last-name "1"}
+                          {:name "Ivan" :last-name "2"}])
+  (t/is (= 2
+           (count (q/q (db kv) {:find ['e] :where [['e :name "Ivan"]]})))))
+
 (t/deftest test-query-using-keywords
   (f/transact-people! kv [{:name "Ivan" :sex :male}
                           {:name "Petr" :sex :male}

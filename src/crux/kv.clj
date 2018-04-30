@@ -15,7 +15,7 @@
                                            #(update % :v keyword))
                  :retracted (g/compile-frame {:type :retracted})})
 
-(def indices (g/compile-frame (g/enum :byte :eat :eid :aid :ident)))
+(def indices (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
 
 (def frames {:key (g/compile-frame
                    (g/header
@@ -24,6 +24,14 @@
                      :eat (g/compile-frame (g/ordered-map :index :eat
                                                           :eid :int32
                                                           :aid :int32
+                                                          :ts :int64)
+                                           #(update % :ts (partial - max-timestamp))
+                                           identity)
+                     :avt (g/compile-frame (g/ordered-map :index :avt
+                                                          :aid :int32
+                                                          :v (g/compile-frame (g/finite-block 16)
+                                                                              (comp md5 to-byte-array)
+                                                                              identity)
                                                           :ts :int64)
                                            #(update % :ts (partial - max-timestamp))
                                            identity)
@@ -72,11 +80,11 @@
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (kv-store/store db (encode :key {:index :ident :ident ident})
-              (encode :val/ident {:aid aid}))
+                    (encode :val/ident {:aid aid}))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
       (kv-store/store db k (encode :val/attr {:attr/type type
-                                        :attr/ident ident})))
+                                              :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
@@ -112,10 +120,16 @@
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))]
          (kv-store/store db (encode :key {:index :eat
-                                    :eid eid
-                                    :aid aid
-                                    :ts (.getTime ts)})
-                   (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))))
+                                          :eid eid
+                                          :aid aid
+                                          :ts (.getTime ts)})
+                         (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))
+         (when v
+           (kv-store/store db (encode :key {:index :avt
+                                            :aid aid
+                                            :v v
+                                            :ts (.getTime ts)})
+                           (long->bytes eid)))))
      @tmp-ids->ids)))
 
 (defn -get-at
@@ -153,10 +167,23 @@
   index that could be lazy."
   [db]
   (->> (kv-store/seek-and-iterate db
-                            (encode :key/index-prefix {:index :eat})
-                            (encode :key/index-prefix {:index :eid}))
+                                  (encode :key/index-prefix {:index :eat})
+                                  (encode :key/index-prefix {:index :avt}))
        (map (fn [[k _]] (decode :key k)))
        (map :eid)
+       (into #{})))
+
+(defn- entity-ids-for-value [db aid v ^java.util.Date ts]
+  (->> (kv-store/seek-and-iterate db
+                                  (encode :key {:index :avt
+                                                :aid aid
+                                                :v v
+                                                :ts (.getTime ts)})
+                                  (encode :key {:index :avt
+                                                :aid aid
+                                                :v v
+                                                :ts (.getTime (java.util.Date. 0 0 0))}))
+       (map (fn [[_ l]] (bytes->long l)))
        (into #{})))
 
 (defrecord KvEntity [eid kv ts]
@@ -170,4 +197,8 @@
 (defrecord KvDatasource [kv ts]
   crux.db/Datasource
   (entities [this]
-    (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids kv))))
+    (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids kv)))
+
+  (entities-for-attribute-value [this a v]
+    (let [aid (attr-schema kv a)]
+      (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids-for-value kv aid v ts)))))
