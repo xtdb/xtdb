@@ -87,7 +87,7 @@ consistency using a model that is possible to reason about predictably
 for the user. This support would be built into the types of the schema
 itself. See [transactions.md](transactions.md) for more about this.
 
-### Adaptive Schema
+### Additive Schema
 
 One option, is to like MongoDB or Elasticsearch, allow usage without
 having to explicitly define the schema upfront. In Mongo one still
