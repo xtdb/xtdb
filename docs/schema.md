@@ -24,7 +24,7 @@ Datomic. When allowing access to the triplets themselves, the user can
 create a new version of an entity "by mistake" without seeing the full
 state of the resulting entity.
 
-The triplets will further need at bitemporal query support, see
+The triplets will further need at least bitemporal query support, see
 [bitemp.md](bitemp.md) and the ability to build various forms of
 retention and provenance models on top of the raw data, see
 [retention.md](retention.md).
@@ -51,18 +51,18 @@ the EDN data model, or say XML Schema to stay closer to RDF. Most
 likely we want support for range queries across types supporting it.
 
 Most likely we want to keep the core data binary and the way its dealt
-with and indexed dealt with by via an extensible interface so the user
-can add their own types.
+with and indexed handled by an extensible interface so the user can
+add their own types.
 
 ### Non-scalar Types
 
 In Datomic one can have an attribute with cardinality many, which
 effectively makes it behave like a set, allowing multiple triplets at
-the same attribute. This is problematic for various reasons. For
-example, you need to explicitly remove all elements of the set if you
-want to replace it. Another issue is that you cannot easily support
-order to model lists. In triple stores there are ways to work around
-this problem, but usually not in an elegant way.
+the same entity/attribute. This is problematic for various
+reasons. For example, you need to explicitly remove all elements of
+the set if you want to replace it. Another issue is that you cannot
+easily support order to model lists. In triple stores there are ways
+to work around this problem, but usually not in an elegant way.
 
 In a document store, simple container data types, like lists, sets,
 maps, and even nested component types, can be more easier defined and
@@ -100,18 +100,18 @@ Datomic requires a stricter schema, as does RDF, as any entity
 referred to, predicates in RDF are also themselves entities, similar
 to how in Datomic the attribute is defined in the schema.
 
-The schema exists for two different reasons, to allow the user reason
-about the data, and ensure it adheres to the type system, but also
-simply to help the query engine index things intelligently.
-
-### Implicit Schema
-
 We have to assume that data evolves fast, and that it will be hard to
 properly predict all data that can be written into the store, and all
 the versions of the schema. Hence, having a defined schema complicates
 matters, as this itself then also needs to evolve, vast data migrated
 etc. For these reasons, one needs either a write once, additive only,
 schema, or make the schema implicit.
+
+### Implicit Indexes
+
+The schema exists for two different reasons, to allow the user reason
+about the data, and ensure it adheres to the type system, but also
+simply to help the query engine index things intelligently.
 
 The indexes themselves are implicit in the queries done, but one
 cannot wait until the last minute to index vast quantities of data, so
