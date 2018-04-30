@@ -15,7 +15,7 @@ implicit, being all predicates reachable from an entity.
 
 The triplets, or the properties of the documents, can be connected to
 other entities in a graph. For more about this, see
-[graph.md](graph.md).
+[query.md](query.md).
 
 One reason to use documents and not triplets, is that triplets are
 really an implementation detail, and users are likely to think about
