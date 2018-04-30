@@ -18,7 +18,7 @@
                               (string? %))
                          :kind vector?))
 (s/def ::term (s/or :fact ::fact
-                    :not (expression-spec 'not ::fact)
+                    :not (expression-spec 'not ::term)
                     :or (expression-spec 'or ::where)
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
@@ -92,8 +92,9 @@
        (fn [_ result] (value-matches? t result))]
 
       :not
-      [nil
-       (fn [_ result] (not (value-matches? t result)))]
+      (let [[_ pred-fn?] (first (query-terms->plan [t]))]
+        [nil
+         (fn [db result] (not (pred-fn? db result)))])
 
       :or
       (let [sub-plan (query-terms->plan t)

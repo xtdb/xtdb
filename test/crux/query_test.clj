@@ -121,29 +121,27 @@
 (t/deftest test-not-query
   (t/is (= [[:fact ['e :name 'name]]
             [:fact ['e :name "Ivan"]]
-            [:not ['e :last-name "Ivannotov"]]]
+            [:not [:fact ['e :last-name "Ivannotov"]]]]
 
            (s/conform :crux.query/where [['e :name 'name]
                                          ['e :name "Ivan"]
                                          '(not [e :last-name "Ivannotov"])])))
 
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
-                            {:name "Ivan" :last-name "Ivanov"}
-                            {:name "Ivan" :last-name "Ivannotov"}])
+                          {:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivannotov"}])
 
   (t/is (= 1 (count (q/q (db kv) {:find ['e]
-                               :where [['e :name 'name]
-                                       ['e :name "Ivan"]
-                                       '(not [e :last-name "Ivanov"])]}))))
+                                  :where [['e :name 'name]
+                                          ['e :name "Ivan"]
+                                          '(not [e :last-name "Ivanov"])]}))))
 
   (t/is (= 2 (count (q/q (db kv) {:find ['e]
-                               :where [['e :name 'name]
-                                       ['e :name "Ivan"]
-                                       '(not [e :last-name "Ivannotov"])]}))))
+                                  :where [['e :name 'name]
+                                          ['e :name "Ivan"]
+                                          '(not [e :last-name "Ivannotov"])]}))))
 
   ;; test what happens if not contains a brand new var, uses diff entity etc
-  ;; test what happens if not is nested, i.e. can you do (not (or ....))
-  ;; That would be good to test out the AST some more.
   )
 
 (t/deftest test-or-query
@@ -193,13 +191,6 @@
     (catch java.lang.AssertionError e
       (t/is true))))
 
-;; ;; query
-;; [:find (count ?artist) .
-;;  :where (or [?artist :artist/type :artist.type/group]
-;;             (and [?artist :artist/type :artist.type/person]
-;;                  [?artist :artist/gender :artist.gender/female]))]
-
-
 (t/deftest test-not-join
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
                             {:name "Malcolm" :last-name "Ofsparks"}
@@ -225,15 +216,11 @@
                                    '(or [[e :last-name "Ivanov"]
                                          (not [e :name "Bob"])])]}))))
 
-  #_(s/conform :crux.query/where [['e :name 'name]
-                                '(not (or [[e :last-name "Ivanov"]
-                                           [e :name "Bob"]]))])
-
-  #_(t/testing "Not can use Or expression"
-      (t/is (= #{["Fred"]} (q/q (db kv) {:find ['name]
-                                         :where [['e :name 'name]
-                                                 '(not (or [[e :last-name "Ivanov"]
-                                                            [e :name "Bob"]]))]})))))
+  (t/testing "Not can use Or expression"
+    (t/is (= #{["Fred"]} (q/q (db kv) {:find ['name]
+                                       :where [['e :name 'name]
+                                               '(not (or [[e :last-name "Ivanov"]
+                                                          [e :name "Bob"]]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov" :age 30}
