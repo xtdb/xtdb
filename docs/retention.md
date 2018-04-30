@@ -19,6 +19,9 @@ and attempt to learn patterns within this data.
 **Data you don't store cannot be misused (intentionally or otherwise)
 nor stolen.**
 
++ [Handling GDPR with Apache Kafka: How does a log
+  forget?](https://www.confluent.io/blog/handling-gdpr-log-forget/)
+
 ### Event Sourcing
 
 The immutable log is a powerful and clean functional model of a
@@ -30,6 +33,12 @@ correction in a system built around an immutable log. One approach
 that has been suggested to deal with this is pseudonymisation, where
 you keep encrypted data but forget the keys, which are stored in a
 separate mutable store.
+
++ [The Log: What every software engineer should know about real-time
+  data's unifying
+  abstraction](https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying)
++ [The Data Dichotomy: Rethinking the Way We Treat Data and
+  Services](https://www.confluent.io/blog/data-dichotomy-rethinking-the-way-we-treat-data-and-services/)
 
 ### Provenance
 

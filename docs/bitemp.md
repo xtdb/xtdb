@@ -45,6 +45,8 @@ data.**
   Patterns](https://martinfowler.com/eaaDev/timeNarrative.html)
 + [Temporal Data & Time Travel in
   PostgreSQL](https://wiki.postgresql.org/images/6/64/Fosdem20150130PostgresqlTemporal.pdf)
++ [Sign of the Times - Managing inhomogeneously bitemporal data with
+  Datomic and Clojure](http://blog.podsnap.com/bitemp.html)
 
 ### Business Time
 
