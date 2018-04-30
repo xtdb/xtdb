@@ -162,7 +162,6 @@
 (defrecord KvEntity [eid kv ts]
   crux.db/Entity
   (attr-val [{:keys [eid]} attr]
-    (println "hi" kv attr)
     (let [aid (attr-schema kv attr)]
       (-get-at kv eid aid ts)))
   (raw-val [{:keys [eid]}]

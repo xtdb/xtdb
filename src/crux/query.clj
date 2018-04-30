@@ -29,45 +29,57 @@
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- value-matches? [[term-e term-a term-v] result]
-  (when-let [v (result term-a)]
-    (and v (or (not term-v)
-               (and (symbol? term-v) (= (result term-v) v))
-               (= term-v v)))))
+  (when-let [v (-> result (get term-e) (crux.db/attr-val term-a))]
+    (or (not term-v)
+        (and (symbol? term-v) (= (result term-v) v))
+        (= term-v v))))
 
-(defn- apply-bindings [[term-e term-a term-v] result]
-  (if term-a
-    (let [e (result term-e)
-          v (crux.db/attr-val e term-a)
-          result (assoc result term-a v)]
-      (if (and (symbol? term-v) (not (result term-v)))
-        (assoc result term-v v)
-        result))
-    result))
+(defprotocol Binding
+  (bind-key [this])
+  (bind [this db results]))
+
+(defrecord EntityBinding [e]
+  Binding
+  (bind-key [this] e)
+  (bind [this db results]
+    (if (empty? (keys (first results)))
+      ;; First entity, assign this to every potential entity in the DB
+      (map #(hash-map e %) (crux.db/entities db))
+      ;; New entity, join the results (todo, look at hash-join algos)
+      (for [result results eid (crux.db/entities db)]
+        (assoc result e eid)))))
+
+(defrecord VarBinding [e a s]
+  Binding
+  (bind-key [this] s)
+  (bind [this db results]
+    (->> results
+         (map #(assoc % s (crux.db/attr-val (get % e) a))))))
+
+(defn- fact->entity-binding [[e a v]]
+  (EntityBinding. e))
+
+(defn- fact->var-binding [[e a v]]
+  (when (and v (symbol? v))
+    (VarBinding. e a v)))
+
+(defn- do-bindings [db bindings results]
+  (reduce (fn [results binding]
+            (bind binding db results))
+          results bindings))
 
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
   [db plan]
-  (reduce (fn [results [e bindings pred-f]]
-            (let [results
-                  (cond (not results)
-                        (map #(hash-map e %) (crux.db/entities db))
-
-                        (get (first results) e)
-                        results
-
-                        :else
-                        (for [result results eid (crux.db/entities db)]
-                          (assoc result e eid)))]
-              (->> results
-                   (map (partial apply-bindings bindings))
-                   (filter (partial pred-f db))
-                   (into #{}))))
-          nil plan))
-
-#_(s/conform :crux.query/where [['e :name 'name]
-                              '(not (or [[e :last-name "Ivanov"]
-                                         [e :name "Bob"]]))])
+  (second (reduce (fn [[bindings results] [term-bindings pred-f]]
+                    (println term-bindings)
+                    [(into bindings (map bind-key term-bindings))
+                     (->> results
+                          (do-bindings db (remove (comp bindings bind-key) term-bindings))
+                          (filter (partial pred-f db))
+                          (into #{}))])
+                  [#{} nil] plan)))
 
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
@@ -76,13 +88,12 @@
   (for [[op t] terms]
     (condp = op
       :fact
-      [(first t)
-       t
+      [(remove nil? [(fact->entity-binding t)
+                     (fact->var-binding t)])
        (fn [_ result] (value-matches? t result))]
 
       :not
-      [(first t)
-       t
+      [nil
        (fn [_ result] (not (value-matches? t result)))]
 
       :or
@@ -92,18 +103,16 @@
         (assert (->> facts
                      (map #(into #{} (filter symbol? (second %))))
                      (apply =)))
-        [(-> facts first second first)
-         (-> facts first second)
+        [nil
          (fn [db result]
-           (when (some (fn [[_ _ pred-fn]]
+           (when (some (fn [[_ pred-fn]]
                          (pred-fn db result))
                        sub-plan)
              result))])
 
       :not-join
       (let [e (-> t :bindings first)]
-        [e
-         nil
+        [(map #(EntityBinding. %) (:bindings t))
          (let [query-plan (query-terms->plan (:terms t))
                or-results (atom nil)]
            (fn [db result]
@@ -113,9 +122,9 @@
 
       :pred
       (let [{:keys [::args ::pred-fn]} t]
-        ['e nil (fn [_ result]
-                  (let [args (map #(or (and (symbol? %) (result %)) %) args)]
-                    (apply pred-fn args)))]))))
+        [nil (fn [_ result]
+               (let [args (map #(or (and (symbol? %) (result %)) %) args)]
+                 (apply pred-fn args)))]))))
 
 (defn term-symbols [terms]
   (reduce into #{}
