@@ -51,6 +51,15 @@ is, it should be simple to swap out the underlying store or
 stores. This doesn't mean this necessarily should be simple to do
 while running, which would be a post MVP feature.
 
++ [Secondary indexing with Redis](https://redis.io/topics/indexes)
++ [Leapfrog Triejoin: a worst-case optimal join
+  algorithm](https://arxiv.org/abs/1210.0481)
++ [On the Way to Better SQL Joins in CockroachDB](https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/)
++ [Hippo: A Fast, yet Scalable, Database Indexing
+  Approach](https://arxiv.org/abs/1604.03234)
++ [A-Tree: A Bounded Approximate Index
+  Structure](https://arxiv.org/abs/1801.10207)
+
 ### Retention
 
 The indexes need to respect the [retention](retention.md) rules setup

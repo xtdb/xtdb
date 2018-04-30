@@ -40,6 +40,12 @@ ultimate time line, or other systems abilities to write into the past,
 one needs bitemporality to ensure evolving but consistent views of the
 data.**
 
++ [Temporal database](https://en.wikipedia.org/wiki/Temporal_database)
++ [Temporal
+  Patterns](https://martinfowler.com/eaaDev/timeNarrative.html)
++ [Temporal Data & Time Travel in
+  PostgreSQL](https://wiki.postgresql.org/images/6/64/Fosdem20150130PostgresqlTemporal.pdf)
+
 ### Business Time
 
 In Crux, most queries would consider themselves with business time,
