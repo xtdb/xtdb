@@ -1,1 +1,13 @@
 ## Competitors
+
+Non-exhaustive list. Apart from Datomic none of these support temporal
+queries.
+
++ [Neo4J](https://en.wikipedia.org/wiki/Neo4j)
++ [DataStax](https://en.wikipedia.org/wiki/DataStax)
++ [Datomic](https://www.datomic.com/)
++ [LogicBlox](http://www.logicblox.com/)
++ [Dgraph](https://github.com/dgraph-io/dgraph)
++ [Stardog](https://www.stardog.com/)
++ [Jena](https://jena.apache.org/)
++ [Kafka Streams](https://kafka.apache.org/documentation/streams/)
