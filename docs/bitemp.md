@@ -62,6 +62,11 @@ recorded in the system. It will always exist, but usually not be
 queried, unless for repeatable read, audit or change tracking
 purposes.
 
+This time can either be a further part of a compound index, or
+potentially even be stored together with business time in an actual
+[multi dimensional
+index](https://redis.io/topics/indexes#multi-dimensional-indexes).
+
 ### Point vs Range
 
 One issue with writing into the past, is that it can be hard to reason
