@@ -20,6 +20,7 @@
 (s/def ::term (s/or :fact ::fact
                     :not (expression-spec 'not ::term)
                     :or (expression-spec 'or ::where)
+                    :and (expression-spec 'and ::where)
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of symbol? :kind vector?)
                                      :terms ::where)
@@ -91,6 +92,14 @@
                      (fact->var-binding t)])
        (fn [_ result] (value-matches? t result))]
 
+      :and
+      (let [sub-plan (query-terms->plan t)]
+        [nil
+         (fn [db result]
+           (every? (fn [[_ pred-fn]]
+                     (pred-fn db result))
+                   sub-plan))])
+
       :not
       (let [[_ pred-fn?] (first (query-terms->plan [t]))]
         [nil
@@ -105,10 +114,9 @@
                      (apply =)))
         [nil
          (fn [db result]
-           (when (some (fn [[_ pred-fn]]
-                         (pred-fn db result))
-                       sub-plan)
-             result))])
+           (some (fn [[_ pred-fn :as s]]
+                   (pred-fn db result))
+                 sub-plan))])
 
       :not-join
       (let [e (-> t :bindings first)]

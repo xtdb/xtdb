@@ -160,9 +160,9 @@
 
 (t/deftest test-or-query
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
-                            {:name "Ivan" :last-name "Ivanov"}
-                            {:name "Ivan" :last-name "Ivannotov"}
-                            {:name "Bob" :last-name "Controlguy"}])
+                          {:name "Ivan" :last-name "Ivanov"}
+                          {:name "Ivan" :last-name "Ivannotov"}
+                          {:name "Bob" :last-name "Controlguy"}])
 
   ;; Here for dev reasons, delete when appropiate
   (t/is (= '[[:fact [e :name name]]
@@ -174,26 +174,39 @@
 
   (t/testing "Or works as expected"
     (t/is (= 3 (count (q/q (db kv) {:find ['e]
-                                 :where [['e :name 'name]
-                                         ['e :name "Ivan"]
-                                         '(or [[e :last-name "Ivanov"]
-                                               [e :last-name "Ivannotov"]])]}))))
+                                    :where [['e :name 'name]
+                                            ['e :name "Ivan"]
+                                            '(or [[e :last-name "Ivanov"]
+                                                  [e :last-name "Ivannotov"]])]}))))
 
     (t/is (= 3 (count (q/q (db kv) {:find ['e]
-                                 :where [['e :name 'name]
-                                         '(or [[e :last-name "Ivanov"]
-                                               [e :name "Bob"]])]})))))
+                                    :where [['e :name 'name]
+                                            '(or [[e :last-name "Ivanov"]
+                                                  [e :name "Bob"]])]})))))
 
   (t/testing "Or edge case - can take a single clause"
     ;; Unsure of the utility
     (t/is (= 2 (count (q/q (db kv) {:find ['e]
-                                 :where [['e :name 'name]
-                                         ['e :name "Ivan"]
-                                         '(or [[e :last-name "Ivanov"]])]})))))
+                                    :where [['e :name 'name]
+                                            ['e :name "Ivan"]
+                                            '(or [[e :last-name "Ivanov"]])]})))))
 
   ;; TODO dig into edge cases some more:
   ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
   )
+
+(t/deftest test-or-query-can-use-and
+  (f/transact-people! kv [{:name "Ivan" :sex :male}
+                          {:name "Bob" :sex :male}
+                          {:name "Ivana" :sex :female}])
+
+  (t/is (= #{["Ivan"]
+             ["Ivana"]}
+           (q/q (db kv) {:find ['name]
+                         :where [['e :name 'name]
+                                 '(or [[e :sex :female]
+                                       (and [[e :sex :male]
+                                             [e :name "Ivan"]])])]}))))
 
 (t/deftest test-ors-must-use-same-vars
   (try
