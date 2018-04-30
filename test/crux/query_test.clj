@@ -153,10 +153,7 @@
   (t/is (= 2 (count (q/q (db kv) {:find ['e]
                                   :where [['e :name 'name]
                                           ['e :name "Ivan"]
-                                          '(not [e :last-name "Ivannotov"])]}))))
-
-  ;; test what happens if not contains a brand new var, uses diff entity etc
-  )
+                                          '(not [e :last-name "Ivannotov"])]})))))
 
 (t/deftest test-or-query
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
@@ -189,11 +186,7 @@
     (t/is (= 2 (count (q/q (db kv) {:find ['e]
                                     :where [['e :name 'name]
                                             ['e :name "Ivan"]
-                                            '(or [[e :last-name "Ivanov"]])]})))))
-
-  ;; TODO dig into edge cases some more:
-  ;; "All clauses used in an or clause must use the same set of variables, which will unify with the surrounding query."
-  )
+                                            '(or [[e :last-name "Ivanov"]])]}))))))
 
 (t/deftest test-or-query-can-use-and
   (f/transact-people! kv [{:name "Ivan" :sex :male}
@@ -217,6 +210,16 @@
     (t/is (= true false) "Expected assertion error")
     (catch java.lang.AssertionError e
       (t/is true))))
+
+(t/deftest test-ors-can-introduce-new-bindings
+  (f/transact-people! kv [{:name "Petr" :last-name "Smith" :sex :male}
+                          {:name "Ivan" :last-name "Ivanov" :sex :male}])
+
+  (t/is (= 1 (count (q/q (db kv) {:find ['?p2]
+                                  :where ['(or (and [?p2 :name "Petr"]
+                                                    [?p2 :sex :female])
+                                               (and [?p2 :last-name "Ivanov"]
+                                                    [?p2 :sex :male]))]})))))
 
 (t/deftest test-not-join
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
