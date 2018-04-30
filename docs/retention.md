@@ -71,6 +71,6 @@ impractical or even impossible. Depending on the issue, this can be
 mitigated downstream or dealt with indirectly by compacting the log,
 as discussed above.
 
-**It's assumed that the replay of the log can be resumed, so
-for normal usage replaying the entire log should not be necessary, but
-can be dealt with incremental backups at the downstream systems.**
+**It's assumed that the replay of the log can be resumed, so for
+normal usage replaying the entire log should not be necessary, but can
+be dealt with incremental backups at the downstream systems.**
