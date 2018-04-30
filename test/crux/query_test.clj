@@ -61,6 +61,20 @@
                                                    ['p1 :last-name 'name]
                                                    ['p1 :name "Smith"]]})))))))
 
+(t/deftest test-query-using-keywords
+  (f/transact-people! kv [{:name "Ivan" :sex :male}
+                          {:name "Petr" :sex :male}
+                          {:name "Doris" :sex :female}
+                          {:name "Jane" :sex :female}])
+
+  (t/testing "Can query by single field"
+    (t/is (= #{["Ivan"] ["Petr"]} (q/q (db kv) {:find ['name]
+                                                :where [['e :name 'name]
+                                                        ['e :sex :male]]})))
+    (t/is (= #{["Doris"] ["Jane"]} (q/q (db kv) {:find ['name]
+                                                 :where [['e :name 'name]
+                                                         ['e :sex :female]]})))))
+
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! kv [{:name "Malcolm" :last-name "Sparks"}]
                                       (c/to-date (time/date-time 1986 10 22)))]
