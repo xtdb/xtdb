@@ -52,7 +52,7 @@ year needs to be stored, or it can simply be archived. Maybe the
 frequency of changes further back in history can be condensed, so one
 compacts them to say daily changes. All this is complicated by the
 schema and data model, and how one can decide what is reachable at a
-certain point in time. See both [schema.md](schema.md) and
+certain point in time. See both [schema](schema.md) and
 [bitemp](bitemp.md) for more.
 
 Crux could at the lowest level provide the tools that helps one

@@ -81,7 +81,7 @@ predictable about what happens to the next value. By default this
 value wouldn't change, but there might need to be possible to change a
 range of values across business time in a consistent manner. The
 changes would need to be done in a transaction, see
-[transactions.md](transactions.md).
+[transactions](transactions.md).
 
 ### Event Sourcing
 
@@ -95,7 +95,7 @@ of documents, or actual events from which these are derived?
 ### Event Horizon
 
 What is visible in across the graph when executing a query, see
-[query.md](query.md) is a non-trivial problem. The latest version of
+[query](query.md) is a non-trivial problem. The latest version of
 each entity, visible from both time lines, can vary widely. The latest
 version might been written just now, or years back. Some entities
 might never change, others change several times a second. Datomic's
@@ -123,4 +123,4 @@ provenance models. Unlike corrections, which allow bitemporal queries
 for repeatable reads, retention might actually remove (or excise in
 Datomic) data, which will by definition break repeatable reads, and
 also complicate event sourcing and other derived views of the
-system. For more, see [retention.md](retention.md)
+system. For more, see [retention](retention.md)
