@@ -14,7 +14,8 @@ versions of this same entity. In a triplet store the document is
 implicit, being all predicates reachable from an entity.
 
 The triplets, or the properties of the documents, can be connected to
-other entities in a graph. For more about this, see [graph.md].
+other entities in a graph. For more about this, see
+[graph.md](graph.md).
 
 One reason to use documents and not triplets, is that triplets are
 really an implementation detail, and users are likely to think about
@@ -24,8 +25,9 @@ create a new version of an entity "by mistake" without seeing the full
 state of the resulting entity.
 
 The triplets will further need at bitemporal query support, see
-[bitemp.md] and the ability to build various forms of retention and
-provenance models on top of the raw data, see [retention.md].
+[bitemp.md](bitemp.md) and the ability to build various forms of
+retention and provenance models on top of the raw data, see
+[retention.md](retention.md).
 
 **Triplets are the most expressive model, but documents easier to
 reason about for the user.**
@@ -73,7 +75,7 @@ complicates indexing (and hence queries) in a bitemporal setting, as
 one need to ensure that source and target of a reference are visible
 at the same time. This can be mitigated by explicitly adding explicit
 retractions to the index but this can double the index size, see
-[bitemp.md] for more about this.
+[bitemp.md](bitemp.md) for more about this.
 
 ### CRDTs
 
@@ -83,7 +85,7 @@ types](https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type)
 to allow scaling without locks, while still provide strong eventual
 consistency using a model that is possible to reason about predictably
 for the user. This support would be built into the types of the schema
-itself. See [transactions.md] for more about this.
+itself. See [transactions.md](transactions.md) for more about this.
 
 ### Adaptive Schema
 
