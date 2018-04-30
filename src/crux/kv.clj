@@ -103,7 +103,7 @@
   entity ID is -1, then a new entity-id will be generated."
   ([db txs]
    (-put db txs (java.util.Date.)))
-  ([db txs ts]
+  ([db txs ^java.util.Date ts]
    (let [tmp-ids->ids (atom {})]
      (doseq [[eid k v] (mapcat entity->txes txs)]
        (let [aid (attr-schema db k)
@@ -120,7 +120,7 @@
 
 (defn -get-at
   ([db eid k] (-get-at db eid k (java.util.Date.)))
-  ([db eid k ts]
+  ([db eid k ^java.util.Date ts]
    (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
      (some->> (kv-store/seek-and-iterate db
                                    (encode :key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
@@ -131,7 +131,7 @@
   an entity."
   ([db eid]
    (entity db eid (java.util.Date.)))
-  ([db eid at-ts]
+  ([db eid ^java.util.Date at-ts]
    (some->
     (reduce (fn [m [k v]]
               (let [{:keys [eid aid ts]} (decode :key k)

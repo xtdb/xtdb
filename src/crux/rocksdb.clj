@@ -1,9 +1,9 @@
 (ns crux.rocksdb
   (:require [byte-streams :as bs]
             [crux.kv-store :refer :all])
-  (:import [org.rocksdb Options ReadOptions RocksDB Slice]))
+  (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
-(defn- -get [db k]
+(defn- -get [^RocksDB db k]
   (let [i (.newIterator db)]
     (try
       (.seek i k)
@@ -12,7 +12,7 @@
       (finally
         (.close i)))))
 
-(defn rocks-iterator->seq [i]
+(defn rocks-iterator->seq [^RocksIterator i]
   (lazy-seq
    (when (and (.isValid i))
      (cons (conj [(.key i) (.value i)])
@@ -22,9 +22,9 @@
 (defn- -seek-and-iterate
   "TODO, improve by getting prefix-same-as-start to work, so we don't
   need an upper-bound."
-  [db k upper-bound]
+  [^RocksDB db k #^bytes upper-bound]
   (let [read-options (ReadOptions.)
-        i (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+        i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
     (try
       (.seek i k)
       (doall (rocks-iterator->seq i))
@@ -47,16 +47,16 @@
   (seek [{:keys [db]} k]
     (-get db k))
 
-  (seek-and-iterate [{:keys [db]} k upper-bound]
+  (seek-and-iterate [{:keys [^RocksDB db]} k upper-bound]
     (-seek-and-iterate db k upper-bound))
 
-  (store [{:keys [db]} k v]
+  (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
 
-  (merge! [{:keys [db]} k v]
+  (merge! [{:keys [^RocksDB db]} k v]
     (.merge db k v))
 
-  (close [{:keys [db]}]
+  (close [{:keys [^RocksDB db]}]
     (.close db))
 
   (destroy [this]
