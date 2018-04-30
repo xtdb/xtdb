@@ -44,6 +44,8 @@ supporting strong eventual consistency using CRDTs in the
 Crux will likely support a range of models here, as there is unlikely
 to be one size that fits all.
 
++ [Jepsen](https://github.com/jepsen-io/jepsen)
+
 ### Throughput
 
 Committing a transaction and ingesting data into the system should be
