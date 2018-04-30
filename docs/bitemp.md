@@ -86,3 +86,36 @@ necessarily a safe assumption. Often writes in the past, or
 corrections, are events in their own regard, which raises questions
 about what we actually write into our log, raw assertions or versions
 of documents, or actual events from which these are derived?
+
+### Event Horizon
+
+What is visible in across the graph when executing a query, see
+[query.md](query.md) is a non-trivial problem. The latest version of
+each entity, visible from both time lines, can vary widely. The latest
+version might been written just now, or years back. Some entities
+might never change, others change several times a second. Datomic's
+as-of functionality abstracts this problem away from the user for
+transaction time. Our aim it to allow Crux do the same in a bitemp
+fashion.
+
+As mentioned above, the transaction time is usually not used when
+doing historical queries, so for most cases one only has to find the
+latest version as of a specific business time. This is different from
+how Datomic works, as Datomic will, by definition, always use
+transaction time. When transaction time is also used for full
+bitemporal queries, the result will be further limited to the latest
+version as of a specific transaction time as well. Both these filters
+might end up returning nothing.
+
+The visibility of the event horizon gets further complicated in the
+case of using triplets, as in this case a single entity might been
+written and updated over time to compose the current version by many
+triplets, each written at different times, and potentially also
+corrected.
+
+What data that can be seen can be further limited by retention and
+provenance models. Unlike corrections, which allow bitemporal queries
+for repeatable reads, retention might actually remove (or excise in
+Datomic) data, which will by definition break repeatable reads, and
+also complicate event sourcing and other derived views of the
+system. For more, see [retention.md](retention.md)
