@@ -12,6 +12,8 @@ Motivation: a database with the following characteristics:
 + Rapid data ingestion (using Kafka)
 + Scalable Query Engine using RocksDB
 
+## Business Model
+
 + [Business Model](docs/business_model.md)
 + [Competitors](docs/competitors.md)
 
