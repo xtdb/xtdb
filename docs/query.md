@@ -19,6 +19,17 @@ actually has reached the index. One approach is to simply provide an
 API with timeout, waiting for a point of time to reach the query node
 before executing the query.
 
++ [Linked Data Sets](https://www.w3.org/wiki/DataSetRDFDumps)
++ [Stanford Network Analysis
+  Project](https://snap.stanford.edu/index.html)
++ [Datomic MusicBrainz sample
+  database](https://github.com/Datomic/mbrainz-sample)
++ [Neo4j vs Dgraph - The numbers speak for
+  themselves](https://blog.dgraph.io/post/benchmark-neo4j/)
++ [NoSQL Performance Benchmark 2018 – MongoDB, PostgreSQL, OrientDB,
+  Neo4j and
+  ArangoDB](https://www.arangodb.com/2018/02/nosql-performance-benchmark-2018-mongodb-postgresql-orientdb-neo4j-arangodb/)
+
 ### Indexes
 
 The main complication in Crux is [bitemporality](bitemp.md). This
@@ -62,6 +73,7 @@ while running, which would be a post MVP feature.
 + [A-Tree: A Bounded Approximate Index
   Structure](https://arxiv.org/abs/1801.10207)
 + [Spatial index](https://en.wikipedia.org/wiki/Spatial_index)
++ [Dgraph Design Concepts](https://docs.dgraph.io/design-concepts/)
 
 ### Retention
 

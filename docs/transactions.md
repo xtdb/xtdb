@@ -66,3 +66,6 @@ inconsistent.
 As mentioned above, throughput would be impacted by both positively
 the ability to shard writes across several topics, and negatively by
 the need for locks or coordination.
+
++ [Loading close to 1M edges/sec into
+  Dgraph](https://blog.dgraph.io/post/bulkloader/)
