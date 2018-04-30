@@ -1,1 +1,66 @@
 ## Transactions
+
+**In this document we assume that the log is Kafka-like, with topics
+divided into partitions.**
+
+### Write Transactions
+
+In the simplest case, the message in the log is either an entity, more
+than one entity, or a set of assertions and retractions. There is in
+the simplest case a single topic with no partitions representing the
+full immutable log.
+
+More advanced cases can include sharding in various ways, supporting
+more topics, and using Kafka
+[transactions](https://www.confluent.io/blog/transactions-apache-kafka/),
+or similar, to ensure that cross topic transactions are dealt with.
+
+Exactly how this would really work when using more than one topic and
+partition is beyond the MVP, but some thinking around this is best
+done sooner rather than later.
+
+### Reading Your Writes
+
+As discussed in the [query](query.md) document, reading your own
+writes could be achieved by using the time of the committed
+transaction and ensure the query node has caught up. This ability
+would be provided via a Crux query API.
+
+### Global Lock
+
+In Datomic there's a single transactor, which also has the ability to
+execute transactor functions. The easiest replacement for this is to
+have a gateway service in front of Kafka, that also has access to the
+indexes and can ensure the entire log has been indexed, and can
+provide similar guarantees as transactor functions do in
+Datomic.
+
+One alternative include using some form of consensus between the
+clients themselves, potentially done using Kafka transactions. Another
+alternative is to avoid locking all together for most cases by
+supporting strong eventual consistency using CRDTs in the schema
+itself, see [schema](schema.md).
+
+Crux will likely support a range of models here, as there is unlikely
+to be one size that fits all.
+
+### Throughput
+
+Committing a transaction and ingesting data into the system should be
+vastly faster than in Datomic. This is one of the selling points of
+Crux. Often there will be massive amounts of existing data, sometimes
+not always all accessible in time order and easily accessible at
+once. This data will likely come from more than one system. Datomic's
+insistence of a single, immutable time line, and also on
+unconditionally indexing at ingestion make imports slow.
+
+In Crux, transactions and indexing are decoupled, which comes with its
+own problems. Allowing bitemporal writes also allow data to be both
+imported from existing systems, while being ingested in a live setting
+and incrementally building up a full view of the data in the log and
+indexes. During this period, the data in the system might be
+inconsistent.
+
+As mentioned above, throughput would be impacted by both positively
+the ability to shard writes across several topics, and negatively by
+the need for locks or coordination.
