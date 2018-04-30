@@ -73,7 +73,6 @@
   stage."
   [db plan]
   (second (reduce (fn [[bindings results] [term-bindings pred-f]]
-                    (println term-bindings)
                     [(into bindings (map bind-key term-bindings))
                      (->> results
                           (do-bindings db (remove (comp bindings bind-key) term-bindings))
