@@ -94,25 +94,24 @@
 
       :and
       (let [sub-plan (query-terms->plan t)]
-        [nil
+        [(mapcat first sub-plan)
          (fn [db result]
            (every? (fn [[_ pred-fn]]
                      (pred-fn db result))
                    sub-plan))])
 
       :not
-      (let [[_ pred-fn?] (first (query-terms->plan [t]))]
-        [nil
+      (let [query-plan (query-terms->plan [t])
+            [bindings pred-fn?] (first query-plan)]
+        [bindings
          (fn [db result] (not (pred-fn? db result)))])
 
       :or
-      (let [sub-plan (query-terms->plan t)
-            e (ffirst sub-plan)
-            facts (filter #(= :fact (first %)) t)]
-        (assert (->> facts
-                     (map #(into #{} (filter symbol? (second %))))
+      (let [sub-plan (query-terms->plan t)]
+        (assert (->> sub-plan
+                     (map #(into #{} (map bind-key (first %))))
                      (apply =)))
-        [nil
+        [(mapcat first sub-plan)
          (fn [db result]
            (some (fn [[_ pred-fn :as s]]
                    (pred-fn db result))
@@ -134,15 +133,11 @@
                (let [args (map #(or (and (symbol? %) (result %)) %) args)]
                  (apply pred-fn args)))]))))
 
-(defn term-symbols [terms]
-  (reduce into #{}
-          (for [[op t] terms]
-            (condp = op
-              :fact (filter symbol? t)
-              :not (filter symbol? t)
-              :or (term-symbols (:terms t))
-              :not-join (term-symbols (:terms t))
-              :pred []))))
+(defn- term-symbols [terms]
+  (->> (query-terms->plan terms)
+       (mapcat first)
+       (map bind-key)
+       (into #{})))
 
 (defn- validate-query [{:keys [find where]}]
   (let [variables (term-symbols where)]

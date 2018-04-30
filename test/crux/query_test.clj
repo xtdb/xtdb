@@ -212,26 +212,28 @@
       (t/is true))))
 
 (t/deftest test-ors-can-introduce-new-bindings
-  (f/transact-people! kv [{:name "Petr" :last-name "Smith" :sex :male}
-                          {:name "Ivan" :last-name "Ivanov" :sex :male}])
+  (let [[petr ivan ivanova] (f/transact-people! kv [{:name "Petr" :last-name "Smith" :sex :male}
+                                                    {:name "Ivan" :last-name "Ivanov" :sex :male}
+                                                    {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
 
-  (t/is (= 1 (count (q/q (db kv) {:find ['?p2]
-                                  :where ['(or (and [?p2 :name "Petr"]
-                                                    [?p2 :sex :female])
-                                               (and [?p2 :last-name "Ivanov"]
-                                                    [?p2 :sex :male]))]})))))
+    (t/testing "?p2 introduced only inside of an Or"
+      (t/is (= #{[(:crux.kv/id ivan)]} (q/q (db kv) {:find ['?p2]
+                                                     :where ['(or [(and [[?p2 :name "Petr"]
+                                                                         [?p2 :sex :female]])
+                                                                   (and [[?p2 :last-name "Ivanov"]
+                                                                         [?p2 :sex :male]])])]}))))))
 
 (t/deftest test-not-join
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
-                            {:name "Malcolm" :last-name "Ofsparks"}
-                            {:name "Dominic" :last-name "Monroe"}])
+                          {:name "Malcolm" :last-name "Ofsparks"}
+                          {:name "Dominic" :last-name "Monroe"}])
 
   (t/testing "Rudimentary or-join"
     (t/is (= #{["Ivan"] ["Malcolm"]}
              (q/q (db kv) {:find ['name]
-                        :where [['e :name 'name]
-                                '(not-join [e]
-                                           [[e :last-name "Monroe"]])]})))))
+                           :where [['e :name 'name]
+                                   '(not-join [e]
+                                              [[e :last-name "Monroe"]])]})))))
 
 (t/deftest test-mixing-expressions
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov"}
