@@ -32,6 +32,9 @@ retention and provenance models on top of the raw data, see
 **Triplets are the most expressive model, but documents easier to
 reason about for the user.**
 
+**Note: we're not talking about large binary documents here, just
+different vays of reasoning about entities.**
+
 ### Scalar Types and Indexing
 
 The scalar types can be assumed to be normal values or references to
