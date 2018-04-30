@@ -47,7 +47,6 @@
     (let [entities (if (and v (not (symbol? v)))
                      (crux.db/entities-for-attribute-value db a v)
                      (crux.db/entities db))]
-      (println entities)
       (if (empty? results)
         ;; First entity, assign this to every potential entity in the DB
         (map #(hash-map e %) entities)

@@ -32,7 +32,8 @@
                                                           :v (g/compile-frame (g/finite-block 16)
                                                                               (comp md5 to-byte-array)
                                                                               identity)
-                                                          :ts :int64)
+                                                          :ts :int64
+                                                          :eid :int32)
                                            #(update % :ts (partial - max-timestamp))
                                            identity)
                      :aid (g/compile-frame {:index :aid
@@ -128,7 +129,8 @@
            (kv-store/store db (encode :key {:index :avt
                                             :aid aid
                                             :v v
-                                            :ts (.getTime ts)})
+                                            :ts (.getTime ts)
+                                            :eid eid})
                            (long->bytes eid)))))
      @tmp-ids->ids)))
 
@@ -173,17 +175,23 @@
        (map :eid)
        (into #{})))
 
+;; can't do this.., unless you have a set of ids in there..
+;; or somehow put the eid in the key
+
 (defn- entity-ids-for-value [db aid v ^java.util.Date ts]
   (->> (kv-store/seek-and-iterate db
                                   (encode :key {:index :avt
                                                 :aid aid
                                                 :v v
-                                                :ts (.getTime ts)})
+                                                :ts (.getTime ts)
+                                                :eid 0})
                                   (encode :key {:index :avt
                                                 :aid aid
                                                 :v v
-                                                :ts (.getTime (java.util.Date. 0 0 0))}))
-       (map (fn [[_ l]] (bytes->long l)))
+                                                :ts (.getTime (java.util.Date. 0 0 0))
+                                                :eid 0}))
+       (map (fn [[k _]] (decode :key k)))
+       (map :eid)
        (into #{})))
 
 (defrecord KvEntity [eid kv ts]
