@@ -36,7 +36,9 @@ and one for transaction time, at the end of the key. It's likely
 faster if this time is "reversed", so later dates come first in the
 index. Another alternative is an [multi dimensional
 index](https://redis.io/topics/indexes#multi-dimensional-indexes). There
-are many variants on this, but most of them are costly to build.
+are many variants on this, like
+[R-trees](https://en.wikipedia.org/wiki/R-tree), but most of them are
+costly to build.
 
 We want the indexes both to be faster to build than Datomic, and also
 decoupled from the bitemporal time lines. Especially, corrections of
@@ -59,6 +61,7 @@ while running, which would be a post MVP feature.
   Approach](https://arxiv.org/abs/1604.03234)
 + [A-Tree: A Bounded Approximate Index
   Structure](https://arxiv.org/abs/1801.10207)
++ [Spatial index](https://en.wikipedia.org/wiki/Spatial_index)
 
 ### Retention
 
