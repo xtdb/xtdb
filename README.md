@@ -4,11 +4,11 @@ An experimental mutable Clojure graph database currently sitting on top of Rocks
 
 Motivation: a database with the following characteristics:
 
-+ Graph Query
-+ Additive Schema
-+ Bitemporality
-+ Data retention/excision strategies (for GDPR)
-+ Global locking
++ [Graph Query](docs/query.md)
++ [Additive Schema](docs/schema.md)
++ [Bitemporality](docs/bitemp.md)
++ [Data retention/excision strategies](docs/retention.md) (for GDPR)
++ [Global locking](docs/transactions.md)
 + Rapid data ingestion (using Kafka)
 + Scalable Query Engine using RocksDB
 
