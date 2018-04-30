@@ -38,8 +38,8 @@ Datomic.
 One alternative include using some form of consensus between the
 clients themselves, potentially done using Kafka transactions. Another
 alternative is to avoid locking all together for most cases by
-supporting strong eventual consistency using CRDTs in the schema
-itself, see [schema](schema.md).
+supporting strong eventual consistency using CRDTs in the
+[schema](schema.md) itself.
 
 Crux will likely support a range of models here, as there is unlikely
 to be one size that fits all.
