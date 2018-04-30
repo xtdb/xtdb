@@ -76,7 +76,7 @@ predictable about what happens to the next value. By default this
 value wouldn't change, but there might need to be possible to change a
 range of values across business time in a consistent manner. The
 changes would need to be done in a transaction, see
-[transaction.md](transaction.md).
+[transactions.md](transactions.md).
 
 ### Event Sourcing
 
