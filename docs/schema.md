@@ -33,7 +33,7 @@ retention and provenance models on top of the raw data, see
 reason about for the user.**
 
 **Note: we're not talking about large binary documents here, just
-different vays of reasoning about entities.**
+different ways of reasoning about entities.**
 
 ### Scalar Types and Indexing
 
