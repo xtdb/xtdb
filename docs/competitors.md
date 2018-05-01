@@ -11,12 +11,15 @@ _World's leading graph database, with native graph storage and
 processing._
 
 Has its own query language,
-[Cypher](https://neo4j.com/developer/cypher/), and also a [GraphQL
-extension](https://neo4j.com/developer/graphql/). Supports what they
-call ["causal
+[Cypher](https://neo4j.com/developer/cypher/). It also have a [GraphQL
+extension](https://neo4j.com/developer/graphql/) and a [Gremlin
+module](http://tinkerpop.apache.org/docs/current/reference/#neo4j-gremlin). Supports
+what they call ["causal
 clustering"](https://neo4j.com/docs/operations-manual/current/clustering/causal-clustering/introduction/)
 which contains of a core set of servers using Raft for transactions,
 and a potentially larger set of read replicas.
+
+Neo4J is written in Java.
 
 https://db-engines.com/en/system/Neo4j
 
@@ -33,6 +36,9 @@ which supports [Gremlin](http://tinkerpop.apache.org/gremlin.html) and
     DataStax Enterprise Graph is the first graph database fast enough to
     power customer facing applications.
 
+DataStax Enterprise is built around Apache Cassandra which is written
+in Java.
+
 https://db-engines.com/en/system/Datastax+Enterprise
 
 https://db-engines.com/en/system/Cassandra
@@ -42,13 +48,17 @@ https://db-engines.com/en/system/Cassandra
 _Dgraph - a low latency, high throughput, native and distributed graph
 database._
 
-Is open source, distributed and has a GraphQL front-end:
+Is open source, written in Go, distributed and has a GraphQL
+front-end:
 
     Dgraph's goal is to provide Google production level scale and
     throughput, with low enough latency to be serving real time user
     queries, over terabytes of structured data. Dgraph supports
     GraphQL-like query syntax, and responds in JSON and Protocol Buffers
     over GRPC and HTTP.
+
+See also [Dgraph compared to other
+databases](https://docs.dgraph.io/dgraph-compared-to-other-databases/)
 
 https://db-engines.com/en/system/Dgraph
 
@@ -65,6 +75,8 @@ auditing aspects of the time-line, and not the business time:
     Chronological: Because Datomic stores all data by default, you can
     audit how and when changes were made.
 
+Datomic is written in Clojure.
+
 https://db-engines.com/en/system/Datomic
 
 #### [datahike](https://github.com/replikativ/datahike)
@@ -79,6 +91,8 @@ via
     datahike runs locally on one peer. A transactor might be provided in
     the future and can also be realized through any linearizing write
     mechanism, e.g. Apache Kafka.
+
+Datahike is written in Clojure.
 
 #### [Mentat](https://github.com/mozilla/mentat)
 
@@ -99,8 +113,8 @@ _LogicBlox is a smart database that combines transactions, analytics,
 planning and business logic, powering a new class of smart enterprise
 applications._
 
-LogicBlox is a commercial database and rule engine, which has its own
-Datalog dialect called LogiQL.
+LogicBlox is a commercial database and rule engine written in C++,
+which has its own Datalog dialect called LogiQL.
 
 See the [Design and Implementation of the LogicBlox
 System](http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf).
@@ -137,8 +151,8 @@ https://db-engines.com/en/system/Amazon+Neptune
 _Stardog makes it fast and easy to turn enterprise data into
 knowledge._
 
-Stardog is a commercial RDF store, which supports SPARQL and has a
-GraphQL front-end. Also supports TinkerPop.
+Stardog is a commercial RDF store written in Java, which supports
+SPARQL and has a GraphQL front-end. Also supports TinkerPop.
 
 https://db-engines.com/en/system/Stardog
 

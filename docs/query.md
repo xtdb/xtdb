@@ -126,6 +126,9 @@ language. GraphQL requires extensions to do ad-hoc queries.**
   Space](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-173.html)
 + [SPARQL
   S-Expressions](https://jena.apache.org/documentation/notes/sse.html)
++ [Gremlinator: An effort towards converting SPARQL queries to Gremlin
+  Graph Pattern Matching
+  Traversals](https://github.com/LITMUS-Benchmark-Suite/sparql-to-gremlin)
 
 ### Datascript Compatibility
 
