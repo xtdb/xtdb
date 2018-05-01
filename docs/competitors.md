@@ -34,6 +34,7 @@ which supports [Gremlin](http://tinkerpop.apache.org/gremlin.html) and
     power customer facing applications.
 
 https://db-engines.com/en/system/Datastax+Enterprise
+
 https://db-engines.com/en/system/Cassandra
 
 #### [Dgraph](https://github.com/dgraph-io/dgraph)
@@ -58,7 +59,7 @@ https://db-engines.com/en/system/Dgraph
 _A transactional database with a flexible data model, elastic scaling,
 and rich queries._
 
-It's worth noting that the current Datomic homepage focusing on
+It's worth noting that the current Datomic homepage is focusing on the
 auditing aspects of the time-line, and not the business time:
 
     Chronological: Because Datomic stores all data by default, you can
@@ -99,8 +100,9 @@ planning and business logic, powering a new class of smart enterprise
 applications._
 
 LogicBlox is a commercial database and rule engine, which has its own
-Datalog dialect called LogiQL. See the [Design and Implementation of
-the LogicBlox
+Datalog dialect called LogiQL.
+
+See the [Design and Implementation of the LogicBlox
 System](http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf).
 
 ### RDF
