@@ -151,12 +151,41 @@ supports OWL reasoning.
 
 ### Streaming
 
+Streaming platforms in general are not direct competitors as such, but
+might be used, as we will likely be using it, to build and piece
+together bespoke solutions that solve the same problems we try to do.
+
+For a Confluent and Kafka centric view: [Putting Apache Kafka To Use:
+A Practical Guide to Building a Streaming Platform (Part
+1)](https://www.confluent.io/blog/stream-data-platform-1/)
+
+How to pick between Apache's different streaming platform like Kafka,
+Flink and Spark isn't obvious.
+
 #### [Kafka Streams](https://kafka.apache.org/documentation/streams/)
 
 _Kafka Streams is a client library for building applications and
 microservices, where the input and output data are stored in Kafka
 clusters._
 
-Streaming platforms in general are not direct competitors as such, but
-might be used, as we will likely be using it, to build and piece
-together bespoke solutions that solve the same problems we try to do.
+Uses RocksDB for local KTable state. If we use Kafka for our log, we
+might also use Kafka Streams as the end-to-end framework.
+
+### [Apache Flink](https://flink.apache.org/)
+
+_Apache Flink® is an open-source stream processing framework for
+distributed, high-performing, always-available, and accurate data
+streaming applications._
+
+It's API is based around the concepts DataSet and DataStream. Also has
+a graph API called
+[gelly](https://ci.apache.org/projects/flink/flink-docs-release-1.4/dev/libs/gelly/).
+
+### [Apache Spark](https://spark.apache.org/)
+
+_Apache Spark™ is a unified analytics engine for large-scale data
+processing._
+
+Has many front-ends and can run on many platforms. It's basic
+abstraction is a Resilient Distributed Dataset (RDD). Spark has a
+graph API called [GraphX](https://spark.apache.org/graphx/).
