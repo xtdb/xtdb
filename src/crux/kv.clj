@@ -228,8 +228,7 @@
                                                            :v v
                                                            :ts (.getTime (java.util.Date. 0 0 0))
                                                            :eid 0}))
-       (map (comp bytes->long second))
-       (into #{})))
+       (map (comp bytes->long second))))
 
 (defn attributes
   "Sequence of all attributes in the DB."
