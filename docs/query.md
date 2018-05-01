@@ -33,8 +33,8 @@ before executing the query.
 ### Indexes
 
 The main complication in Crux is [bitemporality](bitemp.md). This
-should be provided as a context to the query by the user, and the as
-of view should be automatically resolved for both business and
+should be provided as a context to the query by the user, and the
+`as-of` view should be automatically resolved for both business and
 transaction time for the user. This is one of Crux main
 differentiating features.
 
