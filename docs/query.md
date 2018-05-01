@@ -76,6 +76,10 @@ while running, which would be a post MVP feature.
   Structure](https://arxiv.org/abs/1801.10207)
 + [Spatial index](https://en.wikipedia.org/wiki/Spatial_index)
 + [Dgraph Design Concepts](https://docs.dgraph.io/design-concepts/)
++ [ZipG: A Memory-efficient Graph Store for Interactive
+  Queries](https://people.eecs.berkeley.edu/~anuragk/papers/zipg.pdf)
++ [Succinct: Enabling Queries on Compressed
+  Data](https://people.eecs.berkeley.edu/~anuragk/succinct-techreport.pdf)
 
 ### Retention
 
