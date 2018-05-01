@@ -171,7 +171,7 @@ clusters._
 Uses RocksDB for local KTable state. If we use Kafka for our log, we
 might also use Kafka Streams as the end-to-end framework.
 
-### [Apache Flink](https://flink.apache.org/)
+#### [Apache Flink](https://flink.apache.org/)
 
 _Apache Flink® is an open-source stream processing framework for
 distributed, high-performing, always-available, and accurate data
@@ -181,7 +181,7 @@ It's API is based around the concepts DataSet and DataStream. Also has
 a graph API called
 [gelly](https://ci.apache.org/projects/flink/flink-docs-release-1.4/dev/libs/gelly/).
 
-### [Apache Spark](https://spark.apache.org/)
+#### [Apache Spark](https://spark.apache.org/)
 
 _Apache Spark™ is a unified analytics engine for large-scale data
 processing._
