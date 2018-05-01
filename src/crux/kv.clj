@@ -7,17 +7,15 @@
             gloss.io))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
+(def frame-reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
+(def frame-keyword (g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
-                 :keyword (g/compile-frame {:type :keyword, :v (g/string :utf-8)}
-                                           #(update % :v name)
-                                           #(update % :v keyword))
+                 :keyword (g/compile-frame {:type :keyword, :v frame-keyword})
                  :retracted (g/compile-frame {:type :retracted})})
 
 (def indices (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
-
-(def reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
 
 (def frames {:key (g/compile-frame
                    (g/header
@@ -26,20 +24,18 @@
                      :eat (g/compile-frame (g/ordered-map :index :eat
                                                           :eid :int32
                                                           :aid :int32
-                                                          :ts reverse-timestamp))
+                                                          :ts frame-reverse-timestamp))
                      :avt (g/compile-frame (g/ordered-map :index :avt
                                                           :aid :int32
                                                           :v (g/compile-frame (g/finite-block 16)
                                                                               (comp md5 to-byte-array)
                                                                               identity)
-                                                          :ts reverse-timestamp
+                                                          :ts frame-reverse-timestamp
                                                           :eid :int32))
                      :aid (g/compile-frame {:index :aid
                                             :aid :uint32})
                      :ident (g/compile-frame {:index :ident
-                                              :ident :uint32}
-                                             #(update % :ident hash-keyword)
-                                             identity)}
+                                              :ident (g/compile-frame :uint32 hash-keyword identity)})}
                     :index))
              :key/index-prefix (g/ordered-map :index indices)
              :key/eat-prefix (g/ordered-map :index indices :eid :int32)
@@ -51,11 +47,7 @@
              :val/attr (g/compile-frame
                         (g/ordered-map
                          :attr/type (apply g/enum :byte (keys data-types))
-                         :attr/ident (g/string :utf-8))
-                        (fn [m]
-                          (update m :attr/ident #(subs (str %) 1)))
-                        (fn [m]
-                          (update m :attr/ident keyword)))
+                         :attr/ident frame-keyword))
              :val/ident (g/compile-frame {:aid :int32})})
 
 (defn- encode [f m]
