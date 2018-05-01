@@ -64,6 +64,13 @@ schema and data model, and how one decides what is reachable at a
 certain point in time. See both [schema](schema.md) and
 [bitemp](bitemp.md) for more.
 
+Compaction is likely easier dealt with in the indexes themselves, see
+[query](query.md). Compacting the log is a more complex and
+irreversible decision. As discussed above, pseudonymisation might be a
+way to avoid having to rewrite the log itself. There might still be
+cases where the log simply grows to large and need some form of
+compaction.
+
 Crux could at the lowest level provide the tools that helps one
 compact the log in a consistent manner. It could also potentially also
 do this on its own, based on provenance and retention meta-data.

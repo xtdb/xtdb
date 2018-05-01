@@ -32,10 +32,10 @@ before executing the query.
 
 ### Indexes
 
-The main complication in Crux is [bitemporality](bitemp.md). This
-should be provided as a context to the query by the user, and the
-`as-of` view should be automatically resolved for both business and
-transaction time for the user. This is one of Crux main
+The main complication in Crux is [bitemporality](bitemp.md). The as-of
+view should be resolved for both business and transaction time, both
+defaulting to now, without the user having to deal with these temporal
+aspects in the query or schema. This is one of Crux main
 differentiating features.
 
 One option is to store indexes similar to how it's done in this
@@ -52,8 +52,8 @@ are many variants on this, like
 costly to build.
 
 We want the indexes both to be faster to build than Datomic, and also
-decoupled from the bitemporal time lines. Especially, corrections of
-the past should not cost more than any other indexing. Deletions at
+decoupled from a single immutable time-line. Especially, corrections
+of the past should not cost more than any other indexing. Deletions at
 any point should also be simple. Indexes should be possible to backup
 and resume from the log, so the entire index doesn't need to be
 rebuilt from scratch in case of query node failure.
@@ -81,6 +81,16 @@ The indexes need to respect the [retention](retention.md) rules setup
 for the data itself. As the indexes will contain the decrypted values
 of all indexed values, being easily able to derive where a value came
 from and if this now needs to be dropped must be possible.
+
+It should further be possible to compact the indexes and support
+rolling time windows. Different points in time might have different
+fidelity in the index, for example keeping all of the recent data
+while rolling up data on a hourly or daily basis further back in
+time. This can be done both to save space and for performance reasons
+by keeping the indexes smaller and mainly contain data that is likely
+to be queried. See also [schema](schema.md).
+
+Different query nodes could have different retention strategies.
 
 ### Query Language
 
