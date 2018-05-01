@@ -57,8 +57,16 @@ front-end:
     GraphQL-like query syntax, and responds in JSON and Protocol Buffers
     over GRPC and HTTP.
 
+The [schema](https://docs.dgraph.io/query-language/#schema) in Dgraph
+can be implicit, in which case an attribute takes the type of its
+first value. Defining indexes must be done explicitly. Dgraph shards
+its data based on attributes and uses Raft for consensus. It has its
+own custom key value store,
+[Badger](https://github.com/dgraph-io/badger).
+
 See also [Dgraph compared to other
 databases](https://docs.dgraph.io/dgraph-compared-to-other-databases/)
+and [Dgraph Design Concepts](https://docs.dgraph.io/design-concepts/).
 
 https://db-engines.com/en/system/Dgraph
 
