@@ -97,6 +97,8 @@ itself. See [transactions](transactions.md) for more about this.
   Systems](https://arxiv.org/abs/1402.2237)
 + [Anna: A KVS for any
   scale](https://blog.acolyer.org/2018/03/27/anna-a-kvs-for-any-scale/)
++ [Logic and Lattices for Distributed
+  Programming](http://db.cs.berkeley.edu/papers/socc12-blooml.pdf)
 
 ### Additive Schema
 
