@@ -10,6 +10,7 @@
 (def frame-reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
 (def frame-keyword (g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword))
 (def frame-md5 (g/compile-frame (g/finite-block 16) (comp md5 to-byte-array) identity))
+(def frame-id (g/compile-frame :int32))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
@@ -24,8 +25,8 @@
   to get an entity/attribute value, for direct access and for query
   purposes. This index uses reversed time."
   (g/compile-frame (g/ordered-map :index :eat
-                                  :eid :int32
-                                  :aid :int32
+                                  :eid frame-id
+                                  :aid frame-id
                                   :ts frame-reverse-timestamp)))
 
 (def frame-index-avt
@@ -33,22 +34,22 @@
   at a particular point in time, used for query purposes. This index
   uses reversed time."
   (g/compile-frame (g/ordered-map :index :avt
-                                  :aid :int32
+                                  :aid frame-id
                                   :v frame-md5
                                   :ts frame-reverse-timestamp
-                                  :eid :int32)))
+                                  :eid frame-id)))
 
 (def frame-index-aid
   "The AID index is used to provide a mapping from attribute ID to the
   attribute keyword ident."
   (g/compile-frame {:index :aid
-                    :aid :uint32}))
+                    :aid frame-id}))
 
 (def frame-index-attribute-ident
   "The attribute-ident index is used to provide a mapping from
   attribute keyword ident to the attribute ID."
   (g/compile-frame {:index :ident
-                    :ident (g/compile-frame :uint32 hash-keyword identity)}))
+                    :ident (g/compile-frame :uint32 hash-keyword identity)})) ;; todo try the MD5 field
 
 (def frame-index-eid
   "The EID index is used for generating entity IDs; to store the next
@@ -66,7 +67,7 @@
                      :ident frame-index-attribute-ident}
                     :index))
              :key/index-prefix (g/ordered-map :index indices)
-             :key/eat-prefix (g/ordered-map :index indices :eid :int32)
+             :key/eat-prefix (g/ordered-map :index indices :eid frame-id)
              :val/eat (g/compile-frame
                        (g/header
                         (g/compile-frame (apply g/enum :byte (keys data-types)))
@@ -76,7 +77,7 @@
                         (g/ordered-map
                          :attr/type (apply g/enum :byte (keys data-types))
                          :attr/ident frame-keyword))
-             :val/ident (g/compile-frame {:aid :int32})})
+             :frame-id frame-id})
 
 (defn- encode [f m]
   (->> m (gloss.io/encode (frames f)) (bs/to-byte-array)))
@@ -100,7 +101,7 @@
     ;; to go from k -> aid
     (kv-store/store db
                     (encode :key {:index :ident :ident ident})
-                    (encode :val/ident {:aid aid}))
+                    (encode :frame-id aid))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
       (kv-store/store db k (encode :val/attr {:attr/type type
@@ -111,8 +112,7 @@
   (or (some->> {:index :ident :ident ident}
                (encode :key)
                (kv-store/seek db)
-               (decode :val/ident)
-               :aid)
+               (decode :frame-id))
       (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
