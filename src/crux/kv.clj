@@ -9,6 +9,7 @@
 (def max-timestamp (.getTime #inst "9999-12-30"))
 (def frame-reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
 (def frame-keyword (g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword))
+(def frame-md5 (g/compile-frame (g/finite-block 16) (comp md5 to-byte-array) identity))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
@@ -17,25 +18,52 @@
 
 (def indices (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
 
+(def frame-index-eat
+  "The EAT index is used for providing rapid access to a value of an
+  entity/attribute at a given point in time, used as the primary means
+  to get an entity/attribute value, for direct access and for query
+  purposes. This index uses reversed time."
+  (g/compile-frame (g/ordered-map :index :eat
+                                  :eid :int32
+                                  :aid :int32
+                                  :ts frame-reverse-timestamp)))
+
+(def frame-index-avt
+  "The AVT index is used to find entities that have an attribute/value
+  at a particular point in time, used for query purposes. This index
+  uses reversed time."
+  (g/compile-frame (g/ordered-map :index :avt
+                                  :aid :int32
+                                  :v frame-md5
+                                  :ts frame-reverse-timestamp
+                                  :eid :int32)))
+
+(def frame-index-aid
+  "The AID index is used to provide a mapping from attribute ID to the
+  attribute keyword ident."
+  (g/compile-frame {:index :aid
+                    :aid :uint32}))
+
+(def frame-index-attribute-ident
+  "The attribute-ident index is used to provide a mapping from
+  attribute keyword ident to the attribute ID."
+  (g/compile-frame {:index :ident
+                    :ident (g/compile-frame :uint32 hash-keyword identity)}))
+
+(def frame-index-eid
+  "The EID index is used for generating entity IDs; to store the next
+  entity ID to use. A merge operator can be applied to increment the
+  value."
+  (g/compile-frame {:index :eat}))
+
 (def frames {:key (g/compile-frame
                    (g/header
                     indices
-                    {:eid  (g/compile-frame {:index :eat})
-                     :eat (g/compile-frame (g/ordered-map :index :eat
-                                                          :eid :int32
-                                                          :aid :int32
-                                                          :ts frame-reverse-timestamp))
-                     :avt (g/compile-frame (g/ordered-map :index :avt
-                                                          :aid :int32
-                                                          :v (g/compile-frame (g/finite-block 16)
-                                                                              (comp md5 to-byte-array)
-                                                                              identity)
-                                                          :ts frame-reverse-timestamp
-                                                          :eid :int32))
-                     :aid (g/compile-frame {:index :aid
-                                            :aid :uint32})
-                     :ident (g/compile-frame {:index :ident
-                                              :ident (g/compile-frame :uint32 hash-keyword identity)})}
+                    {:eid frame-index-eid
+                     :eat frame-index-eat
+                     :avt frame-index-avt
+                     :aid frame-index-aid
+                     :ident frame-index-attribute-ident}
                     :index))
              :key/index-prefix (g/ordered-map :index indices)
              :key/eat-prefix (g/ordered-map :index indices :eid :int32)
@@ -70,7 +98,8 @@
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
-    (kv-store/store db (encode :key {:index :ident :ident ident})
+    (kv-store/store db
+                    (encode :key {:index :ident :ident ident})
                     (encode :val/ident {:aid aid}))
     ;; to go from aid -> k
     (let [k (encode :key {:index :aid :aid aid})]
