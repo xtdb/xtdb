@@ -49,7 +49,7 @@
   "The attribute-ident index is used to provide a mapping from
   attribute keyword ident to the attribute ID."
   (g/compile-frame {:index :ident
-                    :ident (g/compile-frame :uint32 hash-keyword identity)})) ;; todo try the MD5 field
+                    :ident frame-md5}))
 
 (def frame-index-eid
   "The EID index is used for generating entity IDs; to store the next
