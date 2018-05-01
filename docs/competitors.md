@@ -99,8 +99,8 @@ planning and business logic, powering a new class of smart enterprise
 applications._
 
 LogicBlox is a commercial database and rule engine, which has its own
-Datalog dialect called LogiQL, which see the [Design and
-Implementation of the LogicBlox
+Datalog dialect called LogiQL. See the [Design and Implementation of
+the LogicBlox
 System](http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf).
 
 ### RDF
