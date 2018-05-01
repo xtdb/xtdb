@@ -17,7 +17,15 @@
                  :keyword (g/compile-frame {:type :keyword, :v frame-keyword})
                  :retracted (g/compile-frame {:type :retracted})})
 
-(def indices (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
+(def frame-data-type-enum
+  "An enum byte used to identity a particular data-type. Can be used
+  as a header to signify the follow bytes as conforming to a
+  particular data-type."
+  (g/compile-frame (apply g/enum :byte (keys data-types))))
+
+(def frame-index-enum
+  "An enum byte used to identity a particular index."
+  (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
 
 (def frame-index-eat
   "The EAT index is used for providing rapid access to a value of an
@@ -33,7 +41,7 @@
   "The frame of the value stored inside of the EAT index."
   (g/compile-frame
    (g/header
-    (g/compile-frame (apply g/enum :byte (keys data-types)))
+    frame-data-type-enum
     data-types
     :type)))
 
@@ -58,7 +66,7 @@
   "The frame of the value stored inside of the AID index."
   (g/compile-frame
    (g/ordered-map
-    :attr/type (apply g/enum :byte (keys data-types))
+    :attr/type frame-data-type-enum
     :attr/ident frame-keyword)))
 
 (def frame-index-attribute-ident
@@ -79,7 +87,7 @@
   index and corresponding key structure."
   (g/compile-frame
    (g/header
-    indices
+    frame-index-enum
     {:eid frame-index-eid
      :eat frame-index-eat
      :avt frame-index-avt
@@ -89,12 +97,12 @@
 
 (def frame-index-key-prefix
   "Partial key frame, used for iterating within a particular index."
-  (g/ordered-map :index indices))
+  (g/ordered-map :index frame-index-enum))
 
 (def frame-index-eat-key-prefix
   "Partial key frame, used for iterating within all
   attributes/timestamps of a given entity."
-  (g/ordered-map :index indices :eid frame-id))
+  (g/ordered-map :index frame-index-enum :eid frame-id))
 
 (defn- encode [frame m]
   (->> m (gloss.io/encode frame) (bs/to-byte-array)))
