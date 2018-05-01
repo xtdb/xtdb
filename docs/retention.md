@@ -21,6 +21,8 @@ nor stolen.**
 
 + [Handling GDPR with Apache Kafka: How does a log
   forget?](https://www.confluent.io/blog/handling-gdpr-log-forget/)
++ [SoK: Cryptographically protected database
+  search](https://blog.acolyer.org/2017/06/26/sok-cryptographically-protected-database-search/)
 
 ### Event Sourcing
 

@@ -31,6 +31,9 @@ before executing the query.
   ArangoDB](https://www.arangodb.com/2018/02/nosql-performance-benchmark-2018-mongodb-postgresql-orientdb-neo4j-arangodb/)
 + [TinkerPop Provider
   Docimentation](http://tinkerpop.apache.org/docs/current/dev/provider/)
++ [Do We Need Specialized Graph Databases? Benchmarking Real-Time
+  Social Networking
+  Applications](https://event.cwi.nl/grades/2017/12-Apaci.pdf)
 + [LDBC: The graph & RDF benchmark
   reference](http://www.ldbcouncil.org/)
 
