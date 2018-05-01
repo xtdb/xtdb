@@ -4,9 +4,10 @@
             [crux.query :as q]
             [crux.core :refer [db]]))
 
-(defn bench [& {:keys [n batch-size ts] :or {n 1000
-                                             batch-size 10
-                                             ts (java.util.Date.)}}]
+(defn bench [& {:keys [n batch-size ts queries] :or {n 1000
+                                                     batch-size 10
+                                                     queries 100
+                                                     ts (java.util.Date.)}}]
   (start-system
    (fn []
 
@@ -17,6 +18,8 @@
 
      ;; Basic query
      (time
-      (doseq [i (range 100)]
+      (doseq [i (range queries)]
         (q/q (db kv) {:find ['e]
                       :where [['e :name "Ivan"]]}))))))
+
+;; Datomic: 100 queries against 1000 dataset = 40-50 millis
