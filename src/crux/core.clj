@@ -8,7 +8,8 @@
   (crux.rocksdb/map->CruxRocksKv {:db-name db-name}))
 
 (defn as-of [kv ts]
-  (kv/map->KvDatasource {:kv kv :ts ts}))
+  (let [attributes (kv/attributes kv)]
+    (kv/map->KvDatasource {:kv kv :ts ts :attributes attributes})))
 
 (defn db [kv]
   (as-of kv (java.util.Date.)))

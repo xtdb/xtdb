@@ -243,15 +243,15 @@
                  (assoc attr :attr/id (:aid k))])))
        (into {})))
 
-(defrecord KvDatasource [kv ts]
+(defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource
   (entities [this]
     (entity-ids kv))
 
   (entities-for-attribute-value [this a v]
-    (let [aid (attr-schema kv a)]
+    (let [aid (:attr/id (attributes a))]
       (entity-ids-for-value kv aid v ts)))
 
   (attr-val [this eid attr]
-    (let [aid (attr-schema kv attr)]
+    (let [aid (:attr/id (attributes attr))]
       (-get-at kv eid aid ts))))
