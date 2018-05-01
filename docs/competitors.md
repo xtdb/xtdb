@@ -115,14 +115,18 @@ Neptune is an Amazon service providing both TinkerPop and SPARQL
 interfaces to RDF (or property graph) data, from their
 [FAQs](https://aws.amazon.com/neptune/faqs/):
 
-+ Neptune is ACID compliant with immediate consistency.
-+ Amazon Neptune does not require you to create specific indices to
-  achieve good query performance, and it minimizes the need for such
-  second guessing of the database design.
-+ Amazon Neptune is a purpose-built, high-performance graph database
-  engine. Neptune efficiently stores and navigates graph data, and
-  uses a scale-up, in-memory optimized architecture to allow for fast
-  query evaluation over large graphs.
++ is ACID compliant with immediate consistency.
++ is designed to support graph applications that require high
+  throughput and low latency graph queries. With support for up to 15
+  read replicas, Amazon Neptune can support 100,000s of queries per
+  second
++ does not require you to create specific indices to achieve good
+  query performance, and it minimizes the need for such second
+  guessing of the database design.
++ is a purpose-built, high-performance graph database engine. Neptune
+  efficiently stores and navigates graph data, and uses a scale-up,
+  in-memory optimized architecture to allow for fast query evaluation
+  over large graphs.
 
 https://db-engines.com/en/system/Amazon+Neptune
 
