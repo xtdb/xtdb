@@ -17,6 +17,8 @@
 
 (def indices (g/compile-frame (g/enum :byte :eat :avt :eid :aid :ident)))
 
+(def reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
+
 (def frames {:key (g/compile-frame
                    (g/header
                     indices
@@ -24,18 +26,14 @@
                      :eat (g/compile-frame (g/ordered-map :index :eat
                                                           :eid :int32
                                                           :aid :int32
-                                                          :ts :int64)
-                                           #(update % :ts (partial - max-timestamp))
-                                           identity)
+                                                          :ts reverse-timestamp))
                      :avt (g/compile-frame (g/ordered-map :index :avt
                                                           :aid :int32
                                                           :v (g/compile-frame (g/finite-block 16)
                                                                               (comp md5 to-byte-array)
                                                                               identity)
-                                                          :ts :int64
-                                                          :eid :int32)
-                                           #(update % :ts (partial - max-timestamp))
-                                           identity)
+                                                          :ts reverse-timestamp
+                                                          :eid :int32))
                      :aid (g/compile-frame {:index :aid
                                             :aid :uint32})
                      :ident (g/compile-frame {:index :ident
