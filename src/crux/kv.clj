@@ -232,6 +232,17 @@
        (map :eid)
        (into #{})))
 
+(defn attributes
+  "Sequence of all attributes in the DB."
+  [db]
+  (->> (kv-store/seek-and-iterate-bounded db (encode frame-index-key-prefix {:index :aid}))
+       (map (fn [[k v]]
+              (let [attr (decode frame-value-aid v)
+                    k (decode frame-index-key k)]
+                [(:attr/ident attr)
+                 (assoc attr :attr/id (:aid k))])))
+       (into {})))
+
 (defrecord KvDatasource [kv ts]
   crux.db/Datasource
   (entities [this]

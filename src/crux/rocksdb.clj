@@ -1,7 +1,8 @@
 (ns crux.rocksdb
   (:require [byte-streams :as bs]
             [crux.kv-store :refer :all])
-  (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
+  (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]
+           [java.util Arrays]))
 
 (defn- -get [^RocksDB db k]
   (let [i (.newIterator db)]
@@ -12,12 +13,12 @@
       (finally
         (.close i)))))
 
-(defn rocks-iterator->seq [^RocksIterator i]
+(defn rocks-iterator->seq [^RocksIterator i & [pred]]
   (lazy-seq
-   (when (and (.isValid i))
+   (when (and (.isValid i) (or (not pred) (pred (.key i))))
      (cons (conj [(.key i) (.value i)])
            (do (.next i)
-               (rocks-iterator->seq i))))))
+               (rocks-iterator->seq i pred))))))
 
 (defn- -seek-and-iterate
   "TODO, improve by getting prefix-same-as-start to work, so we don't
@@ -28,6 +29,17 @@
     (try
       (.seek i k)
       (doall (rocks-iterator->seq i))
+      (finally
+        (.close i)))))
+
+(defn- -seek-and-iterate-bounded
+  [^RocksDB db #^bytes k]
+  (let [read-options (doto (ReadOptions.) (.setPrefixSameAsStart true))
+        i ^RocksIterator (.newIterator db read-options)
+        array-length (alength k)]
+    (try
+      (.seek i k)
+      (doall (rocks-iterator->seq i #(Arrays/equals k (Arrays/copyOfRange #^bytes % 0 array-length))))
       (finally
         (.close i)))))
 
@@ -49,6 +61,9 @@
 
   (seek-and-iterate [{:keys [^RocksDB db]} k upper-bound]
     (-seek-and-iterate db k upper-bound))
+
+  (seek-and-iterate-bounded [{:keys [^RocksDB db]} k]
+    (-seek-and-iterate-bounded db k))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))

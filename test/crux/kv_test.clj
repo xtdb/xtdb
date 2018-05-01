@@ -96,3 +96,9 @@
   (cr/-put kv [[test-eid :foo nil]])
   (t/is (not (cr/-get-at kv test-eid :foo)))
   (t/is (= "foo1" (cr/-get-at kv test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
+
+(t/deftest test-get-attributes
+  (cr/transact-schema! kv {:attr/ident :foo/new-ident2
+                           :attr/type :long})
+  (t/is (= #{:age :foo :last-name :name :salary :sex :tar :foo/new-ident2}
+           (set (keys (cr/attributes kv))))))
