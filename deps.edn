@@ -2,12 +2,12 @@
  :deps
  {com.taoensso/nippy {:mvn/version "2.13.0"}
   org.rocksdb/rocksdbjni {:mvn/version "5.11.3"}
-
-  reloaded.repl {:mvn/version "0.2.4"}
-  org.clojure/clojure {:mvn/version "1.9.0-alpha17"}}
+  gloss {:mvn/version "0.2.6"}
+  org.clojure/clojure {:mvn/version "1.9.0"}
+  reloaded.repl {:mvn/version "0.2.4"}}
  :aliases
  {:dev
-  {:extra-paths ["dev" "test"]
+  {:extra-paths ["dev" "test" "bench"]
    :extra-deps
    {integrant/repl {:mvn/version "0.3.1"}
     cider/cider-nrepl {:mvn/version "0.16.0"}
