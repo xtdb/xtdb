@@ -105,7 +105,7 @@
   (g/ordered-map :index frame-index-enum :eid frame-id))
 
 (defn- encode [frame m]
-  (->> m (gloss.io/encode frame) (bs/to-byte-array)))
+  (->> m (gloss.io/encode frame) gloss.io/contiguous .array))
 
 (def o (Object.))
 
