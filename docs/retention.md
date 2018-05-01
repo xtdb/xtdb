@@ -53,7 +53,7 @@ This meta-data would likely be part of the schema itself, and stored
 together with either triplets or documents. Not all data might
 necessarily need this fine grained level of provenance.
 
-### Immutable Log Space
+### Log Compaction
 
 There are other (at times related) reasons why one would want to
 delete or compact the log in various ways. Maybe no data older than a
@@ -73,7 +73,7 @@ it's only in the realised indexes that one can get the correct
 bitemporal visibility needed to compact the data as of a certain point
 in time.
 
-### Immutable Log Replay
+### Log Replay
 
 If downstream systems, especially Crux own indexes, depend on a
 immutable log, replaying this from start might eventually become
