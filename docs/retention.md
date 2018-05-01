@@ -55,6 +55,9 @@ This meta-data would likely be part of the schema itself, and stored
 together with either triplets or documents. Not all data might
 necessarily need this fine grained level of provenance.
 
++ [Ground: A Data Context
+  Service](http://cidrdb.org/cidr2017/papers/p111-hellerstein-cidr17.pdf)
+
 ### Log Compaction
 
 There are other (at times related) reasons why one would want to
