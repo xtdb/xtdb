@@ -70,10 +70,27 @@ https://db-engines.com/en/system/Datomic
 
 _A durable datalog implementation adaptable for distribution._
 
+Datahike is a fork of
+[datascript](https://github.com/tonsky/datascript), adding persistence
+via
+[hitchhiker-tree](https://github.com/datacrypt-project/hitchhiker-tree):
+
+    datahike runs locally on one peer. A transactor might be provided in
+    the future and can also be realized through any linearizing write
+    mechanism, e.g. Apache Kafka.
+
 #### [Mentat](https://github.com/mozilla/mentat)
 
 _Project Mentat is a persistent, embedded knowledge base. It draws
 heavily on DataScript and Datomic._
+
+Mentat is a Mozilla project written in Rust and supports an EDN
+dialect of Datalog and data model similar to Datomic's. It's built on
+top of SQLite:
+
+    Mentat aims to offer many of the advantages of SQLite — single-file
+    use, embeddability, and good performance — while building a more
+    relaxed, reusable, and expressive data model on top.
 
 #### [LogicBlox](http://www.logicblox.com/)
 
@@ -81,7 +98,7 @@ _LogicBlox is a smart database that combines transactions, analytics,
 planning and business logic, powering a new class of smart enterprise
 applications._
 
-LogicBlox is a commercial database and rule engine, which has its own
+    LogicBlox is a commercial database and rule engine, which has its own
 Datalog dialect called LogiQL, which see the [Design and
 Implementation of the LogicBlox
 System](http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf).
@@ -94,6 +111,19 @@ _Amazon Neptune is a fast, reliable, fully-managed graph database
 service that makes it easy to build and run applications that work
 with highly connected datasets._
 
+Neptune is an Amazon service providing both TinkerPop and SPARQL
+interfaces to RDF (or property graph) data, from their
+[FAQs](https://aws.amazon.com/neptune/faqs/):
+
++ Neptune is ACID compliant with immediate consistency.
++ Amazon Neptune does not require you to create specific indices to
+  achieve good query performance, and it minimizes the need for such
+  second guessing of the database design.
++ Amazon Neptune is a purpose-built, high-performance graph database
+  engine. Neptune efficiently stores and navigates graph data, and
+  uses a scale-up, in-memory optimized architecture to allow for fast
+  query evaluation over large graphs.
+
 https://db-engines.com/en/system/Amazon+Neptune
 
 #### [Stardog](https://www.stardog.com/)
@@ -102,7 +132,7 @@ _Stardog makes it fast and easy to turn enterprise data into
 knowledge._
 
 Stardog is a commercial RDF store, which supports SPARQL and has a
-GraphQL front-end.
+GraphQL front-end. Also supports TinkerPop.
 
 https://db-engines.com/en/system/Stardog
 
@@ -112,7 +142,8 @@ _A free and open source Java framework for building Semantic Web and
 Linked Data applications._
 
 While Jena itself is a framework, it also provides a SPARQL server
-called [Fuseki](https://jena.apache.org/documentation/fuseki2/).
+called [Fuseki](https://jena.apache.org/documentation/fuseki2/). Also
+supports OWL reasoning.
 
 ### Streaming
 
