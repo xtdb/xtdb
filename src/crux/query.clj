@@ -29,8 +29,8 @@
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
-(defn- value-matches? [[term-e term-a term-v] result]
-  (when-let [v (-> result (get term-e) (crux.db/attr-val term-a))]
+(defn- value-matches? [db [term-e term-a term-v] result]
+  (when-let [v (crux.db/attr-val db (get result term-e) term-a)]
     (or (not term-v)
         (and (symbol? term-v) (= (result term-v) v))
         (= term-v v))))
@@ -59,7 +59,7 @@
   (bind-key [this] s)
   (bind [this db results]
     (->> results
-         (map #(assoc % s (crux.db/attr-val (get % e) a))))))
+         (map #(assoc % s (crux.db/attr-val db (get % e) a))))))
 
 (defn- fact->entity-binding [[e a v]]
   (EntityBinding. e a v))
@@ -94,7 +94,7 @@
       :fact
       [(remove nil? [(fact->entity-binding t)
                      (fact->var-binding t)])
-       (fn [_ result] (value-matches? t result))]
+       (fn [db result] (value-matches? db t result))]
 
       :and
       (let [sub-plan (query-terms->plan t)]
@@ -151,8 +151,7 @@
   plan)
 
 (defn- find-projection [find result]
-  (map (fn [k] (when-let [r (get result k)]
-                 (if (satisfies? crux.db/Entity r) (crux.db/raw-val r) r))) find))
+  (map (partial get result) find))
 
 (defn q
   [db {:keys [find where] :as q}]

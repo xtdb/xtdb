@@ -232,19 +232,15 @@
        (map :eid)
        (into #{})))
 
-(defrecord KvEntity [eid kv ts]
-  crux.db/Entity
-  (attr-val [{:keys [eid]} attr]
-    (let [aid (attr-schema kv attr)]
-      (-get-at kv eid aid ts)))
-  (raw-val [{:keys [eid]}]
-    eid))
-
 (defrecord KvDatasource [kv ts]
   crux.db/Datasource
   (entities [this]
-    (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids kv)))
+    (entity-ids kv))
 
   (entities-for-attribute-value [this a v]
     (let [aid (attr-schema kv a)]
-      (map (fn [eid] (KvEntity. eid kv ts)) (entity-ids-for-value kv aid v ts)))))
+      (entity-ids-for-value kv aid v ts)))
+
+  (attr-val [this eid attr]
+    (let [aid (attr-schema kv attr)]
+      (-get-at kv eid aid ts))))
