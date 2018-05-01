@@ -216,9 +216,6 @@
        (map :eid)
        (into #{})))
 
-;; can't do this.., unless you have a set of ids in there..
-;; or somehow put the eid in the key
-
 (defn- entity-ids-for-value [db aid v ^java.util.Date ts]
   (->> (kv-store/seek-and-iterate db
                                   (encode frame-index-key {:index :avt
