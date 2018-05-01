@@ -29,6 +29,14 @@
                                   :aid frame-id
                                   :ts frame-reverse-timestamp)))
 
+(def frame-value-eat
+  "The frame of the value stored inside of the EAT index."
+  (g/compile-frame
+   (g/header
+    (g/compile-frame (apply g/enum :byte (keys data-types)))
+    data-types
+    :type)))
+
 (def frame-index-avt
   "The AVT index is used to find entities that have an attribute/value
   at a particular point in time, used for query purposes. This index
@@ -40,10 +48,18 @@
                                   :eid frame-id)))
 
 (def frame-index-aid
-  "The AID index is used to provide a mapping from attribute ID to the
-  attribute keyword ident."
+  "The AID index is used to provide a mapping from attribute ID to
+  information about the attribute, including the attribute's keyword
+  ident."
   (g/compile-frame {:index :aid
                     :aid frame-id}))
+
+(def frame-value-aid
+  "The frame of the value stored inside of the AID index."
+  (g/compile-frame
+   (g/ordered-map
+    :attr/type (apply g/enum :byte (keys data-types))
+    :attr/ident frame-keyword)))
 
 (def frame-index-attribute-ident
   "The attribute-ident index is used to provide a mapping from
@@ -57,39 +73,40 @@
   value."
   (g/compile-frame {:index :eat}))
 
-(def frames {:key (g/compile-frame
-                   (g/header
-                    indices
-                    {:eid frame-index-eid
-                     :eat frame-index-eat
-                     :avt frame-index-avt
-                     :aid frame-index-aid
-                     :ident frame-index-attribute-ident}
-                    :index))
-             :key/index-prefix (g/ordered-map :index indices)
-             :key/eat-prefix (g/ordered-map :index indices :eid frame-id)
-             :val/eat (g/compile-frame
-                       (g/header
-                        (g/compile-frame (apply g/enum :byte (keys data-types)))
-                        data-types
-                        :type))
-             :val/attr (g/compile-frame
-                        (g/ordered-map
-                         :attr/type (apply g/enum :byte (keys data-types))
-                         :attr/ident frame-keyword))
-             :frame-id frame-id})
+(def frame-index-key
+  "Frame to use for building keys, that can access any value across
+  all the indicies. The first byte is a header that identifies the
+  index and corresponding key structure."
+  (g/compile-frame
+   (g/header
+    indices
+    {:eid frame-index-eid
+     :eat frame-index-eat
+     :avt frame-index-avt
+     :aid frame-index-aid
+     :ident frame-index-attribute-ident}
+    :index)))
 
-(defn- encode [f m]
-  (->> m (gloss.io/encode (frames f)) (bs/to-byte-array)))
+(def frame-index-key-prefix
+  "Partial key frame, used for iterating within a particular index."
+  (g/ordered-map :index indices))
 
-(defn- decode [f v]
-  (gloss.io/decode (get frames f) v))
+(def frame-index-eat-key-prefix
+  "Partial key frame, used for iterating within all
+  attributes/timestamps of a given entity."
+  (g/ordered-map :index indices :eid frame-id))
+
+(defn- encode [frame m]
+  (->> m (gloss.io/encode frame) (bs/to-byte-array)))
+
+(defn- decode [frame v]
+  (gloss.io/decode frame v))
 
 (def o (Object.))
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
-    (let [key-entity-id (encode :key {:index :eid})]
+    (let [key-entity-id (encode frame-index-key {:index :eid})]
       (kv-store/merge! db key-entity-id (long->bytes 1))
       (bytes->long (kv-store/seek db key-entity-id)))))
 
@@ -100,24 +117,24 @@
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (kv-store/store db
-                    (encode :key {:index :ident :ident ident})
-                    (encode :frame-id aid))
+                    (encode frame-index-key {:index :ident :ident ident})
+                    (encode frame-id aid))
     ;; to go from aid -> k
-    (let [k (encode :key {:index :aid :aid aid})]
-      (kv-store/store db k (encode :val/attr {:attr/type type
-                                              :attr/ident ident})))
+    (let [k (encode frame-index-key {:index :aid :aid aid})]
+      (kv-store/store db k (encode frame-value-aid {:attr/type type
+                                                    :attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
   (or (some->> {:index :ident :ident ident}
-               (encode :key)
+               (encode frame-index-key)
                (kv-store/seek db)
-               (decode :frame-id))
+               (decode frame-id))
       (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
 
 (defn attr-aid->schema [db aid]
-  (if-let [v (kv-store/seek db (encode :key {:index :aid :aid aid}))]
-    (decode :val/attr v)
+  (if-let [v (kv-store/seek db (encode frame-index-key {:index :aid :aid aid}))]
+    (decode frame-value-aid v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn- entity->txes [tx]
@@ -139,17 +156,17 @@
              eid (or (and (pos? eid) eid)
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))]
-         (kv-store/store db (encode :key {:index :eat
-                                          :eid eid
-                                          :aid aid
-                                          :ts (.getTime ts)})
-                         (encode :val/eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))
+         (kv-store/store db (encode frame-index-key {:index :eat
+                                                     :eid eid
+                                                     :aid aid
+                                                     :ts (.getTime ts)})
+                         (encode frame-value-eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))
          (when v
-           (kv-store/store db (encode :key {:index :avt
-                                            :aid aid
-                                            :v v
-                                            :ts (.getTime ts)
-                                            :eid eid})
+           (kv-store/store db (encode frame-index-key {:index :avt
+                                                       :aid aid
+                                                       :v v
+                                                       :ts (.getTime ts)
+                                                       :eid eid})
                            (long->bytes eid)))))
      @tmp-ids->ids)))
 
@@ -158,9 +175,9 @@
   ([db eid k ^java.util.Date ts]
    (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
      (some->> (kv-store/seek-and-iterate db
-                                   (encode :key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
-                                   (encode :key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
-              first second (decode :val/eat) :v))))
+                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
+                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
+              first second (decode frame-value-eat) :v))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
@@ -169,17 +186,17 @@
   ([db eid ^java.util.Date at-ts]
    (some->
     (reduce (fn [m [k v]]
-              (let [{:keys [eid aid ts]} (decode :key k)
+              (let [{:keys [eid aid ts]} (decode frame-index-key k)
                     attr-schema (attr-aid->schema db aid)
                     ident (:attr/ident attr-schema)]
                 (if (or (ident m)
                         (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
                   m
-                  (assoc m ident (:v (decode :val/eat v))))))
+                  (assoc m ident (:v (decode frame-value-eat v))))))
             nil
             (kv-store/seek-and-iterate db
-                                 (encode :key/eat-prefix {:index :eat :eid eid})
-                                 (encode :key/eat-prefix {:index :eat :eid (inc eid)})))
+                                 (encode frame-index-eat-key-prefix {:index :eat :eid eid})
+                                 (encode frame-index-eat-key-prefix {:index :eat :eid (inc eid)})))
     (assoc ::id eid))))
 
 (defn- entity-ids
@@ -188,9 +205,9 @@
   index that could be lazy."
   [db]
   (->> (kv-store/seek-and-iterate db
-                                  (encode :key/index-prefix {:index :eat})
-                                  (encode :key/index-prefix {:index :avt}))
-       (map (fn [[k _]] (decode :key k)))
+                                  (encode frame-index-key-prefix {:index :eat})
+                                  (encode frame-index-key-prefix {:index :avt}))
+       (map (fn [[k _]] (decode frame-index-key k)))
        (map :eid)
        (into #{})))
 
@@ -199,17 +216,17 @@
 
 (defn- entity-ids-for-value [db aid v ^java.util.Date ts]
   (->> (kv-store/seek-and-iterate db
-                                  (encode :key {:index :avt
-                                                :aid aid
-                                                :v v
-                                                :ts (.getTime ts)
-                                                :eid 0})
-                                  (encode :key {:index :avt
-                                                :aid aid
-                                                :v v
-                                                :ts (.getTime (java.util.Date. 0 0 0))
-                                                :eid 0}))
-       (map (fn [[k _]] (decode :key k)))
+                                  (encode frame-index-key {:index :avt
+                                                           :aid aid
+                                                           :v v
+                                                           :ts (.getTime ts)
+                                                           :eid 0})
+                                  (encode frame-index-key {:index :avt
+                                                           :aid aid
+                                                           :v v
+                                                           :ts (.getTime (java.util.Date. 0 0 0))
+                                                           :eid 0}))
+       (map (fn [[k _]] (decode frame-index-key k)))
        (map :eid)
        (into #{})))
 
