@@ -228,8 +228,7 @@
                                                            :v v
                                                            :ts (.getTime (java.util.Date. 0 0 0))
                                                            :eid 0}))
-       (map (fn [[k _]] (decode frame-index-key k)))
-       (map :eid)
+       (map (comp bytes->long second))
        (into #{})))
 
 (defn attributes
