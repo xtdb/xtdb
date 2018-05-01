@@ -4,7 +4,7 @@
             crux.db
             [crux.kv-store :as kv-store]
             [gloss.core :as g]
-            gloss.io))
+            [gloss.io :refer [decode]]))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
 (def frame-reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
@@ -98,9 +98,6 @@
 
 (defn- encode [frame m]
   (->> m (gloss.io/encode frame) (bs/to-byte-array)))
-
-(defn- decode [frame v]
-  (gloss.io/decode frame v))
 
 (def o (Object.))
 
