@@ -135,8 +135,8 @@ _Amazon Neptune is a fast, reliable, fully-managed graph database
 service that makes it easy to build and run applications that work
 with highly connected datasets._
 
-Neptune is an Amazon service providing both TinkerPop and SPARQL
-interfaces to RDF (or property graph) data, from their
+Neptune is an Amazon service providing both TinkerPop for property
+graph and SPARQL for RDF data, from their
 [FAQs](https://aws.amazon.com/neptune/faqs/):
 
 + is ACID compliant with immediate consistency.
@@ -151,6 +151,8 @@ interfaces to RDF (or property graph) data, from their
   efficiently stores and navigates graph data, and uses a scale-up,
   in-memory optimized architecture to allow for fast query evaluation
   over large graphs.
+
+Neptune is currently in limited preview, requiring sign up.
 
 https://db-engines.com/en/system/Amazon+Neptune
 
