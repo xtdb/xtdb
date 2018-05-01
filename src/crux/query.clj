@@ -138,16 +138,17 @@
                  (apply pred-fn args)))]))))
 
 (defn- term-symbols [terms]
-  (->> (query-terms->plan terms)
+  (->> terms
        (mapcat first)
        (map bind-key)
        (into #{})))
 
-(defn- validate-query [{:keys [find where]}]
-  (let [variables (term-symbols where)]
+(defn- validate-query [find plan]
+  (let [variables (term-symbols plan)]
     (doseq [binding find]
       (when-not (variables binding)
-        (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding)))))))
+        (throw (IllegalArgumentException. (str "Find clause references unbound variable: " binding))))))
+  plan)
 
 (defn- find-projection [find result]
   (map (fn [k] (when-let [r (get result k)]
@@ -156,11 +157,11 @@
 (defn q
   [db {:keys [find where] :as q}]
   (let [{:keys [find where] :as q} (s/conform ::query q)]
-    (validate-query q)
     (when (= :clojure.spec.alpha/invalid q)
       (throw (ex-info "Invalid input" (s/explain-data ::query q))))
     (->> where
          (query-terms->plan)
+         (validate-query find)
          (query-plan->results db)
          (map (partial find-projection find))
          (into #{}))))
