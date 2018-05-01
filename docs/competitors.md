@@ -9,6 +9,7 @@ queries.
 + [datahike](https://github.com/replikativ/datahike)
 + [LogicBlox](http://www.logicblox.com/)
 + [Dgraph](https://github.com/dgraph-io/dgraph)
++ [Amazon Neptune](https://aws.amazon.com/neptune/)
 + [Stardog](https://www.stardog.com/)
 + [Jena](https://jena.apache.org/)
 + [Kafka Streams](https://kafka.apache.org/documentation/streams/)
