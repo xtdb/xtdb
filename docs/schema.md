@@ -95,6 +95,8 @@ itself. See [transactions](transactions.md) for more about this.
 
 + [Coordination Avoidance in Database
   Systems](https://arxiv.org/abs/1402.2237)
++ [Anna: A KVS for any
+  scale](https://blog.acolyer.org/2018/03/27/anna-a-kvs-for-any-scale/)
 
 ### Additive Schema
 
