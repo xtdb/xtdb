@@ -26,7 +26,7 @@ _DataStax Enterprise: he always-on data platform, powered by the best
 distribution of Apache Cassandra._
 
 Built on top of DSE is [DataStax Enterprise
-Graph](https://docs.datastax.com/en/dse/6.0/dse-admin/datastax_enterprise/graph/dseGraphAbout.html)
+Graph](https://docs.datastax.com/en/dse/6.0/dse-dev/datastax_enterprise/graph/graphTOC.html)
 which supports [Gremlin](http://tinkerpop.apache.org/gremlin.html) and
 [TinkerPop](http://tinkerpop.apache.org):
 
@@ -60,8 +60,9 @@ and rich queries._
 
 It's worth noting that the current Datomic homepage focusing on
 auditing aspects of the time-line, and not the business time:
-"Chronological: Because Datomic stores all data by default, you can
-audit how and when changes were made."
+
+    Chronological: Because Datomic stores all data by default, you can
+    audit how and when changes were made.
 
 https://db-engines.com/en/system/Datomic
 
@@ -110,8 +111,8 @@ https://db-engines.com/en/system/Stardog
 _A free and open source Java framework for building Semantic Web and
 Linked Data applications._
 
-Has a SPARQL server called
-[Fuseki](https://jena.apache.org/documentation/fuseki2/).
+While Jena itself is a framework, it also provides a SPARQL server
+called [Fuseki](https://jena.apache.org/documentation/fuseki2/).
 
 ### Streaming
 
