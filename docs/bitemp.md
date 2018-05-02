@@ -47,6 +47,8 @@ data.**
   PostgreSQL](https://wiki.postgresql.org/images/6/64/Fosdem20150130PostgresqlTemporal.pdf)
 + [Sign of the Times - Managing inhomogeneously bitemporal data with
   Datomic and Clojure](http://blog.podsnap.com/bitemp.html)
++ [Time-Based Versioned
+  Graphs](https://iansrobinson.com/2014/05/13/time-based-versioned-graphs/)
 
 ### Business Time
 
