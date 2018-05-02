@@ -89,6 +89,21 @@ it's only in the realised indexes that one can get the correct
 bitemporal visibility needed to compact the data as of a certain point
 in time.
 
+One approach to retention of the log is to rely on the underlying
+engine, say Kafka, deal with retention and compaction, but at the same
+time ensure that Crux brings still live data forward using a
+bitemporal update, effectively writing it again at the end of the
+log. This way various visibility strategies can be implemented,
+relying on Crux's own bitemp for correctness. The data would need to
+be brought forward in a timely manner compared to the retention times,
+so it doesn't risk being deleted for good.
+
+An alternative is to not have a log at all, but a master-master system
+with mutable past and directly control the retention in Crux, see the
+CRDT section in [schema](schema.md). This approach would lead to a
+strongly, eventually consistent time-line, but not allow for
+repeatable reads.
+
 ### Log Replay
 
 If downstream systems, especially Crux own indexes, depend on a
