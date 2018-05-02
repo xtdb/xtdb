@@ -65,6 +65,8 @@ different ways of reasoning about entities.**
 
 + [RStore: A Distributed Multi-version Document
   Store](https://arxiv.org/abs/1802.07693)
++ [RDF Triple Stores vs. Labeled Property Graphs: What’s the
+  Difference?](https://neo4j.com/blog/rdf-triple-store-vs-labeled-property-graph-difference/)
 
 ### Scalar Types and Indexing
 
