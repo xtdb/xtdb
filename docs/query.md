@@ -143,6 +143,8 @@ language. GraphQL requires extensions to do ad-hoc queries.**
 + [Gremlinator: An effort towards converting SPARQL queries to Gremlin
   Graph Pattern Matching
   Traversals](https://github.com/LITMUS-Benchmark-Suite/sparql-to-gremlin)
++ [neo4j-graphql-js (GraphQL to Cypher query execution
+  layer)](https://github.com/neo4j-graphql/neo4j-graphql-js)
 
 ### Datascript Compatibility
 
