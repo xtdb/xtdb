@@ -70,6 +70,14 @@ and [Dgraph Design Concepts](https://docs.dgraph.io/design-concepts/).
 
 https://db-engines.com/en/system/Dgraph
 
+#### [Cayley](https://github.com/cayleygraph/cayley)
+
+_Cayley is an open-source graph inspired by the graph database behind
+Freebase and Google's Knowledge Graph._
+
+Cayley is written in Go. It has GraphQL and Gremlin inspired query
+languages. Some RDF support.
+
 ### Datalog
 
 #### [Datomic](https://www.datomic.com/)
