@@ -19,7 +19,8 @@ clustering"](https://neo4j.com/docs/operations-manual/current/clustering/causal-
 which contains of a core set of servers using Raft for transactions,
 and a potentially larger set of read replicas.
 
-Neo4J is written in Java.
+Neo4J is written in Java. They are aiming to make an
+[openCypher](https://www.opencypher.org/) standard.
 
 https://db-engines.com/en/system/Neo4j
 
@@ -37,7 +38,11 @@ which supports [Gremlin](http://tinkerpop.apache.org/gremlin.html) and
     power customer facing applications.
 
 DataStax Enterprise is built around Apache Cassandra which is written
-in Java.
+in Java. TinkerPop and Cassandra are both Apache projects, and
+DataStax are one of the drivers behind TinkerPop and Gremlin, see
+[this
+post](https://www.datastax.com/2017/12/another-graph-database-announcement-another-shout-out-for-datastax-funded-innovation).
+
 
 https://db-engines.com/en/system/Datastax+Enterprise
 
