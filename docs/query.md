@@ -31,7 +31,7 @@ before executing the query.
   ArangoDB](https://www.arangodb.com/2018/02/nosql-performance-benchmark-2018-mongodb-postgresql-orientdb-neo4j-arangodb/)
 + [TinkerPop Provider
   Docimentation](http://tinkerpop.apache.org/docs/current/dev/provider/)
-+ [blueprints-datomic-graph](https://github.com/datablend/blueprints/tree/master/blueprints-datomic-graph)
++ [Fluxgraph (tinkerpop 2 on Datomic)](https://github.com/datablend/fluxgraph)
 + [Do We Need Specialized Graph Databases? Benchmarking Real-Time
   Social Networking
   Applications](https://event.cwi.nl/grades/2017/12-Apaci.pdf)
