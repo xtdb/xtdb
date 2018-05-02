@@ -32,3 +32,15 @@
 
                           :else
                           v)))
+
+(defn bytes-subset? [#^bytes ba1 #^bytes ba2]
+  (let [l (alength ba1)
+        l2 (alength ba2)]
+    (if (> l2 l)
+      false
+      (loop [n 0]
+        (if (not= (aget ba1 n) (aget ba2 n))
+          false
+          (if (< (inc n) l2)
+            (recur (inc n))
+            true))))))
