@@ -5,7 +5,7 @@
 triplet is made up of Subject Predicate Object, in Datomic the same
 thing is called Entity Attribute Value.**
 
-### Triplets vs Documents
+### Triplets, Documents and Property Graphs
 
 Crux will deal with entities as either a triplets or documents. The
 identifier in the subject position in the triplet represents its
@@ -28,6 +28,34 @@ The triplets will further need at least bitemporal query support, see
 [bitemp](bitemp.md) and the ability to build various forms of
 retention and provenance models on top of the raw data, see
 [retention](retention.md).
+
+This idea of documents above is close to the main other graph model,
+apart from triplets like in RDF, Property Graphs, see the relevant
+documentation for
+[TinkerPop](http://tinkerpop.apache.org/docs/current/reference/#intro)
+and
+[Neo4J](https://neo4j.com/developer/graph-database/#property-graph),
+this explanation is taken from the latter:
+
+    *Nodes* are the entities in the graph. They can hold any number of
+    attributes (key-value-pairs) called properties. Nodes can be
+    tagged with labels representing their different roles in your
+    domain.
+
+    *Relationships* provide directed, named, semantically relevant
+    connections between two node-entities (eg Employee WORKS_FOR
+    Company). A relationship always has a direction, a type, a start
+    node, and an end node. Like nodes, relationships can also have
+    properties.
+
+Nodes are also referred to as vertexes, and relationships as edges.
+
+As nodes are entities which can have any number of properties, they
+can be seen as documents, while relationships are similar to indexed
+properties linking documents together. When using triplets
+relationships are predicates (attributes in Datomic), which cannot
+have properties of their own (per instance). This must be modelled by
+introducing an indirect entity.
 
 **Triplets are the most expressive model, but documents easier to
 reason about for the user.**
