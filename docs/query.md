@@ -90,6 +90,10 @@ while running, which would be a post MVP feature.
   Graph](https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf)
 + [An overview of Neo4j
   Internals](https://www.slideshare.net/thobe/an-overview-of-neo4j-internals)
++ [Index Free Adjacency or Hybrid Indexes for Graph
+  Databases](https://www.arangodb.com/2016/04/index-free-adjacency-hybrid-indexes-graph-databases/)
++ [Inside DSE Graph: What Powers the Best Enterprise Graph
+  DB](https://www.datastax.com/2016/08/inside-dse-graph-what-powers-the-best-enterprise-graph-database)
 
 ### Retention
 
