@@ -88,6 +88,8 @@ while running, which would be a post MVP feature.
   Data](https://people.eecs.berkeley.edu/~anuragk/succinct-techreport.pdf)
 + [TAO: Facebook’s Distributed Data Store for the Social
   Graph](https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf)
++ [An overview of Neo4j
+  Internals](https://www.slideshare.net/thobe/an-overview-of-neo4j-internals)
 
 ### Retention
 
