@@ -48,7 +48,9 @@ this explanation is taken from the latter:
     node, and an end node. Like nodes, relationships can also have
     properties.
 
-Nodes are also referred to as vertexes, and relationships as edges.
+Nodes are also referred to as vertexes, and relationships as
+edges. Labels can be seen as the (multiple) classes an entity is an
+instance of.
 
 As nodes are entities which can have any number of properties, they
 can be seen as documents, while relationships are similar to indexed
