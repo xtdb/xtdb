@@ -21,6 +21,10 @@ nor stolen.**
 
 + [Handling GDPR with Apache Kafka: How does a log
   forget?](https://www.confluent.io/blog/handling-gdpr-log-forget/)
++ [DataStax and the New
+  GDPR](https://www.datastax.com/2018/04/datastax-and-the-new-gdpr)
++ [GDPR Compliance: The Challenges and Problems with Personal
+  Data](https://neo4j.com/blog/gdpr-compliance-challenges-personal-data/)
 + [SoK: Cryptographically protected database
   search](https://blog.acolyer.org/2017/06/26/sok-cryptographically-protected-database-search/)
 
