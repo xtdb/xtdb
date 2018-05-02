@@ -149,6 +149,8 @@ language. GraphQL requires extensions to do ad-hoc queries.**
   Traversals](https://github.com/LITMUS-Benchmark-Suite/sparql-to-gremlin)
 + [neo4j-graphql-js (GraphQL to Cypher query execution
   layer)](https://github.com/neo4j-graphql/neo4j-graphql-js)
++ [Ogre is a Clojure Gremlin Language
+  Variant](https://github.com/clojurewerkz/ogre)
 
 ### Datascript Compatibility
 
