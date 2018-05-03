@@ -6,20 +6,28 @@
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
 
+(defn- encode-bytes [^ByteBuffer bb #^bytes bs]
+  (.put bb bs))
+
+(defn encode-string [^ByteBuffer bb ^String s]
+  (.put bb #^bytes (.getBytes s)))
+
+(defn decode-string [^ByteBuffer bb]
+  (String. (.array (.get bb (byte-array (.remaining bb))))))
+
 (def binary-types {:int32 [4 '.putInt '.getInt nil nil]
                    :id [4 '.putInt '.getInt nil nil]
                    :reverse-ts [8 '.putLong '.getLong (partial - max-timestamp) identity]
+                   :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string nil nil]
 ;;                   :keyword [4 '.putInt '.getInt nil nil]
-                   :md5 [16 '.put
+                   :md5 [16 encode-bytes
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))
-                         (fn [x] (-> x to-byte-array md5)) identity]})
-
-;;(g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword)
+                         (fn [x] (-> x to-byte-array md5)) nil]})
 
 (defprotocol Codec
   (encode [this v])
   (decode [this v])
-  (length [this]))
+  (length [this v]))
 
 (defmacro defenum [name & vals]
   `(def ~name [~(into {} (map-indexed (fn [i v] [v (byte i)]) vals))
@@ -46,34 +54,37 @@
         `(~dec (~f ~'b))
         `(~f ~'b)))))
 
+(defn frame-length-fn [frame]
+  (let [sizes (->> frame
+                   (partition 2)
+                   (map (fn [[k f]]
+                          (if (vector? f)
+                            1
+                            (let [size-or-fn (-> f binary-types first)]
+                              (if (fn? size-or-fn)
+                                (fn [v] (size-or-fn (get v k)))
+                                size-or-fn))))))]
+    (fn [v]
+      (reduce + (map (fn [size-or-fn] (if (fn? size-or-fn)
+                                        (size-or-fn v) size-or-fn)) sizes)))))
+
 (defmacro defframe [name & args]
-  (let [pairs# (partition 2 args)
-        size# (->> pairs#
-                   (map second)
-                   (map (fn [f] (cond (satisfies? Codec f)
-                                      (length f)
-
-                                      (symbol? f) ;; enum
-                                      1
-
-                                      :else
-                                      (-> f binary-types first))))
-                   (reduce +))]
-    `(def ~name
+  `(let [length-fn# (frame-length-fn ~(vec args))]
+     (def ~name
        (reify Codec
-         (encode [_ ~'v]
-           (let [~'b (ByteBuffer/allocate ~size#)]
-             ~@(->> pairs#
+         (encode [~'this ~'v]
+           (let [~'b (ByteBuffer/allocate (length-fn# ~'v))]
+             ~@(->> args
+                    (partition 2)
                     (map (fn [[k# t#]]
                            (encode-form k# t#))))))
          (decode [_ #^bytes ~'v]
            (let [~'b (ByteBuffer/wrap ~'v)]
              (-> {}
-                 ~@(->> pairs#
+                 ~@(->> args
+                        (partition 2)
                         (map (fn [[k# t#]]
-                               `(assoc ~k# ~(decode-form t#))))))))
-         (length [_]
-           ~size#)))))
+                               `(assoc ~k# ~(decode-form t#))))))))))))
 
 (defmacro defprefixedframe [name [header-k header-frame] frames]
   `(def ~name
@@ -85,11 +96,10 @@
          ;; Todo could perhaps eliminate the double read of the prefix
          (let [~'b (ByteBuffer/wrap ~'v)
                ~'codec (get ~frames ~(decode-form header-frame))]
-           (decode ~'codec ~'v)))
-       (length [_]
-         ))))
+           (decode ~'codec ~'v))))))
 
 (comment
   ;; For developing:
   (macroexpand '(defframe foo :foo :md5))
+  (macroexpand '(defframe foostring :a :string))
   (defframe testframe :a :int32 :b :int32))

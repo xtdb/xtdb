@@ -5,13 +5,15 @@
 
 (t/deftest test-codecs-work-as-expected
   (defframe foo :a :int32 :b :int32)
-  (defframe md5f :a :int32 :b :md5)
+  (t/testing "Can encode vanilla frame"
+    (encode foo {:a 1 :b 2}))
 
   (t/testing "Can encode/decode vanilla frame"
     (t/is (= {:a 1 :b 2} (decode foo (.array ^ByteBuffer (encode foo {:a 1 :b 2}))))))
 
   (t/testing "Can encode/decode exotic frame"
-    (t/is (= 1 (:a (decode foo (.array ^ByteBuffer (encode md5f {:a 1 :b 2}))))))))
+    (defframe md5f :a :int32 :b :md5)
+    (t/is (= 1 (:a (decode md5f (.array ^ByteBuffer (encode md5f {:a 1 :b "sad"}))))))))
 
 (t/deftest test-prefix-codecs
   (defframe foo1 :a :int32 :b :int32)
@@ -28,4 +30,10 @@
 (t/deftest test-enums
   (defenum testfoonum :foo :tar)
   (defframe testenum :a :int32 :b testfoonum)
-  (t/is (= {:a 1, :b :foo} #^bytes (decode testenum #^bytes (.array ^ByteBuffer (encode testenum {:a 1 :b :foo}))))))
+  (t/is (= {:a 1, :b :foo} (decode testenum #^bytes (.array ^ByteBuffer (encode testenum {:a 1 :b :foo}))))))
+
+(t/deftest test-various-datatypes
+  (defframe foostring :a :string)
+  (let [m {:a "hello"}
+        encoded (encode foostring m)]
+    (t/is (= {:a "hello"} (decode foostring #^bytes (.array ^ByteBuffer encoded))))))
