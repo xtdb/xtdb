@@ -4,19 +4,26 @@
 
 ;; TODO, consider direct byte-buffer try
 
-(defmacro defenum [name & vals]
-  `(def ~name [~(into {} (map-indexed (fn [i v] [v (byte i)]) vals))
-               ~(into {} (map-indexed (fn [i v] [(byte i) v]) vals))]))
+(def max-timestamp (.getTime #inst "9999-12-30"))
 
 (def binary-types {:int32 [4 '.putInt '.getInt nil nil]
+                   :id [4 '.putInt '.getInt nil nil]
+                   :reverse-ts [8 '.putLong '.getLong (partial - max-timestamp) identity]
+;;                   :keyword [4 '.putInt '.getInt nil nil]
                    :md5 [16 '.put
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))
                          (fn [x] (-> x to-byte-array md5)) identity]})
+
+;;(g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword)
 
 (defprotocol Codec
   (encode [this v])
   (decode [this v])
   (length [this]))
+
+(defmacro defenum [name & vals]
+  `(def ~name [~(into {} (map-indexed (fn [i v] [v (byte i)]) vals))
+               ~(into {} (map-indexed (fn [i v] [(byte i) v]) vals))]))
 
 (defn encode-form
   "Produce a form to perform encoding based on a given type."
@@ -81,10 +88,6 @@
            (decode ~'codec ~'v)))
        (length [_]
          ))))
-
-;;(g/compile-frame (apply g/enum :byte [1 2 3 4]))
-;; why are enums needed?
-;;
 
 (comment
   ;; For developing:
