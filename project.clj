@@ -4,13 +4,13 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.9.0"]
+                 [org.clojure/tools.logging "0.4.0"]
+                 [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.13.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
                  [gloss "0.2.6"]
                  [org.apache.kafka/kafka-streams "1.1.0"]]
   :profiles {:dev {:dependencies [[clj-time "0.14.2"]
-                                  ;; TODO: Proper logging.
-                                  [org.slf4j/slf4j-simple "1.7.25"]
                                   [org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [org.apache.zookeeper/zookeeper "3.4.11"
                                    :exclusions [io.netty/netty
