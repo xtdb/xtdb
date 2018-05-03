@@ -46,7 +46,7 @@
                     (map (fn [[k# t#]]
                            (let [[_ f# _ enc#] (-> t# binary-types)]
                              (encode-form k# t#)))))))
-         (decode [_ ~'v]
+         (decode [_ #^bytes ~'v]
            (let [~'b (ByteBuffer/wrap ~'v)]
              (-> {}
                  ~@(->> pairs#
