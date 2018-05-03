@@ -51,13 +51,24 @@
         (let [b (ByteBuffer/allocate (length-fn m))]
           (doseq [[k t] pairs
                   :let [v (get m k)
-                        [_ f _ enc] (get binary-types t)]]
-            (f b (if enc (enc v) v)))
+                        [_ f] (get binary-types t)]]
+            (f b v))
           b))
       (decode [_ v]
         (let [b (ByteBuffer/wrap #^bytes v)]
           (into {}
                 (for [[k t] pairs
-                      :let [[_ _ f] (get binary-types t)
-                            _ (println f)]]
+                      :let [[_ _ f] (get binary-types t)]]
                   [k (f b)])))))))
+
+(defn compile-header-frame [[header-k header-frame] frames]
+  (reify Codec
+    (encode [_ v]
+      (let [frame (get frames (get v header-k))]
+        (encode frame v)))
+    (decode [_ v]
+      ;; Todo could perhaps eliminate the double read of the prefix
+      (let [b (ByteBuffer/wrap v)
+            [_ _ f] (get binary-types header-frame)
+            codec (get frames (f b))]
+        (decode codec v)))))

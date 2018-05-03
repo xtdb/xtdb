@@ -15,17 +15,16 @@
     (let [f (compile-frame :a :int32 :b :md5)]
       (t/is (= 1 (:a (decode f (.array ^ByteBuffer (encode f {:a 1 :b "sad"})))))))))
 
-;; (t/deftest test-prefix-codecs
-;;   (defframe foo1 :a :int32 :b :int32)
-;;   (defframe foo2 :a :int32 :c :int32)
+(t/deftest test-prefix-codecs
+  (let [f1 (compile-frame :a :int32 :b :int32)
+        f2 (compile-frame :a :int32 :c :int32)
+        f (compile-header-frame [:a :int32] {1 f1 2 f2})]
 
-;;   (defprefixedframe bob [:a :int32] {1 foo1 2 foo2})
+    (encode f {:a 1 :b 2})
 
-;;   (encode bob {:a 1 :b 2})
-
-;;   (t/testing "Can encode/decode prefixed frame"
-;;     (t/is (= {:a 1 :b 2} #^bytes (decode bob #^bytes (.array ^ByteBuffer (encode bob {:a 1 :b 2})))))
-;;     (t/is (= {:a 2 :c 2} #^bytes (decode bob #^bytes (.array ^ByteBuffer (encode bob {:a 2 :c 2})))))))
+    (t/testing "Can encode/decode prefixed frame"
+      (t/is (= {:a 1 :b 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b 2})))))
+      (t/is (= {:a 2 :c 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 2 :c 2}))))))))
 
 ;; (t/deftest test-enums
 ;;   (defenum testfoonum :foo :tar)
