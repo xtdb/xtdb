@@ -26,13 +26,14 @@
       (t/is (= {:a 1 :b 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b 2})))))
       (t/is (= {:a 2 :c 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 2 :c 2}))))))))
 
-;; (t/deftest test-enums
-;;   (defenum testfoonum :foo :tar)
-;;   (defframe testenum :a :int32 :b testfoonum)
-;;   (t/is (= {:a 1, :b :foo} (decode testenum #^bytes (.array ^ByteBuffer (encode testenum {:a 1 :b :foo}))))))
+(t/deftest test-enums
+  (let [e (compile-enum :foo :tar)
+        f (compile-frame :a :int32 :b e)]
+     (encode f {:a 1 :b :foo})
+    (t/is (= {:a 1, :b :foo} (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b :foo})))))))
 
-;; (t/deftest test-various-datatypes
-;;   (defframe foostring :a :string)
-;;   (let [m {:a "hello"}
-;;         encoded (encode foostring m)]
-;;     (t/is (= {:a "hello"} (decode foostring #^bytes (.array ^ByteBuffer encoded))))))
+(t/deftest test-various-datatypes
+  (let [f (compile-frame  :a :string)
+        m {:a "hello"}
+        encoded (encode f m)]
+    (t/is (= {:a "hello"} (decode f #^bytes (.array ^ByteBuffer encoded))))))

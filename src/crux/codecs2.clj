@@ -2,7 +2,6 @@
   (:require [crux.byte-utils :refer [md5 to-byte-array]])
   (:import [java.nio ByteBuffer]))
 
-
 (def max-timestamp (.getTime #inst "9999-12-30"))
 
 (defn- encode-bytes [^ByteBuffer bb #^bytes bs]
@@ -50,16 +49,20 @@
       (encode [this m]
         (let [b (ByteBuffer/allocate (length-fn m))]
           (doseq [[k t] pairs
-                  :let [v (get m k)
-                        [_ f] (get binary-types t)]]
-            (f b v))
+                  :let [v (get m k)]]
+            (if (vector? t)
+              (.put b ^Byte (get (first t) v))
+              (let [[_ f] (get binary-types t)]
+                (f b v))))
           b))
       (decode [_ v]
         (let [b (ByteBuffer/wrap #^bytes v)]
           (into {}
-                (for [[k t] pairs
-                      :let [[_ _ f] (get binary-types t)]]
-                  [k (f b)])))))))
+                (for [[k t] pairs]
+                  [k (if (vector? t)
+                       (get (second t) (.get b))
+                       (let [[_ _ f] (get binary-types t)]
+                         (f b)))])))))))
 
 (defn compile-header-frame [[header-k header-frame] frames]
   (reify Codec
@@ -72,3 +75,7 @@
             [_ _ f] (get binary-types header-frame)
             codec (get frames (f b))]
         (decode codec v)))))
+
+(defn compile-enum [& vals]
+  [(into {} (map-indexed (fn [i v] [v (byte i)]) vals))
+   (into {} (map-indexed (fn [i v] [(byte i) v]) vals))])
