@@ -3,9 +3,9 @@
             [clojure.edn :as edn]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
-  (:import [java.util List Map]
+  (:import [java.util Map]
            [org.apache.kafka.clients.consumer
-            ConsumerRecord ConsumerRecords KafkaConsumer]
+            ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common TopicPartition]
