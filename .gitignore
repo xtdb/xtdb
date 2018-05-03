@@ -2,5 +2,6 @@ notes.md
 .cpcache
 /.nrepl-port
 /.lein-repl-history
+/.lein-failures
 target
 *.log
