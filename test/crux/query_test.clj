@@ -262,21 +262,21 @@
 
 (t/deftest test-predicate-expression
   (f/transact-people! kv [{:name "Ivan" :last-name "Ivanov" :age 30}
-                            {:name "Bob" :last-name "Ivanov" :age 40 }
-                            {:name "Dominic" :last-name "Monroe" :age 50}])
+                          {:name "Bob" :last-name "Ivanov" :age 40 }
+                          {:name "Dominic" :last-name "Monroe" :age 50}])
 
   (t/testing "< predicate expression"
     (t/is (= #{["Ivan"] ["Bob"]}
              (q/q (db kv) {:find ['name]
-                        :where [['e :name 'name]
-                                ['e :age 'age]
-                                '(< age 50)]})))
+                           :where [['e :name 'name]
+                                   ['e :age 'age]
+                                   '(< age 50)]})))
 
     (t/is (= #{["Dominic"]}
              (q/q (db kv) {:find ['name]
-                        :where [['e :name 'name]
-                                ['e :age 'age]
-                                '(>= age 50)]})))))
+                           :where [['e :name 'name]
+                                   ['e :age 'age]
+                                   '(>= age 50)]})))))
 
 ;; TODO write:
 (t/deftest test-use-another-datasource)

@@ -4,6 +4,10 @@
 
 ;; TODO, consider direct byte-buffer try
 
+(defmacro defenum [name & vals]
+  `(def ~name [~(into {} (map-indexed (fn [i v] [v (byte i)]) vals))
+               ~(into {} (map-indexed (fn [i v] [(byte i) v]) vals))]))
+
 (def binary-types {:int32 [4 '.putInt '.getInt nil nil]
                    :md5 [16 '.put
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))
@@ -17,26 +21,36 @@
 (defn encode-form
   "Produce a form to perform encoding based on a given type."
   [k t]
-  (let [[_ f _ enc] (get binary-types t)]
-    (if enc
-      `(~f ~'b (~enc (get ~'v ~k)))
-      `(~f ~'b (get ~'v ~k)))))
+  (if (symbol? t)
+    ;; handle enum
+    `(.put ~'b (get (first ~t) (get ~'v ~k)))
+    (let [[_ f _ enc] (get binary-types t)]
+      (if enc
+        `(~f ~'b (~enc (get ~'v ~k)))
+        `(~f ~'b (get ~'v ~k))))))
 
 (defn decode-form
   "Produce a form to perform encoding based on a given type."
   [t]
-  (let [[_ _ f _ dec] (get binary-types t)]
-    (if dec
-      `(~dec (~f ~'b))
-      `(~f ~'b))))
+  (if (symbol? t)
+    `(get (second ~t) (.get ~'b))
+    (let [[_ _ f _ dec] (get binary-types t)]
+      (if dec
+        `(~dec (~f ~'b))
+        `(~f ~'b)))))
 
 (defmacro defframe [name & args]
   (let [pairs# (partition 2 args)
         size# (->> pairs#
                    (map second)
-                   (map (fn [f] (if (satisfies? Codec f)
-                                  (length f)
-                                  (-> f binary-types first))))
+                   (map (fn [f] (cond (satisfies? Codec f)
+                                      (length f)
+
+                                      (symbol? f) ;; enum
+                                      1
+
+                                      :else
+                                      (-> f binary-types first))))
                    (reduce +))]
     `(def ~name
        (reify Codec
@@ -44,8 +58,7 @@
            (let [~'b (ByteBuffer/allocate ~size#)]
              ~@(->> pairs#
                     (map (fn [[k# t#]]
-                           (let [[_ f# _ enc#] (-> t# binary-types)]
-                             (encode-form k# t#)))))))
+                           (encode-form k# t#))))))
          (decode [_ #^bytes ~'v]
            (let [~'b (ByteBuffer/wrap ~'v)]
              (-> {}
@@ -68,6 +81,10 @@
            (decode ~'codec ~'v)))
        (length [_]
          ))))
+
+;;(g/compile-frame (apply g/enum :byte [1 2 3 4]))
+;; why are enums needed?
+;;
 
 (comment
   ;; For developing:

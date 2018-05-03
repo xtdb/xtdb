@@ -24,3 +24,8 @@
   (t/testing "Can encode/decode prefixed frame"
     (t/is (= {:a 1 :b 2} #^bytes (decode bob #^bytes (.array ^ByteBuffer (encode bob {:a 1 :b 2})))))
     (t/is (= {:a 2 :c 2} #^bytes (decode bob #^bytes (.array ^ByteBuffer (encode bob {:a 2 :c 2})))))))
+
+(t/deftest test-enums
+  (defenum testfoonum :foo :tar)
+  (defframe testenum :a :int32 :b testfoonum)
+  (t/is (= {:a 1, :b :foo} #^bytes (decode testenum #^bytes (.array ^ByteBuffer (encode testenum {:a 1 :b :foo}))))))
