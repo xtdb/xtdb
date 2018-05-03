@@ -38,7 +38,7 @@
   [k t]
   (if (symbol? t)
     ;; handle enum
-    `(.put ~'b (get (first ~t) (get ~'v ~k)))
+    `(.put ~'b ^Byte (get (first ~t) (get ~'v ~k)))
     (let [[_ f _ enc] (get binary-types t)]
       (if enc
         `(~f ~'b (~enc (get ~'v ~k)))
