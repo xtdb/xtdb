@@ -9,7 +9,8 @@
                  [com.taoensso/nippy "2.13.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
                  [gloss "0.2.6"]
-                 [org.apache.kafka/kafka-streams "1.1.0"]]
+                 [org.apache.kafka/kafka-streams "1.1.0"]
+                 [org.eclipse.rdf4j/rdf4j-rio-nquads "2.3.1"]]
   :profiles {:dev {:dependencies [[clj-time "0.14.2"]
                                   [org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [org.apache.zookeeper/zookeeper "3.4.11"
