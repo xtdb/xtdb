@@ -62,14 +62,23 @@
    (value->clj (.getObject statement))])
 
 (defn statements->maps [statements]
-  (->> (for [[subject statements] (group-by (fn [^Statement s]
-                                              (.getSubject s))
-                                            statements)
-             statement statements
-             :let [[s o p] (statement->clj statement)]]
-         {s {:crux.kv/id s
-             o p}})
-       (apply merge-with merge)))
+  (for [[subject statements] (group-by (fn [^Statement s]
+                                         (.getSubject s))
+                                       statements)]
+    (reduce
+     (fn [m statement]
+       (let [[_ p o] (statement->clj statement)]
+         (update m p (fn [x]
+                       (cond
+                         (nil? x)
+                         o
+
+                         (coll? x)
+                         (conj x o)
+
+                         :else #{x o})))))
+     {:crux.kv/id (value->clj subject)}
+     statements)))
 
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
@@ -93,8 +102,12 @@
        :object (.group m "object")
        :datatype (.group m "datatype")})))
 
-;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
+  (with-open [in (io/input-stream
+                  (io/resource "crux/example-data-artists.nt"))]
+    (statements->maps (ntriples-seq in)))
+
+  ;; Download from http://wiki.dbpedia.org/services-resources/ontology
   (with-open [in (io/input-stream
                   (io/file "target/specific_mappingbased_properties_en.nt"))]
     (statements->maps (ntriples-seq in))))
