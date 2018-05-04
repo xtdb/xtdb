@@ -2,15 +2,10 @@
   (:require [clojure.java.io :as io])
   (:import [java.io InputStream]
            [java.net URLDecoder]
-           [org.eclipse.rdf4j.rio Rio RDFFormat]
+           [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
            [org.eclipse.rdf4j.model IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
-
-;; TODO: All this needs to use event based API for real input sets.
-(defn parse-ntriples [^InputStream in]
-  (Rio/parse in "" RDFFormat/NTRIPLES
-             ^"[Lorg.eclipse.rdf4j.model.Resource;" (make-array Resource 0)))
 
 (defn iri->kw [^IRI iri]
   (keyword (clojure.string/replace
@@ -61,6 +56,23 @@
            (iri->kw (.getPredicate statement))
            (object->clj (.getObject statement))}})
        (apply merge-with merge)))
+
+(defn parse-ntriples [^InputStream in]
+  (Rio/parse in "" RDFFormat/NTRIPLES
+             ^"[Lorg.eclipse.rdf4j.model.Resource;" (make-array Resource 0)))
+
+(defn parse-ntriples-callback [^InputStream in f]
+  (-> (Rio/createParser RDFFormat/NTRIPLES)
+      (.setRDFHandler (reify RDFHandler
+                        (endRDF [_])
+                        (startRDF [_])
+                        (handleComment [_ _])
+                        (handleNamespace [_ _ _])
+                        (^void handleStatement [_ ^Statement statement]
+                          (f [(iri->kw (.getSubject statement))
+                              (iri->kw (.getPredicate statement))
+                              (object->clj (.getObject statement))]))))
+      (.parse in "")))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
