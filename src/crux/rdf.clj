@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io])
   (:import [java.io InputStream]
            [java.net URLDecoder]
+           [java.util.concurrent LinkedBlockingQueue]
            [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
            [org.eclipse.rdf4j.model IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
@@ -45,16 +46,19 @@
     (iri->kw object)
     (literal->clj object)))
 
+(defn statement->clj [^Statement statement]
+  [(iri->kw (.getSubject statement))
+   (iri->kw (.getPredicate statement))
+   (object->clj (.getObject statement))])
+
 (defn model->maps [model]
   (->> (for [[subject statements] (group-by (fn [^Statement s]
                                               (.getSubject s))
                                             model)
-             ^Statement statement (seq statements)
-             :let [iri (iri->kw subject)]]
-         {iri
-          {:crux.kv/id iri
-           (iri->kw (.getPredicate statement))
-           (object->clj (.getObject statement))}})
+             statement statements
+             :let [[s o p] (statement->clj statement)]]
+         {s {:crux.kv/id s
+             o p}})
        (apply merge-with merge)))
 
 (defn parse-ntriples [^InputStream in]
@@ -68,11 +72,20 @@
                         (startRDF [_])
                         (handleComment [_ _])
                         (handleNamespace [_ _ _])
-                        (^void handleStatement [_ ^Statement statement]
-                          (f [(iri->kw (.getSubject statement))
-                              (iri->kw (.getPredicate statement))
-                              (object->clj (.getObject statement))]))))
+                        (handleStatement [_ statement]
+                          (f statement))))
       (.parse in "")))
+
+(defn ntriples-seq [in]
+  (let [queue (LinkedBlockingQueue. 32)]
+    (future
+      (try
+        (parse-ntriples-callback in #(.put queue %))
+        (finally
+          (.put queue false))))
+    ((fn step []
+       (when-let [e (.take queue)]
+         (cons e (lazy-seq (step))))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
