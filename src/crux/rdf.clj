@@ -80,6 +80,28 @@
      {:crux.kv/id (value->clj subject)}
      statements)))
 
+(def jsonld-keyword->clj
+  {(keyword "@id")
+   :crux.kv/id
+   (keyword "@type")
+   (keyword "http:" "/www.w3.org/1999/02/22-rdf-syntax-ns#type")})
+
+(defn jsonld->maps [json-ld]
+  (for [json-ld json-ld]
+    (reduce-kv (fn [m k v]
+                 (let [k (get jsonld-keyword->clj k k)]
+                   (assoc m
+                          k
+                          (if (coll? v)
+                            (let [v (for [v v]
+                                      (get v (keyword "@value")
+                                           (keyword (get v (keyword "@id") v))))]
+                              (cond-> (set v)
+                                (= 1 (count v)) first))
+                            (cond-> v
+                              (= :crux.kv/id k) keyword)))))
+               {} json-ld)))
+
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
 

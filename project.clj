@@ -10,6 +10,8 @@
                  [org.rocksdb/rocksdbjni "5.11.3"]
                  [gloss "0.2.6"]
                  [org.apache.kafka/kafka-streams "1.1.0"]
+                 [cheshire "5.8.0"
+                  :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.1"]]
   :profiles {:dev {:dependencies [[clj-time "0.14.2"]
                                   [org.apache.kafka/kafka_2.11 "1.1.0"]

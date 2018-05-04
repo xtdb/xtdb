@@ -1,0 +1,79 @@
+[ {
+  "@id" : "_:node1",
+  "http://example.org/city" : [ {
+    "@value" : "Madrid"
+  } ],
+  "http://example.org/country" : [ {
+    "@value" : "Spain"
+  } ],
+  "http://example.org/street" : [ {
+    "@value" : "31 Art Gallery"
+  } ]
+}, {
+  "@id" : "http://example.org/Picasso",
+  "@type" : [ "http://example.org/Artist" ],
+  "http://example.org/creatorOf" : [ {
+    "@id" : "http://example.org/guernica"
+  } ],
+  "http://example.org/homeAddress" : [ {
+    "@id" : "_:node1"
+  } ],
+  "http://xmlns.com/foaf/0.1/firstName" : [ {
+    "@value" : "Pablo"
+  } ],
+  "http://xmlns.com/foaf/0.1/surname" : [ {
+    "@value" : "Picasso"
+  } ]
+}, {
+  "@id" : "http://example.org/VanGogh",
+  "@type" : [ "http://example.org/Artist" ],
+  "http://example.org/creatorOf" : [ {
+    "@id" : "http://example.org/starryNight"
+  }, {
+    "@id" : "http://example.org/sunflowers"
+  }, {
+    "@id" : "http://example.org/potatoEaters"
+  } ],
+  "http://xmlns.com/foaf/0.1/firstName" : [ {
+    "@value" : "Vincent"
+  } ],
+  "http://xmlns.com/foaf/0.1/surname" : [ {
+    "@value" : "van Gogh"
+  } ]
+}, {
+  "@id" : "http://example.org/guernica",
+  "@type" : [ "http://example.org/Painting" ],
+  "http://example.org/technique" : [ {
+    "@value" : "oil on canvas"
+  } ],
+  "http://www.w3.org/2000/01/rdf-schema#label" : [ {
+    "@value" : "Guernica"
+  } ]
+}, {
+  "@id" : "http://example.org/potatoEaters",
+  "@type" : [ "http://example.org/Painting" ],
+  "http://example.org/technique" : [ {
+    "@value" : "oil on canvas"
+  } ],
+  "http://www.w3.org/2000/01/rdf-schema#label" : [ {
+    "@value" : "The Potato Eaters"
+  } ]
+}, {
+  "@id" : "http://example.org/starryNight",
+  "@type" : [ "http://example.org/Painting" ],
+  "http://example.org/technique" : [ {
+    "@value" : "oil on canvas"
+  } ],
+  "http://www.w3.org/2000/01/rdf-schema#label" : [ {
+    "@value" : "Starry Night"
+  } ]
+}, {
+  "@id" : "http://example.org/sunflowers",
+  "@type" : [ "http://example.org/Painting" ],
+  "http://example.org/technique" : [ {
+    "@value" : "oil on canvas"
+  } ],
+  "http://www.w3.org/2000/01/rdf-schema#label" : [ {
+    "@value" : "Sunflowers"
+  } ]
+} ]
