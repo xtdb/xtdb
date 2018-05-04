@@ -13,7 +13,7 @@
 
 ;; Example based on:
 ;; https://github.com/eclipse/rdf4j-doc/blob/master/examples/src/main/resources/example-data-artists.ttl
-(t/deftest test-can-parse-n-triples-into-maps
+(t/deftest test-can-parse-ntriples-into-maps
   (let [iri->entity (load-example "crux/example-data-artists.nt")]
     (t/is (= 7 (count iri->entity)))
 
