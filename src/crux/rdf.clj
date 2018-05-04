@@ -1,6 +1,7 @@
 (ns crux.rdf
-  (:require [clojure.java.io :as io])
-  (:import [java.io InputStream IOException]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str])
+  (:import [java.io InputStream IOException StringReader]
            [java.net URLDecoder]
            [java.util.concurrent LinkedBlockingQueue]
            [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
@@ -51,52 +52,29 @@
    (iri->kw (.getPredicate statement))
    (object->clj (.getObject statement))])
 
-(defn model->maps [model]
+(defn statements->maps [statements]
   (->> (for [[subject statements] (group-by (fn [^Statement s]
                                               (.getSubject s))
-                                            model)
+                                            statements)
              statement statements
              :let [[s o p] (statement->clj statement)]]
          {s {:crux.kv/id s
              o p}})
        (apply merge-with merge)))
 
-(defn parse-ntriples [^InputStream in]
-  (Rio/parse in "" RDFFormat/NTRIPLES
-             ^"[Lorg.eclipse.rdf4j.model.Resource;" (make-array Resource 0)))
-
-(defn parse-ntriples-callback [^InputStream in f]
-  (-> (Rio/createParser RDFFormat/NTRIPLES)
-      (.setRDFHandler (reify RDFHandler
-                        (endRDF [_])
-                        (startRDF [_])
-                        (handleComment [_ _])
-                        (handleNamespace [_ _ _])
-                        (handleStatement [_ statement]
-                          (f statement))))
-      (.parse in "")))
-
-(defn stream-closed? [^Throwable t]
-  (= "Stream closed" (.getMessage ^Throwable t)))
+(def ^"[Lorg.eclipse.rdf4j.model.Resource;"
+  empty-resource-array (make-array Resource 0))
 
 (defn ntriples-seq [in]
-  (let [queue (LinkedBlockingQueue. 32)]
-    (future
-      (try
-        (parse-ntriples-callback in #(.put queue %))
-        (catch Throwable t
-          (.put queue t))
-        (finally
-          (.put queue false))))
-    ((fn step []
-       (when-let [element (.take queue)]
-         (if (instance? Throwable element)
-           (when-not (stream-closed? element)
-             (throw element))
-           (cons element (lazy-seq (step)))))))))
+  (for [lines (partition-all 1024 (line-seq (io/reader in)))
+        statement (Rio/parse (StringReader. (str/join "\n" lines))
+                             ""
+                             RDFFormat/NTRIPLES
+                             empty-resource-array)]
+    statement))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
   (with-open [in (io/input-stream
                   (io/file "target/specific_mappingbased_properties_en.nt"))]
-    (model->maps (parse-ntriples in))))
+    (statements->maps (ntriples-seq in))))
