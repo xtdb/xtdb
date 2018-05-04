@@ -1,10 +1,9 @@
 (ns crux.rdf
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
-  (:import [java.io InputStream IOException StringReader]
+  (:import [java.io StringReader]
            [java.net URLDecoder]
-           [java.util.concurrent LinkedBlockingQueue]
-           [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
+           [org.eclipse.rdf4j.rio Rio RDFFormat]
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
