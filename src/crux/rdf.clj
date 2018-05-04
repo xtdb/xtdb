@@ -9,6 +9,24 @@
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
 
+;; :crux/iri data reader, makes keywords use last slash for name
+;; delimiter instead of first.
+(defn iri [value]
+  (if (map? value)
+    (reduce-kv (fn [m k v]
+                 (assoc m (iri k) (if (map? v)
+                                    (iri v)
+                                    v)))
+               {} value)
+    (let [iri-string (if (or (keyword? value)
+                             (symbol? value))
+                       (str (namespace value) "/" (name value))
+                       value)
+          [_ namespace name] (re-find #"(.+)/(.+)" iri-string)]
+      (if (and namespace name)
+        (keyword namespace name)
+        (keyword "_" (second (re-find #"_:(.+)" iri-string)))))))
+
 (defn iri->kw [^IRI iri]
   (keyword (clojure.string/replace
             (.getNamespace iri)
