@@ -1,6 +1,6 @@
 (ns crux.rdf
   (:require [clojure.java.io :as io])
-  (:import [java.io InputStream]
+  (:import [java.io InputStream IOException]
            [java.net URLDecoder]
            [java.util.concurrent LinkedBlockingQueue]
            [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
@@ -76,16 +76,24 @@
                           (f statement))))
       (.parse in "")))
 
+(defn stream-closed? [^Throwable t]
+  (= "Stream closed" (.getMessage ^Throwable t)))
+
 (defn ntriples-seq [in]
   (let [queue (LinkedBlockingQueue. 32)]
     (future
       (try
         (parse-ntriples-callback in #(.put queue %))
+        (catch Throwable t
+          (.put queue t))
         (finally
           (.put queue false))))
     ((fn step []
-       (when-let [e (.take queue)]
-         (cons e (lazy-seq (step))))))))
+       (when-let [element (.take queue)]
+         (if (instance? Throwable element)
+           (when-not (stream-closed? element)
+             (throw element))
+           (cons element (lazy-seq (step)))))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
