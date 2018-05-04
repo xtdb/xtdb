@@ -73,6 +73,17 @@
                              empty-resource-array)]
     statement))
 
+(def ntriplet-pattern
+  #"^(?<subject>.+?)\s*(?<predicate><.+?>)\s*(?<object>.+?)(\^\^(?<datatype><.+?>))?\s+\..*$")
+
+(defn parse-ntriplet [line]
+  (let [m (re-matcher ntriplet-pattern line)]
+    (when (.find m)
+      {:subject (.group m "subject")
+       :predicate (.group m "predicate")
+       :object (.group m "object")
+       :datatype (.group m "datatype")})))
+
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 (comment
   (with-open [in (io/input-stream
