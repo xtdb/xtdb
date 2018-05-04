@@ -5,7 +5,7 @@
            [java.net URLDecoder]
            [java.util.concurrent LinkedBlockingQueue]
            [org.eclipse.rdf4j.rio Rio RDFFormat RDFHandler]
-           [org.eclipse.rdf4j.model IRI Statement Literal Resource]
+           [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
 
@@ -14,6 +14,9 @@
             (.getNamespace iri)
             #"/$" "")
            (URLDecoder/decode (.getLocalName iri))))
+
+(defn bnode->kw [^BNode bnode]
+  (keyword "_" (.getID bnode)))
 
 (defn literal->clj [^Literal literal]
   (let [dt (.getDatatype literal)]
@@ -42,15 +45,21 @@
       :else
       (.getLabel literal))))
 
-(defn object->clj [object]
-  (if (instance? IRI object)
-    (iri->kw object)
-    (literal->clj object)))
+(defn value->clj [value]
+  (cond
+    (instance? BNode value)
+    (bnode->kw value)
+
+    (instance? IRI value)
+    (iri->kw value)
+
+    :else
+    (literal->clj value)))
 
 (defn statement->clj [^Statement statement]
-  [(iri->kw (.getSubject statement))
+  [(value->clj (.getSubject statement))
    (iri->kw (.getPredicate statement))
-   (object->clj (.getObject statement))])
+   (value->clj (.getObject statement))])
 
 (defn statements->maps [statements]
   (->> (for [[subject statements] (group-by (fn [^Statement s]
