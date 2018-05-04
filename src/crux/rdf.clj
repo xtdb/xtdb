@@ -1,4 +1,11 @@
 (ns crux.rdf
+  "Experiments around loading RDF triples into Crux.
+
+  https://www.w3.org/TR/rdf11-primer/
+  https://www.w3.org/TR/n-triples/
+  https://www.w3.org/TR/json-ld/
+
+  http://docs.rdf4j.org/"
   (:require [clojure.java.io :as io]
             [clojure.string :as str])
   (:import [java.io StringReader]
@@ -7,6 +14,8 @@
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
+
+;;; Main part, uses RDF4J classes to parse N-Triples.
 
 ;; NOTE: this shifts the parts of the RDF namespace after the first
 ;; slash into the Keyword name.
@@ -61,6 +70,7 @@
    (iri->kw (.getPredicate statement))
    (value->clj (.getObject statement))])
 
+;; NOTE: this isn't lazy, so a large file needs partitioning.
 (defn statements->maps [statements]
   (for [[subject statements] (group-by (fn [^Statement s]
                                          (.getSubject s))
@@ -79,6 +89,9 @@
                          :else #{x o})))))
      {:crux.kv/id (value->clj subject)}
      statements)))
+
+;; JSON-LD, does not depend on RDF4J, initial parsing via normal JSON
+;; parser.
 
 (def jsonld-keyword->clj
   {(keyword "@id")
@@ -112,6 +125,8 @@
                              RDFFormat/NTRIPLES
                              empty-resource-array)]
     statement))
+
+;;; Regexp-based N-Triples parser.
 
 (def ntriplet-pattern
   #"^(?<subject>.+?)\s*(?<predicate><.+?>)\s*(?<object>.+?)(\^\^(?<datatype><.+?>))?\s+\..*$")
