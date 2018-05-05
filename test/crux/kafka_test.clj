@@ -20,7 +20,7 @@
         partitions [(TopicPartition. topic 0)]]
 
     (with-open [p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})]
-      @(.send p (ProducerRecord. topic (pr-str person))))
+      @(.send p (ProducerRecord. topic (.getBytes (pr-str person) "UTF-8"))))
 
     (with-open [c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-produce-and-consume-message-topic"})]
@@ -31,6 +31,8 @@
         (t/is (= person (some-> records
                                 ^ConsumerRecord first
                                 .value
+                                byte-array
+                                (String. "UTF-8")
                                 edn/read-string)))))))
 
 (defn load-ntriples-example [resource]

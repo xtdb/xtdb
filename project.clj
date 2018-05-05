@@ -6,7 +6,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/tools.logging "0.4.0"]
                  [ch.qos.logback/logback-classic "1.2.3"]
-                 [com.taoensso/nippy "2.13.0"]
+                 [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
                  [gloss "0.2.6"]
                  [org.apache.kafka/kafka-streams "1.1.0"]
