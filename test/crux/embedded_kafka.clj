@@ -18,6 +18,8 @@
 (def ^:dynamic *kafka-broker-config*
   {"broker.id" "0"
    "offsets.topic.replication.factor" "1"
+   "transaction.state.log.replication.factor" "1"
+   "transaction.state.log.min.isr" "1"
    "auto.create.topics.enable" "true"})
 
 (defn with-embedded-kafka [f]

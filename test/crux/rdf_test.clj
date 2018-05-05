@@ -32,17 +32,16 @@
        (into {})))
 
 (defn load-ntriples-example [resource]
-  (with-open [in (io/input-stream
-                  (io/resource resource))]
+  (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
          (maps-by-id))))
 
 (defn load-jsonld-example [resource]
-  (->> (json/parse-stream
-        (io/reader (io/resource resource)) true)
-       (rdf/jsonld->maps)
-       (maps-by-id)))
+  (with-open [in (io/reader (io/resource resource))]
+    (->> (json/parse-stream in true)
+         (rdf/jsonld->maps)
+         (maps-by-id))))
 
 (t/deftest test-can-parse-ntriples-into-maps
   (->> (load-ntriples-example "crux/example-data-artists.nt")
