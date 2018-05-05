@@ -19,11 +19,13 @@
         person (f/random-person)
         partitions [(TopicPartition. topic 0)]]
 
-    (with-open [p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})]
-      @(.send p (ProducerRecord. topic (.getBytes (pr-str person) "UTF-8"))))
-
-    (with-open [c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+    (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-produce-and-consume-message-topic"})]
+      (k/create-topic ac topic 1 1)
+      @(.send p (ProducerRecord. topic (.getBytes (pr-str person) "UTF-8")))
+
       (.assign c partitions)
       (.seekToBeginning c partitions)
       (let [records (.poll c 1000)]
@@ -45,13 +47,17 @@
         entities (load-ntriples-example  "crux/example-data-artists.nt")
         partitions [(TopicPartition. topic 0)]]
 
-    (with-open [p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "transactional.id" "test-can-transact-entities"})]
-      (.initTransactions p)
-      (k/transact p topic entities))
-
-    (with-open [c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+    (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+                                      "enable.idempotence" "true"
+                                      "transactional.id" "test-can-transact-entities"})
+                c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-entities"})]
+      (k/create-topic ac topic 1 1)
+
+      (.initTransactions p)
+      (k/transact p topic entities)
+
       (.assign c partitions)
       (.seekToBeginning c partitions)
       (let [entities (map k/consumer-record->entity (.poll c 1000))]

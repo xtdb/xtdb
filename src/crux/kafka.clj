@@ -7,6 +7,8 @@
   message?"
   (:require [taoensso.nippy :as nippy])
   (:import [java.util Map Date UUID]
+           [org.apache.kafka.clients.admin
+            AdminClient NewTopic]
            [org.apache.kafka.clients.consumer
             KafkaConsumer ConsumerRecord]
            [org.apache.kafka.clients.producer
@@ -29,6 +31,12 @@
 
 (defn ^KafkaConsumer create-consumer [config]
   (KafkaConsumer. ^Map (merge default-consumer-config config)))
+
+(defn ^AdminClient create-admin-client [config]
+  (AdminClient/create ^Map config))
+
+(defn create-topic [^AdminClient admin-client topic num-partitions replication-factor]
+  @(.all (.createTopics admin-client [(NewTopic. topic num-partitions replication-factor)])))
 
 (defn consumer-record->entity [^ConsumerRecord record]
   (nippy/thaw (.value record)))
