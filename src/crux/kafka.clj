@@ -35,8 +35,10 @@
 (defn ^AdminClient create-admin-client [config]
   (AdminClient/create ^Map config))
 
-(defn create-topic [^AdminClient admin-client topic num-partitions replication-factor]
-  @(.all (.createTopics admin-client [(NewTopic. topic num-partitions replication-factor)])))
+(defn create-topic [^AdminClient admin-client topic num-partitions replication-factor config]
+  (let [new-topic (doto (NewTopic. topic num-partitions replication-factor)
+                    (.configs config))]
+    @(.all (.createTopics admin-client [new-topic]))))
 
 (defn consumer-record->entity [^ConsumerRecord record]
   (nippy/thaw (.value record)))

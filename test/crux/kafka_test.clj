@@ -23,7 +23,7 @@
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-produce-and-consume-message-topic"})]
-      (k/create-topic ac topic 1 1)
+      (k/create-topic ac topic 1 1 {})
       @(.send p (ProducerRecord. topic (.getBytes (pr-str person) "UTF-8")))
 
       (.assign c partitions)
@@ -53,7 +53,7 @@
                                       "transactional.id" "test-can-transact-entities"})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-entities"})]
-      (k/create-topic ac topic 1 1)
+      (k/create-topic ac topic 1 1 {})
 
       (.initTransactions p)
       (k/transact p topic entities)
