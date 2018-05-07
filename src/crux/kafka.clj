@@ -17,12 +17,15 @@
             ByteArrayDeserializer ByteArraySerializer]))
 
 (def default-producer-config
-  {"key.serializer" (.getName ByteArraySerializer)
+  {"enable.idempotence" "true"
+   "acks" "all"
+   "key.serializer" (.getName ByteArraySerializer)
    "value.serializer" (.getName ByteArraySerializer)})
 
 (def default-consumer-config
   {"enable.auto.commit" "false"
    "isolation.level" "read_committed"
+   "auto.offset.reset" "earliest"
    "key.deserializer" (.getName ByteArrayDeserializer)
    "value.deserializer" (.getName ByteArrayDeserializer)})
 
