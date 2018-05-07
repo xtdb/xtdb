@@ -1,7 +1,7 @@
 (ns crux.memdb
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks])
-  (:import [java.util Comparator TreeMap Arrays]
+  (:import [java.util TreeMap]
            [java.util.function BiFunction]))
 
 (defrecord CruxMemKv [db-name db]
