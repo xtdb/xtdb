@@ -29,11 +29,18 @@
 (t/deftest test-enums
   (let [e (compile-enum :foo :tar)
         f (compile-frame :a :int32 :b e)]
-     (encode f {:a 1 :b :foo})
+    (encode f {:a 1 :b :foo})
     (t/is (= {:a 1, :b :foo} (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b :foo})))))))
 
 (t/deftest test-various-datatypes
-  (let [f (compile-frame  :a :string)
-        m {:a "hello"}
-        encoded (encode f m)]
-    (t/is (= {:a "hello"} (decode f #^bytes (.array ^ByteBuffer encoded))))))
+  (t/testing "String datatype"
+    (let [f (compile-frame  :a :string)
+          m {:a "hello"}
+          encoded (encode f m)]
+      (t/is (= {:a "hello"} (decode f #^bytes (.array ^ByteBuffer encoded))))))
+
+  (t/testing "Keyword datatype"
+    (let [f (compile-frame  :a :keyword)
+          m {:a :bob}
+          encoded (encode f m)]
+      (t/is (= {:a :bob} (decode f #^bytes (.array ^ByteBuffer encoded)))))))
