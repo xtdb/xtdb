@@ -14,7 +14,9 @@
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
-            ByteArrayDeserializer ByteArraySerializer]))
+            ByteArrayDeserializer ByteArraySerializer]
+           [org.apache.kafka.streams.kstream
+            ValueMapper KeyValueMapper]))
 
 (def default-producer-config
   {"enable.idempotence" "true"
@@ -42,6 +44,16 @@
   (let [new-topic (doto (NewTopic. topic num-partitions replication-factor)
                     (.configs config))]
     @(.all (.createTopics admin-client [new-topic]))))
+
+(defn ^ValueMapper value-mapper [f]
+  (reify ValueMapper
+    (apply [_ v]
+      (f v))))
+
+(defn ^KeyValueMapper key-value-mapper [f]
+  (reify KeyValueMapper
+    (apply [_ k v]
+      (f k v))))
 
 (defn consumer-record->entity [^ConsumerRecord record]
   (nippy/thaw (.value record)))

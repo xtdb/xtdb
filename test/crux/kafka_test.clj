@@ -19,7 +19,7 @@
            [org.apache.kafka.streams
             KafkaStreams StreamsBuilder StreamsConfig]
            [org.apache.kafka.streams.kstream
-            KStream Produced ValueMapper KeyValueMapper]))
+            KStream Produced]))
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster)
 
@@ -76,12 +76,11 @@
             builder (StreamsBuilder.)]
         (try
           (-> (.stream builder input-topic)
-              (.flatMapValues (reify ValueMapper
-                                (apply [_ v]
-                                  (str/split (str/lower-case v) #"\W+"))))
-              (.groupBy (reify KeyValueMapper
-                          (apply [_ key word]
-                            word)))
+              (.flatMapValues (k/value-mapper
+                               #(str/split (str/lower-case %) #"\W+")))
+              (.groupBy (k/key-value-mapper
+                         (fn [key word]
+                           word)))
               .count
               .toStream
               (.to output-topic (Produced/with (Serdes/String)
@@ -104,7 +103,8 @@
                       "kafka" 3
                       "summit" 1}
                      (->> (for [^ConsumerRecord record (.poll c 5000)]
-                            [(.key record) (.value record)])
+                            [(.key record)
+                             (.value record)])
                           (into {})))))
           (finally
             (tu/delete-dir state-dir)))))))
