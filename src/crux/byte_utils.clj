@@ -1,7 +1,8 @@
 (ns crux.byte-utils
   (:require [byte-streams :as bs])
-  (:import java.math.BigInteger
-           java.security.MessageDigest))
+  (:import [java.math BigInteger]
+           [java.security MessageDigest]
+           [java.util Comparator]))
 
 (defn hash-keyword [k]
   (hash (str (namespace k) (name k))))
@@ -44,3 +45,27 @@
           (if (< (inc n) l2)
             (recur (inc n))
             true))))))
+
+(defn compare-bytes [a b max-length]
+  (let [a-length (count a)
+        b-length (count b)]
+    (loop [idx (int 0)]
+      (cond
+        (= idx max-length)
+        0
+
+        (or (= idx a-length)
+            (= idx b-length))
+        (- a-length b-length)
+
+        :else
+        (let [diff (Byte/compareUnsigned (aget ^bytes a idx)
+                                         (aget ^bytes b idx))]
+          (if (zero? diff)
+            (recur (unchecked-inc-int idx))
+            diff))))))
+
+(def ^Comparator bytes-comparator
+  (reify Comparator
+    (compare [_ a b]
+      (compare-bytes a b Integer/MAX_VALUE))))
