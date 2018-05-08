@@ -142,13 +142,14 @@
                               [:http://xmlns.com/foaf/0.1/firstName
                                :http://xmlns.com/foaf/0.1/surname])))))))
 
+;; TODO: schema less or generate on demand?
 (defn transact-schema-based-on-entities [db entities]
   (doseq [s (reduce-kv
              (fn [s k v]
-               (conj s {:attr/ident k
-                        :attr/type (get {Keyword :keyword
-                                         String :string}
-                                        (type v))}))
+               (conj s {:crux.kv.attr/ident k
+                        :crux.kv.attr/type (get {Keyword :keyword
+                                                 String :string}
+                                                (type v))}))
              #{} (apply merge entities))]
     (kv/transact-schema! db s)))
 
@@ -178,11 +179,14 @@
       (k/transact p topic entities)
 
       (.assign c partitions)
+      ;; TODO: who consumes, when, where?
       (let [entities (map k/consumer-record->entity (.poll c 1000))]
         (t/is (= 3 (count (kv/-put f/kv
                                    (entities->txs entities)
+                                   ;; TODO: need to partition on tx id.
                                    (:crux.kv/transact-time (first entities))))))
 
+        ;; This is the client, or same person who transacted.
         (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
                  (q/q (crux/db f/kv)
                       '{:find [iri]

@@ -66,8 +66,8 @@
   "The frame of the value stored inside of the AID index."
   (g/compile-frame
    (g/ordered-map
-    :attr/type frame-data-type-enum
-    :attr/ident frame-keyword)))
+    :crux.kv.attr/type frame-data-type-enum
+    :crux.kv.attr/ident frame-keyword)))
 
 (def frame-index-attribute-ident
   "The attribute-ident index is used to provide a mapping from
@@ -117,7 +117,7 @@
 
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
-  [db {:keys [:attr/ident :attr/type]}]
+  [db {:keys [:crux.kv.attr/ident :crux.kv.attr/type]}]
   {:pre [ident type]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
@@ -126,8 +126,8 @@
                     (encode frame-id aid))
     ;; to go from aid -> k
     (let [k (encode frame-index-key {:index :aid :aid aid})]
-      (kv-store/store db k (encode frame-value-aid {:attr/type type
-                                                    :attr/ident ident})))
+      (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/type type
+                                                    :crux.kv.attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]
@@ -165,7 +165,7 @@
                                                      :eid eid
                                                      :aid aid
                                                      :ts (.getTime ts)})
-                         (encode frame-value-eat (if v {:type (:attr/type attr-schema) :v v} {:type :retracted})))
+                         (encode frame-value-eat (if v {:type (:crux.kv.attr/type attr-schema) :v v} {:type :retracted})))
          (when v
            (kv-store/store db (encode frame-index-key {:index :avt
                                                        :aid aid
@@ -193,7 +193,7 @@
     (reduce (fn [m [k v]]
               (let [{:keys [eid aid ts]} (decode frame-index-key k)
                     attr-schema (attr-aid->schema db aid)
-                    ident (:attr/ident attr-schema)]
+                    ident (:crux.kv.attr/ident attr-schema)]
                 (if (or (ident m)
                         (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
                   m
@@ -237,8 +237,8 @@
        (map (fn [[k v]]
               (let [attr (decode frame-value-aid v)
                     k (decode frame-index-key k)]
-                [(:attr/ident attr)
-                 (assoc attr :attr/id (:aid k))])))
+                [(:crux.kv.attr/ident attr)
+                 (assoc attr :crux.kv.attr/id (:aid k))])))
        (into {})))
 
 (defrecord KvDatasource [kv ts attributes]
@@ -247,9 +247,9 @@
     (entity-ids kv))
 
   (entities-for-attribute-value [this a v]
-    (let [aid (:attr/id (attributes a))]
+    (let [aid (:crux.kv.attr/id (attributes a))]
       (entity-ids-for-value kv aid v ts)))
 
   (attr-val [this eid attr]
-    (let [aid (:attr/id (attributes attr))]
+    (let [aid (:crux.kv.attr/id (attributes attr))]
       (-get-at kv eid aid ts))))
