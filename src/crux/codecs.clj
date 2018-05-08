@@ -77,7 +77,9 @@
     (decode [_ v]
       ;; Todo could perhaps eliminate the double read of the prefix
       (let [b (ByteBuffer/wrap v)
-            [_ _ f] (get binary-types header-frame)
+            [_ _ f] (if (vector? header-frame)
+                      header-frame
+                      (get binary-types header-frame))
             codec (get frames (f b))]
         (decode codec v)))))
 

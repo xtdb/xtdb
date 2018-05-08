@@ -3,6 +3,9 @@
             [clojure.test :as t])
   (:import [java.nio ByteBuffer]))
 
+(defn- round-trip [f m]
+  (decode f #^bytes (.array ^ByteBuffer (encode f m))))
+
 (t/deftest test-codecs-work-as-expected
   (let [f (compile-frame :a :int32 :b :int32)]
     (t/testing "Can encode vanilla frame"
@@ -20,8 +23,6 @@
         f2 (compile-frame :a :int32 :c :int32)
         f (compile-header-frame [:a :int32] {1 f1 2 f2})]
 
-    (encode f {:a 1 :b 2})
-
     (t/testing "Can encode/decode prefixed frame"
       (t/is (= {:a 1 :b 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b 2})))))
       (t/is (= {:a 2 :c 2} #^bytes (decode f #^bytes (.array ^ByteBuffer (encode f {:a 2 :c 2}))))))))
@@ -29,8 +30,17 @@
 (t/deftest test-enums
   (let [e (compile-enum :foo :tar)
         f (compile-frame :a :int32 :b e)]
-    (encode f {:a 1 :b :foo})
     (t/is (= {:a 1, :b :foo} (decode f #^bytes (.array ^ByteBuffer (encode f {:a 1 :b :foo})))))))
+
+(t/deftest test-prefix-uses-enum
+  (let [e (compile-enum :foo :tar)
+        f1 (compile-frame :a e :b :int32)
+        f2 (compile-frame :a e :c :int32)
+        f (compile-header-frame [:a e] {:foo f1 :tar f2})]
+
+    (t/testing "Can encode/decode prefixed frame"
+      (t/is (= {:a :foo :b 2} (round-trip f {:a :foo :b 2})))
+      (t/is (= {:a :tar :c 2} (round-trip f {:a :tar :c 2}))))))
 
 (t/deftest test-various-datatypes
   (t/testing "String datatype"
