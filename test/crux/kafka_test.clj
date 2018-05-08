@@ -3,12 +3,16 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [crux.core :as crux]
+            [crux.kv :as kv]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
+            [crux.query :as q]
             [crux.fixtures :as f]
             [crux.test-utils :as tu]
             [crux.embedded-kafka :as ek])
   (:import [java.util List]
+           [clojure.lang Keyword]
            [org.apache.kafka.clients.consumer
             ConsumerRecord]
            [org.apache.kafka.clients.producer
@@ -21,7 +25,7 @@
            [org.apache.kafka.streams.kstream
             KStream Produced]))
 
-(t/use-fixtures :once ek/with-embedded-kafka-cluster)
+(t/use-fixtures :once ek/with-embedded-kafka-cluster f/start-system)
 
 (t/deftest test-can-produce-and-consume-message
   (let [topic "test-can-produce-and-consume-message-topic"
@@ -137,3 +141,55 @@
                  (select-keys (first entities)
                               [:http://xmlns.com/foaf/0.1/firstName
                                :http://xmlns.com/foaf/0.1/surname])))))))
+
+(defn transact-schema-based-on-entities [db entities]
+  (doseq [s (reduce-kv
+             (fn [s k v]
+               (conj s {:attr/ident k
+                        :attr/type (get {Keyword :keyword
+                                         String :string}
+                                        (type v))}))
+             #{} (apply merge entities))]
+    (kv/transact-schema! db s)))
+
+(defn entities->txs [entities]
+  (for [entity entities]
+    (-> entity
+        (assoc :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))
+        (dissoc :crux.kv/transact-id
+                :crux.kv/transact-time
+                :crux.kv/business-time))))
+
+(t/deftest test-can-transact-and-query-entities
+  (let [topic "test-can-transact-and-query-entities"
+        entities (load-ntriples-example  "crux/picasso.nt")
+        partitions [(TopicPartition. topic 0)]]
+
+    (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+                                      "transactional.id" "test-can-transact-and-query-entities"})
+                c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+                                      "group.id" "test-can-transact-and-query-entities"})]
+      (k/create-topic ac topic 1 1 {})
+
+      (transact-schema-based-on-entities f/kv entities)
+
+      (.initTransactions p)
+      (k/transact p topic entities)
+
+      (.assign c partitions)
+      (let [entities (map k/consumer-record->entity (.poll c 1000))]
+        (t/is (= 3 (count (kv/-put f/kv
+                                   (entities->txs entities)
+                                   (:crux.kv/transact-time (first entities))))))
+
+        (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
+                 (q/q (crux/db f/kv)
+                      '{:find [iri]
+                        :where [[e :crux.rdf/iri iri]]})))
+
+        (t/is (= #{[:http://example.org/Picasso]}
+                 (q/q (crux/db f/kv)
+                      '{:find [iri]
+                        :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
+                                [e :crux.rdf/iri iri]]})))))))

@@ -24,11 +24,11 @@
              (-> artist
                  :http://example.org/homeAddress
                  iri->entity
-                 (dissoc :crux.kv/id))))))
+                 (dissoc :crux.rdf/iri))))))
 
 (defn maps-by-id [maps]
   (->> (for [m maps]
-         {(:crux.kv/id m) m})
+         {(:crux.rdf/iri m) m})
        (into {})))
 
 (defn load-ntriples-example [resource]

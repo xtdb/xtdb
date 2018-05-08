@@ -87,7 +87,7 @@
                          (conj x o)
 
                          :else #{x o})))))
-     {:crux.kv/id (value->clj subject)}
+     {:crux.rdf/iri (value->clj subject)}
      statements)))
 
 ;; JSON-LD, does not depend on RDF4J, initial parsing via normal JSON
@@ -95,7 +95,7 @@
 
 (def jsonld-keyword->clj
   {(keyword "@id")
-   :crux.kv/id
+   :crux.rdf/iri
    (keyword "@type")
    (keyword "http:" "/www.w3.org/1999/02/22-rdf-syntax-ns#type")})
 
@@ -112,7 +112,7 @@
                               (cond-> (set v)
                                 (= 1 (count v)) first))
                             (cond-> v
-                              (= :crux.kv/id k) keyword)))))
+                              (= :crux.rdf/iri k) keyword)))))
                {} json-ld)))
 
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
