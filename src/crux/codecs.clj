@@ -16,48 +16,38 @@
 (defn- keyword->string [k]
   (-> k str (subs 1)))
 
-(def binary-types {:int32 [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
-                   :id [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
-                   :reverse-ts [8 (fn [^ByteBuffer b x] (.putLong b (- max-timestamp x))) #(.getLong ^ByteBuffer %)]
+(def binary-types {:int32 [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
+                   :id [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
+                   :reverse-ts [(constantly 8) (fn [^ByteBuffer b x] (.putLong b (- max-timestamp x))) #(.getLong ^ByteBuffer %)]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
                    :keyword [(fn [k] (alength (.getBytes ^String (keyword->string k))))
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
                              #(-> % decode-string keyword)]
-                   :md5 [16
+                   :md5 [(constantly 16)
                          (fn [b x] (encode-bytes b (-> x to-byte-array md5)))
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]})
-
-(defn- frame-length-fn [frame]
-  (let [sizes (->> frame
-                   (partition 2)
-                   (map (fn [[k f]]
-                          (if (vector? f)
-                            1
-                            (let [size-or-fn (-> f binary-types first)]
-                              (if (fn? size-or-fn)
-                                (fn [v] (size-or-fn (get v k)))
-                                size-or-fn))))))]
-    (fn [v]
-      (reduce + (map (fn [size-or-fn] (if (fn? size-or-fn)
-                                        (size-or-fn v) size-or-fn)) sizes)))))
 
 (defprotocol Codec
   (encode [this v])
   (decode [this v]))
+
+(defn- resolve-data-type [t]
+  (or (and (vector? t) t)
+      (get binary-types t)))
 
 (defn compile-frame [& args]
   (let [length-fn (frame-length-fn args)
         pairs (->> args
                    (partition 2)
                    (map (fn [[k t]]
-                          (let [datatype (or (and (vector? t) t)
-                                             (get binary-types t))]
-                            (when-not t
+                          (let [datatype (resolve-data-type t)]
+                            (when-not datatype
                               (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
                             [k datatype]))))]
     (reify Codec
       (encode [this m]
-        (let [b (ByteBuffer/allocate (length-fn m))]
+        (let [length (reduce + (map (fn [[k [length-f]]] (length-f (get m k))) pairs))
+              b (ByteBuffer/allocate length)]
           (doseq [[k [_ f]] pairs
                   :let [v (get m k)]]
             (f b v))
@@ -85,6 +75,6 @@
 (defn compile-enum [& vals]
   (let [keyword->vals (into {} (map-indexed (fn [i v] [v (byte i)]) vals))
         vals->keyword (into {} (map-indexed (fn [i v] [(byte i) v]) vals))]
-    [1
+    [(constantly 1)
      (fn [^ByteBuffer bb k] (.put bb ^Byte (get keyword->vals k)))
      (fn [^ByteBuffer bb] (get vals->keyword (.get bb)))]))
