@@ -10,7 +10,7 @@
 (def frame-reverse-timestamp (g/compile-frame :int64 (partial - max-timestamp) identity))
 (def frame-keyword (g/compile-frame (g/string :utf-8) #(subs (str %) 1) keyword))
 (def frame-md5 (g/compile-frame (g/finite-block 16) (comp md5 to-byte-array) identity))
-(def frame-id (g/compile-frame :int32))
+(def frame-id (g/compile-frame :int64))
 
 (def data-types {:long (g/compile-frame {:type :long, :v :int64})
                  :string (g/compile-frame {:type :string, :v (g/string :utf-8)})
