@@ -43,8 +43,7 @@
 
 (defprotocol Codec
   (encode [this v])
-  (decode [this v])
-  (length [this v]))
+  (decode [this v]))
 
 (defn compile-frame [& args]
   (let [length-fn (frame-length-fn args)
