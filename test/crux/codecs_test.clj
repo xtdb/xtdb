@@ -40,7 +40,16 @@
 
     (t/testing "Can encode/decode prefixed frame"
       (t/is (= {:a :foo :b 2} (round-trip f {:a :foo :b 2})))
-      (t/is (= {:a :tar :c 2} (round-trip f {:a :tar :c 2}))))))
+      (t/is (= {:a :tar :c 2} (round-trip f {:a :tar :c 2})))))
+
+  (let [e (compile-enum :foo :tar)
+        f1 (compile-frame :a e :b :string)
+        f2 (compile-frame :a e :c :string)
+        f (compile-header-frame [:a e] {:foo f1 :tar f2})]
+
+    (t/testing "Can encode/decode prefixed frame with string"
+      (t/is (= {:a :foo :b "test1"} (round-trip f {:a :foo :b "test1"})))
+      (t/is (= {:a :tar :c "test2"} (round-trip f {:a :tar :c "test2"}))))))
 
 (t/deftest test-various-datatypes
   (t/testing "String datatype"

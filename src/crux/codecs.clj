@@ -11,12 +11,15 @@
   (.put bb #^bytes (.getBytes s)))
 
 (defn decode-string [^ByteBuffer bb]
-  (String. (.array (.get bb (byte-array (.remaining bb))))))
+  (let [ba (byte-array (.remaining bb))]
+    (.get bb ba)
+    (String. ba)))
 
 (defn- keyword->string [k]
   (-> k str (subs 1)))
 
 (def binary-types {:int32 [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
+                   :int64 [(constantly 8) #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
                    :id [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
                    :reverse-ts [(constantly 8) (fn [^ByteBuffer b x] (.putLong b (- max-timestamp x))) #(.getLong ^ByteBuffer %)]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
@@ -36,8 +39,7 @@
       (get binary-types t)))
 
 (defn compile-frame [& args]
-  (let [length-fn (frame-length-fn args)
-        pairs (->> args
+  (let [pairs (->> args
                    (partition 2)
                    (map (fn [[k t]]
                           (let [datatype (resolve-data-type t)]
@@ -76,5 +78,9 @@
   (let [keyword->vals (into {} (map-indexed (fn [i v] [v (byte i)]) vals))
         vals->keyword (into {} (map-indexed (fn [i v] [(byte i) v]) vals))]
     [(constantly 1)
-     (fn [^ByteBuffer bb k] (.put bb ^Byte (get keyword->vals k)))
-     (fn [^ByteBuffer bb] (get vals->keyword (.get bb)))]))
+     (fn [^ByteBuffer bb k] (let [v (get keyword->vals k)]
+                              (assert v)
+                              (.put bb ^Byte v)))
+     (fn [^ByteBuffer bb] (let [k (get vals->keyword (.get bb))]
+                            (assert k)
+                            k))]))
