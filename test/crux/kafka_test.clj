@@ -43,7 +43,7 @@
       (.assign c partitions)
       (let [records (.poll c 1000)]
         (t/is (= 1 (count (seq records))))
-        (t/is (= person (first (map k/consumer-record->entity records))))))))
+        (t/is (= person (first (map k/consumer-record->value records))))))))
 
 ;; Based on:
 ;; https://github.com/confluentinc/kafka-streams-examples/blob/4.1.0-post/src/test/java/io/confluent/examples/streams/WordCountLambdaIntegrationTest.java
@@ -129,7 +129,7 @@
       (k/transact p topic entities)
 
       (.assign c partitions)
-      (let [entities (map k/consumer-record->entity (.poll c 1000))]
+      (let [entities (map k/consumer-record->value (.poll c 1000))]
         (t/is (= 7 (count entities)))
         (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
                   :http://xmlns.com/foaf/0.1/surname "Picasso"}

@@ -60,6 +60,9 @@
                     (.configs config))]
     @(.all (.createTopics admin-client [new-topic]))))
 
+(defn consumer-record->value [^ConsumerRecord record]
+  (.value record))
+
 ;;; Streams
 
 (defn ^ValueMapper value-mapper [f]
@@ -94,9 +97,6 @@
 
 ;;; Indexing Consumer
 
-(defn consumer-record->entity [^ConsumerRecord record]
-  (.value record))
-
 (defn entities->txs [entities]
   (for [entity entities]
     (-> entity
@@ -112,9 +112,9 @@
              (:crux.tx/transact-time (first entities)))))
 
 (defn consume-and-index-entities [db ^KafkaConsumer consumer]
-  (let [entities (map consumer-record->entity (.poll consumer 1000))]
+  (let [entities (map consumer-record->value (.poll consumer 1000))]
     (index-entities db entities)
-    ;; TODO: this offsets should be written to the db so it can be
+    ;; TODO: the offsets should be written to the db so it can be
     ;; backed up and reused.
     (.commitSync consumer)
     entities))
