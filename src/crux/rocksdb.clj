@@ -1,6 +1,6 @@
 (ns crux.rocksdb
-  (:require [byte-streams :as bs]
-            [crux.kv-store :refer :all])
+  (:require [crux.kv-store :refer :all]
+            [crux.byte-utils :as bu])
   (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]
            [java.util Arrays]))
 
@@ -8,7 +8,7 @@
   (let [i (.newIterator db)]
     (try
       (.seek i k)
-      (when (and (.isValid i) (bs/bytes= (.key i) k))
+      (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
         (.value i))
       (finally
         (.close i)))))

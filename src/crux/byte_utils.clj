@@ -1,5 +1,4 @@
 (ns crux.byte-utils
-  (:require [byte-streams :as bs])
   (:import [java.math BigInteger]
            [java.security MessageDigest]
            [java.util Comparator]))
@@ -25,14 +24,14 @@
   (.digest md5-algo bytes))
 
 (defn to-byte-array [v]
-  (bs/to-byte-array (cond (keyword? v)
-                          (name v)
+  (cond (string? v)
+        (.getBytes ^String v)
 
-                          (number? v)
-                          (long->bytes v)
+        (keyword? v)
+        (to-byte-array (name v))
 
-                          :else
-                          v)))
+        (number? v)
+        (long->bytes v)))
 
 (defn bytes-subset? [#^bytes ba1 #^bytes ba2]
   (let [l (alength ba1)

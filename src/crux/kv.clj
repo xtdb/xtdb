@@ -1,6 +1,5 @@
 (ns crux.kv
-  (:require [byte-streams :as bs]
-            [crux.byte-utils :refer :all]
+  (:require [crux.byte-utils :refer :all]
             crux.db
             [crux.kv-store :as kv-store]
             [crux.codecs :as c])
