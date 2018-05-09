@@ -240,9 +240,9 @@
                   (.getBytes (pr-str v))))
 
 (defn get-meta [db k]
-  (->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
-       String.
-       edn/read-string))
+  (some->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
+           String.
+           edn/read-string))
 
 (defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource

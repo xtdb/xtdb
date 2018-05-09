@@ -10,8 +10,9 @@
   (:import [java.util Map Date UUID]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
+           [org.apache.kafka.common TopicPartition]
            [org.apache.kafka.clients.consumer
-            KafkaConsumer ConsumerRecord]
+            KafkaConsumer ConsumerRecord ConsumerRecords]
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
@@ -105,6 +106,18 @@
                 :crux.tx/transact-time
                 :crux.tx/business-time))))
 
+(defn offsets-for-records [^ConsumerRecords records]
+  (->> (for [^TopicPartition p (.partitions records)
+             :let [^ConsumerRecord record (last (.records records p))]]
+         [[(.topic p)
+           (.partition p)]
+          (inc (.offset record))])
+       (into {})))
+
+(defn seek-to-stored-offsets [kv ^KafkaConsumer consumer]
+  (doseq [[[topic partition] next-offset] (cr/get-meta kv :kafka-offsets)]
+    (.seek consumer (TopicPartition. topic partition) next-offset)))
+
 (defn index-entities [kv entities]
   (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
     (cr/-put kv
@@ -112,9 +125,9 @@
              (:crux.tx/transact-time (first entities)))))
 
 (defn consume-and-index-entities [kv ^KafkaConsumer consumer]
-  (let [entities (map consumer-record->value (.poll consumer 1000))]
+  (let [records (.poll consumer 1000)
+        entities (map consumer-record->value records)]
     (index-entities kv entities)
-    ;; TODO: the offsets should be written to the db so it can be
-    ;; backed up and reused.
-    (.commitSync consumer)
+    (cr/store-meta kv :kafka-offsets (merge (cr/get-meta kv :kafka-offsets)
+                                            (offsets-for-records records)))
     entities))

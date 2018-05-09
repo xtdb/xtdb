@@ -159,22 +159,29 @@
                                       "group.id" "test-can-transact-and-query-entities"})]
       (k/create-topic ac topic 1 1 {})
 
-      (transact-schema-based-on-entities f/*kv* entities)
+      (t/testing "transacting and indexing"
+        (transact-schema-based-on-entities f/*kv* entities)
 
-      (.initTransactions p)
-      (k/transact p topic entities)
+        (.initTransactions p)
+        (k/transact p topic entities)
 
-      (.assign c partitions)
-      (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))
+        (.assign c partitions)
+        (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))
+        (t/is (empty? (.poll c 1000))))
 
-      ;; This is the client, or same person who transacted.
-      (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-               (q/q (crux/db f/*kv*)
-                    '{:find [iri]
-                      :where [[e :crux.rdf/iri iri]]})))
+      (t/testing "restoring to stored offsets"
+        (.seekToBeginning c partitions)
+        (k/seek-to-stored-offsets f/*kv* c)
+        (t/is (empty? (.poll c 1000))))
 
-      (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (crux/db f/*kv*)
-                    '{:find [iri]
-                      :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
-                              [e :crux.rdf/iri iri]]}))))))
+      (t/testing "querying transacted data"
+        (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
+                 (q/q (crux/db f/*kv*)
+                      '{:find [iri]
+                        :where [[e :crux.rdf/iri iri]]})))
+
+        (t/is (= #{[:http://example.org/Picasso]}
+                 (q/q (crux/db f/*kv*)
+                      '{:find [iri]
+                        :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
+                                [e :crux.rdf/iri iri]]})))))))
