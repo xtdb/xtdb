@@ -153,14 +153,6 @@
              #{} (apply merge entities))]
     (kv/transact-schema! db s)))
 
-(defn entities->txs [entities]
-  (for [entity entities]
-    (-> entity
-        (assoc :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))
-        (dissoc :crux.kv/transact-id
-                :crux.kv/transact-time
-                :crux.kv/business-time))))
-
 (t/deftest test-can-transact-and-query-entities
   (let [topic "test-can-transact-and-query-entities"
         entities (load-ntriples-example  "crux/picasso.nt")
@@ -179,21 +171,16 @@
       (k/transact p topic entities)
 
       (.assign c partitions)
-      ;; TODO: who consumes, when, where?
-      (let [entities (map k/consumer-record->entity (.poll c 1000))]
-        (t/is (= 3 (count (kv/-put f/kv
-                                   (entities->txs entities)
-                                   ;; TODO: need to partition on tx id.
-                                   (:crux.kv/transact-time (first entities))))))
+      (t/is (= 3 (count (k/consume-and-index-entities f/kv c))))
 
-        ;; This is the client, or same person who transacted.
-        (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-                 (q/q (crux/db f/kv)
-                      '{:find [iri]
-                        :where [[e :crux.rdf/iri iri]]})))
+      ;; This is the client, or same person who transacted.
+      (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
+               (q/q (crux/db f/kv)
+                    '{:find [iri]
+                      :where [[e :crux.rdf/iri iri]]})))
 
-        (t/is (= #{[:http://example.org/Picasso]}
-                 (q/q (crux/db f/kv)
-                      '{:find [iri]
-                        :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
-                                [e :crux.rdf/iri iri]]})))))))
+      (t/is (= #{[:http://example.org/Picasso]}
+               (q/q (crux/db f/kv)
+                    '{:find [iri]
+                      :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
+                              [e :crux.rdf/iri iri]]}))))))

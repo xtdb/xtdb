@@ -5,7 +5,8 @@
   Would rather use LogAppendTime, but this is not consistent across a
   transaction. Alternative is to make each transaction a single
   message?"
-  (:require [taoensso.nippy :as nippy])
+  (:require [taoensso.nippy :as nippy]
+            [crux.kv :as kv])
   (:import [java.util Map Date UUID]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
@@ -55,8 +56,7 @@
     (apply [_ k v]
       (f k v))))
 
-(defn consumer-record->entity [^ConsumerRecord record]
-  (nippy/thaw (.value record)))
+;;; Transacting Producer
 
 (defn transact [^KafkaProducer producer ^String topic entities]
   (try
@@ -75,3 +75,30 @@
     (catch Throwable t
       (.abortTransaction producer)
       (throw t))))
+
+;;; Indexing Consumer
+
+(defn consumer-record->entity [^ConsumerRecord record]
+  (nippy/thaw (.value record)))
+
+(defn entities->txs [entities]
+  (for [entity entities]
+    (-> entity
+        (assoc :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))
+        (dissoc :crux.kv/transact-id
+                :crux.kv/transact-time
+                :crux.kv/business-time))))
+
+(defn index-entities [db entities]
+  (doseq [[tx entities] (group-by :crux.kv/transact-id entities)]
+    (kv/-put db
+             (entities->txs entities)
+             (:crux.kv/transact-time (first entities)))))
+
+(defn consume-and-index-entities [db ^KafkaConsumer consumer]
+  (let [entities (map consumer-record->entity (.poll consumer 1000))]
+    (index-entities db entities)
+    ;; TODO: this offsets should be written to the db so it can be
+    ;; backed up and reused.
+    (.commitSync consumer)
+    entities))
