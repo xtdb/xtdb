@@ -5,13 +5,10 @@
            [java.util Arrays]))
 
 (defn- -get [^RocksDB db k]
-  (let [i (.newIterator db)]
-    (try
-      (.seek i k)
-      (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
-        (.value i))
-      (finally
-        (.close i)))))
+  (with-open [i (.newIterator db)]
+    (.seek i k)
+    (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
+      (.value i))))
 
 (defn rocks-iterator->seq [^RocksIterator i & [pred]]
   (lazy-seq
@@ -24,25 +21,20 @@
   "TODO, improve by getting prefix-same-as-start to work, so we don't
   need an upper-bound."
   [^RocksDB db k #^bytes upper-bound]
-  (let [read-options (ReadOptions.)
-        i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
-    (try
-      (.seek i k)
-      (doall (rocks-iterator->seq i))
-      (finally
-        (.close i)))))
+  (with-open [read-options (ReadOptions.)
+              i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+    (.seek i k)
+    (doall (rocks-iterator->seq i))))
 
 (defn- -seek-and-iterate-bounded
   [^RocksDB db #^bytes k]
-  (let [read-options (doto (ReadOptions.) (.setPrefixSameAsStart true))
-        i ^RocksIterator (.newIterator db read-options)
-        array-length (alength k)]
-    (try
+  (with-open [read-options (doto (ReadOptions.) (.setPrefixSameAsStart true))
+              i ^RocksIterator (.newIterator db read-options)]
+    (let [array-length (alength k)]
       (.seek i k)
-      (doall (rocks-iterator->seq i #(Arrays/equals k (Arrays/copyOfRange #^bytes % 0 array-length))))
-      (finally
-        (.close i)))))
+      (doall (rocks-iterator->seq i #(Arrays/equals k (Arrays/copyOfRange #^bytes % 0 array-length)))))))
 
+;; TODO: this should be configurable.
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
 
@@ -50,11 +42,11 @@
   CruxKv
   (open [this]
     (RocksDB/loadLibrary)
-    (let [db (let [opts (doto (Options.)
-                          (.setCreateIfMissing true)
-                          (.setMergeOperatorName "uint64add"))]
-               (RocksDB/open opts (db-path db-name)))]
-      (assoc this :db db)))
+    (let [opts (doto (Options.)
+                 (.setCreateIfMissing true)
+                 (.setMergeOperatorName "uint64add"))
+          db (RocksDB/open opts (db-path db-name))]
+      (assoc this :db db :options opts)))
 
   (seek [{:keys [db]} k]
     (-get db k))
@@ -71,11 +63,13 @@
   (merge! [{:keys [^RocksDB db]} k v]
     (.merge db k v))
 
-  (close [{:keys [^RocksDB db]}]
-    (.close db))
+  (close [{:keys [^RocksDB db ^Options options]}]
+    (.close db)
+    (.close options))
 
   (destroy [this]
-    (org.rocksdb.RocksDB/destroyDB (db-path db-name) (org.rocksdb.Options.))))
+    (with-open [options (Options.)]
+      (RocksDB/destroyDB (db-path db-name) options))))
 
 (defn crux-rocks-kv [db-name]
   (map->CruxRocksKv {:db-name db-name}))
