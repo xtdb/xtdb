@@ -159,22 +159,22 @@
                                       "group.id" "test-can-transact-and-query-entities"})]
       (k/create-topic ac topic 1 1 {})
 
-      (transact-schema-based-on-entities f/kv entities)
+      (transact-schema-based-on-entities f/*kv* entities)
 
       (.initTransactions p)
       (k/transact p topic entities)
 
       (.assign c partitions)
-      (t/is (= 3 (count (k/consume-and-index-entities f/kv c))))
+      (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))
 
       ;; This is the client, or same person who transacted.
       (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-               (q/q (crux/db f/kv)
+               (q/q (crux/db f/*kv*)
                     '{:find [iri]
                       :where [[e :crux.rdf/iri iri]]})))
 
       (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (crux/db f/kv)
+               (q/q (crux/db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                               [e :crux.rdf/iri iri]]}))))))

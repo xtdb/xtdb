@@ -32,16 +32,16 @@
          ids (cr/-put db people ts)]
      (map #(update % :crux.kv/id ids) people))))
 
-(def ^:dynamic kv)
+(def ^:dynamic *kv*)
 
 (defn start-system [f]
   (let [db-name :test]
-    (binding [kv (kv-store/open (crux.core/kv db-name))]
+    (binding [*kv* (kv-store/open (crux.core/kv db-name))]
       (try
-        (cr/transact-schema! kv {:crux.kv.attr/ident :foo :crux.kv.attr/type :string})
-        (cr/transact-schema! kv {:crux.kv.attr/ident :tar :crux.kv.attr/type :string})
-        (transact-schemas! kv)
+        (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo :crux.kv.attr/type :string})
+        (cr/transact-schema! *kv* {:crux.kv.attr/ident :tar :crux.kv.attr/type :string})
+        (transact-schemas! *kv*)
         (f)
         (finally
-          (kv-store/close kv)
-          (kv-store/destroy kv))))))
+          (kv-store/close *kv*)
+          (kv-store/destroy *kv*))))))
