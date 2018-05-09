@@ -6,8 +6,6 @@
   (:import [java.nio ByteBuffer]
            [java.util Date]))
 
-(def max-timestamp (.getTime #inst "9999-12-30"))
-
 (def frame-data-type-enum
   "An enum byte used to identity a particular data-type. Can be used
   as a header to signify the follow bytes as conforming to a
@@ -153,13 +151,13 @@
          (kv-store/store db (encode frame-index-key {:index :eat
                                                      :eid eid
                                                      :aid aid
-                                                     :ts (.getTime ts)})
+                                                     :ts ts})
                          (encode frame-value-eat (if v {:type (:crux.kv.attr/type attr-schema) :v v} {:type :retracted})))
          (when v
            (kv-store/store db (encode frame-index-key {:index :avt
                                                        :aid aid
                                                        :v v
-                                                       :ts (.getTime ts)
+                                                       :ts ts
                                                        :eid eid})
                            (long->bytes eid)))))
      @tmp-ids->ids)))
@@ -169,8 +167,8 @@
   ([db eid k ^Date ts]
    (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
      (some->> (kv-store/seek-and-iterate db
-                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
-                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime (Date. 0 0 0))}))
+                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})
+                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (Date. 0 0 0)}))
               first second (c/decode frame-value-eat) :v))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
@@ -180,11 +178,11 @@
   ([db eid ^Date at-ts]
    (some->
     (reduce (fn [m [k v]]
-              (let [{:keys [eid aid ts]} (c/decode frame-index-key k)
+              (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-key k)
                     attr-schema (attr-aid->schema db aid)
                     ident (:crux.kv.attr/ident attr-schema)]
                 (if (or (ident m)
-                        (or (not at-ts) (<= ts (- max-timestamp (.getTime at-ts)))))
+                        (or (not at-ts) (> (.getTime ts) (.getTime at-ts))))
                   m
                   (assoc m ident (:v (c/decode frame-value-eat v))))))
             nil
@@ -210,12 +208,12 @@
                                   (encode frame-index-key {:index :avt
                                                             :aid aid
                                                             :v v
-                                                            :ts (.getTime ts)
+                                                            :ts ts
                                                             :eid 0})
                                   (encode frame-index-key {:index :avt
                                                             :aid aid
                                                             :v v
-                                                            :ts (.getTime (Date. 0 0 0))
+                                                            :ts (Date. 0 0 0)
                                                             :eid 0}))
        (map (comp bytes->long second))))
 

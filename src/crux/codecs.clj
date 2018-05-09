@@ -1,8 +1,10 @@
 (ns crux.codecs
   (:require [crux.byte-utils :refer [md5 to-byte-array]])
-  (:import [java.nio ByteBuffer]))
+  (:import [java.nio ByteBuffer]
+           [java.util Date]))
 
-(def max-timestamp (.getTime #inst "9999-12-30"))
+(def ^{:tag 'long}
+  max-timestamp (.getTime #inst "9999-12-30"))
 
 (defn- encode-bytes [^ByteBuffer bb #^bytes bs]
   (.put bb bs))
@@ -21,7 +23,9 @@
 (def binary-types {:int32 [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
                    :int64 [(constantly 8) #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
                    :id [(constantly 4) #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
-                   :reverse-ts [(constantly 8) (fn [^ByteBuffer b x] (.putLong b (- max-timestamp x))) #(.getLong ^ByteBuffer %)]
+                   :reverse-ts [(constantly 8)
+                                (fn [^ByteBuffer b ^Date x] (.putLong b (- max-timestamp (.getTime x))))
+                                #(Date. (- max-timestamp (.getLong ^ByteBuffer %)))]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
                    :keyword [(fn [k] (alength (.getBytes ^String (keyword->string k))))
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
