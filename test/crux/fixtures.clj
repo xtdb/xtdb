@@ -2,7 +2,8 @@
   (:require [crux.kv :as cr]
             [crux.kv-store :as kv-store]
             [crux.core]
-            [crux.rocksdb])
+            [crux.rocksdb]
+            [crux.memdb])
   (:import [java.util Date]))
 
 ;; From Datascript:
@@ -46,3 +47,8 @@
         (finally
           (kv-store/close *kv*)
           (kv-store/destroy *kv*))))))
+
+;; TODO: this should obviously be configurable some other way.
+(defn with-memdb [f]
+  (with-redefs [crux.core/kv crux.memdb/crux-mem-kv]
+    (f)))

@@ -2,12 +2,13 @@
   (:require [crux.fixtures :refer [random-person start-system *kv*]]
             [crux.kv :as cr]
             [crux.query :as q]
-            [crux.core :refer [db]]))
+            [crux.core :refer [db]])
+  (:import [java.util Date]))
 
 (defn bench [& {:keys [n batch-size ts queries] :or {n 1000
                                                      batch-size 10
                                                      queries 100
-                                                     ts (java.util.Date.)}}]
+                                                     ts (Date.)}}]
   (start-system
    (fn []
 
