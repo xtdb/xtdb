@@ -45,9 +45,10 @@
             (recur (inc n))
             true))))))
 
-(defn compare-bytes [a b max-length]
-  (let [a-length (count a)
-        b-length (count b)]
+(defn compare-bytes [^bytes a ^bytes b max-length]
+  (let [a-length (int (alength a))
+        b-length (int (alength b))
+        max-length (int max-length)]
     (loop [idx (int 0)]
       (cond
         (= idx max-length)
@@ -58,8 +59,8 @@
         (- a-length b-length)
 
         :else
-        (let [diff (Byte/compareUnsigned (aget ^bytes a idx)
-                                         (aget ^bytes b idx))]
+        (let [diff (unchecked-subtract-int (Byte/toUnsignedInt (aget a idx))
+                                           (Byte/toUnsignedInt (aget b idx)))]
           (if (zero? diff)
             (recur (unchecked-inc-int idx))
             diff))))))
