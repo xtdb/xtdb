@@ -1,6 +1,5 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
-            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.core :as crux]
