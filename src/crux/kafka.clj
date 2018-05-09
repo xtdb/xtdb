@@ -106,17 +106,20 @@
                 :crux.tx/transact-time
                 :crux.tx/business-time))))
 
-(defn offsets-for-records [^ConsumerRecords records]
-  (->> (for [^TopicPartition p (.partitions records)
-             :let [^ConsumerRecord record (last (.records records p))]]
-         [[(.topic p)
-           (.partition p)]
-          (inc (.offset record))])
-       (into {})))
+(defn topic-partition-meta-key [^TopicPartition partition]
+  (keyword "crux.kafka.topic-partition"
+           (str (.topic partition) "_" (.partition partition))))
+
+(defn store-topic-partition-offsets [kv ^ConsumerRecords records]
+  (doseq [^TopicPartition partition (.partitions records)
+          :let [^ConsumerRecord record (last (.records records partition))]]
+    (cr/store-meta kv
+                   (topic-partition-meta-key partition)
+                   (inc (.offset record)))))
 
 (defn seek-to-stored-offsets [kv ^KafkaConsumer consumer]
-  (doseq [[[topic partition] next-offset] (cr/get-meta kv :kafka-offsets)]
-    (.seek consumer (TopicPartition. topic partition) next-offset)))
+  (doseq [^TopicPartition partition (.assignment consumer)]
+    (.seek consumer partition (cr/get-meta kv (topic-partition-meta-key partition)))))
 
 (defn index-entities [kv entities]
   (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
@@ -128,6 +131,5 @@
   (let [records (.poll consumer 1000)
         entities (map consumer-record->value records)]
     (index-entities kv entities)
-    (cr/store-meta kv :kafka-offsets (merge (cr/get-meta kv :kafka-offsets)
-                                            (offsets-for-records records)))
+    (store-topic-partition-offsets kv records)
     entities))
