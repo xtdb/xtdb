@@ -105,15 +105,15 @@
                 :crux.tx/transact-time
                 :crux.tx/business-time))))
 
-(defn index-entities [db entities]
+(defn index-entities [kv entities]
   (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
-    (kv/-put db
+    (kv/-put kv
              (entities->txs entities)
              (:crux.tx/transact-time (first entities)))))
 
-(defn consume-and-index-entities [db ^KafkaConsumer consumer]
+(defn consume-and-index-entities [kv ^KafkaConsumer consumer]
   (let [entities (map consumer-record->value (.poll consumer 1000))]
-    (index-entities db entities)
+    (index-entities kv entities)
     ;; TODO: the offsets should be written to the db so it can be
     ;; backed up and reused.
     (.commitSync consumer)
