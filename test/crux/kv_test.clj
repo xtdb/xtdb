@@ -100,3 +100,7 @@
                              :crux.kv.attr/type :long})
   (t/is (= #{:age :foo :last-name :name :salary :sex :tar :foo/new-ident2}
            (set (keys (cr/attributes *kv*))))))
+
+(t/deftest test-store-and-retrieve-meta
+  (cr/store-meta *kv* :foo {:bar 2})
+  (t/is (= {:bar 2} (cr/get-meta *kv* :foo))))

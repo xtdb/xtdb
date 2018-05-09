@@ -14,7 +14,7 @@
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
-  (c/compile-enum :eat :avt :eid :aid :ident))
+  (c/compile-enum :eat :avt :eid :aid :ident :meta))
 
 (def frame-index-eat
   "The EAT index is used for providing rapid access to a value of an
@@ -64,6 +64,10 @@
   (c/compile-frame :index frame-index-enum
                    :ident :md5))
 
+(def frame-index-meta
+  (c/compile-frame :index frame-index-enum
+                   :key :keyword))
+
 (def frame-index-eid
   "The EID index is used for generating entity IDs; to store the next
   entity ID to use. A merge operator can be applied to increment the
@@ -80,7 +84,8 @@
     :eat frame-index-eat
     :avt frame-index-avt
     :aid frame-index-aid
-    :ident frame-index-attribute-ident}))
+    :ident frame-index-attribute-ident
+    :meta frame-index-meta}))
 
 (def frame-index-key-prefix
   "Partial key frame, used for iterating within a particular index."
@@ -227,6 +232,16 @@
                 [(:crux.kv.attr/ident attr)
                  (assoc attr :crux.kv.attr/id (:aid k))])))
        (into {})))
+
+(defn store-meta [db k v]
+  (kv-store/store db
+                  (encode frame-index-meta {:index :meta :key k})
+                  (.getBytes (pr-str v))))
+
+(defn get-meta [db k]
+  (->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
+       String.
+       clojure.edn/read-string))
 
 (defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource
