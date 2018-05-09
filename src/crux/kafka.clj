@@ -60,6 +60,8 @@
                     (.configs config))]
     @(.all (.createTopics admin-client [new-topic]))))
 
+;;; Streams
+
 (defn ^ValueMapper value-mapper [f]
   (reify ValueMapper
     (apply [_ v]
