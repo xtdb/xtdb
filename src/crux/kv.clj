@@ -1,8 +1,9 @@
 (ns crux.kv
   (:require [crux.byte-utils :refer :all]
-            crux.db
+            [crux.db]
             [crux.kv-store :as kv-store]
-            [crux.codecs :as c])
+            [crux.codecs :as c]
+            [clojure.edn :as edn])
   (:import [java.nio ByteBuffer]
            [java.util Date]))
 
@@ -241,7 +242,7 @@
 (defn get-meta [db k]
   (->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
        String.
-       clojure.edn/read-string))
+       edn/read-string))
 
 (defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource
