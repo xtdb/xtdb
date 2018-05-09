@@ -62,7 +62,7 @@
   (try
     (.beginTransaction producer)
     (let [transact-time (Date.)
-          transact-time-ms ^Long(.getTime transact-time)
+          transact-time-ms ^Long (.getTime transact-time)
           transact-id (UUID/randomUUID)]
       (doseq [{:crux.kv/keys [id business-time] :as entity} entities]
         (.send producer (->> (assoc entity
