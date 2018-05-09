@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.core :as crux]
+            [crux.core :as cr]
             [crux.kv :as kv]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
@@ -169,12 +169,12 @@
 
       ;; This is the client, or same person who transacted.
       (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-               (q/q (crux/db f/*kv*)
+               (q/q (cr/db f/*kv*)
                     '{:find [iri]
                       :where [[e :crux.rdf/iri iri]]})))
 
       (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (crux/db f/*kv*)
+               (q/q (cr/db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                               [e :crux.rdf/iri iri]]}))))))
