@@ -6,7 +6,7 @@
   transaction. Alternative is to make each transaction a single
   message?"
   (:require [taoensso.nippy :as nippy]
-            [crux.kv :as kv])
+            [crux.kv :as cr])
   (:import [java.util Map Date UUID]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
@@ -107,7 +107,7 @@
 
 (defn index-entities [kv entities]
   (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
-    (kv/-put kv
+    (cr/-put kv
              (entities->txs entities)
              (:crux.tx/transact-time (first entities)))))
 

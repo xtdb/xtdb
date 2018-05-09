@@ -2,8 +2,8 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.core :as cr]
-            [crux.kv :as kv]
+            [crux.core :as crux]
+            [crux.kv :as cr]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]
@@ -145,7 +145,7 @@
                                                  String :string}
                                                 (type v))}))
              #{} (apply merge entities))]
-    (kv/transact-schema! db s)))
+    (cr/transact-schema! db s)))
 
 (t/deftest test-can-transact-and-query-entities
   (let [topic "test-can-transact-and-query-entities"
@@ -169,12 +169,12 @@
 
       ;; This is the client, or same person who transacted.
       (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-               (q/q (cr/db f/*kv*)
+               (q/q (crux/db f/*kv*)
                     '{:find [iri]
                       :where [[e :crux.rdf/iri iri]]})))
 
       (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (cr/db f/*kv*)
+               (q/q (crux/db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                               [e :crux.rdf/iri iri]]}))))))
