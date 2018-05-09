@@ -12,8 +12,7 @@
                  [cheshire "5.8.0"
                   :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.1"]]
-  :profiles {:dev {:dependencies [[clj-time "0.14.2"]
-                                  [org.apache.kafka/kafka_2.11 "1.1.0"]
+  :profiles {:dev {:dependencies [[org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [org.apache.zookeeper/zookeeper "3.4.12"
                                    :exclusions [io.netty/netty
                                                 jline

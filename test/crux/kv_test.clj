@@ -1,10 +1,7 @@
 (ns crux.kv-test
-  (:require [clj-time.coerce :as c]
-            [clj-time.core :as time]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.kv :as cr])
-  (:import [java.util Date]))
+            [crux.kv :as cr]))
 
 (t/use-fixtures :each f/start-system)
 
@@ -17,34 +14,34 @@
   (t/is (= "Bar5" (cr/-get-at *kv* test-eid :foo)))
 
   ;; Insert into past
-  (cr/-put *kv* [[test-eid :foo "foo1"]](Date. 2000 1 2))
+  (cr/-put *kv* [[test-eid :foo "foo1"]] #inst "2000-02-02")
   (t/is (= "Bar5" (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-can-get-at-now-for-old-entry
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 110 1 2))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] #inst "2010-02-02")
   (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-can-get-at-t
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 1 1 0))
-  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (Date. 1 1 1))))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] #inst "1901-01-31")
+  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo #inst "1901-02-01")))
 
-  (cr/-put *kv* [[test-eid :foo "Bar4"]] (Date. 1 1 2))
-  (cr/-put *kv* [[test-eid :foo "Bar5"]] (Date. 1 1 3))
-  (cr/-put *kv* [[test-eid :foo "Bar6"]] (Date. 1 1 4))
+  (cr/-put *kv* [[test-eid :foo "Bar4"]] #inst "1901-02-02")
+  (cr/-put *kv* [[test-eid :foo "Bar5"]] #inst "1901-02-03")
+  (cr/-put *kv* [[test-eid :foo "Bar6"]] #inst "1901-02-04")
 
-  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (Date. 1 1 1))))
-  (t/is (= "Bar4" (cr/-get-at *kv* test-eid :foo (Date. 1 1 2))))
-  (t/is (= "Bar6" (cr/-get-at *kv* test-eid :foo (Date. 1 1 5)))))
+  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo #inst "1901-02-01")))
+  (t/is (= "Bar4" (cr/-get-at *kv* test-eid :foo #inst "1901-02-02")))
+  (t/is (= "Bar6" (cr/-get-at *kv* test-eid :foo #inst "1901-02-05"))))
 
 (t/deftest test-can-get-nil-before-range
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 1 1 2))
-  (cr/-put *kv* [[test-eid :foo "Bar4"]] (Date. 1 1 3))
-  (t/is (not (cr/-get-at *kv* test-eid :foo (Date. 1 1 0)))))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] #inst "1901-02-02")
+  (cr/-put *kv* [[test-eid :foo "Bar4"]] #inst "1901-02-03")
+  (t/is (not (cr/-get-at *kv* test-eid :foo #inst "1901-01-31"))))
 
 (t/deftest test-can-get-nil-outside-of-range
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (c/to-date (time/date-time 1986 10 22)))
-  (cr/-put *kv* [[test-eid :tar "Bar4"]] (c/to-date (time/date-time 1986 10 22)))
-  (t/is (not (cr/-get-at *kv* test-eid :tar (c/to-date (time/date-time 1986 10 21))))))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] #inst "1986-10-22")
+  (cr/-put *kv* [[test-eid :tar "Bar4"]] #inst "1986-10-22")
+  (t/is (not (cr/-get-at *kv* test-eid :tar #inst "1986-10-21"))))
 
 (t/deftest test-entity-ids
   (let [eid (cr/next-entity-id *kv*)]
@@ -55,22 +52,22 @@
 
 (t/deftest test-write-and-fetch-entity
   (let [person (first f/people)
-        eid (first (vals (cr/-put *kv* [person] (c/to-date (time/date-time 1986 10 22)))))]
+        eid (first (vals (cr/-put *kv* [person] #inst "1986-10-22")))]
     (t/is (= (dissoc person :crux.kv/id)
              (dissoc (cr/entity *kv* eid) :crux.kv/id)))))
 
 (t/deftest test-fetch-entity-at-t
   (let [person (first f/people)
-        eid (first (vals (cr/-put *kv* [(assoc person :name "Fred")] (c/to-date (time/date-time 1986 10 22)))))]
-    (cr/-put *kv* [(assoc person :name "Freda" :crux.kv/id eid)] (c/to-date (time/date-time 1986 10 24)))
+        eid (first (vals (cr/-put *kv* [(assoc person :name "Fred")] #inst "1986-10-22")))]
+    (cr/-put *kv* [(assoc person :name "Freda" :crux.kv/id eid)] #inst "1986-10-24")
     (t/is (= "Fred"
-             (:name (cr/entity *kv* eid (c/to-date (time/date-time 1986 10 23))))))
+             (:name (cr/entity *kv* eid #inst "1986-10-23"))))
     (t/is (= "Freda"
              (:name (cr/entity *kv* eid))))))
 
 (t/deftest test-invalid-attribute-exception
   (try
-    (cr/-put *kv* [[test-eid :unknown-attribute "foo1"]] (c/to-date (time/date-time 1986 10 22)))
+    (cr/-put *kv* [[test-eid :unknown-attribute "foo1"]] #inst "1986-10-22")
     (assert false "Exception expected")
     (catch IllegalArgumentException e
       (t/is (= "Unrecognised schema attribute: :unknown-attribute"
@@ -93,10 +90,10 @@
   )
 
 (t/deftest test-retract-attribute
-  (cr/-put *kv* [[test-eid :foo "foo1"]] (c/to-date (time/date-time 1986 10 22)))
+  (cr/-put *kv* [[test-eid :foo "foo1"]] #inst "1986-10-22")
   (cr/-put *kv* [[test-eid :foo nil]])
   (t/is (not (cr/-get-at *kv* test-eid :foo)))
-  (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo (c/to-date (time/date-time 1986 10 22))))))
+  (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo #inst "1986-10-22"))))
 
 (t/deftest test-get-attributes
   (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo/new-ident2

@@ -1,7 +1,5 @@
 (ns crux.query-test
-  (:require [clj-time.coerce :as c]
-            [clj-time.core :as time]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.kv :as cr]
@@ -83,12 +81,12 @@
 
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! *kv* [{:name "Malcolm" :last-name "Sparks"}]
-                                      (c/to-date (time/date-time 1986 10 22)))]
-    (cr/-put *kv* [[(:crux.kv/id malcolm) :name "Malcolma"]] (c/to-date (time/date-time 1986 10 24)))
+                                      #inst "1986-10-22")]
+    (cr/-put *kv* [[(:crux.kv/id malcolm) :name "Malcolma"]] #inst "1986-10-24")
     (let [q {:find ['e]
              :where [['e :name "Malcolma"]
                      ['e :last-name "Sparks"]]}]
-      (t/is (= #{} (q/q (as-of *kv* (c/to-date (time/date-time 1986 10 23)))
+      (t/is (= #{} (q/q (as-of *kv* #inst "1986-10-23")
                         q)))
       (t/is (= #{[(:crux.kv/id malcolm)]} (q/q (db *kv*) q))))))
 
