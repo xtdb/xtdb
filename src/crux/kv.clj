@@ -3,7 +3,8 @@
             crux.db
             [crux.kv-store :as kv-store]
             [crux.codecs :as c])
-  (:import java.nio.ByteBuffer))
+  (:import [java.nio ByteBuffer]
+           [java.util Date]))
 
 (def max-timestamp (.getTime #inst "9999-12-30"))
 
@@ -140,8 +141,8 @@
   "Put an attribute/value tuple against an entity ID. If the supplied
   entity ID is -1, then a new entity-id will be generated."
   ([db txs]
-   (-put db txs (java.util.Date.)))
-  ([db txs ^java.util.Date ts]
+   (-put db txs (Date.)))
+  ([db txs ^Date ts]
    (let [tmp-ids->ids (atom {})]
      (doseq [[eid k v] (mapcat entity->txes txs)]
        (let [aid (attr-schema db k)
@@ -164,19 +165,19 @@
      @tmp-ids->ids)))
 
 (defn -get-at
-  ([db eid k] (-get-at db eid k (java.util.Date.)))
-  ([db eid k ^java.util.Date ts]
+  ([db eid k] (-get-at db eid k (Date.)))
+  ([db eid k ^Date ts]
    (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
      (some->> (kv-store/seek-and-iterate db
                                    (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime ts)})
-                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime (java.util.Date. 0 0 0))}))
+                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (.getTime (Date. 0 0 0))}))
               first second (c/decode frame-value-eat) :v))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
   ([db eid]
-   (entity db eid (java.util.Date.)))
-  ([db eid ^java.util.Date at-ts]
+   (entity db eid (Date.)))
+  ([db eid ^Date at-ts]
    (some->
     (reduce (fn [m [k v]]
               (let [{:keys [eid aid ts]} (c/decode frame-index-key k)
@@ -204,7 +205,7 @@
        (map :eid)
        (into #{})))
 
-(defn- entity-ids-for-value [db aid v ^java.util.Date ts]
+(defn- entity-ids-for-value [db aid v ^Date ts]
   (->> (kv-store/seek-and-iterate db
                                   (encode frame-index-key {:index :avt
                                                             :aid aid
@@ -214,7 +215,7 @@
                                   (encode frame-index-key {:index :avt
                                                             :aid aid
                                                             :v v
-                                                            :ts (.getTime (java.util.Date. 0 0 0))
+                                                            :ts (.getTime (Date. 0 0 0))
                                                             :eid 0}))
        (map (comp bytes->long second))))
 

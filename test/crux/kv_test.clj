@@ -3,7 +3,8 @@
             [clj-time.core :as time]
             [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.kv :as cr]))
+            [crux.kv :as cr])
+  (:import [java.util Date]))
 
 (t/use-fixtures :each f/start-system)
 
@@ -16,29 +17,29 @@
   (t/is (= "Bar5" (cr/-get-at *kv* test-eid :foo)))
 
   ;; Insert into past
-  (cr/-put *kv* [[test-eid :foo "foo1"]](java.util.Date. 2000 1 2))
+  (cr/-put *kv* [[test-eid :foo "foo1"]](Date. 2000 1 2))
   (t/is (= "Bar5" (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-can-get-at-now-for-old-entry
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (java.util.Date. 110 1 2))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 110 1 2))
   (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-can-get-at-t
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (java.util.Date. 1 1 0))
-  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (java.util.Date. 1 1 1))))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 1 1 0))
+  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (Date. 1 1 1))))
 
-  (cr/-put *kv* [[test-eid :foo "Bar4"]] (java.util.Date. 1 1 2))
-  (cr/-put *kv* [[test-eid :foo "Bar5"]] (java.util.Date. 1 1 3))
-  (cr/-put *kv* [[test-eid :foo "Bar6"]] (java.util.Date. 1 1 4))
+  (cr/-put *kv* [[test-eid :foo "Bar4"]] (Date. 1 1 2))
+  (cr/-put *kv* [[test-eid :foo "Bar5"]] (Date. 1 1 3))
+  (cr/-put *kv* [[test-eid :foo "Bar6"]] (Date. 1 1 4))
 
-  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (java.util.Date. 1 1 1))))
-  (t/is (= "Bar4" (cr/-get-at *kv* test-eid :foo (java.util.Date. 1 1 2))))
-  (t/is (= "Bar6" (cr/-get-at *kv* test-eid :foo (java.util.Date. 1 1 5)))))
+  (t/is (= "Bar3" (cr/-get-at *kv* test-eid :foo (Date. 1 1 1))))
+  (t/is (= "Bar4" (cr/-get-at *kv* test-eid :foo (Date. 1 1 2))))
+  (t/is (= "Bar6" (cr/-get-at *kv* test-eid :foo (Date. 1 1 5)))))
 
 (t/deftest test-can-get-nil-before-range
-  (cr/-put *kv* [[test-eid :foo "Bar3"]] (java.util.Date. 1 1 2))
-  (cr/-put *kv* [[test-eid :foo "Bar4"]] (java.util.Date. 1 1 3))
-  (t/is (not (cr/-get-at *kv* test-eid :foo (java.util.Date. 1 1 0)))))
+  (cr/-put *kv* [[test-eid :foo "Bar3"]] (Date. 1 1 2))
+  (cr/-put *kv* [[test-eid :foo "Bar4"]] (Date. 1 1 3))
+  (t/is (not (cr/-get-at *kv* test-eid :foo (Date. 1 1 0)))))
 
 (t/deftest test-can-get-nil-outside-of-range
   (cr/-put *kv* [[test-eid :foo "Bar3"]] (c/to-date (time/date-time 1986 10 22)))

@@ -2,7 +2,8 @@
   (:require [crux.kv :as cr]
             [crux.kv-store :as kv-store]
             [crux.core]
-            crux.rocksdb))
+            [crux.rocksdb])
+  (:import [java.util Date]))
 
 ;; From Datascript:
 
@@ -26,7 +27,7 @@
 
 (defn transact-people!
   ([db people-mixins]
-   (transact-people! db people-mixins (java.util.Date.)))
+   (transact-people! db people-mixins (Date.)))
   ([db people-mixins ts]
    (let [people (->> people-mixins (map #(merge %1 %2) people))
          ids (cr/-put db people ts)]
