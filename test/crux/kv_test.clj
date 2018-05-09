@@ -102,5 +102,6 @@
            (set (keys (cr/attributes *kv*))))))
 
 (t/deftest test-store-and-retrieve-meta
+  (t/is (nil? (cr/get-meta *kv* :foo)))
   (cr/store-meta *kv* :foo {:bar 2})
   (t/is (= {:bar 2} (cr/get-meta *kv* :foo))))

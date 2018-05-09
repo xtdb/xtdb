@@ -118,8 +118,11 @@
                    (inc (.offset record)))))
 
 (defn seek-to-stored-offsets [kv ^KafkaConsumer consumer]
-  (doseq [^TopicPartition partition (.assignment consumer)]
-    (.seek consumer partition (cr/get-meta kv (topic-partition-meta-key partition)))))
+  (doseq [^TopicPartition partition (.assignment consumer)
+          :let [offset (cr/get-meta kv (topic-partition-meta-key partition))]]
+    (if offset
+      (.seek consumer partition offset)
+      (.seekToBeginning consumer [partition]))))
 
 (defn index-entities [kv entities]
   (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
