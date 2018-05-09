@@ -1,7 +1,6 @@
 (ns crux.query
   (:require [clojure.spec.alpha :as s]
-            [crux.db]
-            [crux.kv]))
+            [crux.db :as db]))
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -30,7 +29,7 @@
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- value-matches? [db [term-e term-a term-v] result]
-  (when-let [v (crux.db/attr-val db (get result term-e) term-a)]
+  (when-let [v (db/attr-val db (get result term-e) term-a)]
     (or (not term-v)
         (and (symbol? term-v) (= (result term-v) v))
         (= term-v v))))
@@ -45,8 +44,8 @@
   (bind [this db results]
     ;; Could be an issue hanging on to the head:
     (let [entities (if (and v (not (symbol? v)))
-                     (crux.db/entities-for-attribute-value db a v)
-                     (crux.db/entities db))]
+                     (db/entities-for-attribute-value db a v)
+                     (db/entities db))]
       (if (empty? results)
         ;; First entity, assign this to every potential entity in the DB
         (map #(hash-map e %) entities)
@@ -59,7 +58,7 @@
   (bind-key [this] s)
   (bind [this db results]
     (->> results
-         (map #(assoc % s (crux.db/attr-val db (get % e) a))))))
+         (map #(assoc % s (db/attr-val db (get % e) a))))))
 
 (defn- fact->entity-binding [[e a v]]
   (EntityBinding. e a v))
