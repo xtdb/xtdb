@@ -15,22 +15,36 @@
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
-            ByteArrayDeserializer ByteArraySerializer]
+            Deserializer Serializer]
            [org.apache.kafka.streams.kstream
             ValueMapper KeyValueMapper]))
+
+(deftype NippySerializer []
+  Serializer
+  (close [_])
+  (configure [_ _ _])
+  (serialize [_ _ data]
+    (nippy/freeze data)))
+
+(deftype NippyDeserializer []
+  Deserializer
+  (close [_])
+  (configure [_ _ _])
+  (deserialize [_ _ data]
+    (nippy/thaw data)))
 
 (def default-producer-config
   {"enable.idempotence" "true"
    "acks" "all"
-   "key.serializer" (.getName ByteArraySerializer)
-   "value.serializer" (.getName ByteArraySerializer)})
+   "key.serializer" (.getName crux.kafka.NippySerializer)
+   "value.serializer" (.getName crux.kafka.NippySerializer)})
 
 (def default-consumer-config
   {"enable.auto.commit" "false"
    "isolation.level" "read_committed"
    "auto.offset.reset" "earliest"
-   "key.deserializer" (.getName ByteArrayDeserializer)
-   "value.deserializer" (.getName ByteArrayDeserializer)})
+   "key.deserializer" (.getName crux.kafka.NippyDeserializer)
+   "value.deserializer" (.getName crux.kafka.NippyDeserializer)})
 
 (defn ^KafkaProducer create-producer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
@@ -64,13 +78,13 @@
     (let [transact-time (Date.)
           transact-time-ms ^Long (.getTime transact-time)
           transact-id (UUID/randomUUID)]
-      (doseq [{:crux.kv/keys [id business-time] :as entity} entities]
-        (.send producer (->> (assoc entity
-                                    :crux.kv/transact-id transact-id
-                                    :crux.kv/transact-time transact-time
-                                    :crux.kv/business-time (or business-time transact-time))
-                             nippy/freeze
-                             (ProducerRecord. topic nil transact-time-ms (nippy/freeze id))))))
+      (doseq [entity entities]
+        (->> (assoc entity
+                    :crux.tx/transact-id transact-id
+                    :crux.tx/transact-time transact-time
+                    :crux.tx/business-time (or (:crux.tx/business-time entity) transact-time))
+             (ProducerRecord. topic nil transact-time-ms (:crux.rdf/iri entity))
+             (.send producer))))
     (.commitTransaction producer)
     (catch Throwable t
       (.abortTransaction producer)
@@ -79,21 +93,21 @@
 ;;; Indexing Consumer
 
 (defn consumer-record->entity [^ConsumerRecord record]
-  (nippy/thaw (.value record)))
+  (.value record))
 
 (defn entities->txs [entities]
   (for [entity entities]
     (-> entity
         (assoc :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))
-        (dissoc :crux.kv/transact-id
-                :crux.kv/transact-time
-                :crux.kv/business-time))))
+        (dissoc :crux.tx/transact-id
+                :crux.tx/transact-time
+                :crux.tx/business-time))))
 
 (defn index-entities [db entities]
-  (doseq [[tx entities] (group-by :crux.kv/transact-id entities)]
+  (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
     (kv/-put db
              (entities->txs entities)
-             (:crux.kv/transact-time (first entities)))))
+             (:crux.tx/transact-time (first entities)))))
 
 (defn consume-and-index-entities [db ^KafkaConsumer consumer]
   (let [entities (map consumer-record->entity (.poll consumer 1000))]

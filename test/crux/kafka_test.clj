@@ -27,28 +27,23 @@
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster f/start-system)
 
-(t/deftest test-can-produce-and-consume-message
-  (let [topic "test-can-produce-and-consume-message-topic"
+(t/deftest test-can-produce-and-consume-message-using-embedded-kafka
+  (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
         person (f/random-person)
         partitions [(TopicPartition. topic 0)]]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "group.id" "test-can-produce-and-consume-message-topic"})]
+                                      "group.id" "test-can-produce-and-consume-message-using-embedded-kafka-topic"})]
       (k/create-topic ac topic 1 1 {})
 
-      @(.send p (ProducerRecord. topic (.getBytes (pr-str person) "UTF-8")))
+      @(.send p (ProducerRecord. topic person))
 
       (.assign c partitions)
       (let [records (.poll c 1000)]
-        (t/is (= 1 (.count records)))
-        (t/is (= person (some-> records
-                                ^ConsumerRecord first
-                                .value
-                                byte-array
-                                (String. "UTF-8")
-                                edn/read-string)))))))
+        (t/is (= 1 (count (seq records))))
+        (t/is (= person (first (map k/consumer-record->entity records))))))))
 
 ;; Based on:
 ;; https://github.com/confluentinc/kafka-streams-examples/blob/4.1.0-post/src/test/java/io/confluent/examples/streams/WordCountLambdaIntegrationTest.java
