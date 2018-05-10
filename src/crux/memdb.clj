@@ -9,7 +9,10 @@
   (open [this]
     (assoc this :db (TreeMap. bu/bytes-comparator)))
 
-  (seek [{:keys [db]} k]
+  (seek [{:keys [^TreeMap db]} k]
+    (first (.tailMap db k)))
+
+  (value [{:keys [db]} k]
     (get db k))
 
   (seek-and-iterate [{:keys [^TreeMap db]} k upper-bound]
@@ -38,4 +41,4 @@
     (dissoc this :db)))
 
 (defn crux-mem-kv [db-name]
-  (map->CruxMemKv {:db-name db-name}))
+  (map->CruxMemKv {:db-name db-name :attributes (atom nil)}))
