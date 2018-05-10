@@ -13,7 +13,8 @@
     (try
       (with-open [kv ^Closeable (ks/open (lmdb/map->CruxLMDBKv {:db-dir db-dir}))]
         (ks/store kv (bu/long->bytes 1) (.getBytes "LMDB"))
-        (t/is (= "LMDB" (String. ^bytes (ks/seek kv (bu/long->bytes 1))))))
+        (t/is (= "LMDB" (String. ^bytes (ks/seek kv (bu/long->bytes 1)))))
+        (t/is (nil? (ks/seek kv (bu/long->bytes 2)))))
       (finally
         (tu/delete-dir db-dir)))))
 

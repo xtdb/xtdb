@@ -67,9 +67,11 @@
 (defn get-bytes->bytes-in-txn ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
         kv (.mv_data (MDBVal/callocStack stack) kb)
-        dv (MDBVal/callocStack stack)]
-    (success? (LMDB/mdb_get txn dbi kv dv))
-    (bu/byte-buffer->bytes (.mv_data dv))))
+        dv (MDBVal/callocStack stack)
+        rc (LMDB/mdb_get txn dbi kv dv)]
+    (when-not (= LMDB/MDB_NOTFOUND rc)
+      (success? rc)
+      (bu/byte-buffer->bytes (.mv_data dv)))))
 
 (defn get-bytes->bytes ^bytes [env dbi ^bytes k]
   (transaction
