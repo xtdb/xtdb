@@ -108,6 +108,21 @@
       (kv-store/merge! db key-entity-id (long->bytes 1))
       (bytes->long (kv-store/seek db key-entity-id)))))
 
+(defn- val->data-type
+  "Determine the supported data type for the supplied value."
+  [v]
+  (cond (nil? v)
+        :retracted
+
+        (keyword? v)
+        :keyword
+
+        (string? v)
+        :string
+
+        (number? v)
+        :long))
+
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
   [db {:keys [:crux.kv.attr/ident :crux.kv.attr/type]}]
@@ -153,12 +168,14 @@
              attr-schema (attr-aid->schema db aid)
              eid (or (and (pos? eid) eid)
                      (get @tmp-ids->ids eid)
-                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))]
+                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
+             datatype (val->data-type v)]
+         (assert datatype "Could not discern data-type from supplied value")
          (kv-store/store db (encode frame-index-key {:index :eat
                                                      :eid eid
                                                      :aid aid
                                                      :ts ts})
-                         (encode frame-value-eat (if v {:type (:crux.kv.attr/type attr-schema) :v v} {:type :retracted})))
+                         (encode frame-value-eat {:type datatype :v v}))
          (when v
            (kv-store/store db (encode frame-index-key {:index :avt
                                                        :aid aid
