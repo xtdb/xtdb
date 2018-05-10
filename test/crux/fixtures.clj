@@ -42,6 +42,6 @@
   (with-redefs [crux.core/kv crux.memdb/crux-mem-kv]
     (f)))
 
-(defn with-lmdbdb [f]
+(defn with-lmdb [f]
   (with-redefs [crux.core/kv crux.lmdb/crux-lmdb-kv]
     (f)))

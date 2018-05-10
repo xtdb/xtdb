@@ -4,6 +4,7 @@
             [crux.kv-store :as ks])
   (:import [java.io Closeable File]
            [java.nio ByteBuffer]
+           [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBVal]))
 
@@ -108,16 +109,37 @@
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
 
+(def file-deletion-visitor
+  (proxy [SimpleFileVisitor] []
+    (visitFile [file _]
+      (Files/delete file)
+      FileVisitResult/CONTINUE)
+
+    (postVisitDirectory [dir _]
+      (Files/delete dir)
+      FileVisitResult/CONTINUE)))
+
+(defn delete-dir [^File dir]
+  (Files/walkFileTree (.toPath dir) file-deletion-visitor))
+
 (defrecord CruxLMDBKv [db-name db-dir env dbi]
   ks/CruxKvStore
   (open [this]
-    (let [env (env-create)]
-      (env-open env (or db-dir (doto (io/file (db-path db-name))
-                                 .mkdirs)))
-      (assoc this :env env :dbi (dbi-open env))))
+    (let [db-dir (or db-dir (doto (io/file (db-path db-name))
+                              .mkdirs))
+          env (env-create)]
+      (env-open env db-dir)
+      (assoc this :db-dir db-dir :env env :dbi (dbi-open env))))
 
-  (seek [_ k]
+  (value [_ k]
     (get-bytes->bytes env dbi k))
+
+  (seek [this k]
+    (let [keep-going? (atom true)]
+      (first (cursor->vec env dbi k (fn [_]
+                                      (let [done? @keep-going?]
+                                        (reset! keep-going? false)
+                                        done?))))))
 
   (seek-and-iterate [_ k upper-bound]
     (cursor->vec env dbi k #(neg? (bu/compare-bytes % upper-bound Integer/MAX_VALUE))))
@@ -137,15 +159,14 @@
         txn
         dbi
         k
-        (bu/long->bytes (+ (bu/bytes->long (get-bytes->bytes-in-txn stack txn dbi k))
-                           (bu/bytes->long v)))))
+        (bu/long->bytes (if-let [x (get-bytes->bytes-in-txn stack txn dbi k)]
+                          (+  (bu/bytes->long x)
+                              (bu/bytes->long v))
+                          (bu/bytes->long v)))))
      0))
 
   (destroy [this]
-    (transaction
-     env
-     (fn [_ txn]
-       (success? (LMDB/mdb_drop txn dbi true)))))
+    (delete-dir db-dir))
 
   Closeable
   (close [_]
