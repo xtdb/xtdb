@@ -26,7 +26,5 @@
   ;;       https://github.com/technomancy/leiningen/pull/2367
   ;; :pedantic? :abort
   :jvm-opts ~(vec (remove nil?
-                          [(when (System/getenv "USE_YOURKIT_AGENT")
-                             (when-let [path (first (filter #(.exists (clojure.java.io/as-file %))
-                                                            ["/home/jon/dev/yourkit/bin/linux-x86-64/libyjpagent.so"]))]
-                               (str "-agentpath:" path)))])))
+                          [(when-let [f (System/getenv "YOURKIT_AGENT")]
+                             (str "-agentpath:" (clojure.java.io/as-file f)))])))

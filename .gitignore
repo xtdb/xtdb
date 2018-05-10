@@ -5,3 +5,4 @@ notes.md
 /.lein-failures
 target
 *.log
+/setprofiler.sh
