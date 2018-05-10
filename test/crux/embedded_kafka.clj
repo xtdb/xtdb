@@ -1,26 +1,35 @@
 (ns crux.embedded-kafka
-  (:require [crux.test-utils :as tu])
+  (:require [clojure.java.io :as io]
+            [crux.test-utils :as tu])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
            [org.apache.zookeeper.server
             NIOServerCnxnFactory ZooKeeperServer]
-           [java.net InetSocketAddress]))
+           [java.net InetSocketAddress]
+           [java.util Properties]))
 
 ;; Based on:
 ;; https://github.com/pingles/clj-kafka/blob/master/test/clj_kafka/test/utils.clj
 ;; https://github.com/chbatey/kafka-unit/blob/master/src/main/java/info/batey/kafka/unit/KafkaUnit.java
 
 (def ^:dynamic ^String *host* "localhost")
+(def ^:dynamic ^String *broker-id* "0")
 
 (def ^:dynamic *zookeeper-connect* (str *host* ":" 2181))
 (def ^:dynamic *kafka-bootstrap-servers* (str *host* ":" 9092))
 
 (def ^:dynamic *kafka-broker-config*
-  {"broker.id" "0"
-   "offsets.topic.replication.factor" "1"
+  {"offsets.topic.replication.factor" "1"
    "transaction.state.log.replication.factor" "1"
    "transaction.state.log.min.isr" "1"
    "auto.create.topics.enable" "true"})
+
+(defn write-meta-properties [log-dir broker-id]
+  (with-open [out (io/output-stream (io/file log-dir "meta.properties"))]
+    (doto (Properties.)
+      (.setProperty "version" "0")
+      (.setProperty "broker.id" (str broker-id))
+      (.store out ""))))
 
 (defn with-embedded-kafka [f]
   (let [log-dir (tu/create-tmpdir "kafka-log")
@@ -29,10 +38,12 @@
                 (merge *kafka-broker-config*
                        {"host.name" *host*
                         "port" (str port)
+                        "broker.id" *broker-id*
                         "zookeeper.connect" *zookeeper-connect*
                         "log.dir" (.getAbsolutePath log-dir)}))
-        broker (doto (KafkaServerStartable. config)
-                 (.startup))]
+        broker (KafkaServerStartable. config)]
+    (write-meta-properties log-dir *broker-id*)
+    (.startup broker)
     (try
       (binding [*kafka-bootstrap-servers* (str *host* ":" port)]
         (f))
