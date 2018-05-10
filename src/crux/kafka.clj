@@ -16,9 +16,7 @@
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
-            Deserializer Serializer]
-           [org.apache.kafka.streams.kstream
-            ValueMapper KeyValueMapper]))
+            Deserializer Serializer]))
 
 (deftype NippySerializer []
   Serializer
@@ -63,18 +61,6 @@
 
 (defn consumer-record->value [^ConsumerRecord record]
   (.value record))
-
-;;; Streams
-
-(defn ^ValueMapper value-mapper [f]
-  (reify ValueMapper
-    (apply [_ v]
-      (f v))))
-
-(defn ^KeyValueMapper key-value-mapper [f]
-  (reify KeyValueMapper
-    (apply [_ k v]
-      (f k v))))
 
 ;;; Transacting Producer
 

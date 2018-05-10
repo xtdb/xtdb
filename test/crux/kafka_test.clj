@@ -18,11 +18,7 @@
             ProducerRecord]
            [org.apache.kafka.common TopicPartition]
            [org.apache.kafka.common.serialization
-            Serdes StringSerializer StringDeserializer LongDeserializer]
-           [org.apache.kafka.streams
-            KafkaStreams StreamsBuilder StreamsConfig]
-           [org.apache.kafka.streams.kstream
-            KStream Produced]))
+            Serdes StringSerializer StringDeserializer LongDeserializer]))
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster f/start-system)
 
@@ -43,69 +39,6 @@
       (let [records (.poll c 1000)]
         (t/is (= 1 (count (seq records))))
         (t/is (= person (first (map k/consumer-record->value records))))))))
-
-;; Based on:
-;; https://github.com/confluentinc/kafka-streams-examples/blob/4.1.0-post/src/test/java/io/confluent/examples/streams/WordCountLambdaIntegrationTest.java
-(t/deftest test-can-execute-kafka-streams-wordcount-example
-  (let [input-topic "test-can-execute-kafka-streams-wordcount-example-input"
-        output-topic "test-can-execute-kafka-streams-wordcount-example-output"
-        partitions [(TopicPartition. output-topic 0)]]
-
-    (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
-                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "key.serializer" (.getName StringSerializer)
-                                      "value.serializer" (.getName StringSerializer)})
-                c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "group.id" "test-can-execute-kafka-streams-wordcount-example-consumer"
-                                      "key.deserializer" (.getName StringDeserializer)
-                                      "value.deserializer" (.getName LongDeserializer)})]
-      (doseq [topic [input-topic output-topic]]
-        (k/create-topic ac topic 1 1 {}))
-
-      (let [state-dir (tu/create-tmpdir "kafka-streams-state")
-            config (StreamsConfig.
-                    {"application.id" "test-can-execute-kafka-streams-wordcount-example-streams"
-                     "bootstrap.servers" ek/*kafka-bootstrap-servers*
-                     "default.key.serde" (.getName (.getClass (Serdes/String)))
-                     "default.value.serde" (.getName (.getClass (Serdes/String)))
-                     "commit.interval.ms" "1000"
-                     "auto.offset.reset" "earliest"
-                     "state.dir" (.getAbsolutePath state-dir)})
-            builder (StreamsBuilder.)]
-        (try
-          (-> (.stream builder input-topic)
-              (.flatMapValues (k/value-mapper
-                               #(str/split (str/lower-case %) #"\W+")))
-              (.groupBy (k/key-value-mapper
-                         (fn [key word]
-                           word)))
-              .count
-              .toStream
-              (.to output-topic (Produced/with (Serdes/String)
-                                               (Serdes/Long))))
-          (with-open [streams (doto (KafkaStreams. (.build builder) config)
-                                (.start))]
-
-            (doseq [in ["Hello Kafka Streams"
-                        "All streams lead to Kafka"
-                        "Join Kafka Summit"]]
-              @(.send p (ProducerRecord. input-topic in)))
-
-            (.assign c partitions)
-            (t/is (= {"hello" 1
-                      "all" 1
-                      "streams" 2
-                      "lead" 1
-                      "to" 1
-                      "join" 1
-                      "kafka" 3
-                      "summit" 1}
-                     (->> (for [^ConsumerRecord record (.poll c 5000)]
-                            [(.key record)
-                             (.value record)])
-                          (into {})))))
-          (finally
-            (tu/delete-dir state-dir)))))))
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]

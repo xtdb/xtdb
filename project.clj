@@ -8,7 +8,7 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
-                 [org.apache.kafka/kafka-streams "1.1.0"]
+                 [org.apache.kafka/kafka-clients "1.1.0"]
                  [cheshire "5.8.0"
                   :exclusions [com.fasterxml.jackson.core/jackson-core]]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.1"]]
