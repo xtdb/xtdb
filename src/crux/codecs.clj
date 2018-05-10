@@ -52,7 +52,10 @@
                             [k datatype]))))]
     (reify Codec
       (encode [this m]
-        (let [length (reduce + (map (fn [[k [length-f]]] (length-f (get m k))) pairs))
+        (let [pairs (filter #(find m (first %)) pairs)
+              length (->> pairs
+                          (map (fn [[k [length-f]]] (length-f (get m k))))
+                          (reduce +))
               b (ByteBuffer/allocate length)]
           (doseq [[k [_ f]] pairs
                   :let [v (get m k)]]

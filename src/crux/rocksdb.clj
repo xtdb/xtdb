@@ -3,11 +3,17 @@
             [crux.byte-utils :as bu])
   (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
-(defn- -get [^RocksDB db k]
+(defn- -value [^RocksDB db k]
   (with-open [i (.newIterator db)]
     (.seek i k)
     (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
       (.value i))))
+
+(defn- -seek [^RocksDB db k]
+  (with-open [i (.newIterator db)]
+    (.seek i k)
+    (when (.isValid i)
+      [(.key i) (.value i)])))
 
 (defn rocks-iterator->seq
   ([i]
@@ -50,8 +56,11 @@
           db (RocksDB/open opts (db-path db-name))]
       (assoc this :db db :options opts)))
 
+  (value [{:keys [db]} k]
+    (-value db k))
+
   (seek [{:keys [db]} k]
-    (-get db k))
+    (-seek db k))
 
   (seek-and-iterate [{:keys [^RocksDB db]} k upper-bound]
     (-seek-and-iterate db k upper-bound))

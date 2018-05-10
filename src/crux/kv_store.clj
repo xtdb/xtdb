@@ -3,6 +3,8 @@
 (defprotocol CruxKvStore
   (open [this])
 
+  (value [db k])
+
   (seek [db k])
 
   (seek-and-iterate [this k upper-bound])

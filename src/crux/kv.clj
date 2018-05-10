@@ -2,6 +2,7 @@
   (:require [crux.byte-utils :refer :all]
             [crux.db]
             [crux.kv-store :as kv-store]
+            [crux.byte-utils :as bu]
             [crux.codecs :as c]
             [clojure.edn :as edn])
   (:import [java.nio ByteBuffer]
@@ -105,7 +106,7 @@
   (locking o
     (let [key-entity-id (encode frame-index-key {:index :eid})]
       (kv-store/merge! db key-entity-id (long->bytes 1))
-      (bytes->long (kv-store/seek db key-entity-id)))))
+      (bytes->long (kv-store/value db key-entity-id)))))
 
 (defn- val->data-type
   "Determine the supported data type for the supplied value."
@@ -155,14 +156,14 @@
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
                              (encode frame-index-key)
-                             (kv-store/seek db)
+                             (kv-store/value db)
                              bytes->long)
                     (transact-attr-ident! db ident))]
         (swap! attributes assoc ident aid)
         aid)))
 
 (defn attr-aid->ident [db aid]
-  (if-let [v (kv-store/seek db (encode frame-index-key {:index :aid :aid aid}))]
+  (if-let [v (kv-store/value db (encode frame-index-key {:index :aid :aid aid}))]
     (:crux.kv.attr/ident (c/decode frame-value-aid v))
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -203,11 +204,11 @@
 (defn -get-at
   ([db eid ident] (-get-at db eid ident (Date.)))
   ([db eid ident ^Date ts]
-   (let [aid (attr-ident->aid! db ident)]
-     (some->> (kv-store/seek-and-iterate db
-                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})
-                                   (encode frame-index-key {:index :eat :eid eid :aid aid :ts (Date. 0 0 0)}))
-              first second (c/decode frame-value-eat) :v))))
+   (let [aid (attr-ident->aid! db ident)
+         prefix #^bytes (encode frame-index-key {:index :eat :eid eid :aid aid})]
+     (when-let [[k v] (kv-store/seek db (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts}))]
+       (when (zero? (bu/compare-bytes prefix k (alength prefix)))
+         (:v (c/decode frame-value-eat v)))))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
@@ -261,6 +262,6 @@
                   (.getBytes (pr-str v))))
 
 (defn get-meta [db k]
-  (some->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
+  (some->> ^bytes (kv-store/value db (encode frame-index-meta {:index :meta :key k}))
            String.
            edn/read-string))
