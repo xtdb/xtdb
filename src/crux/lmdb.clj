@@ -11,20 +11,23 @@
   (when-not (= LMDB/MDB_SUCCESS rc)
     (throw (IllegalStateException. (LMDB/mdb_strerror rc)))))
 
-(defn transaction [env f]
-  (with-open [stack (MemoryStack/stackPush)]
-    (let [pp (.mallocPointer stack 1)]
-      (success? (LMDB/mdb_txn_begin env MemoryUtil/NULL 0 pp))
-      (let [txn (.get pp)
-            [result
-             error] (try
-                      [(f stack txn)
-                       (LMDB/mdb_txn_commit txn)]
-                      (catch Throwable t
-                        (LMDB/mdb_txn_abort txn)
-                        (throw t)))]
-        (success? error)
-        result))))
+(defn transaction
+  ([env f]
+   (transaction env f LMDB/MDB_RDONLY))
+  ([env f flags]
+   (with-open [stack (MemoryStack/stackPush)]
+     (let [pp (.mallocPointer stack 1)]
+       (success? (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp))
+       (let [txn (.get pp)
+             [result
+              error] (try
+                       [(f stack txn)
+                        (LMDB/mdb_txn_commit txn)]
+                       (catch Throwable t
+                         (LMDB/mdb_txn_abort txn)
+                         (throw t)))]
+         (success? error)
+         result)))))
 
 (defn env-create []
   (with-open [stack (MemoryStack/stackPush)]
@@ -58,7 +61,8 @@
   (transaction
    env
    (fn [^MemoryStack stack ^long txn]
-     (put-bytes->bytes-in-txn stack txn dbi k v))))
+     (put-bytes->bytes-in-txn stack txn dbi k v))
+   0))
 
 (defn get-bytes->bytes-in-txn ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
@@ -108,7 +112,8 @@
         dbi
         k
         (bu/long->bytes (+ (bu/bytes->long (get-bytes->bytes-in-txn stack txn dbi k))
-                           (bu/bytes->long v)))))))
+                           (bu/bytes->long v)))))
+     0))
 
   (destroy [this]
     (transaction
