@@ -40,7 +40,11 @@
           (ks/store kv (.getBytes k) (bu/long->bytes v)))
         (t/is (= [["b" 2] ["c" 3]]
                  (for [[^bytes k v] (ks/seek-and-iterate kv (.getBytes "b") (.getBytes "d"))]
-                   [(String. k) (bu/bytes->long v)]))))
+                   [(String. k) (bu/bytes->long v)])))
+        (t/is (= [] (ks/seek-and-iterate kv (.getBytes "d") (.getBytes "d"))))
+        (t/is (= [] (ks/seek-and-iterate kv (.getBytes "e") (.getBytes "f"))))
+        (t/is (= [["a" 1]] (for [[^bytes k v] (ks/seek-and-iterate kv (.getBytes "0") (.getBytes "b"))]
+                             [(String. k) (bu/bytes->long v)]))))
       (finally
         (tu/delete-dir db-dir)))))
 
@@ -52,6 +56,8 @@
           (ks/store kv (.getBytes k) (bu/long->bytes v)))
         (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
                  (for [[^bytes k v] (ks/seek-and-iterate-bounded kv (.getBytes "b"))]
-                   [(String. k) (bu/bytes->long v)]))))
+                   [(String. k) (bu/bytes->long v)])))
+        (t/is (= [] (ks/seek-and-iterate-bounded kv (.getBytes "0"))))
+        (t/is (= [] (ks/seek-and-iterate-bounded kv (.getBytes "e")))))
       (finally
         (tu/delete-dir db-dir)))))
