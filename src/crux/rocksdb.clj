@@ -30,7 +30,7 @@
 
 (defn- -seek-and-iterate-bounded
   [^RocksDB db #^bytes k]
-  (with-open [read-options (doto (ReadOptions.) (.setPrefixSameAsStart true))
+  (with-open [read-options (ReadOptions.)
               i ^RocksIterator (.newIterator db read-options)]
     (let [array-length (alength k)]
       (.seek i k)
