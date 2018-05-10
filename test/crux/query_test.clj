@@ -215,14 +215,15 @@
     (catch java.lang.AssertionError e
       (t/is true))))
 
-(t/deftest test-ors-can-introduce-new-bindings
+;; TODO bring back
+#_(t/deftest test-ors-can-introduce-new-bindings
   (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}
                                                       {:name "Ivan" :last-name "Ivanov" :sex :male}
                                                       {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
 
     (t/testing "?p2 introduced only inside of an Or"
-      (t/is (= #{[(:crux.kv/id ivan)]} (q/q (db *kv*) {:find ['?p2]
-                                                       :where ['(or [(and [[?p2 :name "Petr"]
+      (t/is (= #{[(:crux.kv/id ivan)]} (q/q (db *kv*) '{:find [?p2]
+                                                        :where [(or [(and [[?p2 :name "Petr"]
                                                                            [?p2 :sex :female]])
                                                                      (and [[?p2 :last-name "Ivanov"]
                                                                            [?p2 :sex :male]])])]}))))))

@@ -36,29 +36,46 @@
 
 (defprotocol Binding
   (bind-key [this])
-  (bind [this db results]))
+  (bind [this db]))
+
+(defn- entities-for-term [db a v]
+  (if (and v (not (symbol? v)))
+    (db/entities-for-attribute-value db a v)
+    (db/entities db)))
 
 (defrecord EntityBinding [e a v]
   Binding
   (bind-key [this] e)
-  (bind [this db results]
-    ;; Could be an issue hanging on to the head:
-    (let [entities (if (and v (not (symbol? v)))
-                     (db/entities-for-attribute-value db a v)
-                     (db/entities db))]
-      (if (empty? results)
-        ;; First entity, assign this to every potential entity in the DB
-        (map #(hash-map e %) entities)
-        ;; New entity, join the results (todo, look at hash-join algos)
-        (for [result results eid entities]
-          (assoc result e eid))))))
+  (bind [this db]
+    (fn [rf]
+      (fn
+        ([]
+         (rf))
+        ([result]
+         (rf result))
+        ([result input]
+         (if (satisfies? db/Datasource input)
+           (reduce rf result (map #(hash-map e %) (entities-for-term db a v)))
+           (if (get input e)
+             (rf result input)
+             ;; New entity, join the results (todo, look at hash-join algos)
+             (reduce rf result (for [eid (entities-for-term db a v)]
+                                 (assoc input e eid))))))))))
 
 (defrecord VarBinding [e a s]
   Binding
   (bind-key [this] s)
-  (bind [this db results]
-    (->> results
-         (map #(assoc % s (db/attr-val db (get % e) a))))))
+  (bind [this db]
+    (fn [rf]
+      (fn
+        ([]
+         (rf))
+        ([result]
+         (rf result))
+        ([result input]
+         (rf result (if (get input s)
+                      input
+                      (assoc input s (db/attr-val db (get input e) a)))))))))
 
 (defn- fact->entity-binding [[e a v]]
   (EntityBinding. e a v))
@@ -67,22 +84,15 @@
   (when (and v (symbol? v))
     (VarBinding. e a v)))
 
-(defn- do-bindings [db bindings results]
-  (reduce (fn [results binding]
-            (bind binding db results))
-          results bindings))
-
 (defn- query-plan->results
   "Reduce over the query plan, unifying the results across each
   stage."
   [db plan]
-  (second (reduce (fn [[bindings results] [term-bindings pred-f]]
-                    [(into bindings (map bind-key term-bindings))
-                     (->> results
-                          (do-bindings db (remove (comp bindings bind-key) term-bindings))
-                          (filter (partial pred-f db))
-                          (into #{}))])
-                  [#{} nil] plan)))
+  (let [xf (apply comp (for [[term-bindings pred-f] plan
+                             :let [binding-transducers (map (fn [b] (bind b db)) term-bindings)]]
+                         (comp (apply comp binding-transducers)
+                               (filter (partial pred-f db)))))]
+    (into #{} xf [db])))
 
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
