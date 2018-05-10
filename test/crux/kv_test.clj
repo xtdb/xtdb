@@ -65,7 +65,9 @@
     (t/is (= "Freda"
              (:name (cr/entity *kv* eid))))))
 
-(t/deftest test-invalid-attribute-exception
+;; TODO - re-establish schema checking (existing of ident and type) as
+;; middleware?
+#_(t/deftest test-invalid-attribute-exception
   (try
     (cr/-put *kv* [[test-eid :unknown-attribute "foo1"]] #inst "1986-10-22")
     (assert false "Exception expected")
@@ -74,18 +76,14 @@
                (.getMessage e))))))
 
 (t/deftest test-transact-schema-attribute
-  (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident})
   (cr/-put *kv* [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :new-ident)))
-
-  (let [aid (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident2})]
-    (t/is (= :new-ident2 (:crux.kv.attr/ident (cr/attr-aid->schema *kv* aid)))))
 
   (cr/-put *kv* [[test-eid :new-ident2 1]])
   (t/is (= 1 (cr/-get-at *kv* test-eid :new-ident2)))
 
-  ;; test insertion of invalid type and consequent exception
-  )
+  (cr/-put *kv* [[2 :new-ident2 "stringversion"]])
+  (t/is (= "stringversion" (cr/-get-at *kv* 2 :new-ident2))))
 
 (t/deftest test-retract-attribute
   (cr/-put *kv* [[test-eid :foo "foo1"]] #inst "1986-10-22")
@@ -94,8 +92,8 @@
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo #inst "1986-10-22"))))
 
 (t/deftest test-get-attributes
-  (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo/new-ident2})
-  (t/is (= #{:age :foo :last-name :name :salary :sex :tar :foo/new-ident2}
+  (cr/-put *kv* [[test-eid :foo/new-ident2 :a]])
+  (t/is (= #{:foo/new-ident2}
            (set (keys (cr/attributes *kv*))))))
 
 (t/deftest test-store-and-retrieve-meta

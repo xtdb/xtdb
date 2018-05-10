@@ -69,14 +69,6 @@
                               [:http://xmlns.com/foaf/0.1/firstName
                                :http://xmlns.com/foaf/0.1/surname])))))))
 
-;; TODO: schema less or generate on demand?
-(defn transact-schema-based-on-entities [db entities]
-  (doseq [s (reduce-kv
-             (fn [s k v]
-               (conj s {:crux.kv.attr/ident k}))
-             #{} (apply merge entities))]
-    (cr/transact-schema! db s)))
-
 (t/deftest test-can-transact-and-query-entities
   (let [topic "test-can-transact-and-query-entities"
         entities (load-ntriples-example  "crux/picasso.nt")
@@ -90,8 +82,6 @@
       (k/create-topic ac topic 1 1 {})
 
       (t/testing "transacting and indexing"
-        (transact-schema-based-on-entities f/*kv* entities)
-
         (.initTransactions p)
         (k/transact p topic entities)
 

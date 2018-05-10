@@ -6,15 +6,6 @@
             [crux.memdb])
   (:import [java.util Date]))
 
-;; From Datascript:
-
-(defn transact-schemas! [db]
-  (cr/transact-schema! db {:crux.kv.attr/ident :name})
-  (cr/transact-schema! db {:crux.kv.attr/ident :last-name})
-  (cr/transact-schema! db {:crux.kv.attr/ident :sex})
-  (cr/transact-schema! db {:crux.kv.attr/ident :age})
-  (cr/transact-schema! db {:crux.kv.attr/ident :salary}))
-
 (def next-eid (atom 0))
 
 (defn random-person [] {:crux.kv/id (swap! next-eid dec)
@@ -40,9 +31,6 @@
   (let [db-name :test]
     (binding [*kv* (kv-store/open (crux.core/kv db-name))]
       (try
-        (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo})
-        (cr/transact-schema! *kv* {:crux.kv.attr/ident :tar})
-        (transact-schemas! *kv*)
         (f)
         (finally
           (kv-store/close *kv*)

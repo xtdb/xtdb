@@ -122,9 +122,8 @@
         (number? v)
         :long))
 
-(defn transact-schema! "This might be merged with a future fn to
-  transact any type of entity."
-  [db {:keys [:crux.kv.attr/ident]}]
+(defn transact-attr-ident!
+  [db ident]
   {:pre [ident]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
@@ -136,16 +135,17 @@
       (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
     aid))
 
-(defn- attr-schema [db ident]
-  (or (some->> {:index :ident :ident ident}
-               (encode frame-index-key)
-               (kv-store/seek db)
-               bytes->long)
-      (throw (IllegalArgumentException. (str "Unrecognised schema attribute: " ident)))))
+(defn- attr-ident->aid
+  "Look up the attribute ID for a given ident."
+  [db ident]
+  (some->> {:index :ident :ident ident}
+           (encode frame-index-key)
+           (kv-store/seek db)
+           bytes->long))
 
-(defn attr-aid->schema [db aid]
+(defn attr-aid->ident [db aid]
   (if-let [v (kv-store/seek db (encode frame-index-key {:index :aid :aid aid}))]
-    (c/decode frame-value-aid v)
+    (:crux.kv.attr/ident (c/decode frame-value-aid v))
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn- entity->txes [tx]
@@ -162,8 +162,7 @@
   ([db txs ^Date ts]
    (let [tmp-ids->ids (atom {})]
      (doseq [[eid k v] (mapcat entity->txes txs)]
-       (let [aid (attr-schema db k)
-             attr-schema (attr-aid->schema db aid)
+       (let [aid (or (attr-ident->aid db k) (transact-attr-ident! db k))
              eid (or (and (pos? eid) eid)
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
@@ -186,7 +185,7 @@
 (defn -get-at
   ([db eid k] (-get-at db eid k (Date.)))
   ([db eid k ^Date ts]
-   (let [aid (if (keyword? k) (attr-schema db k) k)] ;; knarly
+   (let [aid (if (keyword? k) (attr-ident->aid db k) k)] ;; knarly
      (some->> (kv-store/seek-and-iterate db
                                    (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})
                                    (encode frame-index-key {:index :eat :eid eid :aid aid :ts (Date. 0 0 0)}))
@@ -200,8 +199,7 @@
    (some->
     (reduce (fn [m [k v]]
               (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-key k)
-                    attr-schema (attr-aid->schema db aid)
-                    ident (:crux.kv.attr/ident attr-schema)]
+                    ident (attr-aid->ident db aid)]
                 (if (or (ident m)
                         (or (not at-ts) (> (.getTime ts) (.getTime at-ts))))
                   m
