@@ -9,11 +9,11 @@
 ;; From Datascript:
 
 (defn transact-schemas! [db]
-  (cr/transact-schema! db {:crux.kv.attr/ident :name      :crux.kv.attr/type :string})
-  (cr/transact-schema! db {:crux.kv.attr/ident :last-name :crux.kv.attr/type :string})
-  (cr/transact-schema! db {:crux.kv.attr/ident :sex       :crux.kv.attr/type :keyword})
-  (cr/transact-schema! db {:crux.kv.attr/ident :age       :crux.kv.attr/type :long})
-  (cr/transact-schema! db {:crux.kv.attr/ident :salary    :crux.kv.attr/type :long}))
+  (cr/transact-schema! db {:crux.kv.attr/ident :name})
+  (cr/transact-schema! db {:crux.kv.attr/ident :last-name})
+  (cr/transact-schema! db {:crux.kv.attr/ident :sex})
+  (cr/transact-schema! db {:crux.kv.attr/ident :age})
+  (cr/transact-schema! db {:crux.kv.attr/ident :salary}))
 
 (def next-eid (atom 0))
 
@@ -40,8 +40,8 @@
   (let [db-name :test]
     (binding [*kv* (kv-store/open (crux.core/kv db-name))]
       (try
-        (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo :crux.kv.attr/type :string})
-        (cr/transact-schema! *kv* {:crux.kv.attr/ident :tar :crux.kv.attr/type :string})
+        (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo})
+        (cr/transact-schema! *kv* {:crux.kv.attr/ident :tar})
         (transact-schemas! *kv*)
         (f)
         (finally

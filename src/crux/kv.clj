@@ -56,7 +56,6 @@
 (def frame-value-aid
   "The frame of the value stored inside of the AID index."
   (c/compile-frame
-   :crux.kv.attr/type frame-data-type-enum
    :crux.kv.attr/ident :keyword))
 
 (def frame-index-attribute-ident
@@ -125,8 +124,8 @@
 
 (defn transact-schema! "This might be merged with a future fn to
   transact any type of entity."
-  [db {:keys [:crux.kv.attr/ident :crux.kv.attr/type]}]
-  {:pre [ident type]}
+  [db {:keys [:crux.kv.attr/ident]}]
+  {:pre [ident]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (kv-store/store db
@@ -134,8 +133,7 @@
                     (long->bytes aid))
     ;; to go from aid -> k
     (let [k (encode frame-index-key {:index :aid :aid aid})]
-      (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/type type
-                                                    :crux.kv.attr/ident ident})))
+      (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
     aid))
 
 (defn- attr-schema [db ident]

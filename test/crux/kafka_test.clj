@@ -73,10 +73,7 @@
 (defn transact-schema-based-on-entities [db entities]
   (doseq [s (reduce-kv
              (fn [s k v]
-               (conj s {:crux.kv.attr/ident k
-                        :crux.kv.attr/type (get {Keyword :keyword
-                                                 String :string}
-                                                (type v))}))
+               (conj s {:crux.kv.attr/ident k}))
              #{} (apply merge entities))]
     (cr/transact-schema! db s)))
 

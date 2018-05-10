@@ -74,13 +74,11 @@
                (.getMessage e))))))
 
 (t/deftest test-transact-schema-attribute
-  (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident
-                             :crux.kv.attr/type :string})
+  (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident})
   (cr/-put *kv* [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :new-ident)))
 
-  (let [aid (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident2
-                                       :crux.kv.attr/type :long})]
+  (let [aid (cr/transact-schema! *kv* {:crux.kv.attr/ident :new-ident2})]
     (t/is (= :new-ident2 (:crux.kv.attr/ident (cr/attr-aid->schema *kv* aid)))))
 
   (cr/-put *kv* [[test-eid :new-ident2 1]])
@@ -96,8 +94,7 @@
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo #inst "1986-10-22"))))
 
 (t/deftest test-get-attributes
-  (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo/new-ident2
-                             :crux.kv.attr/type :long})
+  (cr/transact-schema! *kv* {:crux.kv.attr/ident :foo/new-ident2})
   (t/is (= #{:age :foo :last-name :name :salary :sex :tar :foo/new-ident2}
            (set (keys (cr/attributes *kv*))))))
 
