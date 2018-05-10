@@ -94,7 +94,7 @@
 (t/deftest test-get-attributes
   (cr/-put *kv* [[test-eid :foo/new-ident2 :a]])
   (t/is (= #{:foo/new-ident2}
-           (set (keys (cr/attributes *kv*))))))
+           (set (keys @(:attributes *kv*))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (cr/get-meta *kv* :foo)))

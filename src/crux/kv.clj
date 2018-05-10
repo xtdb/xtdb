@@ -123,7 +123,7 @@
         :long))
 
 (defn- transact-attr-ident!
-  [{:keys [attributes] :as db} ident]
+  [db ident]
   {:pre [ident]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
@@ -133,21 +133,33 @@
     ;; to go from aid -> k
     (let [k (encode frame-index-key {:index :aid :aid aid})]
       (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
-    (swap! attributes assoc ident aid)
     aid))
+
+(defn- attributes-at-rest
+  "Sequence of all attributes in the DB."
+  [db]
+  (->> (kv-store/seek-and-iterate-bounded db (encode frame-index-key-prefix {:index :aid}))
+       (map (fn [[k v]]
+              (let [attr (c/decode frame-value-aid v)
+                    k (c/decode frame-index-key k)]
+                [(:crux.kv.attr/ident attr)
+                 (:aid k)])))
+       (into {})))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not
   present."
   [{:keys [attributes] :as db} ident]
+  (if (nil? @attributes)
+    (reset! attributes (attributes-at-rest db)))
   (or (get @attributes ident)
-      (let [aid (some->> {:index :ident :ident ident}
-                         (encode frame-index-key)
-                         (kv-store/seek db)
-                         bytes->long)]
+      (let [aid (or (some->> {:index :ident :ident ident}
+                             (encode frame-index-key)
+                             (kv-store/seek db)
+                             bytes->long)
+                    (transact-attr-ident! db ident))]
         (swap! attributes assoc ident aid)
-        aid)
-      (transact-attr-ident! db ident)))
+        aid)))
 
 (defn attr-aid->ident [db aid]
   (if-let [v (kv-store/seek db (encode frame-index-key {:index :aid :aid aid}))]
@@ -242,17 +254,6 @@
                                                              :ts (Date. 0 0 0)
                                                              :eid 0}))
          (map (comp bytes->long second)))))
-
-(defn attributes
-  "Sequence of all attributes in the DB."
-  [db]
-  (->> (kv-store/seek-and-iterate-bounded db (encode frame-index-key-prefix {:index :aid}))
-       (map (fn [[k v]]
-              (let [attr (c/decode frame-value-aid v)
-                    k (c/decode frame-index-key k)]
-                [(:crux.kv.attr/ident attr)
-                 (:aid k)])))
-       (into {})))
 
 (defn store-meta [db k v]
   (kv-store/store db
