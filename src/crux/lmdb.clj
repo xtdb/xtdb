@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [crux.byte-utils :as bu]
             [crux.kv-store :as ks])
-  (:import [java.io File]
+  (:import [java.io Closeable File]
            [java.nio ByteBuffer]
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBVal]))
@@ -79,11 +79,11 @@
 (defn- db-path [db-name]
   (str "/tmp/" (name db-name) ".db"))
 
-(defrecord CruxLMDBKv [db-name env dbi]
+(defrecord CruxLMDBKv [db-name db-dir env dbi]
   ks/CruxKvStore
   (open [this]
     (let [env (env-create)]
-      (env-open env (io/file (db-path db-name)))
+      (env-open env (or db-dir (io/file (db-path db-name))))
       (assoc this :env env :dbi (dbi-open env))))
 
   (seek [_ k]
@@ -106,17 +106,19 @@
         stack
         txn
         dbi
-        (+ (bu/bytes->long (get-bytes->bytes-in-txn stack txn dbi k))
-           (bu/bytes->long v))))))
-
-  (close [_]
-    (env-close env))
+        k
+        (bu/long->bytes (+ (bu/bytes->long (get-bytes->bytes-in-txn stack txn dbi k))
+                           (bu/bytes->long v)))))))
 
   (destroy [this]
     (transaction
      env
      (fn [_ txn]
-       (success? (LMDB/mdb_drop txn dbi true))))))
+       (success? (LMDB/mdb_drop txn dbi true)))))
+
+  Closeable
+  (close [_]
+    (env-close env)))
 
 (defn crux-lmdb-kv [db-name]
   (map->CruxLMDBKv {:db-name db-name}))
