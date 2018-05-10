@@ -3,6 +3,7 @@
             [crux.kv-store :as kv-store]
             [crux.core]
             [crux.rocksdb]
+            [crux.lmdb]
             [crux.memdb])
   (:import [java.util Date]))
 
@@ -39,4 +40,8 @@
 ;; TODO: this should obviously be configurable some other way.
 (defn with-memdb [f]
   (with-redefs [crux.core/kv crux.memdb/crux-mem-kv]
+    (f)))
+
+(defn with-lmdbdb [f]
+  (with-redefs [crux.core/kv crux.lmdb/crux-lmdb-kv]
     (f)))

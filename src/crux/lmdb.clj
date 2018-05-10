@@ -69,15 +69,38 @@
         kv (.mv_data (MDBVal/callocStack stack) kb)
         dv (MDBVal/callocStack stack)]
     (success? (LMDB/mdb_get txn dbi kv dv))
-    (let [bb (.mv_data dv)]
-      (doto (byte-array (.remaining bb))
-        (->> (.get bb))))))
+    (bu/byte-buffer->bytes (.mv_data dv))))
 
 (defn get-bytes->bytes ^bytes [env dbi ^bytes k]
   (transaction
    env
    (fn [^MemoryStack stack ^long txn]
      (get-bytes->bytes-in-txn stack txn dbi k))))
+
+(defn cursor->vec [env dbi ^bytes k pred]
+  (transaction
+   env
+   (fn [^MemoryStack stack ^long txn]
+     (let [pp (.mallocPointer stack 1)]
+       (success? (LMDB/mdb_cursor_open txn dbi pp))
+       (let [cursor (.get pp 0)
+             kb (.flip (.put (.malloc stack (alength k)) k))
+             kv (.mv_data (MDBVal/callocStack stack) kb)
+             dv (MDBVal/callocStack stack)]
+         (try
+           (loop [acc []
+                  flags LMDB/MDB_SET_RANGE]
+             (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
+               (if (= LMDB/MDB_NOTFOUND rc)
+                 acc
+                 (do (success? rc)
+                     (let [k (bu/byte-buffer->bytes (.mv_data kv))]
+                       (if (pred k)
+                         (recur (conj acc [k (bu/byte-buffer->bytes (.mv_data dv))])
+                                LMDB/MDB_NEXT)
+                         acc))))))
+           (finally
+             (LMDB/mdb_cursor_close cursor))))))))
 
 ;; TODO: this should be configurable.
 (defn- db-path [db-name]
@@ -87,17 +110,18 @@
   ks/CruxKvStore
   (open [this]
     (let [env (env-create)]
-      (env-open env (or db-dir (io/file (db-path db-name))))
+      (env-open env (or db-dir (doto (io/file (db-path db-name))
+                                 .mkdirs)))
       (assoc this :env env :dbi (dbi-open env))))
 
   (seek [_ k]
     (get-bytes->bytes env dbi k))
 
   (seek-and-iterate [_ k upper-bound]
-    )
+    (cursor->vec env dbi k #(neg? (bu/compare-bytes % upper-bound Integer/MAX_VALUE))))
 
   (seek-and-iterate-bounded [_ k]
-    )
+    (cursor->vec env dbi k #(zero? (bu/compare-bytes k % (alength ^bytes k)))))
 
   (store [_ k v]
     (put-bytes->bytes env dbi k v))
@@ -126,4 +150,4 @@
     (env-close env)))
 
 (defn crux-lmdb-kv [db-name]
-  (map->CruxLMDBKv {:db-name db-name}))
+  (map->CruxLMDBKv {:db-name db-name :attributes (atom nil)}))

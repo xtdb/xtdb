@@ -1,5 +1,6 @@
 (ns crux.byte-utils
   (:import [java.math BigInteger]
+           [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Comparator]))
 
@@ -32,6 +33,10 @@
 
         (number? v)
         (long->bytes v)))
+
+(defn byte-buffer->bytes ^bytes [^ByteBuffer b]
+  (doto (byte-array (.remaining b))
+    (->> (.get b))))
 
 (defn compare-bytes [^bytes a ^bytes b max-length]
   (let [a-length (int (alength a))

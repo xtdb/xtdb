@@ -41,4 +41,4 @@
     (dissoc this :db)))
 
 (defn crux-mem-kv [db-name]
-  (map->CruxMemKv {:db-name db-name}))
+  (map->CruxMemKv {:db-name db-name :attributes (atom nil)}))
