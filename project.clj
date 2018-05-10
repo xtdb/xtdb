@@ -9,10 +9,10 @@
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
                  [org.apache.kafka/kafka-clients "1.1.0"]
-                 [cheshire "5.8.0"
-                  :exclusions [com.fasterxml.jackson.core/jackson-core]]
+                 [cheshire "5.8.0"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.1"]]
-  :profiles {:dev {:dependencies [[org.apache.kafka/kafka_2.11 "1.1.0"]
+  :profiles {:dev {:dependencies [[org.apache.kafka/kafka_2.11 "1.1.0"
+                                   :exclusions [com.fasterxml.jackson.core/jackson-core]]
                                   [org.apache.zookeeper/zookeeper "3.4.12"
                                    :exclusions [io.netty/netty
                                                 jline
