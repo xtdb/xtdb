@@ -205,9 +205,10 @@
   ([db eid ident] (-get-at db eid ident (Date.)))
   ([db eid ident ^Date ts]
    (let [aid (attr-ident->aid! db ident)
-         prefix #^bytes (encode frame-index-key {:index :eat :eid eid :aid aid})]
-     (when-let [[k v] (kv-store/seek db (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts}))]
-       (when (zero? (bu/compare-bytes prefix k (alength prefix)))
+         seek-k #^bytes (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})]
+     (when-let [[k v] (kv-store/seek db seek-k)]
+       ;; Ensure just the key we want (minus time)
+       (when (zero? (bu/compare-bytes seek-k k (- (alength seek-k) 8)))
          (:v (c/decode frame-value-eat v)))))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
