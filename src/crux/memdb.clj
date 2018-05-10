@@ -4,30 +4,30 @@
   (:import [java.util TreeMap]
            [java.util.function BiFunction]))
 
-(defrecord CruxMemKv [db-name db]
+(defrecord CruxMemKv [db-name ^TreeMap db]
   ks/CruxKvStore
   (open [this]
     (assoc this :db (TreeMap. bu/bytes-comparator)))
 
-  (seek [{:keys [^TreeMap db]} k]
+  (seek [_ k]
     (first (.tailMap db k)))
 
-  (value [{:keys [db]} k]
+  (value [_ k]
     (get db k))
 
-  (seek-and-iterate [{:keys [^TreeMap db]} k upper-bound]
+  (seek-and-iterate [_ k upper-bound]
     (for [[k2 v] (.subMap db k upper-bound)]
       [k2 v]))
 
-  (seek-and-iterate-bounded [{:keys [^TreeMap db]} k]
+  (seek-and-iterate-bounded [_ k]
     (for [[^bytes k2 v] (.tailMap db k)
           :while (zero? (bu/compare-bytes k k2 (count k)))]
       [k2 v]))
 
-  (store [{:keys [^TreeMap db]} k v]
+  (store [_ k v]
     (.put db k v))
 
-  (merge! [{:keys [^TreeMap db]} k v]
+  (merge! [_ k v]
     (.compute db k (reify BiFunction
                      (apply [_ k old-value]
                        (if old-value
@@ -41,4 +41,4 @@
     (dissoc this :db)))
 
 (defn crux-mem-kv [db-name]
-  (map->CruxMemKv {:db-name db-name :attributes (atom nil)}))
+  (map->CruxMemKv {:db-name db-name}))
