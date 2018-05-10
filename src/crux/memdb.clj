@@ -5,7 +5,7 @@
            [java.util.function BiFunction]))
 
 (defrecord CruxMemKv [db-name db]
-  ks/CruxKv
+  ks/CruxKvStore
   (open [this]
     (assoc this :db (TreeMap. bu/bytes-comparator)))
 

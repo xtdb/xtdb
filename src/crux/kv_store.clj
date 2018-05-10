@@ -1,6 +1,6 @@
 (ns crux.kv-store)
 
-(defprotocol CruxKv
+(defprotocol CruxKvStore
   (open [this])
 
   (seek [db k])

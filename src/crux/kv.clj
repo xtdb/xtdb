@@ -122,8 +122,8 @@
         (number? v)
         :long))
 
-(defn transact-attr-ident!
-  [db ident]
+(defn- transact-attr-ident!
+  [{:keys [attributes] :as db} ident]
   {:pre [ident]}
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
@@ -133,15 +133,21 @@
     ;; to go from aid -> k
     (let [k (encode frame-index-key {:index :aid :aid aid})]
       (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
+    (swap! attributes assoc ident aid)
     aid))
 
-(defn- attr-ident->aid
-  "Look up the attribute ID for a given ident."
-  [db ident]
-  (some->> {:index :ident :ident ident}
-           (encode frame-index-key)
-           (kv-store/seek db)
-           bytes->long))
+(defn- attr-ident->aid!
+  "Look up the attribute ID for a given ident. Create it if not
+  present."
+  [{:keys [attributes] :as db} ident]
+  (or (get @attributes ident)
+      (let [aid (some->> {:index :ident :ident ident}
+                         (encode frame-index-key)
+                         (kv-store/seek db)
+                         bytes->long)]
+        (swap! attributes assoc ident aid)
+        aid)
+      (transact-attr-ident! db ident)))
 
 (defn attr-aid->ident [db aid]
   (if-let [v (kv-store/seek db (encode frame-index-key {:index :aid :aid aid}))]
@@ -162,7 +168,7 @@
   ([db txs ^Date ts]
    (let [tmp-ids->ids (atom {})]
      (doseq [[eid k v] (mapcat entity->txes txs)]
-       (let [aid (or (attr-ident->aid db k) (transact-attr-ident! db k))
+       (let [aid (attr-ident->aid! db k)
              eid (or (and (pos? eid) eid)
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
@@ -183,9 +189,9 @@
      @tmp-ids->ids)))
 
 (defn -get-at
-  ([db eid k] (-get-at db eid k (Date.)))
-  ([db eid k ^Date ts]
-   (let [aid (if (keyword? k) (attr-ident->aid db k) k)] ;; knarly
+  ([db eid ident] (-get-at db eid ident (Date.)))
+  ([db eid ident ^Date ts]
+   (let [aid (attr-ident->aid! db ident)]
      (some->> (kv-store/seek-and-iterate db
                                    (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})
                                    (encode frame-index-key {:index :eat :eid eid :aid aid :ts (Date. 0 0 0)}))
@@ -210,7 +216,7 @@
                                        (encode frame-index-eat-key-prefix {:index :eat :eid (inc eid)})))
     (assoc ::id eid))))
 
-(defn- entity-ids
+(defn entity-ids
   "Sequence of all entities in the DB. If this approach sticks, it
   could be a performance gain to replace this with a dedicate EID
   index that could be lazy."
@@ -222,19 +228,20 @@
        (map :eid)
        (into #{})))
 
-(defn- entity-ids-for-value [db aid v ^Date ts]
-  (->> (kv-store/seek-and-iterate db
-                                  (encode frame-index-key {:index :avt
-                                                            :aid aid
-                                                            :v v
-                                                            :ts ts
-                                                            :eid 0})
-                                  (encode frame-index-key {:index :avt
-                                                            :aid aid
-                                                            :v v
-                                                            :ts (Date. 0 0 0)
-                                                            :eid 0}))
-       (map (comp bytes->long second))))
+(defn entity-ids-for-value [db ident v ^Date ts]
+  (let [aid (attr-ident->aid! db ident)]
+    (->> (kv-store/seek-and-iterate db
+                                    (encode frame-index-key {:index :avt
+                                                             :aid aid
+                                                             :v v
+                                                             :ts ts
+                                                             :eid 0})
+                                    (encode frame-index-key {:index :avt
+                                                             :aid aid
+                                                             :v v
+                                                             :ts (Date. 0 0 0)
+                                                             :eid 0}))
+         (map (comp bytes->long second)))))
 
 (defn attributes
   "Sequence of all attributes in the DB."
@@ -244,7 +251,7 @@
               (let [attr (c/decode frame-value-aid v)
                     k (c/decode frame-index-key k)]
                 [(:crux.kv.attr/ident attr)
-                 (assoc attr :crux.kv.attr/id (:aid k))])))
+                 (:aid k)])))
        (into {})))
 
 (defn store-meta [db k v]
@@ -256,16 +263,3 @@
   (some->> ^bytes (kv-store/seek db (encode frame-index-meta {:index :meta :key k}))
            String.
            edn/read-string))
-
-(defrecord KvDatasource [kv ts attributes]
-  crux.db/Datasource
-  (entities [this]
-    (entity-ids kv))
-
-  (entities-for-attribute-value [this a v]
-    (let [aid (:crux.kv.attr/id (attributes a))]
-      (entity-ids-for-value kv aid v ts)))
-
-  (attr-val [this eid attr]
-    (let [aid (:crux.kv.attr/id (attributes attr))]
-      (-get-at kv eid aid ts))))

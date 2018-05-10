@@ -41,7 +41,7 @@
   (str "/tmp/" (name db-name) ".db"))
 
 (defrecord CruxRocksKv [db-name]
-  CruxKv
+  CruxKvStore
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)
