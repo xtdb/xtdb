@@ -24,7 +24,8 @@
                                                 org.slf4j/slf4j-log4j12
                                                 log4j]]]
                    :source-paths ["bench"]}}
-  :aot [crux.kafka]
+  :aot [crux.main
+        crux.kafka]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
