@@ -57,5 +57,5 @@
       (f))))
 
 (defn with-each-kv-store [f]
-  (doseq [with-kv [with-memdb with-rocksdb with-lmdb]]
-    (with-kv f)))
+  (doseq [with-kv-store [with-memdb with-rocksdb with-lmdb]]
+    (with-kv-store f)))
