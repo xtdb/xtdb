@@ -7,9 +7,11 @@
 
   http://docs.rdf4j.org/"
   (:require [clojure.java.io :as io]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.tools.logging :as log])
   (:import [java.io StringReader]
            [java.net URLDecoder]
+           [javax.xml.datatype DatatypeConstants]
            [org.eclipse.rdf4j.rio Rio RDFFormat]
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
@@ -52,10 +54,12 @@
                    (.get (.getLanguage literal)))]
     (cond
       (XMLDatatypeUtil/isCalendarDatatype dt)
-      (let [calendar (-> (.getLabel literal)
-                         (str/replace #"-(\d?)$" "-0$1")
-                         (str/replace #"-(\d?)-" "-0$1-"))]
-        (.getTime (.toGregorianCalendar (XMLDatatypeUtil/parseCalendar calendar))))
+      (.getTime (.toGregorianCalendar
+                 (if (= DatatypeConstants/FIELD_UNDEFINED
+                        (.getTimezone (.calendarValue literal)))
+                   (doto (.calendarValue literal)
+                     (.setTimezone 0))
+                   (.calendarValue literal))))
 
       (XMLDatatypeUtil/isDecimalDatatype dt)
       (.decimalValue literal)
@@ -106,16 +110,20 @@
                                        statements)]
     (reduce
      (fn [m statement]
-       (let [[_ p o] (statement->clj statement)]
-         (update m p (fn [x]
-                       (cond
-                         (nil? x)
-                         o
+       (try
+         (let [[_ p o] (statement->clj statement)]
+           (update m p (fn [x]
+                         (cond
+                           (nil? x)
+                           o
 
-                         (coll? x)
-                         (conj x o)
+                           (coll? x)
+                           (conj x o)
 
-                         :else #{x o})))))
+                           :else #{x o}))))
+         (catch IllegalArgumentException e
+           (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
+           m)))
      {:crux.rdf/iri (value->clj subject)}
      statements)))
 
