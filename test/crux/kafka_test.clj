@@ -8,7 +8,6 @@
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.fixtures :as f]
-            [crux.test-utils :as tu]
             [crux.embedded-kafka :as ek])
   (:import [java.util List]
            [clojure.lang Keyword]

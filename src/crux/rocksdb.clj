@@ -1,8 +1,8 @@
 (ns crux.rocksdb
-  (:require [crux.kv-store :refer :all]
+  (:require [clojure.java.io :as io]
+            [crux.kv-store :refer :all]
             [crux.byte-utils :as bu])
-  (:import [java.io File]
-           [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
+  (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
 (defn- -value [^RocksDB db k]
   (with-open [i (.newIterator db)]
@@ -43,14 +43,14 @@
       (.seek i k)
       (doall (rocks-iterator->seq i #(zero? (bu/compare-bytes k % array-length)))))))
 
-(defrecord CruxRocksKv [^File db-dir]
+(defrecord CruxRocksKv [db-dir]
   CruxKvStore
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)
                  (.setCreateIfMissing true)
                  (.setMergeOperatorName "uint64add"))
-          db (RocksDB/open opts (.getAbsolutePath db-dir))]
+          db (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))]
       (assoc this :db db :options opts)))
 
   (value [{:keys [db]} k]
@@ -77,4 +77,4 @@
 
   (destroy [this]
     (with-open [options (Options.)]
-      (RocksDB/destroyDB (.getAbsolutePath db-dir) options))))
+      (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options))))

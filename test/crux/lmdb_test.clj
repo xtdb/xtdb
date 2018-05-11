@@ -1,7 +1,6 @@
 (ns crux.lmdb-test
   (:require [clojure.test :as t]
             [crux.byte-utils :as bu]
-            [crux.test-utils :as tu]
             [crux.fixtures :as f]
             [crux.kv-store :as ks]
             [crux.lmdb :as lmdb])

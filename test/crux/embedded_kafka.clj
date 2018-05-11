@@ -1,6 +1,6 @@
 (ns crux.embedded-kafka
   (:require [clojure.java.io :as io]
-            [crux.test-utils :as tu])
+            [crux.io :as cio])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
            [org.apache.zookeeper.server
@@ -32,8 +32,8 @@
       (.store out ""))))
 
 (defn with-embedded-kafka [f]
-  (let [log-dir (tu/create-tmpdir "kafka-log")
-        port (tu/free-port)
+  (let [log-dir (cio/create-tmpdir "kafka-log")
+        port (cio/free-port)
         config (KafkaConfig.
                 (merge *kafka-broker-config*
                        {"host.name" *host*
@@ -50,14 +50,14 @@
       (finally
         (some-> broker .shutdown)
         (some-> broker .awaitShutdown)
-        (tu/delete-dir log-dir)))))
+        (cio/delete-dir log-dir)))))
 
 (defn with-embedded-zookeeper [f]
   (let [tick-time 500
         max-connections 16
-        snapshot-dir (tu/create-tmpdir "zk-snapshot")
-        log-dir (tu/create-tmpdir "zk-log")
-        port (tu/free-port)
+        snapshot-dir (cio/create-tmpdir "zk-snapshot")
+        log-dir (cio/create-tmpdir "zk-log")
+        port (cio/free-port)
         server (ZooKeeperServer. snapshot-dir log-dir tick-time)
         server-cnxn-factory (doto (NIOServerCnxnFactory/createFactory)
                               (.configure (InetSocketAddress. *host* port)
@@ -69,7 +69,7 @@
       (finally
         (some-> server-cnxn-factory .shutdown)
         (doseq [dir [snapshot-dir log-dir]]
-          (tu/delete-dir dir))))))
+          (cio/delete-dir dir))))))
 
 (defn with-embedded-kafka-cluster [f]
   (with-embedded-zookeeper

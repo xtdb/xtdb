@@ -1,10 +1,10 @@
 (ns crux.lmdb
   (:require [clojure.java.io :as io]
             [crux.byte-utils :as bu]
-            [crux.kv-store :as ks])
-  (:import [java.io Closeable File]
+            [crux.kv-store :as ks]
+            [crux.io :as cio])
+  (:import [java.io Closeable]
            [java.nio ByteBuffer]
-           [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBVal]))
 
@@ -39,9 +39,10 @@
       (success? (LMDB/mdb_env_create pp))
       (.get pp))))
 
-(defn env-open [^long env ^File dir ^long flags]
+(defn env-open [^long env dir ^long flags]
   (success? (LMDB/mdb_env_open env
-                               (.getAbsolutePath dir)
+                               (.getAbsolutePath (doto (io/file dir)
+                                                   .mkdirs))
                                flags
                                0664)))
 
@@ -98,31 +99,14 @@
            (finally
              (LMDB/mdb_cursor_close cursor))))))))
 
-(def file-deletion-visitor
-  (proxy [SimpleFileVisitor] []
-    (visitFile [file _]
-      (Files/delete file)
-      FileVisitResult/CONTINUE)
-
-    (postVisitDirectory [dir _]
-      (Files/delete dir)
-      FileVisitResult/CONTINUE)))
-
-(defn delete-dir [^File dir]
-  (when (.isDirectory dir)
-    (Files/walkFileTree (.toPath dir) file-deletion-visitor)))
-
-(defrecord CruxLMDBKv [^File db-dir env env-flags dbi]
+(defrecord CruxLMDBKv [db-dir env env-flags dbi]
   ks/CruxKvStore
   (open [this]
-    (let [db-dir (doto db-dir
-                   .mkdirs)
-          env-flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
+    (let [env-flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
           env (env-create)]
       (try
         (env-open env db-dir env-flags)
         (assoc this
-               :db-dir db-dir
                :env env
                :env-flags env-flags
                :dbi (dbi-open env))
@@ -172,7 +156,7 @@
      0))
 
   (destroy [this]
-    (delete-dir db-dir))
+    (cio/delete-dir db-dir))
 
   Closeable
   (close [_]

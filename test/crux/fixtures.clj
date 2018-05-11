@@ -5,7 +5,7 @@
             [crux.rocksdb]
             [crux.lmdb]
             [crux.memdb]
-            [crux.test-utils :as tu])
+            [crux.io :as cio])
   (:import [java.util Date]))
 
 (def next-eid (atom 0))
@@ -31,14 +31,14 @@
 (def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
 
 (defn start-system [f]
-  (let [db-dir (tu/create-tmpdir "test")]
+  (let [db-dir (cio/create-tmpdir "test")]
     (binding [*kv* (kv-store/open (crux.core/kv db-dir {:kv-store *kv-store*}))]
       (try
         (f)
         (finally
           (kv-store/close *kv*)
           (kv-store/destroy *kv*)
-          (tu/delete-dir db-dir))))))
+          (cio/delete-dir db-dir))))))
 
 (defn with-rocksdb [f]
   (binding [*kv-store* (crux.rocksdb/map->CruxRocksKv {})]

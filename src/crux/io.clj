@@ -1,6 +1,6 @@
-(ns crux.test-utils
-  (:import [java.io File]
-           [java.nio.file Files FileVisitResult SimpleFileVisitor]
+(ns crux.io
+  (:require [clojure.java.io :as io])
+  (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
            [java.net ServerSocket]))
 
@@ -21,6 +21,7 @@
       (Files/delete dir)
       FileVisitResult/CONTINUE)))
 
-(defn delete-dir [^File dir]
-  (when (.isDirectory dir)
-    (Files/walkFileTree (.toPath dir) file-deletion-visitor)))
+(defn delete-dir [dir]
+  (let [dir (io/file dir)]
+    (when (.exists dir)
+      (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
