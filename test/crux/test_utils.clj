@@ -22,4 +22,5 @@
       FileVisitResult/CONTINUE)))
 
 (defn delete-dir [^File dir]
-  (Files/walkFileTree (.toPath dir) file-deletion-visitor))
+  (when (.isDirectory dir)
+    (Files/walkFileTree (.toPath dir) file-deletion-visitor)))

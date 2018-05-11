@@ -17,8 +17,11 @@
 
 (defn kv
   "Open a connection to the underlying KV data-store."
-  [db-name]
-  (rocksdb/map->CruxRocksKv {:db-name db-name :attributes (atom nil)}))
+  ([db-dir]
+   (kv db-dir {}))
+  ([db-dir {:keys [kv-store] :as opts}]
+   (merge (or kv-store (rocksdb/map->CruxRocksKv {}))
+          {:db-dir db-dir :attributes (atom nil)})))
 
 (defn as-of [kv ts]
   (map->KvDatasource {:kv kv :ts ts}))

@@ -180,6 +180,3 @@
   Closeable
   (close [_]
     (env-close env)))
-
-(defn crux-lmdb-kv [db-name]
-  (map->CruxLMDBKv {:db-name db-name :attributes (atom nil)}))

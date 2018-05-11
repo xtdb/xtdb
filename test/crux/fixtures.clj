@@ -4,7 +4,8 @@
             [crux.core]
             [crux.rocksdb]
             [crux.lmdb]
-            [crux.memdb])
+            [crux.memdb]
+            [crux.test-utils :as tu])
   (:import [java.util Date]))
 
 (def next-eid (atom 0))
@@ -27,21 +28,26 @@
      (map #(update % :crux.kv/id ids) people))))
 
 (def ^:dynamic *kv*)
+(def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
 
 (defn start-system [f]
-  (let [db-name :test]
-    (binding [*kv* (kv-store/open (crux.core/kv db-name))]
+  (let [db-dir (tu/create-tmpdir "test")]
+    (binding [*kv* (kv-store/open (crux.core/kv db-dir {:kv-store *kv-store*}))]
       (try
         (f)
         (finally
           (kv-store/close *kv*)
-          (kv-store/destroy *kv*))))))
+          (kv-store/destroy *kv*)
+          (tu/delete-dir db-dir))))))
 
-;; TODO: this should obviously be configurable some other way.
+(defn with-rocksdb [f]
+  (binding [*kv-store* (crux.rocksdb/map->CruxRocksKv {})]
+    (f)))
+
 (defn with-memdb [f]
-  (with-redefs [crux.core/kv crux.memdb/crux-mem-kv]
+  (binding [*kv-store* (crux.memdb/map->CruxMemKv {})]
     (f)))
 
 (defn with-lmdb [f]
-  (with-redefs [crux.core/kv crux.lmdb/crux-lmdb-kv]
+  (binding [*kv-store* (crux.lmdb/map->CruxLMDBKv {})]
     (f)))

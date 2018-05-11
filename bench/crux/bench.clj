@@ -1,5 +1,5 @@
 (ns crux.bench
-  (:require [crux.fixtures :refer [random-person start-system *kv*]]
+  (:require [crux.fixtures :as f :refer [random-person start-system *kv*]]
             [crux.kv :as cr]
             [crux.query :as q]
             [crux.core :refer [db]]
@@ -12,21 +12,22 @@
                                                         ts (Date.)
                                                         kv :rocks}}]
 
-  (with-redefs [crux.core/kv (case kv
-                               :rocks crux.core/kv
-                               :mem crux.memdb/crux-mem-kv)]
-    (start-system
-     (fn []
+  ((case kv
+     :rocks f/with-rocksdb
+     :lmdb f/with-lmdb
+     :mem f/with-memdb)
+   (fn []
+     (start-system
+      (fn []
+        ;; Insert data
+        (time
+         (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
+           (cr/-put *kv* people ts)))
 
-       ;; Insert data
-       (time
-        (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-          (cr/-put *kv* people ts)))
-
-       ;; Basic query
-       (time
-        (doseq [i (range queries)]
-          (q/q (db *kv*) {:find ['e]
-                          :where [['e :name "Ivan"]]})))))))
+        ;; Basic query
+        (time
+         (doseq [i (range queries)]
+           (q/q (db *kv*) {:find ['e]
+                           :where [['e :name "Ivan"]]}))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
