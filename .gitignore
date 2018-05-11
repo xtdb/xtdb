@@ -6,3 +6,4 @@ notes.md
 target
 *.log
 /setprofiler.sh
+/data
