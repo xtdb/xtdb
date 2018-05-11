@@ -55,12 +55,11 @@
          (rf result))
         ([result input]
          (if (satisfies? db/Datasource input)
-           (reduce rf result (map #(hash-map e %) (entities-for-term db a v)))
+           (transduce (map (partial hash-map e)) rf result (entities-for-term db a v))
            (if (get input e)
              (rf result input)
              ;; New entity, join the results (todo, look at hash-join algos)
-             (reduce rf result (for [eid (entities-for-term db a v)]
-                                 (assoc input e eid))))))))))
+             (transduce (map #(assoc input e %)) rf result (entities-for-term db a v)))))))))
 
 (defrecord VarBinding [e a s]
   Binding
