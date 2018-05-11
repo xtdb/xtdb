@@ -1,18 +1,17 @@
-(ns crux.lmdb-test
+(ns crux.kv-store-test
   (:require [clojure.test :as t]
             [crux.byte-utils :as bu]
             [crux.fixtures :as f]
-            [crux.kv-store :as ks]
-            [crux.lmdb :as lmdb])
+            [crux.kv-store :as ks])
   (:import [java.io Closeable]))
 
-(t/use-fixtures :each f/with-lmdb f/start-system)
+(t/use-fixtures :each f/with-each-kv-store f/start-system)
 
-(t/deftest test-lmdb-store-and-value []
+(t/deftest test-store-and-value []
   (t/testing "store and retrieve and seek value"
-    (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "LMDB"))
-    (t/is (= "LMDB" (String. ^bytes (ks/value f/*kv* (bu/long->bytes 1)))))
-    (t/is (= [1 "LMDB"] (let [[k v] (ks/seek f/*kv* (bu/long->bytes 1))]
+    (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+    (t/is (= "Crux" (String. ^bytes (ks/value f/*kv* (bu/long->bytes 1)))))
+    (t/is (= [1 "Crux"] (let [[k v] (ks/seek f/*kv* (bu/long->bytes 1))]
                           [(bu/bytes->long k) (String. ^bytes v)]))))
 
   (t/testing "non existing key"
@@ -24,13 +23,13 @@
       (ks/merge! f/*kv* k (bu/long->bytes 1))
       (t/is (= 1 (bu/bytes->long (ks/value f/*kv* k)))))
 
-    (t/testing "store and update ints using merge"
-      (ks/store f/*kv* k (bu/long->bytes 1))
-      (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))
-
     (t/testing "can merge more than once"
       (ks/merge! f/*kv* k (bu/long->bytes 2))
-      (t/is (= 3 (bu/bytes->long (ks/value f/*kv* k)))))))
+      (t/is (= 3 (bu/bytes->long (ks/value f/*kv* k)))))
+
+    (t/testing "store after merge resets value"
+      (ks/store f/*kv* k (bu/long->bytes 1))
+      (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))))
 
 
 (t/deftest test-seek-and-iterate []

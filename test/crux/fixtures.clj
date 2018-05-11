@@ -5,7 +5,8 @@
             [crux.rocksdb]
             [crux.lmdb]
             [crux.memdb]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [clojure.test :as t])
   (:import [java.util Date]))
 
 (def next-eid (atom 0))
@@ -40,14 +41,21 @@
           (kv-store/destroy *kv*)
           (cio/delete-dir db-dir))))))
 
-(defn with-rocksdb [f]
-  (binding [*kv-store* (crux.rocksdb/map->CruxRocksKv {})]
-    (f)))
-
 (defn with-memdb [f]
   (binding [*kv-store* (crux.memdb/map->CruxMemKv {})]
-    (f)))
+    (t/testing "MemDB"
+      (f))))
+
+(defn with-rocksdb [f]
+  (binding [*kv-store* (crux.rocksdb/map->CruxRocksKv {})]
+    (t/testing "RocksDB"
+      (f))))
 
 (defn with-lmdb [f]
   (binding [*kv-store* (crux.lmdb/map->CruxLMDBKv {})]
-    (f)))
+    (t/testing "LMDB"
+      (f))))
+
+(defn with-each-kv-store [f]
+  (doseq [with-kv [with-memdb with-rocksdb with-lmdb]]
+    (with-kv f)))
