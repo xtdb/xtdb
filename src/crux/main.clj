@@ -1,6 +1,5 @@
 (ns crux.main
-  (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
             [clojure.pprint :as pp]
             [crux.core]
@@ -27,7 +26,6 @@
    ["-h" "--help"]])
 
 (defn -main [& args]
-  (log/info "Starting Crux...")
   (let [{:keys [options
                 errors
                 summary]} (cli/parse-opts args cli-options)]
