@@ -2,65 +2,64 @@
   (:require [clojure.test :as t]
             [crux.byte-utils :as bu]
             [crux.test-utils :as tu]
+            [crux.fixtures :as f]
             [crux.kv-store :as ks]
             [crux.lmdb :as lmdb])
   (:import [java.io Closeable]))
 
-;; Based on
-;; https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/util/lmdb/LMDBDemo.java
-(t/deftest test-lmdb-demo []
-  (let [db-dir (tu/create-tmpdir "lmdb")]
-    (try
-      (with-open [kv ^Closeable (ks/open (lmdb/map->CruxLMDBKv {:db-dir db-dir}))]
-        (ks/store kv (bu/long->bytes 1) (.getBytes "LMDB"))
-        (t/is (= "LMDB" (String. ^bytes (ks/value kv (bu/long->bytes 1)))))
-        (t/is (nil? (ks/value kv (bu/long->bytes 2)))))
-      (finally
-        (tu/delete-dir db-dir)))))
+(t/use-fixtures :each f/with-lmdb f/start-system)
+
+(t/deftest test-lmdb-store-and-value []
+  (t/testing "store and retrieve and seek value"
+    (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "LMDB"))
+    (t/is (= "LMDB" (String. ^bytes (ks/value f/*kv* (bu/long->bytes 1)))))
+    (t/is (= [1 "LMDB"] (let [[k v] (ks/seek f/*kv* (bu/long->bytes 1))]
+                          [(bu/bytes->long k) (String. ^bytes v)]))))
+
+  (t/testing "non existing key"
+    (t/is (nil? (ks/value f/*kv* (bu/long->bytes 2))))))
 
 (t/deftest test-merge-adds-ints []
-  (let [db-dir (tu/create-tmpdir "lmdb")
-        k (.getBytes (String. "foo"))]
-    (try
-      (with-open [kv ^Closeable (ks/open (lmdb/map->CruxLMDBKv {:db-dir db-dir}))]
-        (ks/merge! kv k (bu/long->bytes 1))
-        (t/is (= 1 (bu/bytes->long (ks/value kv k))))
+  (let [k (.getBytes (String. "foo"))]
+    (t/testing "merging non existing key stores value"
+      (ks/merge! f/*kv* k (bu/long->bytes 1))
+      (t/is (= 1 (bu/bytes->long (ks/value f/*kv* k)))))
 
-        (ks/store kv k (bu/long->bytes 1))
-        (t/is (= 1 (bu/bytes->long (ks/value kv k))))
+    (t/testing "store and update ints using merge"
+      (ks/store f/*kv* k (bu/long->bytes 1))
+      (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))
 
-        (ks/merge! kv k (bu/long->bytes 2))
-        (t/is (= 3 (bu/bytes->long (ks/value kv k)))))
-      (finally
-        (tu/delete-dir db-dir)))))
+    (t/testing "can merge more than once"
+      (ks/merge! f/*kv* k (bu/long->bytes 2))
+      (t/is (= 3 (bu/bytes->long (ks/value f/*kv* k)))))))
 
 
 (t/deftest test-seek-and-iterate []
-  (let [db-dir (tu/create-tmpdir "lmdb")]
-    (try
-      (with-open [kv ^Closeable (ks/open (lmdb/map->CruxLMDBKv {:db-dir db-dir}))]
-        (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
-          (ks/store kv (.getBytes k) (bu/long->bytes v)))
-        (t/is (= [["b" 2] ["c" 3]]
-                 (for [[^bytes k v] (ks/seek-and-iterate kv (.getBytes "b") (.getBytes "d"))]
-                   [(String. k) (bu/bytes->long v)])))
-        (t/is (= [] (ks/seek-and-iterate kv (.getBytes "d") (.getBytes "d"))))
-        (t/is (= [] (ks/seek-and-iterate kv (.getBytes "e") (.getBytes "f"))))
-        (t/is (= [["a" 1]] (for [[^bytes k v] (ks/seek-and-iterate kv (.getBytes "0") (.getBytes "b"))]
-                             [(String. k) (bu/bytes->long v)]))))
-      (finally
-        (tu/delete-dir db-dir)))))
+  (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
+    (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
+
+  (t/testing "seek range is exclusive"
+    (t/is (= [["b" 2] ["c" 3]]
+             (for [[^bytes k v] (ks/seek-and-iterate f/*kv* (.getBytes "b") (.getBytes "d"))]
+               [(String. k) (bu/bytes->long v)]))))
+
+  (t/testing "seek range after existing keys returns empty"
+    (t/is (= [] (ks/seek-and-iterate f/*kv* (.getBytes "d") (.getBytes "d"))))
+    (t/is (= [] (ks/seek-and-iterate f/*kv* (.getBytes "e") (.getBytes "f")))))
+
+  (t/testing "seek range before existing keys returns keys at start"
+    (t/is (= [["a" 1]] (for [[^bytes k v] (ks/seek-and-iterate f/*kv* (.getBytes "0") (.getBytes "b"))]
+                         [(String. k) (bu/bytes->long v)])))))
 
 (t/deftest test-seek-and-iterate-bounded []
-  (let [db-dir (tu/create-tmpdir "lmdb")]
-    (try
-      (with-open [kv ^Closeable (ks/open (lmdb/map->CruxLMDBKv {:db-dir db-dir}))]
-        (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
-          (ks/store kv (.getBytes k) (bu/long->bytes v)))
-        (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-                 (for [[^bytes k v] (ks/seek-and-iterate-bounded kv (.getBytes "b"))]
-                   [(String. k) (bu/bytes->long v)])))
-        (t/is (= [] (ks/seek-and-iterate-bounded kv (.getBytes "0"))))
-        (t/is (= [] (ks/seek-and-iterate-bounded kv (.getBytes "e")))))
-      (finally
-        (tu/delete-dir db-dir)))))
+  (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
+    (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
+
+  (t/testing "seek within bounded prefix returns all matching keys"
+    (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
+             (for [[^bytes k v] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "b"))]
+               [(String. k) (bu/bytes->long v)]))))
+
+  (t/testing "seek within bounded prefix before or after existing keys returns empty"
+    (t/is (= [] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "0"))))
+    (t/is (= [] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "e"))))))

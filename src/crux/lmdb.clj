@@ -8,6 +8,9 @@
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBVal]))
 
+;; Based on
+;; https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/util/lmdb/LMDBDemo.java
+
 (defn success? [rc]
   (when-not (= LMDB/MDB_SUCCESS rc)
     (throw (IllegalStateException. (LMDB/mdb_strerror rc)))))
