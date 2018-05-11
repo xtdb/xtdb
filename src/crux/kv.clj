@@ -140,12 +140,11 @@
   "Sequence of all attributes in the DB."
   [db]
   (->> (kv-store/seek-and-iterate-bounded db (encode frame-index-key-prefix {:index :aid}))
-       (map (fn [[k v]]
-              (let [attr (c/decode frame-value-aid v)
-                    k (c/decode frame-index-key k)]
-                [(:crux.kv.attr/ident attr)
-                 (:aid k)])))
-       (into {})))
+       (into {} (map (fn [[k v]]
+                       (let [attr (c/decode frame-value-aid v)
+                             k (c/decode frame-index-key k)]
+                         [(:crux.kv.attr/ident attr)
+                          (:aid k)]))))))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not

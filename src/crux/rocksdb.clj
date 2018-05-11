@@ -17,19 +17,9 @@
     (when (.isValid i)
       [(.key i) (.value i)])))
 
-(defn rocks-iterator->seq
-  ([i]
-   (rocks-iterator->seq i (constantly true)))
-  ([^RocksIterator i pred]
-   (lazy-seq
-    (when (and (.isValid i) (pred (.key i)))
-      (cons [(.key i) (.value i)]
-            (do (.next i)
-                (rocks-iterator->seq i pred)))))))
-
-(defn- rock-iterator-loop [^RocksIterator i f init]
+(defn- rock-iterator-loop [^RocksIterator i key-pred f init]
   (loop [init' init]
-    (if (.isValid i)
+    (if (and (.isValid i) (key-pred (.key i)))
       (let [result (f init' [(.key i) (.value i)])]
         (if (reduced? result)
           @result
@@ -38,31 +28,22 @@
             (recur result))))
       init')))
 
+;; TODO move to IReduceInit
 (defn- -seek-and-iterate
-  "TODO, improve by getting prefix-same-as-start to work, so we don't
-  need an upper-bound."
-  [^RocksDB db k #^bytes upper-bound]
+  [^RocksDB db ^ReadOptions read-options key-pred k]
   (reify clojure.lang.IReduce
     (reduce [this f]
-      (with-open [read-options (ReadOptions.)
-                  i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+      (with-open [read-options read-options
+                  i ^RocksIterator (.newIterator db read-options)]
         (.seek i k)
-        (if (.isValid i)
-          (rock-iterator-loop i f [(.key i) (.value i)])
+        (if (and (.isValid i) (key-pred (.key i)))
+          (rock-iterator-loop i key-pred f [(.key i) (.value i)])
           (f))))
     (reduce [this f init]
-      (with-open [read-options (ReadOptions.)
-                  i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+      (with-open [read-options read-options
+                  i ^RocksIterator (.newIterator db read-options)]
         (.seek i k)
-        (rock-iterator-loop i f init)))))
-
-(defn- -seek-and-iterate-bounded
-  [^RocksDB db #^bytes k]
-  (with-open [read-options (ReadOptions.)
-              i ^RocksIterator (.newIterator db read-options)]
-    (let [array-length (alength k)]
-      (.seek i k)
-      (doall (rocks-iterator->seq i #(zero? (bu/compare-bytes k % array-length)))))))
+        (rock-iterator-loop i key-pred f init)))))
 
 (defrecord CruxRocksKv [db-dir]
   CruxKvStore
@@ -81,10 +62,13 @@
     (-seek db k))
 
   (seek-and-iterate [{:keys [^RocksDB db]} k upper-bound]
-    (-seek-and-iterate db k upper-bound))
+    (let [read-options (.setIterateUpperBound (ReadOptions.) (Slice. #^bytes upper-bound))]
+      (-seek-and-iterate db read-options (constantly true) k)))
 
   (seek-and-iterate-bounded [{:keys [^RocksDB db]} k]
-    (-seek-and-iterate-bounded db k))
+    (let [array-length (alength #^bytes k)
+          pred-fn #(zero? (bu/compare-bytes k % array-length))]
+      (-seek-and-iterate db (ReadOptions.) pred-fn k)))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
