@@ -54,21 +54,14 @@
        (success? (LMDB/mdb_dbi_open txn name 0 ip))
        (.get ip 0)))))
 
-(defn put-bytes->bytes-in-txn [^MemoryStack stack txn dbi ^bytes k ^bytes v]
+(defn put-bytes->bytes [^MemoryStack stack txn dbi ^bytes k ^bytes v]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
         kv (.mv_data (MDBVal/callocStack stack) kb)
         vb (.flip (.put (.malloc stack (alength v)) v))
         dv (.mv_data (MDBVal/callocStack stack) vb)]
     (success? (LMDB/mdb_put txn dbi kv dv 0))))
 
-(defn put-bytes->bytes [env dbi ^bytes k ^bytes v]
-  (transaction
-   env
-   (fn [^MemoryStack stack ^long txn]
-     (put-bytes->bytes-in-txn stack txn dbi k v))
-   0))
-
-(defn get-bytes->bytes-in-txn ^bytes [^MemoryStack stack txn dbi ^bytes k]
+(defn get-bytes->bytes ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
         kv (.mv_data (MDBVal/callocStack stack) kb)
         dv (MDBVal/callocStack stack)
@@ -76,12 +69,6 @@
     (when-not (= LMDB/MDB_NOTFOUND rc)
       (success? rc)
       (bu/byte-buffer->bytes (.mv_data dv)))))
-
-(defn get-bytes->bytes ^bytes [env dbi ^bytes k]
-  (transaction
-   env
-   (fn [^MemoryStack stack ^long txn]
-     (get-bytes->bytes-in-txn stack txn dbi k))))
 
 (defn cursor->vec [env dbi ^bytes k pred]
   (transaction
@@ -125,22 +112,29 @@
 (defn delete-dir [^File dir]
   (Files/walkFileTree (.toPath dir) file-deletion-visitor))
 
-(defrecord CruxLMDBKv [db-name db-dir env env-flags dbi]
+(defrecord CruxLMDBKv [db-name ^File db-dir env env-flags dbi]
   ks/CruxKvStore
   (open [this]
-    (let [db-dir (or db-dir (doto (io/file (db-path db-name))
-                              .mkdirs))
-          env (env-create)
-          flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))]
-      (env-open env db-dir flags)
-      (assoc this
-             :db-dir db-dir
-             :env env
-             :env-flags env-flags
-             :dbi (dbi-open env))))
+    (let [db-dir (doto (or db-dir (io/file (db-path db-name)))
+                   .mkdirs)
+          env-flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
+          env (env-create)]
+      (try
+        (env-open env db-dir env-flags)
+        (assoc this
+               :db-dir db-dir
+               :env env
+               :env-flags env-flags
+               :dbi (dbi-open env))
+        (catch Throwable t
+          (env-close env)
+          (throw t)))))
 
   (value [_ k]
-    (get-bytes->bytes env dbi k))
+    (transaction
+     env
+     (fn [^MemoryStack stack ^long txn]
+       (get-bytes->bytes stack txn dbi k))))
 
   (seek [this k]
     (let [keep-going? (atom true)]
@@ -156,18 +150,22 @@
     (cursor->vec env dbi k #(zero? (bu/compare-bytes k % (alength ^bytes k)))))
 
   (store [_ k v]
-    (put-bytes->bytes env dbi k v))
+    (transaction
+     env
+     (fn [^MemoryStack stack ^long txn]
+       (put-bytes->bytes stack txn dbi k v))
+     0))
 
   (merge! [_ k v]
     (transaction
      env
      (fn [^MemoryStack stack ^long txn]
-       (put-bytes->bytes-in-txn
+       (put-bytes->bytes
         stack
         txn
         dbi
         k
-        (bu/long->bytes (if-let [x (get-bytes->bytes-in-txn stack txn dbi k)]
+        (bu/long->bytes (if-let [x (get-bytes->bytes stack txn dbi k)]
                           (+  (bu/bytes->long x)
                               (bu/bytes->long v))
                           (bu/bytes->long v)))))
