@@ -65,6 +65,6 @@
 
 (defn bytes=?
   ([#^bytes k1 #^bytes k2]
-   (bytes=? k1 k2 (alength k1)))
-  ([#^bytes k1 #^bytes k2 array-length]
+   (bytes=? k1 (alength k1) k2))
+  ([#^bytes k1 array-length #^bytes k2]
    (zero? (compare-bytes k1 k2 array-length))))
