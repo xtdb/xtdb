@@ -38,15 +38,15 @@
 
   (t/testing "seek range is exclusive"
     (t/is (= [["b" 2] ["c" 3]]
-             (for [[^bytes k v] (ks/seek-and-iterate f/*kv* (.getBytes "b") (.getBytes "d"))]
+             (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "b") (.getBytes "d")))]
                [(String. k) (bu/bytes->long v)]))))
 
   (t/testing "seek range after existing keys returns empty"
-    (t/is (= [] (ks/seek-and-iterate f/*kv* (.getBytes "d") (.getBytes "d"))))
-    (t/is (= [] (ks/seek-and-iterate f/*kv* (.getBytes "e") (.getBytes "f")))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "d") (.getBytes "d")))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "e") (.getBytes "f"))))))
 
   (t/testing "seek range before existing keys returns keys at start"
-    (t/is (= [["a" 1]] (for [[^bytes k v] (ks/seek-and-iterate f/*kv* (.getBytes "0") (.getBytes "b"))]
+    (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "0") (.getBytes "b")))]
                          [(String. k) (bu/bytes->long v)])))))
 
 (t/deftest test-seek-and-iterate-bounded []

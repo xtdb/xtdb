@@ -11,7 +11,6 @@
                                                         queries 100
                                                         ts (Date.)
                                                         kv :rocks}}]
-
   ((case kv
      :rocks f/with-rocksdb
      :lmdb f/with-lmdb

@@ -27,14 +27,34 @@
             (do (.next i)
                 (rocks-iterator->seq i pred)))))))
 
+(defn- rock-iterator-loop [^RocksIterator i f init]
+  (loop [init' init]
+    (if (.isValid i)
+      (let [result (f init' [(.key i) (.value i)])]
+        (if (reduced? result)
+          @result
+          (do
+            (.next i)
+            (recur result))))
+      init')))
+
 (defn- -seek-and-iterate
   "TODO, improve by getting prefix-same-as-start to work, so we don't
   need an upper-bound."
   [^RocksDB db k #^bytes upper-bound]
-  (with-open [read-options (ReadOptions.)
-              i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
-    (.seek i k)
-    (doall (rocks-iterator->seq i))))
+  (reify clojure.lang.IReduce
+    (reduce [this f]
+      (with-open [read-options (ReadOptions.)
+                  i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+        (.seek i k)
+        (if (.isValid i)
+          (rock-iterator-loop i f [(.key i) (.value i)])
+          (f))))
+    (reduce [this f init]
+      (with-open [read-options (ReadOptions.)
+                  i ^RocksIterator (.newIterator db (.setIterateUpperBound read-options (Slice. upper-bound)))]
+        (.seek i k)
+        (rock-iterator-loop i f init)))))
 
 (defn- -seek-and-iterate-bounded
   [^RocksDB db #^bytes k]
