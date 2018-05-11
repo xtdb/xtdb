@@ -238,24 +238,23 @@
   (->> (kv-store/seek-and-iterate db
                                   (encode frame-index-key-prefix {:index :eat})
                                   (encode frame-index-key-prefix {:index :avt}))
-       (map (fn [[k _]] (c/decode frame-index-key k)))
-       (map :eid)
-       (into #{})))
+       (into #{} (comp (map (fn [[k _]] (c/decode frame-index-key k))) (map :eid)))))
 
 (defn entity-ids-for-value [db ident v ^Date ts]
   (let [aid (attr-ident->aid! db ident)]
-    (->> (kv-store/seek-and-iterate db
-                                    (encode frame-index-key {:index :avt
-                                                             :aid aid
-                                                             :v v
-                                                             :ts ts
-                                                             :eid 0})
-                                    (encode frame-index-key {:index :avt
-                                                             :aid aid
-                                                             :v v
-                                                             :ts (Date. 0 0 0)
-                                                             :eid 0}))
-         (map (comp bytes->long second)))))
+    (eduction
+     (map (comp bytes->long second))
+     (kv-store/seek-and-iterate db
+                                (encode frame-index-key {:index :avt
+                                                         :aid aid
+                                                         :v v
+                                                         :ts ts
+                                                         :eid 0})
+                                (encode frame-index-key {:index :avt
+                                                         :aid aid
+                                                         :v v
+                                                         :ts (Date. 0 0 0)
+                                                         :eid 0})))))
 
 (defn store-meta [db k v]
   (kv-store/store db

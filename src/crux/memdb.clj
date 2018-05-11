@@ -17,8 +17,9 @@
     (get db k))
 
   (seek-and-iterate [_ k upper-bound]
-    (for [[k2 v] (.subMap db k upper-bound)]
-      [k2 v]))
+    (eduction
+     (map (fn [[k2 v]] [k2 v]))
+     (.subMap db k upper-bound)))
 
   (seek-and-iterate-bounded [_ k]
     (for [[^bytes k2 v] (.tailMap db k)
