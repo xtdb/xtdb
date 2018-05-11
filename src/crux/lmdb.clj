@@ -98,10 +98,6 @@
            (finally
              (LMDB/mdb_cursor_close cursor))))))))
 
-;; TODO: this should be configurable.
-(defn- db-path [db-name]
-  (str "/tmp/" (name db-name) ".db"))
-
 (def file-deletion-visitor
   (proxy [SimpleFileVisitor] []
     (visitFile [file _]
@@ -116,10 +112,10 @@
   (when (.isDirectory dir)
     (Files/walkFileTree (.toPath dir) file-deletion-visitor)))
 
-(defrecord CruxLMDBKv [db-name ^File db-dir env env-flags dbi]
+(defrecord CruxLMDBKv [^File db-dir env env-flags dbi]
   ks/CruxKvStore
   (open [this]
-    (let [db-dir (doto (or db-dir (io/file (db-path db-name)))
+    (let [db-dir (doto db-dir
                    .mkdirs)
           env-flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
           env (env-create)]
