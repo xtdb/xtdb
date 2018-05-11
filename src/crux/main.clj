@@ -72,4 +72,6 @@
                                        (crux.kv-store/open))
                     consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
                                                      "group.id" group-id})]
-          (kafka/start-indexing kv consumer topic))))))
+          (kafka/subscribe-from-stored-offsets kv consumer topic)
+          (while true
+            (kafka/consume-and-index-entities kv consumer)))))))

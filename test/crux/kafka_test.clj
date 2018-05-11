@@ -35,7 +35,7 @@
       @(.send p (ProducerRecord. topic person))
 
       (.assign c partitions)
-      (let [records (.poll c 1000)]
+      (let [records (.poll c 10000)]
         (t/is (= 1 (count (seq records))))
         (t/is (= person (first (map k/consumer-record->value records))))))))
 
@@ -46,8 +46,7 @@
 
 (t/deftest test-can-transact-entities
   (let [topic "test-can-transact-entities"
-        entities (load-ntriples-example  "crux/example-data-artists.nt")
-        partitions [(TopicPartition. topic 0)]]
+        entities (load-ntriples-example  "crux/example-data-artists.nt")]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
@@ -55,12 +54,12 @@
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-entities"})]
       (k/create-topic ac topic 1 1 {})
+      (k/subscribe-from-stored-offsets f/*kv* c topic)
 
       (.initTransactions p)
       (k/transact p topic entities)
 
-      (.assign c partitions)
-      (let [entities (map k/consumer-record->value (.poll c 1000))]
+      (let [entities (map k/consumer-record->value (.poll c 5000))]
         (t/is (= 7 (count entities)))
         (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
                   :http://xmlns.com/foaf/0.1/surname "Picasso"}
@@ -70,8 +69,7 @@
 
 (t/deftest test-can-transact-and-query-entities
   (let [topic "test-can-transact-and-query-entities"
-        entities (load-ntriples-example  "crux/picasso.nt")
-        partitions [(TopicPartition. topic 0)]]
+        entities (load-ntriples-example  "crux/picasso.nt")]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
@@ -79,18 +77,18 @@
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-and-query-entities"})]
       (k/create-topic ac topic 1 1 {})
+      (k/subscribe-from-stored-offsets f/*kv* c topic)
 
       (t/testing "transacting and indexing"
         (.initTransactions p)
         (k/transact p topic entities)
 
-        (.assign c partitions)
         (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))
         (t/is (empty? (.poll c 1000))))
 
       (t/testing "restoring to stored offsets"
-        (.seekToBeginning c partitions)
-        (k/seek-to-stored-offsets f/*kv* c)
+        (.seekToBeginning c (.assignment c))
+        (k/seek-to-stored-offsets f/*kv* c (.assignment c))
         (t/is (empty? (.poll c 1000))))
 
       (t/testing "querying transacted data"

@@ -7,12 +7,12 @@
   message?"
   (:require [taoensso.nippy :as nippy]
             [crux.kv :as cr])
-  (:import [java.util Map Date UUID]
+  (:import [java.util List Map Date UUID]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
            [org.apache.kafka.common TopicPartition]
            [org.apache.kafka.clients.consumer
-            KafkaConsumer ConsumerRecord ConsumerRecords]
+            KafkaConsumer ConsumerRecord ConsumerRebalanceListener]
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
@@ -93,20 +93,17 @@
                 :crux.tx/business-time))))
 
 (defn topic-partition-meta-key [^TopicPartition partition]
-  (keyword "crux.kafka.topic-partition"
-           (str (.topic partition) "_" (.partition partition))))
+  (keyword "crux.kafka.topic-partition" (str partition)))
 
-(defn store-topic-partition-offsets [kv ^ConsumerRecords records]
-  (doseq [^TopicPartition partition (.partitions records)
-          :let [^ConsumerRecord record (last (.records records partition))]]
+(defn store-topic-partition-offsets [kv ^KafkaConsumer consumer partitions]
+  (doseq [^TopicPartition partition partitions]
     (cr/store-meta kv
                    (topic-partition-meta-key partition)
-                   (inc (.offset record)))))
+                   (.position consumer partition))))
 
-(defn seek-to-stored-offsets [kv ^KafkaConsumer consumer]
-  (doseq [^TopicPartition partition (.assignment consumer)
-          :let [offset (cr/get-meta kv (topic-partition-meta-key partition))]]
-    (if offset
+(defn seek-to-stored-offsets [kv ^KafkaConsumer consumer partitions]
+  (doseq [^TopicPartition partition partitions]
+    (if-let [offset (cr/get-meta kv (topic-partition-meta-key partition))]
       (.seek consumer partition offset)
       (.seekToBeginning consumer [partition]))))
 
@@ -117,14 +114,18 @@
              (:crux.tx/transact-time (first entities)))))
 
 (defn consume-and-index-entities [kv ^KafkaConsumer consumer]
-  (let [records (.poll consumer 1000)
-        entities (map consumer-record->value records)]
-    (index-entities kv entities)
-    (store-topic-partition-offsets kv records)
-    entities))
+  (let [records (.poll consumer 10000)]
+    (when-let [entities (seq (map consumer-record->value records))]
+      (index-entities kv entities)
+      (store-topic-partition-offsets kv consumer (.partitions records))
+      entities)))
 
-(defn start-indexing [kv ^KafkaConsumer consumer topic]
-  (.assign consumer [(TopicPartition. topic 0)])
-  (seek-to-stored-offsets kv consumer)
-  (while true
-    (consume-and-index-entities kv consumer)))
+(defn subscribe-from-stored-offsets [kv ^KafkaConsumer consumer topic]
+  (let [topics [topic]]
+    (.subscribe consumer
+                ^List topics
+                (reify ConsumerRebalanceListener
+                  (onPartitionsRevoked [_ partitions]
+                    (store-topic-partition-offsets kv consumer partitions))
+                  (onPartitionsAssigned [_ partitions]
+                    (seek-to-stored-offsets kv consumer partitions))))))
