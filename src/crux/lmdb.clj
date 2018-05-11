@@ -36,8 +36,11 @@
       (success? (LMDB/mdb_env_create pp))
       (.get pp))))
 
-(defn env-open [^long env ^File dir]
-  (success? (LMDB/mdb_env_open env (.getAbsolutePath dir) 0 0664)))
+(defn env-open [^long env ^File dir ^long flags]
+  (success? (LMDB/mdb_env_open env
+                               (.getAbsolutePath dir)
+                               flags
+                               0664)))
 
 (defn env-close [^long env]
   (LMDB/mdb_env_close env))
@@ -122,14 +125,19 @@
 (defn delete-dir [^File dir]
   (Files/walkFileTree (.toPath dir) file-deletion-visitor))
 
-(defrecord CruxLMDBKv [db-name db-dir env dbi]
+(defrecord CruxLMDBKv [db-name db-dir env env-flags dbi]
   ks/CruxKvStore
   (open [this]
     (let [db-dir (or db-dir (doto (io/file (db-path db-name))
                               .mkdirs))
-          env (env-create)]
-      (env-open env db-dir)
-      (assoc this :db-dir db-dir :env env :dbi (dbi-open env))))
+          env (env-create)
+          flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))]
+      (env-open env db-dir flags)
+      (assoc this
+             :db-dir db-dir
+             :env env
+             :env-flags env-flags
+             :dbi (dbi-open env))))
 
   (value [_ k]
     (get-bytes->bytes env dbi k))
