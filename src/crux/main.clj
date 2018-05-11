@@ -69,6 +69,7 @@
         (log/warn "options:" options-table)
 
         (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
-                                       (crux.kv-store/open))]
-          (kafka/start-indexing kv topic {"bootstrap.servers" bootstrap-servers
-                                          "group.id" group-id}))))))
+                                       (crux.kv-store/open))
+                    consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                     "group.id" group-id})]
+          (kafka/start-indexing kv consumer topic))))))

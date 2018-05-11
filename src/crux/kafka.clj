@@ -123,9 +123,8 @@
     (store-topic-partition-offsets kv records)
     entities))
 
-(defn start-indexing [kv topic consumer-config]
-  (with-open [consumer (create-consumer consumer-config)]
-    (.assign consumer [(TopicPartition. topic 0)])
-    (seek-to-stored-offsets kv consumer)
-    (while true
-      (consume-and-index-entities kv consumer))))
+(defn start-indexing [kv consumer topic]
+  (.assign consumer [(TopicPartition. topic 0)])
+  (seek-to-stored-offsets kv consumer)
+  (while true
+    (consume-and-index-entities kv consumer)))
