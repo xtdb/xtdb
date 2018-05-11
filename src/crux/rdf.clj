@@ -13,7 +13,7 @@
            [org.eclipse.rdf4j.rio Rio RDFFormat]
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
-           [org.eclipse.rdf4j.model.vocabulary XMLSchema]))
+           [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -27,8 +27,29 @@
 (defn bnode->kw [^BNode bnode]
   (keyword "_" (.getID bnode)))
 
+(def ^:dynamic *default-lang* :en)
+
+(defrecord Lang []
+  CharSequence
+  (charAt [this index]
+    (.charAt (str this) index))
+
+  (length [this]
+    (.length (str this)))
+
+  (subSequence [this start end]
+    (.subSequence (str this) start end))
+
+  (toString [this]
+    (let [lang (if (contains? this *default-lang*)
+                 *default-lang*
+                 (first (keys this)))]
+      (str (get this lang)))))
+
 (defn literal->clj [^Literal literal]
-  (let [dt (.getDatatype literal)]
+  (let [dt (.getDatatype literal)
+        language (when (.isPresent (.getLanguage literal))
+                   (.get (.getLanguage literal)))]
     (cond
       (XMLDatatypeUtil/isCalendarDatatype dt)
       (let [calendar (-> (.getLabel literal)
@@ -53,6 +74,11 @@
 
       (re-find #"^\d+\.\d+$" (.getLabel literal))
       (.doubleValue literal)
+
+      (= RDF/LANGSTRING dt)
+      (map->Lang
+       {(keyword language)
+        (.getLabel literal)})
 
       :else
       (.getLabel literal))))
@@ -100,7 +126,7 @@
   {(keyword "@id")
    :crux.rdf/iri
    (keyword "@type")
-   (keyword "http:" "/www.w3.org/1999/02/22-rdf-syntax-ns#type")})
+   (keyword (str RDF/TYPE))})
 
 (defn jsonld->maps [json-ld]
   (for [json-ld json-ld]
@@ -123,8 +149,8 @@
 
 (defn patch-missing-lang-string [s]
   (str/replace s
-               "^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"
-               "@en"))
+               (format "^^<%s>" RDF/LANGSTRING)
+               ""))
 
 (defn ntriples-seq [in]
   (for [lines (->> (line-seq (io/reader in))

@@ -55,8 +55,8 @@
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)]
     (t/is (= 48 (count picasso)))
-    (t/is (= {:http://xmlns.com/foaf/0.1/givenName "Pablo"
-              :http://xmlns.com/foaf/0.1/surname "Picasso"
+    (t/is (= {:http://xmlns.com/foaf/0.1/givenName #crux.rdf.Lang{:en "Pablo"}
+              :http://xmlns.com/foaf/0.1/surname #crux.rdf.Lang{:en "Picasso"}
               :http://dbpedia.org/ontology/birthDate #inst "1881-10-25"}
              (select-keys picasso
                           [:http://xmlns.com/foaf/0.1/givenName
