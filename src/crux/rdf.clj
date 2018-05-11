@@ -31,7 +31,10 @@
   (let [dt (.getDatatype literal)]
     (cond
       (XMLDatatypeUtil/isCalendarDatatype dt)
-      (.getTime (.toGregorianCalendar (.calendarValue literal)))
+      (let [calendar (-> (.getLabel literal)
+                         (str/replace #"-(\d?)$" "-0$1")
+                         (str/replace #"-(\d?)-" "-0$1-"))]
+        (.getTime (.toGregorianCalendar (XMLDatatypeUtil/parseCalendar calendar))))
 
       (XMLDatatypeUtil/isDecimalDatatype dt)
       (.decimalValue literal)
@@ -118,8 +121,15 @@
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
 
+(defn patch-missing-lang-string [s]
+  (str/replace s
+               "^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"
+               "@en"))
+
 (defn ntriples-seq [in]
-  (for [lines (partition-all 1024 (line-seq (io/reader in)))
+  (for [lines (->> (line-seq (io/reader in))
+                   (map patch-missing-lang-string)
+                   (partition-all 1024))
         statement (Rio/parse (StringReader. (str/join "\n" lines))
                              ""
                              RDFFormat/NTRIPLES
