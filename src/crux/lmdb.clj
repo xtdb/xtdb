@@ -149,10 +149,10 @@
         txn
         dbi
         k
-        (bu/long->bytes (if-let [x (get-bytes->bytes stack txn dbi k)]
-                          (+  (bu/bytes->long x)
-                              (bu/bytes->long v))
-                          (bu/bytes->long v)))))
+        (if-let [old-value (get-bytes->bytes stack txn dbi k)]
+          (bu/long->bytes (+  (bu/bytes->long old-value)
+                              (bu/bytes->long v)))
+          v)))
      0))
 
   (destroy [this]

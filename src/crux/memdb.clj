@@ -1,10 +1,10 @@
 (ns crux.memdb
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks])
-  (:import [java.util TreeMap]
+  (:import [java.util SortedMap TreeMap]
            [java.util.function BiFunction]))
 
-(defrecord CruxMemKv [db-name ^TreeMap db]
+(defrecord CruxMemKv [^SortedMap db]
   ks/CruxKvStore
   (open [this]
     (assoc this :db (TreeMap. bu/bytes-comparator)))
@@ -28,14 +28,14 @@
     (.put db k v))
 
   (merge! [_ k v]
-    (.compute db k (reify BiFunction
-                     (apply [_ k old-value]
-                       (if old-value
+    (locking db
+      (.merge db k v (reify BiFunction
+                       (apply [_ old-value new-value]
                          (bu/long->bytes (+ (bu/bytes->long old-value)
-                                            (bu/bytes->long v)))
-                         v)))))
+                                            (bu/bytes->long new-value))))))))
 
   (close [_])
 
   (destroy [this]
+    (.clear db)
     (dissoc this :db)))
