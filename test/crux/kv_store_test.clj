@@ -55,9 +55,9 @@
 
   (t/testing "seek within bounded prefix returns all matching keys"
     (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-             (for [[^bytes k v] (into [] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "b")))]
+             (for [[^bytes k v] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "b")) (.getBytes "b")))]
                [(String. k) (bu/bytes->long v)]))))
 
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
-    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "0")))))
-    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (.getBytes "e")))))))
+    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
+    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))

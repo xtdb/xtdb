@@ -130,8 +130,8 @@
   (seek-and-iterate [_ k upper-bound]
     (cursor->vec env dbi k #(neg? (bu/compare-bytes % upper-bound Integer/MAX_VALUE))))
 
-  (seek-and-iterate-bounded [_ k]
-    (cursor->vec env dbi k #(zero? (bu/compare-bytes k % (alength ^bytes k)))))
+  (seek-and-iterate-bounded [_ key-pred k]
+    (cursor->vec env dbi k key-pred))
 
   (store [_ k v]
     (transaction

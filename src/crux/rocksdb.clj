@@ -65,10 +65,8 @@
     (let [read-options (.setIterateUpperBound (ReadOptions.) (Slice. #^bytes upper-bound))]
       (-seek-and-iterate db read-options (constantly true) k)))
 
-  (seek-and-iterate-bounded [{:keys [^RocksDB db]} k]
-    (let [array-length (alength #^bytes k)
-          pred-fn #(zero? (bu/compare-bytes k % array-length))]
-      (-seek-and-iterate db (ReadOptions.) pred-fn k)))
+  (seek-and-iterate-bounded [{:keys [^RocksDB db]} key-pred k]
+    (-seek-and-iterate db (ReadOptions.) key-pred k))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))

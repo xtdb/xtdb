@@ -62,3 +62,9 @@
   (reify Comparator
     (compare [_ a b]
       (compare-bytes a b Integer/MAX_VALUE))))
+
+(defn bytes=?
+  ([#^bytes k1 #^bytes k2]
+   (bytes=? k1 k2 (alength k1)))
+  ([#^bytes k1 #^bytes k2 array-length]
+   (zero? (compare-bytes k1 k2 array-length))))
