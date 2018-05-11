@@ -123,7 +123,7 @@
     (store-topic-partition-offsets kv records)
     entities))
 
-(defn start-indexing [kv consumer topic]
+(defn start-indexing [kv ^KafkaConsumer consumer topic]
   (.assign consumer [(TopicPartition. topic 0)])
   (seek-to-stored-offsets kv consumer)
   (while true
