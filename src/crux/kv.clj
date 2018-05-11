@@ -225,9 +225,7 @@
                   m
                   (assoc m ident (:v (c/decode frame-value-eat v))))))
             nil
-            (kv-store/seek-and-iterate db
-                                       (encode frame-index-eat-key-prefix {:index :eat :eid eid})
-                                       (encode frame-index-eat-key-prefix {:index :eat :eid (inc eid)})))
+            (kv-store/seek-and-iterate-bounded db (encode frame-index-eat-key-prefix {:index :eat :eid eid})))
     (assoc ::id eid))))
 
 (defn entity-ids
