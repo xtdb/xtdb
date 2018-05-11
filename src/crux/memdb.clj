@@ -16,12 +16,7 @@
   (value [_ k]
     (get db k))
 
-  (seek-and-iterate [_ k upper-bound]
-    (eduction
-     (map (fn [[k2 v]] [k2 v]))
-     (.subMap db k upper-bound)))
-
-  (seek-and-iterate-bounded [_ key-pred k]
+  (seek-and-iterate [_ key-pred k]
     (for [[^bytes k2 v] (.tailMap db k) :while (key-pred k2)]
       [k2 v]))
 

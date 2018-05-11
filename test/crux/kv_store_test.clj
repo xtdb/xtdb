@@ -31,8 +31,8 @@
       (ks/store f/*kv* k (bu/long->bytes 1))
       (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))))
 
-
-(t/deftest test-seek-and-iterate []
+;; TODO will migrate :-)
+#_(t/deftest test-seek-and-iterate []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
     (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
 
@@ -49,15 +49,15 @@
     (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "0") (.getBytes "b")))]
                          [(String. k) (bu/bytes->long v)])))))
 
-(t/deftest test-seek-and-iterate-bounded []
+(t/deftest test-seek-and-iterate []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
     (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
 
   (t/testing "seek within bounded prefix returns all matching keys"
     (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-             (for [[^bytes k v] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "b")) (.getBytes "b")))]
+             (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "b")) (.getBytes "b")))]
                [(String. k) (bu/bytes->long v)]))))
 
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
-    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
-    (t/is (= [] (into [] (ks/seek-and-iterate-bounded f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))

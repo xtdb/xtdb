@@ -140,7 +140,7 @@
   "Sequence of all attributes in the DB."
   [db]
   (let [k (encode frame-index-key-prefix {:index :aid})]
-    (->> (kv-store/seek-and-iterate-bounded db (partial bu/bytes=? k) k)
+    (->> (kv-store/seek-and-iterate db (partial bu/bytes=? k) k)
          (into {} (map (fn [[k v]]
                          (let [attr (c/decode frame-value-aid v)
                                k (c/decode frame-index-key k)]
@@ -226,7 +226,7 @@
                     m
                     (assoc m ident (:v (c/decode frame-value-eat v))))))
               nil
-              (kv-store/seek-and-iterate-bounded db (partial bu/bytes=? k) k))
+              (kv-store/seek-and-iterate db (partial bu/bytes=? k) k))
       (assoc ::id eid)))))
 
 (def ^:private eat-index-prefix (encode frame-index-key-prefix {:index :eat}))
@@ -236,7 +236,7 @@
   could be a performance gain to replace this with a dedicate EID
   index that could be lazy."
   [db]
-  (->> (kv-store/seek-and-iterate-bounded db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
+  (->> (kv-store/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-key k))) (map :eid)))))
 
 (defn entity-ids-for-value [db ident v ^Date ts]
@@ -248,9 +248,9 @@
                                            :eid 0})]
     (eduction
      (map (comp bytes->long second))
-     (kv-store/seek-and-iterate-bounded db
-                                        (partial bu/bytes=? k (- (alength k) 12))
-                                        k))))
+     (kv-store/seek-and-iterate db
+                                (partial bu/bytes=? k (- (alength k) 12))
+                                k))))
 
 (defn store-meta [db k v]
   (kv-store/store db

@@ -7,9 +7,7 @@
 
   (seek [db k])
 
-  (seek-and-iterate [this k upper-bound])
-
-  (seek-and-iterate-bounded [this key-pred k])
+  (seek-and-iterate [this key-pred k])
 
   (store [this k v])
 
