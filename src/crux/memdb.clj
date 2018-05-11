@@ -1,7 +1,8 @@
 (ns crux.memdb
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks])
-  (:import [java.util SortedMap TreeMap]
+  (:import [java.io Closeable]
+           [java.util SortedMap TreeMap]
            [java.util.function BiFunction]))
 
 (defrecord CruxMemKv [^SortedMap db]
@@ -34,8 +35,9 @@
                          (bu/long->bytes (+ (bu/bytes->long old-value)
                                             (bu/bytes->long new-value))))))))
 
-  (close [_])
-
   (destroy [this]
     (.clear db)
-    (dissoc this :db)))
+    (dissoc this :db))
+
+  Closeable
+  (close [_]))

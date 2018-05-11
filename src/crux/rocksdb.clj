@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [crux.kv-store :refer :all]
             [crux.byte-utils :as bu])
-  (:import [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
+  (:import [java.io Closeable]
+           [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
 (defn- -value [^RocksDB db k]
   (with-open [i (.newIterator db)]
@@ -71,10 +72,11 @@
   (merge! [{:keys [^RocksDB db]} k v]
     (.merge db k v))
 
-  (close [{:keys [^RocksDB db ^Options options]}]
-    (.close db)
-    (.close options))
-
   (destroy [this]
     (with-open [options (Options.)]
-      (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options))))
+      (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options)))
+
+  Closeable
+  (close [{:keys [^RocksDB db ^Options options]}]
+    (.close db)
+    (.close options)))

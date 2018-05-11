@@ -5,6 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/tools.logging "0.4.0"]
+                 [org.clojure/tools.cli "0.3.7"]
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.11.3"]
@@ -24,6 +25,7 @@
                                                 log4j]]]
                    :source-paths ["bench"]}}
   :aot [crux.kafka]
+  :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
   ;;       https://github.com/technomancy/leiningen/pull/2367
