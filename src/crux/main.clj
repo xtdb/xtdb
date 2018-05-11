@@ -9,8 +9,7 @@
             [crux.lmdb]
             [crux.kafka :as kafka])
   (:import [java.io Closeable]
-           [java.net InetAddress]
-           [org.apache.kafka.common TopicPartition]))
+           [java.net InetAddress]))
 
 (def cli-options
   ;; An option with a required argument
@@ -56,10 +55,6 @@
         (log/warn "Options:" (with-out-str
                                (pp/print-table (for [[k v] options]
                                                  {:key k :value v}))))
-        (with-open [^Closeable kv (crux.core/kv db-dir {:kv-store kv-store})
-                    consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                     "group.id" group-id})]
-          (.assign consumer [(TopicPartition. topic 0)])
-          (kafka/seek-to-stored-offsets kv consumer)
-          (while true
-            (kafka/consume-and-index-entities kv consumer)))))))
+        (with-open [^Closeable kv (crux.core/kv db-dir {:kv-store kv-store})]
+          (kafka/start-indexing kv topic {"bootstrap.servers" bootstrap-servers
+                                          "group.id" group-id}))))))
