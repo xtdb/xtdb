@@ -60,5 +60,6 @@
                     consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
                                                      "group.id" group-id})]
           (.assign consumer [(TopicPartition. topic 0)])
+          (kafka/seek-to-stored-offsets kv consumer)
           (while true
             (kafka/consume-and-index-entities kv consumer)))))))
