@@ -66,16 +66,9 @@
   Binding
   (bind-key [this] s)
   (bind [this db]
-    (fn [rf]
-      (fn
-        ([]
-         (rf))
-        ([result]
-         (rf result))
-        ([result input]
-         (rf result (if (get input s)
-                      input
-                      (assoc input s (db/attr-val db (get input e) a)))))))))
+    (map (fn [input] (if (get input s)
+                       input
+                       (assoc input s (db/attr-val db (get input e) a)))))))
 
 (defn- fact->entity-binding [[e a v]]
   (EntityBinding. e a v))
