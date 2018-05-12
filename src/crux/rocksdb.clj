@@ -11,8 +11,8 @@
     (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
       (.value i))))
 
-(defn- -seek [^RocksDB db k]
-  (with-open [i (.newIterator db)]
+(defn- -seek [^RocksDB db ^ReadOptions read-options k]
+  (with-open [i (.newIterator db read-options)]
     (.seek i k)
     (when (.isValid i)
       [(.key i) (.value i)])))
@@ -33,15 +33,13 @@
   [^RocksDB db ^ReadOptions read-options key-pred k]
   (reify clojure.lang.IReduce
     (reduce [this f]
-      (with-open [read-options read-options
-                  i ^RocksIterator (.newIterator db read-options)]
+      (with-open [i ^RocksIterator (.newIterator db read-options)]
         (.seek i k)
         (if (and (.isValid i) (key-pred (.key i)))
           (rock-iterator-loop i key-pred f [(.key i) (.value i)])
           (f))))
     (reduce [this f init]
-      (with-open [read-options read-options
-                  i ^RocksIterator (.newIterator db read-options)]
+      (with-open [i ^RocksIterator (.newIterator db read-options)]
         (.seek i k)
         (rock-iterator-loop i key-pred f init)))))
 
@@ -53,16 +51,16 @@
                  (.setCreateIfMissing true)
                  (.setMergeOperatorName "uint64add"))
           db (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))]
-      (assoc this :db db :options opts)))
+      (assoc this :db db :options opts :vanilla-read-options (ReadOptions.))))
 
   (value [{:keys [db]} k]
     (-value db k))
 
-  (seek [{:keys [db]} k]
-    (-seek db k))
+  (seek [{:keys [db vanilla-read-options]} k]
+    (-seek db vanilla-read-options k))
 
-  (seek-and-iterate [{:keys [^RocksDB db]} key-pred k]
-    (-seek-and-iterate db (ReadOptions.) key-pred k))
+  (seek-and-iterate [{:keys [db vanilla-read-options]} key-pred k]
+    (-seek-and-iterate db vanilla-read-options key-pred k))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
