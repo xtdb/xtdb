@@ -63,8 +63,11 @@
             (f b v))
           b))
       (decode [_ v]
-        (let [b (ByteBuffer/wrap #^bytes v)]
-          (into {} (map (fn [[k [_ _ f]]] [k (f b)])) pairs))))))
+        (let [b (ByteBuffer/wrap #^bytes v)
+              m (transient {})]
+          (doseq [[k [_ _ f]] pairs]
+            (assoc! m k  (f b)))
+          (persistent! m))))))
 
 (defn compile-header-frame [[header-k header-frame] frames]
   (reify Codec
