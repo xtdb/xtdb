@@ -3,6 +3,7 @@
             [crux.kv :as cr]
             [crux.query :as q]
             [crux.core :refer [db]]
+            [crux.codecs]
             [crux.memdb])
   (:import [java.util Date]))
 
@@ -30,3 +31,19 @@
                            :where [['e :name "Ivan"]]}))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
+
+;; ~500 mills for 1 million
+(defn bench-encode [n]
+  (let [d (java.util.Date.)]
+    (doseq [_ (range n)]
+      (cr/encode cr/frame-index-eat {:index :eat :eid (rand-int 1000000) :aid (rand-int 1000000) :ts d}))))
+
+;; ~900 ms for 1 million
+(defn bench-decode [n]
+  (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
+    (doseq [_ (range n)]
+      (crux.codecs/decode cr/frame-value-eat f))))
+
+;; Notes codecs benching:
+;; in the current world - m is problematic, as it's a map
+;; decode is also likely more expensive, due to enum dispatch and the for loop

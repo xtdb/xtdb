@@ -84,7 +84,7 @@
   attributes/timestamps of a given entity."
   (c/compile-frame :index frame-index-enum :eid :id))
 
-(defn- encode [frame m]
+(defn encode [frame m]
   (.array ^ByteBuffer (c/encode frame m)))
 
 (def o (Object.))

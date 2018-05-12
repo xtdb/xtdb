@@ -50,15 +50,13 @@
                             (when-not datatype
                               (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
                             [k datatype]))))
-        length-fns (for [[k [length-f]] pairs :when (fn? length-f)]
-                     [k length-f])
         fixed-length (reduce + (for [[k [length]] pairs :when (number? length)]
-                                 length))]
+                                 length))
+        length-fn (first (for [[k [length-f]] pairs :when (fn? length-f)]
+                           (fn [m] (length-f (get m k)))))]
     (reify Codec
       (encode [this m]
-        (let [length (->> length-fns
-                          (map (fn [[k length-f]] (length-f (get m k))))
-                          (reduce + fixed-length))
+        (let [length (if length-fn (+ fixed-length (length-fn m)) fixed-length)
               b (ByteBuffer/allocate length)]
           (doseq [[k [_ f]] pairs
                   :let [v (get m k)]]
@@ -66,9 +64,7 @@
           b))
       (decode [_ v]
         (let [b (ByteBuffer/wrap #^bytes v)]
-          (into {}
-                (for [[k [_ _ f]] pairs]
-                  [k (f b)])))))))
+          (into {} (map (fn [[k [_ _ f]]] [k (f b)])) pairs))))))
 
 (defn compile-header-frame [[header-k header-frame] frames]
   (reify Codec
@@ -84,13 +80,17 @@
             codec (get frames (f b))]
         (decode codec v)))))
 
-(defn compile-enum [& vals]
-  (let [keyword->vals (into {} (map-indexed (fn [i v] [v (byte i)]) vals))
-        vals->keyword (into {} (map-indexed (fn [i v] [(byte i) v]) vals))]
-    [1
-     (fn [^ByteBuffer bb k] (let [v (get keyword->vals k)]
-                              (assert v)
-                              (.put bb ^Byte v)))
-     (fn [^ByteBuffer bb] (let [k (get vals->keyword (.get bb))]
-                            (assert k)
-                            k))]))
+(defmacro compile-enum [& vals]
+  `[1
+    (fn [^ByteBuffer bb# ~'k]
+      (let [v# (case ~'k
+                 ~@(flatten (for [[i k] (map-indexed vector vals)]
+                              [k (byte i)])))]
+        (assert v#)
+        (.put bb# ^Byte v#)))
+    (fn [^ByteBuffer bb#]
+      (let [k# (case (.get bb#)
+                 ~@(flatten (for [[i k] (map-indexed vector vals)]
+                              [(byte i) k])))]
+        (assert k#)
+        k#))])
