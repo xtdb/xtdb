@@ -75,19 +75,6 @@
   value."
   (c/compile-frame :index frame-index-enum))
 
-(def frame-index-key
-  "Frame to use for building keys, that can access any value across
-  all the indicies. The first byte is a header that identifies the
-  index and corresponding key structure."
-  (c/compile-header-frame
-   [:index frame-index-enum]
-   {:eid frame-index-eid
-    :eat frame-index-eat
-    :avt frame-index-avt
-    :aid frame-index-aid
-    :ident frame-index-attribute-ident
-    :meta frame-index-meta}))
-
 (def frame-index-key-prefix
   "Partial key frame, used for iterating within a particular index."
   (c/compile-frame :index frame-index-enum))
@@ -104,7 +91,7 @@
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking o
-    (let [key-entity-id (encode frame-index-key {:index :eid})]
+    (let [key-entity-id (encode frame-index-eid {:index :eid})]
       (kv-store/merge! db key-entity-id (long->bytes 1))
       (bytes->long (kv-store/value db key-entity-id)))))
 
@@ -129,10 +116,10 @@
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (kv-store/store db
-                    (encode frame-index-key {:index :ident :ident ident})
+                    (encode frame-index-attribute-ident {:index :ident :ident ident})
                     (long->bytes aid))
     ;; to go from aid -> k
-    (let [k (encode frame-index-key {:index :aid :aid aid})]
+    (let [k (encode frame-index-aid {:index :aid :aid aid})]
       (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
     aid))
 
@@ -143,7 +130,7 @@
     (->> (kv-store/seek-and-iterate db (partial bu/bytes=? k) k)
          (into {} (map (fn [[k v]]
                          (let [attr (c/decode frame-value-aid v)
-                               k (c/decode frame-index-key k)]
+                               k (c/decode frame-index-aid k)]
                            [(:crux.kv.attr/ident attr)
                             (:aid k)])))))))
 
@@ -155,7 +142,7 @@
     (reset! attributes (attributes-at-rest db)))
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
-                             (encode frame-index-key)
+                             (encode frame-index-attribute-ident)
                              (kv-store/value db)
                              bytes->long)
                     (transact-attr-ident! db ident))]
@@ -163,7 +150,7 @@
         aid)))
 
 (defn attr-aid->ident [db aid]
-  (if-let [v (kv-store/value db (encode frame-index-key {:index :aid :aid aid}))]
+  (if-let [v (kv-store/value db (encode frame-index-aid {:index :aid :aid aid}))]
     (:crux.kv.attr/ident (c/decode frame-value-aid v))
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -187,13 +174,13 @@
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
              datatype (val->data-type v)]
          (assert datatype "Could not discern data-type from supplied value")
-         (kv-store/store db (encode frame-index-key {:index :eat
+         (kv-store/store db (encode frame-index-eat {:index :eat
                                                      :eid eid
                                                      :aid aid
                                                      :ts ts})
                          (encode frame-value-eat {:type datatype :v v}))
          (when v
-           (kv-store/store db (encode frame-index-key {:index :avt
+           (kv-store/store db (encode frame-index-avt {:index :avt
                                                        :aid aid
                                                        :v v
                                                        :ts ts
@@ -205,7 +192,7 @@
   ([db eid ident] (-get-at db eid ident (Date.)))
   ([db eid ident ^Date ts]
    (let [aid (attr-ident->aid! db ident)
-         seek-k #^bytes (encode frame-index-key {:index :eat :eid eid :aid aid :ts ts})]
+         seek-k #^bytes (encode frame-index-eat {:index :eat :eid eid :aid aid :ts ts})]
      (when-let [[k v] (kv-store/seek db seek-k)]
        ;; Ensure just the key we want (minus time)
        (when (zero? (bu/compare-bytes seek-k k (- (alength seek-k) 8)))
@@ -219,7 +206,7 @@
    (let [k (encode frame-index-eat-key-prefix {:index :eat :eid eid})]
      (some->
       (reduce (fn [m [k v]]
-                (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-key k)
+                (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-eat k)
                       ident (attr-aid->ident db aid)]
                   (if (or (ident m)
                           (or (not at-ts) (> (.getTime ts) (.getTime at-ts))))
@@ -237,11 +224,11 @@
   index that could be lazy."
   [db]
   (->> (kv-store/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
-       (into #{} (comp (map (fn [[k _]] (c/decode frame-index-key k))) (map :eid)))))
+       (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k))) (map :eid)))))
 
 (defn entity-ids-for-value [db ident v ^Date ts]
   (let [aid (attr-ident->aid! db ident)
-        k #^bytes (encode frame-index-key {:index :avt
+        k #^bytes (encode frame-index-avt {:index :avt
                                            :aid aid
                                            :v v
                                            :ts ts
