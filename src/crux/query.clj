@@ -76,15 +76,13 @@
   (when (and v (symbol? v))
     (VarBinding. e a v)))
 
-(defn- query-plan->results
-  "Reduce over the query plan, unifying the results across each
-  stage."
+(defn- query-plan->xform
+  "Create a tranduce from the query-plan."
   [db plan]
-  (let [xf (apply comp (for [[term-bindings pred-f] plan
-                             :let [binding-transducers (map (fn [b] (bind b db)) term-bindings)]]
-                         (comp (apply comp binding-transducers)
-                               (filter (partial pred-f db)))))]
-    (into #{} xf [db])))
+  (apply comp (for [[term-bindings pred-f] plan
+                    :let [binding-transducers (map (fn [b] (bind b db)) term-bindings)]]
+                (comp (apply comp binding-transducers)
+                      (filter (partial pred-f db))))))
 
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
@@ -125,10 +123,12 @@
       :not-join
       (let [e (-> t :bindings first)]
         [(map #(EntityBinding. % nil nil) (:bindings t))
-         (let [query-plan (query-terms->plan (:terms t))
+         (let [
                or-results (atom nil)]
            (fn [db result]
-             (let [or-results (or @or-results (reset! or-results (query-plan->results db query-plan)))]
+             (let [or-results (or @or-results
+                                  (let [query-xform (query-plan->xform db (query-terms->plan (:terms t)))]
+                                    (reset! or-results (into #{} query-xform [db]))))]
                (when-not (some #(= (get result e) (get % e)) or-results)
                  result))))])
 
@@ -159,9 +159,8 @@
   (let [{:keys [find where] :as q} (s/conform ::query q)]
     (when (= :clojure.spec.alpha/invalid q)
       (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-    (->> where
-         (query-terms->plan)
-         (validate-query find)
-         (query-plan->results db)
-         (map (partial find-projection find))
-         (into #{}))))
+    (let [xform (->> where
+                     (query-terms->plan)
+                     (validate-query find)
+                     (query-plan->xform db))]
+      (into #{} (comp xform (map (partial find-projection find))) [db]))))
