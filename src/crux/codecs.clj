@@ -45,11 +45,11 @@
 (defn compile-frame [& args]
   (let [pairs (->> args
                    (partition 2)
-                   (map (fn [[k t]]
-                          (let [datatype (resolve-data-type t)]
-                            (when-not datatype
-                              (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
-                            [k datatype]))))
+                   (mapv (fn [[k t]]
+                           (let [datatype (resolve-data-type t)]
+                             (when-not datatype
+                               (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
+                             [k datatype]))))
         fixed-length (reduce + (for [[k [length]] pairs :when (number? length)]
                                  length))
         length-fn (first (for [[k [length-f]] pairs :when (fn? length-f)]
