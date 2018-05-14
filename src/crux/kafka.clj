@@ -1,10 +1,6 @@
 (ns crux.kafka
   "Currently uses nippy to play nice with RDF IRIs that are not
-  valid keywords.
-
-  Would rather use LogAppendTime, but this is not consistent across a
-  transaction. Alternative is to make each transaction a single
-  message?"
+  valid keywords. Uses one transaction per message."
   (:require [taoensso.nippy :as nippy]
             [crux.kv :as cr])
   (:import [java.util List Map Date]
