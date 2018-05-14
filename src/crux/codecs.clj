@@ -25,19 +25,20 @@
 (defn- keyword->string [k]
   (-> k str (subs 1)))
 
-(def binary-types {:int32 [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
-                   :int64 [8 #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
-                   :id [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
+(def binary-types {:id [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
                    :reverse-ts [8
                                 (fn [^ByteBuffer b ^Date x] (.putLong b (- max-timestamp (.getTime x))))
                                 #(Date. (- max-timestamp (.getLong ^ByteBuffer %)))]
-                   :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
                    :keyword [(fn [k] (alength (.getBytes ^String (keyword->string k))))
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
                              #(-> % decode-string keyword)]
                    :md5 [16
                          (fn [b x] (encode-bytes b x))
-                         (fn [^ByteBuffer b] (.get b (byte-array 16)))]})
+                         (fn [^ByteBuffer b] (.get b (byte-array 16)))]
+                   ;; For range scans:
+                   :long [8 #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
+                   :double [8 #(.putDouble ^ByteBuffer %1 %2) #(.getDouble ^ByteBuffer %)]
+                   :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]})
 
 (defprotocol Codec
   (encode [this v])
