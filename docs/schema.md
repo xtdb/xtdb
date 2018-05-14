@@ -136,6 +136,8 @@ itself. See [transactions](transactions.md) for more about this.
 + [Automerge: A JSON-like data structure that can be modified
   concurrently by different users, and merged again
   automatically.](https://github.com/automerge/automerge)
++ [Pure Operation-Based Replicated Data
+  Types](https://arxiv.org/abs/1710.04469)
 
 ### Additive Schema
 
