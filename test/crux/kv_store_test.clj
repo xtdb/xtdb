@@ -31,6 +31,13 @@
       (ks/store f/*kv* k (bu/long->bytes 1))
       (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))))
 
+(t/deftest test-can-put-all []
+  (ks/put-all! f/*kv* (map (fn [i]
+                             [(bu/long->bytes i) (bu/long->bytes (inc i))])
+                           (range 10)))
+  (doseq [i (range 10)]
+    (t/is (= (inc i) (bu/bytes->long (ks/value f/*kv* (bu/long->bytes i)))))))
+
 ;; TODO will migrate :-)
 #_(t/deftest test-seek-and-iterate []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]

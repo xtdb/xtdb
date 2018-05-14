@@ -23,6 +23,10 @@
   (store [_ k v]
     (.put db k v))
 
+  (put-all! [_ kvs]
+    (doseq [[k v] kvs]
+      (.put db k v)))
+
   (merge! [_ k v]
     (locking db
       (.merge db k v (reify BiFunction

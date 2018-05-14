@@ -154,7 +154,7 @@
     (:crux.kv.attr/ident (c/decode frame-value-aid v))
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
-(defn- entity->txes [tx]
+(defn- entity->txs [tx]
   (if (map? tx)
     (for [[k v] (dissoc tx ::id)]
       [(::id tx) k v])
@@ -167,25 +167,28 @@
    (-put db txs (Date.)))
   ([db txs ^Date ts]
    (let [tmp-ids->ids (atom {})]
-     (doseq [[eid k v] (mapcat entity->txes txs)]
-       (let [aid (attr-ident->aid! db k)
-             eid (or (and (pos? eid) eid)
-                     (get @tmp-ids->ids eid)
-                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
-             datatype (val->data-type v)]
-         (assert datatype "Could not discern data-type from supplied value")
-         (kv-store/store db (encode frame-index-eat {:index :eat
-                                                     :eid eid
-                                                     :aid aid
-                                                     :ts ts})
-                         (encode frame-value-eat {:type datatype :v v}))
-         (when v
-           (kv-store/store db (encode frame-index-avt {:index :avt
-                                                       :aid aid
-                                                       :v v
-                                                       :ts ts
-                                                       :eid eid})
-                           (long->bytes eid)))))
+     (->> txs
+          (mapcat entity->txs)
+          (mapcat (fn [[eid k v]]
+                    (let [eid (or (and (pos? eid) eid)
+                                  (get @tmp-ids->ids eid)
+                                  (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
+                          aid (attr-ident->aid! db k)
+                          datatype (val->data-type v)]
+                      (assert datatype "Could not discern data-type from supplied value")
+                      (remove nil? [[(encode frame-index-eat {:index :eat
+                                                              :eid eid
+                                                              :aid aid
+                                                              :ts ts})
+                                     (encode frame-value-eat {:type datatype :v v})]
+                                    (when v
+                                      [(encode frame-index-avt {:index :avt
+                                                                :aid aid
+                                                                :v v
+                                                                :ts ts
+                                                                :eid eid})
+                                       (long->bytes eid)])]))))
+          (kv-store/put-all! db))
      @tmp-ids->ids)))
 
 (defn -get-at

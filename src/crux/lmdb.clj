@@ -137,6 +137,14 @@
        (put-bytes->bytes stack txn dbi k v))
      0))
 
+  (put-all! [_ kvs]
+    (transaction
+     env
+     (fn [^MemoryStack stack ^long txn]
+       (doseq [[k v] kvs]
+         (put-bytes->bytes stack txn dbi k v)))
+     0))
+
   (merge! [_ k v]
     (transaction
      env

@@ -1,10 +1,10 @@
 (ns crux.rocksdb
   (:require [clojure.java.io :as io]
-            [crux.kv-store :refer :all]
-            [crux.byte-utils :as bu])
-  (:import [java.io Closeable]
-           [clojure.lang IReduce IReduceInit]
-           [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
+            [crux.byte-utils :as bu]
+            [crux.kv-store :refer :all])
+  (:import [clojure.lang IReduce IReduceInit]
+           java.io.Closeable
+           [org.rocksdb Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
 (defn- -value [^RocksDB db k]
   (with-open [i (.newIterator db)]
@@ -46,6 +46,13 @@
         (.seek i k)
         (rock-iterator-loop i key-pred f init)))))
 
+(defn- -put-all! [^RocksDB db kvs]
+  (let [wb (WriteBatch.)
+        wo (WriteOptions.)]
+    (doseq [[k v] kvs]
+      (.put wb k v))
+    (.write db (WriteOptions.) wb)))
+
 (defrecord CruxRocksKv [db-dir]
   CruxKvStore
   (open [this]
@@ -71,6 +78,9 @@
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
+
+  (put-all! [{:keys [^RocksDB db]} kvs]
+    (-put-all! db kvs))
 
   (merge! [{:keys [^RocksDB db]} k v]
     (.merge db k v))
