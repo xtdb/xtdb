@@ -47,11 +47,11 @@
         (rock-iterator-loop i key-pred f init)))))
 
 (defn- -put-all! [^RocksDB db kvs]
-  (let [wb (WriteBatch.)
-        wo (WriteOptions.)]
+  (with-open [wb (WriteBatch.)
+              wo (WriteOptions.)]
     (doseq [[k v] kvs]
       (.put wb k v))
-    (.write db (WriteOptions.) wb)))
+    (.write db wo wb)))
 
 (defrecord CruxRocksKv [db-dir]
   CruxKvStore
