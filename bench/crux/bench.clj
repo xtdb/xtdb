@@ -39,7 +39,8 @@
       (cr/encode cr/frame-index-eat {:index :eat :eid (rand-int 1000000) :aid (rand-int 1000000) :ts d}))))
 
 ;; ~900 ms for 1 million
-(defn bench-decode [n]
+;; TODO: add new test here, the value frames have been replaced by nippy.
+#_(defn bench-decode [n]
   (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
     (doseq [_ (range n)]
       (crux.codecs/decode cr/frame-value-eat f))))
