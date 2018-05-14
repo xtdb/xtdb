@@ -1,5 +1,6 @@
 (ns crux.codecs-test
   (:require [clojure.test :as t]
+            [crux.byte-utils :as bu]
             [crux.codecs :refer :all])
   (:import java.nio.ByteBuffer))
 
@@ -16,7 +17,7 @@
 
   (t/testing "Can encode/decode exotic frame"
     (let [f (compile-frame :a :int32 :b :md5)]
-      (t/is (= 1 (:a (round-trip f {:a 1 :b (.getBytes "sad")})))))))
+      (t/is (= 1 (:a (round-trip f {:a 1 :b (bu/md5 (.getBytes "sad"))})))))))
 
 (t/deftest test-prefix-codecs
   (let [f1 (compile-frame :a :int32 :b :int32)

@@ -36,7 +36,7 @@
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
                              #(-> % decode-string keyword)]
                    :md5 [16
-                         (fn [b x] (encode-bytes b (bu/md5 x)))
+                         (fn [b x] (encode-bytes b x))
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]})
 
 (defprotocol Codec

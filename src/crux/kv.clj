@@ -151,7 +151,7 @@
          (when v
            (conj! txs-to-put [(encode frame-index-avt {:index :avt
                                                        :aid aid
-                                                       :v value-bytes
+                                                       :v (bu/md5 value-bytes)
                                                        :ts ts
                                                        :eid eid})
                               (long->bytes eid)]))))
@@ -200,7 +200,7 @@
   (let [aid (attr-ident->aid! db ident)
         k ^bytes (encode frame-index-avt {:index :avt
                                           :aid aid
-                                          :v (nippy/freeze v)
+                                          :v (bu/md5 (nippy/freeze v))
                                           :ts ts
                                           :eid 0})]
     (eduction
