@@ -1,23 +1,32 @@
 (ns crux.byte-utils
   (:import [java.math BigInteger]
-           [java.nio ByteBuffer]
+           [java.nio ByteBuffer ByteOrder]
+           [java.net URI]
            [java.security MessageDigest]
-           [java.util Comparator]))
+           [java.util Comparator UUID]))
 
 (defn hash-keyword [k]
   (hash (str (namespace k) (name k))))
 
 (defn long->bytes [l]
-  (->(-> (java.nio.ByteBuffer/allocate 8)
-         (.order (java.nio.ByteOrder/nativeOrder)))
-     (.putLong l)
-     (.array)))
+  (-> (ByteBuffer/allocate 8)
+      (.order (ByteOrder/nativeOrder))
+      (.putLong l)
+      (.array)))
 
 (defn bytes->long [data]
-  (.getLong (doto (-> (java.nio.ByteBuffer/allocate 8)
-                      (.order (java.nio.ByteOrder/nativeOrder)))
-              (.put data 0 8)
-              (.flip))))
+  (-> (ByteBuffer/allocate 8)
+      (.order (ByteOrder/nativeOrder))
+      (.put data 0 8)
+      (.flip)
+      (.getLong)))
+
+(defn uuid->bytes [^UUID uuid]
+  (-> (ByteBuffer/allocate 16)
+      (.order (ByteOrder/nativeOrder))
+      (.putLong (.getMostSignificantBits uuid))
+      (.putLong (.getLeastSignificantBits uuid))
+      (.array)))
 
 (def ^java.security.MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
 
@@ -25,17 +34,45 @@
   (.digest md5-algo bytes))
 
 (defn to-byte-array [v]
-  (cond (string? v)
+  (cond (bytes? v)
+        v
+
+        (string? v)
         (.getBytes ^String v)
 
         (keyword? v)
         (to-byte-array (name v))
 
-        (number? v)
-        (long->bytes v)
+        (or (instance? Integer v)
+            (instance? Long v)
+            (instance? Short v)
+            (instance? Byte v))
+        (long->bytes (long v))
+
+        (or (instance? Double v)
+            (instance? Float v))
+        (long->bytes (Double/doubleToLongBits (double v)))
+
+        (boolean? v)
+        (long->bytes (if v 1 0))
 
         (inst? v)
-        (long->bytes (inst-ms v))))
+        (long->bytes (inst-ms v))
+
+        (instance? BigInteger v)
+        (.toByteArray ^BigInteger v)
+
+        (instance? BigDecimal v)
+        (.getBytes (str v))
+
+        (instance? UUID v)
+        (uuid->bytes v)
+
+        (instance? URI v)
+        (.getBytes (str v))
+
+        :else
+        (.getBytes (pr-str v))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))

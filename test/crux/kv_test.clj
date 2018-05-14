@@ -1,7 +1,9 @@
 (ns crux.kv-test
   (:require [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.kv :as cr]))
+            [crux.byte-utils :as bu]
+            [crux.kv :as cr])
+  (:import [java.net URI]))
 
 (t/use-fixtures :each f/start-system)
 
@@ -95,6 +97,55 @@
   (cr/-put *kv* [[test-eid :foo/new-ident2 :a]])
   (t/is (= #{:foo/new-ident2}
            (set (keys @(:attributes *kv*))))))
+
+(t/deftest test-primitives
+  (cr/-put *kv* [[test-eid :foo "foo1"]])
+  (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo 1]])
+  (t/is (= 1 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (byte 1)]])
+  (t/is (= 1 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (short 1)]])
+  (t/is (= 1 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (int 1)]])
+  (t/is (= 1 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo 1.0]])
+  (t/is (= 1.0 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (float 1.0)]])
+  (t/is (= 1.0 (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo 1M]])
+  (t/is (= 1M (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (biginteger 1)]])
+  (t/is (= (biginteger 1) (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo #inst "2001-01-01"]])
+  (t/is (= #inst "2001-01-01" (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo true]])
+  (t/is (= true (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo #uuid "fbee1a5e-273b-4d70-9fde-be76be89209a"]])
+  (t/is (=  #uuid "fbee1a5e-273b-4d70-9fde-be76be89209a"
+            (cr/-get-at *kv* test-eid :foo)))
+
+  (cr/-put *kv* [[test-eid :foo (byte-array [1 2])]])
+  (t/is (bu/bytes=? (byte-array [1 2]) (cr/-get-at *kv* test-eid :foo)))
+
+
+  (cr/-put *kv* [[test-eid :foo (URI. "http://google.com/")]])
+  (t/is (= (URI. "http://google.com/") (cr/-get-at *kv* test-eid :foo)))
+
+
+  (cr/-put *kv* [[test-eid :foo [1 2]]])
+  (t/is (= [1 2] (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (cr/get-meta *kv* :foo)))

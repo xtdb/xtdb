@@ -12,7 +12,8 @@
   "An enum byte used to identity a particular data-type. Can be used
   as a header to signify the follow bytes as conforming to a
   particular data-type."
-  (c/compile-enum :long :string :keyword :instant :retracted))
+  (c/compile-enum :long :double :biginteger :bigdecimal :boolean
+                  :string :keyword :instant :uuid :uri :edn :bytes :retracted))
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
@@ -33,9 +34,17 @@
   (c/compile-header-frame
    [:type frame-data-type-enum]
    {:long (c/compile-frame :type frame-data-type-enum :v :int64)
+    :double (c/compile-frame :type frame-data-type-enum :v :double)
+    :biginteger (c/compile-frame :type frame-data-type-enum :v :biginteger)
+    :bigdecimal (c/compile-frame :type frame-data-type-enum :v :bigdecimal)
+    :boolean (c/compile-frame :type frame-data-type-enum :v :boolean)
     :string (c/compile-frame :type frame-data-type-enum :v :string)
     :keyword (c/compile-frame :type frame-data-type-enum :v :keyword)
-    :instant (c/compile-frame :type frame-data-type-enum :v :ts)
+    :instant (c/compile-frame :type frame-data-type-enum :v :instant)
+    :uuid (c/compile-frame :type frame-data-type-enum :v :uuid)
+    :uri (c/compile-frame :type frame-data-type-enum :v :uri)
+    :edn (c/compile-frame :type frame-data-type-enum :v :edn)
+    :bytes (c/compile-frame :type frame-data-type-enum :v :bytes)
     :retracted (c/compile-frame :type frame-data-type-enum)}))
 
 (def frame-index-avt
@@ -108,11 +117,39 @@
         (string? v)
         :string
 
-        (number? v)
+        (or (instance? Integer v)
+            (instance? Long v)
+            (instance? Short v)
+            (instance? Byte v))
         :long
 
+        (or (instance? Double v)
+            (instance? Float v))
+        :double
+
+        (instance? BigInteger v)
+        :biginteger
+
+        (instance? BigDecimal v)
+        :bigdecimal
+
+        (boolean? v)
+        :boolean
+
         (inst? v)
-        :instant))
+        :instant
+
+        (uuid? v)
+        :uuid
+
+        (uri? v)
+        :uri
+
+        (bytes? v)
+        :bytes
+
+        :else
+        :edn))
 
 (defn- transact-attr-ident!
   [db ident]
