@@ -29,7 +29,6 @@
             (recur result))))
       init')))
 
-;; TODO move to IReduceInit
 (defn- -seek-and-iterate
   [^RocksDB db ^ReadOptions read-options key-pred k]
   (reify
