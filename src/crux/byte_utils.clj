@@ -1,6 +1,6 @@
 (ns crux.byte-utils
   (:import [java.math BigInteger]
-           [java.nio ByteBuffer ByteOrder]
+           [java.nio ByteBuffer]
            [java.net URI]
            [java.security MessageDigest]
            [java.util Comparator UUID]))
