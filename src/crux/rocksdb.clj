@@ -3,6 +3,7 @@
             [crux.kv-store :refer :all]
             [crux.byte-utils :as bu])
   (:import [java.io Closeable]
+           [clojure.lang IReduce]
            [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
 (defn- -value [^RocksDB db k]
@@ -31,15 +32,15 @@
 ;; TODO move to IReduceInit
 (defn- -seek-and-iterate
   [^RocksDB db ^ReadOptions read-options key-pred k]
-  (reify clojure.lang.IReduce
+  (reify IReduce
     (reduce [this f]
-      (with-open [i ^RocksIterator (.newIterator db read-options)]
+      (with-open [i (.newIterator db read-options)]
         (.seek i k)
         (if (and (.isValid i) (key-pred (.key i)))
           (rock-iterator-loop i key-pred f [(.key i) (.value i)])
           (f))))
     (reduce [this f init]
-      (with-open [i ^RocksIterator (.newIterator db read-options)]
+      (with-open [i (.newIterator db read-options)]
         (.seek i k)
         (rock-iterator-loop i key-pred f init)))))
 
@@ -50,7 +51,11 @@
     (let [opts (doto (Options.)
                  (.setCreateIfMissing true)
                  (.setMergeOperatorName "uint64add"))
-          db (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))]
+          db (try
+               (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))
+               (catch Throwable t
+                 (.close opts)
+                 (throw t)))]
       (assoc this :db db :options opts :vanilla-read-options (ReadOptions.))))
 
   (value [{:keys [db]} k]
@@ -73,6 +78,7 @@
       (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options)))
 
   Closeable
-  (close [{:keys [^RocksDB db ^Options options]}]
+  (close [{:keys [^RocksDB db ^Options options ^ReadOptions vanilla-read-options]}]
     (.close db)
-    (.close options)))
+    (.close options)
+    (.close vanilla-read-options)))
