@@ -25,51 +25,10 @@
       (.putLong (.getLeastSignificantBits uuid))
       (.array)))
 
-(def ^java.security.MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
+(def ^MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
 
 (defn md5 [^bytes bytes]
   (.digest md5-algo bytes))
-
-(defn to-byte-array [v]
-  (cond (bytes? v)
-        v
-
-        (string? v)
-        (.getBytes ^String v)
-
-        (keyword? v)
-        (to-byte-array (name v))
-
-        (or (instance? Integer v)
-            (instance? Long v)
-            (instance? Short v)
-            (instance? Byte v))
-        (long->bytes (long v))
-
-        (or (instance? Double v)
-            (instance? Float v))
-        (long->bytes (Double/doubleToLongBits (double v)))
-
-        (boolean? v)
-        (long->bytes (if v 1 0))
-
-        (inst? v)
-        (long->bytes (inst-ms v))
-
-        (instance? BigInteger v)
-        (.toByteArray ^BigInteger v)
-
-        (instance? BigDecimal v)
-        (.getBytes (str v))
-
-        (instance? UUID v)
-        (uuid->bytes v)
-
-        (instance? URI v)
-        (.getBytes (str v))
-
-        :else
-        (.getBytes (pr-str v))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))

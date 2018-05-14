@@ -16,7 +16,7 @@
 
   (t/testing "Can encode/decode exotic frame"
     (let [f (compile-frame :a :int32 :b :md5)]
-      (t/is (= 1 (:a (round-trip f {:a 1 :b "sad"})))))))
+      (t/is (= 1 (:a (round-trip f {:a 1 :b (.getBytes "sad")})))))))
 
 (t/deftest test-prefix-codecs
   (let [f1 (compile-frame :a :int32 :b :int32)

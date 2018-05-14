@@ -1,6 +1,6 @@
 (ns crux.codecs
   (:require [clojure.edn :as edn]
-            [crux.byte-utils :refer [md5 to-byte-array]])
+            [crux.byte-utils :as bu])
   (:import [java.nio ByteBuffer]
            [java.net URI]
            [java.util Date UUID]))
@@ -25,42 +25,18 @@
 (defn- keyword->string [k]
   (-> k str (subs 1)))
 
-(def binary-types {:boolean [1 #(.put ^ByteBuffer %1 (byte (if %2 1 0))) #(= 1 (.get ^ByteBuffer %))]
-                   :int32 [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
+(def binary-types {:int32 [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
                    :int64 [8 #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
                    :id [4 #(.putInt ^ByteBuffer %1 %2) #(.getInt ^ByteBuffer %)]
-                   :double [8 #(.putDouble ^ByteBuffer %1 %2) #(.getDouble ^ByteBuffer %)]
-                   :biginteger [#(alength (.toByteArray ^BigInteger %))
-                                #(encode-bytes %1 (.toByteArray ^BigInteger %2))
-                                #(BigInteger. (decode-bytes %))]
-                   :bigdecimal [#(alength (.getBytes (str %)))
-                                #(encode-string %1 (str %2))
-                                #(BigDecimal. (decode-string ^ByteBuffer %))]
                    :reverse-ts [8
                                 (fn [^ByteBuffer b ^Date x] (.putLong b (- max-timestamp (.getTime x))))
                                 #(Date. (- max-timestamp (.getLong ^ByteBuffer %)))]
-                   :instant [8
-                             (fn [^ByteBuffer b ^Date x] (.putLong b (.getTime x)))
-                             #(Date. (.getLong ^ByteBuffer %))]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
-                   :bytes [#(alength ^bytes %) encode-bytes decode-bytes]
-                   :uuid [16
-                          (fn [^ByteBuffer b ^UUID x]
-                            (doto ^ByteBuffer b
-                              (.putLong (.getMostSignificantBits x))
-                              (.putLong (.getLeastSignificantBits x))))
-                          #(UUID. (.getLong ^ByteBuffer %) (.getLong ^ByteBuffer %))]
-                   :uri  [(fn [^URI s] (alength (.getBytes (str s))))
-                          (fn [^ByteBuffer bb k] (encode-string bb (str k)))
-                          #(-> % decode-string URI.)]
-                   :edn  [(fn [^String s] (alength (.getBytes (pr-str s))))
-                          (fn [^ByteBuffer bb k] (encode-string bb (pr-str k)))
-                          #(-> % decode-string edn/read-string)]
                    :keyword [(fn [k] (alength (.getBytes ^String (keyword->string k))))
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
                              #(-> % decode-string keyword)]
                    :md5 [16
-                         (fn [b x] (encode-bytes b (-> x to-byte-array md5)))
+                         (fn [b x] (encode-bytes b (bu/md5 x)))
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]})
 
 (defprotocol Codec

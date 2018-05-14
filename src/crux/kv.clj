@@ -4,16 +4,10 @@
             [crux.kv-store :as kv-store]
             [crux.byte-utils :as bu]
             [crux.codecs :as c]
+            [taoensso.nippy :as nippy]
             [clojure.edn :as edn])
   (:import [java.nio ByteBuffer]
            [java.util Date]))
-
-(def frame-data-type-enum
-  "An enum byte used to identity a particular data-type. Can be used
-  as a header to signify the follow bytes as conforming to a
-  particular data-type."
-  (c/compile-enum :long :double :biginteger :bigdecimal :boolean
-                  :string :keyword :instant :uuid :uri :edn :bytes :retracted))
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
@@ -28,24 +22,6 @@
                    :eid :id
                    :aid :id
                    :ts :reverse-ts))
-
-(def frame-value-eat
-  "The frame of the value stored inside of the EAT index."
-  (c/compile-header-frame
-   [:type frame-data-type-enum]
-   {:long (c/compile-frame :type frame-data-type-enum :v :int64)
-    :double (c/compile-frame :type frame-data-type-enum :v :double)
-    :biginteger (c/compile-frame :type frame-data-type-enum :v :biginteger)
-    :bigdecimal (c/compile-frame :type frame-data-type-enum :v :bigdecimal)
-    :boolean (c/compile-frame :type frame-data-type-enum :v :boolean)
-    :string (c/compile-frame :type frame-data-type-enum :v :string)
-    :keyword (c/compile-frame :type frame-data-type-enum :v :keyword)
-    :instant (c/compile-frame :type frame-data-type-enum :v :instant)
-    :uuid (c/compile-frame :type frame-data-type-enum :v :uuid)
-    :uri (c/compile-frame :type frame-data-type-enum :v :uri)
-    :edn (c/compile-frame :type frame-data-type-enum :v :edn)
-    :bytes (c/compile-frame :type frame-data-type-enum :v :bytes)
-    :retracted (c/compile-frame :type frame-data-type-enum)}))
 
 (def frame-index-avt
   "The AVT index is used to find entities that have an attribute/value
@@ -64,16 +40,11 @@
   (c/compile-frame :index frame-index-enum
                    :aid :id))
 
-(def frame-value-aid
-  "The frame of the value stored inside of the AID index."
-  (c/compile-frame
-   :crux.kv.attr/ident :keyword))
-
 (def frame-index-attribute-ident
   "The attribute-ident index is used to provide a mapping from
   attribute keyword ident to the attribute ID."
   (c/compile-frame :index frame-index-enum
-                   :ident :md5))
+                   :ident :keyword))
 
 (def frame-index-meta
   (c/compile-frame :index frame-index-enum
@@ -108,52 +79,6 @@
           1)))
       (bytes->long (kv-store/value db key-entity-id)))))
 
-(defn- val->data-type
-  "Determine the supported data type for the supplied value."
-  [v]
-  (cond (nil? v)
-        :retracted
-
-        (keyword? v)
-        :keyword
-
-        (string? v)
-        :string
-
-        (or (instance? Integer v)
-            (instance? Long v)
-            (instance? Short v)
-            (instance? Byte v))
-        :long
-
-        (or (instance? Double v)
-            (instance? Float v))
-        :double
-
-        (instance? BigInteger v)
-        :biginteger
-
-        (instance? BigDecimal v)
-        :bigdecimal
-
-        (boolean? v)
-        :boolean
-
-        (inst? v)
-        :instant
-
-        (uuid? v)
-        :uuid
-
-        (uri? v)
-        :uri
-
-        (bytes? v)
-        :bytes
-
-        :else
-        :edn))
-
 (defn- transact-attr-ident!
   [db ident]
   {:pre [ident]}
@@ -164,7 +89,7 @@
                     (long->bytes aid))
     ;; to go from aid -> k
     (let [k (encode frame-index-aid {:index :aid :aid aid})]
-      (kv-store/store db k (encode frame-value-aid {:crux.kv.attr/ident ident})))
+      (kv-store/store db k (nippy/freeze ident)))
     aid))
 
 (defn- attributes-at-rest
@@ -173,7 +98,7 @@
   (let [k (encode frame-index-key-prefix {:index :aid})]
     (->> (kv-store/seek-and-iterate db (partial bu/bytes=? k) k)
          (into {} (map (fn [[k v]]
-                         (let [attr (c/decode frame-value-aid v)
+                         (let [attr (nippy/thaw v)
                                k (c/decode frame-index-aid k)]
                            [(:crux.kv.attr/ident attr)
                             (:aid k)])))))))
@@ -195,7 +120,7 @@
 
 (defn attr-aid->ident [db aid]
   (if-let [v (kv-store/value db (encode frame-index-aid {:index :aid :aid aid}))]
-    (:crux.kv.attr/ident (c/decode frame-value-aid v))
+    (nippy/thaw v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
 (defn- entity->txs [tx]
@@ -217,17 +142,16 @@
                      (get @tmp-ids->ids eid)
                      (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
              aid (attr-ident->aid! db k)
-             datatype (val->data-type v)]
-         (assert datatype "Could not discern data-type from supplied value")
+             value-bytes (nippy/freeze v)]
          (conj! txs-to-put [(encode frame-index-eat {:index :eat
                                                      :eid eid
                                                      :aid aid
                                                      :ts ts})
-                            (encode frame-value-eat {:type datatype :v v})])
+                            value-bytes])
          (when v
            (conj! txs-to-put [(encode frame-index-avt {:index :avt
                                                        :aid aid
-                                                       :v v
+                                                       :v value-bytes
                                                        :ts ts
                                                        :eid eid})
                               (long->bytes eid)]))))
@@ -242,7 +166,7 @@
      (when-let [[k v] (kv-store/seek db seek-k)]
        ;; Ensure just the key we want (minus time)
        (when (zero? (bu/compare-bytes seek-k k (- (alength seek-k) 8)))
-         (:v (c/decode frame-value-eat v)))))))
+         (nippy/thaw v))))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
@@ -257,7 +181,7 @@
                   (if (or (ident m)
                           (or (not at-ts) (> (.getTime ts) (.getTime at-ts))))
                     m
-                    (assoc m ident (:v (c/decode frame-value-eat v))))))
+                    (assoc m ident (nippy/thaw v)))))
               nil
               (kv-store/seek-and-iterate db (partial bu/bytes=? k) k))
       (assoc ::id eid)))))
@@ -276,7 +200,7 @@
   (let [aid (attr-ident->aid! db ident)
         k ^bytes (encode frame-index-avt {:index :avt
                                           :aid aid
-                                          :v v
+                                          :v (nippy/freeze v)
                                           :ts ts
                                           :eid 0})]
     (eduction
