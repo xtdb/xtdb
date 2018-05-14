@@ -133,6 +133,9 @@ itself. See [transactions](transactions.md) for more about this.
   scale](https://blog.acolyer.org/2018/03/27/anna-a-kvs-for-any-scale/)
 + [Logic and Lattices for Distributed
   Programming](http://db.cs.berkeley.edu/papers/socc12-blooml.pdf)
++ [Automerge: A JSON-like data structure that can be modified
+  concurrently by different users, and merged again
+  automatically.](https://github.com/automerge/automerge)
 
 ### Additive Schema
 
