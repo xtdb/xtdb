@@ -41,6 +41,15 @@ alternative is to avoid locking all together for most cases by
 supporting strong eventual consistency using CRDTs in the
 [schema](schema.md) itself.
 
+One can also support pure transaction functions on the query nodes if
+there's a guaranteed order, like when using a log. This allows for
+basic CAS and access to the index to query invariants and
+conditions. In this mode, the transactor is basically split into two,
+where the indexing and transactor functions run on the nodes, and
+there could be some form of API to see if its transaction passed as
+expected (this is somewhat related to subscriptions). Consistency
+across multiple topics and partitions remains a problem.
+
 Crux will likely support a range of models here, as there is unlikely
 to be one size that fits all.
 
