@@ -26,6 +26,9 @@
                    :reverse-ts [8
                                 (fn [^ByteBuffer b ^Date x] (.putLong b (- max-timestamp (.getTime x))))
                                 #(Date. (- max-timestamp (.getLong ^ByteBuffer %)))]
+                   :ts [8
+                        (fn [^ByteBuffer b ^Date x] (.putLong b (.getTime x)))
+                        #(Date. (.getLong ^ByteBuffer %))]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]
                    :keyword [(fn [k] (alength (.getBytes ^String (keyword->string k))))
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))

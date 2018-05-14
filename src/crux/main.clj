@@ -71,7 +71,9 @@
         (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
                                        (crux.kv-store/open))
                     consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                     "group.id" group-id})]
+                                                     "group.id" group-id})
+                    admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+          (kafka/create-topic admin-client topic 1 1 {})
           (kafka/subscribe-from-stored-offsets kv consumer topic)
           (while true
             (kafka/consume-and-index-entities kv consumer)))))))

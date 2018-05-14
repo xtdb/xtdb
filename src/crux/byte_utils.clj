@@ -32,7 +32,10 @@
         (to-byte-array (name v))
 
         (number? v)
-        (long->bytes v)))
+        (long->bytes v)
+
+        (inst? v)
+        (long->bytes (inst-ms v))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))

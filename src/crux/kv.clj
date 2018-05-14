@@ -12,7 +12,7 @@
   "An enum byte used to identity a particular data-type. Can be used
   as a header to signify the follow bytes as conforming to a
   particular data-type."
-  (c/compile-enum :long :string :keyword :retracted))
+  (c/compile-enum :long :string :keyword :instant :retracted))
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
@@ -35,6 +35,7 @@
    {:long (c/compile-frame :type frame-data-type-enum :v :int64)
     :string (c/compile-frame :type frame-data-type-enum :v :string)
     :keyword (c/compile-frame :type frame-data-type-enum :v :keyword)
+    :instant (c/compile-frame :type frame-data-type-enum :v :ts)
     :retracted (c/compile-frame :type frame-data-type-enum)}))
 
 (def frame-index-avt
@@ -108,7 +109,10 @@
         :string
 
         (number? v)
-        :long))
+        :long
+
+        (inst? v)
+        :instant))
 
 (defn- transact-attr-ident!
   [db ident]

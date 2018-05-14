@@ -49,21 +49,19 @@
         entities (load-ntriples-example  "crux/example-data-artists.nt")]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
-                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "transactional.id" "test-can-transact-entities"})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-entities"})]
       (k/create-topic ac topic 1 1 {})
       (k/subscribe-from-stored-offsets f/*kv* c topic)
 
-      (.initTransactions p)
       (k/transact p topic entities)
 
-      (let [entities (map k/consumer-record->value (.poll c 5000))]
-        (t/is (= 7 (count entities)))
+      (let [txs (map k/consumer-record->value (.poll c 5000))]
+        (t/is (= 1 (count txs)))
         (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
                   :http://xmlns.com/foaf/0.1/surname "Picasso"}
-                 (select-keys (first entities)
+                 (select-keys (ffirst txs)
                               [:http://xmlns.com/foaf/0.1/firstName
                                :http://xmlns.com/foaf/0.1/surname])))))))
 
@@ -72,15 +70,13 @@
         entities (load-ntriples-example  "crux/picasso.nt")]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
-                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
-                                      "transactional.id" "test-can-transact-and-query-entities"})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-and-query-entities"})]
       (k/create-topic ac topic 1 1 {})
       (k/subscribe-from-stored-offsets f/*kv* c topic)
 
       (t/testing "transacting and indexing"
-        (.initTransactions p)
         (k/transact p topic entities)
 
         (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))

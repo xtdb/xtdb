@@ -7,7 +7,8 @@
   message?"
   (:require [taoensso.nippy :as nippy]
             [crux.kv :as cr])
-  (:import [java.util List Map Date UUID]
+  (:import [java.util List Map Date]
+           [java.util.concurrent ExecutionException]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
            [org.apache.kafka.common TopicPartition]
@@ -16,7 +17,9 @@
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
            [org.apache.kafka.common.serialization
-            Deserializer Serializer]))
+            Deserializer Serializer]
+           [org.apache.kafka.common.errors
+            TopicExistsException]))
 
 (deftype NippySerializer []
   Serializer
@@ -45,6 +48,9 @@
    "key.deserializer" (.getName crux.kafka.NippyDeserializer)
    "value.deserializer" (.getName crux.kafka.NippyDeserializer)})
 
+(def default-topic-config
+  {"message.timestamp.type" "LogAppendTime"})
+
 (defn ^KafkaProducer create-producer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 
@@ -56,8 +62,13 @@
 
 (defn create-topic [^AdminClient admin-client topic num-partitions replication-factor config]
   (let [new-topic (doto (NewTopic. topic num-partitions replication-factor)
-                    (.configs config))]
-    @(.all (.createTopics admin-client [new-topic]))))
+                    (.configs (merge default-topic-config config)))]
+    (try
+      @(.all (.createTopics admin-client [new-topic]))
+      (catch ExecutionException e
+        (let [cause (.getCause e)]
+          (when-not (instance? TopicExistsException cause)
+            (throw cause)))))))
 
 (defn consumer-record->value [^ConsumerRecord record]
   (.value record))
@@ -65,32 +76,14 @@
 ;;; Transacting Producer
 
 (defn transact [^KafkaProducer producer ^String topic entities]
-  (try
-    (.beginTransaction producer)
-    (let [transact-time (Date.)
-          transact-time-ms ^Long (.getTime transact-time)
-          transact-id (UUID/randomUUID)]
-      (doseq [entity entities]
-        (->> (assoc entity
-                    :crux.tx/transact-id transact-id
-                    :crux.tx/transact-time transact-time
-                    :crux.tx/business-time (or (:crux.tx/business-time entity) transact-time))
-             (ProducerRecord. topic nil transact-time-ms (:crux.rdf/iri entity))
-             (.send producer))))
-    (.commitTransaction producer)
-    (catch Throwable t
-      (.abortTransaction producer)
-      (throw t))))
+  (->> (ProducerRecord. topic nil entities)
+       (.send producer)))
 
 ;;; Indexing Consumer
 
 (defn entities->txs [entities]
   (for [entity entities]
-    (-> entity
-        (assoc :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))
-        (dissoc :crux.tx/transact-id
-                :crux.tx/transact-time
-                :crux.tx/business-time))))
+    (assoc entity :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))))
 
 (defn topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
@@ -107,18 +100,25 @@
       (.seek consumer partition offset)
       (.seekToBeginning consumer [partition]))))
 
-(defn index-entities [kv entities]
-  (doseq [[tx-id entities] (group-by :crux.tx/transact-id entities)]
-    (cr/-put kv
-             (entities->txs entities)
-             (:crux.tx/transact-time (first entities)))))
+(defn index-tx-record [kv ^ConsumerRecord record]
+  (let [transact-time (Date. (.timestamp record))
+        transact-id [(topic-partition-meta-key (.partition record))
+                     (.offset record)]
+        txs (for [tx (entities->txs (consumer-record->value record))]
+              (assoc tx
+                     :crux.tx/transact-id (pr-str transact-id)
+                     :crux.tx/transact-time transact-time
+                     :crux.tx/business-time (or (:crux.tx/business-time tx) transact-time)))]
+    (cr/-put kv txs transact-time)
+    txs))
 
 (defn consume-and-index-entities [kv ^KafkaConsumer consumer]
-  (let [records (.poll consumer 10000)]
-    (when-let [entities (seq (map consumer-record->value records))]
-      (index-entities kv entities)
-      (store-topic-partition-offsets kv consumer (.partitions records))
-      entities)))
+  (let [records (.poll consumer 10000)
+        entities (->> (for [^ConsumerRecord record records]
+                        (index-tx-record kv record))
+                      (reduce into []))]
+    (store-topic-partition-offsets kv consumer (.partitions records))
+    entities))
 
 (defn subscribe-from-stored-offsets [kv ^KafkaConsumer consumer topic]
   (let [topics [topic]]
