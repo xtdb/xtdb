@@ -46,7 +46,7 @@
         (.seek i k)
         (rock-iterator-loop i key-pred f init)))))
 
-(defn- -put-all! [^RocksDB db kvs]
+(defn- -store-all! [^RocksDB db kvs]
   (with-open [wb (WriteBatch.)
               wo (WriteOptions.)]
     (doseq [[k v] kvs]
@@ -78,8 +78,8 @@
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
 
-  (put-all! [{:keys [^RocksDB db]} kvs]
-    (-put-all! db kvs))
+  (store-all! [{:keys [^RocksDB db]} kvs]
+    (-store-all! db kvs))
 
   (destroy [this]
     (with-open [options (Options.)]

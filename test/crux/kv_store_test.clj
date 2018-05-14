@@ -17,10 +17,10 @@
   (t/testing "non existing key"
     (t/is (nil? (ks/value f/*kv* (bu/long->bytes 2))))))
 
-(t/deftest test-can-put-all []
-  (ks/put-all! f/*kv* (map (fn [i]
-                             [(bu/long->bytes i) (bu/long->bytes (inc i))])
-                           (range 10)))
+(t/deftest test-can-store-all []
+  (ks/store-all! f/*kv* (map (fn [i]
+                               [(bu/long->bytes i) (bu/long->bytes (inc i))])
+                             (range 10)))
   (doseq [i (range 10)]
     (t/is (= (inc i) (bu/bytes->long (ks/value f/*kv* (bu/long->bytes i)))))))
 

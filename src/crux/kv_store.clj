@@ -11,7 +11,7 @@
 
   (store [this k v])
 
-  (put-all! [this kvs])
+  (store-all! [this kvs])
 
   (close [this])
 

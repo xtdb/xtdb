@@ -23,7 +23,7 @@
   (store [_ k v]
     (.put db k v))
 
-  (put-all! [_ kvs]
+  (store-all! [_ kvs]
     (locking db
       (doseq [[k v] kvs]
         (.put db k v))))

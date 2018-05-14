@@ -231,7 +231,7 @@
                                                        :ts ts
                                                        :eid eid})
                               (long->bytes eid)]))))
-     (kv-store/put-all! db (persistent! txs-to-put))
+     (kv-store/store-all! db (persistent! txs-to-put))
      @tmp-ids->ids)))
 
 (defn -get-at
