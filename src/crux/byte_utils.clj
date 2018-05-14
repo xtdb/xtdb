@@ -27,7 +27,7 @@
 
 (def ^java.security.MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
 
-(defn md5 [#^bytes bytes]
+(defn md5 [^bytes bytes]
   (.digest md5-algo bytes))
 
 (defn to-byte-array [v]
@@ -104,7 +104,7 @@
       (compare-bytes a b))))
 
 (defn bytes=?
-  ([#^bytes k1 #^bytes k2]
+  ([^bytes k1 ^bytes k2]
    (bytes=? k1 (alength k1) k2))
-  ([#^bytes k1 array-length #^bytes k2]
+  ([^bytes k1 array-length ^bytes k2]
    (zero? (compare-bytes k1 k2 array-length))))

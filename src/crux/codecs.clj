@@ -8,7 +8,7 @@
 (def ^{:tag 'long}
   max-timestamp (.getTime #inst "9999-12-30"))
 
-(defn- encode-bytes [^ByteBuffer bb #^bytes bs]
+(defn- encode-bytes [^ByteBuffer bb ^bytes bs]
   (.put bb bs))
 
 (defn decode-bytes ^bytes [^ByteBuffer bb]
@@ -17,7 +17,7 @@
     ba))
 
 (defn encode-string [^ByteBuffer bb ^String s]
-  (.put bb #^bytes (.getBytes s)))
+  (.put bb ^bytes (.getBytes s)))
 
 (defn decode-string ^String [^ByteBuffer bb]
   (String. (decode-bytes bb)))
@@ -92,7 +92,7 @@
             (f b v))
           b))
       (decode [_ v]
-        (let [b (ByteBuffer/wrap #^bytes v)
+        (let [b (ByteBuffer/wrap ^bytes v)
               m (transient {})]
           (doseq [[k [_ _ f]] pairs]
             (assoc! m k  (f b)))
