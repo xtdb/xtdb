@@ -30,6 +30,15 @@ up as in querying above.
 The content-hash -> doc index is potentially a LRU cache backed by a
 larger, full key value store shared between the query nodes.
 
+When looking up using transact-time, business-time defaults to
+transact-time. This will filter out eventual writes done into the
+future business-time, which would need to be found via an explicit
+business-time/transact-time pair. The transact-time might not be an
+actual date, but could be a monotonic transaction id or maybe some
+form of causal context. If the transact-time is a date, it should be
+taken in an consistent (monotonic) manner, and should not be assigned
+by the client.
+
 #### Proposal B:
 
 This is the initially implemented approach. This excludes
