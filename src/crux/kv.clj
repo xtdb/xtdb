@@ -207,29 +207,28 @@
   ([db txs]
    (-put db txs (Date.)))
   ([db txs ^Date ts]
-   (let [tmp-ids->ids (atom {})]
-     (->> txs
-          (mapcat entity->txs)
-          (mapcat (fn [[eid k v]]
-                    (let [eid (or (and (pos? eid) eid)
-                                  (get @tmp-ids->ids eid)
-                                  (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
-                          aid (attr-ident->aid! db k)
-                          datatype (val->data-type v)]
-                      (assert datatype "Could not discern data-type from supplied value")
-                      (remove nil? [[(encode frame-index-eat {:index :eat
-                                                              :eid eid
-                                                              :aid aid
-                                                              :ts ts})
-                                     (encode frame-value-eat {:type datatype :v v})]
-                                    (when v
-                                      [(encode frame-index-avt {:index :avt
-                                                                :aid aid
-                                                                :v v
-                                                                :ts ts
-                                                                :eid eid})
-                                       (long->bytes eid)])]))))
-          (kv-store/put-all! db))
+   (let [tmp-ids->ids (atom {})
+         txs-to-put (transient [])]
+     (doseq[[eid k v] (mapcat entity->txs txs)]
+       (let [eid (or (and (pos? eid) eid)
+                     (get @tmp-ids->ids eid)
+                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
+             aid (attr-ident->aid! db k)
+             datatype (val->data-type v)]
+         (assert datatype "Could not discern data-type from supplied value")
+         (conj! txs-to-put [(encode frame-index-eat {:index :eat
+                                                     :eid eid
+                                                     :aid aid
+                                                     :ts ts})
+                            (encode frame-value-eat {:type datatype :v v})])
+         (when v
+           (conj! txs-to-put [(encode frame-index-avt {:index :avt
+                                                       :aid aid
+                                                       :v v
+                                                       :ts ts
+                                                       :eid eid})
+                              (long->bytes eid)]))))
+     (kv-store/put-all! db (persistent! txs-to-put))
      @tmp-ids->ids)))
 
 (defn -get-at
