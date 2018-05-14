@@ -52,3 +52,57 @@ ids which have at any point in time had this value.
 2) These entity attribute values are then resolved again using the
 eid/aid/transact-time index, and kept if the query predicate evaluates
 to true.
+
+
+### System of Record / Log
+
+#### Proposal A: Immutable Log (Kafka)
+
+The initial plan has been to store the transaction log in an immutable
+log, such as Kafka. This is discussed in [retention](retention.md). In
+both suggestion below compaction and deletion of data becomes
+cumbersome, and might be easiest use in combination with separate
+topics for different retention mechanisms or if we use encrypted
+personal data and forget the keys.
+
+The messages in this log can either be individual entities, grouped
+into transactions, or transactions themselves. There are some pros and
+cons of both approaches:
+
+##### Proposal Aa: Messages are Entities
+
+Pros:
+ + Messages can have meaningful keys.
+ + Can potentially use compaction.
+ + Can potentially use Kafka transactions across topics.
+
+Cons:
+ + Harder to reason about transaction boundary, Kafka doesn't support
+   transactional reads.
+ + Cannot use LogAppend time in Kafka for transaction wall
+   time, at least not without additional logic, related to above.
+
+##### Proposal Ab: Messages are Transactions
+
+Pros:
+ + Clear transaction boundaries.
+ + Can use LogAppend time for transaction wall time.
+
+Cons:
+ + Cannot compact topics, each key (if used) is an unique transaction
+   id.
+ + Business time is not necessarily the same for each entity in the
+   message (not necessarily a problem, but can be confusing).
+
+#### Proposal B: Distributed CRDT KV Store
+
+This is easier to modify and delete data from, but requires much more
+engineering and is a departure from the log based design. While Kafka
+might still play a role, the system of record of CRDTs must likely
+live somewhere else. Either directly in the nodes KV stores - which
+makes the durability guarantees of them much higher - or in another
+store.
+
+As this can be a multi-master setup, it's likely to be more scalable
+and it's also a bit more forward looking design than the idealisation
+of an immutable log that has to be worked around.
