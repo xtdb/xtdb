@@ -81,8 +81,7 @@
 
 (def frame-index-eid
   "The EID index is used for generating entity IDs; to store the next
-  entity ID to use. A merge operator can be applied to increment the
-  value."
+  entity ID to use."
   (c/compile-frame :index frame-index-enum))
 
 (def frame-index-key-prefix
@@ -97,12 +96,16 @@
 (defn encode [frame m]
   (.array ^ByteBuffer (c/encode frame m)))
 
-(def o (Object.))
-
 (defn next-entity-id "Return the next entity ID" [db]
-  (locking o
+  (locking db
     (let [key-entity-id (encode frame-index-eid {:index :eid})]
-      (kv-store/merge! db key-entity-id (long->bytes 1))
+      (kv-store/store
+       db
+       key-entity-id
+       (bu/long->bytes
+        (if-let [old-value (kv-store/value db key-entity-id)]
+          (inc (bu/bytes->long old-value))
+          1)))
       (bytes->long (kv-store/value db key-entity-id)))))
 
 (defn- val->data-type

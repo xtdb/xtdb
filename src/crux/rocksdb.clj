@@ -58,8 +58,7 @@
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)
-                 (.setCreateIfMissing true)
-                 (.setMergeOperatorName "uint64add"))
+                 (.setCreateIfMissing true))
           db (try
                (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))
                (catch Throwable t
@@ -81,9 +80,6 @@
 
   (put-all! [{:keys [^RocksDB db]} kvs]
     (-put-all! db kvs))
-
-  (merge! [{:keys [^RocksDB db]} k v]
-    (.merge db k v))
 
   (destroy [this]
     (with-open [options (Options.)]

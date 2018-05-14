@@ -145,21 +145,6 @@
          (put-bytes->bytes stack txn dbi k v)))
      0))
 
-  (merge! [_ k v]
-    (transaction
-     env
-     (fn [^MemoryStack stack ^long txn]
-       (put-bytes->bytes
-        stack
-        txn
-        dbi
-        k
-        (if-let [old-value (get-bytes->bytes stack txn dbi k)]
-          (bu/long->bytes (+  (bu/bytes->long old-value)
-                              (bu/bytes->long v)))
-          v)))
-     0))
-
   (destroy [this]
     (cio/delete-dir db-dir))
 

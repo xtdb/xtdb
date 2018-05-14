@@ -17,20 +17,6 @@
   (t/testing "non existing key"
     (t/is (nil? (ks/value f/*kv* (bu/long->bytes 2))))))
 
-(t/deftest test-merge-adds-ints []
-  (let [k (.getBytes (String. "foo"))]
-    (t/testing "merging non existing key stores value"
-      (ks/merge! f/*kv* k (bu/long->bytes 1))
-      (t/is (= 1 (bu/bytes->long (ks/value f/*kv* k)))))
-
-    (t/testing "can merge more than once"
-      (ks/merge! f/*kv* k (bu/long->bytes 2))
-      (t/is (= 3 (bu/bytes->long (ks/value f/*kv* k)))))
-
-    (t/testing "store after merge resets value"
-      (ks/store f/*kv* k (bu/long->bytes 1))
-      (t/is (= 1 (bu/bytes->long (ks/value  f/*kv* k)))))))
-
 (t/deftest test-can-put-all []
   (ks/put-all! f/*kv* (map (fn [i]
                              [(bu/long->bytes i) (bu/long->bytes (inc i))])
@@ -38,25 +24,26 @@
   (doseq [i (range 10)]
     (t/is (= (inc i) (bu/bytes->long (ks/value f/*kv* (bu/long->bytes i)))))))
 
-;; TODO will migrate :-)
-#_(t/deftest test-seek-and-iterate []
+(t/deftest test-seek-and-iterate-range []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
     (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
 
   (t/testing "seek range is exclusive"
     (t/is (= [["b" 2] ["c" 3]]
-             (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "b") (.getBytes "d")))]
+             (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv*
+                                                              #(neg? (bu/compare-bytes % (.getBytes "d")))
+                                                              (.getBytes "b") ))]
                [(String. k) (bu/bytes->long v)]))))
 
   (t/testing "seek range after existing keys returns empty"
-    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "d") (.getBytes "d")))))
-    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "e") (.getBytes "f"))))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* #(neg? (bu/compare-bytes % (.getBytes "d"))) (.getBytes "d")))))
+    (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* #(neg? (bu/compare-bytes % (.getBytes "f")%)) (.getBytes "e"))))))
 
   (t/testing "seek range before existing keys returns keys at start"
-    (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* (.getBytes "0") (.getBytes "b")))]
+    (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (ks/seek-and-iterate f/*kv* #(neg? (bu/compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
                          [(String. k) (bu/bytes->long v)])))))
 
-(t/deftest test-seek-and-iterate []
+(t/deftest test-seek-and-iterate-prefix []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
     (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
 

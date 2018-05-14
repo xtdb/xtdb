@@ -28,13 +28,6 @@
       (doseq [[k v] kvs]
         (.put db k v))))
 
-  (merge! [_ k v]
-    (locking db
-      (.merge db k v (reify BiFunction
-                       (apply [_ old-value new-value]
-                         (bu/long->bytes (+ (bu/bytes->long old-value)
-                                            (bu/bytes->long new-value))))))))
-
   (destroy [this]
     (.clear db)
     (dissoc this :db))

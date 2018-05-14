@@ -13,8 +13,6 @@
 
   (put-all! [this kvs])
 
-  (merge! [this k v])
-
   (close [this])
 
   (destroy [this]))

@@ -10,20 +10,17 @@
 
 (defn long->bytes [l]
   (-> (ByteBuffer/allocate 8)
-      (.order (ByteOrder/nativeOrder))
       (.putLong l)
       (.array)))
 
 (defn bytes->long [data]
   (-> (ByteBuffer/allocate 8)
-      (.order (ByteOrder/nativeOrder))
       (.put data 0 8)
       (.flip)
       (.getLong)))
 
 (defn uuid->bytes [^UUID uuid]
   (-> (ByteBuffer/allocate 16)
-      (.order (ByteOrder/nativeOrder))
       (.putLong (.getMostSignificantBits uuid))
       (.putLong (.getLeastSignificantBits uuid))
       (.array)))
@@ -78,30 +75,33 @@
   (doto (byte-array (.remaining b))
     (->> (.get b))))
 
-(defn compare-bytes [^bytes a ^bytes b max-length]
-  (let [a-length (int (alength a))
-        b-length (int (alength b))
-        max-length (int max-length)]
-    (loop [idx (int 0)]
-      (cond
-        (= idx max-length)
-        0
+(defn compare-bytes
+  ([^bytes a ^bytes b]
+   (compare-bytes a b Integer/MAX_VALUE))
+  ([^bytes a ^bytes b max-length]
+   (let [a-length (int (alength a))
+         b-length (int (alength b))
+         max-length (int max-length)]
+     (loop [idx (int 0)]
+       (cond
+         (= idx max-length)
+         0
 
-        (or (= idx a-length)
-            (= idx b-length))
-        (- a-length b-length)
+         (or (= idx a-length)
+             (= idx b-length))
+         (- a-length b-length)
 
-        :else
-        (let [diff (unchecked-subtract-int (Byte/toUnsignedInt (aget a idx))
-                                           (Byte/toUnsignedInt (aget b idx)))]
-          (if (zero? diff)
-            (recur (unchecked-inc-int idx))
-            diff))))))
+         :else
+         (let [diff (unchecked-subtract-int (Byte/toUnsignedInt (aget a idx))
+                                            (Byte/toUnsignedInt (aget b idx)))]
+           (if (zero? diff)
+             (recur (unchecked-inc-int idx))
+             diff)))))))
 
 (def ^Comparator bytes-comparator
   (reify Comparator
     (compare [_ a b]
-      (compare-bytes a b Integer/MAX_VALUE))))
+      (compare-bytes a b))))
 
 (defn bytes=?
   ([#^bytes k1 #^bytes k2]
