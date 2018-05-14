@@ -22,8 +22,7 @@
                                                 jline
                                                 org.apache.yetus/audience-annotations
                                                 org.slf4j/slf4j-log4j12
-                                                log4j]]]
-                   :source-paths ["bench"]}}
+                                                log4j]]]}}
   :aot [crux.main
         crux.kafka]
   :main crux.main
