@@ -3,7 +3,7 @@
             [crux.kv-store :refer :all]
             [crux.byte-utils :as bu])
   (:import [java.io Closeable]
-           [clojure.lang IReduce]
+           [clojure.lang IReduce IReduceInit]
            [org.rocksdb Options ReadOptions RocksDB RocksIterator Slice]))
 
 (defn- -value [^RocksDB db k]
@@ -32,13 +32,16 @@
 ;; TODO move to IReduceInit
 (defn- -seek-and-iterate
   [^RocksDB db ^ReadOptions read-options key-pred k]
-  (reify IReduce
+  (reify
+    IReduce
     (reduce [this f]
       (with-open [i (.newIterator db read-options)]
         (.seek i k)
         (if (and (.isValid i) (key-pred (.key i)))
           (rock-iterator-loop i key-pred f [(.key i) (.value i)])
           (f))))
+
+    IReduceInit
     (reduce [this f init]
       (with-open [i (.newIterator db read-options)]
         (.seek i k)
