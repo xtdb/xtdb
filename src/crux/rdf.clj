@@ -207,6 +207,12 @@
     (statements->maps (ntriples-seq in)))
 
   ;; Download from http://wiki.dbpedia.org/services-resources/ontology
+  ;; mappingbased_properties_en.nt is the main data.
+  ;; instance_types_en.nt contains type definitions only.
+  ;; specific_mappingbased_properties_en.nt contains extra literals.
+  ;; dbpedia_2014.owl is the OWL schema, not dealt with.
   (with-open [in (io/input-stream
-                  (io/file "target/specific_mappingbased_properties_en.nt"))]
-    (statements->maps (ntriples-seq in))))
+                  (io/file "../dbpedia/mappingbased_properties_en.nt"))]
+            (time (reduce (fn [^long x ^long y]
+                            (prn x)
+                            (+ x y)) (map count (partition-all 10240 (statements->maps (ntriples-seq in))))))))

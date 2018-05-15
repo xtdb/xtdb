@@ -13,7 +13,7 @@
                  [org.lwjgl/lwjgl-lmdb "3.1.6" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.1.6"]
                  [org.apache.kafka/kafka-clients "1.1.0"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.1"]]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2"]]
   :profiles {:dev {:dependencies [[org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [cheshire "5.8.0"
                                    :exclusions [com.fasterxml.jackson.core/jackson-core]]
