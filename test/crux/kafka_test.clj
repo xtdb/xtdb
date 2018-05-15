@@ -18,7 +18,8 @@
            [org.apache.kafka.common.serialization
             Serdes StringSerializer StringDeserializer LongDeserializer]))
 
-(t/use-fixtures :once ek/with-embedded-kafka-cluster f/start-system)
+(t/use-fixtures :once ek/with-embedded-kafka-cluster)
+(t/use-fixtures :each f/start-system)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"

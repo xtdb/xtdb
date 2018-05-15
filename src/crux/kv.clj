@@ -139,7 +139,7 @@
      (->> (mapcat entity->txs txs)
           (reduce
            (fn [txs-to-put [eid k v]]
-             (let [eid (or (and (pos? eid) eid)
+             (let [eid (or (and (number? eid) (pos? eid) eid)
                            (get @tmp-ids->ids eid)
                            (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
                    aid (attr-ident->aid! db k)
