@@ -181,11 +181,14 @@
 (defn ntriples-seq [in]
   (for [lines (->> (line-seq (io/reader in))
                    (map patch-missing-lang-string)
-                   (partition-all 1024))
-        statement (Rio/parse (StringReader. (str/join "\n" lines))
-                             ""
-                             RDFFormat/NTRIPLES
-                             empty-resource-array)]
+                   (partition-by #(re-find #"<.+?>" %)))
+        statement (try
+                    (Rio/parse (StringReader. (str/join "\n" lines))
+                               ""
+                               RDFFormat/NTRIPLES
+                               empty-resource-array)
+                    (catch Exception e
+                      (log/error e (str/join "\n" lines))))]
     statement))
 
 ;;; Regexp-based N-Triples parser.
