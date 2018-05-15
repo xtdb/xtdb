@@ -27,6 +27,16 @@ node, and getting all the values for the attribute. Keywords are
 resolved to their ids, and then the target content hashes are looked
 up as in querying above.
 
+Many valued attributes (cardinality many) are simply repeated in the
+aid/value index and taken from the document on initial indexing,
+there's no special handling of them. Order in lists etc. are preserved
+by the original document.
+
+Range queries are served by directly scanning the aid/value index, as
+it does not contain any information about time, and will be sorted by
+order. The values themselves needs to be encoded in a binary format
+that preserves order.
+
 The content-hash -> doc index is potentially a LRU cache backed by a
 larger, full key value store shared between the query nodes.
 
