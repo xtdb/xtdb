@@ -23,7 +23,10 @@
 ;; NOTE: this shifts the parts of the RDF namespace after the first
 ;; slash into the Keyword name.
 (defn iri->kw [^IRI iri]
-  (let [[_ kw-namespace kw-name] (re-find #"(.+?)/(.+)?" (.getNamespace iri))]
+  (let [ns (.getNamespace iri)
+        slash-idx (str/index-of ns "/")
+        kw-namespace (subs ns 0 slash-idx)
+        kw-name (subs ns (inc slash-idx))]
     (keyword kw-namespace
              (str kw-name (URLDecoder/decode (.getLocalName iri))))))
 
