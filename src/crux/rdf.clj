@@ -113,11 +113,8 @@
                   (lang->str x language)
                   x)) rdf-map))
 
-;; NOTE: this isn't lazy, so a large file needs partitioning.
-(defn statements->maps [statements]
-  (for [[subject statements] (group-by (fn [^Statement s]
-                                         (.getSubject s))
-                                       statements)]
+(defn entity-statements->map [entity-statements]
+  (when-let [^Statement statement (first entity-statements)]
     (reduce
      (fn [m statement]
        (try
@@ -134,8 +131,14 @@
          (catch IllegalArgumentException e
            (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
            m)))
-     {:crux.rdf/iri (value->clj subject)}
-     statements)))
+     {:crux.rdf/iri (value->clj (.getSubject statement))}
+     entity-statements)))
+
+(defn statements->maps [statements]
+  (->> statements
+       (partition-by (fn [^Statement s]
+                       (.getSubject s)))
+       (map entity-statements->map)))
 
 (defn maps-by-iri [rdf-maps]
   (->> (for [m rdf-maps]

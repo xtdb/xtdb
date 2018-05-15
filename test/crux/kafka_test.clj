@@ -38,7 +38,8 @@
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
-         (rdf/statements->maps))))
+         (rdf/statements->maps)
+         (doall))))
 
 (t/deftest test-can-transact-entities
   (let [topic "test-can-transact-entities"
