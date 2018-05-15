@@ -132,3 +132,20 @@ which allow bitemporal queries for repeatable reads, retention might
 actually remove (or excise in Datomic) data, which will by definition
 break repeatable reads, and also complicate event sourcing and other
 derived views of the system.
+
+### Implementation
+
+Given the primacy of business time in Crux, we will name business time
+`ts` and transaction time `tx-ts`.
+
+### Use cases
+
+#### Give the latest value of X at a given tx-time
+
+For audit reasons, we might wish to know with certainty the value of a
+given entity-attribute at a given tx-instant. In this case, we want to
+exclude the possibility of the business past being amended, so we need
+a pre-correction view of the data, relying on tx-instant.
+
+To achieve this we will use an as-of using ts (business time) and
+tx-ts (transaction time).

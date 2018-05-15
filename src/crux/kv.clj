@@ -21,7 +21,8 @@
   (c/compile-frame :index frame-index-enum
                    :eid :id
                    :aid :id
-                   :ts :reverse-ts))
+                   :ts :reverse-ts
+                   :tx-ts :reverse-ts))
 
 (def frame-index-avt
   "The AVT index is used to find entities that have an attribute/value
@@ -63,6 +64,14 @@
   "Partial key frame, used for iterating within all
   attributes/timestamps of a given entity."
   (c/compile-frame :index frame-index-enum :eid :id))
+
+(def frame-index-eat-key-prefix-business-time
+  "Partial key frame, used for seeking attributes as of a business
+  time."
+  (c/compile-frame :index frame-index-enum
+                   :eid :id
+                   :aid :id
+                   :ts :reverse-ts))
 
 (defn encode [frame m]
   (.array ^ByteBuffer (c/encode frame m)))
@@ -134,7 +143,9 @@
   entity ID is -1, then a new entity-id will be generated."
   ([db txs]
    (-put db txs (Date.)))
-  ([db txs ^Date ts]
+  ([db txs ts]
+   (-put db txs ts ts))
+  ([db txs ^Date ts ^Date tx-ts]
    (let [tmp-ids->ids (atom {})]
      (->> (mapcat entity->txs txs)
           (reduce
@@ -148,7 +159,8 @@
                  true (conj! [(encode frame-index-eat {:index :eat
                                                        :eid eid
                                                        :aid aid
-                                                       :ts ts})
+                                                       :ts ts
+                                                       :tx-ts tx-ts})
                               value-bytes])
                  v (conj! [(encode frame-index-avt {:index :avt
                                                     :aid aid
@@ -162,14 +174,20 @@
      @tmp-ids->ids)))
 
 (defn -get-at
-  ([db eid ident] (-get-at db eid ident (Date.)))
-  ([db eid ident ^Date ts]
+  ([db eid ident]
+   (-get-at db eid ident (Date.)))
+  ([db eid ident ts]
+   (-get-at db eid ident ts nil))
+  ([db eid ident ^Date ts ^Date tx-ts]
    (let [aid (attr-ident->aid! db ident)
-         seek-k ^bytes (encode frame-index-eat {:index :eat :eid eid :aid aid :ts ts})]
-     (when-let [[k v] (kv-store/seek db seek-k)]
-       ;; Ensure just the key we want (minus time)
-       (when (zero? (bu/compare-bytes seek-k k (- (alength seek-k) 8)))
-         (nippy/thaw v))))))
+         seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
+                               {:index :eat :eid eid :aid aid :ts ts})]
+     (when-let [[k v] (kv-store/seek-first db
+                                           #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
+                                           #(or (not tx-ts)
+                                                (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
+                                           seek-k)]
+       (nippy/thaw v)))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."

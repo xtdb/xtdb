@@ -151,3 +151,21 @@
   (t/is (nil? (cr/read-meta *kv* :foo)))
   (cr/store-meta *kv* :foo {:bar 2})
   (t/is (= {:bar 2} (cr/read-meta *kv* :foo))))
+
+(t/deftest test-can-get-at-business-time-filter-for-tx-time
+  (cr/-put *kv* [[test-eid :foo "Foo1"]] #inst "2000-02-02" #inst "2000-02-02")
+  (cr/-put *kv* [[test-eid :foo "Foo2"]] #inst "2000-02-04" #inst "2000-02-04")
+  (cr/-put *kv* [[test-eid :foo "Foo3"]] #inst "2000-02-06" #inst "2000-02-06")
+
+    ;; Perform a correction in the past
+  (cr/-put *kv* [[test-eid :foo "Foo4"]] #inst "2000-02-04" #inst "2000-02-07")
+
+  (t/testing "as-of business time holds"
+    (t/is (= "Foo3" (cr/-get-at *kv* test-eid :foo))))
+
+  (t/testing "Correction is made for business time"
+    (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04"))))
+
+  (t/testing "Can fetch original via prior to correction using tx-time"
+    (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04")))
+    (t/is (= "Foo2" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04" #inst "2000-02-06")))))

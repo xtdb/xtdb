@@ -18,6 +18,19 @@
     (when (.isValid i)
       [(.key i) (.value i)])))
 
+(defn- -seek-first [^RocksDB db ^ReadOptions read-options prefix-pred key-pred seek-k]
+  (with-open [i (.newIterator db read-options)]
+    (.seek i seek-k)
+    (loop []
+      (when (.isValid i)
+        (let [k (.key i)]
+          (when (prefix-pred k)
+            (if (key-pred k)
+              [k (.value i)]
+              (do
+                (.next i)
+                (recur)))))))))
+
 (defn- rock-iterator-loop [^RocksIterator i key-pred f init]
   (loop [init' init]
     (if (and (.isValid i) (key-pred (.key i)))
@@ -71,6 +84,9 @@
 
   (seek [{:keys [db vanilla-read-options]} k]
     (-seek db vanilla-read-options k))
+
+  (seek-first [{:keys [db vanilla-read-options]} prefix-pred key-pred k]
+    (-seek-first db vanilla-read-options prefix-pred key-pred k))
 
   (seek-and-iterate [{:keys [db vanilla-read-options]} key-pred k]
     (-seek-and-iterate db vanilla-read-options key-pred k))

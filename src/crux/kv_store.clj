@@ -3,9 +3,11 @@
 (defprotocol CruxKvStore
   (open [this])
 
-  (value [db k])
+  (value [this k])
 
-  (seek [db k])
+  (seek [this k])
+
+  (seek-first [this prefix-pred key-pred k])
 
   (seek-and-iterate [this key-pred k])
 
