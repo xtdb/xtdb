@@ -8,6 +8,7 @@
   http://docs.rdf4j.org/"
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.walk :as w]
             [clojure.tools.logging :as log])
   (:import [java.io StringReader]
            [java.net URLDecoder]
@@ -103,6 +104,12 @@
    (iri->kw (.getPredicate statement))
    (value->clj (.getObject statement))])
 
+(defn use-default-language [rdf-map language]
+  (w/postwalk (fn [x]
+                (if (instance? Lang x)
+                  (get x language (val (first x)))
+                  x)) rdf-map))
+
 ;; NOTE: this isn't lazy, so a large file needs partitioning.
 (defn statements->maps [statements]
   (for [[subject statements] (group-by (fn [^Statement s]
@@ -126,6 +133,11 @@
            m)))
      {:crux.rdf/iri (value->clj subject)}
      statements)))
+
+(defn maps-by-iri [rdf-maps]
+  (->> (for [m rdf-maps]
+         {(:crux.rdf/iri m) m})
+       (into {})))
 
 ;; JSON-LD, does not depend on RDF4J, initial parsing via normal JSON
 ;; parser.

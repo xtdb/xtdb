@@ -26,22 +26,17 @@
                  iri->entity
                  (dissoc :crux.rdf/iri))))))
 
-(defn maps-by-id [maps]
-  (->> (for [m maps]
-         {(:crux.rdf/iri m) m})
-       (into {})))
-
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
-         (maps-by-id))))
+         (rdf/maps-by-iri))))
 
 (defn load-jsonld-example [resource]
   (with-open [in (io/reader (io/resource resource))]
     (->> (json/parse-stream in true)
          (rdf/jsonld->maps)
-         (maps-by-id))))
+         (rdf/maps-by-iri))))
 
 (t/deftest test-can-parse-ntriples-into-maps
   (->> (load-ntriples-example "crux/example-data-artists.nt")
@@ -61,4 +56,10 @@
              (select-keys picasso
                           [:http://xmlns.com/foaf/0.1/givenName
                            :http://xmlns.com/foaf/0.1/surname
-                           :http://dbpedia.org/ontology/birthDate])))))
+                           :http://dbpedia.org/ontology/birthDate])))
+
+    (t/is (= {:http://xmlns.com/foaf/0.1/givenName "Pablo"
+              :http://xmlns.com/foaf/0.1/surname "Picasso"}
+             (select-keys (rdf/use-default-language picasso :en)
+                          [:http://xmlns.com/foaf/0.1/givenName
+                           :http://xmlns.com/foaf/0.1/surname])))))
