@@ -66,9 +66,6 @@
           (when-not (instance? TopicExistsException cause)
             (throw cause)))))))
 
-(defn consumer-record->value [^ConsumerRecord record]
-  (.value record))
-
 ;;; Transacting Producer
 
 (defn transact [^KafkaProducer producer ^String topic entities]
@@ -76,6 +73,9 @@
        (.send producer)))
 
 ;;; Indexing Consumer
+
+(defn consumer-record->value [^ConsumerRecord record]
+  (.value record))
 
 (defn topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
