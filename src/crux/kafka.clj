@@ -94,8 +94,8 @@
 
 (defn index-tx-record [indexer ^ConsumerRecord record]
   (let [transact-time (Date. (.timestamp record))
-        transact-id [(topic-partition-meta-key (.partition record))
-                     (.offset record)]
+        transact-id (pr-str [(topic-partition-meta-key (.partition record))
+                             (.offset record)])
         txs (for [tx (consumer-record->value record)]
               (assoc tx
                      :crux.kv/id (:crux.rdf/iri tx)
