@@ -131,10 +131,12 @@
 ;; There are 5053979 entities across 33449633 triplets in
 ;; mappingbased_properties_en.nt.
 
-;; 1.6G    /tmp/kafka-log11583518938458431752
-;; 1.9G    /tmp/kv-store8011445493573894774
+;; 1.6G    /tmp/kafka-log1572248494326726941
+;; 2.0G    /tmp/kv-store8136342842355297151
 
-;; 968621ms, ~16mins.
+;; 583800ms  ~9.7mins transact
+;; 861799ms ~14.40mins index
+
 
 ;; Could use test selectors.
 (def run-dbpedia-tests? false)
