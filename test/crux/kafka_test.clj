@@ -118,3 +118,50 @@
                               [p :crux.rdf/iri p-iri]
                               [g :http://dbpedia.org/ontology/author p-iri]
                               [g :crux.rdf/iri g-iri]]}))))))
+
+;; Download from http://wiki.dbpedia.org/services-resources/ontology
+;; mappingbased_properties_en.nt is the main data.
+;; instance_types_en.nt contains type definitions only.
+;; specific_mappingbased_properties_en.nt contains extra literals.
+;; dbpedia_2014.owl is the OWL schema, not dealt with.
+
+;; Test assumes these files are living under ../dbpedia related to the
+;; crux project (to change).
+
+(comment
+  (t/deftest test-can-transact-all-dbpedia-entities
+    (let [topic "test-can-transact-all-dbpedia-entities"
+          indexer (crux/indexer f/*kv*)
+          tx-size 1000
+          max-limit 1000000
+          transacted (atom -1)]
+
+      (k/create-topic ek/*admin-client* topic 1 1 {})
+      (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+
+      (t/testing "transacting and indexing"
+        (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
+          (future
+            (time
+             (reset! transacted (reduce (fn [n entities]
+                                          (k/transact ek/*producer* topic entities)
+                                          (+ n (count entities)))
+                                        0
+                                        (->> (rdf/ntriples-seq in)
+                                             (rdf/statements->maps)
+                                             (map #(rdf/use-default-language % :en))
+                                             (take max-limit)
+                                             (partition-all tx-size))))))
+          (time
+           (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
+                  n 0]
+             (when-not (= n @transacted)
+               (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
+                      (+ n (count entities))))))))
+
+      (t/testing "querying transacted data"
+        (t/is (= #{[:http://dbpedia.org/resource/Aristotle]}
+                 (q/q (crux/db f/*kv*)
+                      '{:find [iri]
+                        :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
+                                [e :crux.rdf/iri iri]]})))))))

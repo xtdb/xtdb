@@ -105,13 +105,16 @@
     (db/index indexer txs transact-time)
     txs))
 
-(defn consume-and-index-entities [indexer ^KafkaConsumer consumer]
-  (let [records (.poll consumer 10000)
-        entities (->> (for [^ConsumerRecord record records]
-                        (index-tx-record indexer record))
-                      (reduce into []))]
-    (store-topic-partition-offsets indexer consumer (.partitions records))
-    entities))
+(defn consume-and-index-entities
+  ([indexer consumer]
+   (consume-and-index-entities indexer consumer 10000))
+  ([indexer ^KafkaConsumer consumer timeout]
+   (let [records (.poll consumer timeout)
+         entities (->> (for [^ConsumerRecord record records]
+                         (index-tx-record indexer record))
+                       (reduce into []))]
+     (store-topic-partition-offsets indexer consumer (.partitions records))
+     entities)))
 
 (defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer topic]
   (let [topics [topic]]

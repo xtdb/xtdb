@@ -32,7 +32,7 @@
 (def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
 
 (defn with-kv-store [f]
-  (let [db-dir (cio/create-tmpdir "test")]
+  (let [db-dir (cio/create-tmpdir "kv-store")]
     (binding [*kv* (kv-store/open (crux.core/kv db-dir {:kv-store *kv-store*}))]
       (try
         (f)
