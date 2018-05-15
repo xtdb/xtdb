@@ -65,14 +65,14 @@
                      (.setTimezone 0))
                    (.calendarValue literal))))
 
-      (XMLDatatypeUtil/isDecimalDatatype dt)
-      (.decimalValue literal)
-
       (XMLDatatypeUtil/isFloatingPointDatatype dt)
       (.doubleValue literal)
 
       (XMLDatatypeUtil/isIntegerDatatype dt)
       (.longValue literal)
+
+      (XMLDatatypeUtil/isNumericDatatype dt)
+      (.decimalValue literal)
 
       (= XMLSchema/BOOLEAN dt)
       (.booleanValue literal)
@@ -86,26 +86,31 @@
       (= RDF/LANGSTRING dt)
       (map->Lang
        {(keyword language)
-        (.getLabel literal)})
+        (.stringValue literal)})
 
       :else
-      (.getLabel literal))))
+      (.stringValue literal))))
 
-(defn value->clj [value]
-  (cond
-    (instance? BNode value)
-    (bnode->kw value)
+(defprotocol RDFToClojure
+  (rdf->clj [_]))
 
-    (instance? IRI value)
-    (iri->kw value)
+(extend-protocol RDFToClojure
+  Literal
+  (rdf->clj [this]
+    (literal->clj this))
 
-    :else
-    (literal->clj value)))
+  IRI
+  (rdf->clj [this]
+    (iri->kw this))
+
+  BNode
+  (rdf->clj [this]
+    (bnode->kw this)))
 
 (defn statement->clj [^Statement statement]
-  [(value->clj (.getSubject statement))
-   (iri->kw (.getPredicate statement))
-   (value->clj (.getObject statement))])
+  [(rdf->clj (.getSubject statement))
+   (rdf->clj (.getPredicate statement))
+   (rdf->clj (.getObject statement))])
 
 (defn use-default-language [rdf-map language]
   (w/postwalk (fn [x]
@@ -117,9 +122,10 @@
   (when-let [^Statement statement (first entity-statements)]
     (->> entity-statements
          (reduce
-          (fn [m statement]
+          (fn [m ^Statement statement]
             (try
-              (let [[_ p o] (statement->clj statement)]
+              (let [p (rdf->clj (.getPredicate statement))
+                    o (rdf->clj (.getObject statement))]
                 (assoc! m p (let [x (get m p)]
                               (cond
                                 (nil? x)
@@ -132,7 +138,7 @@
               (catch IllegalArgumentException e
                 (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
                 m)))
-          (transient {:crux.rdf/iri (value->clj (.getSubject statement))}))
+          (transient {:crux.rdf/iri (rdf->clj (.getSubject statement))}))
          (persistent!))))
 
 (defn statements->maps [statements]
@@ -174,23 +180,35 @@
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
 
+(def missing-lang-string (format "^^<%s>" RDF/LANGSTRING))
+
 (defn patch-missing-lang-string [s]
-  (str/replace s
-               (format "^^<%s>" RDF/LANGSTRING)
-               ""))
+  (str/replace s missing-lang-string ""))
+
+(defn parse-ntriples-str [s]
+  (Rio/parse (StringReader. s)
+             ""
+             RDFFormat/NTRIPLES
+             empty-resource-array))
 
 (defn ntriples-seq [in]
-  (for [lines (->> (line-seq (io/reader in))
-                   (map patch-missing-lang-string)
-                   (partition-by #(re-find #"<.+?>" %)))
-        statement (try
-                    (Rio/parse (StringReader. (str/join "\n" lines))
-                               ""
-                               RDFFormat/NTRIPLES
-                               empty-resource-array)
-                    (catch Exception e
-                      (log/debug e "Could not parse entity:" (str/join "\n" lines))))]
-    statement))
+  (->> (line-seq (io/reader in))
+       (map patch-missing-lang-string)
+       (partition-by #(re-find #"<.+?>" %))
+       (partition-all 100)
+       (pmap (fn [entity-lines]
+               (let [lines (apply concat entity-lines)]
+                 (try
+                   (parse-ntriples-str (str/join "\n" lines))
+                   (catch Exception e
+                     (->> (for [lines entity-lines]
+                            (try
+                              (log/debug e "Could not parse block of entities, parsing one by one.")
+                              (parse-ntriples-str (str/join "\n" lines))
+                              (catch Exception e
+                                (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
+                          (apply concat)))))))
+       (apply concat)))
 
 ;;; Regexp-based N-Triples parser.
 
