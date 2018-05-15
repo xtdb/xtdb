@@ -99,7 +99,7 @@
         txs (for [tx (consumer-record->value record)]
               (assoc tx
                      :crux.kv/id (:crux.rdf/iri tx)
-                     :crux.tx/transact-id (pr-str transact-id)
+                     :crux.tx/transact-id transact-id
                      :crux.tx/transact-time transact-time
                      :crux.tx/business-time (or (:crux.tx/business-time tx) transact-time)))]
     (db/index indexer txs transact-time)
