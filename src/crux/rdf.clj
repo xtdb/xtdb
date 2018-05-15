@@ -145,7 +145,7 @@
   (->> statements
        (partition-by (fn [^Statement s]
                        (.getSubject s)))
-       (pmap entity-statements->map)))
+       (map entity-statements->map)))
 
 (defn maps-by-iri [rdf-maps]
   (->> (for [m rdf-maps]
