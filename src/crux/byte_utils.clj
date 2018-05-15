@@ -19,12 +19,6 @@
       (.flip)
       (.getLong)))
 
-(defn uuid->bytes [^UUID uuid]
-  (-> (ByteBuffer/allocate 16)
-      (.putLong (.getMostSignificantBits uuid))
-      (.putLong (.getLeastSignificantBits uuid))
-      (.array)))
-
 (def ^MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
 
 (defn md5 [^bytes bytes]
