@@ -135,27 +135,30 @@
   ([db txs]
    (-put db txs (Date.)))
   ([db txs ^Date ts]
-   (let [tmp-ids->ids (atom {})
-         txs-to-put (transient [])]
-     (doseq[[eid k v] (mapcat entity->txs txs)]
-       (let [eid (or (and (pos? eid) eid)
-                     (get @tmp-ids->ids eid)
-                     (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
-             aid (attr-ident->aid! db k)
-             value-bytes (nippy/freeze v)]
-         (conj! txs-to-put [(encode frame-index-eat {:index :eat
-                                                     :eid eid
-                                                     :aid aid
-                                                     :ts ts})
-                            value-bytes])
-         (when v
-           (conj! txs-to-put [(encode frame-index-avt {:index :avt
+   (let [tmp-ids->ids (atom {})]
+     (->> (mapcat entity->txs txs)
+          (reduce
+           (fn [txs-to-put [eid k v]]
+             (let [eid (or (and (pos? eid) eid)
+                           (get @tmp-ids->ids eid)
+                           (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
+                   aid (attr-ident->aid! db k)
+                   value-bytes (nippy/freeze v)]
+               (cond-> txs-to-put
+                 true (conj! [(encode frame-index-eat {:index :eat
+                                                       :eid eid
                                                        :aid aid
-                                                       :v (bu/md5 value-bytes)
-                                                       :ts ts
-                                                       :eid eid})
-                              (long->bytes eid)]))))
-     (kv-store/store-all! db (persistent! txs-to-put))
+                                                       :ts ts})
+                              value-bytes])
+                 v (conj! [(encode frame-index-avt {:index :avt
+                                                    :aid aid
+                                                    :v (bu/md5 value-bytes)
+                                                    :ts ts
+                                                    :eid eid})
+                           (long->bytes eid)]))))
+           (transient []))
+          (persistent!)
+          (kv-store/store-all! db))
      @tmp-ids->ids)))
 
 (defn -get-at

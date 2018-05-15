@@ -30,7 +30,13 @@
 (defn bnode->kw [^BNode bnode]
   (keyword "_" (.getID bnode)))
 
-(def ^:dynamic *default-lang* :en)
+(def ^:dynamic *default-language* :en)
+
+(defn lang->str [lang language]
+  (let [language (if (contains? lang language)
+                   language
+                   (first (keys lang)))]
+    (str (get lang language))))
 
 (defrecord Lang []
   CharSequence
@@ -44,10 +50,7 @@
     (.subSequence (str this) start end))
 
   (toString [this]
-    (let [lang (if (contains? this *default-lang*)
-                 *default-lang*
-                 (first (keys this)))]
-      (str (get this lang)))))
+    (lang->str this *default-language*)))
 
 (defn literal->clj [^Literal literal]
   (let [dt (.getDatatype literal)
@@ -107,7 +110,7 @@
 (defn use-default-language [rdf-map language]
   (w/postwalk (fn [x]
                 (if (instance? Lang x)
-                  (get x language (val (first x)))
+                  (lang->str x language)
                   x)) rdf-map))
 
 ;; NOTE: this isn't lazy, so a large file needs partitioning.

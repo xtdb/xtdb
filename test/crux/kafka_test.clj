@@ -99,3 +99,36 @@
                       '{:find [iri]
                         :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                                 [e :crux.rdf/iri iri]]})))))))
+
+(t/deftest test-can-transact-and-query-dbpedia-entities
+  (let [topic "test-can-transact-and-query-dbpedia-entities"
+        entities (-> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
+                     (rdf/use-default-language :en))
+        indexer (crux/indexer f/*kv*)]
+
+    (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
+                c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
+                                      "group.id" "test-can-transact-and-query-dbpedia-entities"})]
+      (k/create-topic ac topic 1 1 {})
+      (k/subscribe-from-stored-offsets indexer c topic)
+
+      (t/testing "transacting and indexing"
+        (k/transact p topic entities)
+        (t/is (= 2 (count (k/consume-and-index-entities indexer c)))))
+
+      (t/testing "querying transacted data"
+        (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
+                 (q/q (crux/db f/*kv*)
+                      '{:find [iri]
+                        :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]
+                                [e :crux.rdf/iri iri]]})))
+
+        (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
+                 (q/q (crux/db f/*kv*)
+                      '{:find [g-iri]
+                        :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
+                                [p :crux.rdf/iri p-iri]
+                                [g :http://dbpedia.org/ontology/author p-iri]
+                                [g :crux.rdf/iri g-iri]]})))))))
