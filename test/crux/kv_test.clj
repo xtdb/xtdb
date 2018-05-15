@@ -148,6 +148,6 @@
   (t/is (= [1 2] (cr/-get-at *kv* test-eid :foo))))
 
 (t/deftest test-store-and-retrieve-meta
-  (t/is (nil? (cr/get-meta *kv* :foo)))
+  (t/is (nil? (cr/read-meta *kv* :foo)))
   (cr/store-meta *kv* :foo {:bar 2})
-  (t/is (= {:bar 2} (cr/get-meta *kv* :foo))))
+  (t/is (= {:bar 2} (cr/read-meta *kv* :foo))))

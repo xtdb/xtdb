@@ -15,6 +15,17 @@
   (attr-val [this eid ident]
     (kv/-get-at kv eid ident ts)))
 
+(defrecord KvIndexer [kv]
+  crux.db/Indexer
+  (index [_ txs transact-time]
+    (kv/-put kv txs transact-time))
+
+  (store-index-meta [_ k v]
+    (kv/store-meta kv k v))
+
+  (read-index-meta [_ k]
+    (kv/read-meta kv k)))
+
 (defn kv
   "Open a connection to the underlying KV data-store."
   ([db-dir]
@@ -28,3 +39,6 @@
 
 (defn db [kv]
   (as-of kv (Date.)))
+
+(defn indexer [kv]
+  (map->KvIndexer {:kv kv}))

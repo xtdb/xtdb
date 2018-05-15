@@ -74,6 +74,7 @@
                                                      "group.id" group-id})
                     admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
           (kafka/create-topic admin-client topic 1 1 {})
-          (kafka/subscribe-from-stored-offsets kv consumer topic)
-          (while true
-            (kafka/consume-and-index-entities kv consumer)))))))
+          (let [indexer (crux.core/indexer kv)]
+            (kafka/subscribe-from-stored-offsets indexer consumer topic)
+            (while true
+              (kafka/consume-and-index-entities indexer consumer))))))))

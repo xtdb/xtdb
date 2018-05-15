@@ -2,7 +2,7 @@
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
   (:require [taoensso.nippy :as nippy]
-            [crux.kv :as cr])
+            [crux.db :as db])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
            [org.apache.kafka.clients.admin
@@ -77,51 +77,48 @@
 
 ;;; Indexing Consumer
 
-(defn entities->txs [entities]
-  (for [entity entities]
-    (assoc entity :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri entity))))))))
-
 (defn topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
 
-(defn store-topic-partition-offsets [kv ^KafkaConsumer consumer partitions]
+(defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
   (doseq [^TopicPartition partition partitions]
-    (cr/store-meta kv
-                   (topic-partition-meta-key partition)
-                   (.position consumer partition))))
+    (db/store-index-meta indexer
+                         (topic-partition-meta-key partition)
+                         (.position consumer partition))))
 
-(defn seek-to-stored-offsets [kv ^KafkaConsumer consumer partitions]
+(defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (doseq [^TopicPartition partition partitions]
-    (if-let [offset (cr/get-meta kv (topic-partition-meta-key partition))]
+    (if-let [offset (db/read-index-meta indexer (topic-partition-meta-key partition))]
       (.seek consumer partition offset)
       (.seekToBeginning consumer [partition]))))
 
-(defn index-tx-record [kv ^ConsumerRecord record]
+(defn index-tx-record [indexer ^ConsumerRecord record]
   (let [transact-time (Date. (.timestamp record))
         transact-id [(topic-partition-meta-key (.partition record))
                      (.offset record)]
-        txs (for [tx (entities->txs (consumer-record->value record))]
+        txs (for [tx (consumer-record->value record)]
               (assoc tx
+                     :crux.kv/id (- (Math/abs (long (hash (:crux.rdf/iri tx)))))
                      :crux.tx/transact-id (pr-str transact-id)
                      :crux.tx/transact-time transact-time
                      :crux.tx/business-time (or (:crux.tx/business-time tx) transact-time)))]
-    (cr/-put kv txs transact-time)
+    (db/index indexer txs transact-time)
     txs))
 
-(defn consume-and-index-entities [kv ^KafkaConsumer consumer]
+(defn consume-and-index-entities [indexer ^KafkaConsumer consumer]
   (let [records (.poll consumer 10000)
         entities (->> (for [^ConsumerRecord record records]
-                        (index-tx-record kv record))
+                        (index-tx-record indexer record))
                       (reduce into []))]
-    (store-topic-partition-offsets kv consumer (.partitions records))
+    (store-topic-partition-offsets indexer consumer (.partitions records))
     entities))
 
-(defn subscribe-from-stored-offsets [kv ^KafkaConsumer consumer topic]
+(defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer topic]
   (let [topics [topic]]
     (.subscribe consumer
                 ^List topics
                 (reify ConsumerRebalanceListener
                   (onPartitionsRevoked [_ partitions]
-                    (store-topic-partition-offsets kv consumer partitions))
+                    (store-topic-partition-offsets indexer consumer partitions))
                   (onPartitionsAssigned [_ partitions]
-                    (seek-to-stored-offsets kv consumer partitions))))))
+                    (seek-to-stored-offsets indexer consumer partitions))))))

@@ -3,7 +3,6 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.core :as crux]
-            [crux.kv :as cr]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]
@@ -46,14 +45,15 @@
 
 (t/deftest test-can-transact-entities
   (let [topic "test-can-transact-entities"
-        entities (load-ntriples-example  "crux/example-data-artists.nt")]
+        entities (load-ntriples-example  "crux/example-data-artists.nt")
+        indexer (crux/indexer f/*kv*)]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-entities"})]
       (k/create-topic ac topic 1 1 {})
-      (k/subscribe-from-stored-offsets f/*kv* c topic)
+      (k/subscribe-from-stored-offsets indexer c topic)
 
       (k/transact p topic entities)
 
@@ -67,24 +67,25 @@
 
 (t/deftest test-can-transact-and-query-entities
   (let [topic "test-can-transact-and-query-entities"
-        entities (load-ntriples-example  "crux/picasso.nt")]
+        entities (load-ntriples-example  "crux/picasso.nt")
+        indexer (crux/indexer f/*kv*)]
 
     (with-open [ac (k/create-admin-client {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 p (k/create-producer {"bootstrap.servers" ek/*kafka-bootstrap-servers*})
                 c (k/create-consumer {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                                       "group.id" "test-can-transact-and-query-entities"})]
       (k/create-topic ac topic 1 1 {})
-      (k/subscribe-from-stored-offsets f/*kv* c topic)
+      (k/subscribe-from-stored-offsets indexer c topic)
 
       (t/testing "transacting and indexing"
         (k/transact p topic entities)
 
-        (t/is (= 3 (count (k/consume-and-index-entities f/*kv* c))))
+        (t/is (= 3 (count (k/consume-and-index-entities indexer c))))
         (t/is (empty? (.poll c 1000))))
 
       (t/testing "restoring to stored offsets"
         (.seekToBeginning c (.assignment c))
-        (k/seek-to-stored-offsets f/*kv* c (.assignment c))
+        (k/seek-to-stored-offsets indexer c (.assignment c))
         (t/is (empty? (.poll c 1000))))
 
       (t/testing "querying transacted data"

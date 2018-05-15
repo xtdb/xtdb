@@ -212,9 +212,8 @@
 (defn store-meta [db k v]
   (kv-store/store db
                   (encode frame-index-meta {:index :meta :key k})
-                  (.getBytes (pr-str v))))
+                  (nippy/freeze v)))
 
-(defn get-meta [db k]
+(defn read-meta [db k]
   (some->> ^bytes (kv-store/value db (encode frame-index-meta {:index :meta :key k}))
-           String.
-           edn/read-string))
+           nippy/thaw))
