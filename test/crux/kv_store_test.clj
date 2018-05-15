@@ -5,7 +5,7 @@
             [crux.kv-store :as ks])
   (:import [java.io Closeable]))
 
-(t/use-fixtures :each f/with-each-kv-store f/start-system)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
 (t/deftest test-store-and-value []
   (t/testing "store and retrieve and seek value"

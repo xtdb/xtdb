@@ -5,7 +5,7 @@
             [crux.kv :as cr])
   (:import [java.net URI]))
 
-(t/use-fixtures :each f/start-system)
+(t/use-fixtures :each f/with-kv-store)
 
 (def test-eid 1)
 

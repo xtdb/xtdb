@@ -6,7 +6,7 @@
             [crux.core :refer [db as-of]]
             [crux.query :as q]))
 
-(t/use-fixtures :each f/start-system)
+(t/use-fixtures :each f/with-kv-store)
 
 (t/deftest test-basic-query
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}

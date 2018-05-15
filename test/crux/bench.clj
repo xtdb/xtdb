@@ -1,5 +1,5 @@
 (ns crux.bench
-  (:require [crux.fixtures :as f :refer [random-person start-system *kv*]]
+  (:require [crux.fixtures :as f :refer [random-person *kv*]]
             [crux.kv :as cr]
             [crux.query :as q]
             [crux.core :refer [db]]
@@ -17,7 +17,7 @@
      :lmdb f/with-lmdb
      :mem f/with-memdb)
    (fn []
-     (start-system
+     (f/with-kv-store
       (fn []
         ;; Insert data
         (time

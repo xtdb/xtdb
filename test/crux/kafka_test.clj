@@ -19,7 +19,7 @@
             Serdes StringSerializer StringDeserializer LongDeserializer]))
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster)
-(t/use-fixtures :each ek/with-kafka-client f/start-system)
+(t/use-fixtures :each ek/with-kafka-client f/with-kv-store)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"

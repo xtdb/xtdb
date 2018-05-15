@@ -31,7 +31,7 @@
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
 
-(defn start-system [f]
+(defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "test")]
     (binding [*kv* (kv-store/open (crux.core/kv db-dir {:kv-store *kv-store*}))]
       (try
@@ -56,6 +56,6 @@
     (t/testing "LMDB"
       (f))))
 
-(defn with-each-kv-store [f]
-  (doseq [with-kv-store [with-memdb with-rocksdb with-lmdb]]
-    (with-kv-store f)))
+(defn with-each-kv-store-implementation [f]
+  (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-lmdb]]
+    (with-kv-store-implementation f)))
