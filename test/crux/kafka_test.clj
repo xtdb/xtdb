@@ -128,40 +128,61 @@
 ;; Test assumes these files are living under ../dbpedia related to the
 ;; crux project (to change).
 
-(comment
-  (t/deftest test-can-transact-all-dbpedia-entities
-    (let [topic "test-can-transact-all-dbpedia-entities"
-          indexer (crux/indexer f/*kv*)
-          tx-size 1000
-          max-limit 1000000
-          transacted (atom -1)]
+;; There are 5053979 entities across 33449633 triplets in
+;; mappingbased_properties_en.nt.
 
-      (k/create-topic ek/*admin-client* topic 1 1 {})
-      (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+;; 1.6G    /tmp/kafka-log11583518938458431752
+;; 1.9G    /tmp/kv-store8011445493573894774
 
-      (t/testing "transacting and indexing"
-        (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
-          (future
-            (time
-             (reset! transacted (reduce (fn [n entities]
-                                          (k/transact ek/*producer* topic entities)
-                                          (+ n (count entities)))
-                                        0
-                                        (->> (rdf/ntriples-seq in)
-                                             (rdf/statements->maps)
-                                             (map #(rdf/use-default-language % :en))
-                                             (take max-limit)
-                                             (partition-all tx-size))))))
-          (time
-           (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
-                  n 0]
-             (when-not (= n @transacted)
-               (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
-                      (+ n (count entities))))))))
+;; 968621ms, ~16mins.
 
-      (t/testing "querying transacted data"
-        (t/is (= #{[:http://dbpedia.org/resource/Aristotle]}
-                 (q/q (crux/db f/*kv*)
-                      '{:find [iri]
-                        :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
-                                [e :crux.rdf/iri iri]]})))))))
+;; Could use test selectors.
+(def run-dbpedia-tests? false)
+
+(t/deftest test-can-transact-all-dbpedia-entities
+  (let [topic "test-can-transact-all-dbpedia-entities"
+        indexer (crux/indexer f/*kv*)
+        tx-size 1000
+        max-limit Long/MAX_VALUE
+        print-size 100000
+        transacted (atom -1)
+        mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
+
+    (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
+      (do (k/create-topic ek/*admin-client* topic 1 1 {})
+          (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+
+          (t/testing "transacting and indexing"
+            (with-open [in (io/input-stream mappingbased-properties-file)]
+              (future
+                (time
+                 (reset! transacted (reduce (fn [n entities]
+                                              (k/transact ek/*producer* topic entities)
+                                              (let [n (+ n (count entities))]
+                                                (when (zero? (mod n print-size))
+                                                  (println "transacted" n))
+                                                n))
+                                            0
+                                            (->> (rdf/ntriples-seq in)
+                                                 (rdf/statements->maps)
+                                                 (map #(rdf/use-default-language % :en))
+                                                 (take max-limit)
+                                                 (partition-all tx-size))))))
+              (time
+               (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
+                      n 0]
+                 (when-not (= n @transacted)
+                   (when (zero? (mod n print-size))
+                     (println "indexed" n))
+                   (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
+                          (+ n (count entities))))))))
+
+          (t/testing "querying transacted data"
+            (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
+                       [(keyword "http://dbpedia.org/resource/Aristotle_(painting)")]
+                       [(keyword "http://dbpedia.org/resource/Aristotle_(book)")]}
+                     (q/q (crux/db f/*kv*)
+                          '{:find [iri]
+                            :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
+                                    [e :crux.rdf/iri iri]]})))))
+      (t/is true "skipping"))))
