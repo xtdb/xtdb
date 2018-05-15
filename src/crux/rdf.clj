@@ -115,30 +115,31 @@
 
 (defn entity-statements->map [entity-statements]
   (when-let [^Statement statement (first entity-statements)]
-    (reduce
-     (fn [m statement]
-       (try
-         (let [[_ p o] (statement->clj statement)]
-           (update m p (fn [x]
-                         (cond
-                           (nil? x)
-                           o
+    (->> entity-statements
+         (reduce
+          (fn [m statement]
+            (try
+              (let [[_ p o] (statement->clj statement)]
+                (assoc! m p (let [x (get m p)]
+                              (cond
+                                (nil? x)
+                                o
 
-                           (coll? x)
-                           (conj x o)
+                                (coll? x)
+                                (conj x o)
 
-                           :else #{x o}))))
-         (catch IllegalArgumentException e
-           (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
-           m)))
-     {:crux.rdf/iri (value->clj (.getSubject statement))}
-     entity-statements)))
+                                :else #{x o}))))
+              (catch IllegalArgumentException e
+                (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
+                m)))
+          (transient {:crux.rdf/iri (value->clj (.getSubject statement))}))
+         (persistent!))))
 
 (defn statements->maps [statements]
   (->> statements
        (partition-by (fn [^Statement s]
                        (.getSubject s)))
-       (map entity-statements->map)))
+       (pmap entity-statements->map)))
 
 (defn maps-by-iri [rdf-maps]
   (->> (for [m rdf-maps]
@@ -188,7 +189,7 @@
                                RDFFormat/NTRIPLES
                                empty-resource-array)
                     (catch Exception e
-                      (log/error e (str/join "\n" lines))))]
+                      (log/debug e "Could not parse entity:" (str/join "\n" lines))))]
     statement))
 
 ;;; Regexp-based N-Triples parser.
