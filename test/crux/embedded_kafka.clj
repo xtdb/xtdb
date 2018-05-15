@@ -1,8 +1,15 @@
 (ns crux.embedded-kafka
   (:require [clojure.java.io :as io]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [crux.kafka :as k])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
+           [org.apache.kafka.clients.admin
+            AdminClient]
+           [org.apache.kafka.clients.producer
+            KafkaProducer]
+           [org.apache.kafka.clients.consumer
+            KafkaConsumer]
            [org.apache.zookeeper.server
             NIOServerCnxnFactory ZooKeeperServer]
            [java.net InetSocketAddress]
@@ -73,3 +80,17 @@
 (defn with-embedded-kafka-cluster [f]
   (with-embedded-zookeeper
     (partial with-embedded-kafka f)))
+
+(def ^:dynamic ^AdminClient *admin-client*)
+(def ^:dynamic ^KafkaProducer *producer*)
+(def ^:dynamic ^KafkaConsumer *consumer*)
+
+(defn with-kafka-client [f]
+  (with-open [admin-client (k/create-admin-client {"bootstrap.servers"*kafka-bootstrap-servers*})
+              producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
+              consumer (k/create-consumer {"bootstrap.servers" *kafka-bootstrap-servers*
+                                           "group.id" "0"})]
+    (binding [*admin-client* admin-client
+              *producer* producer
+              *consumer* consumer]
+      (f))))
