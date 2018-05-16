@@ -79,14 +79,7 @@
 
 (defn index-tx-record [indexer ^ConsumerRecord record]
   (let [transact-time (Date. (.timestamp record))
-        transact-id (pr-str [(topic-partition-meta-key (.partition record))
-                             (.offset record)])
-        txs (for [tx (consumer-record->value record)]
-              (assoc tx
-                     :crux.kv/id (:crux.rdf/iri tx)
-                     :crux.tx/transact-id transact-id
-                     :crux.tx/transact-time transact-time
-                     :crux.tx/business-time (or (:crux.tx/business-time tx) transact-time)))]
+        txs (consumer-record->value record)]
     (db/index indexer txs transact-time)
     txs))
 
@@ -95,11 +88,11 @@
    (consume-and-index-entities indexer consumer 10000))
   ([indexer ^KafkaConsumer consumer timeout]
    (let [records (.poll consumer timeout)
-         entities (->> (for [^ConsumerRecord record records]
-                         (index-tx-record indexer record))
-                       (reduce into []))]
+         txs (->> (for [^ConsumerRecord record records]
+                    (index-tx-record indexer record))
+                  (reduce into []))]
      (store-topic-partition-offsets indexer consumer (.partitions records))
-     entities)))
+     txs)))
 
 (defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer topic]
   (let [topics [topic]]

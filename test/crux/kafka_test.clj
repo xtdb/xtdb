@@ -36,10 +36,14 @@
       (t/is (= 1 (count (seq records))))
       (t/is (= person (first (map k/consumer-record->value records)))))))
 
+(defn use-iri-as-id [m]
+  (assoc m :crux.kv/id (:crux.rdf/iri m)))
+
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
+         (map use-iri-as-id)
          (doall))))
 
 (t/deftest test-can-transact-entities
@@ -93,9 +97,10 @@
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [topic "test-can-transact-and-query-dbpedia-entities"
-        entities (-> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
-                     (rdf/use-default-language :en))
+        entities (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+                              (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
+                      (map #(rdf/use-default-language % :en))
+                      (map use-iri-as-id))
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
@@ -177,6 +182,7 @@
                                             (->> (rdf/ntriples-seq in)
                                                  (rdf/statements->maps)
                                                  (map #(rdf/use-default-language % :en))
+                                                 (map use-iri-as-id)
                                                  (take max-limit)
                                                  (partition-all tx-size))))))
               (time

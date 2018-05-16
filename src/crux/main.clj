@@ -77,4 +77,4 @@
           (let [indexer (crux.core/indexer kv)]
             (kafka/subscribe-from-stored-offsets indexer consumer topic)
             (while true
-              (kafka/consume-and-index-entities indexer consumer))))))))
+              (kafka/consume-and-index-entities indexer consumer 100))))))))
