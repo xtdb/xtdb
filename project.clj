@@ -22,9 +22,11 @@
                                                 jline
                                                 org.apache.yetus/audience-annotations
                                                 org.slf4j/slf4j-log4j12
-                                                log4j]]]}}
-  :aot [crux.main
-        crux.kafka]
+                                                log4j]]]
+                   :repl-options {:init-ns user}}
+             :uberjar {:aot [crux.main
+                             crux.kafka]}}
+  :aot [crux.kafka]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
