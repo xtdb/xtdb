@@ -80,12 +80,17 @@
        (success? (LMDB/mdb_dbi_open txn name 0 ip))
        (.get ip 0)))))
 
-(defn put-bytes->bytes [^MemoryStack stack txn dbi ^bytes k ^bytes v]
-  (let [kb (.flip (.put (.malloc stack (alength k)) k))
-        kv (.mv_data (MDBVal/callocStack stack) kb)
-        dv (.mv_size (MDBVal/callocStack stack) (alength v))]
-    (success? (LMDB/mdb_put txn dbi kv dv LMDB/MDB_RESERVE))
-    (.put (.mv_data dv) v)))
+(defn put-bytes->bytes
+  ([^MemoryStack stack txn dbi ^bytes k ^bytes v]
+   (put-bytes->bytes stack txn dbi
+                     (MDBVal/callocStack stack) k (MDBVal/callocStack stack) v))
+  ([^MemoryStack stack txn dbi ^MDBVal kv ^bytes k ^MDBVal dv ^bytes v]
+   (with-open [stack (.push stack)]
+     (let [kb (.flip (.put (.malloc stack (alength k)) k))
+           kv (.mv_data kv kb)
+           dv (.mv_size dv (alength v))]
+       (success? (LMDB/mdb_put txn dbi kv dv LMDB/MDB_RESERVE))
+       (.put (.mv_data dv) v)))))
 
 (defn get-bytes->bytes ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
@@ -166,9 +171,11 @@
     (transaction
      env
      (fn [^MemoryStack stack ^long txn]
-       (doseq [[k v] kvs]
-         (with-open [stack (.push stack)]
-           (put-bytes->bytes stack txn dbi k v))))
+       (let [kv (MDBVal/callocStack stack)
+             dv (MDBVal/callocStack stack)]
+         (doseq [[k v] kvs]
+           (put-bytes->bytes stack txn dbi
+                             kv k dv v))))
      0))
 
   (destroy [this]
