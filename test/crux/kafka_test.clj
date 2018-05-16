@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.tools.logging :as log]
             [crux.core :as crux]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
@@ -156,7 +157,7 @@
                                  (let [next-n (+ n step)]
                                    (when-not (= (quot n print-size)
                                                 (quot next-n print-size))
-                                     (println message next-n))
+                                     (log/warn message next-n))
                                    next-n))
         transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]

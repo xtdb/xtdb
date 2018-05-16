@@ -25,7 +25,7 @@
     (let [info (MDBEnvInfo/callocStack stack)]
       (success? (LMDB/mdb_env_info env info))
       (let [new-mapsize (* factor (.me_mapsize info))]
-        (log/warn "Increasing mapsize to:" new-mapsize)
+        (log/info "Increasing mapsize to:" new-mapsize)
         (env-set-mapsize env new-mapsize)))))
 
 (defn transaction
@@ -126,7 +126,8 @@
            (finally
              (LMDB/mdb_cursor_close cursor))))))))
 
-(def default-env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
+(def default-env-flags (bit-or LMDB/MDB_NOSYNC
+                               LMDB/MDB_NOMETASYNC))
 
 (defrecord CruxLMDBKv [db-dir env env-flags dbi max-size]
   ks/CruxKvStore
