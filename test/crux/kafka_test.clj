@@ -152,6 +152,12 @@
         tx-size 1000
         max-limit Long/MAX_VALUE
         print-size 100000
+        add-and-print-progress (fn [n step message]
+                                 (let [next-n (+ n step)]
+                                   (when-not (= (quot n print-size)
+                                                (quot next-n print-size))
+                                     (println message next-n))
+                                   next-n))
         transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
 
@@ -165,10 +171,7 @@
                 (time
                  (reset! transacted (reduce (fn [n entities]
                                               (k/transact ek/*producer* topic entities)
-                                              (let [n (+ n (count entities))]
-                                                (when (zero? (mod n print-size))
-                                                  (println "transacted" n))
-                                                n))
+                                              (add-and-print-progress n (count entities) "transacted"))
                                             0
                                             (->> (rdf/ntriples-seq in)
                                                  (rdf/statements->maps)
@@ -178,11 +181,10 @@
               (time
                (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
                       n 0]
-                 (when-not (= n @transacted)
-                   (when (zero? (mod n print-size))
-                     (println "indexed" n))
-                   (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
-                          (+ n (count entities))))))))
+                 (let [n (add-and-print-progress n (count entities) "indexed")]
+                   (when-not (= n @transacted)
+                     (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
+                            (long n))))))))
 
           (t/testing "querying transacted data"
             (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
