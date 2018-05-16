@@ -150,31 +150,6 @@
          {(:crux.rdf/iri m) m})
        (into {})))
 
-;; JSON-LD, does not depend on RDF4J, initial parsing via normal JSON
-;; parser.
-
-(def jsonld-keyword->clj
-  {(keyword "@id")
-   :crux.rdf/iri
-   (keyword "@type")
-   (keyword (str RDF/TYPE))})
-
-(defn jsonld->maps [json-ld]
-  (for [json-ld json-ld]
-    (reduce-kv (fn [m k v]
-                 (let [k (get jsonld-keyword->clj k k)]
-                   (assoc m
-                          k
-                          (if (coll? v)
-                            (let [v (for [v v]
-                                      (get v (keyword "@value")
-                                           (keyword (get v (keyword "@id") v))))]
-                              (cond-> (set v)
-                                (= 1 (count v)) first))
-                            (cond-> v
-                              (= :crux.rdf/iri k) keyword)))))
-               {} json-ld)))
-
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
 
@@ -194,7 +169,7 @@
        (map patch-missing-lang-string)
        (partition-by #(re-find #"<.+?>" %))
        (partition-all 100)
-       (pmap (fn [entity-lines]
+       (map (fn [entity-lines]
                (let [lines (apply concat entity-lines)]
                  (try
                    (parse-ntriples-str (str/join "\n" lines))
