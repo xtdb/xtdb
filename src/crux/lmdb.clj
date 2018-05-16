@@ -83,9 +83,9 @@
 (defn put-bytes->bytes [^MemoryStack stack txn dbi ^bytes k ^bytes v]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
         kv (.mv_data (MDBVal/callocStack stack) kb)
-        vb (.flip (.put (.malloc stack (alength v)) v))
-        dv (.mv_data (MDBVal/callocStack stack) vb)]
-    (success? (LMDB/mdb_put txn dbi kv dv 0))))
+        dv (.mv_size (MDBVal/callocStack stack) (alength v))]
+    (success? (LMDB/mdb_put txn dbi kv dv LMDB/MDB_RESERVE))
+    (.put (.mv_data dv) v)))
 
 (defn get-bytes->bytes ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
