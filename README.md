@@ -1,6 +1,6 @@
 Crux
 
-image:https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b["CircleCI", link="https://circleci.com/gh/juxt/crux"]
+[![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
 
 An experimental mutable Clojure graph database currently sitting on top of RocksDB.
 
