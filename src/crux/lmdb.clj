@@ -12,14 +12,14 @@
 ;; Based on
 ;; https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/util/lmdb/LMDBDemo.java
 
-(defn success? [rc]
+(defn- success? [rc]
   (when-not (= LMDB/MDB_SUCCESS rc)
     (throw (ex-info (LMDB/mdb_strerror rc) {:error rc}))))
 
-(defn env-set-mapsize [^long env ^long size]
+(defn- env-set-mapsize [^long env ^long size]
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
-(defn increase-mapsize [env ^long factor]
+(defn- increase-mapsize [env ^long factor]
   (with-open [stack (MemoryStack/stackPush)]
     (let [info (MDBEnvInfo/callocStack stack)]
       (success? (LMDB/mdb_env_info env info))
@@ -27,9 +27,9 @@
         (log/info "Increasing mapsize to:" new-mapsize)
         (env-set-mapsize env new-mapsize)))))
 
-(defn transaction
+(defn- with-transaction
   ([env f]
-   (transaction env f LMDB/MDB_RDONLY))
+   (with-transaction env f LMDB/MDB_RDONLY))
   ([env f flags]
    (try
      (with-open [stack (MemoryStack/stackPush)]
@@ -51,34 +51,34 @@
      (catch ExceptionInfo e
        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
          (do (increase-mapsize env 2)
-             (transaction env f flags))
+             (with-transaction env f flags))
          (throw e))))))
 
-(defn env-create []
+(defn- env-create []
   (with-open [stack (MemoryStack/stackPush)]
     (let [pp (.mallocPointer stack 1)]
       (success? (LMDB/mdb_env_create pp))
       (.get pp))))
 
-(defn env-open [^long env dir ^long flags]
+(defn- env-open [^long env dir ^long flags]
   (success? (LMDB/mdb_env_open env
                                (.getAbsolutePath (doto (io/file dir)
                                                    .mkdirs))
                                flags
                                0664)))
 
-(defn env-close [^long env]
+(defn- env-close [^long env]
   (LMDB/mdb_env_close env))
 
-(defn env-copy [^long env path]
+(defn- env-copy [^long env path]
   (let [file (io/file path)]
     (when (.exists file)
       (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
     (.mkdirs file)
     (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
 
-(defn dbi-open [env]
-  (transaction
+(defn- dbi-open [env]
+  (with-transaction
    env
    (fn [^MemoryStack stack ^long txn]
      (let [ip (.mallocInt stack 1)
@@ -86,16 +86,7 @@
        (success? (LMDB/mdb_dbi_open txn name 0 ip))
        (.get ip 0)))))
 
-(defn get-bytes->bytes ^bytes [^MemoryStack stack txn dbi ^bytes k]
-  (let [kb (.flip (.put (.malloc stack (alength k)) k))
-        kv (.mv_data (MDBVal/callocStack stack) kb)
-        dv (MDBVal/callocStack stack)
-        rc (LMDB/mdb_get txn dbi kv dv)]
-    (when-not (= LMDB/MDB_NOTFOUND rc)
-      (success? rc)
-      (bu/byte-buffer->bytes (.mv_data dv)))))
-
-(defn cursor [^MemoryStack stack txn dbi f]
+(defn- with-cursor [^MemoryStack stack txn dbi f]
   (let [pp (.mallocPointer stack 1)]
     (success? (LMDB/mdb_cursor_open txn dbi pp))
     (let [cursor (.get pp 0)]
@@ -104,12 +95,6 @@
         (finally
           (LMDB/mdb_cursor_close cursor))))))
 
-(defn- make-k [^MemoryStack stack ^bytes k]
-  (let [kb (.flip (.put (.malloc stack (alength k)) k))
-        kv (.mv_data (MDBVal/callocStack stack) kb)
-        dv (MDBVal/callocStack stack)]
-    [kv dv]))
-
 (defn- cursor->kv [cursor ^MDBVal kv ^MDBVal dv flags]
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
     (when (not=  LMDB/MDB_NOTFOUND rc)
@@ -117,40 +102,40 @@
       [(bu/byte-buffer->bytes (.mv_data kv))
        (bu/byte-buffer->bytes (.mv_data dv))])))
 
-(defn- cursor->vec [env dbi f]
-  (transaction
+(defn- cursor-iterate [env dbi f]
+  (with-transaction
    env
    (fn [stack txn]
-     (cursor stack txn dbi
-             (fn [^MemoryStack stack cursor]
-               (f
-                (let [cursor-ctx (atom nil)]
-                  (reify
-                    ks/KvIterator
-                    (-seek [this k]
-                      (reset! cursor-ctx (make-k stack k))
-                      (let [[kv dv] @cursor-ctx]
-                        (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE)))
-                    (-next [this]
-                      (let [[kv dv] @cursor-ctx]
-                        (cursor->kv cursor kv dv LMDB/MDB_NEXT)))))))))))
+     (with-cursor stack txn dbi
+       (fn [^MemoryStack stack cursor]
+         (let [kv (MDBVal/callocStack stack)
+               dv (MDBVal/callocStack stack)]
+           (f (reify
+                ks/KvIterator
+                (-seek [this k]
+                  (let [k ^bytes k
+                        kb (.flip (.put (.malloc stack (alength k)) k))
+                        kv (.mv_data (MDBVal/callocStack stack) kb)]
+                    (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE)))
+                (-next [this]
+                  (cursor->kv cursor kv dv LMDB/MDB_NEXT))))))))))
 
-(defn cursor-put [env dbi kvs]
-  (transaction
-   env
-   (fn [stack txn]
-     (cursor stack txn dbi
-             (fn [^MemoryStack stack cursor]
-               (let [kv (MDBVal/callocStack stack)
-                     dv (MDBVal/callocStack stack)]
-                 (doseq [[^bytes k ^bytes v] (sort-by first bu/bytes-comparator kvs)]
-                   (with-open [stack (.push stack)]
-                     (let [kb (.flip (.put (.malloc stack (alength k)) k))
-                           kv (.mv_data kv kb)
-                           dv (.mv_size dv (alength v))])
-                     (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
-                     (.put (.mv_data dv) v)))))))
-   0))
+(defn- cursor-put [env dbi kvs]
+  (with-transaction
+    env
+    (fn [stack txn]
+      (with-cursor stack txn dbi
+        (fn [^MemoryStack stack cursor]
+          (let [kv (MDBVal/callocStack stack)
+                dv (MDBVal/callocStack stack)]
+            (doseq [[^bytes k ^bytes v] (sort-by first bu/bytes-comparator kvs)]
+              (with-open [stack (.push stack)]
+                (let [kb (.flip (.put (.malloc stack (alength k)) k))
+                      kv (.mv_data kv kb)
+                      dv (.mv_size dv (alength v))])
+                (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+                (.put (.mv_data dv) v)))))))
+    0))
 
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
@@ -172,7 +157,7 @@
           (throw t)))))
 
   (iterate-with [this f]
-    (cursor->vec env dbi f))
+    (cursor-iterate env dbi f))
 
   (store [_ k v]
     (cursor-put env dbi [[k v]]))
