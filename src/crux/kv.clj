@@ -106,14 +106,14 @@
   "Sequence of all attributes in the DB."
   [db]
   (let [k (encode frame-index-key-prefix {:index :aid})]
-    (->> (kvu/seek-and-iterate db (partial bu/bytes=? k) k
-                               (fn [r]
-                                 (into {} (map (fn [[k v]]
-                                                 (let [attr (nippy/thaw v)
-                                                       k (c/decode frame-index-aid k)]
-                                                   [(:crux.kv.attr/ident attr)
-                                                    (:aid k)])))
-                                       r))))))
+    (kvu/seek-and-iterate db (partial bu/bytes=? k) k
+                          (fn [r]
+                            (into {} (map (fn [[k v]]
+                                            (let [attr (nippy/thaw v)
+                                                  k (c/decode frame-index-aid k)]
+                                              [(:crux.kv.attr/ident attr)
+                                               (:aid k)])))
+                                  r)))))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not

@@ -3,28 +3,6 @@
             [crux.byte-utils :as bu])
   (:import clojure.lang.IReduceInit))
 
-;; Todo potentially move this to kv, where it's used - nice!
-(defn- kv-reducer [key-pred seek-k i]
-  (reify
-    IReduceInit
-    (reduce [this f init]
-      (loop [init init
-             [k v :as kv] (ks/-seek i seek-k)]
-        (if (and k (key-pred k))
-          (let [result (f init kv)]
-            (if (reduced? result)
-              @result
-              (recur result (ks/-next i))))
-          init)))))
-
-(defn seek-and-iterate
-  ([kvs key-pred seek-k]
-   (seek-and-iterate kvs key-pred seek-k (partial into [])))
-  ([kvs key-pred seek-k f]
-   (ks/iterate-with kvs
-                    (fn [i]
-                      (f (kv-reducer key-pred seek-k i))))))
-
 (defn seek [kvs k]
   (ks/iterate-with kvs
                    (fn [i]
@@ -43,3 +21,22 @@
                          (if (key-pred k)
                            kv
                            (recur (ks/-next i))))))))
+
+(defn seek-and-iterate
+  ([kvs key-pred seek-k]
+   (seek-and-iterate kvs key-pred seek-k (partial into [])))
+  ([kvs key-pred seek-k f]
+   (ks/iterate-with kvs
+                    (fn [i]
+                      (f
+                       (reify
+                         IReduceInit
+                         (reduce [this f init]
+                           (loop [init init
+                                  [k v :as kv] (ks/-seek i seek-k)]
+                             (if (and k (key-pred k))
+                               (let [result (f init kv)]
+                                 (if (reduced? result)
+                                   @result
+                                   (recur result (ks/-next i))))
+                               init)))))))))
