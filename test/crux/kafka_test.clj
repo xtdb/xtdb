@@ -175,16 +175,17 @@
             (with-open [in (io/input-stream mappingbased-properties-file)]
               (future
                 (time
-                 (reset! transacted (reduce (fn [n entities]
-                                              (k/transact ek/*producer* topic entities)
-                                              (add-and-print-progress n (count entities) "transacted"))
-                                            0
-                                            (->> (rdf/ntriples-seq in)
-                                                 (rdf/statements->maps)
-                                                 (map #(rdf/use-default-language % :en))
-                                                 (map use-iri-as-id)
-                                                 (take max-limit)
-                                                 (partition-all tx-size))))))
+                 (->> (rdf/ntriples-seq in)
+                      (rdf/statements->maps)
+                      (map #(rdf/use-default-language % :en))
+                      (map use-iri-as-id)
+                      (take max-limit)
+                      (partition-all tx-size)
+                      (reduce (fn [n entities]
+                                (k/transact ek/*producer* topic entities)
+                                (add-and-print-progress n (count entities) "transacted"))
+                              0)
+                      (reset! transacted))))
               (time
                (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
                       n 0]
