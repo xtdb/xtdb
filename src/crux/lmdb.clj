@@ -46,6 +46,9 @@
                                flags
                                0664)))
 
+(defn env-set-mapsize [^long env ^long size]
+  (success? (LMDB/mdb_env_set_mapsize env size)))
+
 (defn env-close [^long env]
   (LMDB/mdb_env_close env))
 
@@ -99,16 +102,22 @@
            (finally
              (LMDB/mdb_cursor_close cursor))))))))
 
-(defrecord CruxLMDBKv [db-dir env env-flags dbi]
+(def default-env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
+(def default-max-size (* 10 1024 1024 1024))
+
+(defrecord CruxLMDBKv [db-dir env env-flags dbi max-size]
   ks/CruxKvStore
   (open [this]
-    (let [env-flags (or env-flags (bit-or LMDB/MDB_WRITEMAP LMDB/MDB_MAPASYNC))
-          env (env-create)]
+    (let [env-flags (or env-flags default-env-flags)
+          env (env-create)
+          max-size (or max-size default-max-size)]
       (try
+        (env-set-mapsize env max-size)
         (env-open env db-dir env-flags)
         (assoc this
                :env env
                :env-flags env-flags
+               :max-size max-size
                :dbi (dbi-open env))
         (catch Throwable t
           (env-close env)
@@ -142,7 +151,8 @@
      env
      (fn [^MemoryStack stack ^long txn]
        (doseq [[k v] kvs]
-         (put-bytes->bytes stack txn dbi k v)))
+         (with-open [stack (.push stack)]
+           (put-bytes->bytes stack txn dbi k v))))
      0))
 
   (destroy [this]
