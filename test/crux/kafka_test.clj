@@ -131,12 +131,17 @@
 ;; There are 5053979 entities across 33449633 triplets in
 ;; mappingbased_properties_en.nt.
 
+;; RocksDB:
 ;; 1.6G    /tmp/kafka-log1572248494326726941
 ;; 2.0G    /tmp/kv-store8136342842355297151
-
-;; 583800ms  ~9.7mins transact
+;; 583800ms ~9.7mins transact
 ;; 861799ms ~14.40mins index
 
+;; LMDB:
+;; 1.6G    /tmp/kafka-log17904986480319416547
+;; 9.3G    /tmp/kv-store4104462813030460112
+;; 640528ms ~10.7mins transact
+;; 2940230ms 49mins index
 
 ;; Could use test selectors.
 (def run-dbpedia-tests? false)
