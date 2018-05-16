@@ -2,7 +2,8 @@
   (:require [clojure.test :as t]
             [crux.byte-utils :as bu]
             [crux.fixtures :as f]
-            [crux.kv-store :as ks])
+            [crux.kv-store :as ks]
+            [crux.io :as cio])
   (:import [java.io Closeable]))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
@@ -55,3 +56,22 @@
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
     (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
     (t/is (= [] (into [] (ks/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))
+
+
+(t/deftest test-backup-and-restore-db
+  (if (instance? crux.memdb.CruxMemKv f/*kv-store*)
+    (t/is true "skipping")
+    (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
+      (try
+        (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+        (ks/backup f/*kv* backup-dir)
+        (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
+          (t/is (= "Crux" (String. ^bytes (ks/value restored-kv (bu/long->bytes 1)))))
+
+          (t/testing "backup and original are different"
+            (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Original"))
+            (ks/store restored-kv (bu/long->bytes 1) (.getBytes "Backup"))
+            (t/is (= "Original" (String. ^bytes (ks/value f/*kv* (bu/long->bytes 1)))))
+            (t/is (= "Backup" (String. ^bytes (ks/value restored-kv (bu/long->bytes 1)))))))
+        (finally
+          (cio/delete-dir backup-dir))))))
