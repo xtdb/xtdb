@@ -32,5 +32,8 @@
     (.clear db)
     (dissoc this :db))
 
+  (backup [_ dir]
+    (throw (UnsupportedOperationException.)))
+
   Closeable
   (close [_]))

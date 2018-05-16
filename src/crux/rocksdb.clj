@@ -1,10 +1,15 @@
 (ns crux.rocksdb
   (:require [clojure.java.io :as io]
             [crux.byte-utils :as bu]
-            [crux.kv-store :refer :all])
+            [crux.kv-store :refer :all]
+            [crux.io :as cio])
   (:import clojure.lang.IReduceInit
            java.io.Closeable
-           [org.rocksdb Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
+           [org.rocksdb
+            BackupEngine BackupableDBOptions
+            Env Options ReadOptions RestoreOptions
+            RocksDB RocksIterator
+            WriteBatch WriteOptions]))
 
 ;; Todo move to kv-store
 (defprotocol KvIterator
@@ -87,6 +92,19 @@
   (destroy [this]
     (with-open [options (Options.)]
       (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options)))
+
+  (backup [{:keys [^RocksDB db]} dir]
+    (let [tmpdir (cio/create-tmpdir "rocksdb-backup")]
+      (try
+        (let [file (io/file dir)]
+          (.mkdirs file)
+          (with-open [backup-options (BackupableDBOptions. (.getAbsolutePath tmpdir))
+                      restore-options (RestoreOptions. false)
+                      engine (BackupEngine/open (Env/getDefault) backup-options)]
+            (.createNewBackup engine db)
+            (.restoreDbFromLatestBackup engine (.getAbsolutePath file) (.getAbsolutePath file) restore-options)))
+        (finally
+          (cio/delete-dir tmpdir)))))
 
   Closeable
   (close [{:keys [^RocksDB db ^Options options ^ReadOptions vanilla-read-options]}]

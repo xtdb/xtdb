@@ -71,6 +71,11 @@
 (defn env-close [^long env]
   (LMDB/mdb_env_close env))
 
+(defn env-copy [^long env ^String path]
+  (let [file (io/file path)]
+    (.mkdirs file)
+    (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
+
 (defn dbi-open [env]
   (transaction
    env
@@ -161,7 +166,7 @@
      (fn [^MemoryStack stack ^long txn]
        (get-bytes->bytes stack txn dbi k))))
 
-  (seek [this k]
+  (seek [_ k]
     (let [keep-going? (atom true)]
       (first (cursor->vec env dbi k (fn [_]
                                       (let [done? @keep-going?]
@@ -177,8 +182,11 @@
   (store-all! [_ kvs]
     (cursor-put env dbi kvs))
 
-  (destroy [this]
+  (destroy [_]
     (cio/delete-dir db-dir))
+
+  (backup [_ dir]
+    (env-copy env dir))
 
   Closeable
   (close [_]

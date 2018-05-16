@@ -17,4 +17,6 @@
 
   (close [this])
 
-  (destroy [this]))
+  (destroy [this])
+
+  (backup [this dir]))
