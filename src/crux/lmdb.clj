@@ -71,8 +71,10 @@
 (defn env-close [^long env]
   (LMDB/mdb_env_close env))
 
-(defn env-copy [^long env ^String path]
+(defn env-copy [^long env path]
   (let [file (io/file path)]
+    (when (.exists file)
+      (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
     (.mkdirs file)
     (success? (LMDB/mdb_env_copy env (.getAbsolutePath file)))))
 

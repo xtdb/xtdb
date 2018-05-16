@@ -6,8 +6,7 @@
   (:import clojure.lang.IReduceInit
            java.io.Closeable
            [org.rocksdb
-            BackupEngine BackupableDBOptions
-            Env Options ReadOptions RestoreOptions
+            Checkpoint Options ReadOptions
             RocksDB RocksIterator
             WriteBatch WriteOptions]))
 
@@ -94,17 +93,7 @@
       (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options)))
 
   (backup [{:keys [^RocksDB db]} dir]
-    (let [tmpdir (cio/create-tmpdir "rocksdb-backup")]
-      (try
-        (let [file (io/file dir)]
-          (.mkdirs file)
-          (with-open [backup-options (BackupableDBOptions. (.getAbsolutePath tmpdir))
-                      restore-options (RestoreOptions. false)
-                      engine (BackupEngine/open (Env/getDefault) backup-options)]
-            (.createNewBackup engine db)
-            (.restoreDbFromLatestBackup engine (.getAbsolutePath file) (.getAbsolutePath file) restore-options)))
-        (finally
-          (cio/delete-dir tmpdir)))))
+    (.createCheckpoint (Checkpoint/create db) (.getAbsolutePath (io/file dir))))
 
   Closeable
   (close [{:keys [^RocksDB db ^Options options ^ReadOptions vanilla-read-options]}]

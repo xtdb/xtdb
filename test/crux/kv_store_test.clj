@@ -64,6 +64,7 @@
     (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
       (try
         (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+        (cio/delete-dir backup-dir)
         (ks/backup f/*kv* backup-dir)
         (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
           (t/is (= "Crux" (String. ^bytes (ks/value restored-kv (bu/long->bytes 1)))))
