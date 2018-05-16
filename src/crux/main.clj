@@ -64,9 +64,9 @@
             options-table (with-out-str
                             (pp/print-table (for [[k v] options]
                                               {:key k :value v})))]
-        (log/warn "Starting Crux...")
-        (log/warnf "version: %s revision: %s" version revision)
-        (log/warn "options:" options-table)
+        (log/info "Starting Crux...")
+        (log/infof "version: %s revision: %s" version revision)
+        (log/info "options:" options-table)
 
         (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
                                        (crux.kv-store/open))
