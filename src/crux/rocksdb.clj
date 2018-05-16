@@ -2,69 +2,32 @@
   (:require [clojure.java.io :as io]
             [crux.byte-utils :as bu]
             [crux.kv-store :refer :all])
-  (:import [clojure.lang IReduce IReduceInit]
+  (:import clojure.lang.IReduceInit
            java.io.Closeable
            [org.rocksdb Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
-(defn- -value [^RocksDB db k]
-  (with-open [i (.newIterator db)]
-    (.seek i k)
-    (when (and (.isValid i) (zero? (bu/compare-bytes (.key i) k Integer/MAX_VALUE)))
-      (.value i))))
+;; Todo move to kv-store
+(defprotocol KvIterator
+  (-seek [this k])
+  (next [this]))
 
-(defn- -seek [^RocksDB db ^ReadOptions read-options k]
-  (with-open [i (.newIterator db read-options)]
-    (.seek i k)
-    (when (.isValid i)
-      [(.key i) (.value i)])))
+(defn- iterator->kv [^RocksIterator i]
+  (when (.isValid i)
+    [(.key i) (.value i)]))
 
-(defn- -seek-first [^RocksDB db ^ReadOptions read-options prefix-pred key-pred seek-k]
-  (with-open [i (.newIterator db read-options)]
-    (.seek i seek-k)
-    (loop []
-      (when (.isValid i)
-        (let [k (.key i)]
-          (when (prefix-pred k)
-            (if (key-pred k)
-              [k (.value i)]
-              (do
-                (.next i)
-                (recur)))))))))
-
-(defn- rock-iterator-loop [^RocksIterator i key-pred f init]
-  (loop [init' init]
-    (if (and (.isValid i) (key-pred (.key i)))
-      (let [result (f init' [(.key i) (.value i)])]
-        (if (reduced? result)
-          @result
-          (do
-            (.next i)
-            (recur result))))
-      init')))
-
-(defn- -seek-and-iterate
-  [^RocksDB db ^ReadOptions read-options key-pred k]
-  (reify
-    IReduce
-    (reduce [this f]
-      (with-open [i (.newIterator db read-options)]
+(defn- ^Closeable rocks-iterator [{:keys [^RocksDB db ^ReadOptions vanilla-read-options]}]
+  (let [i (.newIterator db vanilla-read-options)]
+    (reify
+      KvIterator
+      (-seek [this k]
         (.seek i k)
-        (if (and (.isValid i) (key-pred (.key i)))
-          (rock-iterator-loop i key-pred f [(.key i) (.value i)])
-          (f))))
-
-    IReduceInit
-    (reduce [this f init]
-      (with-open [i (.newIterator db read-options)]
-        (.seek i k)
-        (rock-iterator-loop i key-pred f init)))))
-
-(defn- -store-all! [^RocksDB db kvs]
-  (with-open [wb (WriteBatch.)
-              wo (WriteOptions.)]
-    (doseq [[k v] kvs]
-      (.put wb k v))
-    (.write db wo wb)))
+        (iterator->kv i))
+      (next [this]
+        (.next i)
+        (iterator->kv i))
+      Closeable
+      (close [this]
+        (.close i)))))
 
 (defrecord CruxRocksKv [db-dir]
   CruxKvStore
@@ -79,23 +42,47 @@
                  (throw t)))]
       (assoc this :db db :options opts :vanilla-read-options (ReadOptions.))))
 
-  (value [{:keys [db]} k]
-    (-value db k))
+  (value [this seek-k]
+    (with-open [i (rocks-iterator this)]
+      (when-let [[k v] (-seek i seek-k)]
+        (when (zero? (bu/compare-bytes seek-k k Integer/MAX_VALUE))
+          v))))
 
-  (seek [{:keys [db vanilla-read-options]} k]
-    (-seek db vanilla-read-options k))
+  (seek [this k]
+    (with-open [i (rocks-iterator this)]
+      (-seek i k)))
 
-  (seek-first [{:keys [db vanilla-read-options]} prefix-pred key-pred k]
-    (-seek-first db vanilla-read-options prefix-pred key-pred k))
+  (seek-first [this prefix-pred key-pred seek-k]
+    (with-open [i (rocks-iterator this)]
+      (loop [[k v :as kv] (-seek i seek-k)]
+        (when (and k (prefix-pred k))
+          (if (key-pred k)
+            kv
+            (recur (next i)))))))
 
-  (seek-and-iterate [{:keys [db vanilla-read-options]} key-pred k]
-    (-seek-and-iterate db vanilla-read-options key-pred k))
+  (seek-and-iterate [rocks-kv key-pred seek-k]
+    (reify
+      IReduceInit
+      (reduce [this f init]
+        (with-open [i (rocks-iterator rocks-kv)]
+          (loop [init init
+                 [k v :as kv] (-seek i seek-k)]
+            (if (and k (key-pred k))
+              (let [result (f init kv)]
+                (if (reduced? result)
+                  @result
+                  (recur result (next i))))
+              init))))))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))
 
   (store-all! [{:keys [^RocksDB db]} kvs]
-    (-store-all! db kvs))
+    (with-open [wb (WriteBatch.)
+                wo (WriteOptions.)]
+      (doseq [[k v] kvs]
+        (.put wb k v))
+      (.write db wo wb)))
 
   (destroy [this]
     (with-open [options (Options.)]
