@@ -2,6 +2,7 @@
   (:require [crux.byte-utils :refer :all]
             [crux.db]
             [crux.kv-store :as kv-store]
+            [crux.kv-store-utils :as kvu]
             [crux.byte-utils :as bu]
             [crux.codecs :as c]
             [taoensso.nippy :as nippy]
@@ -83,10 +84,10 @@
        db
        key-entity-id
        (bu/long->bytes
-        (if-let [old-value (kv-store/value db key-entity-id)]
+        (if-let [old-value (kvu/value db key-entity-id)]
           (inc (bu/bytes->long old-value))
           1)))
-      (bytes->long (kv-store/value db key-entity-id)))))
+      (bytes->long (kvu/value db key-entity-id)))))
 
 (defn- transact-attr-ident!
   [db ident]
@@ -105,12 +106,14 @@
   "Sequence of all attributes in the DB."
   [db]
   (let [k (encode frame-index-key-prefix {:index :aid})]
-    (->> (kv-store/seek-and-iterate db (partial bu/bytes=? k) k)
-         (into {} (map (fn [[k v]]
-                         (let [attr (nippy/thaw v)
-                               k (c/decode frame-index-aid k)]
-                           [(:crux.kv.attr/ident attr)
-                            (:aid k)])))))))
+    (->> (kvu/seek-and-iterate db (partial bu/bytes=? k) k
+                               (fn [r]
+                                 (into {} (map (fn [[k v]]
+                                                 (let [attr (nippy/thaw v)
+                                                       k (c/decode frame-index-aid k)]
+                                                   [(:crux.kv.attr/ident attr)
+                                                    (:aid k)])))
+                                       r))))))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not
@@ -121,14 +124,14 @@
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
                              (encode frame-index-attribute-ident)
-                             (kv-store/value db)
+                             (kvu/value db)
                              bytes->long)
                     (transact-attr-ident! db ident))]
         (swap! attributes assoc ident aid)
         aid)))
 
 (defn attr-aid->ident [db aid]
-  (if-let [v (kv-store/value db (encode frame-index-aid {:index :aid :aid aid}))]
+  (if-let [v (kvu/value db (encode frame-index-aid {:index :aid :aid aid}))]
     (nippy/thaw v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -182,11 +185,11 @@
    (let [aid (attr-ident->aid! db ident)
          seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
                                {:index :eat :eid eid :aid aid :ts ts})]
-     (when-let [[k v] (kv-store/seek-first db
-                                           #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
-                                           #(or (not tx-ts)
-                                                (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
-                                           seek-k)]
+     (when-let [[k v] (kvu/seek-first db
+                                      #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
+                                      #(or (not tx-ts)
+                                           (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
+                                      seek-k)]
        (nippy/thaw v)))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
@@ -204,7 +207,7 @@
                     m
                     (assoc m ident (nippy/thaw v)))))
               nil
-              (kv-store/seek-and-iterate db (partial bu/bytes=? k) k))
+              (kvu/seek-and-iterate db (partial bu/bytes=? k) k))
       (assoc ::id eid)))))
 
 (def ^:private eat-index-prefix (encode frame-index-key-prefix {:index :eat}))
@@ -214,7 +217,7 @@
   could be a performance gain to replace this with a dedicate EID
   index that could be lazy."
   [db]
-  (->> (kv-store/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
+  (->> (kvu/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k))) (map :eid)))))
 
 (defn entity-ids-for-value [db ident v ^Date ts]
@@ -226,9 +229,9 @@
                                           :eid 0})]
     (eduction
      (map (comp bytes->long second))
-     (kv-store/seek-and-iterate db
-                                (partial bu/bytes=? k (- (alength k) 12))
-                                k))))
+     (kvu/seek-and-iterate db
+                           (partial bu/bytes=? k (- (alength k) 12))
+                           k))))
 
 (defn store-meta [db k v]
   (kv-store/store db
@@ -236,5 +239,5 @@
                   (nippy/freeze v)))
 
 (defn read-meta [db k]
-  (some->> ^bytes (kv-store/value db (encode frame-index-meta {:index :meta :key k}))
+  (some->> ^bytes (kvu/value db (encode frame-index-meta {:index :meta :key k}))
            nippy/thaw))

@@ -2,13 +2,12 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]
-            [crux.kv-store :as ks]
-            [crux.io :as cio])
-  (:import [java.io Closeable]
-           [java.nio ByteBuffer]
-           [clojure.lang ExceptionInfo]
+            [crux.io :as cio]
+            [crux.kv-store :as ks])
+  (:import clojure.lang.ExceptionInfo
+           java.io.Closeable
            [org.lwjgl.system MemoryStack MemoryUtil]
-           [org.lwjgl.util.lmdb LMDB MDBVal MDBEnvInfo]))
+           [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBVal]))
 
 ;; Based on
 ;; https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/util/lmdb/LMDBDemo.java
@@ -105,26 +104,36 @@
         (finally
           (LMDB/mdb_cursor_close cursor))))))
 
-(defn cursor->vec [env dbi ^bytes k pred]
+(defn- make-k [^MemoryStack stack ^bytes k]
+  (let [kb (.flip (.put (.malloc stack (alength k)) k))
+        kv (.mv_data (MDBVal/callocStack stack) kb)
+        dv (MDBVal/callocStack stack)]
+    [kv dv]))
+
+(defn- cursor->kv [cursor ^MDBVal kv ^MDBVal dv flags]
+  (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
+    (when (not=  LMDB/MDB_NOTFOUND rc)
+      (success? rc)
+      [(bu/byte-buffer->bytes (.mv_data kv))
+       (bu/byte-buffer->bytes (.mv_data dv))])))
+
+(defn- cursor->vec [env dbi f]
   (transaction
    env
    (fn [stack txn]
      (cursor stack txn dbi
              (fn [^MemoryStack stack cursor]
-               (let [kb (.flip (.put (.malloc stack (alength k)) k))
-                     kv (.mv_data (MDBVal/callocStack stack) kb)
-                     dv (MDBVal/callocStack stack)]
-                 (loop [acc []
-                        flags LMDB/MDB_SET_RANGE]
-                   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
-                     (if (= LMDB/MDB_NOTFOUND rc)
-                       acc
-                       (do (success? rc)
-                           (let [k (bu/byte-buffer->bytes (.mv_data kv))]
-                             (if (pred k)
-                               (recur (conj acc [k (bu/byte-buffer->bytes (.mv_data dv))])
-                                      LMDB/MDB_NEXT)
-                               acc))))))) )))))
+               (f
+                (let [cursor-ctx (atom nil)]
+                  (reify
+                    ks/KvIterator
+                    (-seek [this k]
+                      (reset! cursor-ctx (make-k stack k))
+                      (let [[kv dv] @cursor-ctx]
+                        (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE)))
+                    (-next [this]
+                      (let [[kv dv] @cursor-ctx]
+                        (cursor->kv cursor kv dv LMDB/MDB_NEXT)))))))))))
 
 (defn cursor-put [env dbi kvs]
   (transaction
@@ -162,21 +171,8 @@
           (env-close env)
           (throw t)))))
 
-  (value [_ k]
-    (transaction
-     env
-     (fn [^MemoryStack stack ^long txn]
-       (get-bytes->bytes stack txn dbi k))))
-
-  (seek [_ k]
-    (let [keep-going? (atom true)]
-      (first (cursor->vec env dbi k (fn [_]
-                                      (let [done? @keep-going?]
-                                        (reset! keep-going? false)
-                                        done?))))))
-
-  (seek-and-iterate [_ key-pred k]
-    (cursor->vec env dbi k key-pred))
+  (iterate-with [this f]
+    (cursor->vec env dbi f))
 
   (store [_ k v]
     (cursor-put env dbi [[k v]]))

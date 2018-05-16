@@ -1,19 +1,8 @@
 (ns crux.rocksdb
   (:require [clojure.java.io :as io]
-            [crux.byte-utils :as bu]
-            [crux.kv-store :refer :all]
-            [crux.io :as cio])
-  (:import clojure.lang.IReduceInit
-           java.io.Closeable
-           [org.rocksdb
-            Checkpoint Options ReadOptions
-            RocksDB RocksIterator
-            WriteBatch WriteOptions]))
-
-;; Todo move to kv-store
-(defprotocol KvIterator
-  (-seek [this k])
-  (next [this]))
+            [crux.kv-store :refer :all])
+  (:import java.io.Closeable
+           [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
 (defn- iterator->kv [^RocksIterator i]
   (when (.isValid i)
@@ -26,7 +15,7 @@
       (-seek [this k]
         (.seek i k)
         (iterator->kv i))
-      (next [this]
+      (-next [this]
         (.next i)
         (iterator->kv i))
       Closeable
@@ -46,37 +35,9 @@
                  (throw t)))]
       (assoc this :db db :options opts :vanilla-read-options (ReadOptions.))))
 
-  (value [this seek-k]
+  (iterate-with [this f]
     (with-open [i (rocks-iterator this)]
-      (when-let [[k v] (-seek i seek-k)]
-        (when (zero? (bu/compare-bytes seek-k k Integer/MAX_VALUE))
-          v))))
-
-  (seek [this k]
-    (with-open [i (rocks-iterator this)]
-      (-seek i k)))
-
-  (seek-first [this prefix-pred key-pred seek-k]
-    (with-open [i (rocks-iterator this)]
-      (loop [[k v :as kv] (-seek i seek-k)]
-        (when (and k (prefix-pred k))
-          (if (key-pred k)
-            kv
-            (recur (next i)))))))
-
-  (seek-and-iterate [rocks-kv key-pred seek-k]
-    (reify
-      IReduceInit
-      (reduce [this f init]
-        (with-open [i (rocks-iterator rocks-kv)]
-          (loop [init init
-                 [k v :as kv] (-seek i seek-k)]
-            (if (and k (key-pred k))
-              (let [result (f init kv)]
-                (if (reduced? result)
-                  @result
-                  (recur result (next i))))
-              init))))))
+      (f i)))
 
   (store [{:keys [^RocksDB db]} k v]
     (.put db k v))

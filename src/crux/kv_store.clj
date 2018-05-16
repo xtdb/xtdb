@@ -1,15 +1,13 @@
 (ns crux.kv-store)
 
+(defprotocol KvIterator
+  (-seek [this k])
+  (-next [this]))
+
 (defprotocol CruxKvStore
   (open [this])
 
-  (value [this k])
-
-  (seek [this k])
-
-  (seek-first [this prefix-pred key-pred k])
-
-  (seek-and-iterate [this key-pred k])
+  (iterate-with [this f])
 
   (store [this k v])
 

@@ -1,24 +1,29 @@
 (ns crux.memdb
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks])
-  (:import [java.io Closeable]
-           [java.util SortedMap TreeMap]
-           [java.util.function BiFunction]))
+  (:import java.io.Closeable
+           [java.util SortedMap TreeMap]))
+
+(defn- atom-cursor->next! [cursor]
+  (let [[^bytes k2 v :as kv] (first @cursor)]
+    (swap! cursor rest)
+    kv))
 
 (defrecord CruxMemKv [^SortedMap db]
   ks/CruxKvStore
   (open [this]
     (assoc this :db (TreeMap. bu/bytes-comparator)))
 
-  (seek [_ k]
-    (first (.tailMap db k)))
-
-  (value [_ k]
-    (get db k))
-
-  (seek-and-iterate [_ key-pred k]
-    (for [[^bytes k2 v] (.tailMap db k) :while (key-pred k2)]
-      [k2 v]))
+  (iterate-with [_ f]
+    (f
+     (let [c (atom nil)]
+       (reify
+         ks/KvIterator
+         (ks/-seek [this k]
+           (reset! c (.tailMap db k))
+           (atom-cursor->next! c))
+         (ks/-next [this]
+           (atom-cursor->next! c))))))
 
   (store [_ k v]
     (.put db k v))
