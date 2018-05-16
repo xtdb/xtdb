@@ -1,8 +1,7 @@
 (ns crux.kafka
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
-  (:require [taoensso.nippy :as nippy]
-            [crux.db :as db])
+  (:require [crux.db :as db])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
            [org.apache.kafka.clients.admin
@@ -12,37 +11,23 @@
             KafkaConsumer ConsumerRecord ConsumerRebalanceListener]
            [org.apache.kafka.clients.producer
             KafkaProducer ProducerRecord]
-           [org.apache.kafka.common.serialization
-            Deserializer Serializer]
            [org.apache.kafka.common.errors
-            TopicExistsException]))
-
-(deftype NippySerializer []
-  Serializer
-  (close [_])
-  (configure [_ _ _])
-  (serialize [_ _ data]
-    (nippy/freeze data)))
-
-(deftype NippyDeserializer []
-  Deserializer
-  (close [_])
-  (configure [_ _ _])
-  (deserialize [_ _ data]
-    (nippy/thaw data)))
+            TopicExistsException]
+           [crux.kafka.nippy
+            NippySerializer NippyDeserializer]))
 
 (def default-producer-config
   {"enable.idempotence" "true"
    "acks" "all"
-   "key.serializer" (.getName crux.kafka.NippySerializer)
-   "value.serializer" (.getName crux.kafka.NippySerializer)})
+   "key.serializer" (.getName NippySerializer)
+   "value.serializer" (.getName NippySerializer)})
 
 (def default-consumer-config
   {"enable.auto.commit" "false"
    "isolation.level" "read_committed"
    "auto.offset.reset" "earliest"
-   "key.deserializer" (.getName crux.kafka.NippyDeserializer)
-   "value.deserializer" (.getName crux.kafka.NippyDeserializer)})
+   "key.deserializer" (.getName NippyDeserializer)
+   "value.deserializer" (.getName NippyDeserializer)})
 
 (def default-topic-config
   {"message.timestamp.type" "LogAppendTime"})

@@ -25,8 +25,8 @@
                                                 log4j]]]
                    :repl-options {:init-ns user}}
              :uberjar {:aot [crux.main
-                             crux.kafka]}}
-  :aot [crux.kafka]
+                             crux.kafka.nippy]}}
+  :aot [crux.kafka.nippy]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
