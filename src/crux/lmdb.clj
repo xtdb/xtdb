@@ -140,7 +140,7 @@
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
 
-(defrecord CruxLMDBKv [db-dir env env-flags dbi max-size]
+(defrecord CruxLMDBKv [db-dir env env-flags dbi]
   ks/CruxKvStore
   (open [this]
     (let [env-flags (or env-flags default-env-flags)
@@ -150,7 +150,6 @@
         (assoc this
                :env env
                :env-flags env-flags
-               :max-size max-size
                :dbi (dbi-open env))
         (catch Throwable t
           (env-close env)
