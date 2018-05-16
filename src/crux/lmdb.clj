@@ -80,18 +80,6 @@
        (success? (LMDB/mdb_dbi_open txn name 0 ip))
        (.get ip 0)))))
 
-(defn put-bytes->bytes
-  ([^MemoryStack stack txn dbi ^bytes k ^bytes v]
-   (put-bytes->bytes stack txn dbi
-                     (MDBVal/callocStack stack) k (MDBVal/callocStack stack) v))
-  ([^MemoryStack stack txn dbi ^MDBVal kv ^bytes k ^MDBVal dv ^bytes v]
-   (with-open [stack (.push stack)]
-     (let [kb (.flip (.put (.malloc stack (alength k)) k))
-           kv (.mv_data kv kb)
-           dv (.mv_size dv (alength v))]
-       (success? (LMDB/mdb_put txn dbi kv dv LMDB/MDB_RESERVE))
-       (.put (.mv_data dv) v)))))
-
 (defn get-bytes->bytes ^bytes [^MemoryStack stack txn dbi ^bytes k]
   (let [kb (.flip (.put (.malloc stack (alength k)) k))
         kv (.mv_data (MDBVal/callocStack stack) kb)
@@ -101,30 +89,52 @@
       (success? rc)
       (bu/byte-buffer->bytes (.mv_data dv)))))
 
+(defn cursor [^MemoryStack stack txn dbi f]
+  (let [pp (.mallocPointer stack 1)]
+    (success? (LMDB/mdb_cursor_open txn dbi pp))
+    (let [cursor (.get pp 0)]
+      (try
+        (f stack cursor)
+        (finally
+          (LMDB/mdb_cursor_close cursor))))))
+
 (defn cursor->vec [env dbi ^bytes k pred]
   (transaction
    env
-   (fn [^MemoryStack stack ^long txn]
-     (let [pp (.mallocPointer stack 1)]
-       (success? (LMDB/mdb_cursor_open txn dbi pp))
-       (let [cursor (.get pp 0)
-             kb (.flip (.put (.malloc stack (alength k)) k))
-             kv (.mv_data (MDBVal/callocStack stack) kb)
-             dv (MDBVal/callocStack stack)]
-         (try
-           (loop [acc []
-                  flags LMDB/MDB_SET_RANGE]
-             (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
-               (if (= LMDB/MDB_NOTFOUND rc)
-                 acc
-                 (do (success? rc)
-                     (let [k (bu/byte-buffer->bytes (.mv_data kv))]
-                       (if (pred k)
-                         (recur (conj acc [k (bu/byte-buffer->bytes (.mv_data dv))])
-                                LMDB/MDB_NEXT)
-                         acc))))))
-           (finally
-             (LMDB/mdb_cursor_close cursor))))))))
+   (fn [stack txn]
+     (cursor stack txn dbi
+             (fn [^MemoryStack stack cursor]
+               (let [kb (.flip (.put (.malloc stack (alength k)) k))
+                     kv (.mv_data (MDBVal/callocStack stack) kb)
+                     dv (MDBVal/callocStack stack)]
+                 (loop [acc []
+                        flags LMDB/MDB_SET_RANGE]
+                   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
+                     (if (= LMDB/MDB_NOTFOUND rc)
+                       acc
+                       (do (success? rc)
+                           (let [k (bu/byte-buffer->bytes (.mv_data kv))]
+                             (if (pred k)
+                               (recur (conj acc [k (bu/byte-buffer->bytes (.mv_data dv))])
+                                      LMDB/MDB_NEXT)
+                               acc))))))) )))))
+
+(defn cursor-put [env dbi kvs]
+  (transaction
+   env
+   (fn [stack txn]
+     (cursor stack txn dbi
+             (fn [^MemoryStack stack cursor]
+               (let [kv (MDBVal/callocStack stack)
+                     dv (MDBVal/callocStack stack)]
+                 (doseq [[^bytes k ^bytes v] (sort-by first bu/bytes-comparator kvs)]
+                   (with-open [stack (.push stack)]
+                     (let [kb (.flip (.put (.malloc stack (alength k)) k))
+                           kv (.mv_data kv kb)
+                           dv (.mv_size dv (alength v))])
+                     (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+                     (.put (.mv_data dv) v)))))))
+   0))
 
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
@@ -162,22 +172,10 @@
     (cursor->vec env dbi k key-pred))
 
   (store [_ k v]
-    (transaction
-     env
-     (fn [^MemoryStack stack ^long txn]
-       (put-bytes->bytes stack txn dbi k v))
-     0))
+    (cursor-put env dbi [[k v]]))
 
   (store-all! [_ kvs]
-    (transaction
-     env
-     (fn [^MemoryStack stack ^long txn]
-       (let [kv (MDBVal/callocStack stack)
-             dv (MDBVal/callocStack stack)]
-         (doseq [[k v] kvs]
-           (put-bytes->bytes stack txn dbi
-                             kv k dv v))))
-     0))
+    (cursor-put env dbi kvs))
 
   (destroy [this]
     (cio/delete-dir db-dir))
