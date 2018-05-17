@@ -30,7 +30,7 @@
 
 (def default-kafka-broker-config
   {"host" *host*
-   "port" default-kafka-port
+   "port" (str default-kafka-port)
    "broker.id" *broker-id*
    "zookeeper.connect" *zookeeper-connect*
    "offsets.topic.replication.factor" "1"

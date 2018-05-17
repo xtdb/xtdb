@@ -29,18 +29,52 @@
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-h" "--help"]])
 
-(defn version []
+(def default-options (:options (cli/parse-opts [] cli-options)))
+
+(defn parse-version []
   (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
     (->> (doto (Properties.)
            (.load in))
          (into {}))))
 
-(defn start-system [args]
+(def kv)
+
+(defn start-system [options]
+  (let [{:keys [bootstrap-servers
+                group-id
+                topic
+                db-dir
+                kv-backend]
+         :as options} (merge default-options options)
+        kv-store ((case kv-backend
+                    "rocksdb" crux.rocksdb/map->CruxRocksKv
+                    "lmdb" crux.lmdb/map->CruxLMDBKv
+                    "memdb" crux.memdb/map->CruxMemKv) {})
+        options-table (with-out-str
+                        (pp/print-table (for [[k v] options]
+                                          {:key k :value v})))
+        {:strs [version
+                revision]} (parse-version)]
+    (log/info "Starting Crux...")
+    (log/infof "version: %s revision: %s" version revision)
+    (log/info "options:" options-table)
+
+    (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
+                                   (crux.kv-store/open))
+                consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                 "group.id" group-id})
+                admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+      (alter-var-root #'kv (constantly kv))
+      (kafka/create-topic admin-client topic 1 1 {})
+      (let [indexer (crux.core/indexer kv)]
+        (kafka/subscribe-from-stored-offsets indexer consumer topic)
+        (while true
+          (kafka/consume-and-index-entities indexer consumer 100))))))
+
+(defn start-system-from-command-line [args]
   (let [{:keys [options
                 errors
-                summary]} (cli/parse-opts args cli-options)
-        {:strs [version
-                revision]} (version)]
+                summary]} (cli/parse-opts args cli-options)]
     (cond
       (:help options)
       (println summary)
@@ -52,29 +86,4 @@
         (System/exit 1))
 
       :else
-      (let [{:keys [bootstrap-servers
-                    group-id
-                    topic
-                    db-dir
-                    kv-backend]} options
-            kv-store ((case kv-backend
-                        "rocksdb" crux.rocksdb/map->CruxRocksKv
-                        "lmdb" crux.lmdb/map->CruxLMDBKv
-                        "memdb" crux.memdb/map->CruxMemKv) {})
-            options-table (with-out-str
-                            (pp/print-table (for [[k v] options]
-                                              {:key k :value v})))]
-        (log/info "Starting Crux...")
-        (log/infof "version: %s revision: %s" version revision)
-        (log/info "options:" options-table)
-
-        (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
-                                       (crux.kv-store/open))
-                    consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                     "group.id" group-id})
-                    admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-          (kafka/create-topic admin-client topic 1 1 {})
-          (let [indexer (crux.core/indexer kv)]
-            (kafka/subscribe-from-stored-offsets indexer consumer topic)
-            (while true
-              (kafka/consume-and-index-entities indexer consumer 100))))))))
+      (start-system options))))
