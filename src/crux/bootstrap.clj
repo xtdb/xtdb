@@ -1,4 +1,4 @@
-(ns crux.system
+(ns crux.bootstrap
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.tools.logging :as log]
