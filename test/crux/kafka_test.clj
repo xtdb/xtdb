@@ -172,9 +172,9 @@
           (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
 
           (t/testing "transacting and indexing"
-            (with-open [in (io/input-stream mappingbased-properties-file)]
-              (future
-                (time
+            (future
+              (time
+               (with-open [in (io/input-stream mappingbased-properties-file)]
                  (->> (rdf/ntriples-seq in)
                       (rdf/statements->maps)
                       (map #(rdf/use-default-language % :en))
@@ -185,14 +185,14 @@
                                 (k/transact ek/*producer* topic entities)
                                 (add-and-print-progress n (count entities) "transacted"))
                               0)
-                      (reset! transacted))))
-              (time
-               (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
-                      n 0]
-                 (let [n (add-and-print-progress n (count entities) "indexed")]
-                   (when-not (= n @transacted)
-                     (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
-                            (long n))))))))
+                      (reset! transacted)))))
+            (time
+             (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
+                    n 0]
+               (let [n (add-and-print-progress n (count entities) "indexed")]
+                 (when-not (= n @transacted)
+                   (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
+                          (long n)))))))
 
           (t/testing "querying transacted data"
             (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
