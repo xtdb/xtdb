@@ -39,17 +39,10 @@
          (ks/-next [this]
            (atom-cursor->next! c))))))
 
-  (store [_ k v]
-    (.put db k v))
-
-  (store-all! [_ kvs]
+  (store [_ kvs]
     (locking db
       (doseq [[k v] kvs]
         (.put db k v))))
-
-  (destroy [this]
-    (.clear db)
-    (dissoc this :db))
 
   (backup [_ dir]
     (let [file (io/file dir)]

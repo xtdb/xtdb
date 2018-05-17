@@ -155,14 +155,8 @@
   (iterate-with [this f]
     (cursor-iterate env dbi f))
 
-  (store [_ k v]
-    (cursor-put env dbi [[k v]]))
-
-  (store-all! [_ kvs]
+   (store [_ kvs]
     (cursor-put env dbi kvs))
-
-  (destroy [_]
-    (cio/delete-dir db-dir))
 
   (backup [_ dir]
     (env-copy env dir))

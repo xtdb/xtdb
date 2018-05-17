@@ -39,19 +39,12 @@
     (with-open [i (rocks-iterator this)]
       (f i)))
 
-  (store [{:keys [^RocksDB db]} k v]
-    (.put db k v))
-
-  (store-all! [{:keys [^RocksDB db]} kvs]
+  (store [{:keys [^RocksDB db]} kvs]
     (with-open [wb (WriteBatch.)
                 wo (WriteOptions.)]
       (doseq [[k v] kvs]
         (.put wb k v))
       (.write db wo wb)))
-
-  (destroy [this]
-    (with-open [options (Options.)]
-      (RocksDB/destroyDB (.getAbsolutePath (io/file db-dir)) options)))
 
   (backup [{:keys [^RocksDB db]} dir]
     (.createCheckpoint (Checkpoint/create db) (.getAbsolutePath (io/file dir))))

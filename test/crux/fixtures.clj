@@ -38,7 +38,6 @@
         (f)
         (finally
           (kv-store/close *kv*)
-          (kv-store/destroy *kv*)
           (cio/delete-dir db-dir))))))
 
 (defn with-memdb [f]

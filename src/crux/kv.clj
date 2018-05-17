@@ -82,11 +82,11 @@
     (let [key-entity-id (encode frame-index-eid {:index :eid})]
       (kv-store/store
        db
-       key-entity-id
-       (bu/long->bytes
-        (if-let [old-value (kvu/value db key-entity-id)]
-          (inc (bu/bytes->long old-value))
-          1)))
+       [[key-entity-id
+         (bu/long->bytes
+          (if-let [old-value (kvu/value db key-entity-id)]
+            (inc (bu/bytes->long old-value))
+            1))]])
       (bytes->long (kvu/value db key-entity-id)))))
 
 (defn- transact-attr-ident!
@@ -95,11 +95,11 @@
   (let [aid (next-entity-id db)]
     ;; to go from k -> aid
     (kv-store/store db
-                    (encode frame-index-attribute-ident {:index :ident :ident ident})
-                    (long->bytes aid))
+                    [[(encode frame-index-attribute-ident {:index :ident :ident ident})
+                      (long->bytes aid)]])
     ;; to go from aid -> k
     (let [k (encode frame-index-aid {:index :aid :aid aid})]
-      (kv-store/store db k (nippy/freeze ident)))
+      (kv-store/store db [[k (nippy/freeze ident)]]))
     aid))
 
 (defn- attributes-at-rest
@@ -173,7 +173,7 @@
                            (long->bytes eid)]))))
            (transient []))
           (persistent!)
-          (kv-store/store-all! db))
+          (kv-store/store db))
      @tmp-ids->ids)))
 
 (defn -get-at
@@ -235,8 +235,8 @@
 
 (defn store-meta [db k v]
   (kv-store/store db
-                  (encode frame-index-meta {:index :meta :key k})
-                  (nippy/freeze v)))
+                  [[(encode frame-index-meta {:index :meta :key k})
+                    (nippy/freeze v)]]))
 
 (defn read-meta [db k]
   (some->> ^bytes (kvu/value db (encode frame-index-meta {:index :meta :key k}))

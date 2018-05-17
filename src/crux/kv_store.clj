@@ -6,15 +6,7 @@
 
 (defprotocol CruxKvStore
   (open [this])
-
   (iterate-with [this f])
-
-  (store [this k v])
-
-  (store-all! [this kvs])
-
+  (store [this kvs])
   (close [this])
-
-  (destroy [this])
-
   (backup [this dir]))

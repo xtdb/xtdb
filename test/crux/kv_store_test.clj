@@ -11,7 +11,7 @@
 
 (t/deftest test-store-and-value []
   (t/testing "store and retrieve and seek value"
-    (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+    (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
     (t/is (= "Crux" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
     (t/is (= [1 "Crux"] (let [[k v] (kvu/seek f/*kv* (bu/long->bytes 1))]
                           [(bu/bytes->long k) (String. ^bytes v)]))))
@@ -20,15 +20,15 @@
     (t/is (nil? (kvu/value f/*kv* (bu/long->bytes 2))))))
 
 (t/deftest test-can-store-all []
-  (ks/store-all! f/*kv* (map (fn [i]
-                               [(bu/long->bytes i) (bu/long->bytes (inc i))])
-                             (range 10)))
+  (ks/store f/*kv* (map (fn [i]
+                          [(bu/long->bytes i) (bu/long->bytes (inc i))])
+                        (range 10)))
   (doseq [i (range 10)]
     (t/is (= (inc i) (bu/bytes->long (kvu/value f/*kv* (bu/long->bytes i)))))))
 
 (t/deftest test-seek-and-iterate-range []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
-    (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
+    (ks/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
 
   (t/testing "seek range is exclusive"
     (t/is (= [["b" 2] ["c" 3]]
@@ -47,7 +47,7 @@
 
 (t/deftest test-seek-and-iterate-prefix []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
-    (ks/store f/*kv* (.getBytes k) (bu/long->bytes v)))
+    (ks/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
 
   (t/testing "seek within bounded prefix returns all matching keys"
     (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
@@ -61,15 +61,15 @@
 (t/deftest test-backup-and-restore-db
   (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
     (try
-      (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+      (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (ks/backup f/*kv* backup-dir)
       (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
         (t/is (= "Crux" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))
 
         (t/testing "backup and original are different"
-          (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Original"))
-          (ks/store restored-kv (bu/long->bytes 1) (.getBytes "Backup"))
+          (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Original")]])
+          (ks/store restored-kv [[(bu/long->bytes 1) (.getBytes "Backup")]])
           (t/is (= "Original" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
           (t/is (= "Backup" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))))
       (finally
