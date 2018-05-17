@@ -7,9 +7,10 @@
            [java.util SortedMap TreeMap]))
 
 (defn- atom-cursor->next! [cursor]
-  (let [[^bytes k2 v :as kv] (first @cursor)]
+  (let [[k v :as kv] (first @cursor)]
     (swap! cursor rest)
-    kv))
+    (when kv
+      [k v])))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
