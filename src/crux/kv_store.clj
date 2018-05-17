@@ -8,5 +8,5 @@
   (open [this])
   (iterate-with [this f])
   (store [this kvs])
-  (close [this])
+  (^void close [this])
   (backup [this dir]))
