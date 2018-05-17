@@ -11,7 +11,7 @@
     (swap! cursor rest)
     kv))
 
-(defn- persist-db [db dir]
+(defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
     (nippy/freeze-to-file (io/file file "memdb") (into {} db))))
@@ -54,9 +54,9 @@
     (let [file (io/file dir)]
       (when (.exists file)
         (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
-      (persist-db db dir)))
+      (persist-db dir db)))
 
   Closeable
   (close [_]
     (when (and db-dir persist-on-close?)
-      (persist-db db db-dir))))
+      (persist-db db-dir db))))
