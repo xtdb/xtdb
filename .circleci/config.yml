@@ -35,6 +35,6 @@ jobs:
           paths:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
-        
-      # run tests!
+
+      - run: lein version
       - run: lein test
