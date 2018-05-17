@@ -9,7 +9,6 @@ jobs:
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
       - image: circleci/clojure:lein-2.8.1
-      - image: openjdk:8
 
 
     working_directory: ~/crux
@@ -36,5 +35,4 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
 
-      - run: lein version
       - run: lein test
