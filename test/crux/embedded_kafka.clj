@@ -31,11 +31,13 @@
    "transaction.state.log.min.isr" "1"})
 
 (defn write-meta-properties [log-dir broker-id]
-  (with-open [out (io/output-stream (io/file log-dir "meta.properties"))]
-    (doto (Properties.)
-      (.setProperty "version" "0")
-      (.setProperty "broker.id" (str broker-id))
-      (.store out ""))))
+  (let [meta-properties (io/file log-dir "meta.properties")]
+    (when-not (.exists meta-properties)
+      (with-open [out (io/output-stream meta-properties)]
+        (doto (Properties.)
+          (.setProperty "version" "0")
+          (.setProperty "broker.id" (str broker-id))
+          (.store out ""))))))
 
 (defn with-embedded-kafka [f]
   (let [log-dir (cio/create-tmpdir "kafka-log")
