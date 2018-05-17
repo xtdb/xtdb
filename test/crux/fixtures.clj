@@ -7,7 +7,8 @@
             [crux.memdb]
             [crux.io :as cio]
             [clojure.test :as t])
-  (:import [java.util Date]))
+  (:import [java.io Closeable]
+           [java.util Date]))
 
 (def next-eid (atom 0))
 
@@ -35,9 +36,9 @@
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (binding [*kv* (kv-store/open (crux.core/kv db-dir {:kv-store *kv-store*}))]
       (try
-        (f)
+        (with-open [*kv* ^Closeable *kv*]
+          (f))
         (finally
-          (kv-store/close *kv*)
           (cio/delete-dir db-dir))))))
 
 (defn with-memdb [f]
