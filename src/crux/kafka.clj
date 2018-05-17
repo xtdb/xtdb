@@ -1,7 +1,8 @@
 (ns crux.kafka
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
-  (:require [crux.db :as db])
+  (:require [crux.db :as db]
+            [crux.kafka.nippy])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
            [org.apache.kafka.clients.admin
