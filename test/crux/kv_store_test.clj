@@ -59,20 +59,18 @@
     (t/is (= [] (into [] (kvu/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))
 
 (t/deftest test-backup-and-restore-db
-  (if (instance? crux.memdb.CruxMemKv f/*kv-store*)
-    (t/is true "skipping")
-    (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
-      (try
-        (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
-        (cio/delete-dir backup-dir)
-        (ks/backup f/*kv* backup-dir)
-        (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
-          (t/is (= "Crux" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))
+  (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
+    (try
+      (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Crux"))
+      (cio/delete-dir backup-dir)
+      (ks/backup f/*kv* backup-dir)
+      (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
+        (t/is (= "Crux" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))
 
-          (t/testing "backup and original are different"
-            (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Original"))
-            (ks/store restored-kv (bu/long->bytes 1) (.getBytes "Backup"))
-            (t/is (= "Original" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
-            (t/is (= "Backup" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))))
-        (finally
-          (cio/delete-dir backup-dir))))))
+        (t/testing "backup and original are different"
+          (ks/store f/*kv* (bu/long->bytes 1) (.getBytes "Original"))
+          (ks/store restored-kv (bu/long->bytes 1) (.getBytes "Backup"))
+          (t/is (= "Original" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
+          (t/is (= "Backup" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))))
+      (finally
+        (cio/delete-dir backup-dir)))))
