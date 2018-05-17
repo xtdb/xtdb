@@ -10,7 +10,7 @@
 
 (defn value [kvs seek-k]
   (when-let [[k v] (seek kvs seek-k)]
-    (when (zero? (bu/compare-bytes seek-k k Integer/MAX_VALUE))
+    (when (zero? (bu/compare-bytes seek-k k))
       v)))
 
 (defn seek-first [kvs prefix-pred key-pred seek-k]
