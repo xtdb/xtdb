@@ -7,20 +7,32 @@ details and design.
 
 #### Proposal A:
 
-We have 5 indexes:
+We have 5 indexes, spread across a few logical stores:
+
+*Document Store*
+
+* content-hash -> doc
+* aid/value -> content-hash
+
+*Transaction Log*
+
+* eid/business-time/transact-time/tx-id -> content-hash
+* content-hash -> set of eids
+
+*Internals*
 
 * keyword -> id
-* content-hash -> doc
-* eid/business-time/transact-time -> content-hash
-* content-hash -> set of eids
-* aid/value -> content-hash
+
+External ids are assumed to be keywords (idents). This mapping of
+keywords to ids is an optimisation, and could be replaced by MD5 or
+SHA1. This is used for both eid and aid.
 
 Querying works by looking up the attribute and value in the aid/value
 index, and resolving the resulting content hash into a set of entity
 ids which have at any point in time had this value. These entities are
 then resolved using the bitemporal coordinates using the
-eid/business-time/transact-time index, and kept if the content hash is
-the same.
+eid/business-time/transact-time/tx-id index, and kept if the content
+hash is the same.
 
 Following references and joins both work by deserializing the current
 node, and getting all the values for the attribute. Keywords are
@@ -49,20 +61,25 @@ form of causal context. If the transact-time is a date, it should be
 taken in an consistent (monotonic) manner, and should not be assigned
 by the client.
 
+The tx-id is based on the offset of the transaction in the transaction
+log. Both this tx-id, the transact-time and business-time are possible
+to retrieve from the main eid/business-time/transact-time/tx-id index
+without storing them inside the entity itself.
+
 It's worth noting that the content-hash -> doc and aid/value ->
 content-hash indexes form their own key value store with secondary
 indexes. The content-hash -> doc could be represented as a compacted
 topic in Kafka, which could be spread on many partitions and topics
 (for various types of data and retention). In this case the
 transactions themselves could simply contain
-eid/business-time/transact-time -> content-hash or variants there of,
-pointing to the key value topic and is kept smaller. A content hash of
-nil would be a retraction of the full entity. CAS can also be
-implemented via supplying two content hashes. Upserts are slightly
-trickier in this scenario, as this would depend on Crux merging the
-documents and generate a new content hash this could happen on the
-client side in conjunction with CAS, so that one knows that one
-updates the expected version.
+eid/business-time/transact-time/tx-id -> content-hash or variants
+there of, pointing to the key value topic and is kept smaller. A
+content hash of nil would be a retraction of the full entity. CAS can
+also be implemented via supplying two content hashes. Upserts are
+slightly trickier in this scenario, as this would depend on Crux
+merging the documents and generate a new content hash this could
+happen on the client side in conjunction with CAS, so that one knows
+that one updates the expected version.
 
 This way the values in the key value topic can be purged (evicted)
 independently of rewriting the main log by overwriting them with
@@ -120,6 +137,14 @@ always taken from the message itself:
 [:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
 "090622a35d4b579d2fcfebf823821298711d3867"]
 ```
+
+While the business time often might stored as a field inside the
+entity itself, this is not always the case and not mandatory, and the
+content hash would change simply by updating a document even without
+any other "real" changes. This information is stored in the
+eid/business-time/transact-time/tx-id index key so it can be accessed
+regardless, and entities could optionally be enriched with this meta
+data on read, see above.
 
 #### Proposal B:
 
