@@ -1,8 +1,9 @@
 (ns dev
-  (:require [crux.embedded-kafka :as ek]
+  (:require [clojure.java.io :as io]
+            [clojure.tools.namespace.repl :as tn]
+            [crux.embedded-kafka :as ek]
             [crux.bootstrap :as b]
-            [crux.io :as cio]
-            [clojure.tools.namespace.repl :as tn])
+            [crux.io :as cio])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [java.util.concurrent Future]))
@@ -10,19 +11,15 @@
 (def zk nil)
 (def kafka nil)
 (def kv nil)
-(def system nil)
+(def crux nil)
 
-(def zk-snapshot-dir "zk-snapshot")
-(def zk-log-dir "zk-log")
-(def kafka-log-dir "kafka-log")
-(def db-dir "data")
+(def storage-dir "dev-storage")
 
 (defn start-zk []
-  (alter-var-root #'zk (some-fn identity (fn [_] (ek/start-zookeeper zk-snapshot-dir zk-log-dir))))
-  :started)
-
-(defn start-kafka []
-  (alter-var-root #'kafka (some-fn identity (fn [_] (ek/start-kafka-broker {"log.dir" kafka-log-dir}))))
+  (alter-var-root #'zk (some-fn identity
+                                (fn [_]
+                                  (ek/start-zookeeper (io/file storage-dir "zk-snapshot")
+                                                      (io/file storage-dir "zk-log")))))
   :started)
 
 (defn stop-zk []
@@ -31,16 +28,23 @@
                     (some-> zk-server .shutdown)))
   :stopped)
 
+(defn start-kafka []
+  (alter-var-root #'kafka
+                  (some-fn identity
+                           (fn [_]
+                             (ek/start-kafka-broker {"log.dir"
+                                                     (.getAbsolutePath (io/file storage-dir "kafka-log"))}))))
+  :started)
+
 (defn stop-kafka []
   (alter-var-root #'kafka
                   (fn [^KafkaServerStartable kafka]
-                    (some-> kafka .shutdown)))
+                    (some-> kafka .shutdown)
+                    (some-> kafka .awaitShutdown)))
   :stopped)
 
-(defn start-system []
-  (start-zk)
-  (start-kafka)
-  (alter-var-root #'system
+(defn start-crux []
+  (alter-var-root #'crux
                   (some-fn identity
                            (fn [_]
                              (future
@@ -50,21 +54,28 @@
                                                  (let [kv (apply f args)]
                                                    (alter-var-root #'kv (constantly kv))
                                                    kv)))]
-                                 (b/start-system {:db-dir db-dir}))))))
-  :started)
+                                 (b/start-system {:db-dir (io/file storage-dir "data")})))))))
 
-(defn stop-system []
-  (alter-var-root #'system
+(defn stop-crux []
+  (alter-var-root #'crux
                   (fn [system]
                     (some-> system future-cancel)
                     nil))
-  (alter-var-root #'kv (constantly nil))
+  (alter-var-root #'kv (constantly nil)))
+
+(defn start-system []
+  (start-zk)
+  (start-kafka)
+  (start-crux)
+  :started)
+
+(defn stop-system []
+  (stop-crux)
   (stop-kafka)
   (stop-zk)
   :stopped)
 
 (defn delete-storage []
   (stop-system)
-  (doseq [dir [zk-snapshot-dir zk-log-dir kafka-log-dir db-dir]]
-    (cio/delete-dir dir))
+  (cio/delete-dir storage-dir)
   :ok)

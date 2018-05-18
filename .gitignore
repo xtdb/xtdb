@@ -7,6 +7,4 @@ target
 *.log
 /setprofiler.sh
 /data
-/kafka-log
-/zk-log
-/zk-snapshot
+/dev-storage
