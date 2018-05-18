@@ -74,12 +74,11 @@
   ([snapshot-dir log-dir ^String host ^long port]
    (let [tick-time 500
          max-connections 16
-         server (ZooKeeperServer. (io/file snapshot-dir) (io/file log-dir) tick-time)
-         server-cnxn-factory (doto (NIOServerCnxnFactory/createFactory)
-                               (.configure (InetSocketAddress. host port)
-                                           max-connections)
-                               (.startup server))]
-     server-cnxn-factory)))
+         server (ZooKeeperServer. (io/file snapshot-dir) (io/file log-dir) tick-time)]
+     (doto (NIOServerCnxnFactory/createFactory)
+       (.configure (InetSocketAddress. host port)
+                   max-connections)
+       (.startup server)))))
 
 (defn with-embedded-zookeeper [f]
   (let [snapshot-dir (cio/create-tmpdir "zk-snapshot")

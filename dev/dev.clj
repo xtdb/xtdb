@@ -5,8 +5,7 @@
             [crux.bootstrap :as b]
             [crux.io :as cio])
   (:import [kafka.server KafkaServerStartable]
-           [org.apache.zookeeper.server ServerCnxnFactory]
-           [java.util.concurrent Future]))
+           [org.apache.zookeeper.server ServerCnxnFactory]))
 
 (def zk nil)
 (def kafka nil)
