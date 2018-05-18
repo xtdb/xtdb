@@ -104,14 +104,25 @@
       (kv-store/store db [[k (nippy/freeze ident)]]))
     id))
 
+(defn- lookup-ident
+  "Look up the ID for a given ident."
+  [db ident]
+  (some->> {:index :ident :ident ident}
+           (encode frame-index-ident)
+           (kvu/value db)
+           bytes->long))
+
+(defn- ident->id!
+  "Look up the ID for a given ident. Create it if not present."
+  [{:keys [attributes] :as db} ident]
+  (or (lookup-ident db ident)
+      (transact-ident! db ident)))
+
 (defn- lookup-attr-ident-aid
   "Look up the attribute ID for a given ident."
   [{:keys [attributes] :as db} ident]
   (or (get @attributes ident)
-      (let [aid (or (some->> {:index :ident :ident ident}
-                             (encode frame-index-ident)
-                             (kvu/value db)
-                             bytes->long))]
+      (let [aid (or (lookup-ident db ident))]
         (swap! attributes assoc ident aid)
         aid)))
 
@@ -147,9 +158,11 @@
      (->> (mapcat entity->txs txs)
           (reduce
            (fn [txs-to-put [eid k v]]
-             (let [eid (or (and (number? eid) (pos? (long eid)) eid)
-                           (get @tmp-ids->ids eid)
-                           (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
+             (let [eid (if (keyword? eid)
+                         (ident->id! db eid)
+                         (or (and (number? eid) (pos? (long eid)) eid)
+                             (get @tmp-ids->ids eid)
+                             (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid)))
                    aid (attr-ident->aid! db k)
                    value-bytes (nippy/freeze v)]
                (cond-> txs-to-put
@@ -178,7 +191,8 @@
   ([db eid ident ^Date ts ^Date tx-ts]
    (let [aid (lookup-attr-ident-aid db ident)]
      (when aid
-       (let [seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
+       (let [eid (if (keyword? eid) (lookup-ident db eid) eid)
+             seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
                                    {:index :eat :eid eid :aid aid :ts ts})]
          (when-let [[k v] (kvu/seek-first db
                                           #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))

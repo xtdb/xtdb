@@ -90,6 +90,10 @@
   (t/is (= :bar (cr/-get-at *kv* test-eid :foo)))
   (t/is (= {:foo 1} @(:attributes *kv*))))
 
+(t/deftest test-write-entity-id-as-keyword
+  (cr/-put *kv* [[:a-keyword-1 :foo :bar]])
+  (t/is (= :bar (cr/-get-at *kv* :a-keyword-1 :foo))))
+
 (t/deftest test-primitives
   (cr/-put *kv* [[test-eid :foo "foo1"]])
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo)))
