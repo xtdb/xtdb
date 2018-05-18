@@ -67,16 +67,6 @@
     (t/is (= "Freda"
              (:name (cr/entity *kv* eid))))))
 
-;; TODO - re-establish schema checking (existing of ident and type) as
-;; middleware?
-#_(t/deftest test-invalid-attribute-exception
-  (try
-    (cr/-put *kv* [[test-eid :unknown-attribute "foo1"]] #inst "1986-10-22")
-    (assert false "Exception expected")
-    (catch IllegalArgumentException e
-      (t/is (= "Unrecognised schema attribute: :unknown-attribute"
-               (.getMessage e))))))
-
 (t/deftest test-transact-schema-attribute
   (cr/-put *kv* [[test-eid :new-ident "foo1"]])
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :new-ident)))
