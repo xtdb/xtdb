@@ -129,10 +129,8 @@
   (cr/-put *kv* [[test-eid :foo (byte-array [1 2])]])
   (t/is (bu/bytes=? (byte-array [1 2]) (cr/-get-at *kv* test-eid :foo)))
 
-
   (cr/-put *kv* [[test-eid :foo (URI. "http://google.com/")]])
   (t/is (= (URI. "http://google.com/") (cr/-get-at *kv* test-eid :foo)))
-
 
   (cr/-put *kv* [[test-eid :foo [1 2]]])
   (t/is (= [1 2] (cr/-get-at *kv* test-eid :foo))))
