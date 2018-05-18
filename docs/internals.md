@@ -49,6 +49,30 @@ form of causal context. If the transact-time is a date, it should be
 taken in an consistent (monotonic) manner, and should not be assigned
 by the client.
 
+It's worth noting that the content-hash -> doc and aid/value ->
+content-hash indexes form their own key value store with secondary
+indexes. The content-hash -> doc could be represented as a compacted
+topic in Kafka, which could be spread on many partitions and topics
+(for various types of data and retention). In this case the
+transactions themselves could simply contain
+eid/business-time/transact-time -> content-hash or variants there of,
+pointing to the key value topic and is kept smaller. A content hash of
+nil would be a retraction of the full entity. CAS can also be
+implemented via supplying two content hashes. Upserts are slightly
+trickier in this scenario, as this would depend on Crux merging the
+documents and generate a new content hash this could happen on the
+client side in conjunction with CAS, so that one knows that one
+updates the expected version.
+
+This way the values in the key value topic can be purged (evicted)
+independently of rewriting the main log by overwriting them with
+either nil or in a more advanced usage, a scrubbed version of the data
+(this has a drawback of breaking the hash, so would need some meta
+data). For full erasure, the key value store also need to keep track
+of the keys a content-hash have in the aid/value index, as these need
+to be purged as well, but the set can conceivably change if the
+indexing code changes.
+
 #### Proposal B:
 
 This is the initially implemented approach. This excludes
