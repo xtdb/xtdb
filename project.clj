@@ -14,7 +14,8 @@
                  [org.lwjgl/lwjgl-lmdb "3.1.6"]
                  [org.apache.kafka/kafka-clients "1.1.0"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2"]]
-  :profiles {:dev {:dependencies [[org.apache.kafka/kafka_2.11 "1.1.0"]
+  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
+                                  [org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [cheshire "5.8.0"
                                    :exclusions [com.fasterxml.jackson.core/jackson-core]]
                                   [org.apache.zookeeper/zookeeper "3.4.12"
@@ -23,6 +24,7 @@
                                                 org.apache.yetus/audience-annotations
                                                 org.slf4j/slf4j-log4j12
                                                 log4j]]]
+                   :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :aot [crux.kafka.nippy
         crux.main]

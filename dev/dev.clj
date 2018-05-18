@@ -1,8 +1,9 @@
-(ns crux.local-system
+(ns dev
   (:require [crux.embedded-kafka :as ek]
             [crux.bootstrap :as b]
             [crux.kv-store :as kv-store]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [clojure.tools.namespace.repl :as repl])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [java.util.concurrent Future]))
