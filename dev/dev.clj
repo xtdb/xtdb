@@ -82,45 +82,42 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn ^Closeable new-crux [{:keys [storage-dir]}]
+(defn ^Closeable new-kv-store [{:keys [storage-dir]
+                                :as config}]
+  (b/start-kv-store (assoc config :db-dir (io/file storage-dir "data"))))
+
+(defn ^Closeable new-index-node [kv-store config]
   (closeable
-   (let [kv-promise (promise)]
-     {:kv kv-promise
-      :crux (future
-              (with-redefs [b/start-kv-store
-                            (let [f b/start-kv-store]
-                              (fn [& args]
-                                (let [kv (apply f args)]
-                                  (deliver kv-promise kv)
-                                  kv)))]
-                (b/start-system
-                 {:db-dir (io/file storage-dir "data")})))})
-   (fn [{:keys [crux]}]
+   (future
+     (b/start-system kv-store {}))
+   (fn [crux]
      (close-future crux))))
 
 (defn new-crux-system [config]
   (fn [do-with-system]
     (with-open [zk (new-zk config)
                 kafka (new-kafka config)
-                crux (new-crux config)]
-      (do-with-system {:zk @zk
-                       :kafka @kafka
-                       :crux (:crux @crux)
-                       :kv @(:kv @crux)}))))
+                kv-store (new-kv-store config)
+                index-node (new-index-node kv-store config)]
+      (do-with-system (merge config {:zk @zk
+                                     :kafka @kafka
+                                     :kv-store kv-store
+                                     :index-node @index-node})))))
 
-(def config {:storage-dir "dev-storage"})
+(def config {:storage-dir "dev-storage"
+             :kv-backend "rocksdb"})
 
 (def with-crux-system
   (new-crux-system config))
-
-(defn delete-storage []
-  (stop)
-  (cio/delete-dir (:storage-dir config))
-  :ok)
 
 (def system)
 
 (alter-var-root
  #'init (constantly
-         #(with-crux-system (-> (comp deref :crux)
+         #(with-crux-system (-> (comp deref :index-node)
                                 (with-system-var #'system)))))
+
+(defn delete-storage []
+  (stop)
+  (cio/delete-dir (:storage-dir config))
+  :ok)
