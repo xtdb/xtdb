@@ -6,42 +6,45 @@
             [crux.io :as cio])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
-           [clojure.lang IDeref]
+           [clojure.lang IDeref Var$Unbound]
            [java.io Closeable]
            [java.util.concurrent CancellationException]))
 
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
-(defonce instance (atom nil))
-(def init (atom #(throw (IllegalStateException. "init not set."))))
+(def instance)
+(def init)
 
 (defn close-future [future]
-  (future-cancel future)
   (try
+    (future-cancel future)
     @future
     (catch CancellationException ignore)))
 
 (defn start []
-  (swap! instance #(if (or (nil? %) (realized? %))
-                     (future-call @init)
+  (alter-var-root
+   #'instance #(cond (not (bound? #'init))
+                     (throw (IllegalStateException. "init not set."))
+
+                     (or (nil? %)
+                         (instance? Var$Unbound %)
+                         (realized? %))
+                     (future-call init)
+
+                     :else
                      (throw (IllegalStateException. "Already running."))))
   :starting)
 
 (defn stop []
-  (some-> instance deref close-future)
+  (when (and (bound? #'instance)
+             (future? instance))
+    (alter-var-root #'instance close-future))
   :stopped)
 
 (defn reset []
   (stop)
   (tn/refresh :after 'dev/start))
-
-(defn publishing-state [do-with-system target-atom]
-  #(do (reset! target-atom %)
-       (try
-         (do-with-system %)
-         (finally
-           (reset! target-atom nil)))))
 
 (defn ^Closeable closeable
   ([value]
@@ -49,9 +52,19 @@
   ([value close]
    (reify
      IDeref
-     (deref [_] value)
+     (deref [_]
+       value)
      Closeable
-     (close [_] (close value)))))
+     (close [_]
+       (close value)))))
+
+(defn with-system-var [do-with-system target-var]
+  (fn [system]
+    (do (alter-var-root target-var (constantly system))
+        (try
+          (do-with-system system)
+          (finally
+            (alter-var-root target-var (constantly nil)))))))
 
 (defn ^Closeable new-zk [{:keys [storage-dir]}]
   (closeable
@@ -100,11 +113,14 @@
 (def with-crux-system
   (new-crux-system config))
 
-(defonce system (atom nil))
-(reset! init #(with-crux-system (-> (comp deref :crux)
-                                    (publishing-state system))))
-
 (defn delete-storage []
   (stop)
   (cio/delete-dir (:storage-dir config))
   :ok)
+
+(def system)
+
+(alter-var-root
+ #'init (constantly
+         #(with-crux-system (-> (comp deref :crux)
+                                (with-system-var #'system)))))
