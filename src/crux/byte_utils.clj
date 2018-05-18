@@ -19,10 +19,11 @@
       (.flip)
       (.getLong)))
 
-(def ^MessageDigest md5-algo (MessageDigest/getInstance "MD5"))
-
 (defn md5 [^bytes bytes]
-  (.digest md5-algo bytes))
+  (.digest (MessageDigest/getInstance "MD5") bytes))
+
+(defn sha1 [^bytes bytes]
+  (.digest (MessageDigest/getInstance "SHA1") bytes))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))
