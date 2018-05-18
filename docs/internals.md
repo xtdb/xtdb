@@ -152,7 +152,7 @@ This is the initially implemented approach. This excludes
 bitemporality for now; an imminent task is to modify this strategy to
 accomodate it, or move towards another strategy.
 
-* keyword -> attribute id (originally `frame-index-attribute-ident`)
+* keyword -> attribute id (originally `frame-index-ident`)
 * attribute id > keyword (originally `frame-index-aid`)
 * content-hash/transact-time -> entity id (originally
   `frame-index-avt`)

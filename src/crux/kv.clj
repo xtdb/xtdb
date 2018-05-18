@@ -12,7 +12,7 @@
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
-  (c/compile-enum :eat :avt :eid :aid :ident :meta))
+  (c/compile-enum :eat :avt :eid :ident-id :ident :meta))
 
 (def frame-index-eat
   "The EAT index is used for providing rapid access to a value of an
@@ -35,16 +35,16 @@
                    :ts :reverse-ts
                    :eid :id))
 
-(def frame-index-aid
+(def frame-index-ident-id
   "The AID index is used to provide a mapping from attribute ID to
   information about the attribute, including the attribute's keyword
   ident."
   (c/compile-frame :index frame-index-enum
-                   :aid :id))
+                   :id :id))
 
-(def frame-index-attribute-ident
-  "The attribute-ident index is used to provide a mapping from
-  attribute keyword ident to the attribute ID."
+(def frame-index-ident
+  "The ident index is used to provide a mapping from keyword ident to
+  a numeric ID."
   (c/compile-frame :index frame-index-enum
                    :ident :keyword))
 
@@ -89,25 +89,25 @@
             1))]])
       (bytes->long (kvu/value db key-entity-id)))))
 
-(defn- transact-attr-ident!
+(defn- transact-ident!
   [db ident]
   {:pre [ident]}
-  (let [aid (next-entity-id db)]
-    ;; to go from k -> aid
+  (let [id (next-entity-id db)]
+    ;; to go from k -> id
     (kv-store/store db
-                    [[(encode frame-index-attribute-ident {:index :ident :ident ident})
-                      (long->bytes aid)]])
-    ;; to go from aid -> k
-    (let [k (encode frame-index-aid {:index :aid :aid aid})]
+                    [[(encode frame-index-ident {:index :ident :ident ident})
+                      (long->bytes id)]])
+    ;; to go from id -> k
+    (let [k (encode frame-index-ident-id {:index :ident-id :id id})]
       (kv-store/store db [[k (nippy/freeze ident)]]))
-    aid))
+    id))
 
 (defn- lookup-attr-ident-aid
   "Look up the attribute ID for a given ident."
   [{:keys [attributes] :as db} ident]
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
-                             (encode frame-index-attribute-ident)
+                             (encode frame-index-ident)
                              (kvu/value db)
                              bytes->long))]
         (swap! attributes assoc ident aid)
@@ -118,12 +118,12 @@
   present."
   [{:keys [attributes] :as db} ident]
   (or (lookup-attr-ident-aid db ident)
-      (let [aid (transact-attr-ident! db ident)]
+      (let [aid (transact-ident! db ident)]
         (swap! attributes assoc ident aid)
         aid)))
 
 (defn attr-aid->ident [db aid]
-  (if-let [v (kvu/value db (encode frame-index-aid {:index :aid :aid aid}))]
+  (if-let [v (kvu/value db (encode frame-index-ident-id {:index :ident-id :id aid}))]
     (nippy/thaw v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
