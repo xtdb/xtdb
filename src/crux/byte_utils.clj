@@ -25,17 +25,33 @@
 (defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA1") bytes))
 
+(def ^"[Ljava.lang.Object;"
+  byte->hex (object-array (for [n (range 256)]
+                            (char-array (format "%02x" n)))))
+
 (defn bytes->hex ^String [^bytes bytes]
-  (format (str "%0" (bit-shift-left (alength bytes) 1) "x")
-          (BigInteger. 1 bytes)))
+  (let [len (alength bytes)
+        acc (char-array (bit-shift-left len 1))]
+    (loop [idx 0]
+      (if (= idx len)
+        (String. acc)
+        (let [cs ^chars (aget byte->hex (Byte/toUnsignedInt (aget bytes idx)))
+              acc-idx (bit-shift-left idx 1)]
+          (doto acc
+            (aset acc-idx (aget cs 0))
+            (aset (unchecked-inc-int acc-idx) (aget cs 1)))
+          (recur (unchecked-inc-int idx)))))))
 
 (defn hex->bytes ^bytes [^String hex]
-  (let [ba (.toByteArray (BigInteger. hex 16))]
-    (if (= (count hex) (bit-shift-left (alength ba) 1))
-      ba
-      (let [padded (byte-array (unchecked-inc-int (alength ba)))]
-        (System/arraycopy ba 0 padded 1 (alength ba))
-        padded))))
+  (let [len (count hex)
+        acc (byte-array (bit-shift-right len 1))]
+    (loop [idx 0]
+      (if (= idx len)
+        acc
+        (let [b (unchecked-byte (bit-or (bit-shift-left (Character/digit (.charAt hex idx) 16) 4)
+                                        (Character/digit (.charAt hex (unchecked-inc-int idx)) 16)))]
+          (aset acc (bit-shift-right idx 1) b)
+          (recur (unchecked-add-int idx 2)))))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))
