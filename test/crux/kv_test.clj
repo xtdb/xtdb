@@ -88,6 +88,11 @@
   (t/is (= #{:foo/new-ident2}
            (set (keys @(:attributes *kv*))))))
 
+(t/deftest test-reinstate-attributes
+  (cr/-put *kv* [[test-eid :foo :bar]])
+  (reset! (:attributes *kv*) nil)
+  (t/is (= :bar (cr/-get-at *kv* test-eid :foo))))
+
 (t/deftest test-primitives
   (cr/-put *kv* [[test-eid :foo "foo1"]])
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo)))

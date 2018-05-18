@@ -111,15 +111,14 @@
                             (into {} (map (fn [[k v]]
                                             (let [attr (nippy/thaw v)
                                                   k (c/decode frame-index-aid k)]
-                                              [(:crux.kv.attr/ident attr)
-                                               (:aid k)])))
+                                              [attr (:aid k)])))
                                   r)))))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not
   present."
   [{:keys [attributes] :as db} ident]
-  (if (nil? @attributes)
+  (when (nil? @attributes)
     (reset! attributes (attributes-at-rest db)))
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
