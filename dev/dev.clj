@@ -16,52 +16,58 @@
 (def storage-dir "dev-storage")
 
 (defn start-zk []
-  (alter-var-root #'zk (some-fn identity
-                                (fn [_]
-                                  (ek/start-zookeeper (io/file storage-dir "zk-snapshot")
-                                                      (io/file storage-dir "zk-log")))))
+  (alter-var-root
+   #'zk (some-fn identity
+                 (fn [_]
+                   (ek/start-zookeeper
+                    (io/file storage-dir "zk-snapshot")
+                    (io/file storage-dir "zk-log")))))
   :started)
 
 (defn stop-zk []
-  (alter-var-root #'zk
-                  (fn [^ServerCnxnFactory zk-server]
-                    (some-> zk-server .shutdown)))
+  (alter-var-root
+   #'zk (fn [^ServerCnxnFactory zk-server]
+          (some-> zk-server .shutdown)))
   :stopped)
 
 (defn start-kafka []
-  (alter-var-root #'kafka
-                  (some-fn identity
-                           (fn [_]
-                             (ek/start-kafka-broker {"log.dir"
-                                                     (.getAbsolutePath (io/file storage-dir "kafka-log"))}))))
+  (alter-var-root
+   #'kafka (some-fn identity
+                    (fn [_]
+                      (ek/start-kafka-broker
+                       {"log.dir" (.getAbsolutePath (io/file storage-dir "kafka-log"))}))))
   :started)
 
 (defn stop-kafka []
-  (alter-var-root #'kafka
-                  (fn [^KafkaServerStartable kafka]
-                    (some-> kafka .shutdown)
-                    (some-> kafka .awaitShutdown)))
+  (alter-var-root
+   #'kafka (fn [^KafkaServerStartable kafka]
+             (some-> kafka .shutdown)
+             (some-> kafka .awaitShutdown)))
   :stopped)
 
 (defn start-crux []
-  (alter-var-root #'crux
-                  (some-fn identity
-                           (fn [_]
-                             (future
-                               (with-redefs [b/start-kv-store
-                                             (let [f b/start-kv-store]
-                                               (fn [& args]
-                                                 (let [kv (apply f args)]
-                                                   (alter-var-root #'kv (constantly kv))
-                                                   kv)))]
-                                 (b/start-system {:db-dir (io/file storage-dir "data")})))))))
+  (alter-var-root
+   #'crux (some-fn identity
+                   (fn [_]
+                     (future
+                       (with-redefs [b/start-kv-store
+                                     (let [f b/start-kv-store]
+                                       (fn [& args]
+                                         (let [kv (apply f args)]
+                                           (alter-var-root #'kv (constantly kv))
+                                           kv)))]
+                         (b/start-system
+                          {:db-dir (io/file storage-dir "data")}))))))
+  :started)
 
 (defn stop-crux []
-  (alter-var-root #'crux
-                  (fn [system]
-                    (some-> system future-cancel)
-                    nil))
-  (alter-var-root #'kv (constantly nil)))
+  (alter-var-root
+   #'crux (fn [system]
+            (some-> system future-cancel)
+            nil))
+  (alter-var-root
+   #'kv (constantly nil))
+  :stopped)
 
 (defn start-system []
   (start-zk)
