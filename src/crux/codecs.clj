@@ -5,6 +5,8 @@
            [java.net URI]
            [java.util Date UUID]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (def ^{:tag 'long}
   max-timestamp (.getTime #inst "9999-12-30"))
 
@@ -56,13 +58,13 @@
                              (when-not datatype
                                (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
                              [k datatype]))))
-        fixed-length (reduce + (for [[k [length]] pairs :when (number? length)]
-                                 length))
+        fixed-length (long (reduce + (for [[k [length]] pairs :when (number? length)]
+                                       length)))
         length-fn (first (for [[k [length-f]] pairs :when (fn? length-f)]
-                           (fn [m] (length-f (get m k)))))]
+                           (fn ^long [m] (length-f (get m k)))))]
     (reify Codec
       (encode [this m]
-        (let [length (if length-fn (+ fixed-length (length-fn m)) fixed-length)
+        (let [length (if length-fn (+ fixed-length ^long (length-fn m)) fixed-length)
               b (ByteBuffer/allocate length)]
           (doseq [[k [_ f]] pairs
                   :let [v (get m k)]]

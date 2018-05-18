@@ -10,6 +10,8 @@
   (:import [java.nio ByteBuffer]
            [java.util Date]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (def frame-index-enum
   "An enum byte used to identity a particular index."
   (c/compile-enum :eat :avt :eid :ident-id :ident :meta))
@@ -145,7 +147,7 @@
      (->> (mapcat entity->txs txs)
           (reduce
            (fn [txs-to-put [eid k v]]
-             (let [eid (or (and (number? eid) (pos? eid) eid)
+             (let [eid (or (and (number? eid) (pos? (long eid)) eid)
                            (get @tmp-ids->ids eid)
                            (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid))
                    aid (attr-ident->aid! db k)

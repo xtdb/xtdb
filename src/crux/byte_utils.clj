@@ -5,6 +5,8 @@
            [java.security MessageDigest]
            [java.util Arrays Comparator UUID]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn hash-keyword [k]
   (hash (str (namespace k) (name k))))
 
@@ -13,7 +15,7 @@
       (.putLong l)
       (.array)))
 
-(defn bytes->long [data]
+(defn bytes->long ^long [data]
   (-> (ByteBuffer/allocate 8)
       (.put data 0 8)
       (.flip)
@@ -58,9 +60,9 @@
     (->> (.get b))))
 
 (defn compare-bytes
-  ([^bytes a ^bytes b]
+  (^long [^bytes a ^bytes b]
    (compare-bytes a b Integer/MAX_VALUE))
-  ([^bytes a ^bytes b max-length]
+  (^long [^bytes a ^bytes b max-length]
    (let [a-length (int (alength a))
          b-length (int (alength b))
          max-length (int max-length)]
