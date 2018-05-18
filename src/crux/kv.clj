@@ -102,23 +102,9 @@
       (kv-store/store db [[k (nippy/freeze ident)]]))
     aid))
 
-(defn- attributes-at-rest
-  "Sequence of all attributes in the DB."
-  [db]
-  (let [k (encode frame-index-key-prefix {:index :aid})]
-    (kvu/seek-and-iterate db (partial bu/bytes=? k) k
-                          (fn [r]
-                            (into {} (map (fn [[k v]]
-                                            (let [attr (nippy/thaw v)
-                                                  k (c/decode frame-index-aid k)]
-                                              [attr (:aid k)])))
-                                  r)))))
-
 (defn- lookup-attr-ident-aid
   "Look up the attribute ID for a given ident."
   [{:keys [attributes] :as db} ident]
-  (when (nil? @attributes)
-    (reset! attributes (attributes-at-rest db)))
   (or (get @attributes ident)
       (let [aid (or (some->> {:index :ident :ident ident}
                              (encode frame-index-attribute-ident)

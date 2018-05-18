@@ -32,7 +32,7 @@
    (kv db-dir {}))
   ([db-dir {:keys [kv-store] :as opts}]
    (merge (or kv-store (rocksdb/map->CruxRocksKv {}))
-          {:db-dir db-dir :attributes (atom nil)})))
+          {:db-dir db-dir :attributes (atom {})})))
 
 (defn as-of [kv ts]
   (map->KvDatasource {:kv kv :ts ts}))

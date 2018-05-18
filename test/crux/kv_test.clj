@@ -84,12 +84,8 @@
   (t/is (= "foo1" (cr/-get-at *kv* test-eid :foo #inst "1986-10-22"))))
 
 (t/deftest test-get-attributes
-  (cr/-put *kv* [[test-eid :foo/new-ident2 :a]])
-  (t/is (= #{:foo/new-ident2}
-           (set (keys @(:attributes *kv*))))))
-
-(t/deftest test-reinstate-attributes
   (cr/-put *kv* [[test-eid :foo :bar]])
+  (t/is (= {:foo 1} @(:attributes *kv*)))
   (reset! (:attributes *kv*) nil)
   (t/is (= :bar (cr/-get-at *kv* test-eid :foo)))
   (t/is (= {:foo 1} @(:attributes *kv*))))
