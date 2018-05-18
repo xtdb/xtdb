@@ -53,6 +53,8 @@ across multiple topics and partitions remains a problem.
 Crux will likely support a range of models here, as there is unlikely
 to be one size that fits all.
 
++ [Coordination Avoidance in Database
+  Systems](https://arxiv.org/abs/1402.2237)
 + [Jepsen](https://github.com/jepsen-io/jepsen)
 
 ### Throughput
