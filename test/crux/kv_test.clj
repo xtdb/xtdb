@@ -91,7 +91,8 @@
 (t/deftest test-reinstate-attributes
   (cr/-put *kv* [[test-eid :foo :bar]])
   (reset! (:attributes *kv*) nil)
-  (t/is (= :bar (cr/-get-at *kv* test-eid :foo))))
+  (t/is (= :bar (cr/-get-at *kv* test-eid :foo)))
+  (t/is (= {:foo 1} @(:attributes *kv*))))
 
 (t/deftest test-primitives
   (cr/-put *kv* [[test-eid :foo "foo1"]])

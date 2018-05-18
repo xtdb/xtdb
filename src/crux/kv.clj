@@ -114,9 +114,8 @@
                                               [attr (:aid k)])))
                                   r)))))
 
-(defn- attr-ident->aid!
-  "Look up the attribute ID for a given ident. Create it if not
-  present."
+(defn- lookup-attr-ident-aid
+  "Look up the attribute ID for a given ident."
   [{:keys [attributes] :as db} ident]
   (when (nil? @attributes)
     (reset! attributes (attributes-at-rest db)))
@@ -124,8 +123,16 @@
       (let [aid (or (some->> {:index :ident :ident ident}
                              (encode frame-index-attribute-ident)
                              (kvu/value db)
-                             bytes->long)
-                    (transact-attr-ident! db ident))]
+                             bytes->long))]
+        (swap! attributes assoc ident aid)
+        aid)))
+
+(defn- attr-ident->aid!
+  "Look up the attribute ID for a given ident. Create it if not
+  present."
+  [{:keys [attributes] :as db} ident]
+  (or (lookup-attr-ident-aid db ident)
+      (let [aid (transact-attr-ident! db ident)]
         (swap! attributes assoc ident aid)
         aid)))
 
@@ -181,15 +188,16 @@
   ([db eid ident ts]
    (-get-at db eid ident ts nil))
   ([db eid ident ^Date ts ^Date tx-ts]
-   (let [aid (attr-ident->aid! db ident)
-         seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
-                               {:index :eat :eid eid :aid aid :ts ts})]
-     (when-let [[k v] (kvu/seek-first db
-                                      #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
-                                      #(or (not tx-ts)
-                                           (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
-                                      seek-k)]
-       (nippy/thaw v)))))
+   (let [aid (lookup-attr-ident-aid db ident)]
+     (when aid
+       (let [seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
+                                   {:index :eat :eid eid :aid aid :ts ts})]
+         (when-let [[k v] (kvu/seek-first db
+                                          #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
+                                          #(or (not tx-ts)
+                                               (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
+                                          seek-k)]
+           (nippy/thaw v)))))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
