@@ -68,10 +68,58 @@ This way the values in the key value topic can be purged (evicted)
 independently of rewriting the main log by overwriting them with
 either nil or in a more advanced usage, a scrubbed version of the data
 (this has a drawback of breaking the hash, so would need some meta
-data). For full erasure, the key value store also need to keep track
-of the keys a content-hash have in the aid/value index, as these need
-to be purged as well, but the set can conceivably change if the
-indexing code changes.
+data).
+
+For full erasure, the key value store also need to keep track of the
+keys a content-hash have in the aid/value index, as these need to be
+purged as well, but the set can conceivably change if the indexing
+code changes. This is likely better dealt with via index migrations,
+where the simplest case is to simply retire nodes using an old index
+formats, and hence deleting their indexes.
+
+##### Transaction Log Format
+
+The transactions could look something like this, the time is business
+time:
+
+```clj
+[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+"090622a35d4b579d2fcfebf823821298711d3867" #inst
+"2018-05-18T09:20:27.966-00:00"]
+
+[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
+"090622a35d4b579d2fcfebf823821298711d3867"
+"048ebba27e1da223ce97dded59d46e069ddf921b"
+#inst "2018-05-18T09:21:31.846-00:00"]
+
+[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso #inst
+#inst #inst "2018-05-18T09:21:52.151-00:00"]
+```
+
+In this model, upserts or merging can be implemented via CAS on the
+client, first fetching the document then merging it. It could
+potentially be done by Crux itself, but it complicates the ingestion,
+as a new resulting document would be generated and indexed.
+
+The key itself could also be hashed if necessary if we wish to hide it
+from the transaction log, in which case you would have:
+
+```clj
+[:crux.tx/put "9049023351ca330419c5c5072948a305343c8d91"
+"090622a35d4b579d2fcfebf823821298711d3867" #inst
+"2018-05-18T09:20:27.966-00:00"]
+```
+
+Where 9049023351ca330419c5c5072948a305343c8d91 is the SHA1 of
+the :http://dbpedia.org/resource/Pablo_Picasso keyword.
+
+Omitting business time defaults it to the transaction time, which is
+always taken from the message itself:
+
+```clj
+[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+"090622a35d4b579d2fcfebf823821298711d3867"]
+```
 
 #### Proposal B:
 
