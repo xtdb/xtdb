@@ -3,8 +3,8 @@
             [clojure.pprint :as pp]
             [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
-            [crux.core]
-            [crux.kv-store]
+            [crux.core :as crux]
+            [crux.kv-store :as kv-store]
             [crux.memdb]
             [crux.rocksdb]
             [crux.lmdb]
@@ -37,7 +37,9 @@
            (.load in))
          (into {}))))
 
-(def kv)
+(defn ^Closeable start-kv-store [db-dir opts]
+  (->> (crux/kv db-dir opts)
+       (kv-store/open)))
 
 (defn start-system [options]
   (let [{:keys [bootstrap-servers
@@ -59,14 +61,12 @@
     (log/infof "version: %s revision: %s" version revision)
     (log/info "options:" options-table)
 
-    (with-open [^Closeable kv (->> (crux.core/kv db-dir {:kv-store kv-store})
-                                   (crux.kv-store/open))
+    (with-open [kv (start-kv-store db-dir {:kv-store kv-store})
                 consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
                 admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-      (alter-var-root #'kv (constantly kv))
       (kafka/create-topic admin-client topic 1 1 {})
-      (let [indexer (crux.core/indexer kv)]
+      (let [indexer (crux/indexer kv)]
         (kafka/subscribe-from-stored-offsets indexer consumer topic)
         (while true
           (kafka/consume-and-index-entities indexer consumer 100))))))
