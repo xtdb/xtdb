@@ -3,7 +3,7 @@
            [java.nio ByteBuffer]
            [java.net URI]
            [java.security MessageDigest]
-           [java.util Comparator UUID]))
+           [java.util Arrays Comparator UUID]))
 
 (defn hash-keyword [k]
   (hash (str (namespace k) (name k))))
@@ -19,11 +19,23 @@
       (.flip)
       (.getLong)))
 
-(defn md5 [^bytes bytes]
+(defn md5 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "MD5") bytes))
 
-(defn sha1 [^bytes bytes]
+(defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA1") bytes))
+
+(defn bytes->hex ^String [^bytes bytes]
+  (format (str "%0" (bit-shift-left (alength bytes) 1) "x")
+          (BigInteger. 1 bytes)))
+
+(defn hex->bytes ^bytes [^String hex]
+  (let [ba (.toByteArray (BigInteger. hex 16))]
+    (if (= (count hex) (bit-shift-left (alength ba) 1))
+      ba
+      (let [padded (byte-array (unchecked-inc-int (alength ba)))]
+        (System/arraycopy ba 0 padded 1 (alength ba))
+        padded))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (doto (byte-array (.remaining b))
