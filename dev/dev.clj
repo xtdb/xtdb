@@ -24,7 +24,7 @@
     (close [_]
       (close-fn value))))
 
-(defn closeable-future-call [f]
+(defn ^Closeable closeable-future-call [f]
   (let [done? (promise)]
     (closeable
      (future
