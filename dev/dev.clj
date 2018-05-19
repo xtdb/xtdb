@@ -7,7 +7,8 @@
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [clojure.lang IDeref Var$Unbound]
-           [java.io Closeable]))
+           [java.io Closeable]
+           [java.util.concurrent CancellationException]))
 
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
@@ -30,17 +31,14 @@
      (future
        (try
          (f)
-         (catch Throwable t
-           (deliver done? t)
-           (throw t))
          (finally
            (deliver done? true))))
      (fn [this]
-       (if (future-cancel this)
+       (try
+         (future-cancel this)
          @done?
-         (let [result @done?]
-           (when (instance? Throwable result)
-             (throw result))))))))
+         @this
+         (catch CancellationException ignore))))))
 
 (defn start []
   (alter-var-root
