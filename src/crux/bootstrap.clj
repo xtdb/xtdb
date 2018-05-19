@@ -37,6 +37,11 @@
            (.load in))
          (into {}))))
 
+(defn options->table [options]
+  (with-out-str
+    (pp/print-table (for [[k v] options]
+                      {:key k :value v}))))
+
 (defn ^Closeable start-kv-store [{:keys [db-dir
                                          kv-backend]
                                   :as options}]
@@ -47,34 +52,33 @@
     (->> (crux/kv db-dir {:kv-store kv-store})
          (kv-store/open))))
 
-(defn start-system [kv-store options]
-  (let [{:keys [bootstrap-servers
-                group-id
-                topic]
-         :as options} (merge default-options options)
-        options-table (with-out-str
-                        (pp/print-table (for [[k v] options]
-                                          {:key k :value v})))
-        {:strs [version
-                revision]} (parse-version)]
-    (log/info "Starting Crux...")
-    (log/infof "version: %s revision: %s" version revision)
-    (log/info "options:" options-table)
-
-    (with-open [consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                 "group.id" group-id})
-                admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-      (kafka/create-topic admin-client topic 1 1 {})
-      (let [indexer (crux/indexer kv-store)]
-        (kafka/subscribe-from-stored-offsets indexer consumer topic)
-        (while true
-          (kafka/consume-and-index-entities indexer consumer 100))))))
+(defn start-system
+  ([{:keys [bootstrap-servers
+            group-id]
+     :as options}]
+   (with-open [kv-store (start-kv-store options)
+               consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                "group.id" group-id})
+               admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+     (start-system kv-store consumer admin-client options)))
+  ([kv-store consumer admin-client options]
+   (let [{:keys [bootstrap-servers
+                 group-id
+                 topic]
+          :as options} (merge default-options options)]
+     (kafka/create-topic admin-client topic 1 1 {})
+     (let [indexer (crux/indexer kv-store)]
+       (kafka/subscribe-from-stored-offsets indexer consumer topic)
+       (while true
+         (kafka/consume-and-index-entities indexer consumer 100))))))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options
                 errors
-                summary]
-         :as options} (merge default-options (cli/parse-opts args cli-options))]
+                summary]} (cli/parse-opts args cli-options)
+        options (merge default-options options)
+        {:strs [version
+                revision]} (parse-version)]
     (cond
       (:help options)
       (println summary)
@@ -86,8 +90,9 @@
         (System/exit 1))
 
       :else
-      (with-open [kv-store (start-kv-store options)]
-        (start-system kv-store options)))))
+      (do (log/infof "Crux version: %s revision: %s" version revision)
+          (log/info "options:" (options->table options))
+          (start-system options)))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler

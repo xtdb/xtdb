@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as tn]
             [crux.embedded-kafka :as ek]
+            [crux.kafka :as k]
             [crux.bootstrap :as b]
             [crux.io :as cio])
   (:import [kafka.server KafkaServerStartable]
@@ -106,32 +107,38 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn ^Closeable new-kv-store [{:keys [storage-dir]
-                                :as config}]
-  (b/start-kv-store (assoc config :db-dir (io/file storage-dir "data"))))
-
-(defn ^Closeable new-index-node [kv-store config]
+(defn ^Closeable new-crux-system [with-system-fn {:keys [storage-dir
+                                                         bootstrap-servers
+                                                         group-id]
+                                                  :as options}]
   (closeable-future-call
-   #(b/start-system kv-store {})))
+   #(with-open [zk (new-zk options)
+                kafka (new-kafka options)
+                kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
+                kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                   "group.id" group-id})
+                kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+      (->> {:zk @zk
+            :kafka @kafka
+            :kv-store kv-store
+            :kafka-consumer kafka-consumer
+            :kafka-admin-client kafka-admin-client}
+           (merge options)
+           (with-system-fn)))))
 
-(defn ^Closeable new-crux-system [with-system-fn config]
-  (closeable-future-call
-   #(with-open [zk (new-zk config)
-                kafka (new-kafka config)
-                kv-store (new-kv-store config)
-                index-node (new-index-node kv-store config)]
-      (with-system-fn (merge config {:zk @zk
-                                     :kafka @kafka
-                                     :kv-store kv-store
-                                     :index-node @index-node})))))
+(defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
+                         :as options}]
+  (b/start-system kv-store kafka-consumer kafka-admin-client options))
 
 (def config {:storage-dir "dev-storage"
-             :kv-backend "rocksdb"})
+             :kv-backend "rocksdb"
+             :bootstrap-servers ek/*kafka-bootstrap-servers*
+             :group-id "0"})
 (def system)
 
 (alter-var-root
  #'init (constantly (make-init-fn #(new-crux-system % config)
-                                  (comp deref :index-node)
+                                  start-index-node
                                   #'system)))
 
 (defn delete-storage []
