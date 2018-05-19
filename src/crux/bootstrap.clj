@@ -8,7 +8,7 @@
             [crux.memdb]
             [crux.rocksdb]
             [crux.lmdb]
-            [crux.kafka :as kafka])
+            [crux.kafka :as k])
   (:import [java.io Closeable]
            [java.net InetAddress]
            [java.util Properties])
@@ -57,20 +57,20 @@
             group-id]
      :as options}]
    (with-open [kv-store (start-kv-store options)
-               consumer (kafka/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                "group.id" group-id})
-               admin-client (kafka/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+               consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
+                                            "group.id" group-id})
+               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
      (start-system kv-store consumer admin-client options)))
   ([kv-store consumer admin-client options]
    (let [{:keys [bootstrap-servers
                  group-id
                  topic]
-          :as options} (merge default-options options)]
-     (kafka/create-topic admin-client topic 1 1 {})
-     (let [indexer (crux/indexer kv-store)]
-       (kafka/subscribe-from-stored-offsets indexer consumer topic)
-       (while true
-         (kafka/consume-and-index-entities indexer consumer 100))))))
+          :as options} (merge default-options options)
+         indexer (crux/indexer kv-store)]
+     (k/create-topic admin-client topic 1 1 {})
+     (k/subscribe-from-stored-offsets indexer consumer topic)
+     (while true
+       (k/consume-and-index-entities indexer consumer 100)))))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options
