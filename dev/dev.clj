@@ -15,14 +15,14 @@
 (def instance)
 (def init)
 
-(defn ^Closeable closeable [value close]
+(defn ^Closeable closeable [value close-fn]
   (reify
     IDeref
     (deref [_]
       value)
     Closeable
     (close [_]
-      (close value))))
+      (close-fn value))))
 
 (defn closeable-future-call [f]
   (let [done? (promise)]
@@ -70,18 +70,29 @@
       (throw result)
       result)))
 
-(defn with-system-var [f target-var]
+(defn with-system-var [with-system-fn target-var]
   (fn [system]
     (try
       (alter-var-root target-var (constantly system))
-      (f system)
+      (with-system-fn system)
       (finally
         (alter-var-root target-var (constantly nil))))))
 
-(defn with-system-promise [f promise]
+(defn with-system-promise [with-system-fn promise]
   (fn [system]
     (deliver promise system)
-    (f system)))
+    (with-system-fn system)))
+
+(defn make-init-fn [new-system-fn with-system-fn system-var]
+  (fn []
+    (let [started? (promise)
+          instance (-> with-system-fn
+                       (with-system-promise started?)
+                       (with-system-var system-var)
+                       (new-system-fn))]
+      (while (not (or (deref @instance 100 false)
+                      (deref started? 100 false))))
+      instance)))
 
 (defn ^Closeable new-zk [{:keys [storage-dir]}]
   (closeable
@@ -107,32 +118,25 @@
   (closeable-future-call
    #(b/start-system kv-store {})))
 
-(defn ^Closeable new-crux-system [f config]
+(defn ^Closeable new-crux-system [with-system-fn config]
   (closeable-future-call
    #(with-open [zk (new-zk config)
                 kafka (new-kafka config)
                 kv-store (new-kv-store config)
                 index-node (new-index-node kv-store config)]
-      (f (merge config {:zk @zk
-                        :kafka @kafka
-                        :kv-store kv-store
-                        :index-node @index-node})))))
+      (with-system-fn (merge config {:zk @zk
+                                     :kafka @kafka
+                                     :kv-store kv-store
+                                     :index-node @index-node})))))
 
 (def config {:storage-dir "dev-storage"
              :kv-backend "rocksdb"})
-
 (def system)
 
 (alter-var-root
- #'init (constantly
-         #(let [started (promise)
-                instance (-> (comp deref :index-node)
-                             (with-system-promise started)
-                             (with-system-var #'system)
-                             (new-crux-system config))]
-            (while (not (or (deref @instance 100 false)
-                            (deref started 100 false))))
-            instance)))
+ #'init (constantly (make-init-fn #(new-crux-system % config)
+                                  (comp deref :index-node)
+                                  #'system)))
 
 (defn delete-storage []
   (stop)
