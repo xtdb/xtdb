@@ -30,11 +30,17 @@
      (future
        (try
          (f)
+         (catch Throwable t
+           (deliver done? t)
+           (throw t))
          (finally
            (deliver done? true))))
      (fn [this]
-       (future-cancel this)
-       @done?))))
+       (if (future-cancel this)
+         @done?
+         (let [result @done?]
+           (when (instance? Throwable result)
+             (throw result))))))))
 
 (defn start []
   (alter-var-root
@@ -124,7 +130,8 @@
                              (with-system-promise started)
                              (with-system-var #'system)
                              (new-crux-system config))]
-            @started
+            (while (not (or (deref @instance 100 false)
+                            (deref started 100 false))))
             instance)))
 
 (defn delete-storage []
