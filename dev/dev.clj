@@ -91,7 +91,7 @@
                       (deref started? 100 false))))
       instance)))
 
-(defn ^Closeable new-zk [{:keys [storage-dir]}]
+(defn ^Closeable start-zk [{:keys [storage-dir]}]
   (closeable
     (ek/start-zookeeper
      (io/file storage-dir "zk-snapshot")
@@ -99,7 +99,7 @@
     (fn [^ServerCnxnFactory zk]
       (.shutdown zk))))
 
-(defn ^Closeable new-kafka [{:keys [storage-dir]}]
+(defn ^Closeable start-kafka [{:keys [storage-dir]}]
   (closeable
    (ek/start-kafka-broker
     {"log.dir" (.getAbsolutePath (io/file storage-dir "kafka-log"))})
@@ -107,13 +107,13 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn ^Closeable new-crux-system [with-system-fn {:keys [storage-dir
-                                                         bootstrap-servers
-                                                         group-id]
-                                                  :as options}]
+(defn ^Closeable start-crux-system [with-system-fn {:keys [storage-dir
+                                                           bootstrap-servers
+                                                           group-id]
+                                                    :as options}]
   (closeable-future-call
-   #(with-open [zk (new-zk options)
-                kafka (new-kafka options)
+   #(with-open [zk (start-zk options)
+                kafka (start-kafka options)
                 kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
                 kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                    "group.id" group-id})
@@ -137,7 +137,7 @@
 (def system)
 
 (alter-var-root
- #'init (constantly (make-init-fn #(new-crux-system % config)
+ #'init (constantly (make-init-fn #(start-crux-system % config)
                                   start-index-node
                                   #'system)))
 
