@@ -1,5 +1,6 @@
 (ns user)
 
 (defn dev []
-  (require 'dev)
-  (in-ns 'dev))
+  (require 'dev :reload-all)
+  (in-ns 'dev)
+  :ok)

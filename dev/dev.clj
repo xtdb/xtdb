@@ -7,44 +7,13 @@
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [clojure.lang IDeref Var$Unbound]
-           [java.io Closeable]
-           [java.util.concurrent CancellationException]))
+           [java.io Closeable]))
 
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
 (def instance)
 (def init)
-
-(defn close-future [future]
-  (try
-    (future-cancel future)
-    @future
-    (catch CancellationException ignore)))
-
-(defn start []
-  (alter-var-root
-   #'instance #(cond (not (bound? #'init))
-                     (throw (IllegalStateException. "init not set."))
-
-                     (or (nil? %)
-                         (instance? Var$Unbound %)
-                         (realized? %))
-                     (future-call init)
-
-                     :else
-                     (throw (IllegalStateException. "Already running."))))
-  :starting)
-
-(defn stop []
-  (when (and (bound? #'instance)
-             (future? instance))
-    (alter-var-root #'instance close-future))
-  :stopped)
-
-(defn reset []
-  (stop)
-  (tn/refresh :after 'dev/start))
 
 (defn ^Closeable closeable
   ([value]
@@ -58,13 +27,56 @@
      (close [_]
        (close value)))))
 
-(defn with-system-var [do-with-system target-var]
+(defn closeable-future-call [f]
+  (let [done? (promise)]
+    (closeable
+     (future
+       (try
+         (f)
+         (finally
+           (deliver done? true))))
+     (fn [this]
+       (future-cancel this)
+       @done?))))
+
+(defn start []
+  (alter-var-root
+   #'instance #(cond (not (bound? #'init))
+                     (throw (IllegalStateException. "init not set."))
+
+                     (or (nil? %)
+                         (instance? Var$Unbound %))
+                     (cast Closeable (init))
+
+                     :else
+                     (throw (IllegalStateException. "Already running."))))
+  :started)
+
+(defn stop []
+  (when (and (bound? #'instance)
+             (not (nil? instance)))
+    (alter-var-root #'instance #(.close ^Closeable %)))
+  :stopped)
+
+(defn reset []
+  (stop)
+  (let [result (tn/refresh :after 'dev/start)]
+    (if (instance? Throwable result)
+      (throw result)
+      result)))
+
+(defn with-system-var [f target-var]
   (fn [system]
-    (do (alter-var-root target-var (constantly system))
-        (try
-          (do-with-system system)
-          (finally
-            (alter-var-root target-var (constantly nil)))))))
+    (try
+      (alter-var-root target-var (constantly system))
+      (f system)
+      (finally
+        (alter-var-root target-var (constantly nil))))))
+
+(defn with-system-promise [f promise]
+  (fn [system]
+    (deliver promise system)
+    (f system)))
 
 (defn ^Closeable new-zk [{:keys [storage-dir]}]
   (closeable
@@ -87,35 +99,34 @@
   (b/start-kv-store (assoc config :db-dir (io/file storage-dir "data"))))
 
 (defn ^Closeable new-index-node [kv-store config]
-  (closeable
-   (future
-     (b/start-system kv-store {}))
-   (fn [crux]
-     (close-future crux))))
+  (closeable-future-call
+   #(b/start-system kv-store {})))
 
-(defn new-crux-system [config]
-  (fn [do-with-system]
-    (with-open [zk (new-zk config)
+(defn new-crux-system [f config]
+  (closeable-future-call
+   #(with-open [zk (new-zk config)
                 kafka (new-kafka config)
                 kv-store (new-kv-store config)
                 index-node (new-index-node kv-store config)]
-      (do-with-system (merge config {:zk @zk
-                                     :kafka @kafka
-                                     :kv-store kv-store
-                                     :index-node @index-node})))))
+      (f (merge config {:zk @zk
+                        :kafka @kafka
+                        :kv-store kv-store
+                        :index-node @index-node})))))
 
 (def config {:storage-dir "dev-storage"
              :kv-backend "rocksdb"})
-
-(def with-crux-system
-  (new-crux-system config))
 
 (def system)
 
 (alter-var-root
  #'init (constantly
-         #(with-crux-system (-> (comp deref :index-node)
-                                (with-system-var #'system)))))
+         #(let [started (promise)
+                instance (-> (comp deref :index-node)
+                             (with-system-promise started)
+                             (with-system-var #'system)
+                             (new-crux-system config))]
+            @started
+            instance)))
 
 (defn delete-storage []
   (stop)
