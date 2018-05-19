@@ -33,6 +33,9 @@
 (def default-topic-config
   {"message.timestamp.type" "LogAppendTime"})
 
+(def default-admin-client-config
+  {"request.timeout.ms" "5000"})
+
 (defn ^KafkaProducer create-producer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 
@@ -40,7 +43,7 @@
   (KafkaConsumer. ^Map (merge default-consumer-config config)))
 
 (defn ^AdminClient create-admin-client [config]
-  (AdminClient/create ^Map config))
+  (AdminClient/create ^Map (merge default-admin-client-config config)))
 
 (defn create-topic [^AdminClient admin-client topic num-partitions replication-factor config]
   (let [new-topic (doto (NewTopic. topic num-partitions replication-factor)
@@ -50,7 +53,7 @@
       (catch ExecutionException e
         (let [cause (.getCause e)]
           (when-not (instance? TopicExistsException cause)
-            (throw cause)))))))
+            (throw e)))))))
 
 ;;; Transacting Producer
 
