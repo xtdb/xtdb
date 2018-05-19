@@ -6,7 +6,7 @@
             [crux.io :as cio])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
-           [clojure.lang IDeref IPending Var$Unbound]
+           [clojure.lang IDeref Var$Unbound]
            [java.io Closeable]
            [java.util.concurrent CancellationException]))
 
@@ -21,11 +21,6 @@
     IDeref
     (deref [_]
       value)
-    IPending
-    (isRealized [_]
-      (if (instance? IPending value)
-        (realized? value)
-        true))
     Closeable
     (close [_]
       (close-fn value))))
@@ -58,17 +53,11 @@
 (defn stop []
   (when (and (bound? #'instance)
              (not (nil? instance)))
-    (if (and (instance? IPending instance)
-             (realized? instance))
-      (try
-        (let [result @instance]
-          (when (and (instance? IPending result)
-                     (realized? result))
-            @result))
-        (finally
-          (alter-var-root #'instance (constantly nil))))
-      (alter-var-root #'instance #(.close ^Closeable %))))
+    (alter-var-root #'instance #(.close ^Closeable %)))
   :stopped)
+
+(defn clear []
+  (alter-var-root #'instance (constantly nil)))
 
 (defn reset []
   (stop)
