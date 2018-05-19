@@ -15,17 +15,14 @@
 (def instance)
 (def init)
 
-(defn ^Closeable closeable
-  ([value]
-   (closeable value identity))
-  ([value close]
-   (reify
-     IDeref
-     (deref [_]
-       value)
-     Closeable
-     (close [_]
-       (close value)))))
+(defn ^Closeable closeable [value close]
+  (reify
+    IDeref
+    (deref [_]
+      value)
+    Closeable
+    (close [_]
+      (close value))))
 
 (defn closeable-future-call [f]
   (let [done? (promise)]
@@ -41,15 +38,17 @@
 
 (defn start []
   (alter-var-root
-   #'instance #(cond (not (bound? #'init))
-                     (throw (IllegalStateException. "init not set."))
+   #'instance (fn [instance]
+                (cond
+                  (not (bound? #'init))
+                  (throw (IllegalStateException. "init not set."))
 
-                     (or (nil? %)
-                         (instance? Var$Unbound %))
-                     (cast Closeable (init))
+                  (or (nil? instance)
+                      (instance? Var$Unbound instance))
+                  (cast Closeable (init))
 
-                     :else
-                     (throw (IllegalStateException. "Already running."))))
+                  :else
+                  (throw (IllegalStateException. "Already running.")))))
   :started)
 
 (defn stop []
@@ -102,7 +101,7 @@
   (closeable-future-call
    #(b/start-system kv-store {})))
 
-(defn new-crux-system [f config]
+(defn ^Closeable new-crux-system [f config]
   (closeable-future-call
    #(with-open [zk (new-zk config)
                 kafka (new-kafka config)
