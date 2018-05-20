@@ -25,24 +25,23 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn ^Closeable start-crux-system [with-system-fn {:keys [storage-dir
-                                                           bootstrap-servers
-                                                           group-id]
-                                                    :as options}]
-  (sys/closeable-future-call
-   #(with-open [zk (start-zk options)
-                kafka (start-kafka options)
-                kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
-                kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                   "group.id" group-id})
-                kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-      (->> {:zk @zk
-            :kafka @kafka
-            :kv-store kv-store
-            :kafka-consumer kafka-consumer
-            :kafka-admin-client kafka-admin-client}
-           (merge options)
-           (with-system-fn)))))
+(defn with-crux-system [do-with-system-fn {:keys [storage-dir
+                                                  bootstrap-servers
+                                                  group-id]
+                                           :as options}]
+  (with-open [zk (start-zk options)
+              kafka (start-kafka options)
+              kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
+              kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                 "group.id" group-id})
+              kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+    (->> {:zk @zk
+          :kafka @kafka
+          :kv-store kv-store
+          :kafka-consumer kafka-consumer
+          :kafka-admin-client kafka-admin-client}
+         (merge options)
+         (do-with-system-fn))))
 
 (defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
                          :as options}]
@@ -55,7 +54,7 @@
 (def system)
 
 (alter-var-root
- #'sys/init (constantly (sys/make-init-fn #(start-crux-system % config)
+ #'sys/init (constantly (sys/make-init-fn #(with-crux-system % config)
                                           start-index-node
                                           #'system)))
 

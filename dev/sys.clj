@@ -19,9 +19,9 @@
     (close [_]
       (close-fn value))))
 
-(defn ^Closeable closeable-future-call [f]
+(defn ^Closeable closeable-future [future]
   (closeable
-   (future-call f)
+   future
    (fn [this]
      (try
        (when-not (future-cancelled? this)
@@ -60,26 +60,28 @@
       (throw result)
       result)))
 
-(defn with-system-var [with-system-fn target-var]
+(defn with-system-var [do-with-system-fn target-var]
   (fn [system]
     (try
       (alter-var-root target-var (constantly system))
-      (with-system-fn system)
+      (do-with-system-fn system)
       (finally
         (alter-var-root target-var (constantly nil))))))
 
-(defn with-system-promise [with-system-fn promise]
+(defn with-system-promise [do-with-system-fn promise]
   (fn [system]
     (deliver promise system)
-    (with-system-fn system)))
+    (do-with-system-fn system)))
 
-(defn make-init-fn [new-system-fn with-system-fn system-var]
+(defn make-init-fn [with-system-fn do-with-system-fn system-var]
   (fn []
     (let [started? (promise)
-          instance (-> with-system-fn
-                       (with-system-promise started?)
-                       (with-system-var system-var)
-                       (new-system-fn))]
+          instance (closeable-future
+                    (future
+                      (-> do-with-system-fn
+                          (with-system-promise started?)
+                          (with-system-var system-var)
+                          (with-system-fn))))]
       (while (not (or (deref @instance 100 false)
                       (deref started? 100 false))))
       instance)))
