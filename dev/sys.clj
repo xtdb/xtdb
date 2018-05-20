@@ -19,21 +19,6 @@
     (close [_]
       (close-fn value))))
 
-(defn ^Closeable closeable-future-call [f]
-  (let [done? (promise)]
-    (closeable
-     (future
-       (try
-         (f)
-         (finally
-           (deliver done? true))))
-     (fn [this]
-       (try
-         (when (future-cancel this)
-           @done?)
-         (when-not (future-cancelled? this)
-           @this))))))
-
 (defn start []
   (alter-var-root
    #'instance (fn [instance]
@@ -89,11 +74,10 @@
 (defn make-init-fn [with-system-fn do-with-system-fn]
   (fn []
     (let [started? (promise)
-          instance (closeable-future-call
-                    #(-> do-with-system-fn
-                         (with-error-logging)
-                         (with-system-promise started?)
-                         (with-system-fn)))]
+          instance (-> do-with-system-fn
+                       (with-error-logging)
+                       (with-system-promise started?)
+                       (with-system-fn))]
       (while (not (or (deref @instance 100 false)
                       (deref started? 100 false))))
       instance)))

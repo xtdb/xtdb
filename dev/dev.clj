@@ -10,6 +10,11 @@
            [org.apache.zookeeper.server ServerCnxnFactory]
            [java.io Closeable]))
 
+(def config {:storage-dir "dev-storage"
+             :db-dir "dev-storage/data"
+             :replication-factor 1})
+(def system)
+
 (defn ^Closeable start-zk [{:keys [storage-dir]}]
   (sys/closeable
    (ek/start-zookeeper
@@ -46,20 +51,25 @@
          (merge options)
          (do-with-system-fn))))
 
+(defn ^Closeable with-async-crux-system [do-with-system-fn options]
+  (let [running? (atom true)]
+    (sys/closeable
+     (future
+       (with-crux-system do-with-system-fn (assoc options :running? running?)))
+     (fn [this]
+       (reset! running? false)
+       @this))))
+
+
 (defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
                          :as options}]
   (b/start-system kv-store kafka-consumer kafka-admin-client options))
-
-(def config {:storage-dir "dev-storage"
-             :db-dir "dev-storage/data"
-             :replication-factor 1})
-(def system)
 
 (alter-var-root
  #'sys/init (constantly
              (sys/make-init-fn
               #(-> (sys/with-system-var % #'system)
-                   (with-crux-system
+                   (with-async-crux-system
                      (merge b/default-options config)))
               start-index-node)))
 
