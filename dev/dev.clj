@@ -32,12 +32,15 @@
   (with-open [zk (start-zk options)
               kafka (start-kafka options)
               kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
+              kafka-producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
               kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
-              kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+              kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
+                                                         "request.timeout.ms" "5000"})]
     (->> {:zk @zk
           :kafka @kafka
           :kv-store kv-store
+          :kafka-producer kafka-producer
           :kafka-consumer kafka-consumer
           :kafka-admin-client kafka-admin-client}
          (merge options)
@@ -50,7 +53,8 @@
 (def config {:storage-dir "dev-storage"
              :kv-backend "rocksdb"
              :bootstrap-servers ek/*kafka-bootstrap-servers*
-             :group-id "0"})
+             :group-id "0"
+             :replication-factor 1})
 (def system)
 
 (alter-var-root

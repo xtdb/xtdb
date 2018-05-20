@@ -1,5 +1,6 @@
 (ns sys
-  (:require [clojure.tools.namespace.repl :as tn])
+  (:require [clojure.tools.namespace.repl :as tn]
+            [clojure.tools.logging :as log])
   (:import [clojure.lang IDeref Var$Unbound]
            [java.io Closeable]))
 
@@ -77,11 +78,20 @@
     (deliver promise system)
     (do-with-system-fn system)))
 
+(defn with-error-logging [do-with-system-fn]
+  (fn [system]
+    (try
+      (do-with-system-fn system)
+      (catch Throwable t
+        (log/error t "Exception caught, shutting down system:")
+        (throw t)))))
+
 (defn make-init-fn [with-system-fn do-with-system-fn system-var]
   (fn []
     (let [started? (promise)
           instance (closeable-future-call
                     #(-> do-with-system-fn
+                         (with-error-logging)
                          (with-system-promise started?)
                          (with-system-var system-var)
                          (with-system-fn)))]

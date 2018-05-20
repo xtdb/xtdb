@@ -29,7 +29,9 @@
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-h" "--help"]])
 
-(def default-options (:options (cli/parse-opts [] cli-options)))
+(def default-options
+  (merge {:replication-factor 3}
+         (:options (cli/parse-opts [] cli-options))))
 
 (defn parse-version []
   (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
@@ -64,10 +66,11 @@
   ([kv-store consumer admin-client options]
    (let [{:keys [bootstrap-servers
                  group-id
-                 topic]
+                 topic
+                 replication-factor]
           :as options} (merge default-options options)
          indexer (crux/indexer kv-store)]
-     (k/create-topic admin-client topic 1 1 {})
+     (k/create-topic admin-client topic 1 replication-factor {})
      (k/subscribe-from-stored-offsets indexer consumer topic)
      (while true
        (k/consume-and-index-entities indexer consumer 100)))))
