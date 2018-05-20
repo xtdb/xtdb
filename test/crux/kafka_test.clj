@@ -40,7 +40,7 @@
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
-         (map use-iri-as-id)
+         (map rdf/use-iri-as-id)
          (doall))))
 
 (t/deftest test-can-transact-entities
