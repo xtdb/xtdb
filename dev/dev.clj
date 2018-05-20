@@ -43,23 +43,25 @@
           :kafka-producer kafka-producer
           :kafka-consumer kafka-consumer
           :kafka-admin-client kafka-admin-client}
-         (merge b/default-options options)
+         (merge options)
          (do-with-system-fn))))
 
 (defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
                          :as options}]
   (b/start-system kv-store kafka-consumer kafka-admin-client options))
 
-(def config (merge b/default-options
-                   {:storage-dir "dev-storage"
-                    :db-dir "dev-storage/data"
-                    :replication-factor 1}))
+(def config {:storage-dir "dev-storage"
+             :db-dir "dev-storage/data"
+             :replication-factor 1})
 (def system)
 
 (alter-var-root
- #'sys/init (constantly (sys/make-init-fn #(-> (sys/with-system-var % #'system)
-                                               (with-crux-system config))
-                                          start-index-node)))
+ #'sys/init (constantly
+             (sys/make-init-fn
+              #(-> (sys/with-system-var % #'system)
+                   (with-crux-system
+                     (merge b/default-options config)))
+              start-index-node)))
 
 (defn delete-storage []
   (stop)

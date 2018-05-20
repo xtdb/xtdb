@@ -83,7 +83,7 @@
     (try
       (do-with-system-fn system)
       (catch Throwable t
-        (log/error t "Exception caught, shutting down system:")
+        (log/error t "Exception caught, system will stop:")
         (throw t)))))
 
 (defn make-init-fn [with-system-fn do-with-system-fn]

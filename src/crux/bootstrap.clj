@@ -30,7 +30,8 @@
    ["-h" "--help"]])
 
 (def default-options
-  (merge {:replication-factor 3}
+  (merge {:replication-factor 3
+          :running? (delay true)}
          (:options (cli/parse-opts [] cli-options))))
 
 (defn parse-version []
@@ -67,12 +68,13 @@
    (let [{:keys [bootstrap-servers
                  group-id
                  topic
-                 replication-factor]
+                 replication-factor
+                 running?]
           :as options} (merge default-options options)
          indexer (crux/indexer kv-store)]
      (k/create-topic admin-client topic 1 replication-factor {})
      (k/subscribe-from-stored-offsets indexer consumer topic)
-     (while true
+     (while @running?
        (k/consume-and-index-entities indexer consumer 100)))))
 
 (defn start-system-from-command-line [args]
