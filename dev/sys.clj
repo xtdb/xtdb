@@ -86,14 +86,13 @@
         (log/error t "Exception caught, shutting down system:")
         (throw t)))))
 
-(defn make-init-fn [with-system-fn do-with-system-fn system-var]
+(defn make-init-fn [with-system-fn do-with-system-fn]
   (fn []
     (let [started? (promise)
           instance (closeable-future-call
                     #(-> do-with-system-fn
                          (with-error-logging)
                          (with-system-promise started?)
-                         (with-system-var system-var)
                          (with-system-fn)))]
       (while (not (or (deref @instance 100 false)
                       (deref started? 100 false))))

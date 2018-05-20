@@ -57,9 +57,9 @@
 (def system)
 
 (alter-var-root
- #'sys/init (constantly (sys/make-init-fn #(with-crux-system % config)
-                                          start-index-node
-                                          #'system)))
+ #'sys/init (constantly (sys/make-init-fn #(-> (sys/with-system-var % #'system)
+                                               (with-crux-system config))
+                                          start-index-node)))
 
 (defn delete-storage []
   (stop)
