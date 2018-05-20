@@ -1,8 +1,7 @@
 (ns sys
   (:require [clojure.tools.namespace.repl :as tn])
   (:import [clojure.lang IDeref Var$Unbound]
-           [java.io Closeable]
-           [java.util.concurrent CancellationException]))
+           [java.io Closeable]))
 
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
@@ -19,15 +18,20 @@
     (close [_]
       (close-fn value))))
 
-(defn ^Closeable closeable-future [future]
-  (closeable
-   future
-   (fn [this]
-     (try
-       (when-not (future-cancelled? this)
-         (future-cancel this)
-         @this)
-       (catch CancellationException ignore)))))
+(defn ^Closeable closeable-future-call [f]
+  (let [done? (promise)]
+    (closeable
+     (future
+       (try
+         (f)
+         (finally
+           (deliver done? true))))
+     (fn [this]
+       (try
+         (when (future-cancel this)
+           @done?)
+         (when-not (future-cancelled? this)
+           @this))))))
 
 (defn start []
   (alter-var-root
@@ -76,12 +80,11 @@
 (defn make-init-fn [with-system-fn do-with-system-fn system-var]
   (fn []
     (let [started? (promise)
-          instance (closeable-future
-                    (future
-                      (-> do-with-system-fn
-                          (with-system-promise started?)
-                          (with-system-var system-var)
-                          (with-system-fn))))]
+          instance (closeable-future-call
+                    #(-> do-with-system-fn
+                         (with-system-promise started?)
+                         (with-system-var system-var)
+                         (with-system-fn)))]
       (while (not (or (deref @instance 100 false)
                       (deref started? 100 false))))
       instance)))
