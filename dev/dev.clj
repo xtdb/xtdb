@@ -4,6 +4,7 @@
             [crux.kafka :as k]
             [crux.bootstrap :as b]
             [crux.io :as cio]
+            [crux.core :as crux]
             [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
@@ -25,13 +26,12 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn with-crux-system [do-with-system-fn {:keys [storage-dir
-                                                  bootstrap-servers
+(defn with-crux-system [do-with-system-fn {:keys [bootstrap-servers
                                                   group-id]
                                            :as options}]
   (with-open [zk (start-zk options)
               kafka (start-kafka options)
-              kv-store (b/start-kv-store (assoc options :db-dir (io/file storage-dir "data")))
+              kv-store (b/start-kv-store options)
               kafka-producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
               kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
@@ -43,18 +43,17 @@
           :kafka-producer kafka-producer
           :kafka-consumer kafka-consumer
           :kafka-admin-client kafka-admin-client}
-         (merge options)
+         (merge b/default-options options)
          (do-with-system-fn))))
 
 (defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
                          :as options}]
   (b/start-system kv-store kafka-consumer kafka-admin-client options))
 
-(def config {:storage-dir "dev-storage"
-             :kv-backend "rocksdb"
-             :bootstrap-servers ek/*kafka-bootstrap-servers*
-             :group-id "0"
-             :replication-factor 1})
+(def config (merge b/default-options
+                   {:storage-dir "dev-storage"
+                    :db-dir "dev-storage/data"
+                    :replication-factor 1}))
 (def system)
 
 (alter-var-root
@@ -66,3 +65,14 @@
   (stop)
   (cio/delete-dir (:storage-dir config))
   :ok)
+
+(comment
+  (start)
+
+  (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
+    (k/transact-ntriples (:kafka-producer system) in (:topic system) 1000))
+
+  (q/q (crux/db (:kv-store system))
+       '{:find [iri]
+         :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
+                 [e :crux.rdf/iri iri]]}))

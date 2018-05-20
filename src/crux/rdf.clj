@@ -116,6 +116,9 @@
                   (lang->str x language)
                   x)) rdf-map))
 
+(defn use-iri-as-id [m]
+  (assoc m :crux.kv/id (:crux.rdf/iri m)))
+
 (defn entity-statements->map [entity-statements]
   (when-let [^Statement statement (first entity-statements)]
     (->> entity-statements

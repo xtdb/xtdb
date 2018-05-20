@@ -36,9 +36,6 @@
       (t/is (= 1 (count (seq records))))
       (t/is (= person (first (map k/consumer-record->value records)))))))
 
-(defn use-iri-as-id [m]
-  (assoc m :crux.kv/id (:crux.rdf/iri m)))
-
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
@@ -100,7 +97,7 @@
         entities (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                               (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
                       (map #(rdf/use-default-language % :en))
-                      (map use-iri-as-id))
+                      (map rdf/use-iri-as-id))
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
@@ -164,7 +161,7 @@
                                                 (quot next-n print-size))
                                      (log/warn message next-n))
                                    next-n))
-        transacted (atom -1)
+        n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
@@ -175,22 +172,12 @@
             (future
               (time
                (with-open [in (io/input-stream mappingbased-properties-file)]
-                 (->> (rdf/ntriples-seq in)
-                      (rdf/statements->maps)
-                      (map #(rdf/use-default-language % :en))
-                      (map use-iri-as-id)
-                      (take max-limit)
-                      (partition-all tx-size)
-                      (reduce (fn [n entities]
-                                (k/transact ek/*producer* topic entities)
-                                (add-and-print-progress n (count entities) "transacted"))
-                              0)
-                      (reset! transacted)))))
+                 (reset! n-transacted (k/transact-ntriples ek/*producer* in topic tx-size)))))
             (time
              (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
                     n 0]
                (let [n (add-and-print-progress n (count entities) "indexed")]
-                 (when-not (= n @transacted)
+                 (when-not (= n @n-transacted)
                    (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
                           (long n)))))))
 
