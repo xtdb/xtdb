@@ -13,23 +13,23 @@
            [org.slf4j LoggerFactory]
            [java.io Closeable]))
 
-(def config {:storage-dir "dev-storage"
-             :db-dir "dev-storage/data"
+(def storage-dir "dev-storage")
+(def config {:db-dir (io/file storage-dir "data")
+             :zookeeper-data-dir (io/file storage-dir "zookeeper")
+             :kafka-log-dir (io/file storage-dir "kafka-log")
              :replication-factor 1})
 (def system)
 
-(defn ^Closeable start-zk [{:keys [storage-dir]}]
+(defn ^Closeable start-zk [{:keys [zookeeper-data-dir]}]
   (sys/closeable
-   (ek/start-zookeeper
-    (io/file storage-dir "zk-snapshot")
-    (io/file storage-dir "zk-log"))
+   (ek/start-zookeeper (io/file zookeeper-data-dir))
    (fn [^ServerCnxnFactory zk]
      (.shutdown zk))))
 
-(defn ^Closeable start-kafka [{:keys [storage-dir]}]
+(defn ^Closeable start-kafka [{:keys [kafka-log-dir]}]
   (sys/closeable
    (ek/start-kafka-broker
-    {"log.dir" (.getAbsolutePath (io/file storage-dir "kafka-log"))})
+    {"log.dir" (.getAbsolutePath (io/file kafka-log-dir))})
    (fn [^KafkaServerStartable kafka]
      (.shutdown kafka)
      (.awaitShutdown kafka))))
@@ -50,12 +50,12 @@
           :kv-store kv-store
           :kafka-producer kafka-producer
           :kafka-consumer kafka-consumer
-          :kafka-admin-client kafka-admin-client}
-         (merge options)
+          :kafka-admin-client kafka-admin-client
+          :options options}
          (do-with-system-fn))))
 
-(defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
-                         :as options}]
+(defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client options]
+                         :as system}]
   (b/start-system kv-store kafka-consumer kafka-admin-client options))
 
 (defn make-crux-system-init-fn []
@@ -74,7 +74,7 @@
 
 (defn delete-storage []
   (stop)
-  (cio/delete-dir (:storage-dir config))
+  (cio/delete-dir storage-dir)
   :ok)
 
 (defn set-log-level! [ns level]

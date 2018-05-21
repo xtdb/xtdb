@@ -70,29 +70,27 @@
         (cio/delete-dir log-dir)))))
 
 (defn start-zookeeper ^ServerCnxnFactory
-  ([snapshot-dir log-dir]
-   (start-zookeeper snapshot-dir log-dir *host* default-zookeeper-port))
-  ([snapshot-dir log-dir ^String host ^long port]
+  ([data-dir]
+   (start-zookeeper data-dir *host* default-zookeeper-port))
+  ([data-dir ^String host ^long port]
    (let [tick-time 500
          max-connections 16
-         server (ZooKeeperServer. (io/file snapshot-dir) (io/file log-dir) tick-time)]
+         server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
      (doto (NIOServerCnxnFactory/createFactory)
        (.configure (InetSocketAddress. host port)
                    max-connections)
        (.startup server)))))
 
 (defn with-embedded-zookeeper [f]
-  (let [snapshot-dir (cio/create-tmpdir "zk-snapshot")
-        log-dir (cio/create-tmpdir "zk-log")
+  (let [data-dir (cio/create-tmpdir "zookeeper")
         port (cio/free-port)
-        server-cnxn-factory (start-zookeeper snapshot-dir log-dir *host* port)]
+        server-cnxn-factory (start-zookeeper data-dir *host* port)]
     (try
       (binding [*zookeeper-connect* (str  *host* ":" port)]
         (f))
       (finally
         (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown)
-        (doseq [dir [snapshot-dir log-dir]]
-          (cio/delete-dir dir))))))
+        (cio/delete-dir data-dir)))))
 
 (defn with-embedded-kafka-cluster [f]
   (with-embedded-zookeeper
