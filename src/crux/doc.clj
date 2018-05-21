@@ -21,10 +21,11 @@
   (ks/iterate-with
    kv
    (fn [i]
-     (->> (for [seek-k (sort-by bu/bytes-comparator (map key->bytes ks))
+     (->> (for [seek-k (into (sorted-set-by bu/bytes-comparator) (map key->bytes ks))
                 :let [[k v] (ks/-seek i seek-k)]
                 :when (bu/bytes=? seek-k k)]
-            [(bu/bytes->hex k) (nippy/thaw v)])
+            [(bu/bytes->hex k)
+             (nippy/thaw v)])
           (into {})))))
 
 (defn tx-put
