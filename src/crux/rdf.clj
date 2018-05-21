@@ -148,10 +148,14 @@
                        (.getSubject s)))
        (map entity-statements->map)))
 
-(defn maps-by-iri [rdf-maps]
-  (->> (for [m rdf-maps]
-         {(:crux.rdf/iri m) m})
-       (into {})))
+(defn maps-by-iri
+  ([rdf-maps]
+   (maps-by-iri rdf-maps true))
+  ([rdf-maps keep-iri?]
+   (->> (for [m rdf-maps]
+          {(:crux.rdf/iri m) (cond-> m
+                               (not keep-iri?) (dissoc :crux.rdf/iri))})
+        (into {}))))
 
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))

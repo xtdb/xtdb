@@ -96,8 +96,7 @@
   (let [topic "test-can-transact-and-query-dbpedia-entities"
         entities (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                               (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
-                      (map #(rdf/use-default-language % :en))
-                      (map rdf/use-iri-as-id))
+                      (map #(rdf/use-default-language % :en)))
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
