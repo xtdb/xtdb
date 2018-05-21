@@ -70,5 +70,6 @@
         ;; Basic query, does not do temporal look up yet.
         (time
          (doseq [i (range queries)]
-           (doc/find-keys-by-attribute-values
-            *kv* :name #{"Ivan"}))))))))
+           (q/q (doc/map->DocDatasource {:kv *kv*})
+                '{:find [e]
+                  :where [[e :name "Ivan"]]}))))))))

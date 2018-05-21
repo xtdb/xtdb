@@ -36,7 +36,11 @@
     (t/testing "existing doc keys"
       (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
                (doc/existing-doc-keys f/*kv* ["58232d6993e120d1aa19edfc7fbd1df791f06b48"
-                                              "090622a35d4b579d2fcfebf823821298711d3867"]))))))
+                                              "090622a35d4b579d2fcfebf823821298711d3867"]))))
+
+    (t/testing "all existing doc keys"
+      (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
+               (doc/all-doc-keys f/*kv*))))))
 
 (t/deftest test-can-find-doc-by-value
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")

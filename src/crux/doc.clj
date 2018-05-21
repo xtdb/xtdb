@@ -1,6 +1,7 @@
 (ns crux.doc
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
+            [crux.db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]))
 
@@ -50,6 +51,18 @@
 (defn key->bytes [k]
   (cond-> k
     (string? k) bu/hex->bytes))
+
+(defn all-doc-keys [kv]
+  (let [seek-k (.array (.putShort (ByteBuffer/allocate Short/BYTES) content-hash->doc-index-id))]
+    (ks/iterate-with
+     kv
+     (fn [i]
+       (loop [[k v :as kv] (ks/-seek i seek-k)
+              acc #{}]
+         (if (and kv (bu/bytes=? seek-k k))
+           (let [content-hash (decode-doc-key k)]
+             (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
+           acc))))))
 
 (defn entries [kv ks]
   (ks/iterate-with
@@ -129,3 +142,15 @@
   ([k business-time]
    (cond-> [:crux.tx/delete k]
      business-time (conj business-time))))
+
+;; NOTE: this is a simple, non-temporal store using content hashes as ids.
+(defrecord DocDatasource [kv]
+  crux.db/Datasource
+  (entities [this]
+    (all-doc-keys kv))
+
+  (entities-for-attribute-value [this ident v]
+    (find-keys-by-attribute-values kv ident [v]))
+
+  (attr-val [this eid ident]
+    (get-in (docs kv [eid]) [eid ident])))
