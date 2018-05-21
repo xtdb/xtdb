@@ -22,7 +22,7 @@
    (fn [i]
      (->> (for [seek-k (into (sorted-set-by bu/bytes-comparator) (map key->bytes ks))
                 :let [[k v] (ks/-seek i seek-k)]
-                :when (bu/bytes=? seek-k k)]
+                :when (and k (bu/bytes=? seek-k k))]
             [(bu/bytes->hex k)
              (nippy/thaw v)])
           (into {})))))

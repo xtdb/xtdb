@@ -24,4 +24,11 @@
       (t/is (= ["58232d6993e120d1aa19edfc7fbd1df791f06b48"] ks))
       (t/is (= {"58232d6993e120d1aa19edfc7fbd1df791f06b48"
                 picasso}
-               (doc/docs f/*kv* ks))))))
+               (doc/docs f/*kv* ks))))
+
+    (t/testing "non existent entities are not ignored"
+      (t/is (= {"58232d6993e120d1aa19edfc7fbd1df791f06b48"
+                picasso}
+               (doc/docs f/*kv* ["58232d6993e120d1aa19edfc7fbd1df791f06b48"
+                                 "090622a35d4b579d2fcfebf823821298711d3867"])))
+      (t/is (empty? (doc/docs f/*kv* []))))))
