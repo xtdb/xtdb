@@ -8,6 +8,8 @@
             [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
+           [ch.qos.logback.classic Level Logger]
+           [org.slf4j LoggerFactory]
            [java.io Closeable]))
 
 (def config {:storage-dir "dev-storage"
@@ -73,6 +75,10 @@
   (stop)
   (cio/delete-dir (:storage-dir config))
   :ok)
+
+(defn set-log-level! [ns level]
+  (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
+             (Level/valueOf (name level))))
 
 (comment
   (start)
