@@ -3,6 +3,7 @@
             [crux.kv :as cr]
             [crux.query :as q]
             [crux.core :refer [db]]
+            [crux.doc :as doc]
             [crux.codecs]
             [crux.memdb])
   (:import [java.util Date]))
@@ -48,3 +49,26 @@
 ;; Notes codecs benching:
 ;; in the current world - m is problematic, as it's a map
 ;; decode is also likely more expensive, due to enum dispatch and the for loop
+
+(defn bench-doc [& {:keys [n batch-size ts queries kv] :or {n 1000
+                                                            batch-size 10
+                                                            queries 100
+                                                            ts (Date.)
+                                                        kv :rocks}}]
+  ((case kv
+     :rocks f/with-rocksdb
+     :lmdb f/with-lmdb
+     :mem f/with-memdb)
+   (fn []
+     (f/with-kv-store
+      (fn []
+        ;; Insert data
+        (time
+         (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
+           (doc/store *kv* people)))
+
+        ;; Basic query, does not do temporal look up yet.
+        (time
+         (doseq [i (range queries)]
+           (doc/find-keys-by-attribute-values
+            *kv* :name #{"Ivan"}))))))))
