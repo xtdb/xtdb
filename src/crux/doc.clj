@@ -35,17 +35,26 @@
   (cond-> k
     (string? k) bu/hex->bytes))
 
-(defn docs [kv ks]
+(defn entries [kv ks]
   (ks/iterate-with
    kv
    (fn [i]
-     (->> (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
+     (set (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
                             (into (sorted-set-by bu/bytes-comparator)))
-                :let [[k v] (ks/-seek i seek-k)]
+                :let [[k v :as kv] (ks/-seek i seek-k)]
                 :when (and k (bu/bytes=? seek-k k))]
-            [(bu/bytes->hex (decode-doc-key k))
-             (nippy/thaw v)])
-          (into {})))))
+            kv)))))
+
+(defn docs [kv ks]
+  (->> (for [[k v] (entries kv ks)]
+         [(bu/bytes->hex (decode-doc-key k))
+          (nippy/thaw v)])
+       (into {})))
+
+(defn existing-doc-keys [kv ks]
+  (->> (for [[k v] (entries kv ks)]
+         (bu/bytes->hex (decode-doc-key k)))
+       (into #{})))
 
 (defn tx-put
   ([k v]
