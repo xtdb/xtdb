@@ -38,7 +38,7 @@
    "transaction.state.log.min.isr" "1"
    "auto.create.topics.enable" "false"})
 
-(defn write-meta-properties [log-dir broker-id]
+(defn write-kafka-meta-properties [log-dir broker-id]
   (let [meta-properties (io/file log-dir "meta.properties")]
     (when-not (.exists meta-properties)
       (io/make-parents meta-properties)
@@ -54,7 +54,7 @@
 
 (defn with-embedded-kafka [f]
   (let [log-dir (doto (cio/create-tmpdir "kafka-log")
-                  (write-meta-properties *broker-id*))
+                  (write-kafka-meta-properties *broker-id*))
         port (cio/free-port)
         broker (start-kafka-broker {"host.name" *host*
                                     "port" (str port)
