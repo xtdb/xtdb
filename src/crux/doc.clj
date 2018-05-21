@@ -1,16 +1,35 @@
 (ns crux.doc
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
-            [taoensso.nippy :as nippy]))
+            [taoensso.nippy :as nippy])
+  (:import [java.nio ByteBuffer]))
+
+(set! *unchecked-math* :warn-on-boxed)
+
+(def ^:const sha1-size 20)
+
+(def ^:const doc-index-id 0)
+
+(defn encode-doc-key ^bytes [^bytes content-hash]
+  (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size))
+      (.putShort doc-index-id)
+      (.put content-hash)
+      (.array)))
+
+(defn decode-doc-key ^bytes [^bytes doc-key]
+  (let [buffer (ByteBuffer/wrap doc-key)]
+    (assert (= doc-index-id (.getShort buffer)))
+    (doto (byte-array sha1-size)
+      (->> (.get buffer)))))
 
 (defn store [kv docs]
   (let [kvs (->> (for [doc docs
                        :let [v (nippy/freeze doc)
-                             k (bu/sha1 v)]]
+                             k (encode-doc-key (bu/sha1 v))]]
                    [k v])
                  (into {}))]
     (ks/store kv kvs)
-    (mapv bu/bytes->hex (keys kvs))))
+    (mapv (comp bu/bytes->hex decode-doc-key) (keys kvs))))
 
 (defn key->bytes [k]
   (cond-> k
@@ -20,10 +39,11 @@
   (ks/iterate-with
    kv
    (fn [i]
-     (->> (for [seek-k (into (sorted-set-by bu/bytes-comparator) (map key->bytes ks))
+     (->> (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
+                            (into (sorted-set-by bu/bytes-comparator)))
                 :let [[k v] (ks/-seek i seek-k)]
                 :when (and k (bu/bytes=? seek-k k))]
-            [(bu/bytes->hex k)
+            [(bu/bytes->hex (decode-doc-key k))
              (nippy/thaw v)])
           (into {})))))
 
