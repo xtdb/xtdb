@@ -65,7 +65,7 @@
         ;; Insert data
         (time
          (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-           (doc/store *kv* people)))
+           (doc/store-docs *kv* people)))
 
         ;; Basic query, does not do temporal look up yet.
         (time

@@ -20,7 +20,7 @@
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (let [ks (doc/store f/*kv* [picasso])]
+    (let [ks (doc/store-docs f/*kv* [picasso])]
       (t/is (= ["58232d6993e120d1aa19edfc7fbd1df791f06b48"] ks))
       (t/is (= {"58232d6993e120d1aa19edfc7fbd1df791f06b48"
                 picasso}
@@ -47,10 +47,10 @@
                     :http://dbpedia.org/resource/Pablo_Picasso)]
     (doc/store f/*kv* [picasso])
     (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
-             (doc/find-keys-by-attribute-values
+             (doc/find-doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
 
     (t/testing "find multi valued attribute"
       (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
-               (doc/find-keys-by-attribute-values
+               (doc/find-doc-keys-by-attribute-values
                 f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))))
