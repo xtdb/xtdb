@@ -1,6 +1,7 @@
 (ns crux.doc-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
+            [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]))
@@ -45,7 +46,7 @@
 (t/deftest test-can-find-doc-by-value
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)]
-    (doc/store f/*kv* [picasso])
+    (doc/store-docs f/*kv* [picasso])
     (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
              (doc/find-doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
@@ -54,3 +55,54 @@
       (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
                (doc/find-doc-keys-by-attribute-values
                 f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))))
+
+(t/deftest test-can-index-tx-ops
+  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+                    :http://dbpedia.org/resource/Pablo_Picasso)
+        content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
+        ops [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+              content-hash-hex]]
+        transact-time #inst "2018-05-21"
+        tx-id 0]
+
+    (doc/store-txs f/*kv* ops transact-time tx-id)
+
+    (t/testing "can find entity by content hash"
+      (t/is (= {content-hash-hex
+                [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
+               (doc/entities-by-content-hashes f/*kv* [content-hash-hex]))))
+
+    (t/testing "can see entity at transact and business time"
+      (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
+                {:content-hash content-hash-hex
+                 :business-time transact-time
+                 :transact-time transact-time
+                 :tx-id tx-id}}
+               (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time))))
+
+    (t/testing "cannot see entity before business or transact time"
+      (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
+      (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-20"))))
+
+    (t/testing "can see entity after business or transact time"
+      (t/is (some? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" transact-time)))
+      (t/is (some? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-22"))))
+
+    (t/testing "add new version of entity in the past"
+      (let [picasso (assoc picasso :foo :bar)
+            new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
+            new-transact-time #inst "2018-05-22"
+            new-business-time #inst "2018-05-20"
+            new-tx-id 1]
+        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+                                new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
+        (t/is (= {new-content-hash-hex
+                  [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
+                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
+                  {:content-hash new-content-hash-hex
+                   :business-time new-business-time
+                   :transact-time new-transact-time
+                   :tx-id new-tx-id}}
+                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+        (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))))
