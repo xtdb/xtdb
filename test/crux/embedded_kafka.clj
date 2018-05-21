@@ -11,7 +11,7 @@
            [org.apache.kafka.clients.consumer
             KafkaConsumer]
            [org.apache.zookeeper.server
-             ServerCnxnFactory NIOServerCnxnFactory ZooKeeperServer]
+             ServerCnxnFactory ServerCnxnFactory ZooKeeperServer]
            [java.net InetSocketAddress]
            [java.util Properties]))
 
@@ -69,22 +69,17 @@
         (some-> broker .awaitShutdown)
         (cio/delete-dir log-dir)))))
 
-(defn start-zookeeper ^ServerCnxnFactory
-  ([data-dir]
-   (start-zookeeper data-dir *host* default-zookeeper-port))
-  ([data-dir ^String host ^long port]
-   (let [tick-time 500
-         max-connections 16
-         server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
-     (doto (NIOServerCnxnFactory/createFactory)
-       (.configure (InetSocketAddress. host port)
-                   max-connections)
-       (.startup server)))))
+(defn start-zookeeper ^ServerCnxnFactory [data-dir ^long port]
+  (let [tick-time 500
+        max-connections 16
+        server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
+    (doto (ServerCnxnFactory/createFactory port max-connections)
+      (.startup server))))
 
 (defn with-embedded-zookeeper [f]
   (let [data-dir (cio/create-tmpdir "zookeeper")
         port (cio/free-port)
-        server-cnxn-factory (start-zookeeper data-dir *host* port)]
+        server-cnxn-factory (start-zookeeper data-dir port)]
     (try
       (binding [*zookeeper-connect* (str  *host* ":" port)]
         (f))
