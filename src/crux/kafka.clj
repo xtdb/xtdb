@@ -1,7 +1,8 @@
 (ns crux.kafka
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
-  (:require [crux.db :as db]
+  (:require [clojure.tools.logging :as log]
+            [crux.db :as db]
             [crux.rdf :as rdf]
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
@@ -59,6 +60,8 @@
   (->> (ProducerRecord. topic nil entities)
        (.send producer)))
 
+(def ^:dynamic *transact-log-size* 100000)
+
 (defn transact-ntriples [producer in topic tx-size]
   (->> (rdf/ntriples-seq in)
        (rdf/statements->maps)
@@ -66,6 +69,8 @@
        (map rdf/use-iri-as-id)
        (partition-all tx-size)
        (reduce (fn [^long n entities]
+                 (when (zero? (long (mod n *transact-log-size*)))
+                   (log/debug "transacted" n))
                  (transact producer topic entities)
                  (+ n (count entities)))
                0)))
