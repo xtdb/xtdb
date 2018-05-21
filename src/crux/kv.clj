@@ -229,18 +229,21 @@
   (->> (kvu/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k))) (map :eid)))))
 
-(defn entity-ids-for-value [db ident v ^Date ts]
-  (let [aid (attr-ident->aid! db ident)
-        k ^bytes (encode frame-index-avt {:index :avt
-                                          :aid aid
-                                          :v (bu/md5 (nippy/freeze v))
-                                          :ts ts
-                                          :eid 0})]
-    (eduction
-     (map (comp bytes->long second))
-     (kvu/seek-and-iterate db
-                           (partial bu/bytes=? k (- (alength k) 12))
-                           k))))
+(defn entity-ids-for-value
+  ([db ident v]
+   (entity-ids-for-value db ident v (Date.)))
+  ([db ident v ^Date ts]
+   (let [aid (attr-ident->aid! db ident)
+         k ^bytes (encode frame-index-avt {:index :avt
+                                           :aid aid
+                                           :v (bu/md5 (nippy/freeze v))
+                                           :ts ts
+                                           :eid 0})]
+     (eduction
+      (map (comp bytes->long second))
+      (kvu/seek-and-iterate db
+                            (partial bu/bytes=? k (- (alength k) 12))
+                            k)))))
 
 (defn store-meta [db k v]
   (kv-store/store db

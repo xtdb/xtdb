@@ -163,3 +163,14 @@
   (t/testing "Can fetch original via prior to correction using tx-time"
     (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04")))
     (t/is (= "Foo2" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04" #inst "2000-02-06")))))
+
+(t/deftest test-can-query-against-values
+  (cr/-put *kv* [[1 :foo "Bar1"]])
+  (cr/-put *kv* [[2 :foo "Bar2"]])
+  (t/is (= (list 1) (cr/entity-ids-for-value *kv* :foo "Bar1")))
+  (t/is (= (list 2) (cr/entity-ids-for-value *kv* :foo "Bar2")))
+
+  (t/testing "Multiple values"
+    (cr/-put *kv* [[3 :foo "BarX"]])
+    (cr/-put *kv* [[4 :foo "BarX"]])
+    (t/is (= (list 3 4) (sort (cr/entity-ids-for-value *kv* :foo "BarX"))))))
