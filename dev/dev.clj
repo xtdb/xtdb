@@ -29,7 +29,7 @@
 (defn ^Closeable start-kafka [{:keys [kafka-log-dir]}]
   (sys/closeable
    (ek/start-kafka-broker
-    {"log.dir" (.getAbsolutePath (io/file kafka-log-dir))})
+    {"log.dir" (str (io/file kafka-log-dir))})
    (fn [^KafkaServerStartable kafka]
      (.shutdown kafka)
      (.awaitShutdown kafka))))

@@ -69,12 +69,15 @@
         (some-> broker .awaitShutdown)
         (cio/delete-dir log-dir)))))
 
-(defn start-zookeeper ^ServerCnxnFactory [data-dir ^long port]
-  (let [tick-time 500
-        max-connections 16
-        server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
-    (doto (ServerCnxnFactory/createFactory port max-connections)
-      (.startup server))))
+(defn start-zookeeper ^ServerCnxnFactory
+  ([data-dir]
+   (start-zookeeper data-dir default-zookeeper-port))
+  ([data-dir ^long port]
+   (let [tick-time 500
+         max-connections 16
+         server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
+     (doto (ServerCnxnFactory/createFactory port max-connections)
+       (.startup server)))))
 
 (defn with-embedded-zookeeper [f]
   (let [data-dir (cio/create-tmpdir "zookeeper")
