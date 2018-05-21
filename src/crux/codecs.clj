@@ -2,8 +2,7 @@
   (:require [clojure.edn :as edn]
             [crux.byte-utils :as bu])
   (:import [java.nio ByteBuffer]
-           [java.net URI]
-           [java.util Date UUID]))
+           [java.util Date]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
