@@ -5,6 +5,7 @@
             [crux.bootstrap :as b]
             [crux.io :as cio]
             [crux.core :as crux]
+            [crux.query :as q]
             [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
