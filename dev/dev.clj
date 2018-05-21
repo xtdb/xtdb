@@ -83,6 +83,7 @@
 (comment
   (start)
 
+  ;; Download from http://wiki.dbpedia.org/services-resources/ontology
   (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
     (k/transact-ntriples (:kafka-producer system) in (:topic system) 1000))
 
