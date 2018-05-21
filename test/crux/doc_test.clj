@@ -63,26 +63,32 @@
         ops [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
               content-hash-hex]]
         transact-time #inst "2018-05-21"
-        tx-id 0]
+        tx-id 0
+        entity (bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
     (doc/store-txs f/*kv* ops transact-time tx-id)
 
     (t/testing "can find entity by content hash"
       (t/is (= {content-hash-hex
-                [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
+                [entity]}
                (doc/entities-by-content-hashes f/*kv* [content-hash-hex]))))
 
     (t/testing "can see entity at transact and business time"
       (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
-                {:content-hash content-hash-hex
+                {:entity entity
+                 :content-hash content-hash-hex
                  :business-time transact-time
                  :transact-time transact-time
                  :tx-id tx-id}}
-               (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time))))
+               (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
+      (t/is (= #{entity} (doc/all-entities f/*kv* transact-time transact-time))))
 
     (t/testing "cannot see entity before business or transact time"
       (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
-      (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-20"))))
+      (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-20")))
+
+      (t/is (empty? (doc/all-entities f/*kv* #inst "2018-05-20" transact-time)))
+      (t/is (empty? (doc/all-entities f/*kv* transact-time #inst "2018-05-20"))))
 
     (t/testing "can see entity after business or transact time"
       (t/is (some? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" transact-time)))
@@ -100,9 +106,12 @@
                   [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
         (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
-                  {:content-hash new-content-hash-hex
+                  {:entity entity
+                   :content-hash new-content-hash-hex
                    :business-time new-business-time
                    :transact-time new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+        (t/is (= #{entity} (doc/all-entities f/*kv* new-transact-time new-business-time)))
+
         (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))))

@@ -96,8 +96,9 @@
 (defn decode-entity+business-time+transact-time+tx-id-key ^bytes [^bytes key]
     (let [buffer (ByteBuffer/wrap key)]
       (assert (= entity+business-time+transact-time+tx-id->content-hash-index-id (.getShort buffer)))
-      (.position buffer (+ Short/BYTES sha1-size))
-      {:business-time (reverse-time-ms->date (.getLong buffer))
+      {:entity (doto (byte-array sha1-size)
+                 (->> (.get buffer)))
+       :business-time (reverse-time-ms->date (.getLong buffer))
        :transact-time (reverse-time-ms->date (.getLong buffer))
        :tx-id (.getLong buffer)}))
 
@@ -217,7 +218,8 @@
                              (<= (bu/compare-bytes seek-k k) 0)
                              (pos? (alength ^bytes v)))]
               [entity (-> (decode-entity+business-time+transact-time+tx-id-key k)
-                          (assoc :content-hash (bu/bytes->hex v)))])
+                          (assoc :content-hash (bu/bytes->hex v))
+                          (update :entity bu/bytes->hex))])
             (into {}))))))
 
 (defn find-entities-by-attribute-values-at [kv k vs business-time transact-time]
@@ -227,6 +229,23 @@
              :when (= content-hash (:content-hash entity-map))]
          [entity entity-map])
        (into {})))
+
+(defn all-entities [kv business-time transact-time]
+  (let [seek-k (.array (.putShort (ByteBuffer/allocate Short/BYTES) entity+business-time+transact-time+tx-id->content-hash-index-id))
+        entities
+        (ks/iterate-with
+         kv
+         (fn [i]
+           (loop [[k v :as kv] (ks/-seek i seek-k)
+                  acc #{}]
+             (if (and kv (bu/bytes=? seek-k k))
+               (let [{:keys [entity]} (decode-entity+business-time+transact-time+tx-id-key k)]
+                 (recur (ks/-next i) (conj acc entity)))
+               acc))))]
+    (->> (entities-at kv entities business-time transact-time)
+         (keys)
+         (map bu/bytes->hex)
+         (set))))
 
 (defn store-txs [kv ops transact-time tx-id]
   (->> (for [[op k v business-time :as operation] ops
