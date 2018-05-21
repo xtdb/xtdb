@@ -22,4 +22,6 @@
 
     (let [ks (doc/store f/*kv* [picasso])]
       (t/is (= ["58232d6993e120d1aa19edfc7fbd1df791f06b48"] ks))
-      (t/is (= [picasso] (doc/values f/*kv* ks))))))
+      (t/is (= {"58232d6993e120d1aa19edfc7fbd1df791f06b48"
+                picasso}
+               (doc/docs f/*kv* ks))))))

@@ -17,14 +17,15 @@
   (cond-> k
     (string? k) bu/hex->bytes))
 
-(defn values [kv ks]
+(defn docs [kv ks]
   (ks/iterate-with
    kv
    (fn [i]
-     (vec (for [seek-k (sort-by bu/bytes-comparator (map key->bytes ks))
+     (->> (for [seek-k (sort-by bu/bytes-comparator (map key->bytes ks))
                 :let [[k v] (ks/-seek i seek-k)]
                 :when (bu/bytes=? seek-k k)]
-            (nippy/thaw v))))))
+            [(bu/bytes->hex k) (nippy/thaw v)])
+          (into {})))))
 
 (defn tx-put
   ([k v]
