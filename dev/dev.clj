@@ -14,13 +14,13 @@
            [java.io Closeable]))
 
 (def storage-dir "dev-storage")
-(def config {:db-dir (io/file storage-dir "data")
-             :zookeeper-data-dir (io/file storage-dir "zookeeper")
-             :kafka-log-dir (io/file storage-dir "kafka-log")
-             :replication-factor 1})
+(def options {:db-dir (io/file storage-dir "data")
+              :zookeeper-data-dir (io/file storage-dir "zookeeper")
+              :kafka-log-dir (io/file storage-dir "kafka-log")
+              :replication-factor 1})
 (def system)
 
-(defn ^Closeable start-zk [{:keys [zookeeper-data-dir]}]
+(defn ^Closeable start-zookeeper [{:keys [zookeeper-data-dir]}]
   (sys/closeable
    (ek/start-zookeeper (io/file zookeeper-data-dir))
    (fn [^ServerCnxnFactory zk]
@@ -37,7 +37,7 @@
 (defn with-crux-system [do-with-system-fn {:keys [bootstrap-servers
                                                   group-id]
                                            :as options}]
-  (with-open [zk (start-zk options)
+  (with-open [zookeeper (start-zookeeper options)
               kafka (start-kafka options)
               kv-store (b/start-kv-store options)
               kafka-producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
@@ -45,7 +45,7 @@
                                                  "group.id" group-id})
               kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
                                                          "request.timeout.ms" "5000"})]
-    (->> {:zk @zk
+    (->> {:zookeeper @zookeeper
           :kafka @kafka
           :kv-store kv-store
           :kafka-producer kafka-producer
@@ -54,18 +54,17 @@
           :options options}
          (do-with-system-fn))))
 
-(defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client options]
-                         :as system}]
-  (b/start-system kv-store kafka-consumer kafka-admin-client options))
+(defn start-index-node [running? {:keys [kv-store kafka-consumer kafka-admin-client options]
+                                  :as system}]
+  (b/start-system kv-store kafka-consumer kafka-admin-client running? options))
 
 (defn make-crux-system-init-fn []
   (fn []
     (let [running? (atom true)
           init-fn (sys/make-init-fn
                    #(-> (sys/with-system-var % #'system)
-                        (with-crux-system
-                          (merge b/default-options config {:running? running?})))
-                   start-index-node
+                        (with-crux-system (merge b/default-options options)))
+                   (partial start-index-node running?)
                    (fn [_]
                      (reset! running? false)))]
       (init-fn))))

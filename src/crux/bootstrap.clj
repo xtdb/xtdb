@@ -29,8 +29,7 @@
    ["-h" "--help"]])
 
 (def default-options
-  (merge {:replication-factor 3
-          :running? (delay true)}
+  (merge {:replication-factor 3}
          (:options (cli/parse-opts [] cli-options))))
 
 (defn parse-version []
@@ -62,13 +61,12 @@
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-     (start-system kv-store consumer admin-client options)))
-  ([kv-store consumer admin-client options]
+     (start-system kv-store consumer admin-client (delay true) options)))
+  ([kv-store consumer admin-client running? options]
    (let [{:keys [bootstrap-servers
                  group-id
                  topic
-                 replication-factor
-                 running?]
+                 replication-factor]
           :as options} (merge default-options options)
          indexer (crux/indexer kv-store)]
      (k/create-topic admin-client topic 1 replication-factor {})
