@@ -63,23 +63,18 @@
     (deliver promise system)
     (do-with-system-fn system)))
 
-(defn with-error-logging [do-with-system-fn]
-  (fn [system]
-    (try
-      (do-with-system-fn system)
-      (catch Throwable t
-        (log/error t "Exception caught, system will stop:")
-        (throw t)))))
-
 (defn make-init-fn [with-system-fn do-with-system-fn close-fn]
   (fn []
     (let [started? (promise)
           instance (closeable
                     (future
-                      (-> do-with-system-fn
-                          (with-error-logging)
-                          (with-system-promise started?)
-                          (with-system-fn)))
+                      (try
+                        (-> do-with-system-fn
+                            (with-system-promise started?)
+                            (with-system-fn))
+                        (catch Throwable t
+                          (log/error t "Exception caught, system will stop:")
+                          (throw t))))
                     (fn [this]
                       (close-fn this)
                       @this))]
