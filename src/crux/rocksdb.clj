@@ -29,7 +29,8 @@
     (let [opts (doto (Options.)
                  (.setCreateIfMissing true))
           db (try
-               (RocksDB/open opts (.getAbsolutePath (io/file db-dir)))
+               (RocksDB/open opts (.getAbsolutePath (doto (io/file db-dir)
+                                                      (.mkdirs))))
                (catch Throwable t
                  (.close opts)
                  (throw t)))]

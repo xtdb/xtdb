@@ -60,7 +60,7 @@
 (defn- env-open [^long env dir ^long flags]
   (success? (LMDB/mdb_env_open env
                                (.getAbsolutePath (doto (io/file dir)
-                                                   .mkdirs))
+                                                   (.mkdirs)))
                                flags
                                0664)))
 
