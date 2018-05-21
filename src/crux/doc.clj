@@ -33,3 +33,17 @@
   ([k v business-time]
    (cond-> [:crux.tx/put k v]
      business-time (conj business-time))))
+
+(defn tx-cas
+  ([k v-old v-new]
+   (tx-cas k v-old v-new nil))
+  ([k v-old v-new business-time]
+   (cond-> [:crux.tx/cas k v-old v-new]
+     business-time (conj business-time))))
+
+(defn tx-delete
+  ([k]
+   (tx-delete k nil))
+  ([k business-time]
+   (cond-> [:crux.tx/delete k]
+     business-time (conj business-time))))
