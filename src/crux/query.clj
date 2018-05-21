@@ -58,8 +58,8 @@
            (transduce (map (partial hash-map e)) rf result (entities-for-term db a v))
            (if (get input e)
              (rf result input)
-             ;; New entity, join the results (todo, look at hash-join algos)
-             (transduce (map #(assoc input e %)) rf result (entities-for-term db a v)))))))))
+             (let [v (or (and (symbol? v) (get input v)) v)]
+               (transduce (map #(assoc input e %)) rf result (entities-for-term db a v))))))))))
 
 (defrecord VarBinding [e a s]
   Binding
