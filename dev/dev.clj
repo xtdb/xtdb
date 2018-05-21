@@ -51,27 +51,23 @@
          (merge options)
          (do-with-system-fn))))
 
-(defn ^Closeable with-async-crux-system [do-with-system-fn options]
-  (let [running? (atom true)]
-    (sys/closeable
-     (future
-       (with-crux-system do-with-system-fn (assoc options :running? running?)))
-     (fn [this]
-       (reset! running? false)
-       @this))))
-
-
 (defn start-index-node [{:keys [kv-store kafka-consumer kafka-admin-client]
                          :as options}]
   (b/start-system kv-store kafka-consumer kafka-admin-client options))
 
-(alter-var-root
- #'sys/init (constantly
-             (sys/make-init-fn
-              #(-> (sys/with-system-var % #'system)
-                   (with-async-crux-system
-                     (merge b/default-options config)))
-              start-index-node)))
+(defn make-crux-system-init-fn []
+  (fn []
+    (let [running? (atom true)
+          init-fn (sys/make-init-fn
+                   #(-> (sys/with-system-var % #'system)
+                        (with-crux-system
+                          (merge b/default-options config {:running? running?})))
+                   start-index-node
+                   (fn [_]
+                     (reset! running? false)))]
+      (init-fn))))
+
+(alter-var-root #'sys/init (constantly (make-crux-system-init-fn)))
 
 (defn delete-storage []
   (stop)

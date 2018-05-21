@@ -71,13 +71,18 @@
         (log/error t "Exception caught, system will stop:")
         (throw t)))))
 
-(defn make-init-fn [with-system-fn do-with-system-fn]
+(defn make-init-fn [with-system-fn do-with-system-fn close-fn]
   (fn []
     (let [started? (promise)
-          instance (-> do-with-system-fn
-                       (with-error-logging)
-                       (with-system-promise started?)
-                       (with-system-fn))]
+          instance (closeable
+                    (future
+                      (-> do-with-system-fn
+                          (with-error-logging)
+                          (with-system-promise started?)
+                          (with-system-fn)))
+                    (fn [this]
+                      (close-fn this)
+                      @this))]
       (while (not (or (deref @instance 100 false)
                       (deref started? 100 false))))
       instance)))
