@@ -15,7 +15,6 @@
   (:gen-class))
 
 (def cli-options
-  ;; An option with a required argument
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
     :default "localhost:9092"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
