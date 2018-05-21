@@ -173,4 +173,8 @@
   (t/testing "Multiple values"
     (cr/-put *kv* [[3 :foo "BarX"]])
     (cr/-put *kv* [[4 :foo "BarX"]])
-    (t/is (= (list 3 4) (sort (cr/entity-ids-for-value *kv* :foo "BarX"))))))
+    (t/is (= (list 3 4) (sort (cr/entity-ids-for-value *kv* :foo "BarX")))))
+
+  (t/testing "Keyword values"
+    (cr/-put *kv* [[5 :foo :barY]])
+    (t/is (= (list 5) (sort (cr/entity-ids-for-value *kv* :foo :barY))))))

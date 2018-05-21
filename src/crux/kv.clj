@@ -164,7 +164,10 @@
                              (get @tmp-ids->ids eid)
                              (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid)))
                    aid (attr-ident->aid! db k)
-                   value-bytes (nippy/freeze v)]
+                   value-bytes (nippy/freeze v)
+                   value-to-index-bytes (if (keyword? v)
+                                          (nippy/freeze (ident->id! db v))
+                                          value-bytes)]
                (cond-> txs-to-put
                  true (conj! [(encode frame-index-eat {:index :eat
                                                        :eid eid
@@ -174,7 +177,7 @@
                               value-bytes])
                  v (conj! [(encode frame-index-avt {:index :avt
                                                     :aid aid
-                                                    :v (bu/md5 value-bytes)
+                                                    :v (bu/md5 value-to-index-bytes)
                                                     :ts ts
                                                     :eid eid})
                            (long->bytes eid)]))))
@@ -230,20 +233,23 @@
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k))) (map :eid)))))
 
 (defn entity-ids-for-value
+  "Return a sequence of entities that are referenced as part of the AVT
+  index, and match the given attribute/value/timestamp."
   ([db ident v]
    (entity-ids-for-value db ident v (Date.)))
   ([db ident v ^Date ts]
-   (let [aid (attr-ident->aid! db ident)
-         k ^bytes (encode frame-index-avt {:index :avt
-                                           :aid aid
-                                           :v (bu/md5 (nippy/freeze v))
-                                           :ts ts
-                                           :eid 0})]
-     (eduction
-      (map (comp bytes->long second))
-      (kvu/seek-and-iterate db
-                            (partial bu/bytes=? k (- (alength k) 12))
-                            k)))))
+   (when-let [v (if (keyword? v) (lookup-ident db v) v)]
+     (let [aid (attr-ident->aid! db ident)
+           k ^bytes (encode frame-index-avt {:index :avt
+                                             :aid aid
+                                             :v (bu/md5 (nippy/freeze v))
+                                             :ts ts
+                                             :eid 0})]
+       (eduction
+        (map (comp bytes->long second))
+        (kvu/seek-and-iterate db
+                              (partial bu/bytes=? k (- (alength k) 12))
+                              k))))))
 
 (defn store-meta [db k v]
   (kv-store/store db
