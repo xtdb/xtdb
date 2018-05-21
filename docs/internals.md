@@ -101,16 +101,16 @@ time:
 
 ```clj
 [:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867" #inst
-"2018-05-18T09:20:27.966-00:00"]
+"090622a35d4b579d2fcfebf823821298711d3867"
+#inst "2018-05-18T09:20:27.966-00:00"]
 
 [:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
 "090622a35d4b579d2fcfebf823821298711d3867"
 "048ebba27e1da223ce97dded59d46e069ddf921b"
 #inst "2018-05-18T09:21:31.846-00:00"]
 
-[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso #inst
-#inst #inst "2018-05-18T09:21:52.151-00:00"]
+[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
+#inst "2018-05-18T09:21:52.151-00:00"]
 ```
 
 In this model, upserts or merging can be implemented via CAS on the
@@ -123,8 +123,8 @@ from the transaction log, in which case you would have:
 
 ```clj
 [:crux.tx/put "9049023351ca330419c5c5072948a305343c8d91"
-"090622a35d4b579d2fcfebf823821298711d3867" #inst
-"2018-05-18T09:20:27.966-00:00"]
+"090622a35d4b579d2fcfebf823821298711d3867"
+#inst "2018-05-18T09:20:27.966-00:00"]
 ```
 
 Where 9049023351ca330419c5c5072948a305343c8d91 is the SHA1 of
