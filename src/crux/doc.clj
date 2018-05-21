@@ -1,7 +1,6 @@
 (ns crux.doc
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
-            [crux.kv-store-utils :as kvu]
             [taoensso.nippy :as nippy]))
 
 (defn store [kv docs]
