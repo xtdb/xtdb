@@ -225,7 +225,7 @@ of an immutable log that has to be worked around.
 
 ### Identifiers
 
-### Proposal A: Use external IDs
+#### Proposal A: Use external IDs
 
 It's up to the users to supply their own IDs, such as UUIDs.
 
@@ -271,7 +271,7 @@ users insert data for two reasons:
 2) We may insert data that refers to a part of itself; a temporary ID
 will be needed to join the data inside of the transaction together.
 
-### A vs B
+#### A vs B
 
 There are pros and cons of both approaches. It might be possible to
 offset the performance implications of A, and the current rationale is
@@ -283,3 +283,49 @@ helping users to import data and allowing them to not worry about
 managing multiple IDs across their systems and datasets.
 
 If we choose A first, we can always fall back to B.
+
+### Eviction
+
+#### Proposal A: Evict Content History of Entity
+
+In the simplest case, we can evict the content of the history of an
+entity in the log before the transaction time:
+
+```clj
+[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso]
+```
+
+The indexing node will need to find all versions of the entity before
+this time, and get rid of them. In Proposal A for Indexing above, the
+documents must then be deleted from a compacted Kafka topic. To make
+the decision one needs to have consumed the transaction log up until
+the eviction message is read so one can decide which hashes to delete.
+
+The easiest way to achieve this is to have the indexing nodes all send
+deletion messages to the compacted document topic for the content
+hashes from the history of an entity. This will result in duplicated
+(but idempotent) messages being sent to issue deletions, but requires
+no new moving piece, or relying on the client to synchronise and
+submit the deletion messages to the document topic.
+
+The indexing nodes would also listen to this topic and perform purges
+of its indexes when required. It's worth noting that apart from when
+deleting a key, potentially by setting the value to nil, the key
+should always be the content hash of its value.
+
+In more advanced cases, the eviction message above could potentially
+contain dates to only evict partial histories.
+
+There's also an issue around someone else adding a new version of an
+entity at the same time when the entity is evicted, which will result
+in the entity to resurface. Though this is just a special case of it
+happening later, which might be totally valid. An alternative is to do
+a hard eviction, that stops new versions of an entity be able to
+written in the future.
+
+#### Proposal B: Evict Content Directly
+
+Another approach is that instead of evicting a specific entity, the
+user could provide a list of content hashes to explicitly evict. Any
+logic or queries could be used to build this list. This wouldn't deal
+with entities or their time lines explicitly.
