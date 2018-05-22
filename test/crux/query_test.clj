@@ -277,5 +277,13 @@
                                      ['e :age 'age]
                                      '(>= age 50)]})))))
 
+#_(t/deftest test-can-use-idents-as-entities
+  (let [[ivan petr] (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                              {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])]
+    (t/testing "Can query by single field"
+      (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
+                                           :where [[i :name "Ivan"]
+                                                   [p :mentor i]]}))))))
+
 ;; TODO write:
 (t/deftest test-use-another-datasource)
