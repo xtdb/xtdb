@@ -169,6 +169,38 @@ ids which have at any point in time had this value.
 eid/aid/transact-time index, and kept if the query predicate evaluates
 to true.
 
+#### Proposal B2
+
+An iteration of proposal B, where the 'doc store' is split out from
+the indexing layer.
+
+The rationale for this iteration:
+
+1) The actual content (docs) can fed into the system via a different
+ingestion topic, that can then be compacted, for example to remove
+duplicate docs (docs are keyed by content hash).
+
+2) Transactions are necessary to keep immutable, which would reside on
+their own topic / indices. The content topic can otherwise then be
+subject to excision, which is necessary for offering data retention
+strategies (for compliance, i.e. GDPR).
+
+3) It's desirable to keep documents in Crux in a way that doesn't
+necessarily subject them to a full index (triplet style), and then
+make them relatively expensive to stitch back together.
+
+The initial strategy for B2 is have the indexer lag behind the
+transaction log. The indexer will only index the data presiding from a
+transaction when the corresponding document is available in the
+doc-store.
+
+This does present some difficulties, i.e. a user might store a
+transaction, but this no longer means it is actually indexed.
+
+An advantage of this approach is that the doc-store should be
+pluggable - users might want to store their own documents in S3 or
+some other store. In this case there is further analysis on where a
+caching layer would belong, that would be necessary for performance.
 
 ### System of Record / Log
 
