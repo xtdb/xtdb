@@ -273,12 +273,20 @@
                                      '(>= age 50)]})))))
 
 (t/deftest test-can-use-idents-as-entities
-  (let [[ivan petr] (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                              {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])]
-    (t/testing "Can query by single field"
-      (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
-                                           :where [[i :name "Ivan"]
-                                                   [p :mentor i]]}))))))
+  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
+  (t/testing "Can query by single field"
+    (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
+                                         :where [[i :name "Ivan"]
+                                                 [p :mentor i]]})))))
+
+(t/deftest test-simple-numeric-range-search
+  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                            {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :age 18}])
+
+  (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
+                                       :where [[i :age age]
+                                               (< age 20)]}))))
 
 ;; TODO write:
 (t/deftest test-use-another-datasource)
