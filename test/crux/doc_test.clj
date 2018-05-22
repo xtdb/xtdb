@@ -74,7 +74,7 @@
 
     (t/testing "can see entity at transact and business time"
       (t/is (= {entity
-                {:entity entity
+                {:eid entity
                  :content-hash content-hash-hex
                  :bt transact-time
                  :tt transact-time
@@ -109,7 +109,7 @@
         (t/is (= {new-content-hash-hex [entity]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
         (t/is (= {entity
-                  {:entity entity
+                  {:eid entity
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time
@@ -131,14 +131,14 @@
         (t/is (= {new-content-hash-hex [entity]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
         (t/is (= {entity
-                  {:entity entity
+                  {:eid entity
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= {entity
-                  {:entity entity
+                  {:eid entity
                    :content-hash content-hash-hex
                    :bt transact-time
                    :tt transact-time
@@ -158,7 +158,7 @@
         (t/is (= {new-content-hash-hex [entity]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
         (t/is (= {entity
-                  {:entity entity
+                  {:eid entity
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time

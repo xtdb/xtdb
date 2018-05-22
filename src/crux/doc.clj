@@ -111,8 +111,8 @@
 (defn- decode-entity+bt+tt+tx-id-key ^bytes [^bytes key]
     (let [buffer (ByteBuffer/wrap key)]
       (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
-      {:entity (doto (byte-array sha1-size)
-                 (->> (.get buffer)))
+      {:eid (doto (byte-array sha1-size)
+              (->> (.get buffer)))
        :bt (reverse-time-ms->date (.getLong buffer))
        :tt (reverse-time-ms->date (.getLong buffer))
        :tx-id (.getLong buffer)}))
@@ -270,12 +270,12 @@
                                               (pos? (alength ^bytes v)))
                                      (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
                                                           (assoc :content-hash (bu/bytes->hex v))
-                                                          (update :entity bu/bytes->hex))]
+                                                          (update :eid bu/bytes->hex))]
                                        (if (<= (compare (:tt entity-map) transact-time) 0)
                                          entity-map
                                          (recur (ks/-next i))))))]
                 :when entity-map]
-            [(:entity entity-map) entity-map])
+            [(:eid entity-map) entity-map])
           (into {})))))
 
 
@@ -285,9 +285,9 @@
    (fn [i]
      (->> (for [[content-hash entities] (->> (doc-keys-by-attribute-values i kv k vs)
                                              (entities-by-content-hashes i kv))
-                [entity entity-map] (entities-at i kv entities business-time transact-time)
+                [eid entity-map] (entities-at i kv entities business-time transact-time)
                 :when (= content-hash (:content-hash entity-map))]
-            entity)
+            eid)
           (into #{})))))
 
 (defn all-entities [kv business-time transact-time]
@@ -298,8 +298,8 @@
        (loop [[k v :as kv] (ks/-seek i seek-k)
               acc #{}]
          (if (and kv (bu/bytes=? seek-k k))
-           (let [{:keys [entity]} (decode-entity+bt+tt+tx-id-key k)]
-             (recur (ks/-next i) (conj acc (bu/bytes->hex entity))))
+           (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
+             (recur (ks/-next i) (conj acc (bu/bytes->hex eid))))
            (->> (entities-at i kv acc business-time transact-time)
                 (keys)
                 (set))))))))
