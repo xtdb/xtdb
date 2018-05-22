@@ -24,7 +24,7 @@
     (let [info (MDBEnvInfo/callocStack stack)]
       (success? (LMDB/mdb_env_info env info))
       (let [new-mapsize (* factor (.me_mapsize info))]
-        (log/info "Increasing mapsize to:" new-mapsize)
+        (log/debug "Increasing mapsize to:" new-mapsize)
         (env-set-mapsize env new-mapsize)))))
 
 (defn- with-transaction [env f flags]
@@ -112,10 +112,11 @@
         (f (reify
              ks/KvIterator
              (-seek [this k]
-               (let [k ^bytes k
-                     kb (.flip (.put (.malloc stack (alength k)) k))
-                     kv (.mv_data (MDBVal/callocStack stack) kb)]
-                 (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE)))
+               (with-open [stack (.push stack)]
+                 (let [k ^bytes k
+                       kb (.flip (.put (.malloc stack (alength k)) k))
+                       kv (.mv_data (MDBVal/callocStack stack) kb)]
+                   (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE))))
              (-next [this]
                (cursor->kv cursor kv dv LMDB/MDB_NEXT))))))
     LMDB/MDB_RDONLY))
