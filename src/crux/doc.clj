@@ -143,7 +143,7 @@
       (doc-entries i kv ks))))
   ([i kv ks]
    (set (for [seek-k (->> (map (comp encode-doc-key doc-key->bytes) ks)
-                          (into (sorted-set-by bu/bytes-comparator)))
+                          (sort bu/bytes-comparator))
               :let [[k v :as kv] (ks/-seek i seek-k)]
               :when (and kv (bu/bytes=? seek-k k))]
           kv))))
@@ -180,14 +180,13 @@
   ([i kv k vs]
    (->> (for [seek-k (->> (for [v vs]
                             (encode-attribute+value-prefix-key k v))
-                          (into (sorted-set-by bu/bytes-comparator)))]
+                          (sort bu/bytes-comparator))]
           (loop [[k v :as kv] (ks/-seek i seek-k)
                  acc #{}]
             (if (and kv (bu/bytes=? seek-k k))
               (let [content-hash (decode-attribute+value+content-hash-key->content-hash k)]
                 (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
               acc)))
-        (doall)
         (reduce into #{}))))
 
 (defn doc->content-hash [doc]
@@ -264,7 +263,7 @@
                                (entity->eid-bytes entity)
                                business-time
                                transact-time))
-                            (sort-by bu/bytes-comparator))
+                            (sort bu/bytes-comparator))
                 :let [entity-map (loop [[k v :as kv] (ks/-seek i seek-k)]
                                    (when (and k
                                               (bu/bytes=? seek-k prefix-size k)
