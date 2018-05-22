@@ -7,8 +7,8 @@
 
 (when-not *compile-files*
   (require 'taoensso.nippy)
-  (alter-var-root #'freeze (constantly (resolve 'taoensso.nippy/freeze)))
-  (alter-var-root #'thaw (constantly (resolve 'taoensso.nippy/thaw))))
+  (alter-var-root #'freeze (constantly (resolve 'taoensso.nippy/fast-freeze)))
+  (alter-var-root #'thaw (constantly (resolve 'taoensso.nippy/fast-thaw))))
 
 (deftype NippySerializer []
   Serializer

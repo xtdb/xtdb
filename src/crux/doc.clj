@@ -43,7 +43,7 @@
       (.put (encode-keyword k))
       (.put (if (keyword? v)
               (encode-keyword v)
-              (bu/sha1 (nippy/freeze v))))
+              (bu/sha1 (nippy/fast-freeze v))))
       (.put content-hash)
       (.array)))
 
@@ -174,7 +174,7 @@
   ([i kv ks]
    (->> (for [[k v] (doc-entries i kv ks)]
           [(bu/bytes->hex (decode-doc-key k))
-           (nippy/thaw v)])
+           (nippy/fast-thaw v)])
         (into {}))))
 
 (defn existing-doc-keys
@@ -211,11 +211,11 @@
          #{}))))
 
 (defn doc->content-hash [doc]
-  (bu/sha1 (nippy/freeze doc)))
+  (bu/sha1 (nippy/fast-freeze doc)))
 
 (defn store-docs [kv docs]
   (let [content-hash->doc+bytes (->> (for [doc docs
-                                           :let [bs (nippy/freeze doc)
+                                           :let [bs (nippy/fast-freeze doc)
                                                  k (bu/sha1 bs)]]
                                        [k [doc bs]])
                                      (into (sorted-map-by bu/bytes-comparator)))
@@ -248,7 +248,7 @@
     (encode-keyword k)
 
     :else
-    (bu/sha1 (nippy/freeze k))))
+    (bu/sha1 (nippy/fast-freeze k))))
 
 (defn eids-by-content-hashes
   ([kv content-hashes]
