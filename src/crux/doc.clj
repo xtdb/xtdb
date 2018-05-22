@@ -322,12 +322,13 @@
     (ks/iterate-with
      kv
      (fn [i]
-       (loop [[k v :as kv] (ks/-seek i seek-k)
-              acc #{}]
-         (if (and kv (bu/bytes=? seek-k k))
-           (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
-             (recur (ks/-next i) (conj acc (bu/bytes->hex eid))))
-           (entities-at i kv acc business-time transact-time)))))))
+       (let [eids (loop [[k v :as kv] (ks/-seek i seek-k)
+                             acc #{}]
+                        (if (and kv (bu/bytes=? seek-k k))
+                          (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
+                            (recur (ks/-next i) (conj acc (bu/bytes->hex eid))))
+                          acc))]
+         (entities-at i kv eids business-time transact-time))))))
 
 ;; Tx Commands
 
