@@ -48,12 +48,12 @@
                     :http://dbpedia.org/resource/Pablo_Picasso)]
     (doc/store-docs f/*kv* [picasso])
     (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
-             (doc/find-doc-keys-by-attribute-values
+             (doc/doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
 
     (t/testing "find multi valued attribute"
       (t/is (= #{"58232d6993e120d1aa19edfc7fbd1df791f06b48"}
-               (doc/find-doc-keys-by-attribute-values
+               (doc/doc-keys-by-attribute-values
                 f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))))
 
 (t/deftest test-can-index-tx-ops
@@ -75,8 +75,8 @@
       (t/is (= {entity
                 {:entity entity
                  :content-hash content-hash-hex
-                 :business-time transact-time
-                 :transact-time transact-time
+                 :bt transact-time
+                 :tt transact-time
                  :tx-id tx-id}}
                (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
       (t/is (= #{entity} (doc/all-entities f/*kv* transact-time transact-time))))
@@ -104,8 +104,8 @@
         (t/is (= {entity
                   {:entity entity
                    :content-hash new-content-hash-hex
-                   :business-time new-business-time
-                   :transact-time new-transact-time
+                   :bt new-business-time
+                   :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
@@ -124,15 +124,15 @@
         (t/is (= {entity
                   {:entity entity
                    :content-hash new-content-hash-hex
-                   :business-time new-business-time
-                   :transact-time new-transact-time
+                   :bt new-business-time
+                   :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= {entity
                   {:entity entity
                    :content-hash content-hash-hex
-                   :business-time transact-time
-                   :transact-time transact-time
+                   :bt transact-time
+                   :tt transact-time
                    :tx-id tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time #inst "2018-05-22")))
         (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))))
@@ -149,8 +149,8 @@
         (t/is (= {entity
                   {:entity entity
                    :content-hash new-content-hash-hex
-                   :business-time new-business-time
-                   :transact-time new-transact-time
+                   :bt new-business-time
+                   :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
