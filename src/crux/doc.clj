@@ -217,13 +217,12 @@
    kv
    (fn [i]
      (let [prefix-size (+ Short/BYTES sha1-size)]
-       (->> (for [[seek-k entity] (->> (for [entity entities]
-                                         [(encode-entity+business-time+transact-time-prefix-key
-                                           (entity->eid-bytes entity)
-                                           business-time
-                                           transact-time)
-                                          entity])
-                                       (into (sorted-map-by bu/bytes-comparator)))
+       (->> (for [seek-k (->> (for [entity entities]
+                                (encode-entity+business-time+transact-time-prefix-key
+                                 (entity->eid-bytes entity)
+                                 business-time
+                                 transact-time))
+                              (sort-by bu/bytes-comparator))
                   :let [[k v :as kv] (ks/-seek i seek-k)]
                   :when (and k
                              (bu/bytes=? seek-k prefix-size k)
@@ -240,8 +239,8 @@
                                           (entities-by-content-hashes kv))
              [entity entity-map] (entities-at kv entities business-time transact-time)
              :when (= content-hash (:content-hash entity-map))]
-         [entity entity-map])
-       (into {})))
+         entity)
+       (into #{})))
 
 (defn all-entities [kv business-time transact-time]
   (let [seek-k (.array (.putShort (ByteBuffer/allocate Short/BYTES) entity+business-time+transact-time+tx-id->content-hash-index-id))
@@ -307,7 +306,7 @@
     (all-entities kv business-time transact-time))
 
   (entities-for-attribute-value [this ident v]
-    (keys (find-entities-by-attribute-values-at kv ident [v] business-time transact-time)))
+    (find-entities-by-attribute-values-at kv ident [v] business-time transact-time))
 
   (attr-val [this eid ident]
     (let [content-hash (get-in (entities-at kv [eid] business-time transact-time) [eid :content-hash])]
