@@ -1,5 +1,6 @@
 (ns crux.bench
   (:require [crux.fixtures :as f :refer [random-person *kv*]]
+            [crux.byte-utils :as bu]
             [crux.kv :as cr]
             [crux.query :as q]
             [crux.core :refer [db]]
@@ -64,12 +65,23 @@
       (fn []
         ;; Insert data
         (time
-         (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-           (doc/store-docs *kv* people)))
+         (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))
+                 :let [transact-time (Date.)]]
+           (doc/store-docs *kv* people)
+           (doc/store-txs *kv*
+                          (vec (for [person people]
+                                 [:crux.tx/put
+                                  (:crux.kv/id person)
+                                  (bu/bytes->hex (doc/doc->content-hash person))]))
+                          transact-time
+                          0)))
 
         ;; Basic query, does not do temporal look up yet.
         (time
-         (doseq [i (range queries)]
-           (q/q (doc/map->DocDatasource {:kv *kv*})
+         (doseq [i (range queries)
+                 :let [transact-time (Date.)]]
+           (q/q (doc/map->DocDatasource {:kv *kv*
+                                         :transact-time transact-time
+                                         :business-time transact-time})
                 '{:find [e]
                   :where [[e :name "Ivan"]]}))))))))

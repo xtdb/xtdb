@@ -74,7 +74,7 @@
                (doc/entities-by-content-hashes f/*kv* [content-hash-hex]))))
 
     (t/testing "can see entity at transact and business time"
-      (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
+      (t/is (= {entity
                 {:entity entity
                  :content-hash content-hash-hex
                  :business-time transact-time
@@ -105,7 +105,7 @@
         (t/is (= {new-content-hash-hex
                   [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
-        (t/is (= {:http://dbpedia.org/resource/Pablo_Picasso
+        (t/is (= {entity
                   {:entity entity
                    :content-hash new-content-hash-hex
                    :business-time new-business-time
