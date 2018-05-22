@@ -242,7 +242,9 @@
     (bytes? k)
     k
 
-    (string? k)
+    (and (string? k)
+         (even? (count k))
+         (re-find #"\p{XDigit}+" k))
     (bu/hex->bytes k)
 
     (keyword? k)
@@ -308,9 +310,9 @@
   (ks/iterate-with
    kv
    (fn [i]
-     (->> (for [[content-hash entities] (->> (doc-keys-by-attribute-values i kv k vs)
-                                             (eids-by-content-hashes i kv))
-                [eid entity-map] (entities-at i kv entities business-time transact-time)
+     (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values i kv k vs)
+                                         (eids-by-content-hashes i kv))
+                [eid entity-map] (entities-at i kv eids business-time transact-time)
                 :when (= content-hash (:content-hash entity-map))]
             [eid entity-map])
           (into {})))))
