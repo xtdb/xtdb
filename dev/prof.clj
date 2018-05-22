@@ -23,6 +23,7 @@
         (some (comp #{'invokePrim} :name))))
 
 (defn profile! [& ns]
+  (reset! profile-state {})
   (doseq [ns ns
           [_ v] (ns-interns ns)]
     (alter-var-root v #(if (and (fn? %)
