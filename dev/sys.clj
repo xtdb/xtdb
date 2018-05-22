@@ -1,7 +1,7 @@
 (ns sys
   (:require [clojure.tools.namespace.repl :as tn]
             [clojure.tools.logging :as log])
-  (:import [clojure.lang IDeref Var$Unbound]
+  (:import [clojure.lang IDeref]
            [java.io Closeable]))
 
 ;; Inspired by
@@ -26,12 +26,11 @@
                   (not (bound? #'init))
                   (throw (IllegalStateException. "init not set."))
 
-                  (or (nil? instance)
-                      (instance? Var$Unbound instance))
-                  (cast Closeable (init))
+                  (instance? Closeable instance)
+                  (throw (IllegalStateException. "Already running."))
 
                   :else
-                  (throw (IllegalStateException. "Already running.")))))
+                  (cast Closeable (init)))))
   :started)
 
 (defn stop []
