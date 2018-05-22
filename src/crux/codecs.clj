@@ -1,6 +1,7 @@
 (ns crux.codecs
   (:require [clojure.edn :as edn]
-            [crux.byte-utils :as bu])
+            [crux.byte-utils :as bu]
+            [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.util Date]))
 
@@ -34,7 +35,10 @@
                              (fn [^ByteBuffer bb k] (encode-string bb (keyword->string k)))
                              #(-> % decode-string keyword)]
                    :md5 [16
-                         (fn [b x] (encode-bytes b x))
+                         (fn [^ByteBuffer b x]
+                           (let [x (bu/md5 (nippy/freeze x))]
+                             (encode-bytes b x)))
+                         ;; Simply return the md5
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]
                    ;; For range scans:
                    :long [8 #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]

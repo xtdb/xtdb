@@ -1,14 +1,11 @@
 (ns crux.kv
-  (:require [crux.byte-utils :refer :all]
-            [crux.db]
+  (:require [crux.byte-utils :as bu :refer :all]
+            [crux.codecs :as c]
             [crux.kv-store :as kv-store]
             [crux.kv-store-utils :as kvu]
-            [crux.byte-utils :as bu]
-            [crux.codecs :as c]
-            [taoensso.nippy :as nippy]
-            [clojure.edn :as edn])
-  (:import [java.nio ByteBuffer]
-           [java.util Date]))
+            [taoensso.nippy :as nippy])
+  (:import java.nio.ByteBuffer
+           java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -93,7 +90,7 @@
   (let [id (next-entity-id db)]
     ;; to go from k -> id
     (kv-store/store db
-                    [[(encode frame-index-ident {:index :ident :ident (bu/md5 (nippy/freeze ident))})
+                    [[(encode frame-index-ident {:index :ident :ident ident})
                       (long->bytes id)]])
     ;; to go from id -> k
     (let [k (encode frame-index-ident-id {:index :ident-id :id id})]
@@ -103,7 +100,7 @@
 (defn- lookup-ident
   "Look up the ID for a given ident."
   [db ident]
-  (some->> {:index :ident :ident (bu/md5 (nippy/freeze ident))}
+  (some->> {:index :ident :ident ident}
            (encode frame-index-ident)
            (kvu/value db)
            bytes->long))
