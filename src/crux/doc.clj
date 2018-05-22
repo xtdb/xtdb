@@ -213,7 +213,7 @@
                      empty-byte-array])))
     (mapv bu/bytes->hex (keys content-hash->new-docs+bytes))))
 
-;; Txs
+;; Txs Read
 
 (defn- entity->eid-bytes ^bytes [k]
   (cond
@@ -304,45 +304,52 @@
                 (keys)
                 (set))))))))
 
-(defn store-txs [kv ops transact-time tx-id]
-  (->> (for [[op k v business-time :as operation] ops
-             :let [eid (entity->eid-bytes k)
-                   content-hash (bu/hex->bytes v)
-                   business-time (or business-time transact-time)]]
-         (case op
-           :crux.tx/put
-           [[(encode-entity+bt+tt+tx-id-key
-              eid
-              business-time
-              transact-time
-              tx-id)
-             content-hash]
-            [(encode-content-hash+entity-key content-hash eid)
-             empty-byte-array]]
+;; Tx Commands
 
-           :crux.tx/delete
-           [[(encode-entity+bt+tt+tx-id-key
-              eid
-              business-time
-              transact-time
-              tx-id)
-             empty-byte-array]]
+(defmulti tx-command (fn [kv [op] transact-time tx-id] op))
 
-           :crux.tx/cas
-           (let [[op k old-v new-v business-time] operation
-                 old-content-hash (-> (entities-at kv [k] business-time transact-time)
-                                      (get k)
-                                      :content-hash)
-                 business-time (or business-time transact-time)]
-             (when (= old-content-hash old-v)
-               [[(encode-entity+bt+tt+tx-id-key
-                  eid
-                  business-time
-                  transact-time
-                  tx-id)
-                 new-v]
-                [(encode-content-hash+entity-key new-v eid)
-                 empty-byte-array]]))))
+(defmethod tx-command :crux.tx/put [kv [op k v business-time] transact-time tx-id]
+  (let [eid (entity->eid-bytes k)
+        content-hash (bu/hex->bytes v)
+        business-time (or business-time transact-time)]
+    [[(encode-entity+bt+tt+tx-id-key
+       eid
+       business-time
+       transact-time
+       tx-id)
+      content-hash]
+     [(encode-content-hash+entity-key content-hash eid)
+      empty-byte-array]]))
+
+(defmethod tx-command :crux.tx/delete [kv [op k business-time] transact-time tx-id]
+  (let [eid (entity->eid-bytes k)
+        business-time (or business-time transact-time)]
+    [[(encode-entity+bt+tt+tx-id-key
+       eid
+       business-time
+       transact-time
+       tx-id)
+      empty-byte-array]]))
+
+(defmethod tx-command :crux.tx/cas [kv [op k old-v new-v business-time] transact-time tx-id]
+  (let [eid (entity->eid-bytes k)
+        old-content-hash (-> (entities-at kv [k] business-time transact-time)
+                             (get k)
+                             :content-hash)
+        business-time (or business-time transact-time)]
+    (when (= old-content-hash old-v)
+      [[(encode-entity+bt+tt+tx-id-key
+         eid
+         business-time
+         transact-time
+         tx-id)
+        new-v]
+       [(encode-content-hash+entity-key new-v eid)
+        empty-byte-array]])))
+
+(defn store-txs [kv commands transact-time tx-id]
+  (->> (for [command commands]
+         (tx-command kv command transact-time tx-id))
        (reduce into {})
        (ks/store kv)))
 
