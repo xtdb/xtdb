@@ -23,7 +23,7 @@
   (bu/sha1 (.getBytes (str kw))))
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
-  (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size))
+  (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash)))
       (.putShort content-hash->doc-index-id)
       (.put content-hash)
       (.array)))
@@ -55,7 +55,7 @@
       (->> (.get buffer)))))
 
 (defn encode-content-hash+entity-key ^bytes [^bytes content-hash ^bytes eid]
-  (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size (alength eid)))
+  (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash) (alength eid)))
       (.putShort content-hash+entity-index-id)
       (.put content-hash)
       (.put eid)
@@ -87,16 +87,24 @@
   (Date. (- max-timestamp reverse-time-ms)))
 
 (defn encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^long tx-id]
-  (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size Long/BYTES Long/BYTES Long/BYTES))
-      (.putShort entity+bt+tt+tx-id->content-hash-index-id)
-      (.put eid)
-      (.putLong (date->reverse-time-ms business-time))
-      (.putLong (date->reverse-time-ms transact-time))
-      (.putLong tx-id)
-      (.array)))
+  (let [tx-id-size (if (pos? tx-id)
+                     (long Long/BYTES)
+                     0)]
+    (cond-> (ByteBuffer/allocate (+ Short/BYTES (alength eid) Long/BYTES Long/BYTES tx-id-size))
+      true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
+               (.put eid)
+               (.putLong (date->reverse-time-ms business-time))
+               (.putLong (date->reverse-time-ms transact-time)))
+      (= Long/BYTES tx-id-size) (.putLong tx-id)
+      true (.array))))
 
-(defn encode-entity+bt+tt-prefix-key ^bytes [^bytes eid ^Date business-time ^Date transact-time]
-  (encode-entity+bt+tt+tx-id-key eid business-time transact-time 0))
+(defn encode-entity+bt+tt-prefix-key
+  (^bytes []
+   (-> (ByteBuffer/allocate Short/BYTES)
+       (.putShort entity+bt+tt+tx-id->content-hash-index-id)
+       (.array)))
+  (^bytes [^bytes eid ^Date business-time ^Date transact-time]
+   (encode-entity+bt+tt+tx-id-key eid business-time transact-time -1)))
 
 (defn decode-entity+bt+tt+tx-id-key ^bytes [^bytes key]
     (let [buffer (ByteBuffer/wrap key)]
@@ -106,10 +114,6 @@
        :bt (reverse-time-ms->date (.getLong buffer))
        :tt (reverse-time-ms->date (.getLong buffer))
        :tx-id (.getLong buffer)}))
-
-(defn key->bytes [k]
-  (cond-> k
-    (string? k) bu/hex->bytes))
 
 ;; Docs
 
@@ -125,6 +129,10 @@
              (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
            acc))))))
 
+(defn doc-key->bytes [k]
+  (cond-> k
+    (string? k) (bu/hex->bytes)))
+
 (defn doc-entries
   ([kv ks]
    (ks/iterate-with
@@ -132,7 +140,7 @@
     (fn [i]
       (doc-entries i kv ks))))
   ([i kv ks]
-   (set (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
+   (set (for [seek-k (->> (map (comp encode-doc-key doc-key->bytes) ks)
                           (into (sorted-set-by bu/bytes-comparator)))
               :let [[k v :as kv] (ks/-seek i seek-k)]
               :when (and kv (bu/bytes=? seek-k k))]
@@ -281,9 +289,7 @@
           (into #{})))))
 
 (defn all-entities [kv business-time transact-time]
-  (let [seek-k (-> (ByteBuffer/allocate Short/BYTES)
-                   (.putShort entity+bt+tt+tx-id->content-hash-index-id)
-                   (.array))]
+  (let [seek-k (encode-entity+bt+tt-prefix-key)]
     (ks/iterate-with
      kv
      (fn [i]
@@ -299,12 +305,13 @@
 (defn store-txs [kv ops transact-time tx-id]
   (->> (for [[op k v business-time :as operation] ops
              :let [eid (entity->eid-bytes k)
-                   content-hash (bu/hex->bytes v)]]
+                   content-hash (bu/hex->bytes v)
+                   business-time (or business-time transact-time)]]
          (case op
            :crux.tx/put
            [[(encode-entity+bt+tt+tx-id-key
               eid
-              (or business-time transact-time)
+              business-time
               transact-time
               tx-id)
              content-hash]
@@ -314,7 +321,7 @@
            :crux.tx/delete
            [[(encode-entity+bt+tt+tx-id-key
               eid
-              (or business-time transact-time)
+              business-time
               transact-time
               tx-id)
              empty-byte-array]]
@@ -323,11 +330,12 @@
            (let [[op k old-v new-v business-time] operation
                  old-content-hash (-> (entities-at kv [k] business-time transact-time)
                                       (get k)
-                                      :content-hash)]
+                                      :content-hash)
+                 business-time (or business-time transact-time)]
              (when (= old-content-hash old-v)
                [[(encode-entity+bt+tt+tx-id-key
                   eid
-                  (or business-time transact-time)
+                  business-time
                   transact-time
                   tx-id)
                  new-v]

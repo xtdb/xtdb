@@ -61,7 +61,7 @@
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
         transact-time #inst "2018-05-21"
-        tx-id 0
+        tx-id 1
         entity (bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
     (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
@@ -96,7 +96,7 @@
       (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :foo :bar)))
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
-            new-tx-id 1]
+            new-tx-id 2]
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
@@ -116,7 +116,7 @@
       (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :baz :boz)))
             new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
-            new-tx-id 2]
+            new-tx-id 3]
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
@@ -141,7 +141,7 @@
       (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :bar :foo)))
             new-transact-time #inst "2018-05-24"
             new-business-time #inst "2018-05-22"
-            new-tx-id 3]
+            new-tx-id 4]
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
@@ -155,5 +155,5 @@
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
 
-        (t/is (= 2 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
+        (t/is (= 3 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
                        (get-in [entity :tx-id]))))))))
