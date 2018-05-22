@@ -135,7 +135,7 @@
    (set (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
                           (into (sorted-set-by bu/bytes-comparator)))
               :let [[k v :as kv] (ks/-seek i seek-k)]
-              :when (and k (bu/bytes=? seek-k k))]
+              :when (and kv (bu/bytes=? seek-k k))]
           kv))))
 
 (defn docs
@@ -161,31 +161,6 @@
           (bu/bytes->hex (decode-doc-key k)))
         (into #{}))))
 
-(defn doc->content-hash [doc]
-  (bu/sha1 (nippy/freeze doc)))
-
-(defn store-docs [kv docs]
-  (let [content-hash->doc+bytes (->> (for [doc docs
-                                           :let [bs (nippy/freeze doc)
-                                                 k (bu/sha1 bs)]]
-                                       [k [doc bs]])
-                                     (into (sorted-map-by bu/bytes-comparator)))
-        existing-keys (existing-doc-keys kv (keys content-hash->doc+bytes))
-        content-hash->new-docs+bytes (apply dissoc content-hash->doc+bytes existing-keys)]
-    (ks/store kv (concat
-                  (for [[content-hash [doc bs]] content-hash->new-docs+bytes]
-                    [(encode-doc-key content-hash)
-                     bs])
-                  (for [[content-hash [doc]] content-hash->new-docs+bytes
-                        [k v] doc
-                        v (if (or (vector? v)
-                                  (set? v))
-                            v
-                            [v])]
-                    [(encode-attribute+value+content-hash-key k v content-hash)
-                     empty-byte-array])))
-    (mapv bu/bytes->hex (keys content-hash->new-docs+bytes))))
-
 (defn doc-keys-by-attribute-values
   ([kv k vs]
    (ks/iterate-with
@@ -203,6 +178,30 @@
                 (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
               acc)))
         (reduce into #{}))))
+
+(defn doc->content-hash [doc]
+  (bu/sha1 (nippy/freeze doc)))
+
+(defn store-docs [kv docs]
+  (let [content-hash->doc+bytes (->> (for [doc docs
+                                           :let [bs (nippy/freeze doc)
+                                                 k (bu/sha1 bs)]]
+                                       [k [doc bs]])
+                                     (into (sorted-map-by bu/bytes-comparator)))
+        existing-keys (existing-doc-keys kv (keys content-hash->doc+bytes))
+        content-hash->new-docs+bytes (apply dissoc content-hash->doc+bytes existing-keys)]
+    (ks/store kv (concat
+                  (for [[content-hash [doc bs]] content-hash->new-docs+bytes]
+                    [(encode-doc-key content-hash)
+                     bs])
+                  (for [[content-hash [doc]] content-hash->new-docs+bytes
+                        [k v] doc
+                        v (cond-> v
+                            (not (or (vector? v)
+                                     (set? v))) (vector))]
+                    [(encode-attribute+value+content-hash-key k v content-hash)
+                     empty-byte-array])))
+    (mapv bu/bytes->hex (keys content-hash->new-docs+bytes))))
 
 ;; Txs
 
