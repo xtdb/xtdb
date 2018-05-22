@@ -62,29 +62,29 @@
         content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
         transact-time #inst "2018-05-21"
         tx-id 1
-        entity (bu/bytes->hex (doc/encode-keyword :http://dbpedia.org/resource/Pablo_Picasso))]
+        eid (bu/bytes->hex (doc/encode-keyword :http://dbpedia.org/resource/Pablo_Picasso))]
 
     (doc/store-docs f/*kv* [picasso])
     (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                             content-hash-hex]] transact-time tx-id)
 
     (t/testing "can find entity by content hash"
-      (t/is (= {content-hash-hex [entity]}
-               (doc/entities-by-content-hashes f/*kv* [content-hash-hex]))))
+      (t/is (= {content-hash-hex [eid]}
+               (doc/eids-by-content-hashes f/*kv* [content-hash-hex]))))
 
     (t/testing "can see entity at transact and business time"
-      (t/is (= {entity
-                {:eid entity
+      (t/is (= {eid
+                {:eid eid
                  :content-hash content-hash-hex
                  :bt transact-time
                  :tt transact-time
                  :tx-id tx-id}}
                (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
-      (t/is (= #{entity} (doc/all-entities f/*kv* transact-time transact-time))))
+      (t/is (= [eid] (keys (doc/all-entities f/*kv* transact-time transact-time)))))
 
     (t/testing "can find entity by secondary index"
-      (t/is (= #{entity}
-               (doc/entities-by-attribute-values-at f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} transact-time transact-time))))
+      (t/is (= [eid]
+               (keys (doc/entities-by-attribute-values-at f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} transact-time transact-time)))))
 
     (t/testing "cannot see entity before business or transact time"
       (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -106,16 +106,16 @@
         (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
-        (t/is (= {new-content-hash-hex [entity]}
-                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
-        (t/is (= {entity
-                  {:eid entity
+        (t/is (= {new-content-hash-hex [eid]}
+                 (doc/eids-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {eid
+                  {:eid eid
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
+        (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
         (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))
 
@@ -128,23 +128,23 @@
         (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
-        (t/is (= {new-content-hash-hex [entity]}
-                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
-        (t/is (= {entity
-                  {:eid entity
+        (t/is (= {new-content-hash-hex [eid]}
+                 (doc/eids-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {eid
+                  {:eid eid
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-        (t/is (= {entity
-                  {:eid entity
+        (t/is (= {eid
+                  {:eid eid
                    :content-hash content-hash-hex
                    :bt transact-time
                    :tt transact-time
                    :tx-id tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time #inst "2018-05-22")))
-        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))))
+        (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))))
 
     (t/testing "can correct entity at earlier business time"
       (let [new-picasso (assoc picasso :bar :foo)
@@ -155,16 +155,16 @@
         (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
-        (t/is (= {new-content-hash-hex [entity]}
-                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
-        (t/is (= {entity
-                  {:eid entity
+        (t/is (= {new-content-hash-hex [eid]}
+                 (doc/eids-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {eid
+                  {:eid eid
                    :content-hash new-content-hash-hex
                    :bt new-business-time
                    :tt new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
+        (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
         (t/is (= 3 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
-                       (get-in [entity :tx-id]))))))))
+                       (get-in [eid :tx-id]))))))))

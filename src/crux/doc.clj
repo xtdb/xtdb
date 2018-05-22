@@ -250,12 +250,12 @@
     :else
     (bu/sha1 (nippy/freeze k))))
 
-(defn entities-by-content-hashes
+(defn eids-by-content-hashes
   ([kv content-hashes]
    (ks/iterate-with
     kv
     (fn [i]
-      (entities-by-content-hashes i kv content-hashes))))
+      (eids-by-content-hashes i kv content-hashes))))
   ([i kv content-hashes]
    (->> (for [content-hash content-hashes]
           [(encode-content-hash-prefix-key (bu/hex->bytes content-hash))
@@ -308,11 +308,11 @@
    kv
    (fn [i]
      (->> (for [[content-hash entities] (->> (doc-keys-by-attribute-values i kv k vs)
-                                             (entities-by-content-hashes i kv))
+                                             (eids-by-content-hashes i kv))
                 [eid entity-map] (entities-at i kv entities business-time transact-time)
                 :when (= content-hash (:content-hash entity-map))]
-            eid)
-          (into #{})))))
+            [eid entity-map])
+          (into {})))))
 
 (defn all-entities [kv business-time transact-time]
   (let [seek-k (encode-entity+bt+tt-prefix-key)]
@@ -324,9 +324,7 @@
          (if (and kv (bu/bytes=? seek-k k))
            (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
              (recur (ks/-next i) (conj acc (bu/bytes->hex eid))))
-           (->> (entities-at i kv acc business-time transact-time)
-                (keys)
-                (set))))))))
+           (entities-at i kv acc business-time transact-time)))))))
 
 ;; Tx Commands
 
@@ -384,10 +382,10 @@
 (defrecord DocDatasource [kv business-time transact-time]
   crux.db/Datasource
   (entities [this]
-    (all-entities kv business-time transact-time))
+    (keys (all-entities kv business-time transact-time)))
 
   (entities-for-attribute-value [this ident v]
-    (entities-by-attribute-values-at kv ident [v] business-time transact-time))
+    (keys (entities-by-attribute-values-at kv ident [v] business-time transact-time)))
 
   (attr-val [this eid ident]
     (ks/iterate-with
