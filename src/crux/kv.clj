@@ -14,7 +14,7 @@
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
-  (c/compile-enum :eat :avt :eid :ident-id :ident :meta))
+  (c/compile-enum :eat :avt :next-eid :ident-id :ident :meta))
 
 (def frame-index-eat
   "The EAT index is used for providing rapid access to a value of an
@@ -76,7 +76,7 @@
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking db
-    (let [key-entity-id (encode frame-index-selector {:index :eid})]
+    (let [key-entity-id (encode frame-index-selector {:index :next-eid})]
       (kv-store/store
        db
        [[key-entity-id
