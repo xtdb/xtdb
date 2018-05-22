@@ -74,7 +74,7 @@
                                   (:crux.kv/id person)
                                   (bu/bytes->hex (doc/doc->content-hash person))]))
                           transact-time
-                          0)))
+                          (inc i))))
 
         ;; Basic query, does not do temporal look up yet.
         (time
