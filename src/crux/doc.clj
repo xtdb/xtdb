@@ -4,6 +4,7 @@
             [crux.db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
+           [java.security MessageDigest]
            [java.util Date LinkedHashMap]
            [java.util.function Function]))
 
@@ -20,7 +21,7 @@
 (def ^:const ^:private meta-key->value-index-id 4)
 
 (def ^:private empty-byte-array (byte-array 0))
-(def ^:const ^:private sha1-size 20)
+(def ^:const ^:private sha1-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
 
 (defn encode-keyword ^bytes [kw]
   (bu/sha1 (.getBytes (str kw))))

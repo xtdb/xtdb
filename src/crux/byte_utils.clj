@@ -25,7 +25,7 @@
   (.digest (MessageDigest/getInstance "MD5") bytes))
 
 (defn sha1 ^bytes [^bytes bytes]
-  (.digest (MessageDigest/getInstance "SHA1") bytes))
+  (.digest (MessageDigest/getInstance "SHA-1") bytes))
 
 (def ^"[Ljava.lang.Object;"
   ^{:private true}
