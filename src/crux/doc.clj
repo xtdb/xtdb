@@ -125,26 +125,41 @@
              (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
            acc))))))
 
-(defn doc-entries [kv ks]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (set (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
-                            (into (sorted-set-by bu/bytes-comparator)))
-                :let [[k v :as kv] (ks/-seek i seek-k)]
-                :when (and k (bu/bytes=? seek-k k))]
-            kv)))))
+(defn doc-entries
+  ([kv ks]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (doc-entries i kv ks))))
+  ([i kv ks]
+   (set (for [seek-k (->> (map (comp encode-doc-key key->bytes) ks)
+                          (into (sorted-set-by bu/bytes-comparator)))
+              :let [[k v :as kv] (ks/-seek i seek-k)]
+              :when (and k (bu/bytes=? seek-k k))]
+          kv))))
 
-(defn docs [kv ks]
-  (->> (for [[k v] (doc-entries kv ks)]
-         [(bu/bytes->hex (decode-doc-key k))
-          (nippy/thaw v)])
-       (into {})))
+(defn docs
+  ([kv ks]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (docs i kv ks))))
+  ([i kv ks]
+   (->> (for [[k v] (doc-entries i kv ks)]
+          [(bu/bytes->hex (decode-doc-key k))
+           (nippy/thaw v)])
+        (into {}))))
 
-(defn existing-doc-keys [kv ks]
-  (->> (for [[k v] (doc-entries kv ks)]
-         (bu/bytes->hex (decode-doc-key k)))
-       (into #{})))
+(defn existing-doc-keys
+  ([kv ks]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (existing-doc-keys i kv ks))))
+  ([i kv ks]
+   (->> (for [[k v] (doc-entries i kv ks)]
+          (bu/bytes->hex (decode-doc-key k)))
+        (into #{}))))
 
 (defn doc->content-hash [doc]
   (bu/sha1 (nippy/freeze doc)))
@@ -171,20 +186,23 @@
                      empty-byte-array])))
     (mapv bu/bytes->hex (keys content-hash->new-docs+bytes))))
 
-(defn find-doc-keys-by-attribute-values [kv k vs]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (->> (for [seek-k (->> (for [v vs]
-                              (encode-attribute+value-prefix-key k v))
-                            (into (sorted-set-by bu/bytes-comparator)))]
-            (loop [[k v :as kv] (ks/-seek i seek-k)
-                   acc []]
-              (if (and kv (bu/bytes=? seek-k k))
-                (let [content-hash (decode-attribute+value+content-hash-key->content-hash k)]
-                  (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
-                acc)))
-          (reduce into #{})))))
+(defn find-doc-keys-by-attribute-values
+  ([kv k vs]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (find-doc-keys-by-attribute-values i kv k vs))))
+  ([i kv k vs]
+   (->> (for [seek-k (->> (for [v vs]
+                            (encode-attribute+value-prefix-key k v))
+                          (into (sorted-set-by bu/bytes-comparator)))]
+          (loop [[k v :as kv] (ks/-seek i seek-k)
+                 acc []]
+            (if (and kv (bu/bytes=? seek-k k))
+              (let [content-hash (decode-attribute+value+content-hash-key->content-hash k)]
+                (recur (ks/-next i) (conj acc (bu/bytes->hex content-hash))))
+              acc)))
+        (reduce into #{}))))
 
 ;; Txs
 
@@ -202,74 +220,82 @@
     :else
     (bu/sha1 (nippy/freeze k))))
 
-(defn entities-by-content-hashes [kv content-hashes]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (->> (for [[seek-k content-hash] (->> (for [content-hash content-hashes]
-                                             [(encode-content-hash-prefix-key (bu/hex->bytes content-hash))
-                                              content-hash])
-                                           (into (sorted-map-by bu/bytes-comparator)))]
-            (loop [[k v :as kv] (ks/-seek i seek-k)
-                   acc {}]
-              (if (and kv (bu/bytes=? seek-k k))
-                (recur (ks/-next i) (update acc
-                                            content-hash
-                                            conj
-                                            (bu/bytes->hex (decode-content-hash+entity-key->entity k))))
-                acc)))
-          (apply merge-with concat {})))))
+(defn entities-by-content-hashes
+  ([kv content-hashes]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (entities-by-content-hashes i kv content-hashes))))
+  ([i kv content-hashes]
+   (->> (for [[seek-k content-hash] (->> (for [content-hash content-hashes]
+                                           [(encode-content-hash-prefix-key (bu/hex->bytes content-hash))
+                                            content-hash])
+                                         (into (sorted-map-by bu/bytes-comparator)))]
+          (loop [[k v :as kv] (ks/-seek i seek-k)
+                 acc {}]
+            (if (and kv (bu/bytes=? seek-k k))
+              (recur (ks/-next i) (update acc
+                                          content-hash
+                                          conj
+                                          (bu/bytes->hex (decode-content-hash+entity-key->entity k))))
+              acc)))
+        (apply merge-with concat {}))))
 
-(defn entities-at [kv entities business-time transact-time]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (let [prefix-size (+ Short/BYTES sha1-size)]
-       (->> (for [seek-k (->> (for [entity entities]
-                                (encode-entity+business-time+transact-time-prefix-key
-                                 (entity->eid-bytes entity)
-                                 business-time
-                                 transact-time))
-                              (sort-by bu/bytes-comparator))
-                  :let [entity-map (loop [[k v :as kv] (ks/-seek i seek-k)]
-                                     (when (and k
-                                                (bu/bytes=? seek-k prefix-size k)
-                                                (pos? (alength ^bytes v)))
-                                       (let [entity-map (-> (decode-entity+business-time+transact-time+tx-id-key k)
-                                                            (assoc :content-hash (bu/bytes->hex v))
-                                                            (update :entity bu/bytes->hex))]
-                                         (if (<= (compare (:transact-time entity-map) transact-time) 0)
-                                           entity-map
-                                           (recur (ks/-next i))))))]
-                  :when entity-map]
-              [(:entity entity-map) entity-map])
-            (into {}))))))
+(defn entities-at
+  ([kv entities business-time transact-time]
+   (ks/iterate-with
+    kv
+    (fn [i]
+      (entities-at i kv entities business-time transact-time))))
+  ([i kv entities business-time transact-time]
+   (let [prefix-size (+ Short/BYTES sha1-size)]
+     (->> (for [seek-k (->> (for [entity entities]
+                              (encode-entity+business-time+transact-time-prefix-key
+                               (entity->eid-bytes entity)
+                               business-time
+                               transact-time))
+                            (sort-by bu/bytes-comparator))
+                :let [entity-map (loop [[k v :as kv] (ks/-seek i seek-k)]
+                                   (when (and k
+                                              (bu/bytes=? seek-k prefix-size k)
+                                              (pos? (alength ^bytes v)))
+                                     (let [entity-map (-> (decode-entity+business-time+transact-time+tx-id-key k)
+                                                          (assoc :content-hash (bu/bytes->hex v))
+                                                          (update :entity bu/bytes->hex))]
+                                       (if (<= (compare (:transact-time entity-map) transact-time) 0)
+                                         entity-map
+                                         (recur (ks/-next i))))))]
+                :when entity-map]
+            [(:entity entity-map) entity-map])
+          (into {})))))
+
 
 (defn find-entities-by-attribute-values-at [kv k vs business-time transact-time]
-  (->> (for [[content-hash entities] (->> (find-doc-keys-by-attribute-values kv k vs)
-                                          (entities-by-content-hashes kv))
-             [entity entity-map] (entities-at kv entities business-time transact-time)
-             :when (= content-hash (:content-hash entity-map))]
-         entity)
-       (into #{})))
+  (ks/iterate-with
+   kv
+   (fn [i]
+     (->> (for [[content-hash entities] (->> (find-doc-keys-by-attribute-values i kv k vs)
+                                             (entities-by-content-hashes i kv))
+                [entity entity-map] (entities-at i kv entities business-time transact-time)
+                :when (= content-hash (:content-hash entity-map))]
+            entity)
+          (into #{})))))
 
 (defn all-entities [kv business-time transact-time]
   (let [seek-k (-> (ByteBuffer/allocate Short/BYTES)
                    (.putShort entity+business-time+transact-time+tx-id->content-hash-index-id)
-                   (.array))
-        entities
-        (ks/iterate-with
-         kv
-         (fn [i]
-           (loop [[k v :as kv] (ks/-seek i seek-k)
-                  acc #{}]
-             (if (and kv (bu/bytes=? seek-k k))
-               (let [{:keys [entity]} (decode-entity+business-time+transact-time+tx-id-key k)]
-                 (recur (ks/-next i) (conj acc (bu/bytes->hex entity))))
-               acc))))]
-    (->> (entities-at kv entities business-time transact-time)
-         (keys)
-         (set))))
+                   (.array))]
+    (ks/iterate-with
+     kv
+     (fn [i]
+       (loop [[k v :as kv] (ks/-seek i seek-k)
+              acc #{}]
+         (if (and kv (bu/bytes=? seek-k k))
+           (let [{:keys [entity]} (decode-entity+business-time+transact-time+tx-id-key k)]
+             (recur (ks/-next i) (conj acc (bu/bytes->hex entity))))
+           (->> (entities-at i kv acc business-time transact-time)
+                (keys)
+                (set))))))))
 
 (defn store-txs [kv ops transact-time tx-id]
   (->> (for [[op k v business-time :as operation] ops
@@ -322,5 +348,8 @@
     (find-entities-by-attribute-values-at kv ident [v] business-time transact-time))
 
   (attr-val [this eid ident]
-    (let [content-hash (get-in (entities-at kv [eid] business-time transact-time) [eid :content-hash])]
-      (get-in (docs kv [content-hash]) [content-hash ident]))))
+    (ks/iterate-with
+     kv
+     (fn [i]
+       (let [content-hash (get-in (entities-at i kv [eid] business-time transact-time) [eid :content-hash])]
+         (get-in (docs i kv [content-hash]) [content-hash ident]))))))
