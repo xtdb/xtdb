@@ -27,8 +27,7 @@
 (defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA-1") bytes))
 
-(def ^"[Ljava.lang.Object;"
-  ^{:private true}
+(def ^"[Ljava.lang.Object;" ^:private
   byte->hex (object-array (for [n (range 256)]
                             (char-array (format "%02x" n)))))
 
