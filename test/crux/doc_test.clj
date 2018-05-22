@@ -69,8 +69,7 @@
     (doc/store-txs f/*kv* ops transact-time tx-id)
 
     (t/testing "can find entity by content hash"
-      (t/is (= {content-hash-hex
-                [entity]}
+      (t/is (= {content-hash-hex [entity]}
                (doc/entities-by-content-hashes f/*kv* [content-hash-hex]))))
 
     (t/testing "can see entity at transact and business time"
@@ -95,15 +94,13 @@
       (t/is (some? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-22"))))
 
     (t/testing "add new version of entity in the past"
-      (let [picasso (assoc picasso :foo :bar)
-            new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
+      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :foo :bar)))
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
             new-tx-id 1]
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
-        (t/is (= {new-content-hash-hex
-                  [(bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]}
+        (t/is (= {new-content-hash-hex [entity]}
                  (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
         (t/is (= {entity
                   {:entity entity
@@ -114,4 +111,29 @@
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
         (t/is (= #{entity} (doc/all-entities f/*kv* new-transact-time new-business-time)))
 
-        (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))))
+        (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))
+
+    (t/testing "add new version of entity in the future"
+      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :baz :boz)))
+            new-transact-time #inst "2018-05-23"
+            new-business-time #inst "2018-05-22"
+            new-tx-id 2]
+        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+                                new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
+        (t/is (= {new-content-hash-hex [entity]}
+                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {entity
+                  {:entity entity
+                   :content-hash new-content-hash-hex
+                   :business-time new-business-time
+                   :transact-time new-transact-time
+                   :tx-id new-tx-id}}
+                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+        (t/is (= {entity
+                  {:entity entity
+                   :content-hash content-hash-hex
+                   :business-time transact-time
+                   :transact-time transact-time
+                   :tx-id tx-id}}
+                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time #inst "2018-05-22")))
+        (t/is (= #{entity} (doc/all-entities f/*kv* new-transact-time new-business-time)))))))
