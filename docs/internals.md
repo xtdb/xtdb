@@ -222,3 +222,64 @@ store.
 As this can be a multi-master setup, it's likely to be more scalable
 and it's also a bit more forward looking design than the idealisation
 of an immutable log that has to be worked around.
+
+### Identifiers
+
+### Proposal A: Use external IDs
+
+It's up to the users to supply their own IDs, such as UUIDs.
+
+The advantage of this approach are:
+
+1) Users get to use their own (upstream) IDs, which is more
+sympathetic to the enterprise reality of multiple data-stores, and for
+when users are working with external data-sets that already come with
+IDs.
+
+2) External IDs are needed anyway, if data is to be sharded across
+nodes and needs to be reconciled in some way.
+
+3) No-need for temp IDs, thus simplicity of operation.
+
+4) It aligns with the intuitions of Crux being an 'unbundled' DB; the
+ID generation management is another piece that is unbundled, given
+over to the user's control.
+
+The downside is that external IDs will not be optimised for internal
+usage, i.e being numeric IDs to be used directly as part of Crux's
+indices. Therefore IDs may will to be mapped to/from accordingly when
+data goes in and out.
+
+This could be mitigated by using MD5s rather than numerical IDs
+internally (albeit at a higher cost), but a mapping will still to be
+made to reconstruct the external IDs when returning data.
+
+#### Proposal B: Use Crux IDs.
+
+Crux assigns and returns it's own IDs.
+
+The advantage of this approach is that the same constant IDs are used
+throughout all interactions with Crux, meaning there is no need for
+mapping or hashing, which may hamper performance, which may then
+elicit the need for a cache of sorts to mitigate.
+
+In this approach we would need to use the idea of temp-IDs to help
+users insert data for two reasons:
+
+1) Users can get a handle on the data they are inserting, for later use.
+
+2) We may insert data that refers to a part of itself; a temporary ID
+will be needed to join the data inside of the transaction together.
+
+### A vs B
+
+There are pros and cons of both approaches. It might be possible to
+offset the performance implications of A, and the current rationale is
+that we should prioritise superior design and user experience over
+prematurely worrying about performance.
+
+Allowing users to work with their own IDs is a desirable feature,
+helping users to import data and allowing them to not worry about
+managing multiple IDs across their systems and datasets.
+
+If we choose A first, we can always fall back to B.
