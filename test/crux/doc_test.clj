@@ -62,8 +62,9 @@
         content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
         transact-time #inst "2018-05-21"
         tx-id 1
-        entity (bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]
+        entity (bu/bytes->hex (doc/encode-keyword :http://dbpedia.org/resource/Pablo_Picasso))]
 
+    (doc/store-docs f/*kv* [picasso])
     (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                             content-hash-hex]] transact-time tx-id)
 
@@ -81,6 +82,10 @@
                (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
       (t/is (= #{entity} (doc/all-entities f/*kv* transact-time transact-time))))
 
+    (t/testing "can find entity by secondary index"
+      (t/is (= #{entity}
+               (doc/entities-by-attribute-values-at f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} transact-time transact-time))))
+
     (t/testing "cannot see entity before business or transact time"
       (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
       (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-20")))
@@ -93,10 +98,12 @@
       (t/is (some? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-22"))))
 
     (t/testing "add new version of entity in the past"
-      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :foo :bar)))
+      (let [new-picasso (assoc picasso :foo :bar)
+            new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
             new-tx-id 2]
+        (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
@@ -113,10 +120,12 @@
         (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))
 
     (t/testing "add new version of entity in the future"
-      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :baz :boz)))
+      (let [new-picasso (assoc picasso :baz :boz)
+            new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
             new-tx-id 3]
+        (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
@@ -138,10 +147,12 @@
         (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))))
 
     (t/testing "can correct entity at earlier business time"
-      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :bar :foo)))
+      (let [new-picasso (assoc picasso :bar :foo)
+            new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-24"
             new-business-time #inst "2018-05-22"
             new-tx-id 4]
+        (doc/store-docs f/*kv* [new-picasso])
         (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
                                 new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
         (t/is (= {new-content-hash-hex [entity]}
