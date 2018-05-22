@@ -223,14 +223,17 @@
                                  business-time
                                  transact-time))
                               (sort-by bu/bytes-comparator))
-                  :let [[k v :as kv] (ks/-seek i seek-k)]
-                  :when (and k
-                             (bu/bytes=? seek-k prefix-size k)
-                             (<= (bu/compare-bytes seek-k k) 0)
-                             (pos? (alength ^bytes v)))
-                  :let [entity-map (-> (decode-entity+business-time+transact-time+tx-id-key k)
-                                       (assoc :content-hash (bu/bytes->hex v))
-                                       (update :entity bu/bytes->hex))]]
+                  :let [entity-map (loop [[k v :as kv] (ks/-seek i seek-k)]
+                                     (when (and k
+                                                (bu/bytes=? seek-k prefix-size k)
+                                                (pos? (alength ^bytes v)))
+                                       (let [entity-map (-> (decode-entity+business-time+transact-time+tx-id-key k)
+                                                            (assoc :content-hash (bu/bytes->hex v))
+                                                            (update :entity bu/bytes->hex))]
+                                         (if (<= (compare (:transact-time entity-map) transact-time) 0)
+                                           entity-map
+                                           (recur (ks/-next i))))))]
+                  :when entity-map]
               [(:entity entity-map) entity-map])
             (into {}))))))
 

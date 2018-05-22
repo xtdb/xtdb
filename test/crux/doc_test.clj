@@ -109,7 +109,7 @@
                    :transact-time new-transact-time
                    :tx-id new-tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-        (t/is (= #{entity} (doc/all-entities f/*kv* new-transact-time new-business-time)))
+        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
 
         (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21")))))
 
@@ -136,4 +136,25 @@
                    :transact-time transact-time
                    :tx-id tx-id}}
                  (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time #inst "2018-05-22")))
-        (t/is (= #{entity} (doc/all-entities f/*kv* new-transact-time new-business-time)))))))
+        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))))
+
+    (t/testing "can correct entity at earlier business time"
+      (let [new-content-hash-hex (bu/bytes->hex (doc/doc->content-hash (assoc picasso :bar :foo)))
+            new-transact-time #inst "2018-05-24"
+            new-business-time #inst "2018-05-22"
+            new-tx-id 3]
+        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+                                new-content-hash-hex new-business-time]] new-transact-time new-tx-id)
+        (t/is (= {new-content-hash-hex [entity]}
+                 (doc/entities-by-content-hashes f/*kv* [new-content-hash-hex])))
+        (t/is (= {entity
+                  {:entity entity
+                   :content-hash new-content-hash-hex
+                   :business-time new-business-time
+                   :transact-time new-transact-time
+                   :tx-id new-tx-id}}
+                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+        (t/is (= #{entity} (doc/all-entities f/*kv* new-business-time new-transact-time)))
+
+        (t/is (= 2 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
+                       (get-in [entity :tx-id]))))))))
