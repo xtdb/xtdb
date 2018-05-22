@@ -9,49 +9,54 @@
             [crux.memdb])
   (:import [java.util Date]))
 
-(defn bench [& {:keys [n batch-size ts queries kv index] :or {n 1000
-                                                              batch-size 10
-                                                              queries 100
-                                                              ts (Date.)
-                                                              kv :rocks
-                                                              index :kv}}]
+(defn bench [& {:keys [n batch-size ts query queries kv index] :or {n 1000
+                                                                    batch-size 10
+                                                                    queries 100
+                                                                    query :name
+                                                                    ts (Date.)
+                                                                    kv :rocks
+                                                                    index :kv}}]
   ((case kv
      :rocks f/with-rocksdb
      :lmdb f/with-lmdb
      :mem f/with-memdb)
    (fn []
      (f/with-kv-store
-      (fn []
-        ;; Insert data
-        (time
-         (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-           (case index
-             :kv
-             (cr/-put *kv* people ts)
+       (fn []
+         ;; Insert data
+         (time
+          (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
+            (case index
+              :kv
+              (cr/-put *kv* people ts)
 
-             :doc
-             (do (doc/store-docs *kv* people)
-                 (doc/store-txs *kv*
-                                (vec (for [person people]
-                                       [:crux.tx/put
-                                        (keyword (:crux.kv/id person))
-                                        (bu/bytes->hex (doc/doc->content-hash person))]))
-                                ts
-                                (inc i))))))
+              :doc
+              (do (doc/store-docs *kv* people)
+                  (doc/store-txs *kv*
+                                 (vec (for [person people]
+                                        [:crux.tx/put
+                                         (keyword (:crux.kv/id person))
+                                         (bu/bytes->hex (doc/doc->content-hash person))]))
+                                 ts
+                                 (inc i))))))
 
-        ;; Basic query
-        (time
-         (doseq [i (range queries)
-                 :let [db (case index
-                            :kv
-                            (db *kv*)
+         ;; Basic query
+         (time
+          (doseq [i (range queries)
+                  :let [db (case index
+                             :kv
+                             (db *kv*)
 
-                            :doc
-                            (doc/map->DocDatasource {:kv *kv*
-                                                     :transact-time ts
-                                                     :business-time ts}))]]
-           (q/q db '{:find [e]
-                     :where [[e :name "Ivan"]]}))))))))
+                             :doc
+                             (doc/map->DocDatasource {:kv *kv*
+                                                      :transact-time ts
+                                                      :business-time ts}))]]
+            (q/q db (case query
+                      :name '{:find [e]
+                              :where [[e :name "Ivan"]]}
+                      :range '{:find [e]
+                               :where [[e :age age]
+                                       (> age 20)]})))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
 
