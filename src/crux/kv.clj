@@ -54,13 +54,8 @@
   (c/compile-frame :index frame-index-enum
                    :key :keyword))
 
-(def frame-index-eid
-  "The EID index is used for generating entity IDs; to store the next
-  entity ID to use."
-  (c/compile-frame :index frame-index-enum))
-
-(def frame-index-key-prefix
-  "Partial key frame, used for iterating within a particular index."
+(def frame-index-selector
+  "Partial key frame, used for selecting within a particular index."
   (c/compile-frame :index frame-index-enum))
 
 (def frame-index-eat-key-prefix
@@ -81,7 +76,7 @@
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking db
-    (let [key-entity-id (encode frame-index-eid {:index :eid})]
+    (let [key-entity-id (encode frame-index-selector {:index :eid})]
       (kv-store/store
        db
        [[key-entity-id
@@ -222,7 +217,7 @@
               (kvu/seek-and-iterate db (partial bu/bytes=? k) k))
       (assoc ::id eid)))))
 
-(def ^:private eat-index-prefix (encode frame-index-key-prefix {:index :eat}))
+(def ^:private eat-index-prefix (encode frame-index-selector {:index :eat}))
 
 (defn entity-ids
   "Sequence of all entities in the DB. If this approach sticks, it
