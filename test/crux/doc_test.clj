@@ -60,13 +60,12 @@
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
-        ops [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-              content-hash-hex]]
         transact-time #inst "2018-05-21"
         tx-id 0
         entity (bu/bytes->hex (doc/entity->eid-bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
-    (doc/store-txs f/*kv* ops transact-time tx-id)
+    (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+                            content-hash-hex]] transact-time tx-id)
 
     (t/testing "can find entity by content hash"
       (t/is (= {content-hash-hex [entity]}
