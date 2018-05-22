@@ -295,11 +295,11 @@
                                    (when (and kv
                                               (bu/bytes=? seek-k prefix-size k)
                                               (pos? (alength ^bytes v)))
-                                     (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
-                                                          (assoc :content-hash (bu/bytes->hex v))
-                                                          (update :eid bu/bytes->hex))]
+                                     (let [entity-map (decode-entity+bt+tt+tx-id-key k)]
                                        (if (<= (compare (:tt entity-map) transact-time) 0)
-                                         entity-map
+                                         (-> entity-map
+                                             (assoc :content-hash (bu/bytes->hex v))
+                                             (update :eid bu/bytes->hex))
                                          (recur (ks/-next i))))))]
                 :when entity-map]
             [(:eid entity-map) entity-map])
