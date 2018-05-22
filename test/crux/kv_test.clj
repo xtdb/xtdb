@@ -53,19 +53,19 @@
     (t/is (= (+ eid 1001) (cr/next-entity-id *kv*)))))
 
 (t/deftest test-write-and-fetch-entity
-  (let [person (first f/people)
-        eid (first (vals (cr/-put *kv* [person] #inst "1986-10-22")))]
-    (t/is (= (dissoc person :crux.kv/id)
-             (dissoc (cr/entity *kv* eid) :crux.kv/id)))))
+  (let [person (first f/people)]
+    (cr/-put *kv* [person] #inst "1986-10-22")
+    (t/is (= person
+             (cr/entity *kv* (:crux.kv/id person))))))
 
 (t/deftest test-fetch-entity-at-t
-  (let [person (first f/people)
-        eid (first (vals (cr/-put *kv* [(assoc person :name "Fred")] #inst "1986-10-22")))]
-    (cr/-put *kv* [(assoc person :name "Freda" :crux.kv/id eid)] #inst "1986-10-24")
+  (let [person (first f/people)]
+    (cr/-put *kv* [(assoc person :name "Fred")] #inst "1986-10-22")
+    (cr/-put *kv* [(assoc person :name "Freda")] #inst "1986-10-24")
     (t/is (= "Fred"
-             (:name (cr/entity *kv* eid #inst "1986-10-23"))))
+             (:name (cr/entity *kv* (:crux.kv/id person) #inst "1986-10-23"))))
     (t/is (= "Freda"
-             (:name (cr/entity *kv* eid))))))
+             (:name (cr/entity *kv* (:crux.kv/id person)))))))
 
 (t/deftest test-transact-schema-attribute
   (cr/-put *kv* [[test-eid :new-ident "foo1"]])
@@ -85,10 +85,10 @@
 
 (t/deftest test-get-attributes
   (cr/-put *kv* [[test-eid :foo :bar]])
-  (t/is (= {:foo 1} @(:attributes *kv*)))
+  (t/is (= [:foo] (keys @(:attributes *kv*))))
   (reset! (:attributes *kv*) nil)
   (t/is (= :bar (cr/-get-at *kv* test-eid :foo)))
-  (t/is (= {:foo 1} @(:attributes *kv*))))
+  (t/is (= [:foo] (keys @(:attributes *kv*)))))
 
 (t/deftest test-write-entity-id-as-keyword
   (cr/-put *kv* [[:a-keyword-1 :foo :bar]])

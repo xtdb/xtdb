@@ -140,44 +140,34 @@
     [tx]))
 
 (defn -put
-  "Put an attribute/value tuple against an entity ID. If the supplied
-  entity ID is -1, then a new entity-id will be generated."
+  "Put an attribute/value tuple against an entity ID."
   ([db txs]
    (-put db txs (Date.)))
   ([db txs ts]
    (-put db txs ts ts))
   ([db txs ^Date ts ^Date tx-ts]
-   (let [tmp-ids->ids (atom {})]
-     (->> (mapcat entity->txs txs)
-          (reduce
-           (fn [txs-to-put [eid k v]]
-             (let [eid (if (keyword? eid)
-                         (ident->id! db eid)
-                         (or (and (number? eid) (pos? (long eid)) eid)
-                             (get @tmp-ids->ids eid)
-                             (get (swap! tmp-ids->ids assoc eid (next-entity-id db)) eid)))
-                   aid (attr-ident->aid! db k)
-                   value-bytes (nippy/freeze v)
-                   value-to-index-bytes (if (keyword? v)
-                                          (nippy/freeze (ident->id! db v))
-                                          value-bytes)]
-               (cond-> txs-to-put
-                 true (conj! [(encode frame-index-eat {:index :eat
-                                                       :eid eid
-                                                       :aid aid
-                                                       :ts ts
-                                                       :tx-ts tx-ts})
-                              value-bytes])
-                 v (conj! [(encode frame-index-avt {:index :avt
-                                                    :aid aid
-                                                    :v (bu/md5 value-to-index-bytes)
-                                                    :ts ts
-                                                    :eid eid})
-                           (long->bytes eid)]))))
-           (transient []))
-          (persistent!)
-          (kv-store/store db))
-     @tmp-ids->ids)))
+   (->> (mapcat entity->txs txs)
+        (reduce
+         (fn [txs-to-put [eid k v]]
+           (assert eid)
+           (let [eid (ident->id! db eid)
+                 aid (attr-ident->aid! db k)]
+             (cond-> txs-to-put
+               true (conj! [(encode frame-index-eat {:index :eat
+                                                     :eid eid
+                                                     :aid aid
+                                                     :ts ts
+                                                     :tx-ts tx-ts})
+                            (nippy/freeze v)])
+               v (conj! [(encode frame-index-avt {:index :avt
+                                                  :aid aid
+                                                  :v v
+                                                  :ts ts
+                                                  :eid eid})
+                         (long->bytes eid)]))))
+         (transient []))
+        (persistent!)
+        (kv-store/store db))))
 
 (defn -get-at
   ([db eid ident]
@@ -187,7 +177,7 @@
   ([db eid ident ^Date ts ^Date tx-ts]
    (let [aid (lookup-attr-ident-aid db ident)]
      (when aid
-       (let [eid (if (keyword? eid) (lookup-ident db eid) eid)
+       (let [eid (lookup-ident db eid)
              seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
                                    {:index :eat :eid eid :aid aid :ts ts})]
          (when-let [[k v] (kvu/seek-first db
@@ -201,8 +191,9 @@
   an entity."
   ([db eid]
    (entity db eid (Date.)))
-  ([db eid ^Date at-ts]
-   (let [k (encode frame-index-eat-key-prefix {:index :eat :eid eid})]
+  ([db id ^Date at-ts]
+   (let [eid (lookup-ident db id)
+         k (encode frame-index-eat-key-prefix {:index :eat :eid eid})]
      (some->
       (reduce (fn [m [k v]]
                 (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-eat k)
@@ -213,7 +204,7 @@
                     (assoc m ident (nippy/thaw v)))))
               nil
               (kvu/seek-and-iterate db (partial bu/bytes=? k) k))
-      (assoc ::id eid)))))
+      (assoc ::id id)))))
 
 (def ^:private eat-index-prefix (encode frame-index-selector {:index :eat}))
 
@@ -223,7 +214,9 @@
   index that could be lazy."
   [db]
   (->> (kvu/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
-       (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k))) (map :eid)))))
+       (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k)))
+                       (map :eid)
+                       (map (partial attr-aid->ident db))))))
 
 (defn entity-ids-for-value
   "Return a sequence of entities that are referenced as part of the AVT
@@ -231,18 +224,17 @@
   ([db ident v]
    (entity-ids-for-value db ident v (Date.)))
   ([db ident v ^Date ts]
-   (when-let [v (if (keyword? v) (lookup-ident db v) v)]
-     (let [aid (attr-ident->aid! db ident)
-           k ^bytes (encode frame-index-avt {:index :avt
-                                             :aid aid
-                                             :v (bu/md5 (nippy/freeze v))
-                                             :ts ts
-                                             :eid 0})]
-       (eduction
-        (map (comp bytes->long second))
-        (kvu/seek-and-iterate db
-                              (partial bu/bytes=? k (- (alength k) 12))
-                              k))))))
+   (let [aid (attr-ident->aid! db ident)
+         k ^bytes (encode frame-index-avt {:index :avt
+                                           :aid aid
+                                           :v v
+                                           :ts ts
+                                           :eid 0})]
+     (eduction
+      (map (comp (partial attr-aid->ident db) bytes->long second))
+      (kvu/seek-and-iterate db
+                            (partial bu/bytes=? k (- (alength k) 12))
+                            k)))))
 
 (defn store-meta [db k v]
   (kv-store/store db

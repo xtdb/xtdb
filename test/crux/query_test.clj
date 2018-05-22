@@ -40,12 +40,7 @@
 
     (t/testing "Can query for multiple results"
       (t/is (= #{["Ivan"] ["Petr"]}
-               (q/q (db *kv*) {:find ['name] :where [['e :name 'name]]})))
-
-      (let [[ivan2] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov2"}])]
-        (t/is (= #{[(:crux.kv/id ivan)]
-                   [(:crux.kv/id ivan2)]}
-                 (q/q (db *kv*) {:find ['e] :where [['e :name "Ivan"]]})))))
+               (q/q (db *kv*) {:find ['name] :where [['e :name 'name]]}))))
 
     (let [[smith] (f/transact-people! *kv* [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"

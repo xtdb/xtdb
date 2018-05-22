@@ -10,9 +10,7 @@
   (:import [java.io Closeable]
            [java.util Date]))
 
-(def next-eid (atom 0))
-
-(defn random-person [] {:crux.kv/id (swap! next-eid dec)
+(defn random-person [] {:crux.kv/id (str (java.util.UUID/randomUUID))
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
                         :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
                         :sex       (rand-nth [:male :female])
@@ -25,9 +23,9 @@
   ([db people-mixins]
    (transact-people! db people-mixins (Date.)))
   ([db people-mixins ts]
-   (let [people (->> people-mixins (map #(merge %1 %2) people))
-         ids (cr/-put db people ts)]
-     (map #(update % :crux.kv/id ids) people))))
+   (let [people (->> people-mixins (map #(merge %1 %2) people))]
+     (cr/-put db people ts)
+     people)))
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
