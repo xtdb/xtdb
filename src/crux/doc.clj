@@ -400,4 +400,4 @@
                      (lru-cache-compute-if-absent
                       content-hash
                       #(get (docs i kv [%]) %)))]
-         (get-in doc [eid ident]))))))
+         (get doc ident))))))
