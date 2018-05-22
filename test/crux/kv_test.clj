@@ -85,10 +85,10 @@
 
 (t/deftest test-get-attributes
   (cr/-put *kv* [[test-eid :foo :bar]])
-  (t/is (= [:foo] (keys @(:attributes *kv*))))
-  (reset! (:attributes *kv*) nil)
+  (t/is (= [:foo] (keys (:attributes @(:state *kv*)))))
+  (reset! (:state *kv*) nil)
   (t/is (= :bar (cr/-get-at *kv* test-eid :foo)))
-  (t/is (= [:foo] (keys @(:attributes *kv*)))))
+  (t/is (= [:foo] (keys (:attributes @(:state *kv*))))))
 
 (t/deftest test-write-entity-id-as-keyword
   (cr/-put *kv* [[:a-keyword-1 :foo :bar]])

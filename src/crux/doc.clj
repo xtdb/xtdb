@@ -4,7 +4,8 @@
             [crux.db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
-           [java.util Date]))
+           [java.util Date LinkedHashMap]
+           [java.util.function Function]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -116,6 +117,22 @@
        :bt (reverse-time-ms->date (.getLong buffer))
        :tt (reverse-time-ms->date (.getLong buffer))
        :tx-id (.getLong buffer)}))
+
+;; Caching
+
+(defn lru-cache [^long size]
+  (proxy [LinkedHashMap] [16 0.75 true]
+    (removeEldestEntry [_]
+      (> (count this) size))))
+
+(defn lru-cache-compute-if-absent [^LinkedHashMap cache k f]
+  (.computeIfAbsent cache k (reify Function
+                              (apply [_ k]
+                                (f k)))))
+
+(defn lru-named-cache [state cache-name cache-size]
+  (or (get @state cache-name)
+      (get (swap! state assoc cache-name (lru-cache cache-size)) cache-name)))
 
 ;; Docs
 
@@ -362,6 +379,8 @@
 
 ;; Query
 
+(def ^:const default-doc-cache-size 10240)
+
 (defrecord DocDatasource [kv business-time transact-time]
   crux.db/Datasource
   (entities [this]
@@ -374,5 +393,9 @@
     (ks/iterate-with
      kv
      (fn [i]
-       (let [content-hash (get-in (entities-at i kv [eid] business-time transact-time) [eid :content-hash])]
-         (get-in (docs i kv [content-hash]) [content-hash ident]))))))
+       (let [content-hash (get-in (entities-at i kv [eid] business-time transact-time) [eid :content-hash])
+             doc (-> (lru-named-cache (:state kv) :doc-cache default-doc-cache-size)
+                     (lru-cache-compute-if-absent
+                      content-hash
+                      #(get (docs i kv [%]) %)))]
+         (get-in doc [eid ident]))))))

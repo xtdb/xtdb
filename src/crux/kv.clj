@@ -107,25 +107,25 @@
 
 (defn- ident->id!
   "Look up the ID for a given ident. Create it if not present."
-  [{:keys [attributes] :as db} ident]
+  [db ident]
   (or (lookup-ident db ident)
       (transact-ident! db ident)))
 
 (defn- lookup-attr-ident-aid
   "Look up the attribute ID for a given ident."
-  [{:keys [attributes] :as db} ident]
-  (or (get @attributes ident)
+  [{:keys [state] :as db} ident]
+  (or (get-in @state [:attributes ident])
       (when-let [aid (lookup-ident db ident)]
-        (swap! attributes assoc ident aid)
+        (swap! state assoc-in [:attributes ident] aid)
         aid)))
 
 (defn- attr-ident->aid!
   "Look up the attribute ID for a given ident. Create it if not
   present."
-  [{:keys [attributes] :as db} ident]
+  [{:keys [state] :as db} ident]
   (or (lookup-attr-ident-aid db ident)
       (let [aid (transact-ident! db ident)]
-        (swap! attributes assoc ident aid)
+        (swap! state assoc-in [:attributes ident] aid)
         aid)))
 
 (defn attr-aid->ident [db aid]
