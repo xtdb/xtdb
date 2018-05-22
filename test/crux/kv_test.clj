@@ -45,7 +45,7 @@
   (cr/-put *kv* [[test-eid :tar "Bar4"]] #inst "1986-10-22")
   (t/is (not (cr/-get-at *kv* test-eid :tar #inst "1986-10-21"))))
 
-(t/deftest test-entity-ids
+(t/deftest test-next-entity-id
   (let [eid (cr/next-entity-id *kv*)]
     (dotimes [n 1000]
       (cr/next-entity-id *kv*))
@@ -163,6 +163,11 @@
   (t/testing "Can fetch original via prior to correction using tx-time"
     (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04")))
     (t/is (= "Foo2" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04" #inst "2000-02-06")))))
+
+(t/deftest test-can-iterate-all-entity-ids
+  (cr/-put *kv* [[1 :foo "Bar1"]])
+  (cr/-put *kv* [[2 :foo "Bar2"]])
+  (t/is (= (set [1 2]) (cr/entity-ids *kv*))))
 
 (t/deftest test-can-query-against-values
   (cr/-put *kv* [[1 :foo "Bar1"]])
