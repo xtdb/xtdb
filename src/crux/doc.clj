@@ -19,6 +19,9 @@
 (def empty-byte-array (byte-array 0))
 (def ^:const sha1-size 20)
 
+(defn encode-keyword ^bytes [kw]
+  (bu/sha1 (.getBytes (str kw))))
+
 (defn encode-doc-key ^bytes [^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size))
       (.putShort content-hash->doc-index-id)
@@ -34,8 +37,10 @@
 (defn encode-attribute+value+content-hash-key ^bytes [k v ^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size sha1-size (alength content-hash)))
       (.putShort attribute+value+content-hash-index-id)
-      (.put (bu/sha1 (nippy/freeze k)))
-      (.put (bu/sha1 (nippy/freeze v)))
+      (.put (encode-keyword k))
+      (.put (if (keyword? v)
+              (encode-keyword v)
+              (bu/sha1 (nippy/freeze v))))
       (.put content-hash)
       (.array)))
 
@@ -67,7 +72,7 @@
         (->> (.get buffer)))))
 
 (defn encode-meta-key ^bytes [k]
-  (let [k ^bytes (nippy/freeze k)]
+  (let [k (encode-keyword k)]
     (-> (ByteBuffer/allocate (+ Short/BYTES (alength k)))
         (.putShort meta-key->value-index-id)
         (.put k)
@@ -191,6 +196,9 @@
     (string? k)
     (bu/hex->bytes k)
 
+    (keyword? k)
+    (encode-keyword k)
+
     :else
     (bu/sha1 (nippy/freeze k))))
 
@@ -246,7 +254,9 @@
        (into #{})))
 
 (defn all-entities [kv business-time transact-time]
-  (let [seek-k (.array (.putShort (ByteBuffer/allocate Short/BYTES) entity+business-time+transact-time+tx-id->content-hash-index-id))
+  (let [seek-k (-> (ByteBuffer/allocate Short/BYTES)
+                   (.putShort entity+business-time+transact-time+tx-id->content-hash-index-id)
+                   (.array))
         entities
         (ks/iterate-with
          kv
