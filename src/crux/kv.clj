@@ -38,17 +38,16 @@
                    :eid :id))
 
 (def frame-index-ident-id
-  "The AID index is used to provide a mapping from attribute ID to
-  information about the attribute, including the attribute's keyword
-  ident."
+  "The eid index is used store information about the entity ID,
+  including original external ID."
   (c/compile-frame :index frame-index-enum
                    :id :id))
 
 (def frame-index-ident
-  "The ident index is used to provide a mapping from keyword ident to
-  a numeric ID."
+  "The ident index is used to provide a mapping from an external ID to a
+  numeric ID used for referencing in internal indices."
   (c/compile-frame :index frame-index-enum
-                   :ident :keyword))
+                   :ident :md5))
 
 (def frame-index-meta
   (c/compile-frame :index frame-index-enum
@@ -87,12 +86,14 @@
       (bytes->long (kvu/value db key-entity-id)))))
 
 (defn- transact-ident!
+  "Transact the identifier, creating a bi-directional mapping to a newly
+  generated internal identifer used for indexing purposes."
   [db ident]
   {:pre [ident]}
   (let [id (next-entity-id db)]
     ;; to go from k -> id
     (kv-store/store db
-                    [[(encode frame-index-ident {:index :ident :ident ident})
+                    [[(encode frame-index-ident {:index :ident :ident (bu/md5 (nippy/freeze ident))})
                       (long->bytes id)]])
     ;; to go from id -> k
     (let [k (encode frame-index-ident-id {:index :ident-id :id id})]
@@ -102,7 +103,7 @@
 (defn- lookup-ident
   "Look up the ID for a given ident."
   [db ident]
-  (some->> {:index :ident :ident ident}
+  (some->> {:index :ident :ident (bu/md5 (nippy/freeze ident))}
            (encode frame-index-ident)
            (kvu/value db)
            bytes->long))
@@ -117,7 +118,7 @@
   "Look up the attribute ID for a given ident."
   [{:keys [attributes] :as db} ident]
   (or (get @attributes ident)
-      (let [aid (or (lookup-ident db ident))]
+      (when-let [aid (lookup-ident db ident)]
         (swap! attributes assoc ident aid)
         aid)))
 
