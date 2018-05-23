@@ -56,8 +56,10 @@
           (recur (unchecked-add-int idx 2)))))))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
-  (doto (byte-array (.remaining b))
-    (->> (.get b))))
+  (if (.hasArray b)
+    (.array b)
+    (doto (byte-array (.remaining b))
+      (->> (.get b)))))
 
 (defn compare-bytes
   (^long [^bytes a ^bytes b]
