@@ -161,7 +161,7 @@
                             (nippy/freeze v)])
                v (conj! [(encode frame-index-avt {:index :avt
                                                   :aid aid
-                                                  :v [(if (number? v) :long :md5) v]
+                                                  :v [(if (integer? v) :long :md5) v]
                                                   :ts ts
                                                   :eid eid})
                          (long->bytes eid)]))))
@@ -227,7 +227,7 @@
    (let [aid (attr-ident->aid! db ident)
          k ^bytes (encode frame-index-avt {:index :avt
                                            :aid aid
-                                           :v [(if (number? v) :long :md5) v]
+                                           :v [(if (integer? v) :long :md5) v]
                                            :ts ts
                                            :eid 0})]
      (eduction

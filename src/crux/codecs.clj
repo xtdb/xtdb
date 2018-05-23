@@ -77,7 +77,7 @@
                              (when-not datatype
                                (throw (IllegalArgumentException. (str "Unknown datatype: " t))))
                              [k datatype]))))
-        fixed-length (long (reduce + (for [[k [length]] pairs :when (number? length)]
+        fixed-length (long (reduce + (for [[k [length]] pairs :when (int? length)]
                                        length)))
         length-fn (first (for [[k [length-f]] pairs :when (fn? length-f)]
                            (fn ^long [m] (length-f (get m k)))))]
