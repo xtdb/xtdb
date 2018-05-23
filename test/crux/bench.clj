@@ -36,7 +36,7 @@
                                  (vec (for [person people]
                                         [:crux.tx/put
                                          (keyword (:crux.kv/id person))
-                                         (bu/bytes->hex (doc/doc->content-hash person))]))
+                                         (str (doc/doc->content-hash person))]))
                                  ts
                                  (inc i))))))
 

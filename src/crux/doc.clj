@@ -5,7 +5,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
-           [java.util Date LinkedHashMap]
+           [java.util Arrays Date LinkedHashMap]
            [java.util.function Function]
            [clojure.lang Keyword]))
 
@@ -59,28 +59,25 @@
   (id->bytes [this]
     (throw (UnsupportedOperationException.))))
 
-(deftype Id [^ByteBuffer byte-buffer]
+(deftype Id [^bytes bytes]
   IdToBytes
   (id->bytes [this]
-    (id->bytes byte-buffer))
+    (id->bytes bytes))
 
   Object
   (toString [this]
-    (bu/bytes->hex (bu/byte-buffer->bytes byte-buffer)))
+    (bu/bytes->hex bytes))
 
   (equals [this that]
     (and (instance? Id that)
-         (.equals byte-buffer (.byte-buffer ^Id that))))
+         (Arrays/equals bytes ^bytes (.bytes ^Id that))))
 
   (hashCode [this]
-    (.hashCode byte-buffer))
+    (Arrays/hashCode bytes))
 
   Comparable
   (compareTo [this that]
-    (.compareTo byte-buffer (.byte-buffer ^Id that))))
-
-(defn bytes->id [^bytes bytes]
-  (->Id (ByteBuffer/wrap bytes)))
+    (bu/compare-bytes bytes (.bytes ^Id that))))
 
 (defn- encode-doc-key ^bytes [^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash)))
@@ -200,7 +197,7 @@
               acc #{}]
          (if (and kv (bu/bytes=? seek-k k))
            (let [content-hash (decode-doc-key k)]
-             (recur (ks/-next i) (conj acc (bytes->id content-hash))))
+             (recur (ks/-next i) (conj acc (->Id content-hash))))
            acc))))))
 
 (defn docs
@@ -214,7 +211,7 @@
                           (sort bu/bytes-comparator))
               :let [[k v :as kv] (ks/-seek i seek-k)]
               :when (and kv (bu/bytes=? seek-k k))]
-          [(bytes->id (decode-doc-key k))
+          [(->Id (decode-doc-key k))
            (ByteBuffer/wrap v)])
         (into {}))))
 
@@ -246,26 +243,26 @@
              (if (and kv (bu/bytes=? seek-k k))
                (recur (ks/-next i)
                       (->> (decode-attribute+value+content-hash-key->content-hash k)
-                           (bytes->id)
+                           (->Id)
                            (conj acc)))
                acc)))
          #{}))))
 
-(defn doc->content-hash ^bytes [doc]
-  (encode-value doc))
+(defn ^Id doc->content-hash [doc]
+  (->Id (encode-value doc)))
 
 (defn store-docs [kv docs]
-  (let [content-hash->doc+bytes (->> (for [doc docs
-                                           :let [bs (nippy/fast-freeze doc)
-                                                 k (bu/sha1 bs)]]
-                                       [k [doc bs]])
-                                     (into (sorted-map-by bu/bytes-comparator)))
-        existing-keys (existing-doc-keys kv (keys content-hash->doc+bytes))
-        content-hash->new-docs+bytes (apply dissoc content-hash->doc+bytes existing-keys)]
+  (let [content-hash+doc+bytes (for [doc docs
+                                     :let [doc-bytes (nippy/fast-freeze doc)
+                                           k (bu/sha1 doc-bytes)]]
+                                 [k [doc doc-bytes]])
+        new-keys (map first content-hash+doc+bytes)
+        existing-keys (existing-doc-keys kv new-keys)
+        content-hash->new-docs+bytes (apply dissoc (into {} content-hash+doc+bytes) existing-keys)]
     (ks/store kv (concat
-                  (for [[content-hash [doc bs]] content-hash->new-docs+bytes]
+                  (for [[content-hash [doc doc-bytes]] content-hash->new-docs+bytes]
                     [(encode-doc-key content-hash)
-                     bs])
+                     doc-bytes])
                   (for [[content-hash [doc]] content-hash->new-docs+bytes
                         [k v] doc
                         v (cond-> v
@@ -273,7 +270,7 @@
                                      (set? v))) (vector))]
                     [(encode-attribute+value+content-hash-key k v content-hash)
                      empty-byte-array])))
-    (mapv bytes->id (keys content-hash->doc+bytes))))
+    (map (comp ->Id first) content-hash+doc+bytes)))
 
 ;; Txs Read
 
@@ -287,7 +284,7 @@
    (->> (for [content-hash content-hashes
               :let [content-hash (id->bytes content-hash)]]
           [(encode-content-hash-prefix-key content-hash)
-           (bytes->id content-hash)])
+           (->Id content-hash)])
         (into (sorted-map-by bu/bytes-comparator))
         (reduce-kv
          (fn [acc seek-k content-hash]
@@ -298,7 +295,7 @@
                       (update acc
                               content-hash
                               conj
-                              (bytes->id (decode-content-hash+entity-key->entity k))))
+                              (->Id (decode-content-hash+entity-key->entity k))))
                acc)))
          {}))))
 
@@ -323,8 +320,8 @@
                                      (let [entity-map (decode-entity+bt+tt+tx-id-key k)]
                                        (if (<= (compare (:tt entity-map) transact-time) 0)
                                          (-> entity-map
-                                             (assoc :content-hash (bytes->id v))
-                                             (update :eid bytes->id))
+                                             (assoc :content-hash (->Id v))
+                                             (update :eid ->Id))
                                          (recur (ks/-next i))))))]
                 :when entity-map]
             [(:eid entity-map) entity-map])
@@ -351,7 +348,7 @@
                              acc #{}]
                         (if (and kv (bu/bytes=? seek-k k))
                           (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
-                            (recur (ks/-next i) (conj acc (bytes->id eid))))
+                            (recur (ks/-next i) (conj acc (->Id eid))))
                           acc))]
          (entities-at i kv eids business-time transact-time))))))
 
@@ -423,7 +420,7 @@
      kv
      (fn [i]
        (let [content-hash (get-in (entities-at i kv [eid] business-time transact-time) [eid :content-hash])
-             doc (-> (lru-named-cache (:state kv) :doc-cache default-doc-cache-size)
+             doc (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
                      (lru-cache-compute-if-absent
                       content-hash
                       #(nippy/fast-thaw (.array ^ByteBuffer (get (docs i kv [%]) %)))))]
