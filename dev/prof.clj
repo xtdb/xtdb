@@ -1,4 +1,5 @@
-(ns prof)
+(ns prof
+  (:require [clojure.reflect]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
