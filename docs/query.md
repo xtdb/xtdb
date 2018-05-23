@@ -94,6 +94,7 @@ while running, which would be a post MVP feature.
   Databases](https://www.arangodb.com/2016/04/index-free-adjacency-hybrid-indexes-graph-databases/)
 + [Inside DSE Graph: What Powers the Best Enterprise Graph
   DB](https://www.datastax.com/2016/08/inside-dse-graph-what-powers-the-best-enterprise-graph-database)
++ [Adaptive Tuple Differential Coding](https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding)
 
 ### Retention
 
