@@ -30,7 +30,7 @@
   uses reversed time."
   (c/compile-frame :index frame-index-enum
                    :aid :id
-                   :v :md5
+                   :v :long
                    :ts :reverse-ts
                    :eid :id))
 
@@ -235,6 +235,31 @@
       (kvu/seek-and-iterate db
                             (partial bu/bytes=? k (- (alength k) 12))
                             k)))))
+
+(defn- iterate-from-range [db aid ts min-v max-v]
+  (let [seek-k (encode frame-index-avt {:index :avt
+                                        :aid aid
+                                        :v min-v
+                                        :ts ts
+                                        :eid 0})]
+    (kvu/seek-and-iterate db
+                          (fn [^bytes k]
+                            (and (bu/bytes=? seek-k 5 k)
+                                 (let [v (.getLong (ByteBuffer/wrap k) 5)]
+                                   (or (not min-v) (>= v min-v))
+                                   (or (not max-v) (<= v max-v)))))
+                          seek-k)))
+
+(defn entity-ids-for-range-value
+  [db ident min-v max-v ^Date ts]
+  (let [min-v (or min-v 0)
+        aid (attr-ident->aid! db ident)]
+    (eduction
+     (comp cat (map (comp (partial attr-aid->ident db) bytes->long second)))
+     (remove nil?
+             [(iterate-from-range db aid ts min-v)
+              (when (neg? min-v)
+                (iterate-from-range db aid ts 0))]))))
 
 (defn store-meta [db k v]
   (kv-store/store db
