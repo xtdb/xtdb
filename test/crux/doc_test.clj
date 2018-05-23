@@ -20,8 +20,8 @@
 (t/deftest test-can-store-doc
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))
-        content-hash (ByteBuffer/wrap (doc/doc->content-hash picasso))]
+        content-hash (ByteBuffer/wrap (doc/doc->content-hash picasso))
+        content-hash-hex (bu/bytes->hex (.array content-hash))]
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
@@ -67,7 +67,7 @@
         content-hash (ByteBuffer/wrap (doc/doc->content-hash picasso))
         transact-time #inst "2018-05-21"
         tx-id 1
-        eid (ByteBuffer/wrap (doc/encode-keyword :http://dbpedia.org/resource/Pablo_Picasso))]
+        eid (ByteBuffer/wrap (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
     (doc/store-docs f/*kv* [picasso])
     (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso

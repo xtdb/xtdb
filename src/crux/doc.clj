@@ -6,7 +6,8 @@
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Date LinkedHashMap]
-           [java.util.function Function]))
+           [java.util.function Function]
+           [clojure.lang Keyword]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -23,27 +24,40 @@
 (def ^:private empty-byte-array (byte-array 0))
 (def ^:const ^:private sha1-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
 
-(defn encode-keyword ^bytes [kw]
+(defn- encode-keyword ^bytes [kw]
   (bu/sha1 (.getBytes (str kw))))
 
-(defn- identifier->bytes ^bytes [k]
-  (cond
-    (bytes? k)
-    k
+(defn- encode-value ^bytes [v]
+  (if (keyword? v)
+    (encode-keyword v)
+    (bu/sha1 (nippy/fast-freeze v))))
 
-    (instance? ByteBuffer k)
-    (.array ^ByteBuffer k)
+(defprotocol IdToBytes
+  (id->bytes [this]))
 
-    (keyword? k)
-    (encode-keyword k)
+(extend-protocol IdToBytes
+  (class (byte-array 0))
+  (id->bytes [this]
+    this)
 
-    (and (string? k)
-         (even? (count k))
-         (re-find #"\p{XDigit}+" k))
-    (bu/hex->bytes k)
+  ByteBuffer
+  (id->bytes [this]
+    (.array this))
 
-    :else
-    (throw (IllegalArgumentException. (str "Cannot turn identifier into bytes: " k)))))
+  Keyword
+  (id->bytes [this]
+    (encode-keyword this))
+
+  String
+  (id->bytes [this]
+    (if (and (even? (count this))
+             (re-find #"\p{XDigit}+" this))
+      (bu/hex->bytes this)
+      (throw (IllegalArgumentException. (str "Not a hex string: " this)))))
+
+  Object
+  (id->bytes [this]
+    (throw (UnsupportedOperationException.))))
 
 (defn- encode-doc-key ^bytes [^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash)))
@@ -61,9 +75,7 @@
   (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size sha1-size (alength content-hash)))
       (.putShort attribute+value+content-hash-index-id)
       (.put (encode-keyword k))
-      (.put (if (keyword? v)
-              (encode-keyword v)
-              (bu/sha1 (nippy/fast-freeze v))))
+      (.put (encode-value v))
       (.put content-hash)
       (.array)))
 
@@ -175,7 +187,7 @@
     (fn [i]
       (docs i kv ks))))
   ([i kv ks]
-   (->> (for [seek-k (->> (map (comp encode-doc-key identifier->bytes) ks)
+   (->> (for [seek-k (->> (map (comp encode-doc-key id->bytes) ks)
                           (sort bu/bytes-comparator))
               :let [[k v :as kv] (ks/-seek i seek-k)]
               :when (and kv (bu/bytes=? seek-k k))]
@@ -217,7 +229,7 @@
          #{}))))
 
 (defn doc->content-hash ^bytes [doc]
-  (bu/sha1 (nippy/fast-freeze doc)))
+  (encode-value doc))
 
 (defn store-docs [kv docs]
   (let [content-hash->doc+bytes (->> (for [doc docs
@@ -250,7 +262,7 @@
       (eids-by-content-hashes i kv content-hashes))))
   ([i kv content-hashes]
    (->> (for [content-hash content-hashes
-              :let [content-hash (identifier->bytes content-hash)]]
+              :let [content-hash (id->bytes content-hash)]]
           [(encode-content-hash-prefix-key content-hash)
            (ByteBuffer/wrap content-hash)])
         (into (sorted-map-by bu/bytes-comparator))
@@ -277,7 +289,7 @@
    (let [prefix-size (+ Short/BYTES sha1-size)]
      (->> (for [seek-k (->> (for [entity entities]
                               (encode-entity+bt+tt-prefix-key
-                               (identifier->bytes entity)
+                               (id->bytes entity)
                                business-time
                                transact-time))
                             (sort bu/bytes-comparator))
@@ -325,8 +337,8 @@
 (defmulti tx-command (fn [kv [op] transact-time tx-id] op))
 
 (defmethod tx-command :crux.tx/put [kv [op k v business-time] transact-time tx-id]
-  (let [eid (identifier->bytes k)
-        content-hash (identifier->bytes v)
+  (let [eid (id->bytes k)
+        content-hash (id->bytes v)
         business-time (or business-time transact-time)]
     [[(encode-entity+bt+tt+tx-id-key
        eid
@@ -338,7 +350,7 @@
       empty-byte-array]]))
 
 (defmethod tx-command :crux.tx/delete [kv [op k business-time] transact-time tx-id]
-  (let [eid (identifier->bytes k)
+  (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     [[(encode-entity+bt+tt+tx-id-key
        eid
@@ -348,13 +360,13 @@
       empty-byte-array]]))
 
 (defmethod tx-command :crux.tx/cas [kv [op k old-v new-v business-time] transact-time tx-id]
-  (let [eid (identifier->bytes k)
+  (let [eid (id->bytes k)
         old-content-hash (-> (entities-at kv [k] business-time transact-time)
                              (get k)
                              :content-hash)
         business-time (or business-time transact-time)
-        old-v (identifier->bytes old-v)
-        new-v (identifier->bytes new-v)]
+        old-v (id->bytes old-v)
+        new-v (id->bytes new-v)]
     (when (bu/bytes=? old-content-hash old-v)
       [[(encode-entity+bt+tt+tx-id-key
          eid
