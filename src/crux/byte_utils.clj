@@ -94,3 +94,67 @@
    (bytes=? k1 (alength k1) k2))
   ([^bytes k1 array-length ^bytes k2]
    (zero? (compare-bytes k1 k2 array-length))))
+
+(def ^:private ^sun.misc.Unsafe
+  the-unsafe
+  (let [f (doto (.getDeclaredField sun.misc.Unsafe "theUnsafe")
+            (.setAccessible true))]
+    (.get ^java.lang.reflect.Field f nil)))
+
+(def ^:private ^:const byte-array-base-offset
+  ^{:tag 'long}
+  (.arrayBaseOffset the-unsafe (class (byte-array 0))))
+
+(def ^:private ^:const
+  ^{:tag 'boolean}
+  little-endian? (= java.nio.ByteOrder/LITTLE_ENDIAN
+                    (java.nio.ByteOrder/nativeOrder)))
+
+;; Inspired by
+;; https://github.com/google/guava/blob/master/guava/src/com/google/common/primitives/UnsignedBytes.java#L365
+
+;; NOTE: is not faster nor used at the moment.
+
+(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
+  (let [a-length (int (alength a))
+        b-length (int (alength b))
+        max-length (int (max a-length b-length max-length))
+        the-unsafe the-unsafe]
+    (loop [idx (int 0)]
+      (cond
+        (= idx max-length)
+        0
+
+        (or (= idx a-length)
+            (= idx b-length))
+        (unchecked-subtract-int a-length b-length)
+
+        :else
+        (let [array-idx (long (unchecked-add byte-array-base-offset idx))
+              al (.getLong the-unsafe a array-idx)
+              bl (.getLong the-unsafe b array-idx)]
+
+          (if-not (= al bl)
+            (if little-endian?
+              (Long/compareUnsigned (Long/reverseBytes al)
+                                    (Long/reverseBytes bl))
+              (Long/compareUnsigned al bl))
+
+            (let [next-idx (unchecked-add-int idx Long/BYTES)]
+              (if (> next-idx max-length)
+                (loop [idx idx]
+                  (cond
+                    (= idx max-length)
+                    0
+
+                    (or (= idx a-length)
+                        (= idx b-length))
+                    (unchecked-subtract-int a-length b-length)
+
+                    :else
+                    (let [diff (unchecked-subtract-int (Byte/toUnsignedInt (aget a idx))
+                                                       (Byte/toUnsignedInt (aget b idx)))]
+                      (if (zero? diff)
+                        (recur (unchecked-inc-int idx))
+                        diff))))
+                (recur next-idx)))))))))
