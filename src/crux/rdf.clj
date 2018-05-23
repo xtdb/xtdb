@@ -189,21 +189,3 @@
                                (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
                          (apply concat)))))))
        (apply concat)))
-
-;;; Regexp-based N-Triples parser.
-
-(def ntriplet-pattern
-  #"^(?<subject>.+?)\s*(?<predicate><.+?>)\s*(?<object>.+?)(\^\^(?<datatype><.+?>))?\s+\..*$")
-
-(defn parse-ntriplet [line]
-  (let [m (re-matcher ntriplet-pattern line)]
-    (when (.find m)
-      {:subject (.group m "subject")
-       :predicate (.group m "predicate")
-       :object (.group m "object")
-       :datatype (.group m "datatype")})))
-
-(comment
-  (with-open [in (io/input-stream
-                  (io/resource "crux/example-data-artists.nt"))]
-    (doall (statements->maps (ntriples-seq in)))))
