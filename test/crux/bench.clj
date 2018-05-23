@@ -2,6 +2,7 @@
   (:require [crux.fixtures :as f :refer [random-person *kv*]]
             [crux.byte-utils :as bu]
             [crux.kv :as cr]
+            [crux.kv-store :as ks]
             [crux.query :as q]
             [crux.core :refer [db]]
             [crux.doc :as doc]
@@ -51,12 +52,16 @@
                              (doc/map->DocDatasource {:kv *kv*
                                                       :transact-time ts
                                                       :business-time ts}))]]
-            (q/q db (case query
-                      :name '{:find [e]
-                              :where [[e :name "Ivan"]]}
-                      :range '{:find [e]
-                               :where [[e :age age]
-                                       (> age 20)]})))))))))
+
+            (ks/iterate-with
+             *kv*
+             (fn [i]
+               (q/q db (case query
+                         :name '{:find [e]
+                                 :where [[e :name "Ivan"]]}
+                         :range '{:find [e]
+                                  :where [[e :age age]
+                                          (> age 20)]})))))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
 

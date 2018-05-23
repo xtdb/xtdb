@@ -22,6 +22,8 @@
       (close [this]
         (.close i)))))
 
+(def ^:dynamic ^:private *current-iterator* nil)
+
 (defrecord CruxRocksKv [db-dir]
   CruxKvStore
   (open [this]
@@ -38,8 +40,11 @@
                                                         (.setDisableWAL true)))))
 
   (iterate-with [this f]
-    (with-open [i (rocks-iterator this)]
-      (f i)))
+    (if *current-iterator*
+      (f *current-iterator*)
+      (with-open [i (rocks-iterator this)]
+        (binding [*current-iterator* i]
+          (f i)))))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]

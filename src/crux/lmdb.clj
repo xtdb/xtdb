@@ -104,22 +104,28 @@
       [(bu/byte-buffer->bytes (.mv_data kv))
        (bu/byte-buffer->bytes (.mv_data dv))])))
 
+(def ^:dynamic ^:private *current-iterator* nil)
+
 (defn- cursor-iterate [env dbi f]
-  (with-cursor env dbi
-    (fn [^MemoryStack stack cursor]
-      (let [kv (MDBVal/callocStack stack)
-            dv (MDBVal/callocStack stack)]
-        (f (reify
-             ks/KvIterator
-             (-seek [this k]
-               (with-open [stack (.push stack)]
-                 (let [k ^bytes k
-                       kb (.flip (.put (.malloc stack (alength k)) k))
-                       kv (.mv_data (MDBVal/callocStack stack) kb)]
-                   (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE))))
-             (-next [this]
-               (cursor->kv cursor kv dv LMDB/MDB_NEXT))))))
-    LMDB/MDB_RDONLY))
+  (if *current-iterator*
+    (f *current-iterator*)
+    (with-cursor env dbi
+      (fn [^MemoryStack stack cursor]
+        (let [kv (MDBVal/callocStack stack)
+              dv (MDBVal/callocStack stack)
+              i (reify
+                  ks/KvIterator
+                  (-seek [this k]
+                    (with-open [stack (.push stack)]
+                      (let [k ^bytes k
+                            kb (.flip (.put (.malloc stack (alength k)) k))
+                            kv (.mv_data (MDBVal/callocStack stack) kb)]
+                        (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE))))
+                  (-next [this]
+                    (cursor->kv cursor kv dv LMDB/MDB_NEXT)))]
+          (binding [*current-iterator* i]
+            (f i))))
+      LMDB/MDB_RDONLY)))
 
 (defn- cursor-put [env dbi kvs]
   (with-cursor env dbi

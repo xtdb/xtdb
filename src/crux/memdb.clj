@@ -21,6 +21,8 @@
   (doto (TreeMap. bu/bytes-comparator)
     (.putAll (nippy/thaw-from-file (io/file dir "memdb")))))
 
+(def ^:dynamic ^:private *current-iterator* nil)
+
 (defrecord CruxMemKv [^SortedMap db db-dir persist-on-close?]
   ks/CruxKvStore
   (open [this]
@@ -29,15 +31,18 @@
       (assoc this :db (TreeMap. bu/bytes-comparator))))
 
   (iterate-with [_ f]
-    (f
-     (let [c (atom nil)]
-       (reify
-         ks/KvIterator
-         (ks/-seek [this k]
-           (reset! c (.tailMap db k))
-           (atom-cursor->next! c))
-         (ks/-next [this]
-           (atom-cursor->next! c))))))
+    (if *current-iterator*
+      (f *current-iterator*)
+      (let [c (atom nil)
+            i (reify
+                ks/KvIterator
+                (ks/-seek [this k]
+                  (reset! c (.tailMap db k))
+                  (atom-cursor->next! c))
+                (ks/-next [this]
+                  (atom-cursor->next! c)))]
+       (binding [*current-iterator* i]
+         (f i)))))
 
   (store [_ kvs]
     (locking db
