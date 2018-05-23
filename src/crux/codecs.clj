@@ -45,6 +45,22 @@
                    :double [8 #(.putDouble ^ByteBuffer %1 %2) #(.getDouble ^ByteBuffer %)]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]})
 
+(defn variable-data-type [& data-types]
+  (let [data-type->byte (into {} (for [[i k] (map-indexed vector data-types)]
+                                   [k (byte i)]))
+        byte->data-type (into {} (for [[i k] (map-indexed vector data-types)]
+                                   [(byte i) k]))]
+    [(fn [[data-type v]]
+       (inc (first (get binary-types data-type))))
+
+     (fn [^ByteBuffer bb [data-type v]]
+       (.put bb ^byte (data-type->byte data-type))
+       ((second (get binary-types data-type)) bb v))
+
+     (fn [^ByteBuffer bb]
+       (let [data-type ^byte (.get bb)]
+         ((nth (get binary-types (byte->data-type data-type)) 2) bb)))]))
+
 (defprotocol Codec
   (encode [this v])
   (decode [this v]))
@@ -82,20 +98,6 @@
                   (assoc! m k (f b)))
                 (transient {}))
                (persistent! )))))))
-
-(defn compile-header-frame [[header-k header-frame] frames]
-  (reify Codec
-    (encode [_ v]
-      (let [frame (get frames (get v header-k))]
-        (encode frame v)))
-    (decode [_ v]
-      ;; Todo could perhaps eliminate the double read of the prefix
-      (let [b (ByteBuffer/wrap v)
-            [_ _ f] (if (vector? header-frame)
-                      header-frame
-                      (get binary-types header-frame))
-            codec (get frames (f b))]
-        (decode codec v)))))
 
 (defmacro compile-enum [& vals]
   `[1

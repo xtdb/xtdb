@@ -30,7 +30,7 @@
   uses reversed time."
   (c/compile-frame :index frame-index-enum
                    :aid :id
-                   :v :long
+                   :v (c/variable-data-type :long :md5)
                    :ts :reverse-ts
                    :eid :id))
 
@@ -161,7 +161,7 @@
                             (nippy/freeze v)])
                v (conj! [(encode frame-index-avt {:index :avt
                                                   :aid aid
-                                                  :v v
+                                                  :v [(if (number? v) :long :md5) v]
                                                   :ts ts
                                                   :eid eid})
                          (long->bytes eid)]))))
@@ -227,7 +227,7 @@
    (let [aid (attr-ident->aid! db ident)
          k ^bytes (encode frame-index-avt {:index :avt
                                            :aid aid
-                                           :v v
+                                           :v [(if (number? v) :long :md5) v]
                                            :ts ts
                                            :eid 0})]
      (eduction
@@ -239,15 +239,15 @@
 (defn- iterate-from-range [db aid ts min-v max-v]
   (let [seek-k (encode frame-index-avt {:index :avt
                                         :aid aid
-                                        :v min-v
+                                        :v [:long min-v]
                                         :ts ts
                                         :eid 0})]
     (kvu/seek-and-iterate db
                           (fn [^bytes k]
                             (and (bu/bytes=? seek-k 5 k)
-                                 (let [v (.getLong (ByteBuffer/wrap k) 5)]
-                                   (or (not min-v) (>= v min-v))
-                                   (or (not max-v) (<= v max-v)))))
+                                 (let [v (.getLong (ByteBuffer/wrap k) 6)]
+                                   (and (or (not min-v) (>= v min-v))
+                                        (or (not max-v) (<= v max-v))))))
                           seek-k)))
 
 (defn entity-ids-for-range-value
@@ -257,9 +257,11 @@
     (eduction
      (comp cat (map (comp (partial attr-aid->ident db) bytes->long second)))
      (remove nil?
-             [(iterate-from-range db aid ts min-v)
+             [(into [] (iterate-from-range db aid ts min-v max-v))
               (when (neg? min-v)
-                (iterate-from-range db aid ts 0))]))))
+                (into [] (iterate-from-range db aid ts 0 max-v)))
+              (when max-v
+                (into [] (iterate-from-range db aid ts Integer/MIN_VALUE max-v)))]))))
 
 (defn store-meta [db k v]
   (kv-store/store db
