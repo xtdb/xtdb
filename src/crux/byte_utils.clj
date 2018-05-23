@@ -95,27 +95,27 @@
   ([^bytes k1 array-length ^bytes k2]
    (zero? (compare-bytes k1 k2 array-length))))
 
-(def ^:private ^sun.misc.Unsafe
-  the-unsafe
-  (let [f (doto (.getDeclaredField sun.misc.Unsafe "theUnsafe")
-            (.setAccessible true))]
-    (.get ^java.lang.reflect.Field f nil)))
+;; (def ^:private ^sun.misc.Unsafe
+;;   the-unsafe
+;;   (let [f (doto (.getDeclaredField sun.misc.Unsafe "theUnsafe")
+;;             (.setAccessible true))]
+;;     (.get ^java.lang.reflect.Field f nil)))
 
-(def ^:private ^:const byte-array-base-offset
-  ^{:tag 'long}
-  (.arrayBaseOffset the-unsafe (class (byte-array 0))))
+;; (def ^:private ^:const byte-array-base-offset
+;;   ^{:tag 'long}
+;;   (.arrayBaseOffset the-unsafe (class (byte-array 0))))
 
-(def ^:private ^:const
-  ^{:tag 'boolean}
-  little-endian? (= java.nio.ByteOrder/LITTLE_ENDIAN
-                    (java.nio.ByteOrder/nativeOrder)))
+;; (def ^:private ^:const
+;;   ^{:tag 'boolean}
+;;   little-endian? (= java.nio.ByteOrder/LITTLE_ENDIAN
+;;                     (java.nio.ByteOrder/nativeOrder)))
 
 ;; Inspired by
 ;; https://github.com/google/guava/blob/master/guava/src/com/google/common/primitives/UnsignedBytes.java#L365
 
 ;; NOTE: is not faster nor used at the moment.
 
-(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
+#_(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
   (let [a-length (int (alength a))
         b-length (int (alength b))
         max-length (int (max a-length b-length max-length))
