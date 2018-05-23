@@ -20,8 +20,8 @@
 (t/deftest test-can-store-doc
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (ByteBuffer/wrap (doc/doc->content-hash picasso))
-        content-hash-hex (bu/bytes->hex (.array content-hash))]
+        content-hash (doc/bytes->id (doc/doc->content-hash picasso))
+        content-hash-hex (bu/bytes->hex (doc/doc->content-hash picasso))]
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
@@ -50,24 +50,24 @@
 (t/deftest test-can-find-doc-by-value
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash-hex (ByteBuffer/wrap (doc/doc->content-hash picasso))]
+        content-hash (doc/bytes->id (doc/doc->content-hash picasso))]
     (doc/store-docs f/*kv* [picasso])
-    (t/is (= #{content-hash-hex}
+    (t/is (= #{content-hash}
              (doc/doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
 
     (t/testing "find multi valued attribute"
-      (t/is (= #{content-hash-hex}
+      (t/is (= #{content-hash}
                (doc/doc-keys-by-attribute-values
                 f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))))
 
 (t/deftest test-can-index-tx-ops
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (ByteBuffer/wrap (doc/doc->content-hash picasso))
+        content-hash (doc/bytes->id (doc/doc->content-hash picasso))
         transact-time #inst "2018-05-21"
         tx-id 1
-        eid (ByteBuffer/wrap (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
+        eid (doc/bytes->id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
     (doc/store-docs f/*kv* [picasso])
     (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
@@ -104,7 +104,7 @@
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
-            new-content-hash (ByteBuffer/wrap (doc/doc->content-hash new-picasso))
+            new-content-hash (doc/bytes->id (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
             new-tx-id 2]
@@ -126,7 +126,7 @@
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
-            new-content-hash (ByteBuffer/wrap (doc/doc->content-hash new-picasso))
+            new-content-hash (doc/bytes->id (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
             new-tx-id 3]
@@ -153,7 +153,7 @@
 
     (t/testing "can correct entity at earlier business time"
       (let [new-picasso (assoc picasso :bar :foo)
-            new-content-hash (ByteBuffer/wrap (doc/doc->content-hash new-picasso))
+            new-content-hash (doc/bytes->id (doc/doc->content-hash new-picasso))
             new-transact-time #inst "2018-05-24"
             new-business-time #inst "2018-05-22"
             new-tx-id 4]

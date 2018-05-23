@@ -59,6 +59,29 @@
   (id->bytes [this]
     (throw (UnsupportedOperationException.))))
 
+(deftype Id [^ByteBuffer byte-buffer]
+  IdToBytes
+  (id->bytes [this]
+    (id->bytes byte-buffer))
+
+  Object
+  (toString [this]
+    (bu/bytes->hex (bu/byte-buffer->bytes byte-buffer)))
+
+  (equals [this that]
+    (and (instance? Id that)
+         (.equals byte-buffer (.byte-buffer ^Id that))))
+
+  (hashCode [this]
+    (.hashCode byte-buffer))
+
+  Comparable
+  (compareTo [this that]
+    (.compareTo byte-buffer (.byte-buffer ^Id that))))
+
+(defn bytes->id [^bytes bytes]
+  (->Id (ByteBuffer/wrap bytes)))
+
 (defn- encode-doc-key ^bytes [^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash)))
       (.putShort content-hash->doc-index-id)
@@ -177,7 +200,7 @@
               acc #{}]
          (if (and kv (bu/bytes=? seek-k k))
            (let [content-hash (decode-doc-key k)]
-             (recur (ks/-next i) (conj acc (ByteBuffer/wrap content-hash))))
+             (recur (ks/-next i) (conj acc (bytes->id content-hash))))
            acc))))))
 
 (defn docs
@@ -191,7 +214,7 @@
                           (sort bu/bytes-comparator))
               :let [[k v :as kv] (ks/-seek i seek-k)]
               :when (and kv (bu/bytes=? seek-k k))]
-          [(ByteBuffer/wrap (decode-doc-key k))
+          [(bytes->id (decode-doc-key k))
            (ByteBuffer/wrap v)])
         (into {}))))
 
@@ -223,7 +246,7 @@
              (if (and kv (bu/bytes=? seek-k k))
                (recur (ks/-next i)
                       (->> (decode-attribute+value+content-hash-key->content-hash k)
-                           (ByteBuffer/wrap)
+                           (bytes->id)
                            (conj acc)))
                acc)))
          #{}))))
@@ -250,7 +273,7 @@
                                      (set? v))) (vector))]
                     [(encode-attribute+value+content-hash-key k v content-hash)
                      empty-byte-array])))
-    (mapv #(ByteBuffer/wrap ^bytes %) (keys content-hash->doc+bytes))))
+    (mapv bytes->id (keys content-hash->doc+bytes))))
 
 ;; Txs Read
 
@@ -264,7 +287,7 @@
    (->> (for [content-hash content-hashes
               :let [content-hash (id->bytes content-hash)]]
           [(encode-content-hash-prefix-key content-hash)
-           (ByteBuffer/wrap content-hash)])
+           (bytes->id content-hash)])
         (into (sorted-map-by bu/bytes-comparator))
         (reduce-kv
          (fn [acc seek-k content-hash]
@@ -275,7 +298,7 @@
                       (update acc
                               content-hash
                               conj
-                              (ByteBuffer/wrap (decode-content-hash+entity-key->entity k))))
+                              (bytes->id (decode-content-hash+entity-key->entity k))))
                acc)))
          {}))))
 
@@ -300,8 +323,8 @@
                                      (let [entity-map (decode-entity+bt+tt+tx-id-key k)]
                                        (if (<= (compare (:tt entity-map) transact-time) 0)
                                          (-> entity-map
-                                             (assoc :content-hash (ByteBuffer/wrap v))
-                                             (update :eid #(ByteBuffer/wrap ^ByteBuffer %)))
+                                             (assoc :content-hash (bytes->id v))
+                                             (update :eid bytes->id))
                                          (recur (ks/-next i))))))]
                 :when entity-map]
             [(:eid entity-map) entity-map])
@@ -328,7 +351,7 @@
                              acc #{}]
                         (if (and kv (bu/bytes=? seek-k k))
                           (let [{:keys [eid]} (decode-entity+bt+tt+tx-id-key k)]
-                            (recur (ks/-next i) (conj acc (ByteBuffer/wrap eid))))
+                            (recur (ks/-next i) (conj acc (bytes->id eid))))
                           acc))]
          (entities-at i kv eids business-time transact-time))))))
 
