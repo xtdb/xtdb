@@ -177,17 +177,17 @@
        (partition-by #(re-find #"<.+?>" %))
        (partition-all 100)
        (map (fn [entity-lines]
-               (let [lines (apply concat entity-lines)]
-                 (try
-                   (parse-ntriples-str (str/join "\n" lines))
-                   (catch Exception e
-                     (->> (for [lines entity-lines]
-                            (try
-                              (log/debug e "Could not parse block of entities, parsing one by one.")
-                              (parse-ntriples-str (str/join "\n" lines))
-                              (catch Exception e
-                                (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
-                          (apply concat)))))))
+              (let [lines (apply concat entity-lines)]
+                (try
+                  (parse-ntriples-str (str/join "\n" lines))
+                  (catch Exception e
+                    (->> (for [lines entity-lines]
+                           (try
+                             (log/debug e "Could not parse block of entities, parsing one by one.")
+                             (parse-ntriples-str (str/join "\n" lines))
+                             (catch Exception e
+                               (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
+                         (apply concat)))))))
        (apply concat)))
 
 ;;; Regexp-based N-Triples parser.

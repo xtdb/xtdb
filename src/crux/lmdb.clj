@@ -38,11 +38,11 @@
         (let [txn (.get pp)
               [result
                commit-rc] (try
-               [(f stack txn)
-                (LMDB/mdb_txn_commit txn)]
-               (catch Throwable t
-                 (LMDB/mdb_txn_abort txn)
-                 (throw t)))]
+                            [(f stack txn)
+                             (LMDB/mdb_txn_commit txn)]
+                            (catch Throwable t
+                              (LMDB/mdb_txn_abort txn)
+                              (throw t)))]
           (success? commit-rc)
           result)))
     (catch ExceptionInfo e
@@ -76,12 +76,12 @@
 
 (defn- dbi-open [env]
   (with-transaction
-   env
-   (fn [^MemoryStack stack ^long txn]
-     (let [ip (.mallocInt stack 1)
-           ^CharSequence name nil]
-       (success? (LMDB/mdb_dbi_open txn name 0 ip))
-       (.get ip 0)))
+    env
+    (fn [^MemoryStack stack ^long txn]
+      (let [ip (.mallocInt stack 1)
+            ^CharSequence name nil]
+        (success? (LMDB/mdb_dbi_open txn name 0 ip))
+        (.get ip 0)))
     LMDB/MDB_RDONLY))
 
 (defn- with-cursor [env dbi f txn-flags]
@@ -162,7 +162,7 @@
   (iterate-with [this f]
     (cursor-iterate env dbi f))
 
-   (store [_ kvs]
+  (store [_ kvs]
     (cursor-put env dbi kvs))
 
   (backup [_ dir]
