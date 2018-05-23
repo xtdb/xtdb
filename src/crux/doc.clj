@@ -183,8 +183,12 @@
                                 (f k)))))
 
 (defn lru-named-cache [state cache-name cache-size]
-  (or (get @state cache-name)
-      (get (swap! state assoc cache-name (lru-cache cache-size)) cache-name)))
+  (get (swap! state
+              update
+              cache-name
+              (fn [cache]
+                (or cache (lru-cache cache-size))))
+       cache-name))
 
 ;; Docs
 
