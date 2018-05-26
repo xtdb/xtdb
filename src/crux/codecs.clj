@@ -1,28 +1,21 @@
 (ns crux.codecs
-  (:require [clojure.edn :as edn]
-            [crux.byte-utils :as bu]
+  (:require [crux.byte-utils :as bu]
             [taoensso.nippy :as nippy])
-  (:import [java.nio ByteBuffer]
-           [java.util Date]))
+  (:import java.nio.ByteBuffer
+           java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^{:tag 'long}
   max-timestamp (.getTime #inst "9999-12-30"))
 
-(defn- encode-bytes [^ByteBuffer bb ^bytes bs]
-  (.put bb bs))
-
-(defn decode-bytes ^bytes [^ByteBuffer bb]
-  (let [ba (byte-array (.remaining bb))]
-    (.get bb ba)
-    ba))
-
-(defn encode-string [^ByteBuffer bb ^String s]
+(defn- encode-string [^ByteBuffer bb ^String s]
   (.put bb ^bytes (.getBytes s)))
 
-(defn decode-string ^String [^ByteBuffer bb]
-  (String. (decode-bytes bb)))
+(defn- decode-string ^String [^ByteBuffer bb]
+  (let [ba (byte-array (.remaining bb))]
+    (.get bb ba)
+    (String. ba)))
 
 (defn- keyword->string [k]
   (-> k str (subs 1)))
@@ -37,7 +30,7 @@
                    :md5 [16
                          (fn [^ByteBuffer b x]
                            (let [x (bu/md5 (nippy/freeze x))]
-                             (encode-bytes b x)))
+                             (.put b x)))
                          ;; Simply return the md5
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]
                    :long [8
