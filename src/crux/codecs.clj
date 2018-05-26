@@ -40,8 +40,9 @@
                              (encode-bytes b x)))
                          ;; Simply return the md5
                          (fn [^ByteBuffer b] (.get b (byte-array 16)))]
-                   ;; For range scans:
-                   :long [8 #(.putLong ^ByteBuffer %1 %2) #(.getLong ^ByteBuffer %)]
+                   :long [8
+                          #(.putLong ^ByteBuffer %1 (bit-xor ^long %2 Long/MIN_VALUE))
+                          #(bit-xor Long/MIN_VALUE (.getLong ^ByteBuffer %))]
                    :double [8 #(.putDouble ^ByteBuffer %1 %2) #(.getDouble ^ByteBuffer %)]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]})
 
@@ -51,7 +52,7 @@
         byte->data-type (into {} (for [[i k] (map-indexed vector data-types)]
                                    [(byte i) k]))]
     [(fn [[data-type v]]
-       (inc (first (get binary-types data-type))))
+       (inc ^long (first (get binary-types data-type))))
 
      (fn [^ByteBuffer bb [data-type v]]
        (.put bb ^byte (data-type->byte data-type))
