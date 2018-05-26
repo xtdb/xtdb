@@ -43,7 +43,15 @@
                    :long [8
                           #(.putLong ^ByteBuffer %1 (bit-xor ^long %2 Long/MIN_VALUE))
                           #(bit-xor Long/MIN_VALUE (.getLong ^ByteBuffer %))]
-                   :double [8 #(.putDouble ^ByteBuffer %1 %2) #(.getDouble ^ByteBuffer %)]
+                   :double [8
+                            (fn [^ByteBuffer bb d]
+                              (let [l (Double/doubleToLongBits d)
+                                    l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
+                                (.putLong bb l)))
+                            (fn [^ByteBuffer bb]
+                              (let [l (dec (.getLong bb))
+                                    l (bit-xor l (bit-or (bit-shift-right (bit-not l) (dec Long/SIZE)) Long/MIN_VALUE))]
+                                (Double/longBitsToDouble l)))]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]})
 
 (defn variable-data-type [& data-types]

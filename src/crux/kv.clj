@@ -30,7 +30,7 @@
   uses reversed time."
   (c/compile-frame :index frame-index-enum
                    :aid :id
-                   :v (c/variable-data-type :long :md5)
+                   :v (c/variable-data-type :long :double :md5)
                    :ts :reverse-ts
                    :eid :id))
 
@@ -139,6 +139,11 @@
       [(::id tx) k v])
     [tx]))
 
+(defn- value->variable-data-type [v]
+  [(cond (integer? v) :long
+         (double? v) :double
+         :else :md5) v])
+
 (defn -put
   "Put an attribute/value tuple against an entity ID."
   ([db txs]
@@ -161,7 +166,7 @@
                             (nippy/freeze v)])
                v (conj! [(encode frame-index-avt {:index :avt
                                                   :aid aid
-                                                  :v [(if (integer? v) :long :md5) v]
+                                                  :v (value->variable-data-type v)
                                                   :ts ts
                                                   :eid eid})
                          (long->bytes eid)]))))
@@ -239,7 +244,7 @@
 (defn- iterate-within-range [db aid ts min-v max-v]
   (let [seek-k (encode frame-index-avt {:index :avt
                                         :aid aid
-                                        :v [:long min-v]
+                                        :v (value->variable-data-type min-v)
                                         :ts ts
                                         :eid 0})]
     (kvu/seek-and-iterate db
