@@ -11,61 +11,61 @@
 
 (def frame-index-enum
   "An enum byte used to identity a particular index."
-  (c/compile-enum :eat :avt :next-eid :ident-id :ident :meta))
+  (c/enum :eat :avt :next-eid :ident-id :ident :meta))
 
 (def frame-index-eat
   "The EAT index is used for providing rapid access to a value of an
   entity/attribute at a given point in time, used as the primary means
   to get an entity/attribute value, for direct access and for query
   purposes. This index uses reversed time."
-  (c/compile-frame :index frame-index-enum
-                   :eid :id
-                   :aid :id
-                   :ts :reverse-ts
-                   :tx-ts :reverse-ts))
+  (c/frame :index frame-index-enum
+           :eid :id
+           :aid :id
+           :ts :reverse-ts
+           :tx-ts :reverse-ts))
 
 (def frame-index-avt
   "The AVT index is used to find entities that have an attribute/value
   at a particular point in time, used for query purposes. This index
   uses reversed time."
-  (c/compile-frame :index frame-index-enum
-                   :aid :id
-                   :v :tagged
-                   :ts :reverse-ts
-                   :eid :id))
+  (c/frame :index frame-index-enum
+           :aid :id
+           :v :tagged
+           :ts :reverse-ts
+           :eid :id))
 
 (def frame-index-ident-id
   "The eid index is used store information about the entity ID,
   including original external ID."
-  (c/compile-frame :index frame-index-enum
-                   :id :id))
+  (c/frame :index frame-index-enum
+           :id :id))
 
 (def frame-index-ident
   "The ident index is used to provide a mapping from an external ID to a
   numeric ID used for referencing in internal indices."
-  (c/compile-frame :index frame-index-enum
-                   :ident :md5))
+  (c/frame :index frame-index-enum
+           :ident :md5))
 
 (def frame-index-meta
-  (c/compile-frame :index frame-index-enum
-                   :key :keyword))
+  (c/frame :index frame-index-enum
+           :key :keyword))
 
 (def frame-index-selector
   "Partial key frame, used for selecting within a particular index."
-  (c/compile-frame :index frame-index-enum))
+  (c/frame :index frame-index-enum))
 
 (def frame-index-eat-key-prefix
   "Partial key frame, used for iterating within all
   attributes/timestamps of a given entity."
-  (c/compile-frame :index frame-index-enum :eid :id))
+  (c/frame :index frame-index-enum :eid :id))
 
 (def frame-index-eat-key-prefix-business-time
   "Partial key frame, used for seeking attributes as of a business
   time."
-  (c/compile-frame :index frame-index-enum
-                   :eid :id
-                   :aid :id
-                   :ts :reverse-ts))
+  (c/frame :index frame-index-enum
+           :eid :id
+           :aid :id
+           :ts :reverse-ts))
 
 (defn next-entity-id "Return the next entity ID" [db]
   (locking db

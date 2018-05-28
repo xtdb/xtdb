@@ -75,7 +75,7 @@
   (or (and (vector? t) t)
       (get all-types t)))
 
-(defn compile-frame [& args]
+(defn frame [& args]
   (let [pairs (->> args
                    (partition 2)
                    (mapv (fn [[k t]]
@@ -113,7 +113,7 @@
   (let [[_ _ decoder] frame]
     (decoder (ByteBuffer/wrap ^bytes v))))
 
-(defmacro compile-enum [& vals]
+(defmacro enum [& vals]
   `[1
     (fn [^ByteBuffer bb# ~'k]
       (let [v# (case ~'k
