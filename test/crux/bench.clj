@@ -44,6 +44,9 @@
           (let [q (case query
                     :name '{:find [e]
                             :where [[e :name "Ivan"]]}
+                    :multiple-clauses '{:find [e]
+                                        :where [[e :name "Ivan"]
+                                                [e :last-name "Ivanov"]]}
                     :range '{:find [e]
                              :where [[e :age age]
                                      (> age 20)]})
