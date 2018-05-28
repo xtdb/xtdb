@@ -281,12 +281,25 @@
                                                  [p :mentor i]]})))))
 
 (t/deftest test-simple-numeric-range-search
+  (t/is (= [[:fact ['i :age 'age]]
+            [:range {:crux.query/fn <
+                     :crux.query/sym 'age
+                     :crux.query/val 20}]]
+           (s/conform :crux.query/where '[[i :age age]
+                                          (< age 20)])))
+
   (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
                             {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :age 18}])
 
-  (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
-                                       :where [[i :age age]
-                                               (< age 20)]}))))
+  (t/testing "Min search case"
+    (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [i]
+                                         :where [[i :age age]
+                                                 (> age 20)]}))))
+
+  (t/testing "Max search case"
+    (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
+                                         :where [[i :age age]
+                                                 (< age 20)]})))))
 
 ;; TODO write:
 (t/deftest test-use-another-datasource)

@@ -30,7 +30,7 @@
   uses reversed time."
   (c/compile-frame :index frame-index-enum
                    :aid :id
-                   :v (c/variable-data-type :long :double :md5)
+                   :v :tagged
                    :ts :reverse-ts
                    :eid :id))
 
@@ -139,11 +139,6 @@
       [(::id tx) k v])
     [tx]))
 
-(defn- value->variable-data-type [v]
-  [(cond (integer? v) :long
-         (double? v) :double
-         :else :md5) v])
-
 (defn -put
   "Put an attribute/value tuple against an entity ID."
   ([db txs]
@@ -166,7 +161,7 @@
                             (nippy/freeze v)])
                v (conj! [(encode frame-index-avt {:index :avt
                                                   :aid aid
-                                                  :v (value->variable-data-type v)
+                                                  :v v
                                                   :ts ts
                                                   :eid eid})
                          (long->bytes eid)]))))
@@ -232,7 +227,7 @@
    (let [aid (attr-ident->aid! db ident)
          k ^bytes (encode frame-index-avt {:index :avt
                                            :aid aid
-                                           :v [(if (integer? v) :long :md5) v]
+                                           :v v
                                            :ts ts
                                            :eid 0})]
      (eduction
@@ -241,27 +236,38 @@
                             (partial bu/bytes=? k (- (alength k) 12))
                             k)))))
 
-(defn- iterate-within-range [db aid ts min-v max-v]
-  (let [seek-k (encode frame-index-avt {:index :avt
-                                        :aid aid
-                                        :v (value->variable-data-type min-v)
-                                        :ts ts
-                                        :eid 0})]
-    (kvu/seek-and-iterate db
-                          (fn [^bytes k]
-                            (and (bu/bytes=? seek-k 5 k)
-                                 (let [v (:v (c/decode frame-index-avt k))]
-                                   (and (or (not min-v) (>= v min-v))
-                                        (or (not max-v)
-                                            (<= v max-v))))))
-                          seek-k)))
+(defn- value-slice
+  "Given an AVTE key, return the value bytes.
+   We know, 17 bytes for index-type (1), aid (4), ts (8), eid (4)."
+  [^bytes bs]
+  (let [length (- (alength bs) 17)
+        dst (byte-array length)]
+    (System/arraycopy bs 5 dst 0 length)
+    dst))
+
+(defn- encode-value-slice [v]
+  (let [[length-fn encoder] (:tagged c/all-types)
+        bb (ByteBuffer/allocate (length-fn v))]
+    (encoder bb v)
+    (.array bb)))
 
 (defn entity-ids-for-range-value
   [db ident min-v max-v ^Date ts]
-  (let [aid (attr-ident->aid! db ident)]
+  (let [aid (attr-ident->aid! db ident)
+        seek-k (encode frame-index-avt {:index :avt
+                                        :aid aid
+                                        :v min-v
+                                        :ts ts
+                                        :eid 0})
+        max-v-bytes (when max-v (encode-value-slice max-v))]
     (eduction
      (map (comp (partial attr-aid->ident db) bytes->long second))
-     (into [] (iterate-within-range db aid ts (or min-v Long/MIN_VALUE) max-v)))))
+     (into [] (kvu/seek-and-iterate db
+                                    (fn [^bytes k]
+                                      (and (bu/bytes=? seek-k 5 k)
+                                           (or (not max-v)
+                                               (not (pos? ^long (bu/compare-bytes (value-slice k) max-v-bytes))))))
+                                    seek-k)))))
 
 (defn store-meta [db k v]
   (kv-store/store db

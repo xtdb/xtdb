@@ -47,21 +47,29 @@
                                 (Double/longBitsToDouble l)))]
                    :string [(fn [^String s] (alength (.getBytes s))) encode-string decode-string]})
 
-(defn variable-data-type [& data-types]
-  (let [data-type->byte (into {} (for [[i k] (map-indexed vector data-types)]
-                                   [k (byte i)]))
-        byte->data-type (into {} (for [[i k] (map-indexed vector data-types)]
-                                   [(byte i) k]))]
-    [(fn [[data-type v]]
-       (inc ^long (first (get binary-types data-type))))
+(defn- value->binary-type
+  "Determine the binary type to use for the value passed in, for
+  subsequent encoding/decoding purposes."
+  [v]
+  (cond (integer? v) :long
+        (double? v) :double
+        :else :md5))
 
-     (fn [^ByteBuffer bb [data-type v]]
-       (.put bb ^byte (data-type->byte data-type))
-       ((second (get binary-types data-type)) bb v))
+(def tag-binary-type (into {} (for [[i k] (map-indexed vector (keys binary-types))] [k (byte i)])))
+(def untag-binary-type (into {} (for [[i k] (map-indexed vector (keys binary-types))] [(byte i) k])))
 
-     (fn [^ByteBuffer bb]
-       (let [data-type ^byte (.get bb)]
-         ((nth (get binary-types (byte->data-type data-type)) 2) bb)))]))
+(def all-types (assoc binary-types
+                      :tagged [(fn [v]
+                                 (inc ^long (first (binary-types (value->binary-type v)))))
+                               (fn [^ByteBuffer bb v]
+                                 (let [binary-type (value->binary-type v)
+                                       [_ encoder] (binary-types (value->binary-type v))]
+                                   (.put bb ^byte (tag-binary-type binary-type))
+                                   (encoder bb v)))
+                               (fn [^ByteBuffer bb]
+                                 (let [binary-type ^byte (.get bb)
+                                       [_ _ decoder] (binary-types (untag-binary-type binary-type))]
+                                   (decoder bb)))]))
 
 (defprotocol Codec
   (encode [this v])
@@ -69,7 +77,7 @@
 
 (defn- resolve-data-type [t]
   (or (and (vector? t) t)
-      (get binary-types t)))
+      (get all-types t)))
 
 (defn compile-frame [& args]
   (let [pairs (->> args

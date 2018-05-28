@@ -9,8 +9,8 @@
   (entities [this]
     (kv/entity-ids kv))
 
-  (entities-for-attribute-value [this ident v]
-    (kv/entity-ids-for-value kv ident v ts))
+  (entities-for-attribute-value [this ident min-v max-v]
+    (kv/entity-ids-for-range-value kv ident min-v max-v ts))
 
   (attr-val [this eid ident]
     (kv/-get-at kv eid ident ts)))

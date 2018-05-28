@@ -403,8 +403,8 @@
   (entities [this]
     (keys (all-entities kv business-time transact-time)))
 
-  (entities-for-attribute-value [this ident v]
-    (keys (entities-by-attribute-values-at kv ident [v] business-time transact-time)))
+  (entities-for-attribute-value [this ident min-v max-v]
+    (keys (entities-by-attribute-values-at kv ident [min-v] business-time transact-time)))
 
   (attr-val [this eid ident]
     (let [content-hash (get-in (entities-at kv [eid] business-time transact-time) [eid :content-hash])

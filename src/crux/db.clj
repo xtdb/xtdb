@@ -2,7 +2,7 @@
 
 (defprotocol Datasource
   (entities [this])
-  (entities-for-attribute-value [this a v])
+  (entities-for-attribute-value [this a min-v max-v])
   (attr-val [this eid attr]))
 
 (defprotocol Indexer
