@@ -41,25 +41,28 @@
 
          ;; Basic query
          (time
-          (doseq [i (range queries)
-                  :let [db (case index
-                             :kv
-                             (db *kv*)
+          (let [q (case query
+                    :name '{:find [e]
+                            :where [[e :name "Ivan"]]}
+                    :range '{:find [e]
+                             :where [[e :age age]
+                                     (> age 20)]})
+                db-fn (fn [] (case index
+                               :kv
+                               (db *kv*)
 
-                             :doc
-                             (doc/map->DocDatasource {:kv *kv*
-                                                      :transact-time ts
-                                                      :business-time ts}))]]
-
-            (ks/iterate-with
-             *kv*
-             (fn [i]
-               (q/q db (case query
-                         :name '{:find [e]
-                                 :where [[e :name "Ivan"]]}
-                         :range '{:find [e]
-                                  :where [[e :age age]
-                                          (> age 20)]})))))))))))
+                               :doc
+                               (doc/map->DocDatasource {:kv *kv*
+                                                        :transact-time ts
+                                                        :business-time ts})))]
+            ;; Assert this query is in good working order first:
+            (assert (pos? (count (q/q (db-fn) q))))
+            (doseq [i (range queries)
+                    :let [db (db-fn)]]
+              (ks/iterate-with
+               *kv*
+               (fn [i]
+                 (q/q db q)))))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
 

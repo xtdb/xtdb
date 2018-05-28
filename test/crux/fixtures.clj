@@ -14,7 +14,7 @@
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
                         :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
                         :sex       (rand-nth [:male :female])
-                        :age       (rand-int 10)
+                        :age       (rand-int 100)
                         :salary    (rand-int 100000)})
 
 (def people (repeatedly random-person))
