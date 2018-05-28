@@ -61,6 +61,14 @@
     (doto (byte-array (.remaining b))
       (->> (.get b)))))
 
+(defn byte-array-slice
+  "Given an AVTE key, return the value bytes.
+   We know, 17 bytes for index-type (1), aid (4), ts (8), eid (4)."
+  [^bytes bs index length]
+  (let [dst (byte-array length)]
+    (System/arraycopy bs index dst 0 length)
+    dst))
+
 (defn compare-bytes
   (^long [^bytes a ^bytes b]
    (compare-bytes a b Integer/MAX_VALUE))

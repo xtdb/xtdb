@@ -237,19 +237,16 @@
   "Given an AVTE key, return the value bytes.
    We know, 17 bytes for index-type (1), aid (4), ts (8), eid (4)."
   [^bytes bs]
-  (let [length (- (alength bs) 17)
-        dst (byte-array length)]
-    (System/arraycopy bs 5 dst 0 length)
-    dst))
+  (bu/byte-array-slice bs 5 (- (alength bs) 17)))
 
 (defn entity-ids-for-range-value
   [db ident min-v max-v ^Date ts]
   (let [aid (attr-ident->aid! db ident)
         seek-k (c/encode frame-index-avt {:index :avt
-                                        :aid aid
-                                        :v min-v
-                                        :ts ts
-                                        :eid 0})
+                                          :aid aid
+                                          :v min-v
+                                          :ts ts
+                                          :eid 0})
         max-v-bytes (when max-v (c/encode (:tagged c/all-types) max-v))]
     (eduction
      (map (comp (partial attr-aid->ident db) bytes->long second))
