@@ -5,7 +5,7 @@
   (:import java.nio.ByteBuffer))
 
 (defn- round-trip [f m]
-  (decode f ^bytes (.array ^ByteBuffer (encode f m))))
+  (decode f (encode f m)))
 
 (t/deftest test-codecs-work-as-expected
   (let [f (compile-frame :a :long :b :long)]

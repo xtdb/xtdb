@@ -71,10 +71,6 @@
                                        [_ _ decoder] (binary-types (untag-binary-type binary-type))]
                                    (decoder bb)))]))
 
-(defprotocol Codec
-  (encode [this v])
-  (decode [this v]))
-
 (defn- resolve-data-type [t]
   (or (and (vector? t) t)
       (get all-types t)))
@@ -91,23 +87,31 @@
                                        length)))
         length-fn (first (for [[k [length-f]] pairs :when (fn? length-f)]
                            (fn ^long [m] (length-f (get m k)))))]
-    (reify Codec
-      (encode [this m]
-        (let [length (if length-fn (+ fixed-length ^long (length-fn m)) fixed-length)
-              b (ByteBuffer/allocate length)]
-          (doseq [[k [_ f]] pairs
-                  :let [v (get m k)]]
-            (f b v))
-          b))
-      (decode [_ v]
-        (let [b (ByteBuffer/wrap ^bytes v)
-              m (transient {})]
-          (->> pairs
-               (reduce
-                (fn [m [k [_ _ f]]]
-                  (assoc! m k (f b)))
-                (transient {}))
-               (persistent! )))))))
+    [(fn [m]
+       (if length-fn (+ fixed-length ^long (length-fn m)) fixed-length))
+     (fn [^ByteBuffer b m]
+       (doseq [[k [_ f]] pairs
+               :let [v (get m k)]]
+         (f b v))
+       b)
+     (fn [^ByteBuffer b]
+       (let [m (transient {})]
+         (->> pairs
+              (reduce
+               (fn [m [k [_ _ f]]]
+                 (assoc! m k (f b)))
+               (transient {}))
+              (persistent!))))]))
+
+(defn encode [frame v]
+  (let [[length-fn encoder] frame
+        bb (ByteBuffer/allocate (length-fn v))]
+    (encoder bb v)
+    (.array bb)))
+
+(defn decode [frame v]
+  (let [[_ _ decoder] frame]
+    (decoder (ByteBuffer/wrap ^bytes v))))
 
 (defmacro compile-enum [& vals]
   `[1

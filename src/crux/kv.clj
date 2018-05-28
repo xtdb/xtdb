@@ -67,12 +67,9 @@
                    :aid :id
                    :ts :reverse-ts))
 
-(defn encode [frame m]
-  (.array ^ByteBuffer (c/encode frame m)))
-
 (defn next-entity-id "Return the next entity ID" [db]
   (locking db
-    (let [key-entity-id (encode frame-index-selector {:index :next-eid})]
+    (let [key-entity-id (c/encode frame-index-selector {:index :next-eid})]
       (kv-store/store
        db
        [[key-entity-id
@@ -90,10 +87,10 @@
   (let [id (next-entity-id db)]
     ;; to go from k -> id
     (kv-store/store db
-                    [[(encode frame-index-ident {:index :ident :ident ident})
+                    [[(c/encode frame-index-ident {:index :ident :ident ident})
                       (long->bytes id)]])
     ;; to go from id -> k
-    (let [k (encode frame-index-ident-id {:index :ident-id :id id})]
+    (let [k (c/encode frame-index-ident-id {:index :ident-id :id id})]
       (kv-store/store db [[k (nippy/freeze ident)]]))
     id))
 
@@ -101,7 +98,7 @@
   "Look up the ID for a given ident."
   [db ident]
   (some->> {:index :ident :ident ident}
-           (encode frame-index-ident)
+           (c/encode frame-index-ident)
            (kvu/value db)
            bytes->long))
 
@@ -129,7 +126,7 @@
         aid)))
 
 (defn attr-aid->ident [db aid]
-  (if-let [v (kvu/value db (encode frame-index-ident-id {:index :ident-id :id aid}))]
+  (if-let [v (kvu/value db (c/encode frame-index-ident-id {:index :ident-id :id aid}))]
     (nippy/thaw v)
     (throw (IllegalArgumentException. (str "Unrecognised attribute: " aid)))))
 
@@ -153,13 +150,13 @@
            (let [eid (ident->id! db eid)
                  aid (attr-ident->aid! db k)]
              (cond-> txs-to-put
-               true (conj! [(encode frame-index-eat {:index :eat
+               true (conj! [(c/encode frame-index-eat {:index :eat
                                                      :eid eid
                                                      :aid aid
                                                      :ts ts
                                                      :tx-ts tx-ts})
                             (nippy/freeze v)])
-               v (conj! [(encode frame-index-avt {:index :avt
+               v (conj! [(c/encode frame-index-avt {:index :avt
                                                   :aid aid
                                                   :v v
                                                   :ts ts
@@ -178,7 +175,7 @@
    (let [aid (lookup-attr-ident-aid db ident)]
      (when aid
        (let [eid (lookup-ident db eid)
-             seek-k ^bytes (encode frame-index-eat-key-prefix-business-time
+             seek-k ^bytes (c/encode frame-index-eat-key-prefix-business-time
                                    {:index :eat :eid eid :aid aid :ts ts})]
          (when-let [[k v] (kvu/seek-first db
                                           #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
@@ -193,7 +190,7 @@
    (entity db eid (Date.)))
   ([db id ^Date at-ts]
    (let [eid (lookup-ident db id)
-         k (encode frame-index-eat-key-prefix {:index :eat :eid eid})]
+         k (c/encode frame-index-eat-key-prefix {:index :eat :eid eid})]
      (some->
       (reduce (fn [m [k v]]
                 (let [{:keys [eid aid ^Date ts]} (c/decode frame-index-eat k)
@@ -206,7 +203,7 @@
               (kvu/seek-and-iterate db (partial bu/bytes=? k) k))
       (assoc ::id id)))))
 
-(def ^:private eat-index-prefix (encode frame-index-selector {:index :eat}))
+(def ^:private eat-index-prefix (c/encode frame-index-selector {:index :eat}))
 
 (defn entity-ids
   "Sequence of all entities in the DB. If this approach sticks, it
@@ -225,7 +222,7 @@
    (entity-ids-for-value db ident v (Date.)))
   ([db ident v ^Date ts]
    (let [aid (attr-ident->aid! db ident)
-         k ^bytes (encode frame-index-avt {:index :avt
+         k ^bytes (c/encode frame-index-avt {:index :avt
                                            :aid aid
                                            :v v
                                            :ts ts
@@ -245,21 +242,15 @@
     (System/arraycopy bs 5 dst 0 length)
     dst))
 
-(defn- encode-value-slice [v]
-  (let [[length-fn encoder] (:tagged c/all-types)
-        bb (ByteBuffer/allocate (length-fn v))]
-    (encoder bb v)
-    (.array bb)))
-
 (defn entity-ids-for-range-value
   [db ident min-v max-v ^Date ts]
   (let [aid (attr-ident->aid! db ident)
-        seek-k (encode frame-index-avt {:index :avt
+        seek-k (c/encode frame-index-avt {:index :avt
                                         :aid aid
                                         :v min-v
                                         :ts ts
                                         :eid 0})
-        max-v-bytes (when max-v (encode-value-slice max-v))]
+        max-v-bytes (when max-v (c/encode (:tagged c/all-types) max-v))]
     (eduction
      (map (comp (partial attr-aid->ident db) bytes->long second))
      (into [] (kvu/seek-and-iterate db
@@ -271,9 +262,9 @@
 
 (defn store-meta [db k v]
   (kv-store/store db
-                  [[(encode frame-index-meta {:index :meta :key k})
+                  [[(c/encode frame-index-meta {:index :meta :key k})
                     (nippy/freeze v)]]))
 
 (defn read-meta [db k]
-  (some->> ^bytes (kvu/value db (encode frame-index-meta {:index :meta :key k}))
+  (some->> ^bytes (kvu/value db (c/encode frame-index-meta {:index :meta :key k}))
            nippy/thaw))

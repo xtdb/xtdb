@@ -1,14 +1,12 @@
 (ns crux.bench
-  (:require [crux.fixtures :as f :refer [random-person *kv*]]
-            [crux.byte-utils :as bu]
-            [crux.kv :as cr]
-            [crux.kv-store :as ks]
-            [crux.query :as q]
+  (:require [crux.codecs :as c]
             [crux.core :refer [db]]
             [crux.doc :as doc]
-            [crux.codecs]
-            [crux.memdb])
-  (:import [java.util Date]))
+            [crux.fixtures :as f :refer [*kv* random-person]]
+            [crux.kv :as cr]
+            [crux.kv-store :as ks]
+            [crux.query :as q])
+  (:import java.util.Date))
 
 (defn bench [& {:keys [n batch-size ts query queries kv index] :or {n 1000
                                                                     batch-size 10
@@ -69,7 +67,7 @@
 (defn bench-encode [n]
   (let [d (java.util.Date.)]
     (doseq [_ (range n)]
-      (cr/encode cr/frame-index-eat {:index :eat :eid (rand-int 1000000) :aid (rand-int 1000000) :ts d}))))
+      (c/encode cr/frame-index-eat {:index :eat :eid (rand-int 1000000) :aid (rand-int 1000000) :ts d}))))
 
 ;; ~900 ms for 1 million
 ;; TODO: add new test here, the value frames have been replaced by nippy.
