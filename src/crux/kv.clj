@@ -226,12 +226,12 @@
   ([db ident v ^Date ts]
    (let [aid (attr-ident->aid! db ident)
          k ^bytes (c/encode frame-index-avt {:index :avt
-                                           :aid aid
-                                           :v v
-                                           :ts ts
-                                           :eid 0})]
+                                             :aid aid
+                                             :v v
+                                             :ts ts
+                                             :eid 0})]
      (eduction
-      (map (comp bytes->long second))
+      (map (comp bytes->long val))
       (kvu/seek-and-iterate db
                             (partial bu/bytes=? k (- (alength k) 12))
                             k)))))
@@ -252,7 +252,7 @@
                                           :eid 0})
         max-v-bytes (when max-v (c/encode (:tagged c/all-types) max-v))]
     (eduction
-     (map (comp bytes->long second))
+     (map (comp bytes->long val))
      (kvu/seek-and-iterate db
                            (fn [^bytes k]
                              (and (bu/bytes=? seek-k 5 k)

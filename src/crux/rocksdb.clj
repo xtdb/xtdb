@@ -2,11 +2,12 @@
   (:require [clojure.java.io :as io]
             [crux.kv-store :refer :all])
   (:import java.io.Closeable
+           clojure.lang.MapEntry
            [org.rocksdb Checkpoint Options RocksDB RocksIterator WriteBatch WriteOptions]))
 
 (defn- iterator->kv [^RocksIterator i]
   (when (.isValid i)
-    [(.key i) (.value i)]))
+    (MapEntry. (.key i) (.value i))))
 
 (defn- ^Closeable rocks-iterator [{:keys [^RocksDB db]}]
   (let [i (.newIterator db)]
