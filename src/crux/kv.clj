@@ -1,6 +1,7 @@
 (ns crux.kv
   (:require [crux.byte-utils :as bu :refer :all]
             [crux.codecs :as c]
+            [crux.db]
             [crux.kv-store :as kv-store]
             [crux.kv-store-utils :as kvu]
             [taoensso.nippy :as nippy])
@@ -166,23 +167,26 @@
         (persistent!)
         (kv-store/store db))))
 
+(defn seek-first [db eid ident ^Date ts ^Date tx-ts]
+  (when-let [aid (lookup-attr-ident-aid db ident)]
+    (let [seek-k ^bytes (c/encode frame-index-eat-key-prefix-business-time
+                                  {:index :eat :eid eid :aid aid :ts ts})]
+      (when-let [[k v] (kvu/seek-first db
+                                       #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
+                                       #(or (not tx-ts)
+                                            (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
+                                       seek-k)]
+        (nippy/thaw v)))))
+
 (defn -get-at
   ([db eid ident]
    (-get-at db eid ident (Date.)))
   ([db eid ident ts]
    (-get-at db eid ident ts nil))
   ([db eid ident ^Date ts ^Date tx-ts]
-   (let [aid (lookup-attr-ident-aid db ident)]
-     (when aid
-       (let [eid (lookup-ident db eid)
-             seek-k ^bytes (c/encode frame-index-eat-key-prefix-business-time
-                                   {:index :eat :eid eid :aid aid :ts ts})]
-         (when-let [[k v] (kvu/seek-first db
-                                          #(zero? (bu/compare-bytes seek-k % (- (alength seek-k) 8)))
-                                          #(or (not tx-ts)
-                                               (.after tx-ts (:tx-ts (c/decode frame-index-eat %))))
-                                          seek-k)]
-           (nippy/thaw v)))))))
+   (let [eid (lookup-ident db eid)]
+     (when eid
+       (seek-first db eid ident ts tx-ts)))))
 
 (defn entity "Return an entity. Currently iterates through all keys of
   an entity."
@@ -212,8 +216,7 @@
   [db]
   (->> (kvu/seek-and-iterate db (partial bu/bytes=? eat-index-prefix) eat-index-prefix)
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k)))
-                       (map :eid)
-                       (map (partial attr-aid->ident db))))))
+                       (map :eid)))))
 
 (defn entity-ids-for-value
   "Return a sequence of entities that are referenced as part of the AVT
@@ -228,7 +231,7 @@
                                            :ts ts
                                            :eid 0})]
      (eduction
-      (map (comp (partial attr-aid->ident db) bytes->long second))
+      (map (comp bytes->long second))
       (kvu/seek-and-iterate db
                             (partial bu/bytes=? k (- (alength k) 12))
                             k)))))
@@ -249,13 +252,13 @@
                                           :eid 0})
         max-v-bytes (when max-v (c/encode (:tagged c/all-types) max-v))]
     (eduction
-     (map (comp (partial attr-aid->ident db) bytes->long second))
-     (into [] (kvu/seek-and-iterate db
-                                    (fn [^bytes k]
-                                      (and (bu/bytes=? seek-k 5 k)
-                                           (or (not max-v)
-                                               (not (pos? ^long (bu/compare-bytes (value-slice k) max-v-bytes))))))
-                                    seek-k)))))
+     (map (comp bytes->long second))
+     (kvu/seek-and-iterate db
+                           (fn [^bytes k]
+                             (and (bu/bytes=? seek-k 5 k)
+                                  (or (not max-v)
+                                      (not (pos? ^long (bu/compare-bytes (value-slice k) max-v-bytes))))))
+                           seek-k))))
 
 (defn store-meta [db k v]
   (kv-store/store db

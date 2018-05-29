@@ -398,18 +398,24 @@
 
 (def ^:const default-doc-cache-size 10240)
 
-(defrecord DocDatasource [kv business-time transact-time]
-  crux.db/Datasource
-  (entities [this]
-    (keys (all-entities kv business-time transact-time)))
-
-  (entities-for-attribute-value [this ident min-v max-v]
-    (keys (entities-by-attribute-values-at kv ident [min-v] business-time transact-time)))
-
-  (attr-val [this eid ident]
+(defrecord DocEntity [kv eid business-time transact-time]
+  crux.db/Entity
+  (attr-val [this ident]
     (let [content-hash (get-in (entities-at kv [eid] business-time transact-time) [eid :content-hash])
           doc (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
                   (lru-cache-compute-if-absent
                    content-hash
                    #(nippy/fast-thaw (.array ^ByteBuffer (get (docs kv [%]) %)))))]
-      (get doc ident))))
+      (get doc ident)))
+  (->id [this]
+    eid))
+
+(defrecord DocDatasource [kv business-time transact-time]
+  crux.db/Datasource
+  (entities [this]
+    (map (fn [eid] (DocEntity. kv eid business-time transact-time))
+         (keys (all-entities kv business-time transact-time))))
+
+  (entities-for-attribute-value [this ident min-v max-v]
+    (map (fn [eid] (DocEntity. kv eid business-time transact-time))
+         (keys (entities-by-attribute-values-at kv ident [min-v] business-time transact-time)))))

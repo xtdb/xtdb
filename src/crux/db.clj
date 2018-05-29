@@ -2,8 +2,11 @@
 
 (defprotocol Datasource
   (entities [this])
-  (entities-for-attribute-value [this a min-v max-v])
-  (attr-val [this eid attr]))
+  (entities-for-attribute-value [this a min-v max-v]))
+
+(defprotocol Entity
+  (attr-val [this attr])
+  (->id [this]))
 
 (defprotocol Indexer
   (index [this txs transact-time])

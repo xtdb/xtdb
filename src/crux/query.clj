@@ -32,9 +32,12 @@
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- value-matches? [db [term-e term-a term-v] result]
-  (when-let [v (db/attr-val db (get result term-e) term-a)]
+  (when-let [v (db/attr-val (get result term-e) term-a)]
     (or (not term-v)
-        (and (symbol? term-v) (= (result term-v) v))
+        (and (symbol? term-v) (= (if-let [result-v (result term-v)]
+                                   (if (satisfies? db/Entity result-v)
+                                     (db/->id result-v)
+                                     result-v)) v))
         (= term-v v))))
 
 (defprotocol Binding
@@ -64,7 +67,7 @@
   (bind [this db]
     (map (fn [input] (if (get input s)
                        input
-                       (assoc input s (db/attr-val db (get input e) a)))))))
+                       (assoc input s (db/attr-val (get input e) a)))))))
 
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))
@@ -173,7 +176,10 @@
   plan)
 
 (defn- find-projection [find result]
-  (map (partial get result) find))
+  (map (fn [find-clause]
+         (let [v (get result find-clause)]
+           (if (satisfies? db/Entity v) (db/->id v) v)))
+       find))
 
 (defn q
   [db {:keys [find where] :as q}]

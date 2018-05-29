@@ -164,64 +164,73 @@
     (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04")))
     (t/is (= "Foo2" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04" #inst "2000-02-06")))))
 
+(defn- entity-ids-for-value [kv & args]
+  (map (partial cr/attr-aid->ident kv) (apply cr/entity-ids-for-value kv args)))
+
+(defn- entity-ids-for-range-value [kv & args]
+  (map (partial cr/attr-aid->ident kv) (apply cr/entity-ids-for-range-value kv args)))
+
+(defn- entity-ids [kv]
+  (map (partial cr/attr-aid->ident kv) (cr/entity-ids kv)))
+
 (t/deftest test-can-iterate-all-entity-ids
   (cr/-put *kv* [[1 :foo "Bar1"]])
   (cr/-put *kv* [[2 :foo "Bar2"]])
-  (t/is (= (set [1 2]) (cr/entity-ids *kv*))))
+  (t/is (= (set [1 2]) (set (entity-ids *kv*)))))
 
 (t/deftest test-can-query-against-values
   (cr/-put *kv* [[1 :foo "Bar1"]])
   (cr/-put *kv* [[2 :foo "Bar2"]])
-  (t/is (= (list 1) (cr/entity-ids-for-value *kv* :foo "Bar1")))
-  (t/is (= (list 2) (cr/entity-ids-for-value *kv* :foo "Bar2")))
+  (t/is (= (list 1) (entity-ids-for-value *kv* :foo "Bar1")))
+  (t/is (= (list 2) (entity-ids-for-value *kv* :foo "Bar2")))
 
   (t/testing "Multiple values"
     (cr/-put *kv* [[3 :foo "BarX"]])
     (cr/-put *kv* [[4 :foo "BarX"]])
-    (t/is (= (list 3 4) (sort (cr/entity-ids-for-value *kv* :foo "BarX")))))
+    (t/is (= (list 3 4) (sort (entity-ids-for-value *kv* :foo "BarX")))))
 
   (t/testing "Keyword values"
     (cr/-put *kv* [[5 :foo :barY]])
-    (t/is (= (list 5) (sort (cr/entity-ids-for-value *kv* :foo :barY))))))
+    (t/is (= (list 5) (sort (entity-ids-for-value *kv* :foo :barY))))))
 
 (t/deftest test-can-perform-range-search-with-longs
   (cr/-put *kv* [[:id1 :foo 10]
                  [:id2 :foo -2]])
 
   (t/testing "Min"
-    (t/is (= '(:id1) (cr/entity-ids-for-range-value *kv* :foo 9 nil (java.util.Date.)))))
+    (t/is (= '(:id1) (entity-ids-for-range-value *kv* :foo 9 nil (java.util.Date.)))))
 
   (t/testing "Min with a minus number against a positive number"
     ;; -3 is before 10, so 10 should show up.
-    (t/is (= '#{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo -3 nil (java.util.Date.))))))
+    (t/is (= '#{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo -3 nil (java.util.Date.))))))
 
   (t/testing "Min with a minus number against a minus number"
-    (t/is (= #{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo -3 nil (java.util.Date.))))))
+    (t/is (= #{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo -3 nil (java.util.Date.))))))
 
   (t/testing "LT"
-    (t/is (= #{:id2} (set (cr/entity-ids-for-range-value *kv* :foo nil 8 (java.util.Date.)))))
-    (t/is (= #{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo nil 11 (java.util.Date.))))))
+    (t/is (= #{:id2} (set (entity-ids-for-range-value *kv* :foo nil 8 (java.util.Date.)))))
+    (t/is (= #{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo nil 11 (java.util.Date.))))))
 
   (t/testing "LT with a minus number against a minus number"
-    (t/is (= '(:id2) (cr/entity-ids-for-range-value *kv* :foo nil -1 (java.util.Date.))))))
+    (t/is (= '(:id2) (entity-ids-for-range-value *kv* :foo nil -1 (java.util.Date.))))))
 
 (t/deftest test-can-perform-range-search-with-doubles
   (cr/-put *kv* [[:id1 :foo 10.0]
                  [:id2 :foo -2.0]])
 
   (t/testing "Min"
-    (t/is (= '(:id1) (cr/entity-ids-for-range-value *kv* :foo 9.0 nil (java.util.Date.)))))
+    (t/is (= '(:id1) (entity-ids-for-range-value *kv* :foo 9.0 nil (java.util.Date.)))))
 
   (t/testing "Min with a minus number against a positive number"
     ;; -3 is before 10, so 10 should show up.
-    (t/is (= '#{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo -3.0 nil (java.util.Date.))))))
+    (t/is (= '#{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo -3.0 nil (java.util.Date.))))))
 
   (t/testing "Min with a minus number against a minus number"
-    (t/is (= #{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo -3.0 nil (java.util.Date.))))))
+    (t/is (= #{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo -3.0 nil (java.util.Date.))))))
 
   (t/testing "LT"
-    (t/is (= #{:id2} (set (cr/entity-ids-for-range-value *kv* :foo nil 8.0 (java.util.Date.)))))
-    (t/is (= #{:id1 :id2} (set (cr/entity-ids-for-range-value *kv* :foo nil 11.0 (java.util.Date.))))))
+    (t/is (= #{:id2} (set (entity-ids-for-range-value *kv* :foo nil 8.0 (java.util.Date.)))))
+    (t/is (= #{:id1 :id2} (set (entity-ids-for-range-value *kv* :foo nil 11.0 (java.util.Date.))))))
 
   (t/testing "LT with a minus number against a minus number"
-    (t/is (= '(:id2) (cr/entity-ids-for-range-value *kv* :foo nil -1.0 (java.util.Date.))))))
+    (t/is (= '(:id2) (entity-ids-for-range-value *kv* :foo nil -1.0 (java.util.Date.))))))

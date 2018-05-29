@@ -4,16 +4,22 @@
             [crux.db])
   (:import [java.util Date]))
 
+(defrecord KvEntity [kv eid ts]
+  crux.db/Entity
+  (attr-val [this ident]
+    (kv/seek-first kv eid ident ts nil))
+  (->id [this]
+    (kv/attr-aid->ident kv eid)))
+
 (defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource
   (entities [this]
-    (kv/entity-ids kv))
+    (map (fn [eid] (KvEntity. kv eid ts))
+         (kv/entity-ids kv)))
 
   (entities-for-attribute-value [this ident min-v max-v]
-    (kv/entity-ids-for-range-value kv ident min-v max-v ts))
-
-  (attr-val [this eid ident]
-    (kv/-get-at kv eid ident ts)))
+    (map (fn [eid] (KvEntity. kv eid ts))
+         (kv/entity-ids-for-range-value kv ident min-v max-v ts))))
 
 (defrecord KvIndexer [kv]
   crux.db/Indexer
