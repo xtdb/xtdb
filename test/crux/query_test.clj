@@ -307,14 +307,14 @@
                             {:crux.kv/id :petr :name "Petr" :follows #{:ivan :oleg}}])
 
   #_(t/testing "One way"
-    (t/is (= #{[#{:ivan :oleg}]} (q/q (db *kv*) '{:find [x]
-                                                  :where [[i :name "Petr"]
-                                                          [i :follows x]]}))))
+    (t/is (= #{[:ivan] [:oleg]} (q/q (db *kv*) '{:find [x]
+                                                 :where [[i :name "Petr"]
+                                                         [i :follows x]]}))))
 
-  #_(t/testing "The other way"
-    (t/is (= #{[#{:ivan :oleg}]} (q/q (db *kv*) '{:find [i]
-                                                  :where [[x :name "Ivan"]
-                                                          [i :follows x]]})))))
+  (t/testing "The other way"
+    (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
+                                         :where [[x :name "Ivan"]
+                                                 [i :follows x]]})))))
 
 ;; TODO write:
 (t/deftest test-use-another-datasource)

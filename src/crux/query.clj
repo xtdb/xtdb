@@ -31,14 +31,20 @@
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
+(defn- compare-vals? [v1 v2]
+  (if (coll? v1)
+    (contains? v1 v2)
+    (= v1 v2)))
+
 (defn- value-matches? [db [term-e term-a term-v] result]
   (when-let [v (db/attr-val (get result term-e) term-a)]
     (or (not term-v)
-        (and (symbol? term-v) (= (if-let [result-v (result term-v)]
-                                   (if (satisfies? db/Entity result-v)
-                                     (db/->id result-v)
-                                     result-v)) v))
-        (= term-v v))))
+        (and (symbol? term-v)
+             (compare-vals? v (if-let [result-v (result term-v)]
+                                (if (satisfies? db/Entity result-v)
+                                  (db/->id result-v)
+                                  result-v))))
+        (compare-vals? v term-v))))
 
 (defprotocol Binding
   (bind-key [this])
