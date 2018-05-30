@@ -71,9 +71,19 @@
   Binding
   (bind-key [this] s)
   (bind [this db]
-    (map (fn [input] (if (get input s)
-                       input
-                       (assoc input s (db/attr-val (get input e) a)))))))
+    (fn [rf]
+      (fn
+        ([]
+         (rf))
+        ([result]
+         (rf result))
+        ([result input]
+         (if (get input s)
+           (rf result input)
+           (let [v (db/attr-val (get input e) a)]
+             (if (coll? v)
+               (transduce (map #(assoc input s %)) rf result v)
+               (rf result (assoc input s v))))))))))
 
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))

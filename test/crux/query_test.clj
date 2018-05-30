@@ -306,7 +306,7 @@
                             {:crux.kv/id :oleg :name "Oleg"}
                             {:crux.kv/id :petr :name "Petr" :follows #{:ivan :oleg}}])
 
-  #_(t/testing "One way"
+  (t/testing "One way"
     (t/is (= #{[:ivan] [:oleg]} (q/q (db *kv*) '{:find [x]
                                                  :where [[i :name "Petr"]
                                                          [i :follows x]]}))))
