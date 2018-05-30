@@ -180,3 +180,10 @@ As oppose to
 If you use parameterised queries, you can of course optimise the queries (saves on parsing and validation).
 
 I'm yet to discover if there is another reason. Crux may want to hold off on a view here, until the technical case is made, or another reason found.
+
+### Multi-Attribute
+
+Issues to be worked through:
+
++ How to achieve with Schema-less?
++ For proposal B, one part of this is surely solved by utilitising the AVT index for at least one direction. The actual list itself could then put into the 'nippied' val of EAVT. This approach needs to be spiked.

@@ -301,5 +301,20 @@
                                          :where [[i :age age]
                                                  (< age 20)]})))))
 
+(t/deftest test-mutiple-values
+  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" }
+                            {:crux.kv/id :oleg :name "Oleg"}
+                            {:crux.kv/id :petr :name "Petr" :follows #{:ivan :oleg}}])
+
+  #_(t/testing "One way"
+    (t/is (= #{[#{:ivan :oleg}]} (q/q (db *kv*) '{:find [x]
+                                                  :where [[i :name "Petr"]
+                                                          [i :follows x]]}))))
+
+  #_(t/testing "The other way"
+    (t/is (= #{[#{:ivan :oleg}]} (q/q (db *kv*) '{:find [i]
+                                                  :where [[x :name "Ivan"]
+                                                          [i :follows x]]})))))
+
 ;; TODO write:
 (t/deftest test-use-another-datasource)
