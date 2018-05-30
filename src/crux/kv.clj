@@ -218,24 +218,6 @@
        (into #{} (comp (map (fn [[k _]] (c/decode frame-index-eat k)))
                        (map :eid)))))
 
-(defn entity-ids-for-value
-  "Return a sequence of entities that are referenced as part of the AVT
-  index, and match the given attribute/value/timestamp."
-  ([db ident v]
-   (entity-ids-for-value db ident v (Date.)))
-  ([db ident v ^Date ts]
-   (let [aid (attr-ident->aid! db ident)
-         k ^bytes (c/encode frame-index-avt {:index :avt
-                                             :aid aid
-                                             :v v
-                                             :ts ts
-                                             :eid 0})]
-     (eduction
-      (map (comp bytes->long val))
-      (kvu/seek-and-iterate db
-                            (partial bu/bytes=? k (- (alength k) 12))
-                            k)))))
-
 (defn- value-slice
   "Given an AVTE key, return the value bytes.
    We know, 17 bytes for index-type (1), aid (4), ts (8), eid (4)."
@@ -243,6 +225,9 @@
   (bu/byte-array-slice bs 5 (- (alength bs) 17)))
 
 (defn entity-ids-for-range-value
+  "Return a sequence of entities that are referenced as part of the AVT
+  index, and match the given attribute/value/timestamp, given the
+  specified range."
   [db ident min-v max-v ^Date ts]
   (let [aid (attr-ident->aid! db ident)
         seek-k (c/encode frame-index-avt {:index :avt

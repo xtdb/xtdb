@@ -164,9 +164,6 @@
     (t/is (= "Foo4" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04")))
     (t/is (= "Foo2" (cr/-get-at *kv* test-eid :foo #inst "2000-02-04" #inst "2000-02-06")))))
 
-(defn- entity-ids-for-value [kv & args]
-  (map (partial cr/attr-aid->ident kv) (apply cr/entity-ids-for-value kv args)))
-
 (defn- entity-ids-for-range-value [kv & args]
   (map (partial cr/attr-aid->ident kv) (apply cr/entity-ids-for-range-value kv args)))
 
@@ -181,17 +178,17 @@
 (t/deftest test-can-query-against-values
   (cr/-put *kv* [[1 :foo "Bar1"]])
   (cr/-put *kv* [[2 :foo "Bar2"]])
-  (t/is (= (list 1) (entity-ids-for-value *kv* :foo "Bar1")))
-  (t/is (= (list 2) (entity-ids-for-value *kv* :foo "Bar2")))
+  (t/is (= (list 1) (entity-ids-for-range-value *kv* :foo "Bar1" "Bar1" (java.util.Date.))))
+  (t/is (= (list 2) (entity-ids-for-range-value *kv* :foo "Bar2" "Bar2" (java.util.Date.))))
 
   (t/testing "Multiple values"
     (cr/-put *kv* [[3 :foo "BarX"]])
     (cr/-put *kv* [[4 :foo "BarX"]])
-    (t/is (= (list 3 4) (sort (entity-ids-for-value *kv* :foo "BarX")))))
+    (t/is (= (list 3 4) (sort (entity-ids-for-range-value *kv* :foo "BarX" "BarX" (java.util.Date.))))))
 
   (t/testing "Keyword values"
     (cr/-put *kv* [[5 :foo :barY]])
-    (t/is (= (list 5) (sort (entity-ids-for-value *kv* :foo :barY))))))
+    (t/is (= (list 5) (sort (entity-ids-for-range-value *kv* :foo :barY :barY (java.util.Date.)))))))
 
 (t/deftest test-can-perform-range-search-with-longs
   (cr/-put *kv* [[:id1 :foo 10]
