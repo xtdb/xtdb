@@ -47,6 +47,10 @@
                     :multiple-clauses '{:find [e]
                                         :where [[e :name "Ivan"]
                                                 [e :last-name "Ivanov"]]}
+                    :join '{:find [e2]
+                            :where [[e :last-name "Ivanov"]
+                                    [e :last-name name1]
+                                    [e2 :last-name name1]]}
                     :range '{:find [e]
                              :where [[e :age age]
                                      (> age 20)]})
