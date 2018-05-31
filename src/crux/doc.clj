@@ -35,17 +35,17 @@
 
   Long
   (value->bytes [this]
-    (-> (ByteBuffer/allocate id-size)
-        (.putLong (bit-xor ^long this Long/MIN_VALUE))
-        (.array)))
+    (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
 
   Double
   (value->bytes [this]
     (let [l (Double/doubleToLongBits this)
           l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (-> (ByteBuffer/allocate id-size)
-          (.putLong l)
-          (.array))))
+      (bu/long->bytes l)))
+
+  Date
+  (value->bytes [this]
+    (value->bytes (.getTime this)))
 
   Object
   (value->bytes [this]
@@ -115,12 +115,13 @@
 (defn- encode-attribute+value+content-hash-key ^bytes [k v ^bytes content-hash]
   (assert (or (= id-size (alength content-hash))
               (zero? (alength content-hash))))
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size id-size (alength content-hash)))
-      (.putShort attribute+value+content-hash-index-id)
-      (.put (id->bytes k))
-      (.put (value->bytes v))
-      (.put content-hash)
-      (.array)))
+  (let [v (value->bytes v)]
+    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) (alength content-hash)))
+        (.putShort attribute+value+content-hash-index-id)
+        (.put (id->bytes k))
+        (.put v)
+        (.put content-hash)
+        (.array))))
 
 (defn- encode-attribute+value-prefix-key ^bytes [k v]
   (encode-attribute+value+content-hash-key k v empty-byte-array))
@@ -160,13 +161,11 @@
       (.put (id->bytes k))
       (.array)))
 
-(def ^:const max-timestamp ^:private (.getTime #inst "9999-12-30"))
-
 (defn- date->reverse-time-ms ^long [^Date date]
-  (- max-timestamp (.getTime date)))
+  (bit-xor (- (.getTime date)) Long/MIN_VALUE))
 
 (defn- ^Date reverse-time-ms->date [^long reverse-time-ms]
-  (Date. (- max-timestamp reverse-time-ms)))
+  (Date. (bit-xor (- reverse-time-ms) Long/MIN_VALUE)))
 
 (defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^long tx-id]
   (assert (= id-size (alength eid)))
@@ -259,6 +258,7 @@
      (->> (for [v vs]
             (if (vector? v)
               (let [[min-v max-v] v]
+                (assert (not (neg? (compare max-v min-v))))
                 [(encode-attribute+value-prefix-key k min-v)
                  (encode-attribute+value-prefix-key k max-v)])
               (let [seek-k (encode-attribute+value-prefix-key k v)]

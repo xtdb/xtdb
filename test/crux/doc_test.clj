@@ -59,7 +59,32 @@
     (t/testing "find multi valued attribute"
       (t/is (= #{content-hash}
                (doc/doc-keys-by-attribute-values
-                f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))))
+                f/*kv* :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists}))))
+
+    (t/testing "find attribute by range"
+      (t/is (= #{content-hash}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize #{230})))
+
+      (t/is (= #{content-hash}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[229 230]])))
+      (t/is (= #{content-hash}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[229 231]])))
+      (t/is (= #{content-hash}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[230 231]])))
+
+      (t/is (= #{}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[231 255]])))
+      (t/is (= #{}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[1 229]])))
+      (t/is (= #{}
+               (doc/doc-keys-by-attribute-values
+                f/*kv* :http://dbpedia.org/property/imageSize [[-255 229]]))))))
 
 (t/deftest test-can-index-tx-ops
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
