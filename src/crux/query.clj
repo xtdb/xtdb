@@ -199,11 +199,12 @@
        find))
 
 (defn q
-  [db {:keys [find where] :as q}]
-  (when (= :clojure.spec.alpha/invalid q)
-    (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-  (let [xform (->> where
-                   (query-terms->plan)
-                   (validate-query find)
-                   (query-plan->xform db))]
-    (into #{} (comp xform (map (partial find-projection find))) [db])))
+  [db q]
+  (let [{:keys [find where] :as q} (s/conform ::query q)]
+    (when (= :clojure.spec.alpha/invalid q)
+      (throw (ex-info "Invalid input" (s/explain-data ::query q))))
+    (let [xform (->> where
+                     (query-terms->plan)
+                     (validate-query find)
+                     (query-plan->xform db))]
+      (into #{} (comp xform (map (partial find-projection find))) [db]))))
