@@ -59,7 +59,6 @@
          (q/q db q))))))
 
 (defn crit-bench
-  "Currently: prints the insert-data time, and returns the average time taken by a single query (in msecs)"
   [& {:keys [n batch-size ts query queries kv index quick]
       :or {n 1000
            batch-size 10
