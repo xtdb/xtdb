@@ -31,6 +31,11 @@
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
+(defn- v-for-comparison [v]
+  (if (satisfies? db/Entity v)
+    (db/->id v)
+    v))
+
 (defn- compare-vals? [v1 v2]
   (if (coll? v1)
     (contains? v1 v2)
@@ -40,20 +45,17 @@
   (when-let [v (db/attr-val (get result term-e) term-a)]
     (or (not term-v)
         (and (symbol? term-v)
-             (compare-vals? v (if-let [result-v (result term-v)]
-                                (if (satisfies? db/Entity result-v)
-                                  (db/->id result-v)
-                                  result-v))))
+             (compare-vals? v (some-> (result term-v) v-for-comparison)))
         (compare-vals? v term-v))))
 
 (defprotocol Binding
   (bind-key [this])
-  (bind [this db]))
+  (bind [this]))
 
 (defrecord EntityBinding [e fetch-entities-fn]
   Binding
   (bind-key [this] e)
-  (bind [this db]
+  (bind [this]
     (fn [rf]
       (fn
         ([]
@@ -63,34 +65,44 @@
         ([result input]
          (if (get input e)
            (rf result input)
-           (transduce (map #(assoc input e %)) rf result (fetch-entities-fn db))))))))
+           (transduce (map (partial assoc input e)) rf result (fetch-entities-fn input))))))))
 
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))
 
+(defn- find-subsequent-range-terms [v terms]
+  (when (symbol? v)
+    (let [range-terms (->> terms
+                           (filter (fn [[op]] (= :range op)))
+                           (map second)
+                           (filter #(= v (::sym %))))
+          min-value (::val (first (filter #(= > (::fn %)) range-terms)))
+          max-value (::val (first (filter #(= < (::fn %)) range-terms)))]
+      (when (or min-value max-value)
+        [min-value max-value]))))
+
 (defn- fact->entity-binding [[e a v] terms]
-  (let [fetch-entities-fn (cond (symbol? v)
-                                (let [range-terms (->> terms
-                                                       (filter (fn [[op]] (= :range op)))
-                                                       (map second)
-                                                       (filter #(= v (::sym %))))
-                                      min-value (::val (first (filter #(= > (::fn %)) range-terms)))
-                                      max-value (::val (first (filter #(= < (::fn %)) range-terms)))]
-                                  (if (or min-value max-value)
-                                    (partial fetch-entities-within-range a min-value max-value)
-                                    db/entities))
+  (let [subsequent-range (find-subsequent-range-terms v terms)
+        fetch-entities-fn (fn [e]
+                            (let [db (get e '$)]
+                              (cond (and (symbol? v) (get e v))
+                                    (let [v (v-for-comparison (get e v))]
+                                      (db/entities-for-attribute-value db a v v))
 
-                                v
-                                (partial fetch-entities-within-range a v v)
+                                    (and (symbol? v) subsequent-range)
+                                    (apply db/entities-for-attribute-value db a subsequent-range)
 
-                                :else
-                                db/entities)]
+                                    (and v (not (symbol? v)))
+                                    (db/entities-for-attribute-value db a v v)
+
+                                    :else
+                                    (db/entities db))))]
     (EntityBinding. e fetch-entities-fn)))
 
 (defrecord VarBinding [e a s]
   Binding
   (bind-key [this] s)
-  (bind [this db]
+  (bind [this]
     (fn [rf]
       (fn
         ([]
@@ -113,7 +125,7 @@
   "Create a tranduce from the query-plan."
   [db plan]
   (apply comp (for [[term-bindings pred-f] plan
-                    :let [binding-transducers (map (fn [b] (bind b db)) term-bindings)]]
+                    :let [binding-transducers (map (fn [b] (bind b)) term-bindings)]]
                 (comp (apply comp binding-transducers)
                       (filter (partial pred-f db))))))
 
@@ -155,13 +167,12 @@
 
                   :not-join
                   (let [e (-> t :bindings first)]
-                    [(map #(EntityBinding. % db/entities) (:bindings t))
-                     (let [
-                           or-results (atom nil)]
+                    [nil;;(map #(EntityBinding. % db/entities) (:bindings t))
+                     (let [or-results (atom nil)]
                        (fn [db result]
                          (let [or-results (or @or-results
                                               (let [query-xform (query-plan->xform db (query-terms->plan (:terms t)))]
-                                                (reset! or-results (into #{} query-xform [db]))))]
+                                                (reset! or-results (into #{} query-xform [{'$ db}]))))]
                            (when-not (some #(= (get result e) (get % e)) or-results)
                              result))))])
 
