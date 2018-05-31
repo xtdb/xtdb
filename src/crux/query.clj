@@ -61,11 +61,9 @@
         ([result]
          (rf result))
         ([result input]
-         (if (satisfies? db/Datasource input)
-           (transduce (map (partial hash-map e)) rf result (fetch-entities-fn db))
-           (if (get input e)
-             (rf result input)
-             (transduce (map #(assoc input e %)) rf result (fetch-entities-fn db)))))))))
+         (if (get input e)
+           (rf result input)
+           (transduce (map #(assoc input e %)) rf result (fetch-entities-fn db))))))))
 
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))
@@ -106,7 +104,6 @@
              (if (coll? v)
                (transduce (map #(assoc input s %)) rf result v)
                (rf result (assoc input s v))))))))))
-
 
 (defn- fact->var-binding [[e a v]]
   (when (and v (symbol? v))
@@ -207,4 +204,4 @@
                      (query-terms->plan)
                      (validate-query find)
                      (query-plan->xform db))]
-      (into #{} (comp xform (map (partial find-projection find))) [db]))))
+      (into #{} (comp xform (map (partial find-projection find))) [{'$ db}]))))
