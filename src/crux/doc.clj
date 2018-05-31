@@ -29,6 +29,10 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBytes
+  (class (byte-array 0))
+  (value->bytes [this]
+    this)
+
   Long
   (value->bytes [this]
     (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
@@ -273,9 +277,11 @@
      (->> (for [v vs]
             (if (vector? v)
               (let [[min-v max-v] v]
-                (assert (not (neg? (compare max-v min-v))))
+                (if max-v
+                  (assert (not (neg? (compare max-v min-v))))
+                  (assert min-v))
                 [(encode-attribute+value-prefix-key k min-v)
-                 (encode-attribute+value-prefix-key k max-v)])
+                 (encode-attribute+value-prefix-key k (or max-v empty-byte-array))])
               (let [seek-k (encode-attribute+value-prefix-key k v)]
                 [seek-k seek-k])))
           (sort-by first bu/bytes-comparator)
