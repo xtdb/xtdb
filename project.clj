@@ -23,7 +23,8 @@
                                                 jline
                                                 org.apache.yetus/audience-annotations
                                                 org.slf4j/slf4j-log4j12
-                                                log4j]]]
+                                                log4j]]
+                                  [criterium "0.4.4"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :aot [crux.kafka.nippy
