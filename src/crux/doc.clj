@@ -5,7 +5,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
-           [java.util Arrays Date LinkedHashMap]
+           [java.util Arrays Date LinkedHashMap UUID]
            [java.util.function Function]
            [clojure.lang Keyword]))
 
@@ -29,10 +29,6 @@
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBytes
-  Keyword
-  (value->bytes [this]
-    (bu/sha1 (.getBytes (str this))))
-
   Long
   (value->bytes [this]
     (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
@@ -80,7 +76,11 @@
 
   Keyword
   (id->bytes [this]
-    (value->bytes this))
+    (bu/sha1 (.getBytes (str this))))
+
+  UUID
+  (id->bytes [this]
+    (bu/sha1 (.getBytes (str this))))
 
   String
   (id->bytes [this]
@@ -177,10 +177,10 @@
       (.array)))
 
 (defn- date->reverse-time-ms ^long [^Date date]
-  (bit-xor (- (.getTime date)) Long/MIN_VALUE))
+  (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
 
 (defn- ^Date reverse-time-ms->date [^long reverse-time-ms]
-  (Date. (bit-xor (- reverse-time-ms) Long/MIN_VALUE)))
+  (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
 (defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^long tx-id]
   (assert (= id-size (alength eid)))
