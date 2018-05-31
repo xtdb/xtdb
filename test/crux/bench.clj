@@ -9,8 +9,7 @@
             [crux.query :as q])
   (:import java.util.Date))
 
-(def queries {
-              :name '{:find [e]
+(def queries {:name '{:find [e]
                       :where [[e :name "Ivan"]]}
               :multiple-clauses '{:find [e]
                                   :where [[e :name "Ivan"]
@@ -93,8 +92,8 @@
                             (nth 2)
                             read-string)
                queries-to-bench (if (= query :all)
-                              (keys queries)
-                              (flatten [query]))]
+                                  (keys queries)
+                                  (flatten [query]))]
            (merge {:insert insert-time}
                   (zipmap
                    queries-to-bench
@@ -112,6 +111,6 @@
 ;; ~900 ms for 1 million
 ;; TODO: add new test here, the value frames have been replaced by nippy.
 #_(defn bench-decode [n]
-  (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
-    (doseq [_ (range n)]
-      (crux.codecs/decode cr/frame-value-eat f))))
+    (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
+      (doseq [_ (range n)]
+        (crux.codecs/decode cr/frame-value-eat f))))
