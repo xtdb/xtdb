@@ -47,6 +47,21 @@
   (value->bytes [this]
     (value->bytes (.getTime this)))
 
+  String
+  (value->bytes [this]
+    (let [empty-mark (byte 0)
+          terminate-mark (byte 1)
+          offset (byte 2)]
+      (if (empty? this)
+        (byte-array [empty-mark])
+        (let [bs (.getBytes this "UTF-8")
+              buffer (ByteBuffer/allocate (inc (alength bs)))]
+          (doseq [^byte b bs]
+            (.put buffer (byte (+ offset b))))
+          (-> buffer
+              (.put terminate-mark)
+              (.array))))))
+
   Object
   (value->bytes [this]
     (bu/sha1 (nippy/fast-freeze this))))
