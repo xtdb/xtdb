@@ -24,16 +24,31 @@
 (def ^:private empty-byte-array (byte-array 0))
 (def ^:const ^:private sha1-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
 
-(defn- encode-keyword ^bytes [kw]
-  (bu/sha1 (.getBytes (str kw))))
+(defprotocol ValueToBytes
+  (value->bytes ^bytes [this]))
 
-(defn- encode-value ^bytes [v]
-  (if (keyword? v)
-    (encode-keyword v)
-    (bu/sha1 (nippy/fast-freeze v))))
+;; Adapted from https://github.com/ndimiduk/orderly
+(extend-protocol ValueToBytes
+  Keyword
+  (value->bytes [this]
+    (bu/sha1 (.getBytes (str this))))
+
+  Long
+  (value->bytes [this]
+    (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
+
+  Double
+  (value->bytes [this]
+    (let [l (Double/doubleToLongBits this)
+          l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
+      (bu/long->bytes l)))
+
+  Object
+  (value->bytes [this]
+    (bu/sha1 (nippy/fast-freeze this))))
 
 (defprotocol IdToBytes
-  (id->bytes [this]))
+  (id->bytes ^bytes [this]))
 
 (extend-protocol IdToBytes
   (class (byte-array 0))
@@ -46,7 +61,7 @@
 
   Keyword
   (id->bytes [this]
-    (encode-keyword this))
+    (value->bytes this))
 
   String
   (id->bytes [this]
@@ -94,8 +109,8 @@
 (defn- encode-attribute+value+content-hash-key ^bytes [k v ^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size sha1-size (alength content-hash)))
       (.putShort attribute+value+content-hash-index-id)
-      (.put (encode-keyword k))
-      (.put (encode-value v))
+      (.put (value->bytes k))
+      (.put (value->bytes v))
       (.put content-hash)
       (.array)))
 
@@ -127,7 +142,7 @@
         (->> (.get buffer)))))
 
 (defn- encode-meta-key ^bytes [k]
-  (let [k (encode-keyword k)]
+  (let [k (value->bytes k)]
     (-> (ByteBuffer/allocate (+ Short/BYTES (alength k)))
         (.putShort meta-key->value-index-id)
         (.put k)
@@ -245,7 +260,7 @@
          #{}))))))
 
 (defn ^Id doc->content-hash [doc]
-  (->Id (encode-value doc)))
+  (->Id (bu/sha1 (nippy/fast-freeze doc))))
 
 (defn existing-doc-keys [kv ks]
   (->> (docs kv ks)

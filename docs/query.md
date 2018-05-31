@@ -75,11 +75,12 @@ while running, which would be a post MVP feature.
 + [Secondary indexing with Redis](https://redis.io/topics/indexes)
 + [Leapfrog Triejoin: a worst-case optimal join
   algorithm](https://arxiv.org/abs/1210.0481)
-+ [On the Way to Better SQL Joins in CockroachDB](https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/)
++ [On the Way to Better SQL Joins in
+  CockroachDB](https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/)
 + [Hippo: A Fast, yet Scalable, Database Indexing
   Approach](https://arxiv.org/abs/1604.03234)
 + [A-Tree: A Bounded Approximate Index
-  Structure](https://arxiv.org/abs/1801.10207)
+  Structurqe](https://arxiv.org/abs/1801.10207)
 + [Spatial index](https://en.wikipedia.org/wiki/Spatial_index)
 + [Dgraph Design Concepts](https://docs.dgraph.io/design-concepts/)
 + [ZipG: A Memory-efficient Graph Store for Interactive
@@ -94,7 +95,10 @@ while running, which would be a post MVP feature.
   Databases](https://www.arangodb.com/2016/04/index-free-adjacency-hybrid-indexes-graph-databases/)
 + [Inside DSE Graph: What Powers the Best Enterprise Graph
   DB](https://www.datastax.com/2016/08/inside-dse-graph-what-powers-the-best-enterprise-graph-database)
-+ [Adaptive Tuple Differential Coding](https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding)
++ [Adaptive Tuple Differential
+  Coding](https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding)
++ [Orderly: Schema and type system for creating sortable
+  byte](https://github.com/ndimiduk/orderly)
 
 ### Retention
 
