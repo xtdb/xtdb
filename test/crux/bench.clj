@@ -51,7 +51,7 @@
                                                 :business-time ts})))]
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q/q (db-fn) q))))
-    
+
     (let [db (db-fn)]
       (ks/iterate-with
        *kv*
@@ -172,7 +172,3 @@
   (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
     (doseq [_ (range n)]
       (crux.codecs/decode cr/frame-value-eat f))))
-
-;; Notes codecs benching:
-;; in the current world - m is problematic, as it's a map
-;; decode is also likely more expensive, due to enum dispatch and the for loop
