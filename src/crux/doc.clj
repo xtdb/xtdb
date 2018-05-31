@@ -22,7 +22,7 @@
 (def ^:const ^:private meta-key->value-index-id 4)
 
 (def ^:private empty-byte-array (byte-array 0))
-(def ^:const ^:private sha1-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
+(def ^:const ^:private id-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
 
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
@@ -35,13 +35,17 @@
 
   Long
   (value->bytes [this]
-    (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
+    (-> (ByteBuffer/allocate id-size)
+        (.putLong (bit-xor ^long this Long/MIN_VALUE))
+        (.array)))
 
   Double
   (value->bytes [this]
     (let [l (Double/doubleToLongBits this)
           l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (bu/long->bytes l)))
+      (-> (ByteBuffer/allocate id-size)
+          (.putLong l)
+          (.array))))
 
   Object
   (value->bytes [this]
@@ -95,21 +99,25 @@
     (bu/compare-bytes bytes (.bytes ^Id that))))
 
 (defn- encode-doc-key ^bytes [^bytes content-hash]
-  (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash)))
+  (assert (= id-size (alength content-hash)))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
       (.putShort content-hash->doc-index-id)
       (.put content-hash)
       (.array)))
 
 (defn- decode-doc-key ^bytes [^bytes doc-key]
+  (assert (= (+ Short/BYTES id-size) (alength doc-key)))
   (let [buffer (ByteBuffer/wrap doc-key)]
     (assert (= content-hash->doc-index-id (.getShort buffer)))
-    (doto (byte-array sha1-size)
+    (doto (byte-array id-size)
       (->> (.get buffer)))))
 
 (defn- encode-attribute+value+content-hash-key ^bytes [k v ^bytes content-hash]
-  (-> (ByteBuffer/allocate (+ Short/BYTES sha1-size sha1-size (alength content-hash)))
+  (assert (or (= id-size (alength content-hash))
+              (zero? (alength content-hash))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size id-size (alength content-hash)))
       (.putShort attribute+value+content-hash-index-id)
-      (.put (value->bytes k))
+      (.put (id->bytes k))
       (.put (value->bytes v))
       (.put content-hash)
       (.array)))
@@ -118,14 +126,18 @@
   (encode-attribute+value+content-hash-key k v empty-byte-array))
 
 (defn- decode-attribute+value+content-hash-key->content-hash ^bytes [^bytes key]
+  (assert (<= (+ Short/BYTES id-size id-size) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= attribute+value+content-hash-index-id (.getShort buffer)))
-    (.position buffer (+ Short/BYTES sha1-size sha1-size))
-    (doto (byte-array sha1-size)
+    (.position buffer (- (alength key) id-size))
+    (doto (byte-array id-size)
       (->> (.get buffer)))))
 
 (defn- encode-content-hash+entity-key ^bytes [^bytes content-hash ^bytes eid]
-  (-> (ByteBuffer/allocate (+ Short/BYTES (alength content-hash) (alength eid)))
+  (assert (= id-size (alength content-hash)))
+  (assert (or (= id-size (alength eid))
+              (zero? (alength eid))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength eid)))
       (.putShort content-hash+entity-index-id)
       (.put content-hash)
       (.put eid)
@@ -135,18 +147,18 @@
   (encode-content-hash+entity-key content-hash empty-byte-array))
 
 (defn- decode-content-hash+entity-key->entity ^bytes [^bytes key]
-    (let [buffer (ByteBuffer/wrap key)]
-      (assert (= content-hash+entity-index-id (.getShort buffer)))
-      (.position buffer (+ Short/BYTES sha1-size))
-      (doto (byte-array sha1-size)
-        (->> (.get buffer)))))
+  (assert (= (+ Short/BYTES id-size id-size) (alength key)))
+  (let [buffer (ByteBuffer/wrap key)]
+    (assert (= content-hash+entity-index-id (.getShort buffer)))
+    (.position buffer (+ Short/BYTES id-size))
+    (doto (byte-array id-size)
+      (->> (.get buffer)))))
 
 (defn- encode-meta-key ^bytes [k]
-  (let [k (value->bytes k)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES (alength k)))
-        (.putShort meta-key->value-index-id)
-        (.put k)
-        (.array))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
+      (.putShort meta-key->value-index-id)
+      (.put (id->bytes k))
+      (.array)))
 
 (def ^:const max-timestamp ^:private (.getTime #inst "9999-12-30"))
 
@@ -157,10 +169,11 @@
   (Date. (- max-timestamp reverse-time-ms)))
 
 (defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^long tx-id]
+  (assert (= id-size (alength eid)))
   (let [tx-id-size (if (pos? tx-id)
                      (long Long/BYTES)
                      0)]
-    (cond-> (ByteBuffer/allocate (+ Short/BYTES (alength eid) Long/BYTES Long/BYTES tx-id-size))
+    (cond-> (ByteBuffer/allocate (+ Short/BYTES id-size Long/BYTES Long/BYTES tx-id-size))
       true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
                (.put eid)
                (.putLong (date->reverse-time-ms business-time))
@@ -177,13 +190,14 @@
    (encode-entity+bt+tt+tx-id-key eid business-time transact-time -1)))
 
 (defn- decode-entity+bt+tt+tx-id-key ^bytes [^bytes key]
-    (let [buffer (ByteBuffer/wrap key)]
-      (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
-      {:eid (doto (byte-array sha1-size)
-              (->> (.get buffer)))
-       :bt (reverse-time-ms->date (.getLong buffer))
-       :tt (reverse-time-ms->date (.getLong buffer))
-       :tx-id (.getLong buffer)}))
+  (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES)) (alength key))
+  (let [buffer (ByteBuffer/wrap key)]
+    (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
+    {:eid (doto (byte-array id-size)
+            (->> (.get buffer)))
+     :bt (reverse-time-ms->date (.getLong buffer))
+     :tt (reverse-time-ms->date (.getLong buffer))
+     :tx-id (.getLong buffer)}))
 
 (defn- all-keys-in-index [kv index-id]
   (ks/iterate-with
@@ -237,7 +251,7 @@
                  :when (and k (bu/bytes=? seek-k k))]
              [(->Id (decode-doc-key k))
               (ByteBuffer/wrap v)])
-        (into {}))))))
+           (into {}))))))
 
 (defn doc-keys-by-attribute-values
   ([kv k vs]
@@ -245,19 +259,19 @@
     kv
     (fn [i]
       (->> (for [v vs]
-          (encode-attribute+value-prefix-key k v))
-        (sort bu/bytes-comparator)
-        (reduce
-         (fn [acc seek-k]
-           (loop [[k v] (ks/-seek i seek-k)
-                  acc acc]
-             (if (and k (bu/bytes=? seek-k k))
-               (recur (ks/-next i)
-                      (->> (decode-attribute+value+content-hash-key->content-hash k)
-                           (->Id)
-                           (conj acc)))
-               acc)))
-         #{}))))))
+             (encode-attribute+value-prefix-key k v))
+           (sort bu/bytes-comparator)
+           (reduce
+            (fn [acc seek-k]
+              (loop [[k v] (ks/-seek i seek-k)
+                     acc acc]
+                (if (and k (bu/bytes=? seek-k k))
+                  (recur (ks/-next i)
+                         (->> (decode-attribute+value+content-hash-key->content-hash k)
+                              (->Id)
+                              (conj acc)))
+                  acc)))
+            #{}))))))
 
 (defn ^Id doc->content-hash [doc]
   (->Id (bu/sha1 (nippy/fast-freeze doc))))
@@ -295,7 +309,7 @@
    (ks/iterate-with
     kv
     (fn [i]
-      (let [prefix-size (+ Short/BYTES sha1-size)]
+      (let [prefix-size (+ Short/BYTES id-size)]
         (->> (for [seek-k (->> (for [entity entities]
                                  (encode-entity+bt+tt-prefix-key
                                   (id->bytes entity)
