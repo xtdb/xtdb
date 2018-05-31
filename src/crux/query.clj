@@ -67,24 +67,6 @@
              (rf result input)
              (transduce (map #(assoc input e %)) rf result (fetch-entities-fn db)))))))))
 
-(defrecord VarBinding [e a s]
-  Binding
-  (bind-key [this] s)
-  (bind [this db]
-    (fn [rf]
-      (fn
-        ([]
-         (rf))
-        ([result]
-         (rf result))
-        ([result input]
-         (if (get input s)
-           (rf result input)
-           (let [v (db/attr-val (get input e) a)]
-             (if (coll? v)
-               (transduce (map #(assoc input s %)) rf result v)
-               (rf result (assoc input s v))))))))))
-
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))
 
@@ -106,6 +88,25 @@
                                 :else
                                 db/entities)]
     (EntityBinding. e fetch-entities-fn)))
+
+(defrecord VarBinding [e a s]
+  Binding
+  (bind-key [this] s)
+  (bind [this db]
+    (fn [rf]
+      (fn
+        ([]
+         (rf))
+        ([result]
+         (rf result))
+        ([result input]
+         (if (get input s)
+           (rf result input)
+           (let [v (db/attr-val (get input e) a)]
+             (if (coll? v)
+               (transduce (map #(assoc input s %)) rf result v)
+               (rf result (assoc input s v))))))))))
+
 
 (defn- fact->var-binding [[e a v]]
   (when (and v (symbol? v))
@@ -199,11 +200,10 @@
 
 (defn q
   [db {:keys [find where] :as q}]
-  (let [{:keys [find where] :as q} (s/conform ::query q)]
-    (when (= :clojure.spec.alpha/invalid q)
-      (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-    (let [xform (->> where
-                     (query-terms->plan)
-                     (validate-query find)
-                     (query-plan->xform db))]
-      (into #{} (comp xform (map (partial find-projection find))) [db]))))
+  (when (= :clojure.spec.alpha/invalid q)
+    (throw (ex-info "Invalid input" (s/explain-data ::query q))))
+  (let [xform (->> where
+                   (query-terms->plan)
+                   (validate-query find)
+                   (query-plan->xform db))]
+    (into #{} (comp xform (map (partial find-projection find))) [db])))
