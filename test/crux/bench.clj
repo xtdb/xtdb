@@ -42,7 +42,7 @@
   (let [q (query queries)
         db-fn (fn [] (case index
                        :kv
-                       (crux/as-of (crux/db *kv*) ts)
+                       (crux/as-of *kv* ts)
 
                        :doc
                        (doc/map->DocDatasource {:kv *kv*
