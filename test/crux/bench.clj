@@ -9,19 +9,19 @@
             [crux.query :as q])
   (:import java.util.Date))
 
-(def bench-queries {
-              :name '{:find [e]
-                      :where [[e :name "Ivan"]]}
-              :multiple-clauses '{:find [e]
-                                  :where [[e :name "Ivan"]
-                                          [e :last-name "Ivanov"]]}
-              :join '{:find [e2]
-                      :where [[e :last-name "Ivanov"]
-                              [e :last-name name1]
-                              [e2 :last-name name1]]}
-              :range '{:find [e]
-                       :where [[e :age age]
-                               (> age 20)]}})
+(def queries {
+                    :name '{:find [e]
+                            :where [[e :name "Ivan"]]}
+                    :multiple-clauses '{:find [e]
+                                        :where [[e :name "Ivan"]
+                                                [e :last-name "Ivanov"]]}
+                    :join '{:find [e2]
+                            :where [[e :last-name "Ivanov"]
+                                    [e :last-name name1]
+                                    [e2 :last-name name1]]}
+                    :range '{:find [e]
+                             :where [[e :age age]
+                                     (> age 20)]}})
 
 (defn- insert-data [n batch-size ts index]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
@@ -40,7 +40,7 @@
                          (inc i))))))
 
 (defn- perform-query [ts query index]
-  (let [q (query bench-queries)
+  (let [q (query queries)
         db-fn (fn [] (case index
                        :kv
                        (db *kv*)
@@ -58,16 +58,16 @@
        (fn [_]
          (q/q db q))))))
 
-(defn crit-bench
-  [& {:keys [n batch-size ts query queries kv index quick]
+(defn bench
+  [& {:keys [n batch-size ts query samples kv index quick]
       :or {n 1000
            batch-size 10
-           queries 100
+           samples 100 ;; should always be >2
            query :name
            ts (Date.)
            kv :rocks
            index :kv
-           quick true}}]
+           quick true}}] ;; use Criterion's faster but "less rigorous" quick-benchmark
   ((case kv
      :rocks f/with-rocksdb
      :lmdb f/with-lmdb
@@ -87,76 +87,13 @@
           (->
            (if quick
              (crit/quick-benchmark
-              (perform-query ts query index) {:samples queries})
+              (perform-query ts query index) {:samples samples})
              (crit/benchmark
-              (perform-query ts query index) {:samples queries}))
+              (perform-query ts query index) {:samples samples}))
            :mean
            first
            (* 1000) ;; secs -> msecs
            )})))))
-
-(defn bench [& {:keys [n batch-size ts query queries kv index] :or {n 1000
-                                                                    batch-size 10
-                                                                    queries 100
-                                                                    query :name
-                                                                    ts (Date.)
-                                                                    kv :rocks
-                                                                    index :kv}}]
-  ((case kv
-     :rocks f/with-rocksdb
-     :lmdb f/with-lmdb
-     :mem f/with-memdb)
-   (fn []
-     (f/with-kv-store
-       (fn []
-         ;; Insert data
-         (time
-          (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-            (case index
-              :kv
-              (cr/-put *kv* people ts)
-
-              :doc
-              (do (doc/store-docs *kv* people)
-                  (doc/store-txs *kv*
-                                 (vec (for [person people]
-                                        [:crux.tx/put
-                                         (keyword (:crux.kv/id person))
-                                         (str (doc/doc->content-hash person))]))
-                                 ts
-                                 (inc i))))))
-
-         ;; Basic query
-         (time
-          (let [q (case query
-                    :name '{:find [e]
-                            :where [[e :name "Ivan"]]}
-                    :multiple-clauses '{:find [e]
-                                        :where [[e :name "Ivan"]
-                                                [e :last-name "Ivanov"]]}
-                    :join '{:find [e2]
-                            :where [[e :last-name "Ivanov"]
-                                    [e :last-name name1]
-                                    [e2 :last-name name1]]}
-                    :range '{:find [e]
-                             :where [[e :age age]
-                                     (> age 20)]})
-                db-fn (fn [] (case index
-                               :kv
-                               (db *kv*)
-
-                               :doc
-                               (doc/map->DocDatasource {:kv *kv*
-                                                        :transact-time ts
-                                                        :business-time ts})))]
-            ;; Assert this query is in good working order first:
-            (assert (pos? (count (q/q (db-fn) q))))
-            (doseq [i (range queries)
-                    :let [db (db-fn)]]
-              (ks/iterate-with
-               *kv*
-               (fn [i]
-                 (q/q db q)))))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
 
