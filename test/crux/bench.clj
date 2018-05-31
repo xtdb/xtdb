@@ -1,7 +1,7 @@
 (ns crux.bench
   (:require [criterium.core :as crit]
             [crux.codecs :as c]
-            [crux.core :refer [db]]
+            [crux.core :as crux]
             [crux.doc :as doc]
             [crux.fixtures :as f :refer [*kv* random-person]]
             [crux.kv :as cr]
@@ -42,7 +42,7 @@
   (let [q (query queries)
         db-fn (fn [] (case index
                        :kv
-                       (db *kv*)
+                       (crux/as-of (crux/db *kv*) ts)
 
                        :doc
                        (doc/map->DocDatasource {:kv *kv*
