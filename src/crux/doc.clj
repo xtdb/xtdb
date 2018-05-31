@@ -464,11 +464,9 @@
 (defrecord DocDatasource [kv business-time transact-time]
   crux.db/Datasource
   (entities [this]
-    (->> (all-entities kv business-time transact-time)
-         (vals)
-         (map map->DocEntity)))
+    (for [[_ entity-map] (all-entities kv business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv))))
 
   (entities-for-attribute-value [this ident min-v max-v]
-    (->> (entities-by-attribute-values-at kv ident [[min-v max-v]] business-time transact-time)
-         (vals)
-         (map map->DocEntity))))
+    (for [[_ entity-map] (entities-by-attribute-values-at kv ident [[min-v max-v]] business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv)))))
