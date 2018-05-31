@@ -10,18 +10,18 @@
   (:import java.util.Date))
 
 (def queries {
-                    :name '{:find [e]
-                            :where [[e :name "Ivan"]]}
-                    :multiple-clauses '{:find [e]
-                                        :where [[e :name "Ivan"]
-                                                [e :last-name "Ivanov"]]}
-                    :join '{:find [e2]
-                            :where [[e :last-name "Ivanov"]
-                                    [e :last-name name1]
-                                    [e2 :last-name name1]]}
-                    :range '{:find [e]
-                             :where [[e :age age]
-                                     (> age 20)]}})
+              :name '{:find [e]
+                      :where [[e :name "Ivan"]]}
+              :multiple-clauses '{:find [e]
+                                  :where [[e :name "Ivan"]
+                                          [e :last-name "Ivanov"]]}
+              :join '{:find [e2]
+                      :where [[e :last-name "Ivanov"]
+                              [e :last-name name1]
+                              [e2 :last-name name1]]}
+              :range '{:find [e]
+                       :where [[e :age age]
+                               (> age 20)]}})
 
 (defn- insert-data [n batch-size ts index]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
@@ -58,6 +58,17 @@
        (fn [_]
          (q/q db q))))))
 
+(defn- do-benchmark [ts samples index quick query]
+  (-> (if quick
+        (crit/quick-benchmark
+         (perform-query ts query index) {:samples samples})
+        (crit/benchmark
+         (perform-query ts query index) {:samples samples}))
+      :mean
+      first
+      (* 1000) ;; secs -> msecs
+      ))
+
 (defn bench
   [& {:keys [n batch-size ts query samples kv index quick]
       :or {n 1000
@@ -75,25 +86,20 @@
    (fn []
      (f/with-kv-store
        (fn []
-
-         {:insert-time
-          (-> (with-out-str (time
-                             (insert-data n batch-size ts index)))
-              (clojure.string/split #" ")
-              (nth 2)
-              read-string)
-
-          :query-time
-          (->
-           (if quick
-             (crit/quick-benchmark
-              (perform-query ts query index) {:samples samples})
-             (crit/benchmark
-              (perform-query ts query index) {:samples samples}))
-           :mean
-           first
-           (* 1000) ;; secs -> msecs
-           )})))))
+         (let [insert-time (->
+                            (with-out-str (time
+                                           (insert-data n batch-size ts index)))
+                            (clojure.string/split #" ")
+                            (nth 2)
+                            read-string)
+               queries-to-bench (if (= query :all)
+                              (keys queries)
+                              (flatten [query]))]
+           (merge {:insert insert-time}
+                  (zipmap
+                   queries-to-bench
+                   (map (partial do-benchmark ts samples index quick)
+                        queries-to-bench)))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
 
