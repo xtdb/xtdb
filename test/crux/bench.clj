@@ -61,32 +61,36 @@
 
     (q/q (db-fn) q)))
 
-(defn- do-benchmark [ts samples index speed query]
-  (ks/iterate-with
-       *kv*
-       (fn [_]
-         (-> (case speed
-               :normal
-               (-> (crit/benchmark
-                    (perform-query ts query index) {:samples samples})
-                   :mean
-                   first)
-               
-               :quick ;; faster but "less rigorous"
-               (-> (crit/quick-benchmark
-                    (perform-query ts query index) {:samples samples})
-                   :mean
-                   first)
-               
-               :instant ;; even faster, even less rigorous
-               (as-> (map (fn [_] (duration (perform-query ts query index)))
-                        (range samples)) x
+(defn- do-benchmark [ts samples index speed verbose query]
+  (when verbose (print (str query "... ")) (flush))
+  (let [result 
+        (ks/iterate-with
+         *kv*
+         (fn [_]
+           (-> (case speed
+                 :normal
+                 (-> (crit/benchmark
+                      (perform-query ts query index) {:samples samples})
+                     :mean
+                     first)
+                 
+                 :quick ;; faster but "less rigorous"
+                 (-> (crit/quick-benchmark
+                      (perform-query ts query index) {:samples samples})
+                     :mean
+                     first)
+                 
+                 :instant ;; even faster, even less rigorous
+                 (as-> (map (fn [_] (duration (perform-query ts query index)))
+                            (range samples)) x
                    (apply + x)
                    (/ x samples)))
-             (* 1000)))))  ;; secs -> msecs
+               (* 1000))))] ;; secs -> msecs
+    (when verbose (println result))
+    result)) 
 
 (defn bench
-  [& {:keys [n batch-size ts query samples kv index speed]
+  [& {:keys [n batch-size ts query samples kv index speed verbose]
       :or {n 1000
            batch-size 10
            samples 100 ;; should always be >2
@@ -94,7 +98,8 @@
            ts (Date.)
            kv :rocks
            index :kv
-           speed :instant}}]
+           speed :instant
+           verbose false}}]
   ((case kv
      :rocks f/with-rocksdb
      :lmdb f/with-lmdb
@@ -102,19 +107,16 @@
    (fn []
      (f/with-kv-store
        (fn []
-         (let [insert-time (->
-                            (with-out-str (time
-                                           (insert-data n batch-size ts index)))
-                            (clojure.string/split #" ")
-                            (nth 2)
-                            read-string)
+         (when verbose (print ":insert... ") (flush))
+         (let [insert-time (duration (insert-data n batch-size ts index))
                queries-to-bench (if (= query :all)
                                   (keys queries)
                                   (flatten [query]))]
+           (when verbose (println insert-time))
            (merge {:insert insert-time}
                   (zipmap
                    queries-to-bench
-                   (map (partial do-benchmark ts samples index speed)
+                   (map (partial do-benchmark ts samples index speed verbose)
                         queries-to-bench)))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
