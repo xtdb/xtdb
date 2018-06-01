@@ -494,8 +494,8 @@
 
 (defrecord DocIndexer [kv]
   crux.db/Indexer
-  (index-docs [_ docs]
-    (store-docs kv docs))
+  (index-doc [_ content-hash doc]
+    (store-docs kv {content-hash doc}))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (store-txs kv tx-ops tx-time tx-id))

@@ -108,9 +108,9 @@
 
 (defn- index-doc-record [indexer ^ConsumerRecord record]
   (let [content-hash (doc/id->bytes (.key record))
-        doc-bytes (consumer-record->value record)]
-    (db/index-docs indexer {content-hash doc-bytes})
-    doc-bytes))
+        doc (consumer-record->value record)]
+    (db/index-doc indexer content-hash doc)
+    doc))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [tx-time (Date. (.timestamp record))
