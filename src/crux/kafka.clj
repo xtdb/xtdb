@@ -2,6 +2,7 @@
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
   (:require [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.rdf :as rdf]
@@ -57,22 +58,31 @@
 
 ;;; Transacting Producer
 
-(defn transact [^KafkaProducer producer ^String topic entities]
-  (->> (ProducerRecord. topic nil entities)
-       (.send producer)))
+(defn transact [^KafkaProducer producer ^String tx-topic ^String doc-topic tx-ops]
+  (let [record-tx-ops (s/conform :crux.doc/tx-ops tx-ops)]
+    (when (s/invalid? record-tx-ops)
+      (throw (ex-info "Invalid input" (s/explain-data :crux.doc/tx-ops tx-ops))))
+    (doseq [tx-op tx-ops
+            doc (filter map? tx-op)]
+      (->> (ProducerRecord. doc-topic (str (doc/doc->content-hash doc)) doc)
+           (.send producer)))
+    (->> (ProducerRecord. tx-topic nil record-tx-ops)
+         (.send producer))))
 
-(def ^:dynamic *transact-log-size* 100000)
+(def ^:dynamic *ntriples-log-size* 100000)
 
-(defn transact-ntriples [producer in topic tx-size]
+(defn transact-ntriples [producer in tx-topic doc-topic tx-size]
   (->> (rdf/ntriples-seq in)
        (rdf/statements->maps)
        (map #(rdf/use-default-language % rdf/*default-language*))
        (map rdf/use-iri-as-id)
        (partition-all tx-size)
        (reduce (fn [^long n entities]
-                 (when (zero? (long (mod n *transact-log-size*)))
+                 (when (zero? (long (mod n *ntriples-log-size*)))
                    (log/debug "transacted" n))
-                 (transact producer topic entities)
+                 (let [tx-ops (for [entity entities]
+                                [:crux.tx/put (:crux.rdf/iri entity) entity])]
+                   (transact-ops producer tx-topic doc-topic tx-ops))
                  (+ n (count entities)))
                0)))
 
@@ -105,7 +115,7 @@
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [tx-time (Date. (.timestamp record))
         tx-ops (consumer-record->value record)
-        tx-id (.offset record)]
+        tx-id (inc (.offset record))]
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 

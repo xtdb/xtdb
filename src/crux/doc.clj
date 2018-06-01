@@ -312,8 +312,8 @@
 
 (defn store-docs [kv docs]
   (let [content-hash+doc+bytes (if (map? docs)
-                                 (for [[k doc-bytes] docs
-                                       :let [doc (nippy/fast-thaw doc-bytes)]]
+                                 (for [[k doc] docs
+                                       :let [doc-bytes (nippy/fast-freeze doc)]]
                                    [(id->bytes k) [doc doc-bytes]])
                                  (for [doc docs
                                        :let [doc-bytes (nippy/fast-freeze doc)

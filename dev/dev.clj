@@ -85,7 +85,7 @@
 
   ;; Download from http://wiki.dbpedia.org/services-resources/ontology
   (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
-    (k/transact-ntriples (:kafka-producer system) in (:topic system) 1000))
+    (k/transact-ntriples-ops (:kafka-producer system) in (:tx-topic system) (:doc-topic system) 1000))
 
   (q/q (crux/db (:kv-store system))
        '{:find [iri]

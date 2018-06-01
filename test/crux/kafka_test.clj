@@ -4,12 +4,13 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.core :as crux]
+            [crux.doc :as doc]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
-  (:import [java.util List]
+  (:import [java.util Date List]
            [clojure.lang Keyword]
            [org.apache.kafka.clients.consumer
             ConsumerRecord]
@@ -38,41 +39,51 @@
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
-    (->> (rdf/ntriples-seq in)
-         (rdf/statements->maps)
-         (map rdf/use-iri-as-id)
-         (doall))))
+    (vec (for [entity (->> (rdf/ntriples-seq in)
+                           (rdf/statements->maps)
+                           (map rdf/use-iri-as-id))]
+           [:crux.tx/put (:crux.rdf/iri entity) entity]))))
 
 (t/deftest test-can-transact-entities
-  (let [topic "test-can-transact-entities"
-        entities (load-ntriples-example  "crux/example-data-artists.nt")
-        indexer (crux/indexer f/*kv*)]
+  (let [tx-topic "test-can-transact-entities-tx"
+        doc-topic "test-can-transact-entities-doc"
+        tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
+        indexer (doc/->DocIndexer f/*kv*)]
 
-    (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
+    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
+    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [doc-topic])
 
-    (k/transact ek/*producer* topic entities)
+    (k/transact ek/*producer* tx-topic doc-topic tx-ops)
 
-    (let [txs (map k/consumer-record->value (.poll ek/*consumer* 5000))]
-      (t/is (= 1 (count txs)))
+    (let [docs (map k/consumer-record->value (.poll ek/*consumer* 5000))]
+      (t/is (= 7 (count docs)))
       (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
                 :http://xmlns.com/foaf/0.1/surname "Picasso"}
-               (select-keys (ffirst txs)
+               (select-keys (first docs)
                             [:http://xmlns.com/foaf/0.1/firstName
                              :http://xmlns.com/foaf/0.1/surname]))))))
 
-(t/deftest test-can-transact-and-query-entities
-  (let [topic "test-can-transact-and-query-entities"
-        entities (load-ntriples-example  "crux/picasso.nt")
-        indexer (crux/indexer f/*kv*)]
+(defn doc-db [kv]
+  (let [now (Date.)]
+    (doc/map->DocDatasource {:kv kv
+                             :transact-time now
+                             :business-time now})))
 
-    (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
+(t/deftest test-can-transact-and-query-entities
+  (let [tx-topic "test-can-transact-and-query-entities-tx"
+        doc-topic "test-can-transact-and-query-entities-doc"
+        tx-ops (load-ntriples-example  "crux/picasso.nt")
+        indexer (doc/->DocIndexer f/*kv*)]
+
+    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
+    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (k/transact ek/*producer* topic entities)
+      (k/transact ek/*producer* tx-topic doc-topic tx-ops)
 
-      (t/is (= 3 (count (k/consume-and-index-entities indexer ek/*consumer*))))
+      (t/is (= 20 (count (k/consume-and-index-entities indexer ek/*consumer*))))
       (t/is (empty? (.poll ek/*consumer* 1000))))
 
     (t/testing "restoring to stored offsets"
@@ -81,40 +92,38 @@
       (t/is (empty? (.poll ek/*consumer* 1000))))
 
     (t/testing "querying transacted data"
-      (t/is (= (set (map (comp vector :crux.rdf/iri) entities))
-               (q/q (crux/db f/*kv*)
-                    '{:find [iri]
-                      :where [[e :crux.rdf/iri iri]]})))
-
       (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (crux/db f/*kv*)
+               (q/q (doc-db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                               [e :crux.rdf/iri iri]]}))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
-  (let [topic "test-can-transact-and-query-dbpedia-entities"
-        entities (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                              (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
-                      (map #(rdf/use-default-language % :en)))
-        indexer (crux/indexer f/*kv*)]
+  (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
+        doc-topic "test-can-transact-and-query-dbpedia-entities-doc"
+        tx-ops (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+                            (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
+                    (map #(rdf/use-default-language % :en))
+                    (vec))
+        indexer (doc/->DocIndexer f/*kv*)]
 
-    (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
+    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
+    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (k/transact ek/*producer* topic entities)
-      (t/is (= 2 (count (k/consume-and-index-entities indexer ek/*consumer*)))))
+      (k/transact ek/*producer* tx-topic doc-topic tx-ops)
+      (t/is (= 82 (count (k/consume-and-index-entities indexer ek/*consumer*)))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
-               (q/q (crux/db f/*kv*)
+               (q/q (doc-db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [e :crux.rdf/iri iri]]})))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-               (q/q (crux/db f/*kv*)
+               (q/q (doc-db f/*kv*)
                     '{:find [g-iri]
                       :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [p :crux.rdf/iri p-iri]
@@ -149,8 +158,9 @@
 (def run-dbpedia-tests? false)
 
 (t/deftest test-can-transact-all-dbpedia-entities
-  (let [topic "test-can-transact-all-dbpedia-entities"
-        indexer (crux/indexer f/*kv*)
+  (let [tx-topic "test-can-transact-all-dbpedia-entities-tx"
+        doc-topic "test-can-transact-all-dbpedia-entities-doc"
+        indexer (doc/->DocIndexer f/*kv*)
         tx-size 1000
         max-limit Long/MAX_VALUE
         print-size 100000
@@ -164,14 +174,15 @@
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
-      (do (k/create-topic ek/*admin-client* topic 1 1 {})
-          (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
+      (do (k/create-topic ek/*admin-client* tx-topic 1 1 {})
+          (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+          (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
           (t/testing "transacting and indexing"
             (future
               (time
                (with-open [in (io/input-stream mappingbased-properties-file)]
-                 (reset! n-transacted (k/transact-ntriples ek/*producer* in topic tx-size)))))
+                 (reset! n-transacted (k/transact-ntriples ek/*producer* in tx-topic doc-topic tx-size)))))
             (time
              (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
                     n 0]
@@ -184,7 +195,7 @@
             (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
                        [(keyword "http://dbpedia.org/resource/Aristotle_(painting)")]
                        [(keyword "http://dbpedia.org/resource/Aristotle_(book)")]}
-                     (q/q (crux/db f/*kv*)
+                     (q/q (doc-db f/*kv*)
                           '{:find [iri]
                             :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
                                     [e :crux.rdf/iri iri]]})))))
