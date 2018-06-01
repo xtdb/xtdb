@@ -3,6 +3,7 @@
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
             [crux.core :as crux]
+            [crux.doc :as doc]
             [crux.embedded-kafka :as ek]
             [crux.io :as cio]
             [crux.kafka :as k]
@@ -93,7 +94,7 @@
                          in
                          1000))
 
-  (q/q (crux/db (:kv-store system))
+  (q/q (doc/db (:kv-store system))
        '{:find [iri]
          :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
                  [e :crux.rdf/iri iri]]}))
