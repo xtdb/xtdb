@@ -332,17 +332,19 @@
                     [(encode-doc-key (id->bytes content-hash))
                      (nippy/fast-freeze doc)])
                   (for [[content-hash doc] content-hash->new-docs
+                        :let [content-hash (id->bytes content-hash)]
                         [k v] doc
                         v (normalize-value v)]
-                    [(encode-attribute+value+content-hash-key k v (id->bytes content-hash))
+                    [(encode-attribute+value+content-hash-key k v content-hash)
                      empty-byte-array])))
     (ks/delete kv (concat
                    (for [[content-hash doc] content-hash->evicted-docs]
                      (encode-doc-key (id->bytes content-hash)))
                    (for [[content-hash doc] content-hash->evicted-docs
-                         [k v] doc
+                         :let [content-hash (id->bytes content-hash)]
+                         [k v] (nippy/fast-thaw (.array ^ByteBuffer doc))
                          v (normalize-value v)]
-                     (encode-attribute+value+content-hash-key k v (id->bytes content-hash)))))
+                     (encode-attribute+value+content-hash-key k v content-hash))))
     (keys content-hash->doc)))
 
 ;; Txs Read
