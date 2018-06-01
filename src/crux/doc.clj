@@ -483,8 +483,8 @@
 (defmethod tx-command :crux.tx/cas [kv tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)
-        old-content-hash (-> (entities-at kv [k] business-time transact-time)
-                             (get k)
+        old-content-hash (-> (entities-at kv [eid] business-time transact-time)
+                             (get (->Id eid))
                              :content-hash)
         old-v (id->bytes old-v)
         new-v (id->bytes new-v)]
@@ -502,7 +502,7 @@
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [content-hash (get (entity-histories kv [eid]) (->Id eid))]
+      (doseq [{:keys [content-hash]} (get (entity-histories kv [eid]) (->Id eid))]
         (db/submit-doc tx-log (str content-hash) nil)))
     [[(encode-entity+bt+tt+tx-id-key
        eid
