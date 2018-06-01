@@ -62,9 +62,6 @@
 
 ;;; Transacting Producer
 
-(defn- offset->tx-id [^long offset]
-  (inc offset))
-
 (defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -79,7 +76,7 @@
                                 (.send producer))]
         (delay
          (let [record-meta ^RecordMetadata @tx-send-future]
-           {:tx-id (offset->tx-id (.offset record-meta))
+           {:tx-id (.offset record-meta)
             :transact-time (Date. (.timestamp record-meta))}))))))
 
 ;;; Indexing Consumer
@@ -111,7 +108,7 @@
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [tx-time (Date. (.timestamp record))
         tx-ops (consumer-record->value record)
-        tx-id (offset->tx-id (.offset record))]
+        tx-id (.offset record)]
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 
