@@ -10,6 +10,6 @@
 
 (defprotocol Indexer
   (index-docs [this docs])
-  (index-tx [this tx-ops transact-time tx-id])
+  (index-tx [this tx-ops tx-time tx-id])
   (store-index-meta [this k v])
   (read-index-meta [this k]))

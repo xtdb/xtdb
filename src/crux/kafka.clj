@@ -81,7 +81,7 @@
 (defn consumer-record->value [^ConsumerRecord record]
   (.value record))
 
-(defn topic-partition-meta-key [^TopicPartition partition]
+(defn- topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
 
 (defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
@@ -96,20 +96,31 @@
       (.seek consumer partition offset)
       (.seekToBeginning consumer [partition]))))
 
-(defn index-tx-record [indexer ^ConsumerRecord record]
-  (let [transact-time (Date. (.timestamp record))
+(defn- index-doc-record [indexer ^ConsumerRecord record]
+  (let [content-hash (doc/id->bytes (.key record))
+        doc-bytes (consumer-record->value record)]
+    (db/index-docs indexer {content-hash doc-bytes})
+    doc-bytes))
+
+(defn- index-tx-record [indexer ^ConsumerRecord record]
+  (let [tx-time (Date. (.timestamp record))
         tx-ops (consumer-record->value record)
         tx-id (.offset record)]
-    (db/index-tx indexer tx-ops transact-time tx-id)
+    (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
+
+(defn- tx-record? [^ConsumerRecord record]
+  (nil? (.key record)))
 
 (defn consume-and-index-entities
   ([indexer consumer]
    (consume-and-index-entities indexer consumer 10000))
   ([indexer ^KafkaConsumer consumer timeout]
    (let [records (.poll consumer timeout)
-         txs (->> (for [^ConsumerRecord record records]
-                    (index-tx-record indexer record))
+         txs (->> (for [record records]
+                    (if (tx-record? record)
+                      (index-tx-record indexer record)
+                      (index-doc-record indexer record)))
                   (reduce into []))]
      (store-topic-partition-offsets indexer consumer (.partitions records))
      txs)))

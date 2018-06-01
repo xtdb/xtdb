@@ -486,9 +486,9 @@
        [(encode-content-hash+entity-key new-v eid)
         empty-byte-array]])))
 
-(defn store-txs [kv tx-ops transact-time tx-id]
+(defn store-txs [kv tx-ops tx-time tx-id]
   (->> (for [tx-op tx-ops]
-         (tx-command kv tx-op transact-time tx-id))
+         (tx-command kv tx-op tx-time tx-id))
        (reduce into {})
        (ks/store kv)))
 
@@ -497,8 +497,8 @@
   (index-docs [_ docs]
     (store-docs kv docs))
 
-  (index-tx [_ tx-ops transact-time tx-id]
-    (store-txs kv tx-ops transact-time tx-id))
+  (index-tx [_ tx-ops tx-time tx-id]
+    (store-txs kv tx-ops tx-time tx-id))
 
   (store-index-meta [_ k v]
     (store-meta kv k v))

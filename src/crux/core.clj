@@ -26,8 +26,8 @@
   (index-docs [_ docs]
     (throw (UnsupportedOperationException.)))
 
-  (index-tx [_ tx-ops transact-time tx-id]
-    (kv/-put kv tx-ops transact-time))
+  (index-tx [_ tx-ops tx-time tx-id]
+    (kv/-put kv tx-ops tx-time))
 
   (store-index-meta [_ k v]
     (kv/store-meta kv k v))
