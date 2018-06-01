@@ -198,13 +198,12 @@
 
 (defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^Long tx-id]
   (assert (= id-size (alength eid)))
-  (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES)
-                                 transact-time (+ Long/BYTES)
+  (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES Long/Bytes)
                                  tx-id (+ Long/BYTES)))
     true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
              (.put eid)
-             (.putLong (date->reverse-time-ms business-time)))
-    transact-time (.putLong (date->reverse-time-ms transact-time))
+             (.putLong (date->reverse-time-ms business-time))
+             (.putLong (date->reverse-time-ms transact-time)))
     tx-id (.putLong tx-id)
     true (.array)))
 
@@ -360,8 +359,7 @@
                                                 (pos? (alength ^bytes v)))
                                        (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
                                                             (enrich-entity-map v))]
-                                         (if (or (nil? transact-time)
-                                                 (<= (compare (:tt entity-map) transact-time) 0))
+                                         (if (<= (compare (:tt entity-map) transact-time) 0)
                                            entity-map
                                            (recur (ks/-next i))))))]
                   :when entity-map]

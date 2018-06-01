@@ -53,7 +53,7 @@
 
                        :doc
                        (doc/map->DocDatasource {:kv *kv*
-                                                :transact-time nil
+                                                :transact-time ts
                                                 :business-time ts})))]
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q/q (db-fn) q))))
