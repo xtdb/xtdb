@@ -82,7 +82,7 @@
                    (log/debug "transacted" n))
                  (let [tx-ops (for [entity entities]
                                 [:crux.tx/put (:crux.rdf/iri entity) entity])]
-                   (transact-ops producer tx-topic doc-topic tx-ops))
+                   (transact producer tx-topic doc-topic tx-ops))
                  (+ n (count entities)))
                0)))
 
