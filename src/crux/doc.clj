@@ -129,6 +129,11 @@
       (.put content-hash)
       (.array)))
 
+(defn- encode-doc-prefix-key ^bytes []
+  (-> (ByteBuffer/allocate (+ Short/BYTES))
+      (.putShort content-hash->doc-index-id)
+      (.array)))
+
 (defn- decode-doc-key ^bytes [^bytes doc-key]
   (assert (= (+ Short/BYTES id-size) (alength doc-key)))
   (let [buffer (ByteBuffer/wrap doc-key)]
@@ -191,9 +196,9 @@
 (defn- ^Date reverse-time-ms->date [^long reverse-time-ms]
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
-(defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^long tx-id]
+(defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^Long tx-id]
   (assert (= id-size (alength eid)))
-  (let [tx-id-size (if (pos? tx-id)
+  (let [tx-id-size (if tx-id
                      (long Long/BYTES)
                      0)]
     (cond-> (ByteBuffer/allocate (+ Short/BYTES id-size Long/BYTES Long/BYTES tx-id-size))
@@ -201,7 +206,7 @@
                (.put eid)
                (.putLong (date->reverse-time-ms business-time))
                (.putLong (date->reverse-time-ms transact-time)))
-      (= Long/BYTES tx-id-size) (.putLong tx-id)
+      tx-id (.putLong tx-id)
       true (.array))))
 
 (defn- encode-entity+bt+tt-prefix-key
@@ -209,10 +214,15 @@
    (-> (ByteBuffer/allocate Short/BYTES)
        (.putShort entity+bt+tt+tx-id->content-hash-index-id)
        (.array)))
+  (^bytes [^bytes eid]
+   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
+       (.putShort entity+bt+tt+tx-id->content-hash-index-id)
+       (.put eid)
+       (.array)))
   (^bytes [^bytes eid ^Date business-time ^Date transact-time]
-   (encode-entity+bt+tt+tx-id-key eid business-time transact-time -1)))
+   (encode-entity+bt+tt+tx-id-key eid business-time transact-time nil)))
 
-(defn- decode-entity+bt+tt+tx-id-key ^bytes [^bytes key]
+(defn- decode-entity+bt+tt+tx-id-key [^bytes key]
   (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES)) (alength key))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
@@ -222,16 +232,15 @@
      :tt (reverse-time-ms->date (.getLong buffer))
      :tx-id (.getLong buffer)}))
 
-(defn- all-keys-in-index [kv index-id]
+(defn- all-key-values-in-prefix [kv ^bytes prefix]
   (ks/iterate-with
    kv
    (fn [i]
-     (let [seek-k (.array (.putShort (ByteBuffer/allocate Short/BYTES) index-id))]
-       (loop [[k v] (ks/-seek i seek-k)
-              acc #{}]
-         (if (and k (bu/bytes=? seek-k k))
-           (recur (ks/-next i) (conj acc k))
-           acc))))))
+     (loop [[k v] (ks/-seek i prefix)
+            acc []]
+       (if (and k (bu/bytes=? prefix k))
+         (recur (ks/-next i) (conj acc [k v]))
+         acc)))))
 
 ;; Caching
 
@@ -256,12 +265,9 @@
 ;; Docs
 
 (defn all-doc-keys [kv]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (->> (all-keys-in-index kv content-hash->doc-index-id)
-          (map (comp ->Id decode-doc-key))
-          (set)))))
+  (->> (all-key-values-in-prefix kv (encode-doc-prefix-key))
+       (map (comp ->Id decode-doc-key first))
+       (set)))
 
 (defn docs [kv ks]
   (ks/iterate-with
@@ -337,6 +343,11 @@
 
 ;; Txs Read
 
+(defn- enrich-entity-map [entity-map content-hash]
+  (-> entity-map
+      (assoc :content-hash (->Id content-hash))
+      (update :eid ->Id)))
+
 (defn entities-at [kv entities business-time transact-time]
   (ks/iterate-with
    kv
@@ -352,11 +363,10 @@
                                      (when (and k
                                                 (bu/bytes=? seek-k prefix-size k)
                                                 (pos? (alength ^bytes v)))
-                                       (let [entity-map (decode-entity+bt+tt+tx-id-key k)]
+                                       (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
+                                                            (enrich-entity-map v))]
                                          (if (<= (compare (:tt entity-map) transact-time) 0)
-                                           (-> entity-map
-                                               (assoc :content-hash (->Id v))
-                                               (update :eid ->Id))
+                                           entity-map
                                            (recur (ks/-next i))))))]
                   :when entity-map]
               [(:eid entity-map) entity-map])
@@ -386,23 +396,28 @@
            {})))))
 
 (defn entities-by-attribute-values-at [kv k vs business-time transact-time]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values kv k vs)
-                                         (eids-by-content-hashes kv))
-                [eid entity-map] (entities-at kv eids business-time transact-time)
-                :when (= content-hash (:content-hash entity-map))]
-            [eid entity-map])
-          (into {})))))
+  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values kv k vs)
+                                      (eids-by-content-hashes kv))
+             [eid entity-map] (entities-at kv eids business-time transact-time)
+             :when (= content-hash (:content-hash entity-map))]
+         [eid entity-map])
+       (into {})))
 
 (defn all-entities [kv business-time transact-time]
-  (ks/iterate-with
-   kv
-   (fn [i]
-     (let [eids (->> (all-keys-in-index kv entity+bt+tt+tx-id->content-hash-index-id)
-                     (map (comp ->Id :eid decode-entity+bt+tt+tx-id-key)))]
-       (entities-at kv eids business-time transact-time)))))
+  (let [eids (->> (all-key-values-in-prefix kv (encode-entity+bt+tt-prefix-key))
+                  (map (comp ->Id :eid decode-entity+bt+tt+tx-id-key first)))]
+    (entities-at kv eids business-time transact-time)))
+
+(defn entity-histories [kv entities]
+  (->> (for [seek-k (->> (for [entity entities]
+                           (encode-entity+bt+tt-prefix-key (id->bytes entity)))
+                         (sort bu/bytes-comparator))
+             :let [[entity-map :as history] (for [[k v] (all-key-values-in-prefix kv seek-k)]
+                                              (-> (decode-entity+bt+tt+tx-id-key k)
+                                                  (enrich-entity-map v)))]
+             :when entity-map]
+         {(:eid entity-map) history})
+       (into {})))
 
 ;; Meta
 

@@ -197,7 +197,12 @@
         (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
         (t/is (= 3 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
-                       (get-in [eid :tx-id]))))))))
+                       (get-in [eid :tx-id]))))))
+
+    (t/testing "can retrieve history of entity"
+      (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
+        (t/is (= [4 3 1 2] (map :tx-id picasso-history)))
+        (t/is (= 4 (count (set (map :content-hash picasso-history)))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
