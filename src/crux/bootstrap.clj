@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
             [crux.core :as crux]
+            [crux.doc :as doc]
             [crux.kv-store :as kv-store]
             [crux.memdb]
             [crux.rocksdb]
@@ -64,9 +65,10 @@
    (with-open [kv-store (start-kv-store options)
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
+               producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
-     (start-system kv-store consumer admin-client (delay true) options)))
-  ([kv-store consumer admin-client running? options]
+     (start-system kv-store consumer producer admin-client (delay true) options)))
+  ([kv-store consumer producer admin-client running? options]
    (let [{:keys [bootstrap-servers
                  group-id
                  tx-topic
@@ -74,7 +76,7 @@
                  doc-partitions
                  replication-factor]
           :as options} (merge default-options options)
-         indexer (crux/indexer kv-store)
+         indexer (doc/->DocIndexer kv-store {:producer producer :doc-topic doc-topic})
          replication-factor (Long/parseLong replication-factor)]
      (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)

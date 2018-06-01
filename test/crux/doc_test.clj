@@ -25,7 +25,7 @@
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (let [ks (doc/store-docs f/*kv* [picasso])]
+    (let [ks (doc/store-docs f/*kv* {content-hash picasso})]
       (t/is (= [content-hash] ks))
       (t/is (= {content-hash
                 (ByteBuffer/wrap (nippy/fast-freeze picasso))}
@@ -38,11 +38,6 @@
                                  "090622a35d4b579d2fcfebf823821298711d3867"])))
       (t/is (empty? (doc/docs f/*kv* []))))
 
-    (t/testing "existing doc keys"
-      (t/is (= #{content-hash}
-               (doc/existing-doc-keys f/*kv* [content-hash-hex
-                                              "090622a35d4b579d2fcfebf823821298711d3867"]))))
-
     (t/testing "all existing doc keys"
       (t/is (= #{content-hash}
                (doc/all-doc-keys f/*kv*))))))
@@ -51,7 +46,7 @@
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (doc/doc->content-hash picasso)]
-    (doc/store-docs f/*kv* [picasso])
+    (doc/store-docs f/*kv* {content-hash picasso})
     (t/is (= #{content-hash}
              (doc/doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
@@ -86,6 +81,11 @@
                (doc/doc-keys-by-attribute-values
                 f/*kv* :http://dbpedia.org/property/imageSize [[-255 229]]))))))
 
+(defn local-transact [kv eid doc business-time transact-time tx-id]
+  (let [content-hash (doc/doc->content-hash doc)]
+    (doc/store-docs kv {content-hash doc})
+    (doc/store-txs kv nil [[:crux.tx/put eid content-hash business-time]] transact-time tx-id)))
+
 (t/deftest test-can-index-tx-ops
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
@@ -94,9 +94,7 @@
         tx-id 1
         eid (doc/->Id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
-    (doc/store-docs f/*kv* [picasso])
-    (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-                            content-hash]] transact-time tx-id)
+    (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso picasso transact-time transact-time tx-id)
 
     (t/testing "can find entity by content hash"
       (t/is (= {content-hash [eid]}
@@ -133,9 +131,8 @@
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
             new-tx-id 2]
-        (doc/store-docs f/*kv* [new-picasso])
-        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-                                new-content-hash new-business-time]] new-transact-time new-tx-id)
+        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
         (t/is (= {eid
@@ -155,9 +152,8 @@
             new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
             new-tx-id 3]
-        (doc/store-docs f/*kv* [new-picasso])
-        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-                                new-content-hash new-business-time]] new-transact-time new-tx-id)
+        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
         (t/is (= {eid
@@ -182,9 +178,8 @@
             new-transact-time #inst "2018-05-24"
             new-business-time #inst "2018-05-22"
             new-tx-id 4]
-        (doc/store-docs f/*kv* [new-picasso])
-        (doc/store-txs f/*kv* [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-                                new-content-hash new-business-time]] new-transact-time new-tx-id)
+        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
         (t/is (= {eid

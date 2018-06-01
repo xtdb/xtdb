@@ -48,7 +48,7 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
-        indexer (doc/->DocIndexer f/*kv*)]
+        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -74,7 +74,7 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
-        indexer (doc/->DocIndexer f/*kv*)]
+        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -105,7 +105,7 @@
                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        indexer (doc/->DocIndexer f/*kv*)]
+        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -160,7 +160,7 @@
 (t/deftest test-can-transact-all-dbpedia-entities
   (let [tx-topic "test-can-transact-all-dbpedia-entities-tx"
         doc-topic "test-can-transact-all-dbpedia-entities-doc"
-        indexer (doc/->DocIndexer f/*kv*)
+        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})
         tx-size 1000
         max-limit Long/MAX_VALUE
         print-size 100000

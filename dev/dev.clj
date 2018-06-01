@@ -53,9 +53,9 @@
           :options options}
          (do-with-system-fn))))
 
-(defn start-index-node [running? {:keys [kv-store kafka-consumer kafka-admin-client options]
+(defn start-index-node [running? {:keys [kv-store kafka-consumer kafka-producer kafka-admin-client options]
                                   :as system}]
-  (b/start-system kv-store kafka-consumer kafka-admin-client running? options))
+  (b/start-system kv-store kafka-consumer kafka-producer kafka-admin-client running? options))
 
 (defn make-crux-system-init-fn []
   (fn []

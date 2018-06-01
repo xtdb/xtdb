@@ -9,7 +9,9 @@
            [java.security MessageDigest]
            [java.util Arrays Date LinkedHashMap UUID]
            [java.util.function Function]
-           [clojure.lang Keyword]))
+           [clojure.lang Keyword]
+           [org.apache.kafka.clients.producer
+            KafkaProducer ProducerRecord]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -311,35 +313,39 @@
 (defn ^Id doc->content-hash [doc]
   (->Id (bu/sha1 (nippy/fast-freeze doc))))
 
-(defn existing-doc-keys [kv ks]
-  (->> (docs kv ks)
-       (keys)
-       (into #{})))
+(defn- normalize-value [v]
+  (cond-> v
+    (not (or (vector? v)
+             (set? v))) (vector)))
 
-(defn store-docs [kv docs]
-  (let [content-hash+doc+bytes (if (map? docs)
-                                 (for [[k doc] docs
-                                       :let [doc-bytes (nippy/fast-freeze doc)]]
-                                   [(id->bytes k) [doc doc-bytes]])
-                                 (for [doc docs
-                                       :let [doc-bytes (nippy/fast-freeze doc)
-                                             k (bu/sha1 doc-bytes)]]
-                                   [k [doc doc-bytes]]))
-        new-keys (map first content-hash+doc+bytes)
-        existing-keys (existing-doc-keys kv new-keys)
-        content-hash->new-docs+bytes (apply dissoc (into {} content-hash+doc+bytes) existing-keys)]
+(defn store-docs [kv kvs]
+  (let [content-hash->doc (->> (for [[k doc] kvs]
+                                 [(->Id (id->bytes k)) doc])
+                               (into (sorted-map-by bu/bytes-comparator)))
+        {docs-to-add false
+         docs-to-evict true} (group-by (comp nil? val) content-hash->doc)
+        content-hash->new-docs (->> (map key docs-to-add)
+                                    (docs kv)
+                                    (keys)
+                                    (apply dissoc content-hash->doc))
+        content-hash->evicted-docs (docs kv (map key docs-to-evict))]
     (ks/store kv (concat
-                  (for [[content-hash [doc doc-bytes]] content-hash->new-docs+bytes]
-                    [(encode-doc-key content-hash)
-                     doc-bytes])
-                  (for [[content-hash [doc]] content-hash->new-docs+bytes
+                  (for [[content-hash doc] content-hash->new-docs]
+                    [(encode-doc-key (id->bytes content-hash))
+                     (nippy/fast-freeze doc)])
+                  (for [[content-hash doc] content-hash->new-docs
                         [k v] doc
-                        v (cond-> v
-                            (not (or (vector? v)
-                                     (set? v))) (vector))]
-                    [(encode-attribute+value+content-hash-key k v content-hash)
+                        v (normalize-value v)]
+                    [(encode-attribute+value+content-hash-key k v (id->bytes content-hash))
                      empty-byte-array])))
-    (map (comp ->Id first) content-hash+doc+bytes)))
+    (ks/delete kv (concat
+                   (for [[content-hash doc] content-hash->evicted-docs]
+                     (encode-doc-key (id->bytes content-hash)))
+                   (for [[content-hash doc] content-hash->evicted-docs
+                         [k v] doc
+                         v (normalize-value v)]
+                     (encode-attribute+value+content-hash-key k v (id->bytes content-hash)))))
+    (keys content-hash->doc)))
 
 ;; Txs Read
 
@@ -451,6 +457,9 @@
                        :new-doc ::doc
                        :business-time (s/? inst?)))
 
+(s/def ::evict-op (s/cat :op #{:crux.tx/evict}
+                         :id ::id))
+
 (s/def ::tx-op (s/and (s/or :put ::put-op
                             :delete ::delete-op
                             :cas ::cas-op)
@@ -458,9 +467,9 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [kv [op] transact-time tx-id] op))
+(defmulti tx-command (fn [kv producer [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [kv [op k v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv producer [op k v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         content-hash (id->bytes v)
         business-time (or business-time transact-time)]
@@ -473,7 +482,7 @@
      [(encode-content-hash+entity-key content-hash eid)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/delete [kv [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [kv producer [op k business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     [[(encode-entity+bt+tt+tx-id-key
@@ -483,7 +492,7 @@
        tx-id)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/cas [kv [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv producer [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         old-content-hash (-> (entities-at kv [k] business-time transact-time)
                              (get k)
@@ -501,19 +510,34 @@
        [(encode-content-hash+entity-key new-v eid)
         empty-byte-array]])))
 
-(defn store-txs [kv tx-ops tx-time tx-id]
+;; TODO: This shouldn't really use Kafka directly.
+(defmethod tx-command :crux.tx/evict [kv {:keys [^KafkaProducer producer doc-topic]} [op k business-time] transact-time tx-id]
+  (let [eid (id->bytes k)
+        business-time (or business-time transact-time)]
+    (when (and producer doc-topic)
+      (doseq [content-hash (get (entity-histories kv [eid]) (->Id eid))]
+        (->> (ProducerRecord. doc-topic (str content-hash) nil)
+             (.send producer))))
+    [[(encode-entity+bt+tt+tx-id-key
+       eid
+       business-time
+       transact-time
+       tx-id)
+      empty-byte-array]]))
+
+(defn store-txs [kv producer tx-ops tx-time tx-id]
   (->> (for [tx-op tx-ops]
-         (tx-command kv tx-op tx-time tx-id))
+         (tx-command kv producer tx-op tx-time tx-id))
        (reduce into {})
        (ks/store kv)))
 
-(defrecord DocIndexer [kv]
+(defrecord DocIndexer [kv producer]
   crux.db/Indexer
   (index-doc [_ content-hash doc]
     (store-docs kv {content-hash doc}))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (store-txs kv tx-ops tx-time tx-id))
+    (store-txs kv producer tx-ops tx-time tx-id))
 
   (store-index-meta [_ k v]
     (store-meta kv k v))
