@@ -14,3 +14,7 @@
   (index-tx [this tx-ops tx-time tx-id])
   (store-index-meta [this k v])
   (read-index-meta [this k]))
+
+(defprotocol TxLog
+  (submit-doc [this content-hash doc])
+  (submit-tx [this tx-ops]))

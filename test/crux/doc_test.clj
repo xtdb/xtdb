@@ -81,7 +81,7 @@
                (doc/doc-keys-by-attribute-values
                 f/*kv* :http://dbpedia.org/property/imageSize [[-255 229]]))))))
 
-(defn local-transact [kv eid doc business-time transact-time tx-id]
+(defn local-submit [kv eid doc business-time transact-time tx-id]
   (let [content-hash (doc/doc->content-hash doc)]
     (doc/store-docs kv {content-hash doc})
     (doc/store-txs kv nil [[:crux.tx/put eid content-hash business-time]] transact-time tx-id)))
@@ -94,7 +94,7 @@
         tx-id 1
         eid (doc/->Id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
 
-    (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso picasso transact-time transact-time tx-id)
+    (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso picasso transact-time transact-time tx-id)
 
     (t/testing "can find entity by content hash"
       (t/is (= {content-hash [eid]}
@@ -131,7 +131,7 @@
             new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
             new-tx-id 2]
-        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
 
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
@@ -152,7 +152,7 @@
             new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
             new-tx-id 3]
-        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
 
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
@@ -178,7 +178,7 @@
             new-transact-time #inst "2018-05-24"
             new-business-time #inst "2018-05-22"
             new-tx-id 4]
-        (local-transact f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
 
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))

@@ -4,6 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.core :as crux]
+            [crux.db :as db]
             [crux.doc :as doc]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
@@ -48,13 +49,14 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
-        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (doc/->DocIndexer f/*kv* tx-log)]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [doc-topic])
 
-    (k/transact ek/*producer* tx-topic doc-topic tx-ops)
+    (db/submit-tx tx-log tx-ops)
 
     (let [docs (map k/consumer-record->value (.poll ek/*consumer* 5000))]
       (t/is (= 7 (count docs)))
@@ -74,14 +76,15 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
-        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (doc/->DocIndexer f/*kv* tx-log)]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (k/transact ek/*producer* tx-topic doc-topic tx-ops)
+      (db/submit-tx tx-log tx-ops)
 
       (t/is (= 20 (count (k/consume-and-index-entities indexer ek/*consumer*))))
       (t/is (empty? (.poll ek/*consumer* 1000))))
@@ -105,14 +108,15 @@
                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})]
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (doc/->DocIndexer f/*kv* tx-log)]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (k/transact ek/*producer* tx-topic doc-topic tx-ops)
+      (db/submit-tx tx-log tx-ops)
       (t/is (= 82 (count (k/consume-and-index-entities indexer ek/*consumer*)))))
 
     (t/testing "querying transacted data"
@@ -160,7 +164,6 @@
 (t/deftest test-can-transact-all-dbpedia-entities
   (let [tx-topic "test-can-transact-all-dbpedia-entities-tx"
         doc-topic "test-can-transact-all-dbpedia-entities-doc"
-        indexer (doc/->DocIndexer f/*kv*  {:producer ek/*producer* :doc-topic doc-topic})
         tx-size 1000
         max-limit Long/MAX_VALUE
         print-size 100000
@@ -171,7 +174,9 @@
                                      (log/warn message next-n))
                                    next-n))
         n-transacted (atom -1)
-        mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
+        mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (doc/->DocIndexer f/*kv* tx-log)]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
       (do (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -182,7 +187,7 @@
             (future
               (time
                (with-open [in (io/input-stream mappingbased-properties-file)]
-                 (reset! n-transacted (k/transact-ntriples ek/*producer* in tx-topic doc-topic tx-size)))))
+                 (reset! n-transacted (k/submit-ntriples tx-log in tx-size)))))
             (time
              (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
                     n 0]

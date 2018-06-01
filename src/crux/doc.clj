@@ -3,15 +3,13 @@
             [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
             [crux.kv-store-utils :as kvu]
-            [crux.db]
+            [crux.db :as db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Arrays Date LinkedHashMap UUID]
            [java.util.function Function]
-           [clojure.lang Keyword]
-           [org.apache.kafka.clients.producer
-            KafkaProducer ProducerRecord]))
+           [clojure.lang Keyword]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -467,9 +465,9 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [kv producer [op] transact-time tx-id] op))
+(defmulti tx-command (fn [kv tx-log [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [kv producer [op k v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv tx-log [op k v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         content-hash (id->bytes v)
         business-time (or business-time transact-time)]
@@ -482,7 +480,7 @@
      [(encode-content-hash+entity-key content-hash eid)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/delete [kv producer [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [kv tx-log [op k business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     [[(encode-entity+bt+tt+tx-id-key
@@ -492,7 +490,7 @@
        tx-id)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/cas [kv producer [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         old-content-hash (-> (entities-at kv [k] business-time transact-time)
                              (get k)
@@ -510,14 +508,12 @@
        [(encode-content-hash+entity-key new-v eid)
         empty-byte-array]])))
 
-;; TODO: This shouldn't really use Kafka directly.
-(defmethod tx-command :crux.tx/evict [kv {:keys [^KafkaProducer producer doc-topic]} [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [kv tx-log [op k business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
-    (when (and producer doc-topic)
+    (when tx-log
       (doseq [content-hash (get (entity-histories kv [eid]) (->Id eid))]
-        (->> (ProducerRecord. doc-topic (str content-hash) nil)
-             (.send producer))))
+        (db/submit-doc tx-log (str content-hash) nil)))
     [[(encode-entity+bt+tt+tx-id-key
        eid
        business-time
@@ -525,19 +521,19 @@
        tx-id)
       empty-byte-array]]))
 
-(defn store-txs [kv producer tx-ops tx-time tx-id]
+(defn store-txs [kv tx-log tx-ops tx-time tx-id]
   (->> (for [tx-op tx-ops]
-         (tx-command kv producer tx-op tx-time tx-id))
+         (tx-command kv tx-log tx-op tx-time tx-id))
        (reduce into {})
        (ks/store kv)))
 
-(defrecord DocIndexer [kv producer]
-  crux.db/Indexer
+(defrecord DocIndexer [kv tx-log]
+  db/Indexer
   (index-doc [_ content-hash doc]
     (store-docs kv {content-hash doc}))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (store-txs kv producer tx-ops tx-time tx-id))
+    (store-txs kv tx-log tx-ops tx-time tx-id))
 
   (store-index-meta [_ k v]
     (store-meta kv k v))
@@ -550,7 +546,7 @@
 (def ^:const default-doc-cache-size 10240)
 
 (defrecord DocEntity [kv eid content-hash]
-  crux.db/Entity
+  db/Entity
   (attr-val [this ident]
     (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
         (lru-cache-compute-if-absent
@@ -561,7 +557,7 @@
     eid))
 
 (defrecord DocDatasource [kv business-time transact-time]
-  crux.db/Datasource
+  db/Datasource
   (entities [this]
     (for [[_ entity-map] (all-entities kv business-time transact-time)]
       (map->DocEntity (assoc entity-map :kv kv))))

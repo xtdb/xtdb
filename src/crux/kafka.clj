@@ -64,20 +64,25 @@
 
 ;;; Transacting Producer
 
-(defn transact [^KafkaProducer producer ^String tx-topic ^String doc-topic tx-ops]
-  (let [record-tx-ops (s/conform :crux.doc/tx-ops tx-ops)]
-    (when (s/invalid? record-tx-ops)
-      (throw (ex-info "Invalid input" (s/explain-data :crux.doc/tx-ops tx-ops))))
-    (doseq [tx-op tx-ops
-            doc (filter map? tx-op)]
-      (->> (ProducerRecord. doc-topic (str (doc/doc->content-hash doc)) doc)
-           (.send producer)))
-    (->> (ProducerRecord. tx-topic nil record-tx-ops)
-         (.send producer))))
+(defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]
+  db/TxLog
+  (submit-doc [this content-hash doc]
+    (->> (ProducerRecord. doc-topic content-hash doc)
+         (.send producer)))
+
+  (submit-tx [this tx-ops]
+    (let [record-tx-ops (s/conform :crux.doc/tx-ops tx-ops)]
+      (when (s/invalid? record-tx-ops)
+        (throw (ex-info "Invalid input" (s/explain-data :crux.doc/tx-ops tx-ops))))
+      (doseq [tx-op tx-ops
+              doc (filter map? tx-op)]
+        (db/submit-doc this (str (doc/doc->content-hash doc)) doc))
+      (->> (ProducerRecord. tx-topic nil record-tx-ops)
+           (.send producer)))))
 
 (def ^:dynamic *ntriples-log-size* 100000)
 
-(defn transact-ntriples [producer in tx-topic doc-topic tx-size]
+(defn submit-ntriples [tx-log in tx-size]
   (->> (rdf/ntriples-seq in)
        (rdf/statements->maps)
        (map #(rdf/use-default-language % rdf/*default-language*))
@@ -85,10 +90,10 @@
        (partition-all tx-size)
        (reduce (fn [^long n entities]
                  (when (zero? (long (mod n *ntriples-log-size*)))
-                   (log/debug "transacted" n))
+                   (log/debug "submitted" n))
                  (let [tx-ops (for [entity entities]
                                 [:crux.tx/put (:crux.rdf/iri entity) entity])]
-                   (transact producer tx-topic doc-topic tx-ops))
+                   (db/submit-tx tx-log tx-ops))
                  (+ n (count entities)))
                0)))
 

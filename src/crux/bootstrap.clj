@@ -76,7 +76,8 @@
                  doc-partitions
                  replication-factor]
           :as options} (merge default-options options)
-         indexer (doc/->DocIndexer kv-store {:producer producer :doc-topic doc-topic})
+         tx-log (k/->KafkaTxLog producer tx-topic doc-topic)
+         indexer (doc/->DocIndexer kv-store tx-log)
          replication-factor (Long/parseLong replication-factor)]
      (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
