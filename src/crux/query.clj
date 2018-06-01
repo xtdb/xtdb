@@ -60,18 +60,43 @@
          (rf result input)
          (transduce (map (partial assoc input k)) rf result (f input)))))))
 
+(defn binding-agg-xform [k aggregate-fn]
+  (fn [rf]
+    (let [buf (java.util.ArrayList.)]
+      (fn
+        ([]
+         (rf))
+        ([result]
+         (rf (reduce rf result (aggregate-fn buf))))
+        ([result input]
+         (if (get input k)
+           (rf result input)
+           (do
+             (.add buf input)
+             result)))))))
+
 (defprotocol Binding
   (bind-key [this])
   (bind [this]))
 
-(defrecord EntityBinding [e fetch-entities-fn]
+(defrecord EntityBinding [e a v range-vals]
   Binding
   (bind-key [this] e)
   (bind [this]
-    (binding-xform e fetch-entities-fn)))
+    (binding-agg-xform e (fn [e]
+                           (let [db (get e '$)]
+                             (cond (and (symbol? v) (get e v))
+                                   (let [v (v-for-comparison (get e v))]
+                                     (db/entities-for-attribute-value db a v v))
 
-(defn- fetch-entities-within-range [a min-v max-v db]
-  (db/entities-for-attribute-value db a min-v max-v))
+                                   (and (symbol? v) range-vals)
+                                   (apply db/entities-for-attribute-value db a range-vals)
+
+                                   (and v (not (symbol? v)))
+                                   (db/entities-for-attribute-value db a v v)
+
+                                   :else
+                                   (db/entities db)))))))
 
 (defn- find-subsequent-range-terms [v terms]
   (when (symbol? v)
@@ -85,22 +110,7 @@
         [min-value max-value]))))
 
 (defn- fact->entity-binding [[e a v] terms]
-  (let [subsequent-range (find-subsequent-range-terms v terms)
-        fetch-entities-fn (fn [e]
-                            (let [db (get e '$)]
-                              (cond (and (symbol? v) (get e v))
-                                    (let [v (v-for-comparison (get e v))]
-                                      (db/entities-for-attribute-value db a v v))
-
-                                    (and (symbol? v) subsequent-range)
-                                    (apply db/entities-for-attribute-value db a subsequent-range)
-
-                                    (and v (not (symbol? v)))
-                                    (db/entities-for-attribute-value db a v v)
-
-                                    :else
-                                    (db/entities db))))]
-    (EntityBinding. e fetch-entities-fn)))
+  (EntityBinding. e a v (find-subsequent-range-terms v terms)))
 
 (defrecord VarBinding [e a s]
   Binding
