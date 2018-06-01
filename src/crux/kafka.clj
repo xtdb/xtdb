@@ -15,7 +15,7 @@
            [org.apache.kafka.clients.consumer
             KafkaConsumer ConsumerRecord ConsumerRebalanceListener]
            [org.apache.kafka.clients.producer
-            KafkaProducer ProducerRecord]
+            KafkaProducer ProducerRecord RecordMetadata]
            [org.apache.kafka.common.errors
             TopicExistsException]
            [crux.kafka.nippy
@@ -64,6 +64,9 @@
 
 ;;; Transacting Producer
 
+(defn- offset->tx-id [^long offset]
+  (inc offset))
+
 (defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -71,14 +74,15 @@
          (.send producer)))
 
   (submit-tx [this tx-ops]
-    (let [record-tx-ops (s/conform :crux.doc/tx-ops tx-ops)]
-      (when (s/invalid? record-tx-ops)
-        (throw (ex-info "Invalid input" (s/explain-data :crux.doc/tx-ops tx-ops))))
-      (doseq [tx-op tx-ops
-              doc (filter map? tx-op)]
+    (let [conformed-tx-ops (doc/conform-tx-ops tx-ops)]
+      (doseq [doc (doc/tx-ops->docs tx-ops)]
         (db/submit-doc this (str (doc/doc->content-hash doc)) doc))
-      (->> (ProducerRecord. tx-topic nil record-tx-ops)
-           (.send producer)))))
+      (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
+                                (.send producer))]
+        (delay
+         (let [record-meta ^RecordMetadata @tx-send-future]
+           {:tx-id (offset->tx-id (.offset record-meta))
+            :transact-time (Date. (.timestamp record-meta))}))))))
 
 (def ^:dynamic *ntriples-log-size* 100000)
 
@@ -126,7 +130,7 @@
 (defn- index-tx-record [indexer ^ConsumerRecord record]
   (let [tx-time (Date. (.timestamp record))
         tx-ops (consumer-record->value record)
-        tx-id (inc (.offset record))]
+        tx-id (offset->tx-id (.offset record))]
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 

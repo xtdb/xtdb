@@ -541,6 +541,32 @@
   (read-index-meta [_ k]
     (read-meta kv k)))
 
+(defn conform-tx-ops [tx-ops]
+  (let [conformed-ops (s/conform ::tx-ops tx-ops)]
+    (if (s/invalid? conformed-ops)
+      (throw (ex-info "Invalid input" (s/explain-data ::tx-ops tx-ops)))
+      conformed-ops)))
+
+(defn tx-ops->docs [tx-ops]
+  (for [tx-op tx-ops
+        doc (filter map? tx-op)]
+    doc))
+
+(defrecord DocTxLog [kv]
+  db/TxLog
+  (submit-doc [this content-hash doc]
+    (store-docs kv {content-hash doc}))
+
+  (submit-tx [this tx-ops]
+    (let [transact-time (Date.)
+          tx-id (.getTime transact-time)
+          conformed-tx-ops (conform-tx-ops tx-ops)]
+      (doseq [doc (tx-ops->docs tx-ops)]
+        (db/submit-doc this (str (doc->content-hash doc)) doc))
+      (store-txs kv this conformed-tx-ops transact-time tx-id)
+      (delay {:tx-id tx-id
+              :transact-time transact-time}))))
+
 ;; Query
 
 (def ^:const default-doc-cache-size 10240)

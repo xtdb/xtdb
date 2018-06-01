@@ -1,12 +1,15 @@
 (ns crux.doc-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
+            [crux.db :as db]
             [crux.doc :as doc]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
             [taoensso.nippy :as nippy])
-  (:import [java.nio ByteBuffer]))
+  (:import [java.util Date]
+           [java.nio ByteBuffer]))
 
 (t/use-fixtures :each f/with-kv-store)
 
@@ -81,20 +84,15 @@
                (doc/doc-keys-by-attribute-values
                 f/*kv* :http://dbpedia.org/property/imageSize [[-255 229]]))))))
 
-(defn local-submit [kv eid doc business-time transact-time tx-id]
-  (let [content-hash (doc/doc->content-hash doc)]
-    (doc/store-docs kv {content-hash doc})
-    (doc/store-txs kv nil [[:crux.tx/put eid content-hash business-time]] transact-time tx-id)))
-
 (t/deftest test-can-index-tx-ops
-  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+  (let [tx-log (doc/->DocTxLog f/*kv*)
+        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (doc/doc->content-hash picasso)
-        transact-time #inst "2018-05-21"
-        tx-id 1
-        eid (doc/->Id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))]
-
-    (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso picasso transact-time transact-time tx-id)
+        business-time #inst "2018-05-21"
+        eid (doc/->Id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))
+        {:keys [transact-time tx-id]}
+        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])]
 
     (t/testing "can find entity by content hash"
       (t/is (= {content-hash [eid]}
@@ -104,7 +102,7 @@
       (t/is (= {eid
                 {:eid eid
                  :content-hash content-hash
-                 :bt transact-time
+                 :bt business-time
                  :tt transact-time
                  :tx-id tx-id}}
                (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
@@ -128,10 +126,10 @@
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
             new-content-hash (doc/doc->content-hash new-picasso)
-            new-transact-time #inst "2018-05-22"
             new-business-time #inst "2018-05-20"
-            new-tx-id 2]
-        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+            {new-transact-time :transact-time
+             new-tx-id :tx-id}
+            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
@@ -149,10 +147,10 @@
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
             new-content-hash (doc/doc->content-hash new-picasso)
-            new-transact-time #inst "2018-05-23"
             new-business-time #inst "2018-05-22"
-            new-tx-id 3]
-        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
+            {new-transact-time :transact-time
+             new-tx-id :tx-id}
+            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (t/is (= {new-content-hash [eid]}
                  (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
@@ -166,37 +164,38 @@
         (t/is (= {eid
                   {:eid eid
                    :content-hash content-hash
-                   :bt transact-time
+                   :bt business-time
                    :tt transact-time
                    :tx-id tx-id}}
-                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time #inst "2018-05-22")))
-        (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))))
-
-    (t/testing "can correct entity at earlier business time"
-      (let [new-picasso (assoc picasso :bar :foo)
-            new-content-hash (doc/doc->content-hash new-picasso)
-            new-transact-time #inst "2018-05-24"
-            new-business-time #inst "2018-05-22"
-            new-tx-id 4]
-        (local-submit f/*kv* :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time new-transact-time new-tx-id)
-
-        (t/is (= {new-content-hash [eid]}
-                 (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
-        (t/is (= {eid
-                  {:eid eid
-                   :content-hash new-content-hash
-                   :bt new-business-time
-                   :tt new-transact-time
-                   :tx-id new-tx-id}}
-                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+                 (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time transact-time)))
         (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
-        (t/is (= 3 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
-                       (get-in [eid :tx-id]))))))
+        (t/testing "can correct entity at earlier business time"
+          (let [new-picasso (assoc picasso :bar :foo)
+                new-content-hash (doc/doc->content-hash new-picasso)
+                prev-transact-time new-transact-time
+                prev-tx-id new-tx-id
+                new-business-time #inst "2018-05-22"
+                {new-transact-time :transact-time
+                 new-tx-id :tx-id}
+                @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
+
+            (t/is (= {new-content-hash [eid]}
+                     (doc/eids-by-content-hashes f/*kv* [new-content-hash])))
+            (t/is (= {eid
+                      {:eid eid
+                       :content-hash new-content-hash
+                       :bt new-business-time
+                       :tt new-transact-time
+                       :tx-id new-tx-id}}
+                     (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+            (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
+
+            (t/is (= prev-tx-id (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] prev-transact-time prev-transact-time)
+                                    (get-in [eid :tx-id]))))))))
 
     (t/testing "can retrieve history of entity"
       (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-        (t/is (= [4 3 1 2] (map :tx-id picasso-history)))
         (t/is (= 4 (count (set (map :content-hash picasso-history)))))))))
 
 (t/deftest test-store-and-retrieve-meta
