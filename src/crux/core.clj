@@ -7,9 +7,8 @@
 (defrecord KvEntity [kv eid ts fields]
   crux.db/Entity
   (attr-val [this ident]
-    (let [v  (or (@fields ident)
-                 (get (swap! fields assoc ident (kv/seek-first kv eid ident ts nil)) ident))]
-      v))
+    (or (@fields ident)
+        (get (swap! fields assoc ident (kv/seek-first kv eid ident ts nil)) ident)))
   (->id [this]
     (kv/attr-aid->ident kv eid))
   (eq? [this another]

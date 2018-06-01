@@ -48,14 +48,27 @@
              (compare-vals? v (some-> (result term-v) v-for-comparison)))
         (compare-vals? v term-v))))
 
+(defn binding-xform [k f]
+  (fn [rf]
+    (fn
+      ([]
+       (rf))
+      ([result]
+       (rf result))
+      ([result input]
+       (if (get input k)
+         (rf result input)
+         (transduce (map (partial assoc input k)) rf result (f input)))))))
+
 (defprotocol Binding
   (bind-key [this])
-  (bind [this input]))
+  (bind [this]))
 
 (defrecord EntityBinding [e fetch-entities-fn]
   Binding
   (bind-key [this] e)
-  (bind [this input] (fetch-entities-fn input)))
+  (bind [this]
+    (binding-xform e fetch-entities-fn)))
 
 (defn- fetch-entities-within-range [a min-v max-v db]
   (db/entities-for-attribute-value db a min-v max-v))
@@ -92,31 +105,20 @@
 (defrecord VarBinding [e a s]
   Binding
   (bind-key [this] s)
-  (bind [this input]
-    (let [v (db/attr-val (get input e) a)]
-      (if (coll? v) v [v]))))
+  (bind [this]
+    (binding-xform s (fn [input]
+                       (let [v (db/attr-val (get input e) a)]
+                         (if (coll? v) v [v]))))))
 
 (defn- fact->var-binding [[e a v]]
   (when (and v (symbol? v))
     (VarBinding. e a v)))
 
-(defn binding-xform [b]
-  (fn [rf]
-    (fn
-      ([]
-       (rf))
-      ([result]
-       (rf result))
-      ([result input]
-       (if (get input (bind-key b))
-         (rf result input)
-         (transduce (map (partial assoc input (bind-key b))) rf result (bind b input)))))))
-
 (defn- query-plan->xform
   "Create a tranduce from the query-plan."
   [db plan]
   (apply comp (for [[term-bindings pred-f] plan
-                    :let [binding-transducers (map binding-xform term-bindings)]]
+                    :let [binding-transducers (map bind term-bindings)]]
                 (comp (apply comp binding-transducers)
                       (filter (partial pred-f db))))))
 
