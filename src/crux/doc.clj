@@ -589,6 +589,4 @@
   ([kv business-time]
    (db kv business-time (Date.)))
   ([kv business-time transact-time]
-   (map->DocDatasource {:kv kv
-                        :business-time business-time
-                        :transact-time transact-time})))
+   (->DocDatasource kv business-time transact-time)))
