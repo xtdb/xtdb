@@ -52,9 +52,7 @@
                        (crux/as-of *kv* ts)
 
                        :doc
-                       (doc/map->DocDatasource {:kv *kv*
-                                                :transact-time ts
-                                                :business-time ts})))]
+                       (doc/db *kv* ts)))]
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q/q (db-fn) q))))
 

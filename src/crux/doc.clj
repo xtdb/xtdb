@@ -584,9 +584,10 @@
 
 (defn db
   ([kv]
-   (db kv (Date.)))
+   (let [now (Date.)]
+     (db kv now now)))
   ([kv business-time]
-   (db kv business-time business-time))
+   (db kv business-time (Date.)))
   ([kv business-time transact-time]
    (map->DocDatasource {:kv kv
                         :business-time business-time
