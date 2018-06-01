@@ -328,7 +328,7 @@
                       [(encode-attribute+value+content-hash-key k v content-hash-bytes)
                        empty-byte-array])))
 
-      (nil? doc)
+      (and (nil? doc) existing-doc)
       (ks/delete kv (cons
                      (encode-doc-key content-hash-bytes)
                      (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
