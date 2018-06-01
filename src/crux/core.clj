@@ -30,7 +30,7 @@
     (throw (UnsupportedOperationException.)))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (kv/-put kv tx-ops tx-time))
+    (throw (UnsupportedOperationException.)))
 
   (store-index-meta [_ k v]
     (kv/store-meta kv k v))
