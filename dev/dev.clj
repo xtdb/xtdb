@@ -1,10 +1,12 @@
 (ns dev
   (:require [clojure.java.io :as io]
-            [crux.embedded-kafka :as ek]
-            [crux.kafka :as k]
             [crux.bootstrap :as b]
-            [crux.io :as cio]
+            [crux.byte-utils :as bu]
             [crux.core :as crux]
+            [crux.embedded-kafka :as ek]
+            [crux.io :as cio]
+            [crux.kafka :as k]
+            [crux.rdf :as rdf]
             [crux.query :as q]
             [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
@@ -84,7 +86,7 @@
 
   ;; Download from http://wiki.dbpedia.org/services-resources/ontology
   (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
-    (k/transact-ntriples-ops (:kafka-producer system) in (:tx-topic system) (:doc-topic system) 1000))
+    (rdf/submit-ntriples (k/->KafkaTxLog (:kafka-producer system) (:tx-topic system) (:doc-topic system)) in 1000))
 
   (q/q (crux/db (:kv-store system))
        '{:find [iri]

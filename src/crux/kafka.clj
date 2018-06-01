@@ -2,10 +2,8 @@
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
   (:require [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.rdf :as rdf]
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
@@ -83,23 +81,6 @@
          (let [record-meta ^RecordMetadata @tx-send-future]
            {:tx-id (offset->tx-id (.offset record-meta))
             :transact-time (Date. (.timestamp record-meta))}))))))
-
-(def ^:dynamic *ntriples-log-size* 100000)
-
-(defn submit-ntriples [tx-log in tx-size]
-  (->> (rdf/ntriples-seq in)
-       (rdf/statements->maps)
-       (map #(rdf/use-default-language % rdf/*default-language*))
-       (map rdf/use-iri-as-id)
-       (partition-all tx-size)
-       (reduce (fn [^long n entities]
-                 (when (zero? (long (mod n *ntriples-log-size*)))
-                   (log/debug "submitted" n))
-                 (let [tx-ops (for [entity entities]
-                                [:crux.tx/put (:crux.rdf/iri entity) entity])]
-                   (db/submit-tx tx-log tx-ops))
-                 (+ n (count entities)))
-               0)))
 
 ;;; Indexing Consumer
 

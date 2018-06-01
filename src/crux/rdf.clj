@@ -9,7 +9,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [crux.db :as db])
   (:import [java.io StringReader]
            [java.net URLDecoder]
            [javax.xml.datatype DatatypeConstants]
@@ -189,3 +190,20 @@
                                (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
                          (apply concat)))))))
        (apply concat)))
+
+(def ^:dynamic *ntriples-log-size* 100000)
+
+(defn submit-ntriples [tx-log in tx-size]
+  (->> (ntriples-seq in)
+       (statements->maps)
+       (map #(use-default-language % *default-language*))
+       (map use-iri-as-id)
+       (partition-all tx-size)
+       (reduce (fn [^long n entities]
+                 (when (zero? (long (mod n *ntriples-log-size*)))
+                   (log/debug "submitted" n))
+                 (let [tx-ops (vec (for [entity entities]
+                                     [:crux.tx/put (:crux.rdf/iri entity) entity]))]
+                   (db/submit-tx tx-log tx-ops))
+                 (+ n (count entities)))
+               0)))
