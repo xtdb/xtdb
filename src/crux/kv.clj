@@ -144,28 +144,27 @@
   ([db txs ts]
    (-put db txs ts ts))
   ([db txs ^Date ts ^Date tx-ts]
-   (->> (mapcat entity->txs txs)
-        (reduce
-         (fn [txs-to-put [eid k v]]
-           (assert eid)
-           (let [eid (ident->id! db eid)
-                 aid (attr-ident->aid! db k)]
-             (cond-> txs-to-put
-               true (conj! [(c/encode frame-index-eat {:index :eat
-                                                     :eid eid
-                                                     :aid aid
-                                                     :ts ts
-                                                     :tx-ts tx-ts})
-                            (nippy/freeze v)])
-               v (conj! [(c/encode frame-index-avt {:index :avt
-                                                  :aid aid
-                                                  :v v
-                                                  :ts ts
-                                                  :eid eid})
-                         (long->bytes eid)]))))
-         (transient []))
-        (persistent!)
-        (kv-store/store db))))
+   (let [txs-to-put (transient [])]
+     (loop [[[eid k v :as tx] & txs] (mapcat entity->txs txs)]
+       (when tx
+         (assert eid)
+         (let [eid (ident->id! db eid)
+               aid (attr-ident->aid! db k)]
+           (conj! txs-to-put [(c/encode frame-index-eat {:index :eat
+                                                         :eid eid
+                                                         :aid aid
+                                                         :ts ts
+                                                         :tx-ts tx-ts})
+                              (nippy/freeze v)])
+           (doseq [v (if (coll? v) v [v]) :when v]
+             (conj! txs-to-put [(c/encode frame-index-avt {:index :avt
+                                                           :aid aid
+                                                           :v v
+                                                           :ts ts
+                                                           :eid eid})
+                                (long->bytes eid)])))
+         (recur txs)))
+     (kv-store/store db (persistent! txs-to-put)))))
 
 (defn seek-first [db eid ident ^Date ts ^Date tx-ts]
   (when-let [aid (lookup-attr-ident-aid db ident)]
