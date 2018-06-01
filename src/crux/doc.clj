@@ -198,7 +198,7 @@
 
 (defn- encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^Long tx-id]
   (assert (= id-size (alength eid)))
-  (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES Long/Bytes)
+  (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES Long/BYTES)
                                  tx-id (+ Long/BYTES)))
     true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
              (.put eid)
@@ -581,3 +581,13 @@
   (entities-for-attribute-value [this ident min-v max-v]
     (for [[_ entity-map] (entities-by-attribute-values-at kv ident [[min-v max-v]] business-time transact-time)]
       (map->DocEntity (assoc entity-map :kv kv)))))
+
+(defn db
+  ([kv]
+   (db kv (Date.)))
+  ([kv business-time]
+   (db kv business-time business-time))
+  ([kv business-time transact-time]
+   (map->DocDatasource {:kv kv
+                        :business-time business-time
+                        :transact-time transact-time})))
