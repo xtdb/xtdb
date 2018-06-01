@@ -15,11 +15,11 @@
   (close [_])
   (configure [_ _ _])
   (serialize [_ _ data]
-    (freeze data)))
+    (some-> data freeze)))
 
 (deftype NippyDeserializer []
   Deserializer
   (close [_])
   (configure [_ _ _])
   (deserialize [_ _ data]
-    (thaw data)))
+    (some-> data thaw)))
