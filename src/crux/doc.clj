@@ -413,7 +413,9 @@
 ;; Tx Commands
 
 (s/def ::id (s/conformer (comp str ->Id id->bytes)))
-(s/def ::doc (s/and map? (s/conformer (comp str doc->content-hash))))
+(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str doc->content-hash)))
+                          :content-hash ::id)
+                    (s/conformer second)))
 
 (s/def ::put-op (s/cat :op #{:crux.tx/put}
                        :id ::id
