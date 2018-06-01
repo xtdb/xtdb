@@ -37,6 +37,12 @@
 (def default-topic-config
   {"message.timestamp.type" "LogAppendTime"})
 
+(def tx-topic-config
+  {"retention.ms" (str Long/MAX_VALUE)})
+
+(def doc-topic-config
+  {"cleanup.policy" "compact"})
+
 (defn ^KafkaProducer create-producer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 

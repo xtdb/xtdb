@@ -19,10 +19,14 @@
     :default "localhost:9092"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
     :default (.getHostName (InetAddress/getLocalHost))]
-   ["-tt" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
+   ["-t" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
     :default "crux-transaction-log"]
-   ["-dt" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
+   ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
     :default "crux-docs"]
+   ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
+    :default "1"]
+   ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
+    :default "1"]
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: rocksdb, lmdb or memdb"
@@ -30,9 +34,7 @@
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-h" "--help"]])
 
-(def default-options
-  (merge {:replication-factor 3}
-         (:options (cli/parse-opts [] cli-options))))
+(def default-options (:options (cli/parse-opts [] cli-options)))
 
 (defn parse-version []
   (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
@@ -69,11 +71,13 @@
                  group-id
                  tx-topic
                  doc-topic
+                 doc-partitions
                  replication-factor]
           :as options} (merge default-options options)
-         indexer (crux/indexer kv-store)]
-     (k/create-topic admin-client tx-topic 1 replication-factor {"retention.ms" (str Long/MAX_VALUE)})
-     (k/create-topic admin-client doc-topic 3 replication-factor {"cleanup.policy" "compact"})
+         indexer (crux/indexer kv-store)
+         replication-factor (Long/parseLong replication-factor)]
+     (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
+     (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
      (while @running?
        (k/consume-and-index-entities indexer consumer 100)))))

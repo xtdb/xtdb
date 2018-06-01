@@ -16,8 +16,7 @@
 (def storage-dir "dev-storage")
 (def options {:db-dir (io/file storage-dir "data")
               :zookeeper-data-dir (io/file storage-dir "zookeeper")
-              :kafka-log-dir (io/file storage-dir "kafka-log")
-              :replication-factor 1})
+              :kafka-log-dir (io/file storage-dir "kafka-log")})
 (def system)
 
 (defn ^Closeable start-zookeeper [{:keys [zookeeper-data-dir]}]

@@ -50,8 +50,8 @@
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
         indexer (doc/->DocIndexer f/*kv*)]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
-    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [doc-topic])
 
     (k/transact ek/*producer* tx-topic doc-topic tx-ops)
@@ -76,8 +76,8 @@
         tx-ops (load-ntriples-example  "crux/picasso.nt")
         indexer (doc/->DocIndexer f/*kv*)]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
-    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
@@ -107,8 +107,8 @@
                     (vec))
         indexer (doc/->DocIndexer f/*kv*)]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 {})
-    (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
@@ -174,8 +174,8 @@
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
-      (do (k/create-topic ek/*admin-client* tx-topic 1 1 {})
-          (k/create-topic ek/*admin-client* doc-topic 1 1 {})
+      (do (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+          (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
           (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
           (t/testing "transacting and indexing"
