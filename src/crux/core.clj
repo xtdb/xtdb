@@ -23,8 +23,8 @@
 
 (defrecord KvIndexer [kv]
   crux.db/Indexer
-  (index [_ txs transact-time]
-    (kv/-put kv txs transact-time))
+  (index [_ tx-ops transact-time tx-id]
+    (kv/-put kv tx-ops transact-time))
 
   (store-index-meta [_ k v]
     (kv/store-meta kv k v))

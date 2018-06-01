@@ -482,11 +482,22 @@
        [(encode-content-hash+entity-key new-v eid)
         empty-byte-array]])))
 
-(defn store-txs [kv commands transact-time tx-id]
-  (->> (for [command commands]
-         (tx-command kv command transact-time tx-id))
+(defn store-txs [kv tx-ops transact-time tx-id]
+  (->> (for [tx-op tx-ops]
+         (tx-command kv tx-op transact-time tx-id))
        (reduce into {})
        (ks/store kv)))
+
+(defrecord DocIndexer [kv]
+  crux.db/Indexer
+  (index [_ tx-ops transact-time tx-id]
+    (store-txs kv tx-ops transact-time tx-id))
+
+  (store-index-meta [_ k v]
+    (store-meta kv k v))
+
+  (read-index-meta [_ k]
+    (read-meta kv k)))
 
 ;; Query
 

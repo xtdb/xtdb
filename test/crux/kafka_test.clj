@@ -49,7 +49,7 @@
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
 
     (k/transact ek/*producer* topic entities)
 
@@ -67,7 +67,7 @@
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
 
     (t/testing "transacting and indexing"
       (k/transact ek/*producer* topic entities)
@@ -100,7 +100,7 @@
         indexer (crux/indexer f/*kv*)]
 
     (k/create-topic ek/*admin-client* topic 1 1 {})
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
 
     (t/testing "transacting and indexing"
       (k/transact ek/*producer* topic entities)
@@ -165,7 +165,7 @@
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
       (do (k/create-topic ek/*admin-client* topic 1 1 {})
-          (k/subscribe-from-stored-offsets indexer ek/*consumer* topic)
+          (k/subscribe-from-stored-offsets indexer ek/*consumer* [topic])
 
           (t/testing "transacting and indexing"
             (future

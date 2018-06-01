@@ -3,6 +3,7 @@
   valid keywords. Uses one transaction per message."
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
+            [crux.doc :as doc]
             [crux.rdf :as rdf]
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
@@ -97,9 +98,10 @@
 
 (defn index-tx-record [indexer ^ConsumerRecord record]
   (let [transact-time (Date. (.timestamp record))
-        txs (consumer-record->value record)]
-    (db/index indexer txs transact-time)
-    txs))
+        tx-ops (consumer-record->value record)
+        tx-id (.offset record)]
+    (db/index indexer tx-ops transact-time tx-id)
+    tx-ops))
 
 (defn consume-and-index-entities
   ([indexer consumer]
@@ -112,12 +114,11 @@
      (store-topic-partition-offsets indexer consumer (.partitions records))
      txs)))
 
-(defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer topic]
-  (let [topics [topic]]
-    (.subscribe consumer
-                ^List topics
-                (reify ConsumerRebalanceListener
-                  (onPartitionsRevoked [_ partitions]
-                    (store-topic-partition-offsets indexer consumer partitions))
-                  (onPartitionsAssigned [_ partitions]
-                    (seek-to-stored-offsets indexer consumer partitions))))))
+(defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer ^List topics]
+  (.subscribe consumer
+              topics
+              (reify ConsumerRebalanceListener
+                (onPartitionsRevoked [_ partitions]
+                  (store-topic-partition-offsets indexer consumer partitions))
+                (onPartitionsAssigned [_ partitions]
+                  (seek-to-stored-offsets indexer consumer partitions)))))

@@ -9,6 +9,6 @@
   (->id [this]))
 
 (defprotocol Indexer
-  (index [this txs transact-time])
+  (index [this tx-ops transact-time tx-id])
   (store-index-meta [this k v])
   (read-index-meta [this k]))

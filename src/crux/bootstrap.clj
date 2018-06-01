@@ -70,7 +70,7 @@
           :as options} (merge default-options options)
          indexer (crux/indexer kv-store)]
      (k/create-topic admin-client topic 1 replication-factor {})
-     (k/subscribe-from-stored-offsets indexer consumer topic)
+     (k/subscribe-from-stored-offsets indexer consumer [topic])
      (while @running?
        (k/consume-and-index-entities indexer consumer 100)))))
 
