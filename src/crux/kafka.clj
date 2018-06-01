@@ -100,7 +100,7 @@
   (let [transact-time (Date. (.timestamp record))
         tx-ops (consumer-record->value record)
         tx-id (.offset record)]
-    (db/index indexer tx-ops transact-time tx-id)
+    (db/index-tx indexer tx-ops transact-time tx-id)
     tx-ops))
 
 (defn consume-and-index-entities

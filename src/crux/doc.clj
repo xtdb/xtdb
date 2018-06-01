@@ -311,10 +311,14 @@
        (into #{})))
 
 (defn store-docs [kv docs]
-  (let [content-hash+doc+bytes (for [doc docs
-                                     :let [doc-bytes (nippy/fast-freeze doc)
-                                           k (bu/sha1 doc-bytes)]]
-                                 [k [doc doc-bytes]])
+  (let [content-hash+doc+bytes (if (map? docs)
+                                 (for [[k doc-bytes] docs
+                                       :let [doc (nippy/fast-thaw doc-bytes)]]
+                                   [(id->bytes k) [doc doc-bytes]])
+                                 (for [doc docs
+                                       :let [doc-bytes (nippy/fast-freeze doc)
+                                             k (bu/sha1 doc-bytes)]]
+                                   [k [doc doc-bytes]]))
         new-keys (map first content-hash+doc+bytes)
         existing-keys (existing-doc-keys kv new-keys)
         content-hash->new-docs+bytes (apply dissoc (into {} content-hash+doc+bytes) existing-keys)]
@@ -490,7 +494,10 @@
 
 (defrecord DocIndexer [kv]
   crux.db/Indexer
-  (index [_ tx-ops transact-time tx-id]
+  (index-docs [_ docs]
+    (store-docs kv docs))
+
+  (index-tx [_ tx-ops transact-time tx-id]
     (store-txs kv tx-ops transact-time tx-id))
 
   (store-index-meta [_ k v]

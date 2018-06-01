@@ -23,7 +23,10 @@
 
 (defrecord KvIndexer [kv]
   crux.db/Indexer
-  (index [_ tx-ops transact-time tx-id]
+  (index-docs [_ docs]
+    (throw (UnsupportedOperationException.)))
+
+  (index-tx [_ tx-ops transact-time tx-id]
     (kv/-put kv tx-ops transact-time))
 
   (store-index-meta [_ k v]
