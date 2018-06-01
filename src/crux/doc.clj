@@ -315,36 +315,26 @@
     (not (or (vector? v)
              (set? v))) (vector)))
 
-(defn store-docs [kv kvs]
-  (let [content-hash->doc (->> (for [[k doc] kvs]
-                                 [(->Id (id->bytes k)) doc])
-                               (into (sorted-map-by bu/bytes-comparator)))
-        {docs-to-add false
-         docs-to-evict true} (group-by (comp nil? val) content-hash->doc)
-        content-hash->new-docs (->> (map key docs-to-add)
-                                    (docs kv)
-                                    (keys)
-                                    (apply dissoc content-hash->doc))
-        content-hash->evicted-docs (docs kv (map key docs-to-evict))]
-    (ks/store kv (concat
-                  (for [[content-hash doc] content-hash->new-docs]
-                    [(encode-doc-key (id->bytes content-hash))
-                     (nippy/fast-freeze doc)])
-                  (for [[content-hash doc] content-hash->new-docs
-                        :let [content-hash (id->bytes content-hash)]
-                        [k v] doc
-                        v (normalize-value v)]
-                    [(encode-attribute+value+content-hash-key k v content-hash)
-                     empty-byte-array])))
-    (ks/delete kv (concat
-                   (for [[content-hash doc] content-hash->evicted-docs]
-                     (encode-doc-key (id->bytes content-hash)))
-                   (for [[content-hash doc] content-hash->evicted-docs
-                         :let [content-hash (id->bytes content-hash)]
-                         [k v] (nippy/fast-thaw (.array ^ByteBuffer doc))
-                         v (normalize-value v)]
-                     (encode-attribute+value+content-hash-key k v content-hash))))
-    (keys content-hash->doc)))
+(defn store-doc [kv content-hash doc]
+  (let [content-hash-bytes (id->bytes content-hash)
+        content-hash (->Id content-hash-bytes)
+        existing-doc (get (docs kv [content-hash]) content-hash)]
+    (cond
+      (and doc (nil? existing-doc))
+      (ks/store kv (cons
+                    [(encode-doc-key content-hash-bytes)
+                     (nippy/fast-freeze doc)]
+                    (for [[k v] doc
+                          v (normalize-value v)]
+                      [(encode-attribute+value+content-hash-key k v content-hash-bytes)
+                       empty-byte-array])))
+
+      (nil? doc)
+      (ks/delete kv (cons
+                     (encode-doc-key content-hash-bytes)
+                     (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
+                           v (normalize-value v)]
+                       (encode-attribute+value+content-hash-key k v content-hash-bytes)))))))
 
 ;; Txs Read
 
@@ -532,7 +522,7 @@
 (defrecord DocIndexer [kv tx-log]
   db/Indexer
   (index-doc [_ content-hash doc]
-    (store-docs kv {content-hash doc}))
+    (store-doc kv content-hash doc))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (store-tx kv tx-log tx-ops tx-time tx-id))

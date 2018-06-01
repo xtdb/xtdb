@@ -28,11 +28,10 @@
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (let [ks (doc/store-docs f/*kv* {content-hash picasso})]
-      (t/is (= [content-hash] ks))
-      (t/is (= {content-hash
-                (ByteBuffer/wrap (nippy/fast-freeze picasso))}
-               (doc/docs f/*kv* ks))))
+    (doc/store-doc f/*kv* content-hash picasso)
+    (t/is (= {content-hash
+              (ByteBuffer/wrap (nippy/fast-freeze picasso))}
+             (doc/docs f/*kv* [content-hash])))
 
     (t/testing "non existent docs are ignored"
       (t/is (= {content-hash
@@ -49,7 +48,7 @@
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (doc/doc->content-hash picasso)]
-    (doc/store-docs f/*kv* {content-hash picasso})
+    (doc/store-doc f/*kv* content-hash picasso)
     (t/is (= #{content-hash}
              (doc/doc-keys-by-attribute-values
               f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))
