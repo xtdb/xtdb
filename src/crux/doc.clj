@@ -338,7 +338,7 @@
 
 (defn- enrich-entity-map [entity-map content-hash]
   (-> entity-map
-      (assoc :content-hash (->Id content-hash))
+      (assoc :content-hash (some-> content-hash not-empty ->Id))
       (update :eid ->Id)))
 
 (defn entities-at [kv entities business-time transact-time]
@@ -444,11 +444,13 @@
                        :business-time (s/? inst?)))
 
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
-                         :id ::id))
+                         :id ::id
+                         :business-time (s/? inst?)))
 
 (s/def ::tx-op (s/and (s/or :put ::put-op
                             :delete ::delete-op
-                            :cas ::cas-op)
+                            :cas ::cas-op
+                            :evict ::evict-op)
                       (s/conformer (comp vec vals second))))
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
@@ -500,7 +502,8 @@
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [{:keys [content-hash]} (get (entity-histories kv [eid]) (->Id eid))]
+      (doseq [{:keys [content-hash bt]} (get (entity-histories kv [eid]) (->Id eid))
+              :when (and content-hash (<= (compare bt business-time) 0))]
         (db/submit-doc tx-log (str content-hash) nil)))
     [[(encode-entity+bt+tt+tx-id-key
        eid

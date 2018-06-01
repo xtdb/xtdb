@@ -231,7 +231,25 @@
 
     (t/testing "can retrieve history of entity"
       (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-        (t/is (= 6 (count (set (map :content-hash picasso-history)))))))))
+        (t/is (= 6 (count (map :content-hash picasso-history))))
+        (t/is (= 5 (count (doc/docs f/*kv* (keep :content-hash picasso-history)))))))
+
+    (t/testing "can evict entity"
+      (let [new-business-time #inst "2018-05-23"
+            {new-transact-time :transact-time
+             new-tx-id :tx-id}
+            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
+        (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+
+        (t/testing "eviction adds to and keeps tx history"
+          (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
+            (t/is (= 7 (count (map :content-hash picasso-history))))
+            (t/testing "eviction removes docs"
+              (t/is (empty? (doc/docs f/*kv* (keep :content-hash picasso-history)))))))
+
+        (t/testing "eviction removes secondary indexes"
+          (t/is (empty? (keys (doc/entities-by-attribute-values-at f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} new-transact-time new-transact-time))))
+          (t/is (empty? (doc/doc-keys-by-attribute-values f/*kv* :http://xmlns.com/foaf/0.1/givenName #{"Pablo"}))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
