@@ -191,11 +191,21 @@
             (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
             (t/is (= prev-tx-id (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] prev-transact-time prev-transact-time)
-                                    (get-in [eid :tx-id]))))))))
+                                    (get-in [eid :tx-id]))))))
+
+        (t/testing "can delete entity"
+          (let [new-business-time #inst "2018-05-23"
+                {new-transact-time :transact-time
+                 new-tx-id :tx-id}
+                @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
+            (t/is (empty? (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+            (t/testing "first version of entity is still visible in the past"
+              (t/is (= tx-id (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-transact-time)
+                                 (get-in [eid :tx-id])))))))))
 
     (t/testing "can retrieve history of entity"
       (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-        (t/is (= 4 (count (set (map :content-hash picasso-history)))))))))
+        (t/is (= 5 (count (set (map :content-hash picasso-history)))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

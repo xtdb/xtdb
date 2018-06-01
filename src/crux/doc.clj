@@ -315,25 +315,24 @@
              (set? v))) (vector)))
 
 (defn store-doc [kv content-hash doc]
-  (let [content-hash-bytes (id->bytes content-hash)
-        content-hash (->Id content-hash-bytes)
-        existing-doc (get (docs kv [content-hash]) content-hash)]
+  (let [content-hash (id->bytes content-hash)
+        existing-doc (get (docs kv [content-hash]) (->Id content-hash))]
     (cond
       (and doc (nil? existing-doc))
       (ks/store kv (cons
-                    [(encode-doc-key content-hash-bytes)
+                    [(encode-doc-key content-hash)
                      (nippy/fast-freeze doc)]
                     (for [[k v] doc
                           v (normalize-value v)]
-                      [(encode-attribute+value+content-hash-key k v content-hash-bytes)
+                      [(encode-attribute+value+content-hash-key k v content-hash)
                        empty-byte-array])))
 
       (and (nil? doc) existing-doc)
       (ks/delete kv (cons
-                     (encode-doc-key content-hash-bytes)
+                     (encode-doc-key content-hash)
                      (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
                            v (normalize-value v)]
-                       (encode-attribute+value+content-hash-key k v content-hash-bytes)))))))
+                       (encode-attribute+value+content-hash-key k v content-hash)))))))
 
 ;; Txs Read
 
@@ -354,13 +353,12 @@
                                  transact-time))
                               (sort bu/bytes-comparator))
                   :let [entity-map (loop [[k v] (ks/-seek i seek-k)]
-                                     (when (and k
-                                                (bu/bytes=? seek-k prefix-size k)
-                                                (pos? (alength ^bytes v)))
+                                     (when (and k (bu/bytes=? seek-k prefix-size k))
                                        (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
                                                             (enrich-entity-map v))]
                                          (if (<= (compare (:tt entity-map) transact-time) 0)
-                                           entity-map
+                                           (when-not (empty? v)
+                                             entity-map)
                                            (recur (ks/-next i))))))]
                   :when entity-map]
               [(:eid entity-map) entity-map])
@@ -514,7 +512,7 @@
 (defn store-tx [kv tx-log tx-ops tx-time tx-id]
   (->> (for [tx-op tx-ops]
          (tx-command kv tx-log tx-op tx-time tx-id))
-       (reduce into {})
+       (reduce into (sorted-map-by bu/bytes-comparator))
        (ks/store kv)))
 
 (defrecord DocIndexer [kv tx-log]
