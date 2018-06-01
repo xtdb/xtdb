@@ -10,7 +10,7 @@
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
 (t/deftest test-store-and-value []
-  (t/testing "store and retrieve and seek value"
+  (t/testing "store, retrieve and seek value"
     (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
     (t/is (= "Crux" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
     (t/is (= [1 "Crux"] (let [[k v] (kvu/seek f/*kv* (bu/long->bytes 1))]
@@ -57,6 +57,15 @@
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
     (t/is (= [] (into [] (kvu/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
     (t/is (= [] (into [] (kvu/seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))
+
+(t/deftest test-delete-keys []
+  (t/testing "store, retrieve and delete value"
+    (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+    (t/is (= "Crux" (String. ^bytes (kvu/value f/*kv* (bu/long->bytes 1)))))
+    (ks/delete f/*kv* [(bu/long->bytes 1)])
+    (t/is (nil? (kvu/value f/*kv* (bu/long->bytes 1))))
+    (t/testing "deleting non existing key is noop"
+      (ks/delete f/*kv* [(bu/long->bytes 1)]))))
 
 (t/deftest test-backup-and-restore-db
   (let [backup-dir (cio/create-tmpdir "kv-store-backup")]

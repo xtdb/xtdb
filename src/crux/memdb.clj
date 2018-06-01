@@ -49,6 +49,11 @@
       (doseq [[k v] kvs]
         (.put db k v))))
 
+  (delete [_ ks]
+    (locking db
+      (doseq [k ks]
+        (.remove db k))))
+
   (backup [_ dir]
     (let [file (io/file dir)]
       (when (.exists file)

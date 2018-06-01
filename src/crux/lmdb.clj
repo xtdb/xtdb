@@ -141,6 +141,19 @@
             (.put (.mv_data dv) v)))))
     0))
 
+(defn- tx-delete [env dbi ks]
+  (with-transaction env
+    (fn [^MemoryStack stack txn]
+      (let [kv (MDBVal/callocStack stack)]
+        (doseq [^bytes k (sort-by bu/bytes-comparator ks)]
+          (with-open [stack (.push stack)]
+            (let [kb (.flip (.put (.malloc stack (alength k)) k))
+                  kv (.mv_data kv kb)
+                  rc (LMDB/mdb_del txn dbi kv nil)]
+              (when-not (= LMDB/MDB_NOTFOUND rc)
+                (success? rc)))))))
+    0))
+
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
 
@@ -164,6 +177,9 @@
 
   (store [_ kvs]
     (cursor-put env dbi kvs))
+
+  (delete [_ ks]
+    (tx-delete env dbi ks))
 
   (backup [_ dir]
     (env-copy env dir))

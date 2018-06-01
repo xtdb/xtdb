@@ -8,4 +8,5 @@
   (open [this])
   (iterate-with [this f])
   (store [this kvs])
+  (delete [this ks])
   (backup [this dir]))

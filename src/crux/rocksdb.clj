@@ -53,6 +53,12 @@
         (.put wb k v))
       (.write db write-options wb)))
 
+  (delete [{:keys [^RocksDB db ^WriteOptions write-options]} ks]
+    (with-open [wb (WriteBatch.)]
+      (doseq [k ks]
+        (.delete wb k))
+      (.write db write-options wb)))
+
   (backup [{:keys [^RocksDB db]} dir]
     (.createCheckpoint (Checkpoint/create db) (.getAbsolutePath (io/file dir))))
 
