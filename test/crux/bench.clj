@@ -51,22 +51,21 @@
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q/q (db-fn) q))))
 
-    (let [db (db-fn)]
-      (ks/iterate-with
-       *kv*
-       (fn [_]
-         (q/q db q))))))
+    (q/q (db-fn) q)))
 
 (defn- do-benchmark [ts samples index quick query]
-  (-> (if quick
-        (crit/quick-benchmark
-         (perform-query ts query index) {:samples samples})
-        (crit/benchmark
-         (perform-query ts query index) {:samples samples}))
-      :mean
-      first
-      (* 1000) ;; secs -> msecs
-      ))
+  (ks/iterate-with
+       *kv*
+       (fn [_]
+         (-> (if quick
+               (crit/quick-benchmark
+                (perform-query ts query index) {:samples samples})
+               (crit/benchmark
+                (perform-query ts query index) {:samples samples}))
+             :mean
+             first
+             (* 1000) ;; secs -> msecs
+             ))))
 
 (defn bench
   [& {:keys [n batch-size ts query samples kv index quick]
