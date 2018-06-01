@@ -482,10 +482,10 @@
 
 (defmethod tx-command :crux.tx/cas [kv tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
+        business-time (or business-time transact-time)
         old-content-hash (-> (entities-at kv [k] business-time transact-time)
                              (get k)
                              :content-hash)
-        business-time (or business-time transact-time)
         old-v (id->bytes old-v)
         new-v (id->bytes new-v)]
     (when (bu/bytes=? old-content-hash old-v)
