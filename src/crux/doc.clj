@@ -521,7 +521,7 @@
        tx-id)
       empty-byte-array]]))
 
-(defn store-txs [kv tx-log tx-ops tx-time tx-id]
+(defn store-tx [kv tx-log tx-ops tx-time tx-id]
   (->> (for [tx-op tx-ops]
          (tx-command kv tx-log tx-op tx-time tx-id))
        (reduce into {})
@@ -533,7 +533,7 @@
     (store-docs kv {content-hash doc}))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (store-txs kv tx-log tx-ops tx-time tx-id))
+    (store-tx kv tx-log tx-ops tx-time tx-id))
 
   (store-index-meta [_ k v]
     (store-meta kv k v))
@@ -555,7 +555,7 @@
 (defrecord DocTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (store-docs kv {content-hash doc}))
+    (db/index-doc (->DocIndexer kv this) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (Date.)
@@ -563,7 +563,7 @@
           conformed-tx-ops (conform-tx-ops tx-ops)]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (doc->content-hash doc)) doc))
-      (store-txs kv this conformed-tx-ops transact-time tx-id)
+      (db/index-tx (->DocIndexer kv this) conformed-tx-ops transact-time tx-id)
       (delay {:tx-id tx-id
               :transact-time transact-time}))))
 

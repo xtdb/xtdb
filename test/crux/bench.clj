@@ -2,6 +2,7 @@
   (:require [criterium.core :as crit]
             [crux.codecs :as c]
             [crux.core :as crux]
+            [crux.db :as db]
             [crux.doc :as doc]
             [crux.fixtures :as f :refer [*kv* random-person]]
             [crux.kv :as cr]
@@ -37,14 +38,12 @@
       (cr/-put *kv* people ts)
 
       :doc
-      (do (doc/store-docs *kv* people)
-          (doc/store-txs *kv*
-                         (vec (for [person people]
-                                [:crux.tx/put
-                                 (keyword (:crux.kv/id person))
-                                 (str (doc/doc->content-hash person))]))
-                         ts
-                         (inc i))))))
+      (db/submit-tx (doc/->DocTxLog *kv*)
+                    (vec (for [person people]
+                           [:crux.tx/put
+                            (keyword (:crux.kv/id person))
+                            person
+                            ts]))))))
 
 (defn- perform-query [ts query index]
   (let [q (query queries)
@@ -63,7 +62,7 @@
 
 (defn- do-benchmark [ts samples index speed verbose query]
   (when verbose (print (str query "... ")) (flush))
-  (let [result 
+  (let [result
         (ks/iterate-with
          *kv*
          (fn [_]
@@ -73,13 +72,13 @@
                       (perform-query ts query index) {:samples samples})
                      :mean
                      first)
-                 
+
                  :quick ;; faster but "less rigorous"
                  (-> (crit/quick-benchmark
                       (perform-query ts query index) {:samples samples})
                      :mean
                      first)
-                 
+
                  :instant ;; even faster, even less rigorous
                  (as-> (map (fn [_] (duration (perform-query ts query index)))
                             (range samples)) x
@@ -87,7 +86,7 @@
                    (/ x samples)))
                (* 1000))))] ;; secs -> msecs
     (when verbose (println result))
-    result)) 
+    result))
 
 (defn bench
   [& {:keys [n batch-size ts query samples kv index speed verbose]
