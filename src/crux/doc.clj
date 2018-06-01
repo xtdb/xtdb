@@ -1,5 +1,6 @@
 (ns crux.doc
-  (:require [crux.byte-utils :as bu]
+  (:require [clojure.spec.alpha :as s]
+            [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
             [crux.db]
             [taoensso.nippy :as nippy])
@@ -22,7 +23,8 @@
 (def ^:const ^:private meta-key->value-index-id 4)
 
 (def ^:private empty-byte-array (byte-array 0))
-(def ^:const ^:private id-size (.getDigestLength (MessageDigest/getInstance "SHA-1")))
+(def ^:const ^:private id-hash-algorithm "SHA-1")
+(def ^:const ^:private id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
 
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
@@ -69,6 +71,9 @@
 (defprotocol IdToBytes
   (id->bytes ^bytes [this]))
 
+(def ^:private hex-id-pattern
+  (re-pattern (format "\\p{XDigit}{%d}" (* 2 id-size))))
+
 (extend-protocol IdToBytes
   (class (byte-array 0))
   (id->bytes [this]
@@ -88,10 +93,9 @@
 
   String
   (id->bytes [this]
-    (if (and (even? (count this))
-             (re-find #"\p{XDigit}+" this))
+    (if (re-find hex-id-pattern this)
       (bu/hex->bytes this)
-      (throw (IllegalArgumentException. (str "Not a hex string: " this)))))
+      (throw (IllegalArgumentException. (format "Not a %s hex string: %s" id-hash-algorithm this)))))
 
   Object
   (id->bytes [this]
@@ -396,6 +400,31 @@
        (entities-at kv eids business-time transact-time)))))
 
 ;; Tx Commands
+
+(s/def ::id (s/conformer (comp str ->Id id->bytes)))
+(s/def ::doc (s/and map? (s/conformer (comp str doc->content-hash))))
+
+(s/def ::put-op (s/cat :op #{:crux.tx/put}
+                       :id ::id
+                       :doc ::doc
+                       :business-time (s/? inst?)))
+
+(s/def ::delete-op (s/cat :op #{:crux.tx/delete}
+                          :id ::id
+                          :business-time (s/? inst?)))
+
+(s/def ::cas-op (s/cat :op #{:crux.tx/cas}
+                       :id ::id
+                       :old-doc ::doc
+                       :new-doc ::doc
+                       :business-time (s/? inst?)))
+
+(s/def ::tx-op (s/and (s/or :put ::put-op
+                            :delete ::delete-op
+                            :cas ::cas-op)
+                      (s/conformer (comp vec vals second))))
+
+(s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
 (defmulti tx-command (fn [kv [op] transact-time tx-id] op))
 
