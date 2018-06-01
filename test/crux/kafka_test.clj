@@ -11,15 +11,10 @@
             [crux.query :as q]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
-  (:import [java.util Date List]
-           [clojure.lang Keyword]
-           [org.apache.kafka.clients.consumer
-            ConsumerRecord]
+  (:import [java.util Date]
            [org.apache.kafka.clients.producer
             ProducerRecord]
-           [org.apache.kafka.common TopicPartition]
-           [org.apache.kafka.common.serialization
-            Serdes StringSerializer StringDeserializer LongDeserializer]))
+           [org.apache.kafka.common TopicPartition]))
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster)
 (t/use-fixtures :each ek/with-kafka-client f/with-kv-store)
@@ -66,12 +61,6 @@
                             [:http://xmlns.com/foaf/0.1/firstName
                              :http://xmlns.com/foaf/0.1/surname]))))))
 
-(defn doc-db [kv]
-  (let [now (Date.)]
-    (doc/map->DocDatasource {:kv kv
-                             :transact-time now
-                             :business-time now})))
-
 (t/deftest test-can-transact-and-query-entities
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
@@ -96,7 +85,7 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (doc-db f/*kv*)
+               (q/q (doc/db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
                               [e :crux.rdf/iri iri]]}))))))
@@ -121,13 +110,13 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
-               (q/q (doc-db f/*kv*)
+               (q/q (doc/db f/*kv*)
                     '{:find [iri]
                       :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [e :crux.rdf/iri iri]]})))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-               (q/q (doc-db f/*kv*)
+               (q/q (doc/db f/*kv*)
                     '{:find [g-iri]
                       :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [p :crux.rdf/iri p-iri]
@@ -200,7 +189,7 @@
             (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
                        [(keyword "http://dbpedia.org/resource/Aristotle_(painting)")]
                        [(keyword "http://dbpedia.org/resource/Aristotle_(book)")]}
-                     (q/q (doc-db f/*kv*)
+                     (q/q (doc/db f/*kv*)
                           '{:find [iri]
                             :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
                                     [e :crux.rdf/iri iri]]})))))
