@@ -6,7 +6,8 @@
 
 (defprotocol Entity
   (attr-val [this attr])
-  (->id [this]))
+  (->id [this])
+  (eq? [this another]))
 
 (defprotocol Indexer
   (index-doc [this content-hash doc])

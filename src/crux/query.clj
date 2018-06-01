@@ -164,7 +164,7 @@
                          (let [or-results (or @or-results
                                               (let [query-xform (query-plan->xform db (query-terms->plan (:terms t)))]
                                                 (reset! or-results (into #{} query-xform [{'$ db}]))))]
-                           (when-not (some #(= (get result e) (get % e)) or-results)
+                           (when-not (some #(db/eq? (get result e) (get % e)) or-results)
                              result))))])
 
                   :pred

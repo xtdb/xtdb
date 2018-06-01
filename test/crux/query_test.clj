@@ -318,3 +318,11 @@
 
 ;; TODO write:
 (t/deftest test-use-another-datasource)
+
+(t/deftest test-sanitise-join
+  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}])
+  (t/testing "Can query by single field"
+    (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [e2]
+                                         :where [[e :last-name "Ivanov"]
+                                                 [e :last-name name1]
+                                                 [e2 :last-name name1]]})))))
