@@ -133,12 +133,12 @@
                                 (nil? x)
                                 o
 
-                                (coll? x)
+                                (set? x)
                                 (conj x o)
 
                                 :else #{x o}))))
               (catch IllegalArgumentException e
-                (log/debug "Could not turn RDF statement into Clojure:" statement (str e))
+                (log/debug e "Could not turn RDF statement into Clojure:" statement)
                 m)))
           (transient {:crux.rdf/iri (rdf->clj (.getSubject statement))}))
          (persistent!))))

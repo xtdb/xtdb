@@ -84,9 +84,14 @@
 (comment
   (start)
 
+  (set-log-level! 'crux.rdf :debug)
   ;; Download from http://wiki.dbpedia.org/services-resources/ontology
   (with-open [in (io/input-stream (io/file "../dbpedia/mappingbased_properties_en.nt"))]
-    (rdf/submit-ntriples (k/->KafkaTxLog (:kafka-producer system) (:tx-topic system) (:doc-topic system)) in 1000))
+    (rdf/submit-ntriples (k/->KafkaTxLog (:kafka-producer system)
+                                         (get-in system [:options :tx-topic])
+                                         (get-in system [:options :doc-topic]))
+                         in
+                         1000))
 
   (q/q (crux/db (:kv-store system))
        '{:find [iri]
