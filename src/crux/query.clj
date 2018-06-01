@@ -83,20 +83,23 @@
   Binding
   (bind-key [this] e)
   (bind [this]
-    (binding-agg-xform e (fn [e]
-                           (let [db (get e '$)]
-                             (cond (and (symbol? v) (get e v))
-                                   (let [v (v-for-comparison (get e v))]
-                                     (db/entities-for-attribute-value db a v v))
+    (binding-agg-xform e (fn [results]
+                           (reduce into []
+                                   (for [r results]
+                                     (let [db (get r '$)
+                                           join-entities (cond (and (symbol? v) (get e v))
+                                                               (let [v (v-for-comparison (get r v))]
+                                                                 (db/entities-for-attribute-value db a v v))
 
-                                   (and (symbol? v) range-vals)
-                                   (apply db/entities-for-attribute-value db a range-vals)
+                                                               (and (symbol? v) range-vals)
+                                                               (apply db/entities-for-attribute-value db a range-vals)
 
-                                   (and v (not (symbol? v)))
-                                   (db/entities-for-attribute-value db a v v)
+                                                               (and v (not (symbol? v)))
+                                                               (db/entities-for-attribute-value db a v v)
 
-                                   :else
-                                   (db/entities db)))))))
+                                                               :else
+                                                               (db/entities db))]
+                                       (map (partial assoc r e) join-entities))))))))
 
 (defn- find-subsequent-range-terms [v terms]
   (when (symbol? v)

@@ -8,6 +8,11 @@
 
 (t/use-fixtures :each f/with-kv-store)
 
+(t/deftest test-sanity-check
+  (f/transact-people! *kv* [{:name "Ivan"}])
+  (t/is (first (q/q (db *kv*) {:find ['e]
+                               :where [['e :name "Ivan"]]}))))
+
 (t/deftest test-basic-query
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                                               {:name "Petr" :last-name "Petrov"}])]
