@@ -191,7 +191,33 @@
             (t/is (= [eid] (keys (doc/all-entities f/*kv* new-business-time new-transact-time))))
 
             (t/is (= prev-tx-id (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] prev-transact-time prev-transact-time)
-                                    (get-in [eid :tx-id]))))))
+                                    (get-in [eid :tx-id]))))
+
+            (t/testing "compare and set does nothing with wrong content hash"
+              (let [old-picasso (assoc picasso :baz :boz)]
+                @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])
+                (t/is (= {eid
+                          {:eid eid
+                           :content-hash new-content-hash
+                           :bt new-business-time
+                           :tt new-transact-time
+                           :tx-id new-tx-id}}
+                         (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))))
+
+            (t/testing "compare and set updates with correct content hash"
+              (let [old-picasso new-picasso
+                    new-picasso (assoc old-picasso :baz :boz)
+                    new-content-hash (doc/doc->content-hash new-picasso)
+                    {new-transact-time :transact-time
+                     new-tx-id :tx-id}
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
+                (t/is (= {eid
+                          {:eid eid
+                           :content-hash new-content-hash
+                           :bt new-business-time
+                           :tt new-transact-time
+                           :tx-id new-tx-id}}
+                         (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))))))
 
         (t/testing "can delete entity"
           (let [new-business-time #inst "2018-05-23"
@@ -205,7 +231,7 @@
 
     (t/testing "can retrieve history of entity"
       (let [picasso-history (get (doc/entity-histories f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-        (t/is (= 5 (count (set (map :content-hash picasso-history)))))))))
+        (t/is (= 6 (count (set (map :content-hash picasso-history)))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

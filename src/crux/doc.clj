@@ -486,7 +486,7 @@
                              :content-hash)
         old-v (id->bytes old-v)
         new-v (id->bytes new-v)]
-    (when (bu/bytes=? old-content-hash old-v)
+    (when (bu/bytes=? (id->bytes old-content-hash) old-v)
       [[(encode-entity+bt+tt+tx-id-key
          eid
          business-time
