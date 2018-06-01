@@ -51,9 +51,9 @@
                                          kv-backend]
                                   :as options}]
   (let [kv-store ((case kv-backend
-                    "rocksdb" crux.rocksdb/map->CruxRocksKv
-                    "lmdb" crux.lmdb/map->CruxLMDBKv
-                    "memdb" crux.memdb/map->CruxMemKv) {})]
+                    "rocksdb" crux.rocksdb/map->RocksKv
+                    "lmdb" crux.lmdb/map->LMDBKv
+                    "memdb" crux.memdb/map->MemKv) {})]
     (->> (crux/kv db-dir {:kv-store kv-store})
          (kv-store/open))))
 

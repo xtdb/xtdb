@@ -4,7 +4,7 @@
   (-seek [this k])
   (-next [this]))
 
-(defprotocol CruxKvStore
+(defprotocol KvStore
   (open [this])
   (iterate-with [this f])
   (store [this kvs])

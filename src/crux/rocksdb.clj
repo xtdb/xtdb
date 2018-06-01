@@ -25,8 +25,8 @@
 
 (def ^:dynamic ^:private *current-iterator* nil)
 
-(defrecord CruxRocksKv [db-dir]
-  CruxKvStore
+(defrecord RocksKv [db-dir]
+  KvStore
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)

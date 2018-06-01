@@ -23,8 +23,8 @@
 
 (def ^:dynamic ^:private *current-iterator* nil)
 
-(defrecord CruxMemKv [^SortedMap db db-dir persist-on-close?]
-  ks/CruxKvStore
+(defrecord MemKv [^SortedMap db db-dir persist-on-close?]
+  ks/KvStore
   (open [this]
     (if (.isFile (io/file db-dir "memdb"))
       (assoc this :db (restore-db db-dir))

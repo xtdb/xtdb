@@ -157,8 +157,8 @@
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
 
-(defrecord CruxLMDBKv [db-dir env env-flags dbi]
-  ks/CruxKvStore
+(defrecord LMDBKv [db-dir env env-flags dbi]
+  ks/KvStore
   (open [this]
     (let [env-flags (or env-flags default-env-flags)
           env (env-create)]

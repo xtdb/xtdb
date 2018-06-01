@@ -44,7 +44,7 @@
   ([db-dir]
    (kv db-dir {}))
   ([db-dir {:keys [kv-store] :as opts}]
-   (merge (or kv-store (rocksdb/map->CruxRocksKv {}))
+   (merge (or kv-store (rocksdb/map->RocksKv {}))
           {:db-dir db-dir :state (atom {})})))
 
 (defn as-of [kv ts]

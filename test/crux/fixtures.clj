@@ -28,7 +28,7 @@
      people)))
 
 (def ^:dynamic *kv*)
-(def ^:dynamic *kv-store* (crux.rocksdb/map->CruxRocksKv {}))
+(def ^:dynamic *kv-store* (crux.rocksdb/map->RocksKv {}))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
@@ -40,17 +40,17 @@
           (cio/delete-dir db-dir))))))
 
 (defn with-memdb [f]
-  (binding [*kv-store* (crux.memdb/map->CruxMemKv {})]
+  (binding [*kv-store* (crux.memdb/map->MemKv {})]
     (t/testing "MemDB"
       (f))))
 
 (defn with-rocksdb [f]
-  (binding [*kv-store* (crux.rocksdb/map->CruxRocksKv {})]
+  (binding [*kv-store* (crux.rocksdb/map->RocksKv {})]
     (t/testing "RocksDB"
       (f))))
 
 (defn with-lmdb [f]
-  (binding [*kv-store* (crux.lmdb/map->CruxLMDBKv {})]
+  (binding [*kv-store* (crux.lmdb/map->LMDBKv {})]
     (t/testing "LMDB"
       (f))))
 
