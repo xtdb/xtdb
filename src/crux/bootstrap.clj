@@ -72,8 +72,8 @@
                  replication-factor]
           :as options} (merge default-options options)
          indexer (crux/indexer kv-store)]
-     (k/create-topic admin-client tx-topic 1 replication-factor {})
-     (k/create-topic admin-client doc-topic 3 replication-factor {})
+     (k/create-topic admin-client tx-topic 1 replication-factor {"retention.ms" (str Long/MAX_VALUE)})
+     (k/create-topic admin-client doc-topic 3 replication-factor {"cleanup.policy" "compact"})
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
      (while @running?
        (k/consume-and-index-entities indexer consumer 100)))))
