@@ -198,3 +198,8 @@
 
         (t/is (= 3 (-> (doc/entities-at f/*kv* [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-23" #inst "2018-05-23")
                        (get-in [eid :tx-id]))))))))
+
+(t/deftest test-store-and-retrieve-meta
+  (t/is (nil? (doc/read-meta f/*kv* :foo)))
+  (doc/store-meta f/*kv* :foo {:bar 2})
+  (t/is (= {:bar 2} (doc/read-meta f/*kv* :foo))))

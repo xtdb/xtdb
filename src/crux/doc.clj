@@ -2,6 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
+            [crux.kv-store-utils :as kvu]
             [crux.db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
@@ -398,6 +399,16 @@
      (let [eids (->> (all-keys-in-index kv entity+bt+tt+tx-id->content-hash-index-id)
                      (map (comp ->Id :eid decode-entity+bt+tt+tx-id-key)))]
        (entities-at kv eids business-time transact-time)))))
+
+;; Meta
+
+(defn store-meta [kv k v]
+  (ks/store kv [[(encode-meta-key k)
+                 (nippy/fast-freeze v)]]))
+
+(defn read-meta [kv k]
+  (some->> ^bytes (kvu/value kv (encode-meta-key k))
+           nippy/fast-thaw))
 
 ;; Tx Commands
 
