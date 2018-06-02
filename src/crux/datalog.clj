@@ -12,18 +12,22 @@
 (s/def ::atom (s/or :var ::var :literal ::literal))
 (s/def ::predicate (s/cat :name symbol?
                           :args (s/? (s/coll-of ::atom :kind list?))))
-(s/def ::fact (s/cat :name symbol?
-                     :args (s/? (s/coll-of ::literal :kind list?))
-                     :dot ::dot))
-(s/def ::rule (s/cat :head ::predicate
-                     :comma-hyphen #{:-}
-                     :body (s/+ ::predicate)
-                     :dot ::dot))
+(s/def ::fact (s/& (s/cat :name symbol?
+                          :args (s/? (s/coll-of ::literal :kind list?))
+                          :dot ::dot)
+                   (s/conformer #(dissoc % :dot))))
+(s/def ::rule (s/& (s/cat :head ::predicate
+                          :comma-hyphen #{:-}
+                          :body (s/* ::predicate)
+                          :expression (s/? list?)
+                          :dot ::dot)
+                   (s/conformer #(dissoc % :comma-hyphen :dot))))
 (s/def ::clause (s/alt :fact ::fact
                        :rule ::rule))
 (s/def ::program (s/* ::clause))
-(s/def ::query (s/cat :query ::predicate
-                      :dot ::dot))
+(s/def ::query (s/& (s/cat :query ::predicate
+                           :dot ::dot)
+                    (s/conformer #(dissoc % :dot))))
 
 (comment
   (s/conform
