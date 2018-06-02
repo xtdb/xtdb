@@ -140,6 +140,18 @@ which has its own Datalog dialect called LogiQL.
 See the [Design and Implementation of the LogicBlox
 System](http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf).
 
+#### [Naga](https://github.com/threatgrid/naga)
+
+_Datalog based rules engine._
+
+Naga is a Datalog engine written in Clojure. It seems to be mainly
+used [in memory](https://github.com/threatgrid/asami), but has
+[pluggable backends](https://github.com/threatgrid/naga-store),
+including a Datomic one. Has its own Prolog-like Datalog dialect
+called Pabu. They also have a HTTP based [query
+server](https://github.com/threatgrid/naga-http) that consumes data
+from Kafka. Naga is EPL, and seems affiliated with Cisco.
+
 ### RDF
 
 #### [Amazon Neptune](https://aws.amazon.com/neptune/)
