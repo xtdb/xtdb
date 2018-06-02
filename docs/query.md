@@ -111,6 +111,8 @@ Programs](https://pdfs.semanticscholar.org/004c/2bd66cc6e8aeb9f03c0ea88041d05981
   Algorithms](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.96.5371&rep=rep1&type=pdf)
 + [Magic sets and other strange ways to implement logic
   programs](https://web.archive.org/web/20120308104055/http://ssdi.di.fct.unl.pt/krr/docs/magicsets.pdf)
++ [What You Always Wanted to Know About Datalog (And Never Dared to
+Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf)
 
 ### Retention
 
