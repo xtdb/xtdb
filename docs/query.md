@@ -99,6 +99,16 @@ while running, which would be a post MVP feature.
   Coding](https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding)
 + [Orderly: Schema and type system for creating sortable
   byte](https://github.com/ndimiduk/orderly)
++ [Integrating Datalog and Constraint
+  Solving](https://arxiv.org/abs/1307.4635)
++ [Using Datalog with Binary Decision Diagrams for Program
+Analysis](https://people.csail.mit.edu/mcarbin/papers/aplas05.pdf)
++ [On Fast Large-Scale Program Analysis in
+  Datalog](http://discovery.ucl.ac.uk/1474713/1/main.pdf)
++ [Efficient Lazy Evaluation of Rule-Based
+Programs](https://pdfs.semanticscholar.org/004c/2bd66cc6e8aeb9f03c0ea88041d05981acb6.pdf)
++ [The LEAPS
+  Algorithms](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.96.5371&rep=rep1&type=pdf)
 
 ### Retention
 
