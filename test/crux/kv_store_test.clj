@@ -45,6 +45,15 @@
     (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (kvu/seek-and-iterate f/*kv* #(neg? (bu/compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
                          [(String. k) (bu/bytes->long v)])))))
 
+(t/deftest test-seek-between-keys []
+  (doseq [[^String k v] {"a" 1 "c" 3}]
+    (ks/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
+
+  (t/testing "seek returns next valid key"
+    (t/is (= ["c" 3]
+             (let [[^bytes k v] (kvu/seek f/*kv* (.getBytes "b"))]
+               [(String. k) (bu/bytes->long v)])))))
+
 (t/deftest test-seek-and-iterate-prefix []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
     (ks/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
