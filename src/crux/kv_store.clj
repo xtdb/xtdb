@@ -5,11 +5,12 @@
   (-next [this]))
 
 (defprotocol KvSnapshot
+  (^Closeable new-iterator [this])
   (iterate-with [this f]))
 
 (defprotocol KvStore
   (open [this])
-  (new-snapshot [this])
+  (^Closeable new-snapshot [this])
   (store [this kvs])
   (delete [this ks])
   (backup [this dir]))

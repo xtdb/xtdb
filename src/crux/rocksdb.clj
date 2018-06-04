@@ -44,9 +44,12 @@
                          (.setSnapshot snapshot))]
       (reify
         KvSnapshot
+        (new-iterator [this]
+          (rocks-iterator db read-options))
+
         (iterate-with [this f]
           (try
-            (with-open [i (rocks-iterator db read-options)]
+            (with-open [i (new-iterator this)]
               (f i))
             ;; TODO: This will disappear once iterate-with becomes
             ;; new-iterator, done to ensure resources are closed for

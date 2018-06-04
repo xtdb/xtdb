@@ -4,7 +4,7 @@
             [crux.byte-utils :as bu]
             [crux.io :as cio]
             [crux.kv-store :as ks])
-  (:import clojure.lang.ExceptionInfo
+  (:import [clojure.lang ExceptionInfo MapEntry]
            java.io.Closeable
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBVal]))
@@ -28,28 +28,20 @@
         (env-set-mapsize env new-mapsize)))))
 
 (defn- with-transaction [env f flags]
-  (try
-    (with-open [stack (MemoryStack/stackPush)]
-      (let [pp (.mallocPointer stack 1)
-            rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
-        (if (= LMDB/MDB_MAP_RESIZED rc)
-          (env-set-mapsize env 0)
-          (success? rc))
-        (let [txn (.get pp)
-              [result
-               commit-rc] (try
-                            [(f stack txn)
-                             (LMDB/mdb_txn_commit txn)]
-                            (catch Throwable t
-                              (LMDB/mdb_txn_abort txn)
-                              (throw t)))]
-          (success? commit-rc)
-          result)))
-    (catch ExceptionInfo e
-      (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
-        (do (increase-mapsize env 2)
-            (with-transaction env f flags))
-        (throw e)))))
+  (with-open [stack (MemoryStack/stackPush)]
+    (let [pp (.mallocPointer stack 1)
+          rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
+      (if (= LMDB/MDB_MAP_RESIZED rc)
+        (env-set-mapsize env 0)
+        (success? rc))
+      (let [txn (.get pp)
+            result (try
+                     (f stack txn)
+                     (catch Throwable t
+                       (LMDB/mdb_txn_abort txn)
+                       (throw t)))]
+        (success? (LMDB/mdb_txn_commit txn))
+        result))))
 
 (defn- env-create []
   (with-open [stack (MemoryStack/stackPush)]
@@ -101,8 +93,8 @@
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
     (when (not=  LMDB/MDB_NOTFOUND rc)
       (success? rc)
-      [(bu/byte-buffer->bytes (.mv_data kv))
-       (bu/byte-buffer->bytes (.mv_data dv))])))
+      (MapEntry. (bu/byte-buffer->bytes (.mv_data kv))
+                 (bu/byte-buffer->bytes (.mv_data dv))))))
 
 (defn- cursor-iterate [env dbi f]
   (with-cursor env dbi
@@ -131,9 +123,9 @@
           (with-open [stack (.push stack)]
             (let [kb (.flip (.put (.malloc stack (alength k)) k))
                   kv (.mv_data kv kb)
-                  dv (.mv_size dv (alength v))])
-            (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
-            (.put (.mv_data dv) v)))))
+                  dv (.mv_size dv (alength v))]
+              (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+              (.put (.mv_data dv) v))))))
     0))
 
 (defn- tx-delete [env dbi ks]
@@ -170,14 +162,23 @@
   (new-snapshot [this]
     (reify
       ks/KvSnapshot
+      (new-iterator [this]
+        (throw (UnsupportedOperationException.)))
+
       (iterate-with [this f]
         (cursor-iterate env dbi f))
 
       Closeable
       (close [_])))
 
-  (store [_ kvs]
-    (cursor-put env dbi kvs))
+  (store [this kvs]
+    (try
+      (cursor-put env dbi kvs)
+      (catch ExceptionInfo e
+        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
+          (do (increase-mapsize env 2)
+              (cursor-put env dbi kvs))
+          (throw e)))))
 
   (delete [_ ks]
     (tx-delete env dbi ks))

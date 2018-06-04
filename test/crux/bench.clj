@@ -61,28 +61,25 @@
 (defn- do-benchmark [ts samples index speed verbose query]
   (when verbose (print (str query "... ")) (flush))
   (let [result
-        (ks/iterate-with
-         (ks/new-snapshot *kv*)
-         (fn [_]
-           (-> (case speed
-                 :normal
-                 (-> (crit/benchmark
-                      (perform-query ts query index) {:samples samples})
-                     :mean
-                     first)
+        (-> (case speed
+              :normal
+              (-> (crit/benchmark
+                   (perform-query ts query index) {:samples samples})
+                  :mean
+                  first)
 
-                 :quick ;; faster but "less rigorous"
-                 (-> (crit/quick-benchmark
-                      (perform-query ts query index) {:samples samples})
-                     :mean
-                     first)
+              :quick ;; faster but "less rigorous"
+              (-> (crit/quick-benchmark
+                   (perform-query ts query index) {:samples samples})
+                  :mean
+                  first)
 
-                 :instant ;; even faster, even less rigorous
-                 (as-> (map (fn [_] (duration (perform-query ts query index)))
-                            (range samples)) x
-                   (apply + x)
-                   (/ x samples)))
-               (* 1000))))] ;; secs -> msecs
+              :instant ;; even faster, even less rigorous
+              (as-> (map (fn [_] (duration (perform-query ts query index)))
+                         (range samples)) x
+                (apply + x)
+                (/ x samples)))
+            (* 1000))] ;; secs -> msecs
     (when verbose (println result))
     result))
 

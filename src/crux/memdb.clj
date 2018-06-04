@@ -9,7 +9,7 @@
   (let [[k v :as kv] (first @cursor)]
     (swap! cursor rest)
     (when kv
-      [k v])))
+      kv)))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -31,17 +31,20 @@
     (let [db @db]
       (reify
         ks/KvSnapshot
-        (iterate-with [_ f]
+        (new-iterator [_]
           (let [c (atom nil)]
-            (f (reify
-                 ks/KvIterator
-                 (ks/-seek [this k]
-                   (reset! c (subseq db >= k))
-                   (atom-cursor->next! c))
-                 (ks/-next [this]
-                   (atom-cursor->next! c))
-                 Closeable
-                 (close [_])))))
+            (reify
+              ks/KvIterator
+              (ks/-seek [this k]
+                (reset! c (subseq db >= k))
+                (atom-cursor->next! c))
+              (ks/-next [this]
+                (atom-cursor->next! c))
+              Closeable
+              (close [_]))))
+
+        (iterate-with [this f]
+          (f (ks/new-iterator this)))
 
         Closeable
         (close [_]))))
