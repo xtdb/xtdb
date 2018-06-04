@@ -1,6 +1,6 @@
 (ns crux.byte-utils
   (:import [java.math BigInteger]
-           [java.nio ByteBuffer]
+           [java.nio Buffer ByteBuffer]
            [java.net URI]
            [java.security MessageDigest]
            [java.util Arrays Comparator UUID]))
@@ -18,7 +18,7 @@
 (defn bytes->long ^long [data]
   (-> (ByteBuffer/allocate 8)
       (.put data 0 8)
-      (.flip)
+      ^ByteBuffer (.flip)
       (.getLong)))
 
 (defn md5 ^bytes [^bytes bytes]
