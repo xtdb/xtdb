@@ -232,7 +232,7 @@
 
 (defn- all-key-values-in-prefix [kv ^bytes prefix]
   (ks/iterate-with
-   kv
+   (ks/new-snapshot kv)
    (fn [i]
      (loop [[k v] (ks/-seek i prefix)
             acc []]
@@ -269,7 +269,7 @@
 
 (defn docs [kv ks]
   (ks/iterate-with
-   kv
+   (ks/new-snapshot kv)
    (fn [i]
      (->> (for [seek-k (->> (map (comp encode-doc-key id->bytes) ks)
                             (sort bu/bytes-comparator))
@@ -281,7 +281,7 @@
 
 (defn doc-keys-by-attribute-values [kv k vs]
   (ks/iterate-with
-   kv
+   (ks/new-snapshot kv)
    (fn [i]
      (->> (for [v vs]
             (if (vector? v)
@@ -343,7 +343,7 @@
 
 (defn entities-at [kv entities business-time transact-time]
   (ks/iterate-with
-   kv
+   (ks/new-snapshot kv)
    (fn [i]
      (let [prefix-size (+ Short/BYTES id-size)]
        (->> (for [seek-k (->> (for [entity entities]
@@ -367,7 +367,7 @@
 
 (defn eids-by-content-hashes [kv content-hashes]
   (ks/iterate-with
-   kv
+   (ks/new-snapshot kv)
    (fn [i]
      (->> (for [content-hash content-hashes
                 :let [content-hash (id->bytes content-hash)]]

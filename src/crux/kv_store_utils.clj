@@ -4,7 +4,7 @@
   (:import clojure.lang.IReduceInit))
 
 (defn seek [kvs k]
-  (ks/iterate-with kvs
+  (ks/iterate-with (ks/new-snapshot kvs)
                    (fn [i]
                      (ks/-seek i k))))
 
@@ -14,7 +14,7 @@
       v)))
 
 (defn seek-first [kvs prefix-pred key-pred seek-k]
-  (ks/iterate-with kvs
+  (ks/iterate-with (ks/new-snapshot kvs)
                    (fn [i]
                      (loop [[k v :as kv] (ks/-seek i seek-k)]
                        (when (and k (prefix-pred k))
@@ -26,7 +26,7 @@
   ([kvs key-pred seek-k]
    (seek-and-iterate kvs key-pred seek-k (partial into [])))
   ([kvs key-pred seek-k f]
-   (ks/iterate-with kvs
+   (ks/iterate-with (ks/new-snapshot kvs)
                     (fn [i]
                       (f
                        (reify

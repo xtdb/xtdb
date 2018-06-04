@@ -3,14 +3,14 @@
             [crux.kv-store :refer :all])
   (:import java.io.Closeable
            clojure.lang.MapEntry
-           [org.rocksdb Checkpoint Options RocksDB RocksIterator WriteBatch WriteOptions]))
+           [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
 (defn- iterator->kv [^RocksIterator i]
   (when (.isValid i)
     (MapEntry. (.key i) (.value i))))
 
-(defn- ^Closeable rocks-iterator [{:keys [^RocksDB db]}]
-  (let [i (.newIterator db)]
+(defn- ^Closeable rocks-iterator [^RocksDB db ^ReadOptions read-options]
+  (let [i (.newIterator db read-options)]
     (reify
       KvIterator
       (-seek [this k]
@@ -22,8 +22,6 @@
       Closeable
       (close [this]
         (.close i)))))
-
-(def ^:dynamic ^:private *current-iterator* nil)
 
 (defrecord RocksKv [db-dir]
   KvStore
@@ -40,12 +38,20 @@
       (assoc this :db db :options opts :write-options (doto (WriteOptions.)
                                                         (.setDisableWAL true)))))
 
-  (iterate-with [this f]
-    (if *current-iterator*
-      (f *current-iterator*)
-      (with-open [i (rocks-iterator this)]
-        (binding [*current-iterator* i]
-          (f i)))))
+  (new-snapshot [{:keys [^RocksDB db]} ]
+    (let [snapshot (.getSnapshot db)
+          read-options (doto (ReadOptions.)
+                         (.setSnapshot snapshot))]
+      (reify
+        KvSnapshot
+        (iterate-with [this f]
+          (with-open [i (rocks-iterator db read-options)]
+            (f i)))
+
+        Closeable
+        (close [_]
+          (.releaseSnapshot db snapshot)
+          (.close read-options)))))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]

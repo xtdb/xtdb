@@ -62,7 +62,7 @@
   (when verbose (print (str query "... ")) (flush))
   (let [result
         (ks/iterate-with
-         *kv*
+         (ks/new-snapshot *kv*)
          (fn [_]
            (-> (case speed
                  :normal

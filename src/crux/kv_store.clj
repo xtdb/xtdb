@@ -4,9 +4,12 @@
   (-seek [this k])
   (-next [this]))
 
+(defprotocol KvSnapshot
+  (iterate-with [this f]))
+
 (defprotocol KvStore
   (open [this])
-  (iterate-with [this f])
+  (new-snapshot [this])
   (store [this kvs])
   (delete [this ks])
   (backup [this dir]))
