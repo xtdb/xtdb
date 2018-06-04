@@ -164,16 +164,6 @@
         (new-iterator [this]
           (new-cursor-iterator stack env dbi (:txn tx)))
 
-        (iterate-with [this f]
-          (try
-            (with-open [i (ks/new-iterator this)]
-              (f i))
-            ;; TODO: This will disappear once iterate-with becomes
-            ;; new-iterator, done to ensure resources are closed for
-            ;; now.
-            (finally
-              (.close this))))
-
         Closeable
         (close [_]
           (.close stack)

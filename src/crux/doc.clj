@@ -231,14 +231,13 @@
      :tx-id (.getLong buffer)}))
 
 (defn- all-key-values-in-prefix [kv ^bytes prefix]
-  (ks/iterate-with
-   (ks/new-snapshot kv)
-   (fn [i]
-     (loop [[k v] (ks/-seek i prefix)
-            acc []]
-       (if (and k (bu/bytes=? prefix k))
-         (recur (ks/-next i) (conj acc [k v]))
-         acc)))))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (loop [[k v] (ks/-seek i prefix)
+           acc []]
+      (if (and k (bu/bytes=? prefix k))
+        (recur (ks/-next i) (conj acc [k v]))
+        acc))))
 
 ;; Caching
 
@@ -268,43 +267,41 @@
        (set)))
 
 (defn docs [kv ks]
-  (ks/iterate-with
-   (ks/new-snapshot kv)
-   (fn [i]
-     (->> (for [seek-k (->> (map (comp encode-doc-key id->bytes) ks)
-                            (sort bu/bytes-comparator))
-                :let [[k v] (ks/-seek i seek-k)]
-                :when (and k (bu/bytes=? seek-k k))]
-            [(->Id (decode-doc-key k))
-             (ByteBuffer/wrap v)])
-          (into {})))))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (->> (for [seek-k (->> (map (comp encode-doc-key id->bytes) ks)
+                           (sort bu/bytes-comparator))
+               :let [[k v] (ks/-seek i seek-k)]
+               :when (and k (bu/bytes=? seek-k k))]
+           [(->Id (decode-doc-key k))
+            (ByteBuffer/wrap v)])
+         (into {}))))
 
 (defn doc-keys-by-attribute-values [kv k vs]
-  (ks/iterate-with
-   (ks/new-snapshot kv)
-   (fn [i]
-     (->> (for [v vs]
-            (if (vector? v)
-              (let [[min-v max-v] v]
-                (if max-v
-                  (assert (not (neg? (compare max-v min-v))))
-                  (assert min-v))
-                [(encode-attribute+value-prefix-key k min-v)
-                 (encode-attribute+value-prefix-key k (or max-v empty-byte-array))])
-              (let [seek-k (encode-attribute+value-prefix-key k v)]
-                [seek-k seek-k])))
-          (sort-by first bu/bytes-comparator)
-          (reduce
-           (fn [acc [min-seek-k ^bytes max-seek-k]]
-             (loop [[k v] (ks/-seek i min-seek-k)
-                    acc acc]
-               (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-                 (recur (ks/-next i)
-                        (->> (decode-attribute+value+content-hash-key->content-hash k)
-                             (->Id)
-                             (conj acc)))
-                 acc)))
-           #{})))))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (->> (for [v vs]
+           (if (vector? v)
+             (let [[min-v max-v] v]
+               (if max-v
+                 (assert (not (neg? (compare max-v min-v))))
+                 (assert min-v))
+               [(encode-attribute+value-prefix-key k min-v)
+                (encode-attribute+value-prefix-key k (or max-v empty-byte-array))])
+             (let [seek-k (encode-attribute+value-prefix-key k v)]
+               [seek-k seek-k])))
+         (sort-by first bu/bytes-comparator)
+         (reduce
+          (fn [acc [min-seek-k ^bytes max-seek-k]]
+            (loop [[k v] (ks/-seek i min-seek-k)
+                   acc acc]
+              (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
+                (recur (ks/-next i)
+                       (->> (decode-attribute+value+content-hash-key->content-hash k)
+                            (->Id)
+                            (conj acc)))
+                acc)))
+          #{}))))
 
 (defn ^Id doc->content-hash [doc]
   (->Id (bu/sha1 (nippy/fast-freeze doc))))
@@ -342,50 +339,48 @@
       (update :eid ->Id)))
 
 (defn entities-at [kv entities business-time transact-time]
-  (ks/iterate-with
-   (ks/new-snapshot kv)
-   (fn [i]
-     (let [prefix-size (+ Short/BYTES id-size)]
-       (->> (for [seek-k (->> (for [entity entities]
-                                (encode-entity+bt+tt-prefix-key
-                                 (id->bytes entity)
-                                 business-time
-                                 transact-time))
-                              (sort bu/bytes-comparator))
-                  :let [entity-map (loop [[k v] (ks/-seek i seek-k)]
-                                     (when (and k (bu/bytes=? seek-k prefix-size k))
-                                       (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
-                                                            (enrich-entity-map v))]
-                                         (if (<= (compare (:tt entity-map) transact-time) 0)
-                                           (when-not (empty? v)
-                                             entity-map)
-                                           (recur (ks/-next i))))))]
-                  :when entity-map]
-              [(:eid entity-map) entity-map])
-            (into {}))))))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (let [prefix-size (+ Short/BYTES id-size)]
+      (->> (for [seek-k (->> (for [entity entities]
+                               (encode-entity+bt+tt-prefix-key
+                                (id->bytes entity)
+                                business-time
+                                transact-time))
+                             (sort bu/bytes-comparator))
+                 :let [entity-map (loop [[k v] (ks/-seek i seek-k)]
+                                    (when (and k (bu/bytes=? seek-k prefix-size k))
+                                      (let [entity-map (-> (decode-entity+bt+tt+tx-id-key k)
+                                                           (enrich-entity-map v))]
+                                        (if (<= (compare (:tt entity-map) transact-time) 0)
+                                          (when-not (empty? v)
+                                            entity-map)
+                                          (recur (ks/-next i))))))]
+                 :when entity-map]
+             [(:eid entity-map) entity-map])
+           (into {})))))
 
 
 (defn eids-by-content-hashes [kv content-hashes]
-  (ks/iterate-with
-   (ks/new-snapshot kv)
-   (fn [i]
-     (->> (for [content-hash content-hashes
-                :let [content-hash (id->bytes content-hash)]]
-            [(encode-content-hash-prefix-key content-hash)
-             (->Id content-hash)])
-          (into (sorted-map-by bu/bytes-comparator))
-          (reduce-kv
-           (fn [acc seek-k content-hash]
-             (loop [[k v] (ks/-seek i seek-k)
-                    acc acc]
-               (if (and k (bu/bytes=? seek-k k))
-                 (recur (ks/-next i)
-                        (update acc
-                                content-hash
-                                conj
-                                (->Id (decode-content-hash+entity-key->entity k))))
-                 acc)))
-           {})))))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (->> (for [content-hash content-hashes
+               :let [content-hash (id->bytes content-hash)]]
+           [(encode-content-hash-prefix-key content-hash)
+            (->Id content-hash)])
+         (into (sorted-map-by bu/bytes-comparator))
+         (reduce-kv
+          (fn [acc seek-k content-hash]
+            (loop [[k v] (ks/-seek i seek-k)
+                   acc acc]
+              (if (and k (bu/bytes=? seek-k k))
+                (recur (ks/-next i)
+                       (update acc
+                               content-hash
+                               conj
+                               (->Id (decode-content-hash+entity-key->entity k))))
+                acc)))
+          {}))))
 
 (defn entities-by-attribute-values-at [kv k vs business-time transact-time]
   (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values kv k vs)

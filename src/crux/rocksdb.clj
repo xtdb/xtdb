@@ -19,6 +19,7 @@
       (-next [this]
         (.next i)
         (iterator->kv i))
+
       Closeable
       (close [this]
         (.close i)))))
@@ -46,16 +47,6 @@
         KvSnapshot
         (new-iterator [this]
           (rocks-iterator db read-options))
-
-        (iterate-with [this f]
-          (try
-            (with-open [i (new-iterator this)]
-              (f i))
-            ;; TODO: This will disappear once iterate-with becomes
-            ;; new-iterator, done to ensure resources are closed for
-            ;; now.
-            (finally
-              (.close this))))
 
         Closeable
         (close [_]

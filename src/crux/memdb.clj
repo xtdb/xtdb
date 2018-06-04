@@ -43,9 +43,6 @@
               Closeable
               (close [_]))))
 
-        (iterate-with [this f]
-          (f (ks/new-iterator this)))
-
         Closeable
         (close [_]))))
 
