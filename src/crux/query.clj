@@ -58,7 +58,7 @@
       ([result input]
        (if (get input k)
          (rf result input)
-         (transduce (map (partial assoc input k)) rf result (f input)))))))
+         (reduce rf result (map (partial assoc input k) (f input))))))))
 
 (defn binding-agg-xform [k aggregate-fn]
   (fn [rf]
