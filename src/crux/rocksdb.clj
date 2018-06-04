@@ -50,8 +50,8 @@
 
         Closeable
         (close [_]
-          (.releaseSnapshot db snapshot)
-          (.close read-options)))))
+          (.close read-options)
+          (.releaseSnapshot db snapshot)))))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]

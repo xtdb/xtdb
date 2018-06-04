@@ -166,8 +166,8 @@
 
         Closeable
         (close [_]
-          (.close stack)
-          (.close tx)))))
+          (.close tx)
+          (.close stack)))))
 
   (store [this kvs]
     (try
