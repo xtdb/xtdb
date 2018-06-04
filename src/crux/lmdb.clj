@@ -82,7 +82,7 @@
 (defn- ^LMDBCursor new-cursor [^MemoryStack stack dbi txn]
   (let [pp (.mallocPointer stack 1)]
     (success? (LMDB/mdb_cursor_open txn dbi pp))
-    (->LMDBCursor(.get pp))))
+    (->LMDBCursor (.get pp))))
 
 (defn- cursor->kv [cursor ^MDBVal kv ^MDBVal dv flags]
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
@@ -91,24 +91,24 @@
       (MapEntry. (bu/byte-buffer->bytes (.mv_data kv))
                  (bu/byte-buffer->bytes (.mv_data dv))))))
 
-(defn- cursor-iterate [env dbi f]
-  (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction stack env LMDB/MDB_RDONLY)
-              cursor (new-cursor stack dbi (:txn tx))]
-    (let [{:keys [cursor]} cursor
-          kv (MDBVal/callocStack stack)
-          dv (MDBVal/callocStack stack)
-          i (reify
-              ks/KvIterator
-              (-seek [this k]
-                (with-open [stack (.push stack)]
-                  (let [k ^bytes k
-                        kb (.flip (.put (.malloc stack (alength k)) k))
-                        kv (.mv_data (MDBVal/callocStack stack) kb)]
-                    (cursor->kv cursor kv dv LMDB/MDB_SET_RANGE))))
-              (-next [this]
-                (cursor->kv cursor kv dv LMDB/MDB_NEXT)))]
-      (f i))))
+(defn- new-cursor-iterator [^MemoryStack stack env dbi txn]
+  (let [cursor (new-cursor stack dbi txn)
+        kv (MDBVal/callocStack stack)
+        dv (MDBVal/callocStack stack)]
+    (reify
+      ks/KvIterator
+      (-seek [this k]
+        (with-open [stack (.push stack)]
+          (let [k ^bytes k
+                kb (.flip (.put (.malloc stack (alength k)) k))
+                kv (.mv_data (MDBVal/callocStack stack) kb)]
+            (cursor->kv (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
+      (-next [this]
+        (cursor->kv (:cursor cursor) kv dv LMDB/MDB_NEXT))
+
+      Closeable
+      (close [_]
+        (.close cursor)))))
 
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
@@ -157,16 +157,27 @@
           (throw t)))))
 
   (new-snapshot [this]
-    (reify
-      ks/KvSnapshot
-      (new-iterator [this]
-        (throw (UnsupportedOperationException.)))
+    (let [stack (MemoryStack/stackPush)
+          tx (new-transaction stack env LMDB/MDB_RDONLY)]
+      (reify
+        ks/KvSnapshot
+        (new-iterator [this]
+          (new-cursor-iterator stack env dbi (:txn tx)))
 
-      (iterate-with [this f]
-        (cursor-iterate env dbi f))
+        (iterate-with [this f]
+          (try
+            (with-open [i (ks/new-iterator this)]
+              (f i))
+            ;; TODO: This will disappear once iterate-with becomes
+            ;; new-iterator, done to ensure resources are closed for
+            ;; now.
+            (finally
+              (.close this))))
 
-      Closeable
-      (close [_])))
+        Closeable
+        (close [_]
+          (.close stack)
+          (.close tx)))))
 
   (store [this kvs]
     (try
