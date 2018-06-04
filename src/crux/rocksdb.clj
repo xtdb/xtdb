@@ -45,8 +45,14 @@
       (reify
         KvSnapshot
         (iterate-with [this f]
-          (with-open [i (rocks-iterator db read-options)]
-            (f i)))
+          (try
+            (with-open [i (rocks-iterator db read-options)]
+              (f i))
+            ;; TODO: This will disappear once iterate-with becomes
+            ;; new-iterator, done to ensure resources are closed for
+            ;; now.
+            (finally
+              (.close this))))
 
         Closeable
         (close [_]
