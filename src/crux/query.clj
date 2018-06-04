@@ -85,22 +85,24 @@
   (bind [this]
     (binding-agg-xform e (fn [results]
                            (if (seq results)
-                             (let [db (get (first results) '$)
-                                   vs (sort (map (comp v-for-comparison #(get % v)) results))
-                                   join-entities (cond (and (symbol? v) (seq vs))
-                                                       (db/entities-for-attribute-value db a (first vs) (last vs))
+                             (let [db (get (first results) '$)]
+                               (cond (and (symbol? v) (some #(get % v) results))
+                                     (for [[distinct-v results] (group-by (comp v-for-comparison #(get % v)) results)
+                                           je (db/entities-for-attribute-value db a distinct-v distinct-v)
+                                           r results]
+                                       (assoc r e je))
 
-                                                       (and (symbol? v) range-vals)
-                                                       (apply db/entities-for-attribute-value db a range-vals)
+                                     (and (symbol? v) range-vals)
+                                     (for [r results je (apply db/entities-for-attribute-value db a range-vals)]
+                                       (assoc r e je))
 
-                                                       (and v (not (symbol? v)))
-                                                       (db/entities-for-attribute-value db a v v)
+                                     (and v (not (symbol? v)))
+                                     (for [r results je (db/entities-for-attribute-value db a v v)]
+                                       (assoc r e je))
 
-                                                       :else
-                                                       (db/entities db))]
-                               (reduce into []
-                                       (for [r results]
-                                         (map (partial assoc r e) join-entities))))
+                                     :else
+                                     (for [r results je (db/entities db)]
+                                       (assoc r e je))))
                              results)))))
 
 (defn- find-subsequent-range-terms [v terms]
