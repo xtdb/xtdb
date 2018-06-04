@@ -7,7 +7,8 @@
   [query]
   (case query
     :insert 500
-    150)) ;; default
+    :range 150
+    100)) ;; default
 
 (t/deftest test-query-speed
   (let [benchmark (b/bench
