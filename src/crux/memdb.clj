@@ -3,8 +3,7 @@
             [crux.kv-store :as ks]
             [clojure.java.io :as io]
             [taoensso.nippy :as nippy])
-  (:import java.io.Closeable
-           [java.util SortedMap TreeMap]))
+  (:import java.io.Closeable))
 
 (defn- atom-cursor->next! [cursor]
   (let [[k v :as kv] (first @cursor)]
@@ -15,20 +14,20 @@
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
-    (nippy/freeze-to-file (io/file file "memdb") (into {} db))))
+    (nippy/freeze-to-file (io/file file "memdb") @db)))
 
 (defn- restore-db [dir]
-  (doto (TreeMap. bu/bytes-comparator)
-    (.putAll (nippy/thaw-from-file (io/file dir "memdb")))))
+  (->> (nippy/thaw-from-file (io/file dir "memdb"))
+       (into (sorted-map-by bu/bytes-comparator))))
 
 (def ^:dynamic ^:private *current-iterator* nil)
 
-(defrecord MemKv [^SortedMap db db-dir persist-on-close?]
+(defrecord MemKv [db db-dir persist-on-close?]
   ks/KvStore
   (open [this]
     (if (.isFile (io/file db-dir "memdb"))
-      (assoc this :db (restore-db db-dir))
-      (assoc this :db (TreeMap. bu/bytes-comparator))))
+      (assoc this :db (atom (restore-db db-dir)))
+      (assoc this :db (atom (sorted-map-by bu/bytes-comparator)))))
 
   (iterate-with [_ f]
     (if *current-iterator*
@@ -37,7 +36,7 @@
             i (reify
                 ks/KvIterator
                 (ks/-seek [this k]
-                  (reset! c (.tailMap db k))
+                  (reset! c (subseq @db >= k))
                   (atom-cursor->next! c))
                 (ks/-next [this]
                   (atom-cursor->next! c)))]
@@ -45,14 +44,10 @@
          (f i)))))
 
   (store [_ kvs]
-    (locking db
-      (doseq [[k v] kvs]
-        (.put db k v))))
+    (swap! db merge (into {} kvs)))
 
   (delete [_ ks]
-    (locking db
-      (doseq [k ks]
-        (.remove db k))))
+    (swap! db #(apply dissoc % ks)))
 
   (backup [_ dir]
     (let [file (io/file dir)]
