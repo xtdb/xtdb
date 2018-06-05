@@ -32,7 +32,7 @@
       (reify
         ks/KvSnapshot
         (new-iterator [_]
-          (let [c (atom nil)]
+          (let [c (atom (seq db))]
             (reify
               ks/KvIterator
               (ks/-seek [this k]
