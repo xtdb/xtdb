@@ -1,5 +1,6 @@
 (ns dev
   (:require [clojure.java.io :as io]
+            [clojure.tools.namespace.repl :as tn]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
             [crux.core :as crux]
