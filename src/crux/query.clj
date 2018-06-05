@@ -77,31 +77,31 @@
 
 (defprotocol Binding
   (bind-key [this])
-  (bind [this]))
+  (bind [this query-context]))
 
 (defrecord EntityBinding [e a v range-vals]
   Binding
   (bind-key [this] e)
-  (bind [this]
+  (bind [this query-context]
     (binding-agg-xform e (fn [results]
                            (if (seq results)
                              (let [db (get (first results) '$)]
                                (cond (and (symbol? v) (some #(get % v) results))
                                      (for [[distinct-v results] (group-by (comp v-for-comparison #(get % v)) results)
-                                           je (db/entities-for-attribute-value db a distinct-v distinct-v)
+                                           je (db/entities-for-attribute-value db query-context a distinct-v distinct-v)
                                            r results]
                                        (assoc r e je))
 
                                      (and (symbol? v) range-vals)
-                                     (for [r results je (apply db/entities-for-attribute-value db a range-vals)]
+                                     (for [r results je (apply db/entities-for-attribute-value db query-context a range-vals)]
                                        (assoc r e je))
 
                                      (and v (not (symbol? v)))
-                                     (for [r results je (db/entities-for-attribute-value db a v v)]
+                                     (for [r results je (db/entities-for-attribute-value db query-context a v v)]
                                        (assoc r e je))
 
                                      :else
-                                     (for [r results je (db/entities db)]
+                                     (for [r results je (db/entities db query-context)]
                                        (assoc r e je))))
                              results)))))
 
@@ -122,7 +122,7 @@
 (defrecord VarBinding [e a s]
   Binding
   (bind-key [this] s)
-  (bind [this]
+  (bind [this _]
     (binding-xform s (fn [input]
                        (let [v (db/attr-val (get input e) a)]
                          (if (coll? v) v [v]))))))
@@ -133,16 +133,16 @@
 
 (defn- query-plan->xform
   "Create a tranduce from the query-plan."
-  [db plan]
+  [db query-context plan]
   (apply comp (for [[term-bindings pred-f] plan
-                    :let [binding-transducers (map bind term-bindings)]]
+                    :let [binding-transducers (map #(bind % query-context) term-bindings)]]
                 (comp (apply comp binding-transducers)
                       (filter (partial pred-f db))))))
 
 (defn- query-terms->plan
   "Converts a sequence of query terms into a sequence of executable
   query stages."
-  [[[op t :as term] & terms]]
+  [query-context [[op t :as term] & terms]]
   (when term
     (let [stage (condp = op
                   :fact
@@ -151,7 +151,7 @@
                    (fn [db result] (value-matches? db t result))]
 
                   :and
-                  (let [sub-plan (query-terms->plan t)]
+                  (let [sub-plan (query-terms->plan query-context t)]
                     [(mapcat first sub-plan)
                      (fn [db result]
                        (every? (fn [[_ pred-fn]]
@@ -159,13 +159,13 @@
                                sub-plan))])
 
                   :not
-                  (let [query-plan (query-terms->plan [t])
+                  (let [query-plan (query-terms->plan query-context [t])
                         [bindings pred-fn?] (first query-plan)]
                     [bindings
                      (fn [db result] (not (pred-fn? db result)))])
 
                   :or
-                  (let [sub-plan (query-terms->plan t)]
+                  (let [sub-plan (query-terms->plan query-context t)]
                     (assert (->> sub-plan
                                  (map #(into #{} (map bind-key (first %))))
                                  (apply =)))
@@ -181,7 +181,7 @@
                      (let [or-results (atom nil)]
                        (fn [db result]
                          (let [or-results (or @or-results
-                                              (let [query-xform (query-plan->xform db (query-terms->plan (:terms t)))]
+                                              (let [query-xform (query-plan->xform db query-context (query-terms->plan query-context (:terms t)))]
                                                 (reset! or-results (into #{} query-xform [{'$ db}]))))]
                            (when-not (some #(db/eq? (get result e) (get % e)) or-results)
                              result))))])
@@ -195,7 +195,7 @@
                   :range
                   [nil (fn [_ result]
                          ((::fn t) (result (::sym t)) (::val t)))])]
-      (cons stage (query-terms->plan terms)))))
+      (cons stage (query-terms->plan query-context terms)))))
 
 (defn- term-symbols [terms]
   (->> terms
@@ -221,8 +221,9 @@
   (let [{:keys [find where] :as q} (s/conform ::query q)]
     (when (= :clojure.spec.alpha/invalid q)
       (throw (ex-info "Invalid input" (s/explain-data ::query q))))
-    (let [xform (->> where
-                     (query-terms->plan)
-                     (validate-query find)
-                     (query-plan->xform db))]
-      (into #{} (comp xform (map (partial find-projection find))) [{'$ db}]))))
+    (with-open [query-context (db/new-query-context db)]
+      (let [xform (->> where
+                       (query-terms->plan query-context)
+                       (validate-query find)
+                       (query-plan->xform db query-context))]
+        (into #{} (comp xform (map (partial find-projection find))) [{'$ db}])))))

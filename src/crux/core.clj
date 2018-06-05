@@ -1,6 +1,7 @@
 (ns crux.core
   (:require [crux.kv :as kv]
             [crux.rocksdb :as rocksdb]
+            [crux.kv-store :as ks]
             [crux.db])
   (:import [java.util Date]))
 
@@ -16,11 +17,14 @@
 
 (defrecord KvDatasource [kv ts attributes]
   crux.db/Datasource
-  (entities [this]
+  (new-query-context [this]
+    (ks/new-snapshot kv))
+
+  (entities [this query-context]
     (map (fn [eid] (KvEntity. kv eid ts (atom {})))
          (kv/entity-ids kv)))
 
-  (entities-for-attribute-value [this ident min-v max-v]
+  (entities-for-attribute-value [this query-context ident min-v max-v]
     (map (fn [eid] (KvEntity. kv eid ts (atom {})))
          (kv/entity-ids-for-range-value kv ident min-v max-v ts))))
 

@@ -570,11 +570,14 @@
 
 (defrecord DocDatasource [kv business-time transact-time]
   db/Datasource
-  (entities [this]
+  (new-query-context [this]
+    (ks/new-snapshot kv))
+
+  (entities [this query-context]
     (for [[_ entity-map] (all-entities kv business-time transact-time)]
       (map->DocEntity (assoc entity-map :kv kv))))
 
-  (entities-for-attribute-value [this ident min-v max-v]
+  (entities-for-attribute-value [this query-context ident min-v max-v]
     (for [[_ entity-map] (entities-by-attribute-values-at kv ident [[min-v max-v]] business-time transact-time)]
       (map->DocEntity (assoc entity-map :kv kv)))))
 

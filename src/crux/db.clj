@@ -1,8 +1,9 @@
 (ns crux.db)
 
 (defprotocol Datasource
-  (entities [this])
-  (entities-for-attribute-value [this a min-v max-v]))
+  (^java.io.Closeable new-query-context [this])
+  (entities [this qc])
+  (entities-for-attribute-value [this qc a min-v max-v]))
 
 (defprotocol Entity
   (attr-val [this attr])
