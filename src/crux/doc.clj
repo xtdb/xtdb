@@ -230,9 +230,8 @@
      :tt (reverse-time-ms->date (.getLong buffer))
      :tx-id (.getLong buffer)}))
 
-(defn- all-key-values-in-prefix [kv ^bytes prefix]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
+(defn- all-key-values-in-prefix [snapshot ^bytes prefix]
+  (with-open [i (ks/new-iterator snapshot)]
     (loop [[k v] (ks/-seek i prefix)
            acc []]
       (if (and k (bu/bytes=? prefix k))
@@ -261,14 +260,13 @@
 
 ;; Docs
 
-(defn all-doc-keys [kv]
-  (->> (all-key-values-in-prefix kv (encode-doc-prefix-key))
+(defn all-doc-keys [snapshot]
+  (->> (all-key-values-in-prefix snapshot (encode-doc-prefix-key))
        (map (comp ->Id decode-doc-key first))
        (set)))
 
-(defn docs [kv ks]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
+(defn docs [snapshot ks]
+  (with-open [i (ks/new-iterator snapshot)]
     (->> (for [seek-k (->> (map (comp encode-doc-key id->bytes) ks)
                            (sort bu/bytes-comparator))
                :let [[k v] (ks/-seek i seek-k)]
@@ -277,9 +275,8 @@
             (ByteBuffer/wrap v)])
          (into {}))))
 
-(defn doc-keys-by-attribute-values [kv k vs]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
+(defn doc-keys-by-attribute-values [snapshot k vs]
+  (with-open [i (ks/new-iterator snapshot)]
     (->> (for [v vs]
            (if (vector? v)
              (let [[min-v max-v] v]
@@ -313,7 +310,8 @@
 
 (defn store-doc [kv content-hash doc]
   (let [content-hash (id->bytes content-hash)
-        existing-doc (get (docs kv [content-hash]) (->Id content-hash))]
+        existing-doc (with-open [snapshot (ks/new-snapshot kv)]
+                       (get (docs snapshot [content-hash]) (->Id content-hash)))]
     (cond
       (and doc (nil? existing-doc))
       (ks/store kv (cons
@@ -338,9 +336,8 @@
       (assoc :content-hash (some-> content-hash not-empty ->Id))
       (update :eid ->Id)))
 
-(defn entities-at [kv entities business-time transact-time]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
+(defn entities-at [snapshot entities business-time transact-time]
+  (with-open [i (ks/new-iterator snapshot)]
     (let [prefix-size (+ Short/BYTES id-size)]
       (->> (for [seek-k (->> (for [entity entities]
                                (encode-entity+bt+tt-prefix-key
@@ -361,9 +358,8 @@
            (into {})))))
 
 
-(defn eids-by-content-hashes [kv content-hashes]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
+(defn eids-by-content-hashes [snapshot content-hashes]
+  (with-open [i (ks/new-iterator snapshot)]
     (->> (for [content-hash content-hashes
                :let [content-hash (id->bytes content-hash)]]
            [(encode-content-hash-prefix-key content-hash)
@@ -382,24 +378,24 @@
                 acc)))
           {}))))
 
-(defn entities-by-attribute-values-at [kv k vs business-time transact-time]
-  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values kv k vs)
-                                      (eids-by-content-hashes kv))
-             [eid entity-map] (entities-at kv eids business-time transact-time)
+(defn entities-by-attribute-values-at [snapshot k vs business-time transact-time]
+  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values snapshot k vs)
+                                      (eids-by-content-hashes snapshot))
+             [eid entity-map] (entities-at snapshot eids business-time transact-time)
              :when (= content-hash (:content-hash entity-map))]
          [eid entity-map])
        (into {})))
 
-(defn all-entities [kv business-time transact-time]
-  (let [eids (->> (all-key-values-in-prefix kv (encode-entity+bt+tt-prefix-key))
+(defn all-entities [snapshot business-time transact-time]
+  (let [eids (->> (all-key-values-in-prefix snapshot (encode-entity+bt+tt-prefix-key))
                   (map (comp ->Id :eid decode-entity+bt+tt+tx-id-key first)))]
-    (entities-at kv eids business-time transact-time)))
+    (entities-at snapshot eids business-time transact-time)))
 
-(defn entity-histories [kv entities]
+(defn entity-histories [snapshot entities]
   (->> (for [seek-k (->> (for [entity entities]
                            (encode-entity+bt+tt-prefix-key (id->bytes entity)))
                          (sort bu/bytes-comparator))
-             :let [[entity-map :as history] (for [[k v] (all-key-values-in-prefix kv seek-k)]
+             :let [[entity-map :as history] (for [[k v] (all-key-values-in-prefix snapshot seek-k)]
                                               (-> (decode-entity+bt+tt+tx-id-key k)
                                                   (enrich-entity-map v)))]
              :when entity-map]
@@ -450,9 +446,9 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [kv tx-log [op] transact-time tx-id] op))
+(defmulti tx-command (fn [kv snapshot tx-log [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [kv tx-log [op k v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv snapshot tx-log [op k v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         content-hash (id->bytes v)
         business-time (or business-time transact-time)]
@@ -465,7 +461,7 @@
      [(encode-content-hash+entity-key content-hash eid)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/delete [kv tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [kv snapshot tx-log [op k business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     [[(encode-entity+bt+tt+tx-id-key
@@ -475,10 +471,10 @@
        tx-id)
       empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/cas [kv tx-log [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv snapshot tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)
-        old-content-hash (-> (entities-at kv [eid] business-time transact-time)
+        old-content-hash (-> (entities-at snapshot [eid] business-time transact-time)
                              (get (->Id eid))
                              :content-hash)
         old-v (id->bytes old-v)
@@ -493,11 +489,11 @@
        [(encode-content-hash+entity-key new-v eid)
         empty-byte-array]])))
 
-(defmethod tx-command :crux.tx/evict [kv tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [kv snapshot tx-log [op k business-time] transact-time tx-id]
   (let [eid (id->bytes k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [{:keys [content-hash bt]} (get (entity-histories kv [eid]) (->Id eid))
+      (doseq [{:keys [content-hash bt]} (get (entity-histories snapshot [eid]) (->Id eid))
               :when (and content-hash (<= (compare bt business-time) 0))]
         (db/submit-doc tx-log (str content-hash) nil)))
     [[(encode-entity+bt+tt+tx-id-key
@@ -508,10 +504,11 @@
       empty-byte-array]]))
 
 (defn store-tx [kv tx-log tx-ops tx-time tx-id]
-  (->> (for [tx-op tx-ops]
-         (tx-command kv tx-log tx-op tx-time tx-id))
-       (reduce into (sorted-map-by bu/bytes-comparator))
-       (ks/store kv)))
+  (with-open [snapshot (ks/new-snapshot kv)]
+    (->> (for [tx-op tx-ops]
+           (tx-command kv snapshot tx-log tx-op tx-time tx-id))
+         (reduce into (sorted-map-by bu/bytes-comparator))
+         (ks/store kv))))
 
 (defrecord DocIndexer [kv tx-log]
   db/Indexer
@@ -557,13 +554,13 @@
 
 (def ^:const default-doc-cache-size 10240)
 
-(defrecord DocEntity [kv eid content-hash]
+(defrecord DocEntity [kv query-context eid content-hash]
   db/Entity
   (attr-val [this ident]
     (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
         (lru-cache-compute-if-absent
          content-hash
-         #(nippy/fast-thaw (.array ^ByteBuffer (get (docs kv [%]) %))))
+         #(nippy/fast-thaw (.array ^ByteBuffer (get (docs query-context [%]) %))))
         (get ident)))
   (->id [this]
     eid))
@@ -574,12 +571,12 @@
     (ks/new-snapshot kv))
 
   (entities [this query-context]
-    (for [[_ entity-map] (all-entities kv business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv))))
+    (for [[_ entity-map] (all-entities query-context business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv :query-context query-context))))
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
-    (for [[_ entity-map] (entities-by-attribute-values-at kv ident [[min-v max-v]] business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv)))))
+    (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv :query-context query-context)))))
 
 (defn db
   ([kv]
