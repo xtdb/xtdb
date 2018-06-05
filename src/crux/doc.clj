@@ -542,10 +542,12 @@
   (submit-tx [this tx-ops]
     (let [transact-time (Date.)
           tx-id (.getTime transact-time)
-          conformed-tx-ops (conform-tx-ops tx-ops)]
+          conformed-tx-ops (conform-tx-ops tx-ops)
+          indexer (->DocIndexer kv this)]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (doc->content-hash doc)) doc))
-      (db/index-tx (->DocIndexer kv this) conformed-tx-ops transact-time tx-id)
+      (db/index-tx indexer conformed-tx-ops transact-time tx-id)
+      (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
       (delay {:tx-id tx-id
               :transact-time transact-time}))))
 
@@ -579,11 +581,20 @@
     (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
       (map->DocEntity (assoc entity-map :kv kv :query-context query-context)))))
 
+(def ^:dynamic *default-await-tx-timeout* 10000)
+
+(defn- await-tx-time [kv transact-time ^long timeout]
+  (let [timeout-at (+ timeout (System/currentTimeMillis))]
+    (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
+      (Thread/sleep 100)
+      (when (>= (System/currentTimeMillis) timeout-at)
+        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
+
 (defn db
   ([kv]
-   (let [now (Date.)]
-     (db kv now now)))
+   (db kv (Date.)))
   ([kv business-time]
-   (db kv business-time (Date.)))
+   (->DocDatasource kv business-time business-time))
   ([kv business-time transact-time]
+   (await-tx-time kv transact-time *default-await-tx-timeout*)
    (->DocDatasource kv business-time transact-time)))

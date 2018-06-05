@@ -115,6 +115,13 @@
 (defn- tx-record? [^ConsumerRecord record]
   (nil? (.key record)))
 
+(defn- store-tx-log-time [indexer records]
+  (when-let [tx-time (->> (filter tx-record? records)
+                          (map #(.timestamp ^ConsumerRecord %))
+                          (sort)
+                          (last))]
+    (db/store-index-meta indexer :crux.tx-log/tx-time tx-time)))
+
 (defn consume-and-index-entities
   ([indexer consumer]
    (consume-and-index-entities indexer consumer 10000))
@@ -126,6 +133,7 @@
                       (index-doc-record indexer record)))
                   (reduce into []))]
      (store-topic-partition-offsets indexer consumer (.partitions records))
+     (store-tx-log-time indexer records)
      txs)))
 
 (defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer ^List topics]
