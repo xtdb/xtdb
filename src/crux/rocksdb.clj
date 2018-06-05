@@ -10,14 +10,19 @@
     (MapEntry. (.key i) (.value i))))
 
 (defn- ^Closeable rocks-iterator [^RocksDB db ^ReadOptions read-options]
-  (let [i (.newIterator db read-options)]
+  (let [i (.newIterator db read-options)
+        started? (atom false)]
     (reify
       KvIterator
       (-seek [this k]
         (.seek i k)
+        (reset! started? true)
         (iterator->kv i))
       (-next [this]
-        (.next i)
+        (if @started?
+          (.next i)
+          (.seekToFirst i))
+        (reset! started? true)
         (iterator->kv i))
 
       Closeable
