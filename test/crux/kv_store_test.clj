@@ -58,12 +58,15 @@
   (doseq [[^String k v] {"a" 1 "c" 3}]
     (ks/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
 
-  (t/testing "next returns first value"
-    (t/is (= ["a" 1]
-             (let [[^bytes k v] (with-open [snapshot (ks/new-snapshot f/*kv*)
-                                            i (ks/new-iterator snapshot)]
-                                  (ks/-next i))]
-               [(String. k) (bu/bytes->long v)])))))
+  (t/testing "next from start iterates over all keys to end"
+    (t/is (= [["a" 1] ["c" 3] nil]
+             (with-open [snapshot (ks/new-snapshot f/*kv*)
+                         i (ks/new-iterator snapshot)]
+               (for [[^bytes k v] [(ks/-next i)
+                                   (ks/-next i)
+                                   (ks/-next i)]]
+                 (when k
+                   [(String. k) (bu/bytes->long v)])))))))
 
 (t/deftest test-seek-and-iterate-prefix []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
