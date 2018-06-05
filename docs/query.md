@@ -59,12 +59,12 @@ are many variants on this, like
 [R-trees](https://en.wikipedia.org/wiki/R-tree), but most of them are
 costly to build.
 
-We want the indexes both to be faster to build than Datomic, and also
-decoupled from a single immutable time-line. Especially, corrections
-of the past should not cost more than any other indexing. Deletions at
-any point should also be simple. Indexes should be possible to backup
-and resume from the log, so the entire index doesn't need to be
-rebuilt from scratch in case of query node failure.
+We want the indexes both to be fast, and also decoupled from a single
+immutable time-line. Especially, corrections of the past should not
+cost more than any other indexing. Deletions at any point should also
+be simple. Indexes should be possible to backup and resume from the
+log, so the entire index doesn't need to be rebuilt from scratch in
+case of query node failure.
 
 The strategy of building indexes and what's stored in them should be
 decoupled from the way the indexes actually are built and stored. That
@@ -142,19 +142,20 @@ The important thing is finding and defining the interface between the
 indexes and the query front end. Crux might support several query
 languages as well as API level index and query engine access. As Crux
 will be open source, it should be easy to reuse and understand how the
-reference implementation provided by JUXT actually works, and
+initial reference implementation provided by JUXT actually works, and
 extending or deviate from it at each level.
 
-Datomic uses an EDN-based dialect of Datalog, with various syntactical
-extensions. It's also clause order sensitive. This has some benefits,
-as it's easier to reason about and doesn't require an advanced query
-planner, but also drawbacks, as it makes the query language less
-declarative, requiring understanding of Datomic index-internals to
-tweak queries.
+We could use an EDN-based dialect of Datalog. There is the
+consideration of made the queries clause order sensitive. This has
+some benefits, as it's easier to reason about and doesn't require an
+advanced query planner, but also drawbacks, as it makes the query
+language less declarative, requiring understanding of index-internals
+to tweak queries.
 
-In reality, [Datalog](https://en.wikipedia.org/wiki/Datalog) is a
-subset of Prolog, and we could stay closer to that. Other alternatives
-are [Cypher](https://en.wikipedia.org/wiki/Cypher_Query_Language),
+[Datalog](https://en.wikipedia.org/wiki/Datalog) is a subset of
+Prolog, and we could stay closer to that. Other alternatives
+are
+[Cypher](https://en.wikipedia.org/wiki/Cypher_Query_Language),
 [Gremlin](https://en.wikipedia.org/wiki/Gremlin_(programming_language))
 and [SPARQL](https://en.wikipedia.org/wiki/SPARQL).
 
@@ -172,38 +173,3 @@ language. GraphQL requires extensions to do ad-hoc queries.**
   layer)](https://github.com/neo4j-graphql/neo4j-graphql-js)
 + [Ogre is a Clojure Gremlin Language
   Variant](https://github.com/clojurewerkz/ogre)
-
-### Datascript Compatibility
-
-#### Query Arguments
-
-Datascript queries supply parameters as arguments outside the main query.
-
-For example
-
-````
-(query
-{:find ['e]
- :in [$name]
- :where [['e :name $name]]}
- "Ivan")
-````
-
-As oppose to
-
-````
-{:find ['e]
- :where [['e :name "Ivan"]]}
-
-````
-
-If you use parameterised queries, you can of course optimise the queries (saves on parsing and validation).
-
-I'm yet to discover if there is another reason. Crux may want to hold off on a view here, until the technical case is made, or another reason found.
-
-### Multi-Attribute
-
-Issues to be worked through:
-
-+ How to achieve with Schema-less?
-+ For proposal B, one part of this is surely solved by utilitising the AVT index for at least one direction. The actual list itself could then put into the 'nippied' val of EAVT. This approach needs to be spiked.
