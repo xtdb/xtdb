@@ -328,6 +328,16 @@
                            v (normalize-value v)]
                        (encode-attribute+value+content-hash-key k v content-hash)))))))
 
+;; Meta
+
+(defn store-meta [kv k v]
+  (ks/store kv [[(encode-meta-key k)
+                 (nippy/fast-freeze v)]]))
+
+(defn read-meta [kv k]
+  (some->> ^bytes (kvu/value kv (encode-meta-key k))
+           nippy/fast-thaw))
+
 ;; Txs Read
 
 (defn- enrich-entity-map [entity-map content-hash]
@@ -401,15 +411,54 @@
          {(:eid entity-map) history})
        (into {})))
 
-;; Meta
 
-(defn store-meta [kv k v]
-  (ks/store kv [[(encode-meta-key k)
-                 (nippy/fast-freeze v)]]))
+;; Query
 
-(defn read-meta [kv k]
-  (some->> ^bytes (kvu/value kv (encode-meta-key k))
-           nippy/fast-thaw))
+(def ^:const default-doc-cache-size 10240)
+
+(defrecord DocEntity [kv query-context eid content-hash]
+  db/Entity
+  (attr-val [this ident]
+    (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
+        (lru-cache-compute-if-absent
+         content-hash
+         #(nippy/fast-thaw (.array ^ByteBuffer (get (docs query-context [%]) %))))
+        (get ident)))
+  (->id [this]
+    (db/attr-val this :crux.kv/id))
+  (eq? [this that]
+    (= eid (:eid that))))
+
+(defrecord DocDatasource [kv business-time transact-time]
+  db/Datasource
+  (new-query-context [this]
+    (ks/new-snapshot kv))
+
+  (entities [this query-context]
+    (for [[_ entity-map] (all-entities query-context business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv :query-context query-context))))
+
+  (entities-for-attribute-value [this query-context ident min-v max-v]
+    (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
+      (map->DocEntity (assoc entity-map :kv kv :query-context query-context)))))
+
+(def ^:dynamic *default-await-tx-timeout* 10000)
+
+(defn- await-tx-time [kv transact-time ^long timeout]
+  (let [timeout-at (+ timeout (System/currentTimeMillis))]
+    (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
+      (Thread/sleep 100)
+      (when (>= (System/currentTimeMillis) timeout-at)
+        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
+
+(defn db
+  ([kv]
+   (db kv (Date.)))
+  ([kv business-time]
+   (->DocDatasource kv business-time business-time))
+  ([kv business-time transact-time]
+   (await-tx-time kv transact-time *default-await-tx-timeout*)
+   (->DocDatasource kv business-time transact-time)))
 
 ;; Tx Commands
 
@@ -550,51 +599,3 @@
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
       (delay {:tx-id tx-id
               :transact-time transact-time}))))
-
-;; Query
-
-(def ^:const default-doc-cache-size 10240)
-
-(defrecord DocEntity [kv query-context eid content-hash]
-  db/Entity
-  (attr-val [this ident]
-    (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
-        (lru-cache-compute-if-absent
-         content-hash
-         #(nippy/fast-thaw (.array ^ByteBuffer (get (docs query-context [%]) %))))
-        (get ident)))
-  (->id [this]
-    (db/attr-val this :crux.kv/id))
-  (eq? [this that]
-    (= eid (:eid that))))
-
-(defrecord DocDatasource [kv business-time transact-time]
-  db/Datasource
-  (new-query-context [this]
-    (ks/new-snapshot kv))
-
-  (entities [this query-context]
-    (for [[_ entity-map] (all-entities query-context business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv :query-context query-context))))
-
-  (entities-for-attribute-value [this query-context ident min-v max-v]
-    (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv :query-context query-context)))))
-
-(def ^:dynamic *default-await-tx-timeout* 10000)
-
-(defn- await-tx-time [kv transact-time ^long timeout]
-  (let [timeout-at (+ timeout (System/currentTimeMillis))]
-    (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
-      (Thread/sleep 100)
-      (when (>= (System/currentTimeMillis) timeout-at)
-        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
-
-(defn db
-  ([kv]
-   (db kv (Date.)))
-  ([kv business-time]
-   (->DocDatasource kv business-time business-time))
-  ([kv business-time transact-time]
-   (await-tx-time kv transact-time *default-await-tx-timeout*)
-   (->DocDatasource kv business-time transact-time)))
