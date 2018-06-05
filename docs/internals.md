@@ -148,26 +148,51 @@ data on read, see above.
 
 #### Proposal B:
 
-This is the initially implemented approach. This excludes
-bitemporality for now; an imminent task is to modify this strategy to
-accomodate it, or move towards another strategy.
+This is the initially implemented approach.
 
-* keyword -> attribute id (originally `frame-index-ident`)
-* attribute id > keyword (originally `frame-index-aid`)
-* content-hash/transact-time -> entity id (originally
-  `frame-index-avt`)
-* eid/attribute-id/transact-time -> attribute value (originally
-  `frame-index-eat`).
+* ident -> ident-id
+* ident-id > ident
+* AV: attribute-id/content -> entity-id
+* EAT: entity-id/attribute-id/business-time/transact-time -> attribute value
+
+Note that the current implementation differs slightly from the above:
+
+* AV contains business time, which should be considered to remove
+* AV also contains entity ID, which may stay, so that the look-up of
+  the value is not required.
 
 Querying works by:
 
-1) Looking up the attribute and value in the aid/value content-hash
-index, and resolving the resulting content hash into a set of entity
-ids which have at any point in time had this value.
+1) Looking up the attribute and value in the AV indes, and resolving
+the resulting content hash into a set of entity ids which have at any
+point in time had this value.
 
 2) These entity attribute values are then resolved again using the
-eid/aid/transact-time index, and kept if the query predicate evaluates
+eid/aid/business/time/transact-time index, and kept if the query predicate evaluates
 to true.
+
+Pros:
+
+* Less storage needed compared to proposal A - only datoms that change
+  need to be stored.
+* Less deserialisation needed of data (typically)
+
+Cons:
+
+* More jumps are needed. In A you always have the full document on
+  hand, where-as in B you need to look-up each value that is needed.
+* Proposal A ships a document store as part of the implementation. B
+  will need a document store if all the data pertaining to an entity
+  isn't going to be indexed (this leads on to proposal B2). This
+  disadvantage of a lack of functionality could be seen as an
+  advantage with a nod towards the 'unbundled' nature of Crux - i.e. B
+  does one thing and does it (hopefully) well.
+
+Further analysis/work needed:
+
+* How do we compact/evict stale data from the AV index?
+* Work is needed to bring B up to compatibility status with
+  Datasource.
 
 #### Proposal B2
 
