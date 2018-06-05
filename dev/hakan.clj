@@ -1,6 +1,7 @@
-(ns crux.datalog
-  "Experiment implementing a parser for a subset of Prolog using spec."
+(ns hakan
   (:require [clojure.spec.alpha :as s]))
+
+;;; Experiment implementing a parser for a subset of Prolog using spec.
 
 (defn- prolog-var? [s]
   (and (symbol? s)
