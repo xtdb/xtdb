@@ -6,7 +6,7 @@
             [crux.core :refer [db as-of]]
             [crux.query :as q]))
 
-(t/use-fixtures :each f/with-kv-store)
+(t/use-fixtures :each f/with-kv-store f/with-each-query-index-implementation)
 
 (t/deftest test-sanity-check
   (f/transact-people! *kv* [{:name "Ivan"}])
@@ -82,7 +82,7 @@
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! *kv* [{:name "Malcolm" :last-name "Sparks"}]
                                       #inst "1986-10-22")]
-    (cr/-put *kv* [[(:crux.kv/id malcolm) :name "Malcolma"]] #inst "1986-10-24")
+    (f/transact-people! *kv* [{:name "Malcolma" :last-name "Sparks"}] #inst "1986-10-24")
     (let [q {:find ['e]
              :where [['e :name "Malcolma"]
                      ['e :last-name "Sparks"]]}]

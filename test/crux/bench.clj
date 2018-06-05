@@ -8,7 +8,7 @@
             [crux.kv :as cr]
             [crux.kv-store :as ks]
             [crux.query :as q])
-  (:import java.util.Date))
+  (:import [java.util Date UUID]))
 
 (def queries {:name '{:find [e]
                       :where [[e :name "Ivan"]]}
@@ -41,7 +41,10 @@
       (db/submit-tx (doc/->DocTxLog *kv*)
                     (vec (for [person people]
                            [:crux.tx/put
-                            (keyword (:crux.kv/id person))
+                            (let [id (:crux.kv/id person)]
+                              (if (keyword? id)
+                                id
+                                (UUID/fromString id)))
                             person
                             ts]))))))
 

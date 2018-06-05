@@ -280,12 +280,11 @@
     (->> (for [v vs]
            (if (vector? v)
              (let [[min-v max-v] v]
-               (if max-v
-                 (assert (not (neg? (compare max-v min-v))))
-                 (assert min-v))
-               [(encode-attribute+value-prefix-key k min-v)
+               (when max-v
+                 (assert (not (neg? (compare max-v min-v)))))
+               [(encode-attribute+value-prefix-key k (or min-v empty-byte-array))
                 (encode-attribute+value-prefix-key k (or max-v empty-byte-array))])
-             (let [seek-k (encode-attribute+value-prefix-key k v)]
+             (let [seek-k (encode-attribute+value-prefix-key k (or v empty-byte-array))]
                [seek-k seek-k])))
          (sort-by first bu/bytes-comparator)
          (reduce
@@ -563,7 +562,9 @@
          #(nippy/fast-thaw (.array ^ByteBuffer (get (docs query-context [%]) %))))
         (get ident)))
   (->id [this]
-    eid))
+    (db/attr-val this :crux.kv/id))
+  (eq? [this that]
+    (= eid (:eid that))))
 
 (defrecord DocDatasource [kv business-time transact-time]
   db/Datasource
