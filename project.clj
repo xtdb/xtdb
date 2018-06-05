@@ -13,7 +13,9 @@
                  [org.lwjgl/lwjgl-lmdb "3.1.6" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.1.6"]
                  [org.apache.kafka/kafka-clients "1.1.0"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2"]]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2"]
+                 [ring/ring-core "1.6.3"]
+                 [ring/ring-jetty-adapter "1.6.3"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.apache.kafka/kafka_2.11 "1.1.0"]
                                   [org.apache.zookeeper/zookeeper "3.4.12"
