@@ -236,7 +236,7 @@
                                           :eid 0})
         max-v-bytes (when max-v (c/encode (:tagged c/all-types) max-v))]
     (eduction
-     (map (comp bytes->long val))
+     (map (comp bytes->long second))
      (kvu/seek-and-iterate db
                            (fn [^bytes k]
                              (and (bu/bytes=? seek-k 5 k)

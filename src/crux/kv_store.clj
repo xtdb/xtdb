@@ -3,7 +3,8 @@
 
 (defprotocol KvIterator
   (-seek [this k])
-  (-next [this]))
+  (-next [this])
+  (-value [this]))
 
 (defprotocol KvSnapshot
   (^java.io.Closeable new-iterator [this]))

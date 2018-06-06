@@ -5,18 +5,20 @@
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
-(defn- iterator->kv [^RocksIterator i]
+(defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
-    (MapEntry. (.key i) (.value i))))
+    (.key i)))
 
 (defrecord RocksKvIterator [^RocksIterator i]
   KvIterator
   (-seek [this k]
     (.seek i k)
-    (iterator->kv i))
+    (iterator->key i))
   (-next [this]
     (.next i)
-    (iterator->kv i))
+    (iterator->key i))
+  (-value [this]
+    (.value i))
 
   Closeable
   (close [this]

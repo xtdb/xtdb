@@ -6,20 +6,23 @@
 (defn seek [kvs k]
   (with-open [snapshot (ks/new-snapshot kvs)
               i (ks/new-iterator snapshot)]
-    (ks/-seek i k)))
+    (when-let [k (ks/-seek i k)]
+      [k (ks/-value i)])))
 
 (defn value [kvs seek-k]
-  (when-let [[k v] (seek kvs seek-k)]
-    (when (zero? (bu/compare-bytes seek-k k))
-      v)))
+  (with-open [snapshot (ks/new-snapshot kvs)
+              i (ks/new-iterator snapshot)]
+    (when-let [k (ks/-seek i seek-k)]
+      (when (zero? (bu/compare-bytes seek-k k))
+        (ks/-value i)))))
 
 (defn seek-first [kvs prefix-pred key-pred seek-k]
   (with-open [snapshot (ks/new-snapshot kvs)
               i (ks/new-iterator snapshot)]
-    (loop [[k v :as kv] (ks/-seek i seek-k)]
+    (loop [k (ks/-seek i seek-k)]
       (when (and k (prefix-pred k))
         (if (key-pred k)
-          kv
+          [k (ks/-value i)]
           (recur (ks/-next i)))))))
 
 (defn seek-and-iterate
@@ -33,9 +36,9 @@
         IReduceInit
         (reduce [this f init]
           (loop [init init
-                 [k v :as kv] (ks/-seek i seek-k)]
+                 k (ks/-seek i seek-k)]
             (if (and k (key-pred k))
-              (let [result (f init kv)]
+              (let [result (f init [k (ks/-value i)])]
                 (if (reduced? result)
                   @result
                   (recur result (ks/-next i))))

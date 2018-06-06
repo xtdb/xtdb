@@ -85,12 +85,11 @@
       (success? (LMDB/mdb_cursor_open txn dbi pp))
       (->LMDBCursor (.get pp)))))
 
-(defn- cursor->kv [cursor ^MDBVal kv ^MDBVal dv flags]
+(defn- cursor->key [cursor ^MDBVal kv ^MDBVal dv flags]
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
     (when (not=  LMDB/MDB_NOTFOUND rc)
       (success? rc)
-      (MapEntry. (bu/byte-buffer->bytes (.mv_data kv))
-                 (bu/byte-buffer->bytes (.mv_data dv))))))
+      (bu/byte-buffer->bytes (.mv_data kv)))))
 
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
@@ -123,16 +122,18 @@
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
 
-(defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor kv dv]
+(defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
   ks/KvIterator
   (-seek [_ k]
     (with-open [stack (.push stack)]
       (let [k ^bytes k
             kb (.flip (.put (.malloc stack (alength k)) k))
             kv (.mv_data (MDBVal/callocStack stack) kb)]
-        (cursor->kv (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
-  (-next [_]
-    (cursor->kv (:cursor cursor) kv dv LMDB/MDB_NEXT))
+        (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
+  (-next [this]
+    (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
+  (-value [this]
+    (bu/byte-buffer->bytes (.mv_data dv)))
 
   Closeable
   (close [_]

@@ -15,10 +15,11 @@
 
 (defn- all-key-values-in-prefix [snapshot ^bytes prefix]
   (with-open [i (ks/new-iterator snapshot)]
-    (loop [[k v] (ks/-seek i prefix)
+    (loop [k (ks/-seek i prefix)
            acc []]
       (if (and k (bu/bytes=? prefix k))
-        (recur (ks/-next i) (conj acc [k v]))
+        (let [v (ks/-value i)]
+          (recur (ks/-next i) (conj acc [k v])))
         acc))))
 
 ;; Docs
@@ -32,10 +33,10 @@
   (with-open [i (ks/new-iterator snapshot)]
     (->> (for [seek-k (->> (map idx/encode-doc-key ks)
                            (sort bu/bytes-comparator))
-               :let [[k v] (ks/-seek i seek-k)]
+               :let [k (ks/-seek i seek-k)]
                :when (and k (bu/bytes=? seek-k k))]
            [(idx/decode-doc-key k)
-            (ByteBuffer/wrap v)])
+            (ByteBuffer/wrap (ks/-value i))])
          (into {}))))
 
 (defn doc-keys-by-attribute-values [snapshot k vs]
@@ -52,7 +53,7 @@
          (sort-by first bu/bytes-comparator)
          (reduce
           (fn [acc [min-seek-k ^bytes max-seek-k]]
-            (loop [[k v] (ks/-seek i min-seek-k)
+            (loop [k (ks/-seek i min-seek-k)
                    acc acc]
               (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
                 (recur (ks/-next i)
@@ -96,8 +97,8 @@
 (defn read-meta [kv k]
   (with-open [snapshot (ks/new-snapshot kv)
               i (ks/new-iterator snapshot)]
-    (when-let [[k v] (ks/-seek i (idx/encode-meta-key k))]
-      (nippy/fast-thaw v))))
+    (when-let [k (ks/-seek i (idx/encode-meta-key k))]
+      (nippy/fast-thaw (ks/-value i)))))
 
 ;; Txs Read
 
@@ -114,9 +115,10 @@
                               business-time
                               transact-time))
                            (sort bu/bytes-comparator))
-               :let [entity-map (loop [[k v] (ks/-seek i seek-k)]
+               :let [entity-map (loop [k (ks/-seek i seek-k)]
                                   (when (and k (bu/bytes=? seek-k entity-prefix-size k))
-                                    (let [entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
+                                    (let [v (ks/-value i)
+                                          entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
                                                          (enrich-entity-map v))]
                                       (if (<= (compare (:tt entity-map) transact-time) 0)
                                         (when-not (empty? v)
@@ -136,7 +138,7 @@
          (into (sorted-map-by bu/bytes-comparator))
          (reduce-kv
           (fn [acc seek-k content-hash]
-            (loop [[k v] (ks/-seek i seek-k)
+            (loop [k (ks/-seek i seek-k)
                    acc acc]
               (if (and k (bu/bytes=? seek-k k))
                 (recur (ks/-next i)
@@ -213,9 +215,10 @@
   ks/KvIterator
   (-seek [_ k]
     (ks/-seek i k))
-
   (-next [_]
     (ks/-next i))
+  (-value [_]
+    (ks/-value i))
 
   Closeable
   (close [_]
