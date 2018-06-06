@@ -9,8 +9,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(s/def ::id (s/conformer (comp str idx/->Id idx/id->bytes)))
-(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str doc/doc->content-hash)))
+(s/def ::id (s/conformer (comp str idx/new-id)))
+(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str idx/new-id)))
                           :content-hash ::id)
                     (s/conformer second)))
 
@@ -141,7 +141,7 @@
           conformed-tx-ops (conform-tx-ops tx-ops)
           indexer (->DocIndexer kv this)]
       (doseq [doc (tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (doc/doc->content-hash doc)) doc))
+        (db/submit-doc this (str (idx/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
       (delay {:tx-id tx-id

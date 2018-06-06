@@ -4,7 +4,7 @@
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Arrays Date UUID]
-           [clojure.lang Keyword]))
+           [clojure.lang Keyword IPersistentMap]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -93,6 +93,10 @@
       (bu/hex->bytes this)
       (throw (IllegalArgumentException. (format "Not a %s hex string: %s" id-hash-algorithm this)))))
 
+  IPersistentMap
+  (id->bytes [this]
+    (value->bytes this))
+
   Object
   (id->bytes [this]
     (throw (UnsupportedOperationException.))))
@@ -116,6 +120,9 @@
   Comparable
   (compareTo [this that]
     (bu/compare-bytes bytes (.bytes ^Id that))))
+
+(defn ^Id new-id [id]
+  (->Id (id->bytes id)))
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
   (assert (= id-size (alength content-hash)))

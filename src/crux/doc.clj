@@ -62,9 +62,6 @@
                 acc)))
           #{}))))
 
-(defn ^crux.doc.index.Id doc->content-hash [doc]
-  (idx/->Id (bu/sha1 (nippy/fast-freeze doc))))
-
 (defn- normalize-value [v]
   (cond-> v
     (not (or (vector? v)

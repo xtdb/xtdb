@@ -26,7 +26,7 @@
 (t/deftest test-can-store-doc
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (doc/doc->content-hash picasso)
+        content-hash (idx/new-id picasso)
         content-hash-hex (str content-hash)]
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
@@ -53,7 +53,7 @@
 (t/deftest test-can-find-doc-by-value
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (doc/doc->content-hash picasso)]
+        content-hash (idx/new-id picasso)]
     (doc/store-doc f/*kv* content-hash picasso)
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/is (= #{content-hash}
@@ -96,9 +96,9 @@
   (let [tx-log (tx/->DocTxLog f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (doc/doc->content-hash picasso)
+        content-hash (idx/new-id picasso)
         business-time #inst "2018-05-21"
-        eid (idx/->Id (idx/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))
+        eid (idx/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:keys [transact-time tx-id]}
         @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])]
 
@@ -134,7 +134,7 @@
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
-            new-content-hash (doc/doc->content-hash new-picasso)
+            new-content-hash (idx/new-id new-picasso)
             new-business-time #inst "2018-05-20"
             {new-transact-time :transact-time
              new-tx-id :tx-id}
@@ -156,7 +156,7 @@
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
-            new-content-hash (doc/doc->content-hash new-picasso)
+            new-content-hash (idx/new-id new-picasso)
             new-business-time #inst "2018-05-22"
             {new-transact-time :transact-time
              new-tx-id :tx-id}
@@ -183,7 +183,7 @@
 
         (t/testing "can correct entity at earlier business time"
           (let [new-picasso (assoc picasso :bar :foo)
-                new-content-hash (doc/doc->content-hash new-picasso)
+                new-content-hash (idx/new-id new-picasso)
                 prev-transact-time new-transact-time
                 prev-tx-id new-tx-id
                 new-business-time #inst "2018-05-22"
@@ -222,7 +222,7 @@
             (t/testing "compare and set updates with correct content hash"
               (let [old-picasso new-picasso
                     new-picasso (assoc old-picasso :baz :boz)
-                    new-content-hash (doc/doc->content-hash new-picasso)
+                    new-content-hash (idx/new-id new-picasso)
                     {new-transact-time :transact-time
                      new-tx-id :tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
