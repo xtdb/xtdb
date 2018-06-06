@@ -111,7 +111,7 @@
       Closeable
       (close [_]
         (.close cursor)
-        (.pop stack)))))
+        (.close stack)))))
 
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
