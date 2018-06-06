@@ -5,6 +5,7 @@
             [clojure.tools.cli :as cli]
             [crux.core :as crux]
             [crux.doc.tx :as tx]
+            [crux.http-server :as srv]
             [crux.kv-store :as kv-store]
             [crux.memdb]
             [crux.rocksdb]
@@ -66,7 +67,8 @@
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
+               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
+               http-server (srv/create-server kv-store)]
      (start-system kv-store consumer producer admin-client (delay true) options)))
   ([kv-store consumer producer admin-client running? options]
    (let [{:keys [bootstrap-servers

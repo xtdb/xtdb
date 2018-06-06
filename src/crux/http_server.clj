@@ -1,7 +1,9 @@
 (ns crux.http-server
   (:require [crux.doc :as doc]
             [crux.query :as q]
-            [ring.adapter.jetty :as j]))
+            [ring.adapter.jetty :as j]
+            [ring.util.request :as req])
+  (:import [java.io Closeable]))
 
 (defn handler [kv request]
   (case (:request-method request)
@@ -11,8 +13,12 @@
 
     :post {:status 200
            :headers {"Content-Type" "text/plain"}
-           :body (str
-                  (q/q (doc/db kv) (:body request)))}))
+           :body (let [db (doc/db kv)
+                       query (req/body-string request)]
+                   (str (q/q db query)))}))
 
-(defn start-endpoint [kv]
-  (j/run-jetty (partial handler kv) {:port 3000}))
+(defn create-server [kv]
+  (let [server (j/run-jetty (partial handler kv)
+                            {:port 3000
+                             :join? false})]
+    (reify Closeable (close [_] (.stop server)))))
