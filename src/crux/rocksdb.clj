@@ -9,25 +9,33 @@
   (when (.isValid i)
     (MapEntry. (.key i) (.value i))))
 
-(defn- ^Closeable rocks-iterator [^RocksDB db ^ReadOptions read-options]
-  (let [i (.newIterator db read-options)
-        started? (atom false)]
-    (reify
-      KvIterator
-      (-seek [this k]
-        (.seek i k)
-        (reset! started? true)
-        (iterator->kv i))
-      (-next [this]
-        (if @started?
-          (.next i)
-          (.seekToFirst i))
-        (reset! started? true)
-        (iterator->kv i))
+(defrecord RocksKvIterator [^RocksIterator i started?]
+  KvIterator
+  (-seek [this k]
+    (.seek i k)
+    (reset! started? true)
+    (iterator->kv i))
+  (-next [this]
+    (if @started?
+      (.next i)
+      (.seekToFirst i))
+    (reset! started? true)
+    (iterator->kv i))
 
-      Closeable
-      (close [this]
-        (.close i)))))
+  Closeable
+  (close [this]
+    (.close i)))
+
+(defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options]
+  KvSnapshot
+  (new-iterator [this]
+    (->RocksKvIterator (.newIterator db read-options) (atom false)))
+
+  Closeable
+  (close [_]
+    (let [snapshot (.snapshot read-options)]
+      (.close read-options)
+      (.releaseSnapshot db snapshot))))
 
 (defrecord RocksKv [db-dir]
   KvStore
@@ -45,18 +53,8 @@
                                                         (.setDisableWAL true)))))
 
   (new-snapshot [{:keys [^RocksDB db]} ]
-    (let [snapshot (.getSnapshot db)
-          read-options (doto (ReadOptions.)
-                         (.setSnapshot snapshot))]
-      (reify
-        KvSnapshot
-        (new-iterator [this]
-          (rocks-iterator db read-options))
-
-        Closeable
-        (close [_]
-          (.close read-options)
-          (.releaseSnapshot db snapshot)))))
+    (->RocksKvSnapshot db (doto (ReadOptions.)
+                            (.setSnapshot (.getSnapshot db)))))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]

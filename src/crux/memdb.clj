@@ -20,6 +20,24 @@
   (->> (nippy/thaw-from-file (io/file dir "memdb"))
        (into (sorted-map-by bu/bytes-comparator))))
 
+(defrecord MemKvIterator [db cursor]
+  ks/KvIterator
+  (ks/-seek [this k]
+    (reset! cursor (subseq db >= k))
+    (atom-cursor->next! cursor))
+  (ks/-next [this]
+    (atom-cursor->next! cursor))
+  Closeable
+  (close [_]))
+
+(defrecord MemKvSnapshot [db]
+  ks/KvSnapshot
+  (new-iterator [_]
+    (->MemKvIterator db (atom (seq db))))
+
+  Closeable
+  (close [_]))
+
 (defrecord MemKv [db db-dir persist-on-close?]
   ks/KvStore
   (open [this]
@@ -28,23 +46,7 @@
       (assoc this :db (atom (sorted-map-by bu/bytes-comparator)))))
 
   (new-snapshot [_]
-    (let [db @db]
-      (reify
-        ks/KvSnapshot
-        (new-iterator [_]
-          (let [c (atom (seq db))]
-            (reify
-              ks/KvIterator
-              (ks/-seek [this k]
-                (reset! c (subseq db >= k))
-                (atom-cursor->next! c))
-              (ks/-next [this]
-                (atom-cursor->next! c))
-              Closeable
-              (close [_]))))
-
-        Closeable
-        (close [_]))))
+    (->MemKvSnapshot @db))
 
   (store [_ kvs]
     (swap! db merge (into {} kvs)))

@@ -208,7 +208,6 @@
   (eq? [this that]
     (= eid (:eid that))))
 
-
 (defrecord DocCachedIterator [iterators i]
   ks/KvIterator
   (-seek [_ k]

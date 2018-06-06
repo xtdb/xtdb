@@ -92,27 +92,6 @@
       (MapEntry. (bu/byte-buffer->bytes (.mv_data kv))
                  (bu/byte-buffer->bytes (.mv_data dv))))))
 
-(defn- new-cursor-iterator [^MemoryStack stack env dbi txn]
-  (let [stack (.push stack)
-        cursor (new-cursor stack dbi txn)
-        kv (MDBVal/callocStack stack)
-        dv (MDBVal/callocStack stack)]
-    (reify
-      ks/KvIterator
-      (-seek [this k]
-        (with-open [stack (.push stack)]
-          (let [k ^bytes k
-                kb (.flip (.put (.malloc stack (alength k)) k))
-                kv (.mv_data (MDBVal/callocStack stack) kb)]
-            (cursor->kv (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
-      (-next [this]
-        (cursor->kv (:cursor cursor) kv dv LMDB/MDB_NEXT))
-
-      Closeable
-      (close [_]
-        (.close cursor)
-        (.close stack)))))
-
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
               tx (new-transaction stack env 0)
@@ -144,6 +123,36 @@
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
                                LMDB/MDB_NOMETASYNC))
 
+(defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor kv dv]
+  ks/KvIterator
+  (-seek [this k]
+    (with-open [stack (.push stack)]
+      (let [k ^bytes k
+            kb (.flip (.put (.malloc stack (alength k)) k))
+            kv (.mv_data (MDBVal/callocStack stack) kb)]
+        (cursor->kv (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
+  (-next [this]
+    (cursor->kv (:cursor cursor) kv dv LMDB/MDB_NEXT))
+
+  Closeable
+  (close [_]
+    (.close cursor)
+    (.close stack))  )
+
+(defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
+  ks/KvSnapshot
+  (new-iterator [this]
+    (let [stack (.push stack)]
+      (->LMDBKvIterator stack
+                        (new-cursor stack dbi (:txn tx))
+                        (MDBVal/callocStack stack)
+                        (MDBVal/callocStack stack))))
+
+  Closeable
+  (close [_]
+    (.close tx)
+    (.close stack)))
+
 (defrecord LMDBKv [db-dir env env-flags dbi]
   ks/KvStore
   (open [this]
@@ -162,15 +171,7 @@
   (new-snapshot [this]
     (let [stack (MemoryStack/stackPush)
           tx (new-transaction stack env LMDB/MDB_RDONLY)]
-      (reify
-        ks/KvSnapshot
-        (new-iterator [this]
-          (new-cursor-iterator stack env dbi (:txn tx)))
-
-        Closeable
-        (close [_]
-          (.close tx)
-          (.close stack)))))
+      (->LMDBKvSnapshot stack env dbi tx)))
 
   (store [this kvs]
     (try
