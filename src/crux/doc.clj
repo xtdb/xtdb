@@ -25,16 +25,16 @@
 
 (defn all-doc-keys [snapshot]
   (->> (all-key-values-in-prefix snapshot (idx/encode-doc-prefix-key))
-       (map (comp idx/->Id idx/decode-doc-key first))
+       (map (comp idx/decode-doc-key first))
        (set)))
 
 (defn docs [snapshot ks]
   (with-open [i (ks/new-iterator snapshot)]
-    (->> (for [seek-k (->> (map (comp idx/encode-doc-key idx/id->bytes) ks)
+    (->> (for [seek-k (->> (map idx/encode-doc-key ks)
                            (sort bu/bytes-comparator))
                :let [[k v] (ks/-seek i seek-k)]
                :when (and k (bu/bytes=? seek-k k))]
-           [(idx/->Id (idx/decode-doc-key k))
+           [(idx/decode-doc-key k)
             (ByteBuffer/wrap v)])
          (into {}))))
 
@@ -45,9 +45,9 @@
              (let [[min-v max-v] v]
                (when max-v
                  (assert (not (neg? (compare max-v min-v)))))
-               [(idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or min-v idx/empty-byte-array)))
-                (idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or max-v idx/empty-byte-array)))])
-             (let [seek-k (idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or v idx/empty-byte-array)))]
+               [(idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
+                (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))])
+             (let [seek-k (idx/encode-attribute+value-prefix-key k (or v idx/empty-byte-array))]
                [seek-k seek-k])))
          (sort-by first bu/bytes-comparator)
          (reduce
@@ -57,7 +57,6 @@
               (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
                 (recur (ks/-next i)
                        (->> (idx/decode-attribute+value+content-hash-key->content-hash k)
-                            (idx/->Id)
                             (conj acc)))
                 acc)))
           #{}))))
@@ -68,9 +67,9 @@
              (set? v))) (vector)))
 
 (defn store-doc [kv content-hash doc]
-  (let [content-hash (idx/id->bytes content-hash)
+  (let [content-hash (idx/new-id content-hash)
         existing-doc (with-open [snapshot (ks/new-snapshot kv)]
-                       (get (docs snapshot [content-hash]) (idx/->Id content-hash)))]
+                       (get (docs snapshot [content-hash]) content-hash))]
     (cond
       (and doc (nil? existing-doc))
       (ks/store kv (cons
@@ -78,7 +77,7 @@
                      (nippy/fast-freeze doc)]
                     (for [[k v] doc
                           v (normalize-value v)]
-                      [(idx/encode-attribute+value+content-hash-key (idx/id->bytes k) (idx/value->bytes v) content-hash)
+                      [(idx/encode-attribute+value+content-hash-key k v content-hash)
                        idx/empty-byte-array])))
 
       (and (nil? doc) existing-doc)
@@ -86,24 +85,22 @@
                      (idx/encode-doc-key content-hash)
                      (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
                            v (normalize-value v)]
-                       (idx/encode-attribute+value+content-hash-key (idx/id->bytes k) (idx/value->bytes v) content-hash)))))))
+                       (idx/encode-attribute+value+content-hash-key k v content-hash)))))))
 
 ;; Meta
 
 (defn store-meta [kv k v]
-  (ks/store kv [[(idx/encode-meta-key (idx/id->bytes k))
+  (ks/store kv [[(idx/encode-meta-key k)
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
-  (some->> ^bytes (kvu/value kv (idx/encode-meta-key (idx/id->bytes k)))
+  (some->> ^bytes (kvu/value kv (idx/encode-meta-key k))
            nippy/fast-thaw))
 
 ;; Txs Read
 
 (defn- enrich-entity-map [entity-map content-hash]
-  (-> entity-map
-      (assoc :content-hash (some-> content-hash not-empty idx/->Id))
-      (update :eid idx/->Id)))
+  (assoc entity-map :content-hash (some-> content-hash not-empty idx/new-id)))
 
 (def ^:private ^:const entity-prefix-size (+ Short/BYTES idx/id-size))
 
@@ -111,7 +108,7 @@
   (with-open [i (ks/new-iterator snapshot)]
     (->> (for [seek-k (->> (for [entity entities]
                              (idx/encode-entity+bt+tt-prefix-key
-                              (idx/id->bytes entity)
+                              entity
                               business-time
                               transact-time))
                            (sort bu/bytes-comparator))
@@ -131,9 +128,9 @@
 (defn eids-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
     (->> (for [content-hash content-hashes
-               :let [content-hash (idx/id->bytes content-hash)]]
+               :let [content-hash (idx/new-id content-hash)]]
            [(idx/encode-content-hash-prefix-key content-hash)
-            (idx/->Id content-hash)])
+            content-hash])
          (into (sorted-map-by bu/bytes-comparator))
          (reduce-kv
           (fn [acc seek-k content-hash]
@@ -144,7 +141,7 @@
                        (update acc
                                content-hash
                                conj
-                               (idx/->Id (idx/decode-content-hash+entity-key->entity k))))
+                               (idx/decode-content-hash+entity-key->entity k)))
                 acc)))
           {}))))
 
@@ -158,12 +155,12 @@
 
 (defn all-entities [snapshot business-time transact-time]
   (let [eids (->> (all-key-values-in-prefix snapshot (idx/encode-entity+bt+tt-prefix-key))
-                  (map (comp idx/->Id :eid idx/decode-entity+bt+tt+tx-id-key first)))]
+                  (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first)))]
     (entities-at snapshot eids business-time transact-time)))
 
 (defn entity-histories [snapshot entities]
   (->> (for [seek-k (->> (for [entity entities]
-                           (idx/encode-entity+bt+tt-prefix-key (idx/id->bytes entity)))
+                           (idx/encode-entity+bt+tt-prefix-key entity))
                          (sort bu/bytes-comparator))
              :let [[entity-map :as history] (for [[k v] (all-key-values-in-prefix snapshot seek-k)]
                                               (-> (idx/decode-entity+bt+tt+tx-id-key k)
