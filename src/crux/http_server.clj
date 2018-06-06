@@ -17,7 +17,7 @@
                        query (read-string (req/body-string request))]
                    (str (q/q db query)))}))
 
-(defn create-server [kv]
+(defn ^Closeable create-server [kv]
   (let [server (j/run-jetty (partial handler kv)
                             {:port 3000
                              :join? false})]
