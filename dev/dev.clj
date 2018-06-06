@@ -6,6 +6,7 @@
             [crux.core :as crux]
             [crux.doc :as doc]
             [crux.embedded-kafka :as ek]
+            [crux.http-server :as srv]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
@@ -47,13 +48,15 @@
               kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
               kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
-                                                         "request.timeout.ms" "5000"})]
+                                                         "request.timeout.ms" "5000"})
+              http-server (srv/create-server kv-store)]
     (->> {:zookeeper @zookeeper
           :kafka @kafka
           :kv-store kv-store
           :kafka-producer kafka-producer
           :kafka-consumer kafka-consumer
           :kafka-admin-client kafka-admin-client
+          :http-server http-server
           :options options}
          (do-with-system-fn))))
 
