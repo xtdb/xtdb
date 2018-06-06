@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
             [crux.core :as crux]
-            [crux.doc :as doc]
+            [crux.doc.tx :as tx]
             [crux.kv-store :as kv-store]
             [crux.memdb]
             [crux.rocksdb]
@@ -77,7 +77,7 @@
                  replication-factor]
           :as options} (merge default-options options)
          tx-log (k/->KafkaTxLog producer tx-topic doc-topic)
-         indexer (doc/->DocIndexer kv-store tx-log)
+         indexer (tx/->DocIndexer kv-store tx-log)
          replication-factor (Long/parseLong replication-factor)]
      (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)

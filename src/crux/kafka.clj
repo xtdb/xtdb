@@ -4,6 +4,7 @@
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.doc.tx :as tx]
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
@@ -69,8 +70,8 @@
          (.send producer)))
 
   (submit-tx [this tx-ops]
-    (let [conformed-tx-ops (doc/conform-tx-ops tx-ops)]
-      (doseq [doc (doc/tx-ops->docs tx-ops)]
+    (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
+      (doseq [doc (tx/tx-ops->docs tx-ops)]
         (db/submit-doc this (str (doc/doc->content-hash doc)) doc))
       (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
                                 (.send producer))]
@@ -100,7 +101,7 @@
       (.seekToBeginning consumer [partition]))))
 
 (defn- index-doc-record [indexer ^ConsumerRecord record]
-  (let [content-hash (doc/id->bytes (.key record))
+  (let [content-hash (.key record)
         doc (consumer-record->value record)]
     (db/index-doc indexer content-hash doc)
     doc))

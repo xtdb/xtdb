@@ -4,6 +4,7 @@
             [crux.core]
             [crux.db]
             [crux.doc]
+            [crux.doc.tx]
             [crux.rocksdb]
             [crux.lmdb]
             [crux.memdb]
@@ -63,7 +64,7 @@
 ;; TODO: this should either be simplified or cleaned up, depending on if
 ;; we keep KV.
 (defn with-query-doc-index [f]
-  (let [tx-log (crux.doc/->DocTxLog *kv*)]
+  (let [tx-log (crux.doc.tx/->DocTxLog *kv*)]
     (with-redefs [crux.core/db crux.doc/db
                   transact-people! (fn this
                                      ([kv people-mixins]

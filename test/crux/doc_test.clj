@@ -5,6 +5,8 @@
             [crux.byte-utils :as bu]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.doc.index :as idx]
+            [crux.doc.tx :as tx]
             [crux.kv-store :as ks]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
@@ -91,12 +93,12 @@
                   snapshot :http://dbpedia.org/property/imageSize [[-255 229]])))))))
 
 (t/deftest test-can-index-tx-ops
-  (let [tx-log (doc/->DocTxLog f/*kv*)
+  (let [tx-log (tx/->DocTxLog f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (doc/doc->content-hash picasso)
         business-time #inst "2018-05-21"
-        eid (doc/->Id (doc/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))
+        eid (idx/->Id (idx/id->bytes :http://dbpedia.org/resource/Pablo_Picasso))
         {:keys [transact-time tx-id]}
         @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])]
 

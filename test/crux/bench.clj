@@ -4,6 +4,7 @@
             [crux.core :as crux]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.doc.tx :as tx]
             [crux.fixtures :as f :refer [*kv* random-person]]
             [crux.kv :as cr]
             [crux.kv-store :as ks]
@@ -38,7 +39,7 @@
       (cr/-put *kv* people ts)
 
       :doc
-      (db/submit-tx (doc/->DocTxLog *kv*)
+      (db/submit-tx (tx/->DocTxLog *kv*)
                     (vec (for [person people]
                            [:crux.tx/put
                             (let [id (:crux.kv/id person)]
