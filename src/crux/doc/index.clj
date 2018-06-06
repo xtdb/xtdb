@@ -22,6 +22,8 @@
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
 
+(def ^:const ^:private max-string-index-length 128)
+
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
 
@@ -52,7 +54,10 @@
           offset (byte 2)]
       (if (empty? this)
         (byte-array [empty-mark])
-        (let [bs (.getBytes this "UTF-8")
+        (let [s (if (< max-string-index-length (count this))
+                  (subs this 0 max-string-index-length)
+                  this)
+              bs (.getBytes s "UTF-8")
               buffer (ByteBuffer/allocate (inc (alength bs)))]
           (doseq [^byte b bs]
             (.put buffer (byte (+ offset b))))

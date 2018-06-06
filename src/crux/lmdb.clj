@@ -112,7 +112,7 @@
               tx (new-transaction stack env 0)]
     (let [{:keys [^long txn]} tx
           kv (MDBVal/callocStack stack)]
-      (doseq [^bytes k (sort-by bu/bytes-comparator ks)]
+      (doseq [^bytes k (sort bu/bytes-comparator ks)]
         (with-open [stack (.push stack)]
           (let [kb (.flip (.put (.malloc stack (alength k)) k))
                 kv (.mv_data kv kb)
@@ -125,23 +125,23 @@
 
 (defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor kv dv]
   ks/KvIterator
-  (-seek [this k]
+  (-seek [_ k]
     (with-open [stack (.push stack)]
       (let [k ^bytes k
             kb (.flip (.put (.malloc stack (alength k)) k))
             kv (.mv_data (MDBVal/callocStack stack) kb)]
         (cursor->kv (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
-  (-next [this]
+  (-next [_]
     (cursor->kv (:cursor cursor) kv dv LMDB/MDB_NEXT))
 
   Closeable
   (close [_]
     (.close cursor)
-    (.close stack))  )
+    (.close stack)))
 
 (defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
   ks/KvSnapshot
-  (new-iterator [this]
+  (new-iterator [_]
     (let [stack (.push stack)]
       (->LMDBKvIterator stack
                         (new-cursor stack dbi (:txn tx))
@@ -168,12 +168,12 @@
           (env-close env)
           (throw t)))))
 
-  (new-snapshot [this]
+  (new-snapshot [_]
     (let [stack (MemoryStack/stackPush)
           tx (new-transaction stack env LMDB/MDB_RDONLY)]
       (->LMDBKvSnapshot stack env dbi tx)))
 
-  (store [this kvs]
+  (store [_ kvs]
     (try
       (cursor-put env dbi kvs)
       (catch ExceptionInfo e

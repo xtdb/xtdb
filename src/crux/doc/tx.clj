@@ -41,9 +41,9 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [kv snapshot tx-log [op] transact-time tx-id] op))
+(defmulti tx-command (fn [kv tx-log [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [kv snapshot tx-log [op k v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv tx-log [op k v business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
@@ -56,7 +56,7 @@
      [(idx/encode-content-hash+entity-key content-hash eid)
       idx/empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/delete [kv snapshot tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [kv tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     [[(idx/encode-entity+bt+tt+tx-id-key
@@ -66,12 +66,13 @@
        tx-id)
       idx/empty-byte-array]]))
 
-(defmethod tx-command :crux.tx/cas [kv snapshot tx-log [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)
-        old-content-hash (-> (doc/entities-at snapshot [eid] business-time transact-time)
-                             (get eid)
-                             :content-hash)
+        old-content-hash (with-open [snapshot (ks/new-snapshot kv)]
+                           (-> (doc/entities-at snapshot [eid] business-time transact-time)
+                               (get eid)
+                               :content-hash))
         old-v (idx/id->bytes old-v)
         new-v (idx/id->bytes new-v)]
     (when (bu/bytes=? (idx/id->bytes old-content-hash) old-v)
@@ -84,11 +85,12 @@
        [(idx/encode-content-hash+entity-key new-v eid)
         idx/empty-byte-array]])))
 
-(defmethod tx-command :crux.tx/evict [kv snapshot tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [kv tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [{:keys [content-hash bt]} (get (doc/entity-histories snapshot [eid]) eid)
+      (doseq [{:keys [content-hash bt]} (with-open [snapshot (ks/new-snapshot kv)]
+                                          (get (doc/entity-histories snapshot [eid]) eid))
               :when (and content-hash (<= (compare bt business-time) 0))]
         (db/submit-doc tx-log (str content-hash) nil)))
     [[(idx/encode-entity+bt+tt+tx-id-key
@@ -99,11 +101,10 @@
       idx/empty-byte-array]]))
 
 (defn store-tx [kv tx-log tx-ops tx-time tx-id]
-  (with-open [snapshot (ks/new-snapshot kv)]
-    (->> (for [tx-op tx-ops]
-           (tx-command kv snapshot tx-log tx-op tx-time tx-id))
-         (reduce into (sorted-map-by bu/bytes-comparator))
-         (ks/store kv))))
+  (->> (for [tx-op tx-ops]
+         (tx-command kv tx-log tx-op tx-time tx-id))
+       (reduce into (sorted-map-by bu/bytes-comparator))
+       (ks/store kv)))
 
 (defrecord DocIndexer [kv tx-log]
   db/Indexer

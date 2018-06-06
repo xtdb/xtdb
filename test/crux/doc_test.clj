@@ -14,7 +14,7 @@
   (:import [java.util Date]
            [java.nio ByteBuffer]))
 
-(t/use-fixtures :each f/with-kv-store)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
