@@ -2,7 +2,6 @@
   (:require [crux.byte-utils :as bu]
             [crux.doc.index :as idx]
             [crux.kv-store :as ks]
-            [crux.kv-store-utils :as kvu]
             [crux.db :as db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
@@ -95,8 +94,10 @@
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
-  (some->> ^bytes (kvu/value kv (idx/encode-meta-key k))
-           nippy/fast-thaw))
+  (with-open [snapshot (ks/new-snapshot kv)
+              i (ks/new-iterator snapshot)]
+    (when-let [[k v] (ks/-seek i (idx/encode-meta-key k))]
+      (nippy/fast-thaw v))))
 
 ;; Txs Read
 
