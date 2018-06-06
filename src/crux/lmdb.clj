@@ -80,9 +80,10 @@
     (LMDB/mdb_cursor_close cursor)))
 
 (defn- ^LMDBCursor new-cursor [^MemoryStack stack dbi txn]
-  (let [pp (.mallocPointer stack 1)]
-    (success? (LMDB/mdb_cursor_open txn dbi pp))
-    (->LMDBCursor (.get pp))))
+  (with-open [stack (.push stack)]
+    (let [pp (.mallocPointer stack 1)]
+      (success? (LMDB/mdb_cursor_open txn dbi pp))
+      (->LMDBCursor (.get pp)))))
 
 (defn- cursor->kv [cursor ^MDBVal kv ^MDBVal dv flags]
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
@@ -92,7 +93,8 @@
                  (bu/byte-buffer->bytes (.mv_data dv))))))
 
 (defn- new-cursor-iterator [^MemoryStack stack env dbi txn]
-  (let [cursor (new-cursor stack dbi txn)
+  (let [stack (.push stack)
+        cursor (new-cursor stack dbi txn)
         kv (MDBVal/callocStack stack)
         dv (MDBVal/callocStack stack)]
     (reify
@@ -108,7 +110,8 @@
 
       Closeable
       (close [_]
-        (.close cursor)))))
+        (.close cursor)
+        (.pop stack)))))
 
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)

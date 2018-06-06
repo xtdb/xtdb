@@ -6,6 +6,7 @@
             [crux.db :as db]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
+           [java.io Closeable]
            [java.util Date LinkedHashMap]
            [java.util.function Function]))
 
@@ -207,10 +208,40 @@
   (eq? [this that]
     (= eid (:eid that))))
 
+
+(defrecord DocCachedIterator [iterators i]
+  ks/KvIterator
+  (-seek [_ k]
+    (ks/-seek i k))
+
+  (-next [_]
+    (ks/-next i))
+
+  Closeable
+  (close [_]
+    (swap! iterators conj i)))
+
+(defrecord DocSnapshot [^Closeable snapshot iterators]
+  ks/KvSnapshot
+  (new-iterator [_]
+    (let [is @iterators]
+      (if-let [i (first is)]
+        (if (compare-and-set! iterators is (disj is i))
+          (->DocCachedIterator iterators i)
+          (recur))
+        (->> (ks/new-iterator snapshot)
+             (->DocCachedIterator iterators)))))
+
+  Closeable
+  (close [_]
+    (doseq [^Closeable i @iterators]
+      (.close i))
+    (.close snapshot)))
+
 (defrecord DocDatasource [kv business-time transact-time]
   db/Datasource
   (new-query-context [this]
-    (ks/new-snapshot kv))
+    (->DocSnapshot (ks/new-snapshot kv) (atom #{})))
 
   (entities [this query-context]
     (for [[_ entity-map] (all-entities query-context business-time transact-time)]
@@ -233,7 +264,7 @@
   ([kv]
    (db kv (Date.)))
   ([kv business-time]
-   (->DocDatasource kv business-time business-time))
+   (->DocDatasource kv business-time (Date.)))
   ([kv business-time transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout)
    (->DocDatasource kv business-time transact-time)))
