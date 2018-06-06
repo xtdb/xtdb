@@ -14,7 +14,7 @@
     :post {:status 200
            :headers {"Content-Type" "text/plain"}
            :body (let [db (doc/db kv)
-                       query (req/body-string request)]
+                       query (read-string (req/body-string request))]
                    (str (q/q db query)))}))
 
 (defn create-server [kv]
