@@ -9,17 +9,13 @@
   (when (.isValid i)
     (MapEntry. (.key i) (.value i))))
 
-(defrecord RocksKvIterator [^RocksIterator i started?]
+(defrecord RocksKvIterator [^RocksIterator i]
   KvIterator
   (-seek [this k]
     (.seek i k)
-    (reset! started? true)
     (iterator->kv i))
   (-next [this]
-    (if @started?
-      (.next i)
-      (.seekToFirst i))
-    (reset! started? true)
+    (.next i)
     (iterator->kv i))
 
   Closeable
@@ -29,7 +25,7 @@
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options]
   KvSnapshot
   (new-iterator [this]
-    (->RocksKvIterator (.newIterator db read-options) (atom false)))
+    (->RocksKvIterator (.newIterator db read-options)))
 
   Closeable
   (close [_]
