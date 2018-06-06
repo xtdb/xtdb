@@ -45,9 +45,9 @@
              (let [[min-v max-v] v]
                (when max-v
                  (assert (not (neg? (compare max-v min-v)))))
-               [(idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
-                (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))])
-             (let [seek-k (idx/encode-attribute+value-prefix-key k (or v idx/empty-byte-array))]
+               [(idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or min-v idx/empty-byte-array)))
+                (idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or max-v idx/empty-byte-array)))])
+             (let [seek-k (idx/encode-attribute+value-prefix-key (idx/id->bytes k) (idx/value->bytes (or v idx/empty-byte-array)))]
                [seek-k seek-k])))
          (sort-by first bu/bytes-comparator)
          (reduce
@@ -78,7 +78,7 @@
                      (nippy/fast-freeze doc)]
                     (for [[k v] doc
                           v (normalize-value v)]
-                      [(idx/encode-attribute+value+content-hash-key k v content-hash)
+                      [(idx/encode-attribute+value+content-hash-key (idx/id->bytes k) (idx/value->bytes v) content-hash)
                        idx/empty-byte-array])))
 
       (and (nil? doc) existing-doc)
@@ -86,16 +86,16 @@
                      (idx/encode-doc-key content-hash)
                      (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
                            v (normalize-value v)]
-                       (idx/encode-attribute+value+content-hash-key k v content-hash)))))))
+                       (idx/encode-attribute+value+content-hash-key (idx/id->bytes k) (idx/value->bytes v) content-hash)))))))
 
 ;; Meta
 
 (defn store-meta [kv k v]
-  (ks/store kv [[(idx/encode-meta-key k)
+  (ks/store kv [[(idx/encode-meta-key (idx/id->bytes k))
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
-  (some->> ^bytes (kvu/value kv (idx/encode-meta-key k))
+  (some->> ^bytes (kvu/value kv (idx/encode-meta-key (idx/id->bytes k)))
            nippy/fast-thaw))
 
 ;; Txs Read

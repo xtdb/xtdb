@@ -143,16 +143,16 @@
     (doto (byte-array id-size)
       (->> (.get buffer)))))
 
-(defn encode-attribute+value+content-hash-key ^bytes [k v ^bytes content-hash]
-  (assert (or (= id-size (alength content-hash))
-              (zero? (alength content-hash))))
-  (let [v (value->bytes v)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) (alength content-hash)))
-        (.putShort attribute+value+content-hash-index-id)
-        (.put (id->bytes k))
-        (.put v)
-        (.put content-hash)
-        (.array))))
+(defn encode-attribute+value+content-hash-key ^bytes [^bytes k ^bytes v ^bytes content-hash]
+  (assert (and (= id-size (alength k))
+               (or (= id-size (alength content-hash))
+                   (zero? (alength content-hash)))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) (alength content-hash)))
+      (.putShort attribute+value+content-hash-index-id)
+      (.put k)
+      (.put v)
+      (.put content-hash)
+      (.array)))
 
 (defn encode-attribute+value-prefix-key ^bytes [k v]
   (encode-attribute+value+content-hash-key k v empty-byte-array))
@@ -186,10 +186,11 @@
     (doto (byte-array id-size)
       (->> (.get buffer)))))
 
-(defn encode-meta-key ^bytes [k]
+(defn encode-meta-key ^bytes [^bytes k]
+  (assert (= id-size (alength k)))
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
       (.putShort meta-key->value-index-id)
-      (.put (id->bytes k))
+      (.put k)
       (.array)))
 
 (defn- date->reverse-time-ms ^long [^Date date]
