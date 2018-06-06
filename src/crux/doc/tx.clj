@@ -44,20 +44,20 @@
 (defmulti tx-command (fn [kv snapshot tx-log [op] transact-time tx-id] op))
 
 (defmethod tx-command :crux.tx/put [kv snapshot tx-log [op k v business-time] transact-time tx-id]
-  (let [eid (idx/id->bytes k)
-        content-hash (idx/id->bytes v)
+  (let [eid (idx/new-id k)
+        content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
     [[(idx/encode-entity+bt+tt+tx-id-key
        eid
        business-time
        transact-time
        tx-id)
-      content-hash]
+      (idx/id->bytes content-hash)]
      [(idx/encode-content-hash+entity-key content-hash eid)
       idx/empty-byte-array]]))
 
 (defmethod tx-command :crux.tx/delete [kv snapshot tx-log [op k business-time] transact-time tx-id]
-  (let [eid (idx/id->bytes k)
+  (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     [[(idx/encode-entity+bt+tt+tx-id-key
        eid
@@ -67,10 +67,10 @@
       idx/empty-byte-array]]))
 
 (defmethod tx-command :crux.tx/cas [kv snapshot tx-log [op k old-v new-v business-time] transact-time tx-id]
-  (let [eid (idx/id->bytes k)
+  (let [eid (idx/new-id k)
         business-time (or business-time transact-time)
         old-content-hash (-> (doc/entities-at snapshot [eid] business-time transact-time)
-                             (get (idx/->Id eid))
+                             (get eid)
                              :content-hash)
         old-v (idx/id->bytes old-v)
         new-v (idx/id->bytes new-v)]
@@ -85,10 +85,10 @@
         idx/empty-byte-array]])))
 
 (defmethod tx-command :crux.tx/evict [kv snapshot tx-log [op k business-time] transact-time tx-id]
-  (let [eid (idx/id->bytes k)
+  (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [{:keys [content-hash bt]} (get (doc/entity-histories snapshot [eid]) (idx/->Id eid))
+      (doseq [{:keys [content-hash bt]} (get (doc/entity-histories snapshot [eid]) eid)
               :when (and content-hash (<= (compare bt business-time) 0))]
         (db/submit-doc tx-log (str content-hash) nil)))
     [[(idx/encode-entity+bt+tt+tx-id-key
