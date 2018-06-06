@@ -115,6 +115,9 @@ Programs](https://pdfs.semanticscholar.org/004c/2bd66cc6e8aeb9f03c0ea88041d05981
 Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf)
 + [Magic functions: A technique to optimize extended datalog recursive
   programs](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.104.1950&rep=rep1&type=pdf)
++ [Survey and Taxonomy of Lossless Graph Compression and
+  Space-Efficient Graph
+  Representations](https://arxiv.org/abs/1806.01799)
 
 ### Retention
 
