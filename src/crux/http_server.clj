@@ -8,21 +8,24 @@
 
 (defn handler [kv request]
   (case (:request-method request)
-    :get {:status 200
-          :headers {"Content-Type" "text/plain"}
-          :body "Status: OK"}
+    :get ;; health check
+    {:status 200
+     :headers {"Content-Type" "text/plain"}
+     :body "Status: OK"}
 
-    :post {:status 200
-           :headers {"Content-Type" "text/plain"}
-           :body (let [db (doc/db kv)
-                       query (read-string (req/body-string request))]
-                   (str (q/q db query)))}
+    :post ;; Read
+    {:status 200
+     :headers {"Content-Type" "text/plain"}
+     :body (let [db (doc/db kv)
+                 query (read-string (req/body-string request))]
+             (str (q/q db query)))}
 
-    :put {:status 200
-          :headers {"Content-Type" "text/plain"}
-          :body (let [tx (read-string (req/body-string request))]
-                  (kv/-put kv tx)
-                  (str "Successfully inserted " tx))}))
+    :put ;; Write
+    {:status 200
+     :headers {"Content-Type" "text/plain"}
+     :body (let [tx (read-string (req/body-string request))]
+             (kv/-put kv tx)
+             (str "Successfully inserted " tx))}))
 
 (defn ^Closeable create-server [kv]
   (let [server (j/run-jetty (partial handler kv)
