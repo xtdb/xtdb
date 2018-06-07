@@ -3,7 +3,6 @@
             [clojure.tools.namespace.repl :as tn]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
-            [crux.core :as crux]
             [crux.doc :as doc]
             [crux.embedded-kafka :as ek]
             [crux.http-server :as srv]

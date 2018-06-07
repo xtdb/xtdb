@@ -1,12 +1,9 @@
 (ns crux.bench
   (:require [criterium.core :as crit]
-            [crux.codecs :as c]
-            [crux.core :as crux]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.doc.tx :as tx]
-            [crux.fixtures :as f :refer [*kv* random-person]]
-            [crux.kv :as cr]
+            [crux.fixtures :as f :refer [*kv*]]
             [crux.kv-store :as ks]
             [crux.query :as q])
   (:import [java.util Date UUID]))
@@ -33,30 +30,13 @@
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
 (defn- insert-data [n batch-size ts index]
-  (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly random-person))))]
-    (case index
-      :kv
-      (cr/-put *kv* people ts)
-
-      :doc
-      (db/submit-tx (tx/->DocTxLog *kv*)
-                    (vec (for [person people]
-                           [:crux.tx/put
-                            (let [id (:crux.kv/id person)]
-                              (if (keyword? id)
-                                id
-                                (UUID/fromString id)))
-                            person
-                            ts]))))))
+  (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
+    @(db/submit-tx (tx/->DocTxLog *kv*)
+                   (f/people->tx-ops people ts))))
 
 (defn- perform-query [ts query index]
   (let [q (query queries)
-        db-fn (fn [] (case index
-                       :kv
-                       (crux/as-of *kv* ts)
-
-                       :doc
-                       (doc/db *kv* ts)))]
+        db-fn (fn [] (doc/db *kv* ts))]
     ;; Assert this query is in good working order first:
     (assert (pos? (count (q/q (db-fn) q))))
 
@@ -95,7 +75,6 @@
            query :name
            ts (Date.)
            kv :rocks
-           index :kv
            speed :instant
            verbose false}}]
   ((case kv
@@ -118,16 +97,3 @@
                         queries-to-bench)))))))))
 
 ;; Datomic: 100 queries against 1000 dataset = 40-50 millis
-
-;; ~500 mills for 1 million
-(defn bench-encode [n]
-  (let [d (java.util.Date.)]
-    (doseq [_ (range n)]
-      (c/encode cr/frame-index-eat {:index :eat :eid (rand-int 1000000) :aid (rand-int 1000000) :ts d}))))
-
-;; ~900 ms for 1 million
-;; TODO: add new test here, the value frames have been replaced by nippy.
-#_(defn bench-decode [n]
-    (let [f (cr/encode cr/frame-value-eat {:type :string :v "asdasd"})]
-      (doseq [_ (range n)]
-        (crux.codecs/decode cr/frame-value-eat f))))

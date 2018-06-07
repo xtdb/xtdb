@@ -3,7 +3,6 @@
             [clojure.pprint :as pp]
             [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
-            [crux.core :as crux]
             [crux.doc :as doc]
             [crux.doc.tx :as tx]
             [crux.http-server :as srv]
@@ -57,7 +56,9 @@
                     "rocksdb" crux.rocksdb/map->RocksKv
                     "lmdb" crux.lmdb/map->LMDBKv
                     "memdb" crux.memdb/map->MemKv) {})]
-    (->> (crux/kv db-dir {:kv-store kv-store})
+    (->> (assoc kv-store
+                :db-dir db-dir
+                :state (atom {}))
          (kv-store/open))))
 
 (defn start-system

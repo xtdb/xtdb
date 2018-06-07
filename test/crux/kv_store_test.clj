@@ -1,5 +1,6 @@
 (ns crux.kv-store-test
   (:require [clojure.test :as t]
+            [crux.bootstrap]
             [crux.byte-utils :as bu]
             [crux.fixtures :as f]
             [crux.kv-store :as ks]
@@ -82,7 +83,8 @@
       (ks/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (ks/backup f/*kv* backup-dir)
-      (with-open [restored-kv ^Closeable (ks/open (crux.core/kv backup-dir {:kv-store f/*kv-store*}))]
+      (with-open [restored-kv (crux.bootstrap/start-kv-store {:db-dir backup-dir
+                                                              :kv-backend f/*kv-backend*})]
         (t/is (= "Crux" (String. ^bytes (kvu/value restored-kv (bu/long->bytes 1)))))
 
         (t/testing "backup and original are different"

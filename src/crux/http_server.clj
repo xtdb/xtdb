@@ -1,6 +1,5 @@
 (ns crux.http-server
   (:require [crux.doc :as doc]
-            [crux.kv :as kv]
             [crux.query :as q]
             [ring.adapter.jetty :as j]
             [ring.util.request :as req])
@@ -24,7 +23,7 @@
     {:status 200
      :headers {"Content-Type" "text/plain"}
      :body (let [tx (read-string (req/body-string request))]
-             (kv/-put kv tx)
+;;             (kv/-put kv tx)
              (str "Successfully inserted " tx))}))
 
 (defn ^Closeable create-server [kv]

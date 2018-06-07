@@ -2,11 +2,10 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.kv :as cr]
-            [crux.core :refer [db as-of]]
+            [crux.doc :as doc :refer [db]]
             [crux.query :as q]))
 
-(t/use-fixtures :each f/with-kv-store f/with-each-query-index-implementation)
+(t/use-fixtures :each f/with-kv-store)
 
 (t/deftest test-sanity-check
   (f/transact-people! *kv* [{:name "Ivan"}])
@@ -86,7 +85,7 @@
     (let [q {:find ['e]
              :where [['e :name "Malcolma"]
                      ['e :last-name "Sparks"]]}]
-      (t/is (= #{} (q/q (as-of *kv* #inst "1986-10-23")
+      (t/is (= #{} (q/q (doc/db *kv* #inst "1986-10-23")
                         q)))
       (t/is (= #{[(:crux.kv/id malcolm)]} (q/q (db *kv*) q))))))
 

@@ -3,7 +3,6 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.core :as crux]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.doc.tx :as tx]
