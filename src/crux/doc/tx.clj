@@ -47,14 +47,16 @@
   (let [eid (idx/new-id k)
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
-    [[(idx/encode-entity+bt+tt+tx-id-key
-       eid
-       business-time
-       transact-time
-       tx-id)
-      (idx/id->bytes content-hash)]
-     [(idx/encode-content-hash+entity-key content-hash eid)
-      idx/empty-byte-array]]))
+    (concat
+     [[(idx/encode-entity+bt+tt+tx-id-key
+        eid
+        business-time
+        transact-time
+        tx-id)
+       (idx/id->bytes content-hash)]]
+     (when-not (= content-hash (idx/new-id nil))
+       [[(idx/encode-content-hash+entity-key content-hash eid)
+         idx/empty-byte-array]]))))
 
 (defmethod tx-command :crux.tx/delete [db tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
@@ -64,7 +66,7 @@
        business-time
        transact-time
        tx-id)
-      idx/empty-byte-array]]))
+      idx/nil-id-bytes]]))
 
 (defmethod tx-command :crux.tx/cas [db tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
@@ -73,16 +75,18 @@
                  (db/entity db qc eid))
         old-doc (db/->map entity)
         old-v (idx/id->bytes old-v)
-        new-v (idx/id->bytes new-v)]
-    (when (and old-doc (bu/bytes=? (idx/id->bytes old-doc) old-v))
-      [[(idx/encode-entity+bt+tt+tx-id-key
-         eid
-         business-time
-         transact-time
-         tx-id)
-        new-v]
-       [(idx/encode-content-hash+entity-key new-v eid)
-        idx/empty-byte-array]])))
+        new-v (idx/new-id new-v)]
+    (when (bu/bytes=? (idx/id->bytes old-doc) old-v)
+      (concat
+       [[(idx/encode-entity+bt+tt+tx-id-key
+          eid
+          business-time
+          transact-time
+          tx-id)
+         (idx/id->bytes new-v)]]
+       (when-not (= new-v (idx/new-id nil))
+         [[(idx/encode-content-hash+entity-key new-v eid)
+            idx/empty-byte-array]])))))
 
 (defmethod tx-command :crux.tx/evict [db tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
@@ -98,7 +102,7 @@
        business-time
        transact-time
        tx-id)
-      idx/empty-byte-array]]))
+      idx/nil-id-bytes]]))
 
 (defrecord DocIndexer [kv tx-log object-store]
   db/Indexer

@@ -117,7 +117,7 @@
                                           entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
                                                          (enrich-entity-map v))]
                                       (if (<= (compare (:tt entity-map) transact-time) 0)
-                                        (when-not (empty? v)
+                                        (when-not (bu/bytes=? idx/nil-id-bytes v)
                                           entity-map)
                                         (recur (ks/-next i))))))]
                :when entity-map]
@@ -218,8 +218,7 @@
   (->id [this]
     (db/attr-val this :crux.kv/id))
   (->map [this]
-    (when content-hash
-      (get (db/get-objects object-store [content-hash]) content-hash)))
+    (get (db/get-objects object-store [content-hash]) content-hash))
   (->business-time [this]
     bt)
   (eq? [this that]

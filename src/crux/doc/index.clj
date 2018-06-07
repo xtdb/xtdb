@@ -22,6 +22,8 @@
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
 
+(def nil-id-bytes (byte-array id-size))
+
 (def ^:const ^:private max-string-index-length 128)
 
 (defprotocol ValueToBytes
@@ -101,6 +103,10 @@
   IPersistentMap
   (id->bytes [this]
     (value->bytes this))
+
+  nil
+  (id->bytes [this]
+    nil-id-bytes)
 
   Object
   (id->bytes [this]
