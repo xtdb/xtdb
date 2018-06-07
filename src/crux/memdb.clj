@@ -52,7 +52,7 @@
     (->MemKvSnapshot @db))
 
   (store [_ kvs]
-    (swap! db merge (into {} kvs)))
+    (swap! db into kvs))
 
   (delete [_ ks]
     (swap! db #(apply dissoc % ks)))
