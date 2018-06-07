@@ -18,10 +18,10 @@
 
 (def ^:const ^:private meta-key->value-index-id 4)
 
-(def empty-byte-array (byte-array 0))
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
 
+(def empty-byte-array (byte-array 0))
 (def nil-id-bytes (byte-array id-size))
 
 (def ^:const ^:private max-string-index-length 128)
