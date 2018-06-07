@@ -104,7 +104,7 @@
 
   Object
   (id->bytes [this]
-    (throw (UnsupportedOperationException.))))
+    (throw (UnsupportedOperationException. (str "Not a valid id: " this)))))
 
 (deftype Id [^bytes bytes]
   IdToBytes

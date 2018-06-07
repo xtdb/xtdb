@@ -19,3 +19,8 @@
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops]))
+
+(defprotocol ObjectStore
+  (get-objects [this ks])
+  (put-objects [this kvs])
+  (delete-objects [this kvs]))

@@ -24,14 +24,15 @@
          (#(rdf/maps-by-iri % false)))))
 
 (t/deftest test-can-store-doc
-  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (idx/new-id picasso)
         content-hash-hex (str content-hash)]
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (doc/store-doc f/*kv* content-hash picasso)
+    (db/submit-doc tx-log content-hash picasso)
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/is (= {content-hash
                 (ByteBuffer/wrap (nippy/fast-freeze picasso))}
@@ -43,18 +44,14 @@
                   (ByteBuffer/wrap (nippy/fast-freeze picasso))}
                  (doc/docs snapshot [content-hash-hex
                                      "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (doc/docs snapshot [])))))
-
-    (t/testing "all existing doc keys"
-      (t/is (= #{content-hash}
-               (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                 (doc/all-doc-keys snapshot)))))))
+        (t/is (empty? (doc/docs snapshot [])))))))
 
 (t/deftest test-can-find-doc-by-value
-  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (idx/new-id picasso)]
-    (doc/store-doc f/*kv* content-hash picasso)
+    (db/submit-doc tx-log content-hash picasso)
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/is (= #{content-hash}
                (doc/doc-keys-by-attribute-values

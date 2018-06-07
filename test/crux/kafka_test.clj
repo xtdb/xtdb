@@ -46,7 +46,7 @@
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
         tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log)]
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -67,7 +67,7 @@
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
         tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log)]
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -99,7 +99,7 @@
                     (map #(rdf/use-default-language % :en))
                     (vec))
         tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log)]
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -166,7 +166,7 @@
         n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
         tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log)]
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
       (do (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)

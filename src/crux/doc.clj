@@ -24,11 +24,6 @@
 
 ;; Docs
 
-(defn all-doc-keys [snapshot]
-  (->> (all-key-values-in-prefix snapshot (idx/encode-doc-prefix-key))
-       (map (comp idx/decode-doc-key first))
-       (set)))
-
 (defn docs [snapshot ks]
   (with-open [i (ks/new-iterator snapshot)]
     (->> (for [seek-k (->> (map idx/encode-doc-key ks)
@@ -67,26 +62,30 @@
     (not (or (vector? v)
              (set? v))) (vector)))
 
-(defn store-doc [kv content-hash doc]
-  (let [content-hash (idx/new-id content-hash)
-        existing-doc (with-open [snapshot (ks/new-snapshot kv)]
-                       (get (docs snapshot [content-hash]) content-hash))]
-    (cond
-      (and doc (nil? existing-doc))
-      (ks/store kv (cons
-                    [(idx/encode-doc-key content-hash)
-                     (nippy/fast-freeze doc)]
-                    (for [[k v] doc
-                          v (normalize-value v)]
-                      [(idx/encode-attribute+value+content-hash-key k v content-hash)
-                       idx/empty-byte-array])))
+(defn index-doc [kv content-hash doc]
+  (ks/store kv (for [[k v] doc
+                     v (normalize-value v)]
+                 [(idx/encode-attribute+value+content-hash-key k v content-hash)
+                  idx/empty-byte-array])))
 
-      (and (nil? doc) existing-doc)
-      (ks/delete kv (cons
-                     (idx/encode-doc-key content-hash)
-                     (for [[k v] (nippy/fast-thaw (.array ^ByteBuffer existing-doc))
-                           v (normalize-value v)]
-                       (idx/encode-attribute+value+content-hash-key k v content-hash)))))))
+(defn delete-doc-from-index [kv content-hash doc]
+  (ks/delete kv (for [[k v] doc
+                      v (normalize-value v)]
+                  (idx/encode-attribute+value+content-hash-key k v content-hash))))
+
+(defrecord DocObjectStore [kv]
+  db/ObjectStore
+  (get-objects [this ks]
+    (with-open [snapshot (ks/new-snapshot kv)]
+      (->> (for [[k v] (docs snapshot ks)]
+             [k (nippy/fast-thaw (.array ^ByteBuffer v))])
+           (into {}))))
+  (put-objects [this kvs]
+    (ks/store kv (for [[k v] kvs]
+                   [(idx/encode-doc-key k)
+                    (nippy/fast-freeze v)])))
+  (delete-objects [this ks]
+    (ks/delete kv (map idx/encode-doc-key ks))))
 
 ;; Meta
 

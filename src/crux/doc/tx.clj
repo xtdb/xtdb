@@ -106,10 +106,19 @@
        (reduce into (sorted-map-by bu/bytes-comparator))
        (ks/store kv)))
 
-(defrecord DocIndexer [kv tx-log]
+(defrecord DocIndexer [kv tx-log object-store]
   db/Indexer
   (index-doc [_ content-hash doc]
-    (doc/store-doc kv content-hash doc))
+    (let [content-hash (idx/new-id content-hash)
+          existing-doc (get (db/get-objects object-store [content-hash]) content-hash)]
+      (cond
+        (and doc (nil? existing-doc))
+        (do (db/put-objects object-store [[content-hash doc]])
+            (doc/index-doc kv content-hash doc))
+
+        (and (nil? doc) existing-doc)
+        (do (db/delete-objects object-store [content-hash])
+            (doc/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (store-tx kv tx-log tx-ops tx-time tx-id))
@@ -134,13 +143,13 @@
 (defrecord DocTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (db/index-doc (->DocIndexer kv this) content-hash doc))
+    (db/index-doc (->DocIndexer kv this (doc/->DocObjectStore kv)) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (Date.)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
-          indexer (->DocIndexer kv this)]
+          indexer (->DocIndexer kv this (doc/->DocObjectStore kv))]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (idx/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
