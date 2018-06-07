@@ -231,7 +231,7 @@
    (encode-entity+bt+tt+tx-id-key eid business-time transact-time nil)))
 
 (defn decode-entity+bt+tt+tx-id-key [^bytes key]
-  (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES)) (alength key))
+  (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
     {:eid (new-id (doto (byte-array id-size)
