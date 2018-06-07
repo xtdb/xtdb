@@ -15,12 +15,11 @@
 
 (defn- all-key-values-in-prefix [snapshot ^bytes prefix]
   (with-open [i (ks/new-iterator snapshot)]
-    (loop [k (ks/-seek i prefix)
-           acc []]
+    (loop [acc (transient [])
+           k (ks/-seek i prefix)]
       (if (and k (bu/bytes=? prefix k))
-        (let [v (ks/-value i)]
-          (recur (ks/-next i) (conj acc [k v])))
-        acc))))
+        (recur (conj! acc [k (ks/-value i)]) (ks/-next i))
+        (persistent! acc)))))
 
 ;; Docs
 
