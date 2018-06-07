@@ -16,9 +16,9 @@
     (catch Exception e
       {:status 400
        :headers {"Content-Type" "text/plain"}
-       :body (str (if (some? (ex-data e))
-                    (ex-data e)
-                    (.getMessage e)))})))
+       :body (str
+              (.getMessage e) "\n"
+              (ex-data e))})))
 
 (defn handler [kv request]
   (case (:request-method request)
