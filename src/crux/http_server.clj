@@ -1,9 +1,22 @@
 (ns crux.http-server
-  (:require [crux.doc :as doc]
-            [crux.query :as q]
+  (:require [clojure.edn :as edn]
+            [crux.doc :as doc]
+            [crux.query :as q] 
             [ring.adapter.jetty :as j]
             [ring.util.request :as req])
   (:import [java.io Closeable]))
+
+(defn on-post [kv request]
+  (try
+    {:status 200
+     :headers {"Content-Type" "application/edn"}
+     :body (let [db (doc/db kv)
+                 query (edn/read-string (req/body-string request))]
+             (pr-str (q/q db query)))}
+    (catch Exception e
+      {:status 400
+       :headers {"Content-Type" "text/plain"}
+       :body (.getMessage e)})))
 
 (defn handler [kv request]
   (case (:request-method request)
@@ -13,11 +26,7 @@
      :body "Status: OK"}
 
     :post ;; Read
-    {:status 200
-     :headers {"Content-Type" "text/plain"}
-     :body (let [db (doc/db kv)
-                 query (read-string (req/body-string request))]
-             (str (q/q db query)))}
+    (on-post kv request)
 
     :put ;; Write
     {:status 200
