@@ -80,7 +80,9 @@
                    [(idx/encode-doc-key k)
                     (nippy/fast-freeze v)])))
   (delete-objects [this ks]
-    (ks/delete kv (map idx/encode-doc-key ks))))
+    (ks/delete kv (map idx/encode-doc-key ks)))
+  Closeable
+  (close [_]))
 
 ;; Meta
 
@@ -188,18 +190,32 @@
                 (or cache (lru-cache cache-size))))
        cache-name))
 
+(defrecord CachedObjectStore [^LinkedHashMap cache object-store]
+  db/ObjectStore
+  (get-objects [this ks]
+    (->> (for [k ks]
+           [k (lru-cache-compute-if-absent
+               cache
+               k
+               #(get (db/get-objects object-store [%]) %))])
+         (into {})))
+  (put-objects [this kvs]
+    (db/put-objects object-store kvs))
+  (delete-objects [this ks]
+    (doseq [k ks]
+      (.remove cache k))
+    (db/delete-objects object-store ks))
+  Closeable
+  (close [_]))
+
 ;; Query
 
 (def ^:const default-doc-cache-size 10240)
 
-(defrecord DocEntity [kv query-context eid content-hash]
+(defrecord DocEntity [object-store eid content-hash]
   db/Entity
   (attr-val [this ident]
-    (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
-        (lru-cache-compute-if-absent
-         content-hash
-         #(get (db/get-objects (->DocObjectStore kv) [%]) %))
-        (get ident)))
+    (get-in (db/get-objects object-store [content-hash]) [content-hash ident]))
   (->id [this]
     (db/attr-val this :crux.kv/id))
   (eq? [this that]
@@ -235,18 +251,18 @@
       (.close i))
     (.close snapshot)))
 
-(defrecord DocDatasource [kv business-time transact-time]
+(defrecord DocDatasource [kv object-store business-time transact-time]
   db/Datasource
   (new-query-context [this]
     (->DocSnapshot (ks/new-snapshot kv) (atom #{})))
 
   (entities [this query-context]
     (for [[_ entity-map] (all-entities query-context business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv :query-context query-context))))
+      (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
     (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
-      (map->DocEntity (assoc entity-map :kv kv :query-context query-context)))))
+      (map->DocEntity (assoc entity-map :object-store object-store)))))
 
 (def ^:const default-await-tx-timeout 10000)
 
@@ -257,11 +273,21 @@
       (when (>= (System/currentTimeMillis) timeout-at)
         (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
 
+(defn- new-cached-object-store [kv cache-size]
+  (->CachedObjectStore (lru-named-cache (:state kv)::doc-cache cache-size)
+                       (->DocObjectStore kv)))
+
 (defn db
   ([kv]
    (db kv (Date.)))
   ([kv business-time]
-   (->DocDatasource kv business-time (Date.)))
+   (->DocDatasource kv
+                    (new-cached-object-store kv default-doc-cache-size)
+                    business-time
+                    (Date.)))
   ([kv business-time transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout)
-   (->DocDatasource kv business-time transact-time)))
+   (->DocDatasource kv
+                    (new-cached-object-store kv default-doc-cache-size)
+                    business-time
+                    transact-time)))
