@@ -33,7 +33,9 @@
 (extend-protocol ValueToBytes
   (class (byte-array 0))
   (value->bytes [this]
-    this)
+    (if (empty? this)
+      this
+      (bu/sha1 this)))
 
   Long
   (value->bytes [this]
@@ -69,7 +71,7 @@
 
   Object
   (value->bytes [this]
-    (bu/sha1 (nippy/fast-freeze this))))
+    (value->bytes (nippy/fast-freeze this))))
 
 (defprotocol IdToBytes
   (id->bytes ^bytes [this]))
