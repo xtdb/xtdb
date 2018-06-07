@@ -120,7 +120,8 @@
               (success? rc))))))))
 
 (def default-env-flags (bit-or LMDB/MDB_NOSYNC
-                               LMDB/MDB_NOMETASYNC))
+                               LMDB/MDB_NOMETASYNC
+                               LMDB/MDB_NOTLS))
 
 (defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
   ks/KvIterator
@@ -140,8 +141,6 @@
     (.close cursor)
     (.close stack)))
 
-(def ^:private ^ThreadLocal snapshot-tl (ThreadLocal.))
-
 (defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
   ks/KvSnapshot
   (new-iterator [_]
@@ -153,7 +152,6 @@
 
   Closeable
   (close [_]
-    (.remove snapshot-tl)
     (.close tx)
     (.close stack)))
 
@@ -173,18 +171,9 @@
           (throw t)))))
 
   (new-snapshot [_]
-    (if-let [snapshot (.get snapshot-tl)]
-      (reify
-        ks/KvSnapshot
-        (new-iterator [this]
-          (ks/new-iterator snapshot))
-
-        Closeable
-        (close [_]))
-      (let [stack (MemoryStack/stackPush)
-            tx (new-transaction stack env LMDB/MDB_RDONLY)]
-        (doto (->LMDBKvSnapshot stack env dbi tx)
-          (->> (.set snapshot-tl))))))
+    (let [stack (MemoryStack/stackPush)
+          tx (new-transaction stack env LMDB/MDB_RDONLY)]
+      (->LMDBKvSnapshot stack env dbi tx)))
 
   (store [_ kvs]
     (try
