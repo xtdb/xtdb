@@ -3,11 +3,15 @@
 (defprotocol Datasource
   (^java.io.Closeable new-query-context [this])
   (entities [this qc])
-  (entities-for-attribute-value [this qc a min-v max-v]))
+  (entities-for-attribute-value [this qc a min-v max-v])
+  (entity [this qc eid])
+  (entity-history [this qc eid]))
 
 (defprotocol Entity
   (attr-val [this attr])
   (->id [this])
+  (->map [this])
+  (->business-time [this])
   (eq? [this another]))
 
 (defprotocol Indexer

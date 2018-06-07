@@ -211,12 +211,17 @@
 
 ;; Query
 
-(defrecord DocEntity [object-store eid content-hash]
+(defrecord DocEntity [object-store eid content-hash bt]
   db/Entity
   (attr-val [this ident]
-    (get-in (db/get-objects object-store [content-hash]) [content-hash ident]))
+    (get (db/->map this) ident))
   (->id [this]
     (db/attr-val this :crux.kv/id))
+  (->map [this]
+    (when content-hash
+      (get (db/get-objects object-store [content-hash]) content-hash)))
+  (->business-time [this]
+    bt)
   (eq? [this that]
     (= eid (:eid that))))
 
@@ -261,6 +266,14 @@
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
     (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
+      (map->DocEntity (assoc entity-map :object-store object-store))))
+
+  (entity-history [this query-context eid]
+    (for [entity-map (get (entity-histories query-context [eid]) eid)]
+      (map->DocEntity (assoc entity-map :object-store object-store))))
+
+  (entity [this query-context eid]
+    (when-let [entity-map (get (entities-at query-context [eid] business-time transact-time) eid)]
       (map->DocEntity (assoc entity-map :object-store object-store)))))
 
 (def ^:const default-await-tx-timeout 10000)
