@@ -1,6 +1,7 @@
 (ns crux.http-server
   (:require [clojure.edn :as edn]
             [crux.doc :as doc]
+            [crux.kv-store :as kvs]
             [crux.query :as q] 
             [ring.adapter.jetty :as j]
             [ring.util.request :as req])
@@ -25,7 +26,8 @@
     :get ;; health check
     {:status 200
      :headers {"Content-Type" "text/plain"}
-     :body "Status: OK"}
+     :body (pr-str
+            {:estimate-num-keys (kvs/count-keys kv)})}
 
     :post ;; Read
     (on-post kv request)

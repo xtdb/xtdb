@@ -14,4 +14,5 @@
   (^java.io.Closeable new-snapshot [this])
   (store [this kvs])
   (delete [this ks])
-  (backup [this dir]))
+  (backup [this dir])
+  (count-keys [this]))
