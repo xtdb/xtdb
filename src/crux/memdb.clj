@@ -5,13 +5,6 @@
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable))
 
-(defn- atom-cursor->next! [cursor value]
-  (let [[k v :as kv] (first @cursor)]
-    (swap! cursor rest)
-    (when kv
-      (reset! value v)
-      k)))
-
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
@@ -21,22 +14,30 @@
   (->> (nippy/thaw-from-file (io/file dir "memdb"))
        (into (sorted-map-by bu/bytes-comparator))))
 
-(defrecord MemKvIterator [db cursor value]
+(defrecord MemKvIterator [db cursor]
   ks/KvIterator
   (ks/-seek [this k]
-    (reset! cursor (subseq db >= k))
-    (atom-cursor->next! cursor value))
+    (let [[x & xs] (subseq db >= k)]
+      (some->> (reset! cursor {:first x :rest xs})
+               :first
+               (key))))
   (ks/-next [this]
-    (atom-cursor->next! cursor value))
+    (some->> (swap! cursor (fn [{[x & xs] :rest}]
+                             {:first x :rest xs}))
+             :first
+             (key)))
   (ks/-value [this]
-    @value)
+    (some->> @cursor
+             :first
+             (val)))
+
   Closeable
   (close [_]))
 
 (defrecord MemKvSnapshot [db]
   ks/KvSnapshot
   (new-iterator [_]
-    (->MemKvIterator db (atom (seq db)) (atom nil)))
+    (->MemKvIterator db (atom {:rest (seq db)})))
 
   Closeable
   (close [_]))
