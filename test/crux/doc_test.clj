@@ -25,26 +25,23 @@
 
 (t/deftest test-can-store-doc
   (let [tx-log (tx/->DocTxLog f/*kv*)
+        object-store (doc/->DocObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (idx/new-id picasso)
-        content-hash-hex (str content-hash)]
+        content-hash (idx/new-id picasso)]
     (t/is (= 47 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
     (db/submit-doc tx-log content-hash picasso)
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/is (= {content-hash
-                (ByteBuffer/wrap (nippy/fast-freeze picasso))}
-               (doc/docs snapshot [content-hash]))))
+    (t/is (= {content-hash picasso}
+             (db/get-objects object-store [content-hash])))
 
     (t/testing "non existent docs are ignored"
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= {content-hash
-                  (ByteBuffer/wrap (nippy/fast-freeze picasso))}
-                 (doc/docs snapshot [content-hash-hex
-                                     "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (doc/docs snapshot [])))))))
+      (t/is (= {content-hash picasso}
+               (db/get-objects object-store
+                               [content-hash
+                                "090622a35d4b579d2fcfebf823821298711d3867"])))
+      (t/is (empty? (db/get-objects object-store []))))))
 
 (t/deftest test-can-find-doc-by-value
   (let [tx-log (tx/->DocTxLog f/*kv*)
@@ -91,6 +88,7 @@
 
 (t/deftest test-can-index-tx-ops
   (let [tx-log (tx/->DocTxLog f/*kv*)
+        object-store (doc/->DocObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (idx/new-id picasso)
@@ -254,8 +252,7 @@
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
         (let [picasso-history (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-          (t/is (= 6 (count (map :content-hash picasso-history))))
-          (t/is (= 5 (count (doc/docs snapshot (keep :content-hash picasso-history))))))))
+          (t/is (= 6 (count (map :content-hash picasso-history)))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -264,15 +261,17 @@
             @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
+          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))
 
-          (t/testing "eviction adds to and keeps tx history"
-            (let [picasso-history (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
-              ;; TODO: this is flaky
-              ;; (t/is (= 7 (count (map :content-hash picasso-history))))
-              (t/testing "eviction removes docs"
-                (t/is (empty? (doc/docs snapshot (keep :content-hash picasso-history)))))))
+        (t/testing "eviction adds to and keeps tx history"
+          (let [picasso-history (with-open [snapshot (ks/new-snapshot f/*kv*)]
+                                  (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid))]
+            ;; TODO: this is flaky
+            ;; (t/is (= 7 (count (map :content-hash picasso-history))))
+            (t/testing "eviction removes docs"
+              (t/is (empty? (db/get-objects object-store (keep :content-hash picasso-history)))))))
 
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/testing "eviction removes secondary indexes"
             (t/is (empty? (keys (doc/entities-by-attribute-values-at snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} new-transact-time new-transact-time))))
             (t/is (empty? (doc/doc-keys-by-attribute-values snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))))))))

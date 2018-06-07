@@ -24,16 +24,6 @@
 
 ;; Docs
 
-(defn docs [snapshot ks]
-  (with-open [i (ks/new-iterator snapshot)]
-    (->> (for [seek-k (->> (map idx/encode-doc-key ks)
-                           (sort bu/bytes-comparator))
-               :let [k (ks/-seek i seek-k)]
-               :when (and k (bu/bytes=? seek-k k))]
-           [(idx/decode-doc-key k)
-            (ByteBuffer/wrap (ks/-value i))])
-         (into {}))))
-
 (defn doc-keys-by-attribute-values [snapshot k vs]
   (with-open [i (ks/new-iterator snapshot)]
     (->> (for [v vs]
@@ -76,9 +66,14 @@
 (defrecord DocObjectStore [kv]
   db/ObjectStore
   (get-objects [this ks]
-    (with-open [snapshot (ks/new-snapshot kv)]
-      (->> (for [[k v] (docs snapshot ks)]
-             [k (nippy/fast-thaw (.array ^ByteBuffer v))])
+    (with-open [snapshot (ks/new-snapshot kv)
+                i (ks/new-iterator snapshot)]
+      (->> (for [seek-k (->> (map idx/encode-doc-key ks)
+                             (sort bu/bytes-comparator))
+                 :let [k (ks/-seek i seek-k)]
+                 :when (and k (bu/bytes=? seek-k k))]
+             [(idx/decode-doc-key k)
+            (nippy/fast-thaw (ks/-value i))])
            (into {}))))
   (put-objects [this kvs]
     (ks/store kv (for [[k v] kvs]
@@ -203,7 +198,7 @@
     (-> (lru-named-cache (:state kv) ::doc-cache default-doc-cache-size)
         (lru-cache-compute-if-absent
          content-hash
-         #(nippy/fast-thaw (.array ^ByteBuffer (get (docs query-context [%]) %))))
+         #(get (db/get-objects (->DocObjectStore kv) [%]) %))
         (get ident)))
   (->id [this]
     (db/attr-val this :crux.kv/id))
