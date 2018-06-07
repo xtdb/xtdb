@@ -81,6 +81,7 @@
                     (nippy/fast-freeze v)])))
   (delete-objects [this ks]
     (ks/delete kv (map idx/encode-doc-key ks)))
+
   Closeable
   (close [_]))
 
@@ -96,7 +97,7 @@
     (when-let [k (ks/-seek i (idx/encode-meta-key k))]
       (nippy/fast-thaw (ks/-value i)))))
 
-;; Txs Read
+;; Entities
 
 (defn- enrich-entity-map [entity-map content-hash]
   (assoc entity-map :content-hash (some-> content-hash not-empty idx/new-id)))
@@ -205,12 +206,11 @@
     (doseq [k ks]
       (.remove cache k))
     (db/delete-objects object-store ks))
+
   Closeable
   (close [_]))
 
 ;; Query
-
-(def ^:const default-doc-cache-size 10240)
 
 (defrecord DocEntity [object-store eid content-hash]
   db/Entity
@@ -272,6 +272,8 @@
       (Thread/sleep 100)
       (when (>= (System/currentTimeMillis) timeout-at)
         (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
+
+(def ^:const default-doc-cache-size 10240)
 
 (defn- new-cached-object-store [kv cache-size]
   (->CachedObjectStore (lru-named-cache (:state kv)::doc-cache cache-size)

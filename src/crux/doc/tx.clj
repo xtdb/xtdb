@@ -100,12 +100,6 @@
        tx-id)
       idx/empty-byte-array]]))
 
-(defn store-tx [kv tx-log tx-ops tx-time tx-id]
-  (->> (for [tx-op tx-ops]
-         (tx-command kv tx-log tx-op tx-time tx-id))
-       (reduce into (sorted-map-by bu/bytes-comparator))
-       (ks/store kv)))
-
 (defrecord DocIndexer [kv tx-log object-store]
   db/Indexer
   (index-doc [_ content-hash doc]
@@ -121,7 +115,10 @@
             (doc/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (store-tx kv tx-log tx-ops tx-time tx-id))
+    (->> (for [tx-op tx-ops]
+         (tx-command kv tx-log tx-op tx-time tx-id))
+       (reduce into (sorted-map-by bu/bytes-comparator))
+       (ks/store kv)))
 
   (store-index-meta [_ k v]
     (doc/store-meta kv k v))
