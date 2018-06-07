@@ -23,11 +23,15 @@
     {:status 200
      :headers {"Content-Type" "text/plain"}
      :body (let [tx (read-string (req/body-string request))]
-;;             (kv/-put kv tx)
+;;             (kv/-put kv tx) TODO
              (str "Successfully inserted " tx))}))
 
-(defn ^Closeable create-server [kv]
-  (let [server (j/run-jetty (partial handler kv)
-                            {:port 3000
-                             :join? false})]
-    (reify Closeable (close [_] (.stop server)))))
+(defn ^Closeable create-server
+  ([kv]
+   (create-server kv 3000))
+  
+  ([kv port]
+   (let [server (j/run-jetty (partial handler kv)
+                             {:port port
+                              :join? false})]
+     (reify Closeable (close [_] (.stop server))))))
