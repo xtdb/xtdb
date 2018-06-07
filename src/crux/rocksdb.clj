@@ -71,7 +71,7 @@
 
   (count-keys [{:keys [^RocksDB db]}]
     (-> (.getProperty db "rocksdb.estimate-num-keys")
-        (read-string)))
+        (Long/parseLong)))
 
   Closeable
   (close [{:keys [^RocksDB db ^Options options ^WriteOptions write-options]}]

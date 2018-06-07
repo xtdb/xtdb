@@ -63,6 +63,9 @@
         (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath file)))))
       (persist-db dir db)))
 
+  (count-keys [_]
+    (count @db))
+
   Closeable
   (close [_]
     (when (and db-dir persist-on-close?)
