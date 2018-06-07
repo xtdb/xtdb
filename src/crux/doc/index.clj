@@ -64,7 +64,7 @@
               bs (.getBytes s "UTF-8")
               buffer (ByteBuffer/allocate (inc (alength bs)))]
           (doseq [^byte b bs]
-            (.put buffer (byte (+ offset b))))
+            (.put buffer (unchecked-byte (+ offset b))))
           (-> buffer
               (.put terminate-mark)
               (.array))))))
