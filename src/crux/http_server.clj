@@ -1,50 +1,65 @@
 (ns crux.http-server
   (:require [clojure.edn :as edn]
+            [crux.db :as db]
             [crux.doc :as doc]
+            [crux.doc.tx :as tx]
             [crux.kv-store :as kvs]
             [crux.query :as q] 
             [ring.adapter.jetty :as j]
             [ring.util.request :as req])
   (:import [java.io Closeable]))
 
-(defn on-post [kv request]
+(defn exception-response [^Exception e]
+  {:status 400
+   :headers {"Content-Type" "text/plain"}
+   :body (str
+          (.getMessage e) "\n"
+          (ex-data e))})
+
+(defn on-get [kvs] ;; Health check
+  {:status 200
+   :headers {"Content-Type" "application/edn"}
+   :body (pr-str
+          {:estimate-num-keys (kvs/count-keys kvs)})})
+
+(defn on-post [kvs request] ;; Read
   (try
     {:status 200
      :headers {"Content-Type" "application/edn"}
-     :body (let [db (doc/db kv)
+     :body (let [db (doc/db kvs)
                  query (edn/read-string (req/body-string request))]
              (pr-str (q/q db query)))}
     (catch Exception e
-      {:status 400
+      (exception-response e))))
+
+(defn on-put [kvs request] ;; Write
+  (try
+    (let [v (read-string (req/body-string request))
+          tx-op [:crux.tx/put
+                 (java.util.UUID/randomUUID)
+                 v
+                 (java.util.Date.)]]
+      (db/submit-tx
+       (tx/->DocTxLog kvs)
+       [tx-op])
+      {:status 200
        :headers {"Content-Type" "text/plain"}
-       :body (str
-              (.getMessage e) "\n"
-              (ex-data e))})))
+       :body (str "Successfully inserted " v)})
+    (catch Exception e
+      (exception-response e))))
 
-(defn handler [kv request]
+(defn handler [kvs request]
   (case (:request-method request)
-    :get ;; health check
-    {:status 200
-     :headers {"Content-Type" "text/plain"}
-     :body (pr-str
-            {:estimate-num-keys (kvs/count-keys kv)})}
-
-    :post ;; Read
-    (on-post kv request)
-
-    :put ;; Write
-    {:status 200
-     :headers {"Content-Type" "text/plain"}
-     :body (let [tx (read-string (req/body-string request))]
-;;             (kv/-put kv tx) TODO
-             (str "Successfully inserted " tx))}))
+    :get (on-get kvs)
+    :post (on-post kvs request)
+    :put (on-put kvs request)))
 
 (defn ^Closeable create-server
-  ([kv]
-   (create-server kv 3000))
+  ([kvs]
+   (create-server kvs 3000))
   
-  ([kv port]
-   (let [server (j/run-jetty (partial handler kv)
+  ([kvs port]
+   (let [server (j/run-jetty (partial handler kvs)
                              {:port port
                               :join? false})]
      (reify Closeable (close [_] (.stop server))))))
