@@ -140,6 +140,8 @@
     (.close cursor)
     (.close stack)))
 
+(def ^:private ^ThreadLocal snapshot-tl (ThreadLocal.))
+
 (defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
   ks/KvSnapshot
   (new-iterator [_]
@@ -151,6 +153,7 @@
 
   Closeable
   (close [_]
+    (.remove snapshot-tl)
     (.close tx)
     (.close stack)))
 
@@ -170,9 +173,18 @@
           (throw t)))))
 
   (new-snapshot [_]
-    (let [stack (MemoryStack/stackPush)
-          tx (new-transaction stack env LMDB/MDB_RDONLY)]
-      (->LMDBKvSnapshot stack env dbi tx)))
+    (if-let [snapshot (.get snapshot-tl)]
+      (reify
+        ks/KvSnapshot
+        (new-iterator [this]
+          (ks/new-iterator snapshot))
+
+        Closeable
+        (close [_]))
+      (let [stack (MemoryStack/stackPush)
+            tx (new-transaction stack env LMDB/MDB_RDONLY)]
+        (doto (->LMDBKvSnapshot stack env dbi tx)
+          (->> (.set snapshot-tl))))))
 
   (store [_ kvs]
     (try
