@@ -130,9 +130,9 @@
                 (unchecked-subtract-int a-length b-length)
 
                 :else
-                (let [array-idx (unchecked-add Unsafe/ARRAY_BYTE_BASE_OFFSET idx)
-                      diff (unchecked-subtract-int (Byte/toUnsignedInt (.getByte the-unsafe a (long array-idx)))
-                                                   (Byte/toUnsignedInt (.getByte the-unsafe b (long array-idx))))]
+                (let [array-idx (long (unchecked-add Unsafe/ARRAY_BYTE_BASE_OFFSET idx))
+                      diff (unchecked-subtract-int (Byte/toUnsignedInt (.getByte the-unsafe a (clojure.lang.RT/uncheckedLongCast array-idx)))
+                                                   (Byte/toUnsignedInt (.getByte the-unsafe b (clojure.lang.RT/uncheckedLongCast array-idx))))]
                   (if (zero? diff)
                     (recur (unchecked-inc-int idx))
                     diff))))
