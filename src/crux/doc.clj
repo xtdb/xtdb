@@ -216,7 +216,7 @@
   (attr-val [this ident]
     (get (db/->map this) ident))
   (->id [this]
-    (db/attr-val this :crux.kv/id))
+    (or (db/attr-val this :crux.kv/id) eid))
   (->map [this]
     (get (db/get-objects object-store [content-hash]) content-hash))
   (->business-time [this]
