@@ -21,17 +21,37 @@ public class ByteUtils {
         }
     }
 
-    private static final byte[] HEX = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
+    private static final char[] HEX = new char[256 * 256 * 4];
+
+    static {
+        for (int i = 0, j = 0; i < 256 * 256; i++, j += 4) {
+            String s = String.format("%04x", i);
+            HEX[j] = s.charAt(0);
+            HEX[j + 1] = s.charAt(1);
+            HEX[j + 2] = s.charAt(2);
+            HEX[j + 3] = s.charAt(3);
+        }
+    }
 
     public static String bytesToHex(byte[] bytes) {
         char[] acc = new char[bytes.length << 1];
         int maxOffset = bytes.length + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
         for (int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET, j = sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
              i < maxOffset;
-             i++, j += 4) {
-            int b = UNSAFE.getByte(bytes, i) & 0xFF;
-            UNSAFE.putChar(acc, j, (char) UNSAFE.getByte(HEX, (b >> 4) + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET));
-            UNSAFE.putChar(acc, j + 2, (char) UNSAFE.getByte(HEX, (b & 0xF) + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET));
+             i += 2, j += 8) {
+            if (i == maxOffset - 1) {
+                int b = UNSAFE.getByte(bytes, i);
+                UNSAFE.putInt(acc, j, UNSAFE.getInt(HEX,
+                                                    ((b & 0xFF) << 3)
+                                                    + (Character.BYTES << 1)
+                                                    + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
+            } else {
+                short s = UNSAFE.getShort(bytes, i);
+                s = IS_LITTLE_ENDIAN ? Short.reverseBytes(s) : s;
+                UNSAFE.putLong(acc, j, UNSAFE.getLong(HEX,
+                                                      ((s & 0xFFFF) << 3)
+                                                      + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
+            }
         }
         return new String(acc);
     }
