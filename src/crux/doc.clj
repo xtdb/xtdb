@@ -3,11 +3,11 @@
             [crux.doc.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
+            [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.io Closeable]
-           [java.util Date LinkedHashMap]
-           [java.util.function Function]))
+           [java.util Date]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -172,29 +172,11 @@
 
 ;; Caching
 
-(defn- lru-cache [^long size]
-  (proxy [LinkedHashMap] [16 0.75 true]
-    (removeEldestEntry [_]
-      (> (count this) size))))
-
-(defn- lru-cache-compute-if-absent [^LinkedHashMap cache k f]
-  (.computeIfAbsent cache k (reify Function
-                              (apply [_ k]
-                                (f k)))))
-
-(defn- lru-named-cache [state cache-name cache-size]
-  (get (swap! state
-              update
-              cache-name
-              (fn [cache]
-                (or cache (lru-cache cache-size))))
-       cache-name))
-
-(defrecord CachedObjectStore [^LinkedHashMap cache object-store]
+(defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
   (get-objects [this ks]
     (->> (for [k ks]
-           [k (lru-cache-compute-if-absent
+           [k (lru/compute-if-absent
                cache
                k
                #(get (db/get-objects object-store [%]) %))])
@@ -203,7 +185,7 @@
     (db/put-objects object-store kvs))
   (delete-objects [this ks]
     (doseq [k ks]
-      (.remove cache k))
+      (lru/evict cache k))
     (db/delete-objects object-store ks))
 
   Closeable
@@ -287,8 +269,16 @@
 
 (def ^:const default-doc-cache-size 10240)
 
+(defn- named-cache [state cache-name cache-size]
+  (get (swap! state
+              update
+              cache-name
+              (fn [cache]
+                (or cache (lru/new-cache cache-size))))
+       cache-name))
+
 (defn- new-cached-object-store [kv cache-size]
-  (->CachedObjectStore (lru-named-cache (:state kv)::doc-cache cache-size)
+  (->CachedObjectStore (named-cache (:state kv)::doc-cache cache-size)
                        (->DocObjectStore kv)))
 
 (defn db

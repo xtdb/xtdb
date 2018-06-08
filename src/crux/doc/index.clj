@@ -4,7 +4,7 @@
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Arrays Date UUID]
-           [clojure.lang Keyword IPersistentMap]))
+           [clojure.lang IHashEq IPersistentMap Keyword]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -122,21 +122,27 @@
     (bu/bytes->hex bytes))
 
   (equals [this that]
-    (and (satisfies? IdToBytes that)
-         (Arrays/equals bytes (id->bytes that))))
+    (or (identical? this that)
+        (and (satisfies? IdToBytes that)
+             (Arrays/equals bytes (id->bytes that)))))
 
   (hashCode [this]
-    (if (not (zero? hash-code))
-      hash-code
-      (do (set! hash-code (Arrays/hashCode bytes))
-          hash-code)))
+    (when (zero? hash-code)
+      (set! hash-code (Arrays/hashCode bytes)))
+    hash-code)
+
+  IHashEq
+  (hasheq [this]
+    (.hashCode this))
 
   Comparable
   (compareTo [this that]
-    (bu/compare-bytes bytes (id->bytes that))))
+    (if (identical? this that)
+      0
+      (bu/compare-bytes bytes (id->bytes that)))))
 
 (defn ^Id new-id [id]
-  (->Id (id->bytes id) (int 0)))
+  (->Id (id->bytes id) 0))
 
 (defn encode-doc-key ^bytes [content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))

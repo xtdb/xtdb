@@ -4,8 +4,8 @@
            [java.nio Buffer ByteBuffer ByteOrder]
            [java.net URI]
            [java.security MessageDigest]
-           [java.util Arrays Comparator UUID])
-  (:import [crux ByteUtils]))
+           [java.util Arrays Comparator UUID]
+           [crux ByteUtils]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
