@@ -7,7 +7,7 @@
   (:import [clojure.lang ExceptionInfo MapEntry]
            java.io.Closeable
            [org.lwjgl.system MemoryStack MemoryUtil]
-           [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBVal]))
+           [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]))
 
 ;; Based on
 ;; https://github.com/LWJGL/lwjgl3/blob/master/modules/samples/src/test/java/org/lwjgl/demo/util/lmdb/LMDBDemo.java
@@ -190,6 +190,13 @@
   (backup [_ dir]
     (env-copy env dir))
 
+  (count-keys [_]
+    (with-open [stack (MemoryStack/stackPush)]
+      (let [tx (new-transaction stack env LMDB/MDB_RDONLY)
+            stat (MDBStat/callocStack stack)]
+        (LMDB/mdb_stat (:txn tx) dbi stat)
+        (.ms_entries stat))))
+  
   Closeable
   (close [_]
     (env-close env)))
