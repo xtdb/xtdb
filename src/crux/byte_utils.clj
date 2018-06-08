@@ -130,7 +130,7 @@
                 (unchecked-subtract-int a-length b-length)
 
                 :else
-                (let [array-idx (long (unchecked-add Unsafe/ARRAY_BYTE_BASE_OFFSET idx))
+                (let [array-idx (unchecked-add-int Unsafe/ARRAY_BYTE_BASE_OFFSET idx)
                       diff (unchecked-subtract-int (Byte/toUnsignedInt (.getByte the-unsafe a array-idx))
                                                    (Byte/toUnsignedInt (.getByte the-unsafe b array-idx)))]
                   (if (zero? diff)
