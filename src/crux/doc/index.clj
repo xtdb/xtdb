@@ -112,7 +112,7 @@
   (id->bytes [this]
     nil-id-bytes))
 
-(deftype Id [^bytes bytes]
+(deftype Id [^bytes bytes ^:unsynchronized-mutable ^int hash-code]
   IdToBytes
   (id->bytes [this]
     (id->bytes bytes))
@@ -126,14 +126,17 @@
          (Arrays/equals bytes (id->bytes that))))
 
   (hashCode [this]
-    (Arrays/hashCode bytes))
+    (if (not (zero? hash-code))
+      hash-code
+      (do (set! hash-code (Arrays/hashCode bytes))
+          hash-code)))
 
   Comparable
   (compareTo [this that]
     (bu/compare-bytes bytes (id->bytes that))))
 
 (defn ^Id new-id [id]
-  (->Id (id->bytes id)))
+  (->Id (id->bytes id) (int 0)))
 
 (defn encode-doc-key ^bytes [content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
