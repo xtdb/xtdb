@@ -216,6 +216,7 @@
   (attr-val [this ident]
     (get (db/->map this) ident))
   (->id [this]
+    ;; TODO: we want to get rid of the need for :crux.kv/id
     (or (db/attr-val this :crux.kv/id) eid))
   (->map [this]
     (get (db/get-objects object-store [content-hash]) content-hash))

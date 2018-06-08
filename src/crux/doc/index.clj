@@ -26,6 +26,9 @@
 
 (def ^:const ^:private max-string-index-length 128)
 
+(defprotocol IdToBytes
+  (id->bytes ^bytes [this]))
+
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
 
@@ -71,10 +74,9 @@
 
   Object
   (value->bytes [this]
-    (value->bytes (nippy/fast-freeze this))))
-
-(defprotocol IdToBytes
-  (id->bytes ^bytes [this]))
+    (if (satisfies? IdToBytes this)
+      (id->bytes this)
+      (value->bytes (nippy/fast-freeze this)))))
 
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 id-size))))
@@ -104,15 +106,11 @@
 
   IPersistentMap
   (id->bytes [this]
-    (value->bytes this))
+    (value->bytes (nippy/fast-freeze this)))
 
   nil
   (id->bytes [this]
-    nil-id-bytes)
-
-  Object
-  (id->bytes [this]
-    (throw (UnsupportedOperationException. (str "Not a valid id: " this)))))
+    nil-id-bytes))
 
 (deftype Id [^bytes bytes]
   IdToBytes
@@ -124,15 +122,15 @@
     (bu/bytes->hex bytes))
 
   (equals [this that]
-    (and (instance? Id that)
-         (Arrays/equals bytes ^bytes (.bytes ^Id that))))
+    (and (satisfies? IdToBytes that)
+         (Arrays/equals bytes (id->bytes that))))
 
   (hashCode [this]
     (Arrays/hashCode bytes))
 
   Comparable
   (compareTo [this that]
-    (bu/compare-bytes bytes (.bytes ^Id that))))
+    (bu/compare-bytes bytes (id->bytes that))))
 
 (defn ^Id new-id [id]
   (->Id (id->bytes id)))

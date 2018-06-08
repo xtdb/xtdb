@@ -36,6 +36,9 @@
     (db/->id v)
     v))
 
+;; TODO: this needs to deal with comparsions of ids against their
+;; source, like a keyword. Needs work, but don't want to expose
+;; id->bytes here just yet.
 (defn- compare-vals? [v1 v2]
   (if (coll? v1)
     (contains? v1 v2)
