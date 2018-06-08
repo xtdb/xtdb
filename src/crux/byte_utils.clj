@@ -92,17 +92,17 @@
              (recur (unchecked-inc-int idx))
              diff)))))))
 
-(def ^:private ^Unsafe
+#_(def ^:private ^Unsafe
   the-unsafe
   (let [f (doto (.getDeclaredField Unsafe "theUnsafe")
             (.setAccessible true))]
     (.get ^Field f nil)))
 
-(def ^:private ^:const
+#_(def ^:private ^:const
   ^{:tag 'boolean}
   little-endian? (= ByteOrder/LITTLE_ENDIAN (ByteOrder/nativeOrder)))
 
-(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
+#_(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
   (let [a-length (int (alength a))
         b-length (int (alength b))
         max-length (int max-length)
@@ -149,10 +149,10 @@
 (def ^Comparator bytes-comparator
   (reify Comparator
     (compare [_ a b]
-      (compare-bytes-unsafe a b Integer/MAX_VALUE))))
+      (compare-bytes a b Integer/MAX_VALUE))))
 
 (defn bytes=?
   ([^bytes k1 ^bytes k2]
    (bytes=? k1 (alength k1) k2))
   ([^bytes k1 array-length ^bytes k2]
-   (zero? (compare-bytes-unsafe k1 k2 array-length))))
+   (zero? (compare-bytes k1 k2 array-length))))
