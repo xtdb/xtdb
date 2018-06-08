@@ -9,9 +9,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn hash-keyword [k]
-  (hash (str (namespace k) (name k))))
-
 (defn long->bytes [l]
   (-> (ByteBuffer/allocate 8)
       (.putLong l)
@@ -22,9 +19,6 @@
       (.put data 0 8)
       ^ByteBuffer (.flip)
       (.getLong)))
-
-(defn md5 ^bytes [^bytes bytes]
-  (.digest (MessageDigest/getInstance "MD5") bytes))
 
 (defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA-1") bytes))
