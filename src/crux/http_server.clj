@@ -20,7 +20,8 @@
   {:status 200
    :headers {"Content-Type" "application/edn"}
    :body (pr-str
-          {:estimate-num-keys (kvs/count-keys kvs)})})
+          {:kv-backend (type kvs)
+           :estimate-num-keys (kvs/count-keys kvs)})})
 
 (defn on-post [kvs request] ;; Read
   (try
