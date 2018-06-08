@@ -41,27 +41,13 @@
           (recur (unchecked-inc-int idx)))))))
 
 (defn hex->bytes ^bytes [^String hex]
-  (let [len (count hex)
-        acc (byte-array (bit-shift-right len 1))]
-    (loop [idx 0]
-      (if (= idx len)
-        acc
-        (let [b (unchecked-byte (bit-or (bit-shift-left (Character/digit (.charAt hex idx) 16) 4)
-                                        (Character/digit (.charAt hex (unchecked-inc-int idx)) 16)))]
-          (aset acc (bit-shift-right idx 1) b)
-          (recur (unchecked-add-int idx 2)))))))
+  (ByteUtils/hexToBytes hex))
 
 (defn byte-buffer->bytes ^bytes [^ByteBuffer b]
   (if (.hasArray b)
     (.array b)
     (doto (byte-array (.remaining b))
       (->> (.get b)))))
-
-(defn byte-array-slice
-  [^bytes bs index length]
-  (let [dst (byte-array length)]
-    (System/arraycopy bs index dst 0 length)
-    dst))
 
 (defn compare-bytes
   (^long [^bytes a ^bytes b]

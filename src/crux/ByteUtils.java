@@ -21,6 +21,16 @@ public class ByteUtils {
         }
     }
 
+    public static byte[] hexToBytes(String s) {
+        int len = s.length();
+        byte[] acc = new byte[len >> 1];
+        for (int i = 0, j = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET; i < len; i += 2, j++) {
+            UNSAFE.putByte(acc, j, (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                                           | Character.digit(s.charAt(i + 1), 16)));
+        }
+        return acc;
+    }
+
     public static int compareBytes(byte[] a, byte[] b, int maxLength) {
         int maxCompareOffset = Math.min(Math.min(a.length, b.length), maxLength) + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
         int maxStrideOffset = maxCompareOffset & ~(Long.BYTES - 1);
