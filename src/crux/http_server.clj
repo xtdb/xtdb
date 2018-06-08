@@ -9,8 +9,8 @@
             [ring.util.request :as req])
   (:import [java.io Closeable]))
 
-(defn exception-response [^Exception e]
-  {:status 400
+(defn exception-response [^Exception e status]
+  {:status status
    :headers {"Content-Type" "text/plain"}
    :body (str
           (.getMessage e) "\n"
@@ -25,13 +25,17 @@
 
 (defn on-post [kvs request] ;; Read
   (try
-    {:status 200
-     :headers {"Content-Type" "application/edn"}
-     :body (let [db (doc/db kvs)
-                 query (edn/read-string (req/body-string request))]
-             (pr-str (q/q db query)))}
+    (let [query (edn/read-string (req/body-string request))]
+      (try
+        {:status 200
+         :headers {"Content-Type" "application/edn"}
+         :body (pr-str (q/q (doc/db kvs) query))}
+        (catch Exception e
+          (if (= "Invalid input" (.getMessage e))
+            (exception-response e 400)
+            (exception-response e 500)))))
     (catch Exception e
-      (exception-response e))))
+      (exception-response e 400))))
 
 (defn on-put [kvs request] ;; Write
   (try
@@ -47,7 +51,7 @@
        :headers {"Content-Type" "text/plain"}
        :body (str "Successfully inserted " v)})
     (catch Exception e
-      (exception-response e))))
+      (exception-response e 500))))
 
 (defn handler [kvs request]
   (case (:request-method request)
