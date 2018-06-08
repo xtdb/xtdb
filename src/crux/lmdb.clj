@@ -191,9 +191,9 @@
     (env-copy env dir))
 
   (count-keys [_]
-    (with-open [stack (MemoryStack/stackPush)]
-      (let [tx (new-transaction stack env LMDB/MDB_RDONLY)
-            stat (MDBStat/callocStack stack)]
+    (with-open [stack (MemoryStack/stackPush)
+                tx (new-transaction stack env LMDB/MDB_RDONLY)]
+      (let [stat (MDBStat/callocStack stack)]
         (LMDB/mdb_stat (:txn tx) dbi stat)
         (.ms_entries stat))))
   
