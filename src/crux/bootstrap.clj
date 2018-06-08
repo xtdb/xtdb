@@ -34,6 +34,8 @@
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: rocksdb, lmdb or memdb"
     :default "rocksdb"
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
+   ["-s" "--server-port SERVER_PORT" "port on which to run the HTTP server"
+    :default "3000"]
    ["-h" "--help"]])
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
@@ -63,14 +65,15 @@
 
 (defn start-system
   ([{:keys [bootstrap-servers
-            group-id]
+            group-id
+            server-port]
      :as options}]
    (with-open [kv-store (start-kv-store options)
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
-               http-server (srv/create-server kv-store)]
+               http-server (srv/create-server kv-store (Long/parseLong server-port))]
      (start-system kv-store consumer producer admin-client (delay true) options)))
   ([kv-store consumer producer admin-client running? options]
    (let [{:keys [bootstrap-servers
