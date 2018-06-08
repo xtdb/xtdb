@@ -28,17 +28,7 @@
                             (char-array (format "%02x" n)))))
 
 (defn bytes->hex ^String [^bytes bytes]
-  (let [len (alength bytes)
-        acc (char-array (bit-shift-left len 1))]
-    (loop [idx 0]
-      (if (= idx len)
-        (String. acc)
-        (let [cs ^chars (aget byte->hex (Byte/toUnsignedInt (aget bytes idx)))
-              acc-idx (bit-shift-left idx 1)]
-          (doto acc
-            (aset acc-idx (aget cs 0))
-            (aset (unchecked-inc-int acc-idx) (aget cs 1)))
-          (recur (unchecked-inc-int idx)))))))
+  (ByteUtils/bytesToHex bytes))
 
 (defn hex->bytes ^bytes [^String hex]
   (ByteUtils/hexToBytes hex))
