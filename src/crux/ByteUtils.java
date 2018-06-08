@@ -41,7 +41,7 @@ public class ByteUtils {
             byte aByte = UNSAFE.getByte(a, i);
             byte bByte = UNSAFE.getByte(b, i);
             if (aByte != bByte) {
-                return Byte.compareUnsigned(aByte, bByte);
+                return (aByte & 0xFF) - (bByte & 0xFF);
             }
         }
         if (i == maxLength + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET) {
