@@ -28,6 +28,8 @@
                                   [criterium "0.4.4"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
+  :java-source-paths ["src"]
+  :javac-options ["-XDignore.symbol.file"]
   :aot [crux.kafka.nippy
         crux.main]
   :main crux.main

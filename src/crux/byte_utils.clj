@@ -4,8 +4,8 @@
            [java.nio Buffer ByteBuffer ByteOrder]
            [java.net URI]
            [java.security MessageDigest]
-           [java.util Arrays Comparator UUID]
-           [sun.misc Unsafe]))
+           [java.util Arrays Comparator UUID])
+  (:import [crux ByteUtils]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -92,67 +92,11 @@
              (recur (unchecked-inc-int idx))
              diff)))))))
 
-#_(def ^:private ^Unsafe
-  the-unsafe
-  (let [f (doto (.getDeclaredField Unsafe "theUnsafe")
-            (.setAccessible true))]
-    (.get ^Field f nil)))
-
-#_(def ^:private ^:const
-  ^{:tag 'boolean}
-  little-endian? (= ByteOrder/LITTLE_ENDIAN (ByteOrder/nativeOrder)))
-
-#_(defn compare-bytes-unsafe ^long [^bytes a ^bytes b ^long max-length]
-  (let [a-length (int (alength a))
-        b-length (int (alength b))
-        max-length (int max-length)
-        the-unsafe the-unsafe
-        max-stride-length (min a-length b-length max-length)]
-    (loop [idx (int 0)]
-      (cond
-        (= idx max-length)
-        0
-
-        (or (= idx a-length)
-            (= idx b-length))
-        (unchecked-subtract-int a-length b-length)
-
-        :else
-        (let [next-idx (unchecked-add-int idx Long/BYTES)]
-          (if (> next-idx max-stride-length)
-            (loop [idx idx]
-              (cond
-                (= idx max-length)
-                0
-
-                (or (= idx a-length)
-                    (= idx b-length))
-                (unchecked-subtract-int a-length b-length)
-
-                :else
-                (let [array-idx (long (unchecked-add Unsafe/ARRAY_BYTE_BASE_OFFSET idx))
-                      diff (unchecked-subtract-int (Byte/toUnsignedInt (.getByte the-unsafe a (clojure.lang.RT/uncheckedLongCast array-idx)))
-                                                   (Byte/toUnsignedInt (.getByte the-unsafe b (clojure.lang.RT/uncheckedLongCast array-idx))))]
-                  (if (zero? diff)
-                    (recur (unchecked-inc-int idx))
-                    diff))))
-            (let [array-idx (long (unchecked-add Unsafe/ARRAY_BYTE_BASE_OFFSET idx))
-                  al (.getLong the-unsafe a array-idx)
-                  bl (.getLong the-unsafe b array-idx)]
-              (if-not (= al bl)
-                (if little-endian?
-                  (Long/compareUnsigned (Long/reverseBytes al)
-                                        (Long/reverseBytes bl))
-                  (Long/compareUnsigned al bl))
-                (recur next-idx)))))))))
-
 (def ^Comparator bytes-comparator
-  (reify Comparator
-    (compare [_ a b]
-      (compare-bytes a b Integer/MAX_VALUE))))
+  ByteUtils/UNSIGNED_BYTES_COMPARATOR)
 
 (defn bytes=?
   ([^bytes k1 ^bytes k2]
    (bytes=? k1 (alength k1) k2))
   ([^bytes k1 array-length ^bytes k2]
-   (zero? (compare-bytes k1 k2 array-length))))
+   (zero? (ByteUtils/compareBytes k1 k2 array-length))))
