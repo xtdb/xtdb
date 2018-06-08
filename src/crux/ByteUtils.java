@@ -22,13 +22,12 @@ public class ByteUtils {
     }
 
     public static int compareBytes(byte[] a, byte[] b, int maxLength) {
-        int maxCompareLength = Math.min(Math.min(a.length, b.length), maxLength);
-        int maxStrideLength = maxCompareLength & ~(Long.BYTES - 1);
-        int i = 0;
-        for (; i < maxStrideLength; i += Long.BYTES) {
-            int arrayIndex = i + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-            long aLong = UNSAFE.getLong(a, arrayIndex);
-            long bLong = UNSAFE.getLong(b, arrayIndex);
+        int maxCompareOffset = Math.min(Math.min(a.length, b.length), maxLength) + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+        int maxStrideOffset = maxCompareOffset & ~(Long.BYTES - 1);
+        int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+        for (; i < maxStrideOffset; i += Long.BYTES) {
+            long aLong = UNSAFE.getLong(a, i);
+            long bLong = UNSAFE.getLong(b, i);
             if (aLong != bLong) {
                 if (IS_LITTLE_ENDIAN) {
                     return Long.compareUnsigned(Long.reverseBytes(aLong),
@@ -38,15 +37,14 @@ public class ByteUtils {
                 }
             }
         }
-        for (; i < maxCompareLength; i++) {
-            int arrayIndex = i + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-            int aByte = UNSAFE.getByte(a, arrayIndex) & 0xff;
-            int bByte = UNSAFE.getByte(b, arrayIndex) & 0xff;
+        for (; i < maxCompareOffset; i++) {
+            byte aByte = UNSAFE.getByte(a, i);
+            byte bByte = UNSAFE.getByte(b, i);
             if (aByte != bByte) {
-                return aByte - bByte;
+                return Byte.compareUnsigned(aByte, bByte);
             }
         }
-        if (i == maxLength) {
+        if (i == maxLength + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET) {
             return 0;
         }
         return a.length - b.length;
