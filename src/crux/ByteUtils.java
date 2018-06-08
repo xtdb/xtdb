@@ -21,34 +21,35 @@ public class ByteUtils {
         }
     }
 
-    private static final char[] HEX = new char[256 * 256 * 4];
+    private static final char[] TWO_BYTES_TO_HEX = new char[256 * 256 * Character.BYTES * 2];
 
     static {
         for (int i = 0, j = 0; i < 256 * 256; i++, j += 4) {
             String s = String.format("%04x", i);
-            HEX[j] = s.charAt(0);
-            HEX[j + 1] = s.charAt(1);
-            HEX[j + 2] = s.charAt(2);
-            HEX[j + 3] = s.charAt(3);
+            TWO_BYTES_TO_HEX[j] = s.charAt(0);
+            TWO_BYTES_TO_HEX[j + 1] = s.charAt(1);
+            TWO_BYTES_TO_HEX[j + 2] = s.charAt(2);
+            TWO_BYTES_TO_HEX[j + 3] = s.charAt(3);
         }
     }
 
     public static String bytesToHex(byte[] bytes) {
-        char[] acc = new char[bytes.length << 1];
         int maxOffset = bytes.length + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-        for (int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET, j = sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
+        char[] acc = new char[bytes.length << 1];
+        for (int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET,
+                 j = sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
              i < maxOffset;
-             i += 2, j += 8) {
+             i += Short.BYTES, j += Long.BYTES) {
             if (i == maxOffset - 1) {
                 int b = UNSAFE.getByte(bytes, i);
-                UNSAFE.putInt(acc, j, UNSAFE.getInt(HEX,
+                UNSAFE.putInt(acc, j, UNSAFE.getInt(TWO_BYTES_TO_HEX,
                                                     ((b & 0xFF) << 3)
                                                     + (Character.BYTES << 1)
                                                     + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
             } else {
                 short s = UNSAFE.getShort(bytes, i);
                 s = IS_LITTLE_ENDIAN ? Short.reverseBytes(s) : s;
-                UNSAFE.putLong(acc, j, UNSAFE.getLong(HEX,
+                UNSAFE.putLong(acc, j, UNSAFE.getLong(TWO_BYTES_TO_HEX,
                                                       ((s & 0xFFFF) << 3)
                                                       + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
             }
@@ -56,14 +57,24 @@ public class ByteUtils {
         return new String(acc);
     }
 
+    private static final byte[] HEX_TO_NIBBLE = new byte[Byte.MAX_VALUE];
+
+    static {
+        for (int i = 0, j = 0; i < 16; i++, j += 4) {
+            HEX_TO_NIBBLE[String.format("%x", i).charAt(0)] = (byte) i;
+            HEX_TO_NIBBLE[String.format("%X", i).charAt(0)] = (byte) i;
+        }
+    }
+
     public static byte[] hexToBytes(String s) {
         int len = s.length();
         byte[] acc = new byte[len >> 1];
-        for (int i = 0, j = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+        for (int i = 0,
+                 j = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
              i < len;
              i += 2, j++) {
-            UNSAFE.putByte(acc, j, (byte) ((Character.digit(s.charAt(i), 16) << 4)
-                                           | Character.digit(s.charAt(i + 1), 16)));
+            UNSAFE.putByte(acc, j, (byte) ((HEX_TO_NIBBLE[s.charAt(i)] << 4)
+                                           | HEX_TO_NIBBLE[s.charAt(i + 1)]));
         }
         return acc;
     }
