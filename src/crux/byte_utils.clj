@@ -1,10 +1,7 @@
 (ns crux.byte-utils
-  (:import [java.lang.reflect Field]
-           [java.math BigInteger]
-           [java.nio Buffer ByteBuffer ByteOrder]
-           [java.net URI]
+  (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
-           [java.util Arrays Comparator UUID]
+           [java.util Comparator]
            [crux ByteUtils]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -23,10 +20,6 @@
 (defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA-1") bytes))
 
-(def ^"[Ljava.lang.Object;" ^:private
-  byte->hex (object-array (for [n (range 256)]
-                            (char-array (format "%02x" n)))))
-
 (defn bytes->hex ^String [^bytes bytes]
   (ByteUtils/bytesToHex bytes))
 
@@ -41,32 +34,15 @@
 
 (defn compare-bytes
   (^long [^bytes a ^bytes b]
-   (compare-bytes a b Integer/MAX_VALUE))
+   (ByteUtils/compareBytes a b))
   (^long [^bytes a ^bytes b max-length]
-   (let [a-length (int (alength a))
-         b-length (int (alength b))
-         max-length (int max-length)]
-     (loop [idx (int 0)]
-       (cond
-         (= idx max-length)
-         0
-
-         (or (= idx a-length)
-             (= idx b-length))
-         (- a-length b-length)
-
-         :else
-         (let [diff (unchecked-subtract-int (Byte/toUnsignedInt (aget a idx))
-                                            (Byte/toUnsignedInt (aget b idx)))]
-           (if (zero? diff)
-             (recur (unchecked-inc-int idx))
-             diff)))))))
+   (ByteUtils/compareBytes a b max-length)))
 
 (def ^Comparator bytes-comparator
   ByteUtils/UNSIGNED_BYTES_COMPARATOR)
 
 (defn bytes=?
   ([^bytes k1 ^bytes k2]
-   (bytes=? k1 (alength k1) k2))
+   (zero? (ByteUtils/compareBytes k1 k2 (alength k1))))
   ([^bytes k1 array-length ^bytes k2]
    (zero? (ByteUtils/compareBytes k1 k2 array-length))))

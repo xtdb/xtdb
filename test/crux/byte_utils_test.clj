@@ -1,7 +1,6 @@
 (ns crux.byte-utils-test
   (:require [clojure.test :as t]
-            [crux.byte-utils :as bu])
-  (:import [crux ByteUtils]))
+            [crux.byte-utils :as bu]))
 
 (t/deftest test-convert-bytes-to-hex-and-back
   (let [bs (bu/sha1 (.getBytes "Hello World"))
