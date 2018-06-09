@@ -37,6 +37,7 @@ before executing the query.
   Applications](https://event.cwi.nl/grades/2017/12-Apaci.pdf)
 + [LDBC: The graph & RDF benchmark
   reference](http://www.ldbcouncil.org/)
++ [RDFox Tests](http://www.cs.ox.ac.uk/isg/tools/RDFox/2014/AAAI/)
 
 ### Indexes
 
