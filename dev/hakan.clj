@@ -1,11 +1,28 @@
 (ns hakan
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [clojure.set :as set]))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
+
+;; See Racket for the Datalog syntax in EBNF (slightly different from this one):
+;; https://docs.racket-lang.org/datalog/datalog.html
 
 (defn- prolog-var? [s]
   (and (symbol? s)
        (Character/isUpperCase (char (first (name s))))))
+
+(defn- safe-clause? [{:keys [head body]
+                     :as clause}]
+  (let [head-vars (->> head
+                       :args
+                       (filter (comp #{:var} first))
+                       (set))
+        body-vars (->> body
+                       (filter (comp #{:predicate} first))
+                       (mapcat (comp :args second))
+                       (filter (comp #{:var} first))
+                       (set))]
+    (empty? (set/difference head-vars body-vars))))
 
 (def ^:private separator? '#{:- <- . - ?})
 
@@ -20,11 +37,13 @@
                           :op (s/or :assert ::dot
                                     :retact #{'-}))
                    (s/conformer #(update % :op first))))
+(s/def ::safe-clause safe-clause?)
 (s/def ::rule (s/& (s/cat :head ::predicate
                           :comma-hyphen #{:- '<-}
                           :body (s/* (s/alt :predicate ::predicate
                                             :expression list?))
                           :dot ::dot)
+                   safe-clause?
                    (s/conformer #(dissoc % :comma-hyphen :dot))))
 (s/def ::query (s/& (s/cat :query ::predicate
                            :question-mark #{'?})
