@@ -27,8 +27,8 @@
                        :rule ::rule))
 (s/def ::program (s/* ::clause))
 (s/def ::query (s/& (s/cat :query ::predicate
-                           :dot ::dot)
-                    (s/conformer #(dissoc % :dot))))
+                           :question-mark #{'?})
+                    (s/conformer #(dissoc % :question-mark))))
 
 (comment
   (s/conform
