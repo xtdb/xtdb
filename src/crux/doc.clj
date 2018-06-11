@@ -134,11 +134,11 @@
           {}))))
 
 (defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
-  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
-                                      (eids-by-content-hashes snapshot))
-             entity-map (entities-at snapshot eids business-time transact-time)
-             :when (= content-hash (:content-hash entity-map))]
-         entity-map)))
+  (for [[content-hash eids] (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
+                                 (eids-by-content-hashes snapshot))
+        entity-map (entities-at snapshot eids business-time transact-time)
+        :when (= content-hash (:content-hash entity-map))]
+    entity-map))
 
 (defn all-entities [snapshot business-time transact-time]
   (let [eids (->> (all-key-values-in-prefix snapshot (idx/encode-entity+bt+tt-prefix-key))
