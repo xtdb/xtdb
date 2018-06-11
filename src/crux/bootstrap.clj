@@ -65,15 +65,13 @@
 
 (defn start-system
   ([{:keys [bootstrap-servers
-            group-id
-            server-port]
+            group-id]
      :as options}]
    (with-open [kv-store (start-kv-store options)
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
-               http-server (srv/create-server kv-store (Long/parseLong server-port))]
+               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})]
      (start-system kv-store consumer producer admin-client (delay true) options)))
   ([kv-store consumer producer admin-client running? options]
    (let [{:keys [bootstrap-servers
@@ -81,17 +79,20 @@
                  tx-topic
                  doc-topic
                  doc-partitions
-                 replication-factor]
+                 replication-factor
+                 server-port]
           :as options} (merge default-options options)
          tx-log (k/->KafkaTxLog producer tx-topic doc-topic)
          object-store (doc/->DocObjectStore kv-store)
          indexer (tx/->DocIndexer kv-store tx-log object-store)
-         replication-factor (Long/parseLong replication-factor)]
+         replication-factor (Long/parseLong replication-factor)
+         server-port (Long/parseLong server-port)]
      (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
-     (while @running?
-       (k/consume-and-index-entities indexer consumer 100)))))
+     (with-open [http-server (srv/create-server kv-store tx-log server-port)]
+       (while @running?
+         (k/consume-and-index-entities indexer consumer 100))))))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options

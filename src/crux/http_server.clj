@@ -37,34 +37,32 @@
     (catch Exception e
       (exception-response e 400)))) ;; Invalid edn
 
-(defn on-put [kvs request] ;; Write
+(defn on-put [kvs tx-log request] ;; Write
   (try
     (let [v (read-string (req/body-string request))
           tx-op [:crux.tx/put
                  (java.util.UUID/randomUUID)
                  v
-                 (java.util.Date.)]]
-      (db/submit-tx
-       (tx/->DocTxLog kvs)
-       [tx-op])
+                 (java.util.Date.)] ;; WIP; ought to use v directly and assume user provided valid tx-op syntax
+          return (db/submit-tx tx-log [tx-op])]      
       {:status 200
-       :headers {"Content-Type" "text/plain"}
-       :body (str "Successfully inserted " v)})
+       :headers {"Content-Type" "application/edn"}
+       :body (pr-str @return)})
     (catch Exception e
-      (exception-response e 500))))
+      (exception-response e 500)))) ;; TODO invalid requests need a 400
 
-(defn handler [kvs request]
+(defn handler [kvs tx-log request]
   (case (:request-method request)
     :get (on-get kvs)
     :post (on-post kvs request)
-    :put (on-put kvs request)))
+    :put (on-put kvs tx-log request)))
 
 (defn ^Closeable create-server
-  ([kvs]
-   (create-server kvs 3000))
+  ([kvs tx-log]
+   (create-server kvs tx-log 3000))
 
-  ([kvs port]
-   (let [server (j/run-jetty (partial handler kvs)
+  ([kvs tx-log port]
+   (let [server (j/run-jetty (partial handler kvs tx-log)
                              {:port port
                               :join? false})]
      (reify Closeable (close [_] (.stop server))))))
