@@ -13,6 +13,14 @@
 
 ;; Utils
 
+(defn- all-keys-in-prefix-seq [i prefix]
+  (let [step (fn step [f-cons f-next]
+               (lazy-seq
+                (let [k (f-cons)]
+                  (when (and k (bu/bytes=? prefix k))
+                    (cons k (step f-next f-next))))))]
+    (step #(ks/-seek i prefix) #(ks/-next i))))
+
 (defn- all-key-values-in-prefix-seq [i prefix]
   (let [step (fn step [f-cons f-next]
                (lazy-seq
@@ -24,19 +32,22 @@
 
 ;; Docs
 
-(defn doc-keys-by-attribute-value [snapshot k min-v max-v]
+(defn- doc-keys-by-attribute-value-seq [i k min-v max-v]
   (when (and min-v max-v)
     (assert (not (neg? (compare max-v min-v)))))
   (let [min-seek-k (idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
-        max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))]
-    (with-open [i (ks/new-iterator snapshot)]
-      (loop [k (ks/-seek i min-seek-k)
-             acc []]
-        (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-          (recur (ks/-next i)
-                 (->> (idx/decode-attribute+value+content-hash-key->content-hash k)
-                      (conj acc)))
-          acc)))))
+        max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))
+        step (fn step [f-cons f-next]
+               (lazy-seq
+                (let [k (f-cons)]
+                  (when (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
+                    (cons (idx/decode-attribute+value+content-hash-key->content-hash k)
+                          (step f-next f-next))))))]
+    (step #(ks/-seek i min-seek-k) #(ks/-next i))))
+
+(defn doc-keys-by-attribute-value [snapshot k min-v max-v]
+  (with-open [i (ks/new-iterator snapshot)]
+    (vec (doc-keys-by-attribute-value-seq i k min-v max-v))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -95,52 +106,63 @@
 
 (def ^:private ^:const entity-prefix-size (+ Short/BYTES idx/id-size))
 
+(defn- entity-at [i entity business-time transact-time]
+  (let [seek-k (idx/encode-entity+bt+tt-prefix-key
+                entity
+                business-time
+                transact-time)]
+    (loop [k (ks/-seek i seek-k)]
+      (when (and k (bu/bytes=? seek-k entity-prefix-size k))
+        (let [v (ks/-value i)
+              entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
+                             (enrich-entity-map v))]
+          (if (<= (compare (:tt entity-map) transact-time) 0)
+            (when-not (bu/bytes=? idx/nil-id-bytes v)
+              entity-map)
+            (recur (ks/-next i))))))))
+
+(defn- entities-at-seq [i entities business-time transact-time]
+  (for [entity entities
+        :let [entity-map (entity-at i entity business-time transact-time)]
+        :when entity-map]
+    entity-map))
+
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (vec (for [entity entities
-               :let [seek-k (idx/encode-entity+bt+tt-prefix-key
-                             entity
-                             business-time
-                             transact-time)
-                     entity-map (loop [k (ks/-seek i seek-k)]
-                                  (when (and k (bu/bytes=? seek-k entity-prefix-size k))
-                                    (let [v (ks/-value i)
-                                          entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
-                                                         (enrich-entity-map v))]
-                                      (if (<= (compare (:tt entity-map) transact-time) 0)
-                                        (when-not (bu/bytes=? idx/nil-id-bytes v)
-                                          entity-map)
-                                        (recur (ks/-next i))))))]
-               :when entity-map]
-           entity-map))))
+    (vec (entities-at-seq i entities business-time transact-time))))
+
+(defn content-hash+eid-by-content-hashes-seq [i content-hashes]
+  (for [content-hash content-hashes
+        :let [content-hash (idx/new-id content-hash)
+              seek-k (idx/encode-content-hash-prefix-key content-hash)]
+        eid (->> (all-keys-in-prefix-seq i seek-k)
+                 (map idx/decode-content-hash+entity-key->entity))]
+    [content-hash eid]))
 
 (defn content-hash+eid-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
-    (vec (for [content-hash content-hashes
-               :let [content-hash (idx/new-id content-hash)
-                     seek-k (idx/encode-content-hash-prefix-key content-hash)]
-               eid (loop [k (ks/-seek i seek-k)
-                          acc []]
-                     (if (and k (bu/bytes=? seek-k k))
-                       (recur (ks/-next i)
-                              (conj acc (idx/decode-content-hash+entity-key->entity k)))
-                       acc))]
-           [content-hash eid]))))
+    (vec (content-hash+eid-by-content-hashes-seq i content-hashes))))
 
-(defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
-  (for [content-hash+eids (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
-                               (content-hash+eid-by-content-hashes snapshot)
+(defn- entities-by-attribute-value-at-seq [di ci ei k min-v max-v business-time transact-time]
+  (for [content-hash+eids (->> (doc-keys-by-attribute-value-seq di k min-v max-v)
+                               (content-hash+eid-by-content-hashes-seq ci)
                                (partition-by first))
         :let [content-hash (ffirst content-hash+eids)
               eids (map second content-hash+eids)]
-        entity-map (entities-at snapshot eids business-time transact-time)
+        entity-map (entities-at-seq ei eids business-time transact-time)
         :when (= content-hash (:content-hash entity-map))]
     entity-map))
 
+(defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
+  (with-open [di (ks/new-iterator snapshot)
+              ci (ks/new-iterator snapshot)
+              ei (ks/new-iterator snapshot)]
+    (vec (entities-by-attribute-value-at-seq di ci ei k min-v max-v business-time transact-time))))
+
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [eids (->> (all-key-values-in-prefix-seq i (idx/encode-entity+bt+tt-prefix-key))
-                    (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first))
+    (let [eids (->> (all-keys-in-prefix-seq i (idx/encode-entity+bt+tt-prefix-key))
+                    (map (comp :eid idx/decode-entity+bt+tt+tx-id-key))
                     (distinct))]
       (entities-at snapshot eids business-time transact-time))))
 
