@@ -23,28 +23,19 @@
 
 ;; Docs
 
-(defn doc-keys-by-attribute-values [snapshot k vs]
+(defn doc-keys-by-attribute-value [snapshot k min-v max-v]
   (with-open [i (ks/new-iterator snapshot)]
-    (->> (for [v vs]
-           (if (vector? v)
-             (let [[min-v max-v] v]
-               (when max-v
-                 (assert (not (neg? (compare max-v min-v)))))
-               [(idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
-                (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))])
-             (let [seek-k (idx/encode-attribute+value-prefix-key k (or v idx/empty-byte-array))]
-               [seek-k seek-k])))
-         (sort-by first bu/bytes-comparator)
-         (reduce
-          (fn [acc [min-seek-k ^bytes max-seek-k]]
-            (loop [k (ks/-seek i min-seek-k)
-                   acc acc]
-              (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-                (recur (ks/-next i)
-                       (->> (idx/decode-attribute+value+content-hash-key->content-hash k)
-                            (conj acc)))
-                acc)))
-          #{}))))
+    (when (and min-v max-v)
+      (assert (not (neg? (compare max-v min-v)))))
+    (let [min-seek-k (idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
+          max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))]
+      (loop [k (ks/-seek i min-seek-k)
+             acc []]
+        (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
+          (recur (ks/-next i)
+                 (->> (idx/decode-attribute+value+content-hash-key->content-hash k)
+                      (conj acc)))
+          acc)))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -145,8 +136,8 @@
                 acc)))
           {}))))
 
-(defn entities-by-attribute-values-at [snapshot k vs business-time transact-time]
-  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-values snapshot k vs)
+(defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
+  (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
                                       (eids-by-content-hashes snapshot))
              [eid entity-map] (entities-at snapshot eids business-time transact-time)
              :when (= content-hash (:content-hash entity-map))]
@@ -241,7 +232,7 @@
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
-    (for [[_ entity-map] (entities-by-attribute-values-at query-context ident [[min-v max-v]] business-time transact-time)]
+    (for [[_ entity-map] (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity-history [this query-context eid]

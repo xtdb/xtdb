@@ -50,41 +50,42 @@
         content-hash (idx/new-id picasso)]
     (db/submit-doc tx-log content-hash picasso)
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/is (= #{content-hash}
-               (doc/doc-keys-by-attribute-values
-                snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"}))))
+      (t/is (= [content-hash]
+               (doc/doc-keys-by-attribute-value
+                snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"))))
 
     (t/testing "find multi valued attribute"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= #{content-hash}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://purl.org/dc/terms/subject #{:http://dbpedia.org/resource/Category:Cubist_artists})))))
+        (t/is (= [content-hash]
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://purl.org/dc/terms/subject
+                  :http://dbpedia.org/resource/Category:Cubist_artists :http://dbpedia.org/resource/Category:Cubist_artists)))))
 
     (t/testing "find attribute by range"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= #{content-hash}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize #{230})))
+        (t/is (= [content-hash]
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 230 230)))
 
-        (t/is (= #{content-hash}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[229 230]])))
-        (t/is (= #{content-hash}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[229 231]])))
-        (t/is (= #{content-hash}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[230 231]])))
+        (t/is (= [content-hash]
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 229 230)))
+        (t/is (= [content-hash]
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 229 231)))
+        (t/is (= [content-hash]
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 230 231)))
 
-        (t/is (= #{}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[231 255]])))
-        (t/is (= #{}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[1 229]])))
-        (t/is (= #{}
-                 (doc/doc-keys-by-attribute-values
-                  snapshot :http://dbpedia.org/property/imageSize [[-255 229]])))))))
+        (t/is (= []
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 231 255)))
+        (t/is (= []
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize 1 229)))
+        (t/is (= []
+                 (doc/doc-keys-by-attribute-value
+                  snapshot :http://dbpedia.org/property/imageSize -255 229)))))))
 
 (t/deftest test-can-index-tx-ops
   (let [tx-log (tx/->DocTxLog f/*kv*)
@@ -114,7 +115,7 @@
 
       (t/testing "can find entity by secondary index"
         (t/is (= [eid]
-                 (keys (doc/entities-by-attribute-values-at snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} transact-time transact-time)))))
+                 (keys (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time)))))
 
       (t/testing "cannot see entity before business or transact time"
         (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -273,8 +274,9 @@
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/testing "eviction removes secondary indexes"
-            (t/is (empty? (keys (doc/entities-by-attribute-values-at snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"} new-transact-time new-transact-time))))
-            (t/is (empty? (doc/doc-keys-by-attribute-values snapshot :http://xmlns.com/foaf/0.1/givenName #{"Pablo"})))))))))
+            (t/is (empty? (keys (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
+                                                                    new-transact-time new-transact-time))))
+            (t/is (empty? (doc/doc-keys-by-attribute-value snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo")))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
