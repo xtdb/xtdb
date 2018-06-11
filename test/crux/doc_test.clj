@@ -43,50 +43,6 @@
                                 "090622a35d4b579d2fcfebf823821298711d3867"])))
       (t/is (empty? (db/get-objects object-store []))))))
 
-(t/deftest test-can-find-doc-by-value
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                    :http://dbpedia.org/resource/Pablo_Picasso)
-        content-hash (idx/new-id picasso)]
-    (db/submit-doc tx-log content-hash picasso)
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/is (= [content-hash]
-               (doc/doc-keys-by-attribute-value
-                snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"))))
-
-    (t/testing "find multi valued attribute"
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= [content-hash]
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://purl.org/dc/terms/subject
-                  :http://dbpedia.org/resource/Category:Cubist_artists :http://dbpedia.org/resource/Category:Cubist_artists)))))
-
-    (t/testing "find attribute by range"
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= [content-hash]
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 230 230)))
-
-        (t/is (= [content-hash]
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 229 230)))
-        (t/is (= [content-hash]
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 229 231)))
-        (t/is (= [content-hash]
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 230 231)))
-
-        (t/is (empty?
-               (doc/doc-keys-by-attribute-value
-                snapshot :http://dbpedia.org/property/imageSize 231 255)))
-        (t/is (empty?
-               (doc/doc-keys-by-attribute-value
-                snapshot :http://dbpedia.org/property/imageSize 1 229)))
-        (t/is (empty?
-               (doc/doc-keys-by-attribute-value
-                snapshot :http://dbpedia.org/property/imageSize -255 229)))))))
-
 (t/deftest test-can-index-tx-ops
   (let [tx-log (tx/->DocTxLog f/*kv*)
         object-store (doc/->DocObjectStore f/*kv*)
@@ -96,33 +52,87 @@
         business-time #inst "2018-05-21"
         eid (idx/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:keys [transact-time tx-id]}
-        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])]
+        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])
+        expected-entities [{:eid eid
+                            :content-hash content-hash
+                            :bt business-time
+                            :tt transact-time
+                            :tx-id tx-id}]]
 
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "can find entity by content hash"
-        (t/is (= [[content-hash eid]]
-                 (doc/content-hash+eid-by-content-hashes snapshot [content-hash]))))
+        (t/is (= [eid] (doc/eids-for-content-hash snapshot content-hash))))
 
       (t/testing "can see entity at transact and business time"
-        (t/is (= [{:eid eid
-                   :content-hash content-hash
-                   :bt business-time
-                   :tt transact-time
-                   :tx-id tx-id}]
+        (t/is (= expected-entities
                  (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
-        (t/is (= [{:eid eid
-                   :content-hash content-hash
-                   :bt business-time
-                   :tt transact-time
-                   :tx-id tx-id}] (doc/all-entities snapshot transact-time transact-time))))
+        (t/is (= expected-entities
+                 (doc/all-entities snapshot transact-time transact-time))))
 
       (t/testing "can find entity by secondary index"
-        (t/is (= [{:eid eid
-                   :content-hash content-hash
-                   :bt business-time
-                   :tt transact-time
-                   :tx-id tx-id}]
-                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time))))
+        (t/testing "single value attribute")
+        (t/is (= expected-entities
+                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time)))
+
+        (t/testing "find multi valued attribute"
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://purl.org/dc/terms/subject
+                    :http://dbpedia.org/resource/Category:Cubist_artists :http://dbpedia.org/resource/Category:Cubist_artists
+                    transact-time transact-time))))
+
+        (t/testing "find attribute by range"
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    230 230
+                    transact-time transact-time)))
+
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    229
+                    230
+                    transact-time transact-time)))
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    229
+                    231
+                    transact-time transact-time)))
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    230
+                    231
+                    transact-time transact-time)))
+
+          (t/is (empty?
+                 (doc/entities-by-attribute-value-at
+                  snapshot
+                  :http://dbpedia.org/property/imageSize
+                  231
+                  255
+                  transact-time transact-time)))
+          (t/is (empty?
+                 (doc/entities-by-attribute-value-at
+                  snapshot
+                  :http://dbpedia.org/property/imageSize
+                  1
+                  229
+                  transact-time transact-time)))
+          (t/is (empty?
+                 (doc/entities-by-attribute-value-at
+                  snapshot
+                  :http://dbpedia.org/property/imageSize
+                  -255
+                  229
+                  transact-time transact-time)))))
 
       (t/testing "cannot see entity before business or transact time"
         (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -152,8 +162,7 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [[new-content-hash eid]]
-                   (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
+          (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -177,8 +186,7 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [[new-content-hash eid]]
-                   (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
+          (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -209,8 +217,7 @@
 
             (with-open [snapshot (ks/new-snapshot f/*kv*)]
 
-              (t/is (= [[new-content-hash eid]]
-                       (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
+              (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
               (t/is (= [{:eid eid
                          :content-hash new-content-hash
                          :bt new-business-time
@@ -277,21 +284,18 @@
             @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))
+          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
 
-        (t/testing "eviction adds to and keeps tx history"
-          (let [picasso-history (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                                  (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso))]
-            ;; TODO: this is flaky
-            ;; (t/is (= 7 (count (map :content-hash picasso-history))))
-            (t/testing "eviction removes docs"
-              (t/is (empty? (db/get-objects object-store (keep :content-hash picasso-history)))))))
+          (t/testing "eviction adds to and keeps tx history"
+            (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+              ;; TODO: this is flaky
+              ;; (t/is (= 7 (count (map :content-hash picasso-history))))
+              (t/testing "eviction removes docs"
+                (t/is (empty? (db/get-objects object-store (keep :content-hash picasso-history)))))))
 
-        (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/testing "eviction removes secondary indexes"
             (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
-                                                              new-transact-time new-transact-time)))
-            (t/is (empty? (doc/doc-keys-by-attribute-value snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo")))))))))
+                                                              new-transact-time new-transact-time)))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
