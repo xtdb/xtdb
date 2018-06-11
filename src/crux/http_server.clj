@@ -32,10 +32,10 @@
          :body (pr-str (q/q (doc/db kvs) query))}
         (catch Exception e
           (if (= "Invalid input" (.getMessage e))
-            (exception-response e 400)
-            (exception-response e 500)))))
+            (exception-response e 400) ;; Valid edn, invalid query
+            (exception-response e 500))))) ;; Valid query; something internal failed
     (catch Exception e
-      (exception-response e 400))))
+      (exception-response e 400)))) ;; Invalid edn
 
 (defn on-put [kvs request] ;; Write
   (try
