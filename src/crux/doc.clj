@@ -114,75 +114,78 @@
 
 (def ^:private ^:const entity-prefix-size (+ Short/BYTES idx/id-size))
 
-(defn- entity-at [i entity business-time transact-time]
-  (let [seek-k (idx/encode-entity+bt+tt-prefix-key
-                entity
-                business-time
-                transact-time)]
-    (loop [k (ks/-seek i seek-k)]
-      (when (and k (bu/bytes=? seek-k entity-prefix-size k))
-        (let [v (ks/-value i)
-              entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
-                             (enrich-entity-map v))]
-          (if (<= (compare (:tt entity-map) transact-time) 0)
-            (when-not (bu/bytes=? idx/nil-id-bytes v)
-              entity-map)
-            (recur (ks/-next i))))))))
+(defrecord EntityTxIndex [i business-time transact-time]
+  db/Index
+  (db/-seek-values [this k]
+    (let [seek-k (idx/encode-entity+bt+tt-prefix-key
+                  k
+                  business-time
+                  transact-time)]
+      (loop [k (ks/-seek i seek-k)]
+        (when (and k (bu/bytes=? seek-k entity-prefix-size k))
+          (let [v (ks/-value i)
+                entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
+                               (enrich-entity-map v))]
+            (if (<= (compare (:tt entity-map) transact-time) 0)
+              (when-not (bu/bytes=? idx/nil-id-bytes v)
+                [entity-map])
+              (recur (ks/-next i))))))))
 
-(defn- entities-at-seq [i entities business-time transact-time]
-  (for [entity entities
-        :let [entity-map (entity-at i entity business-time transact-time)]
-        :when entity-map]
-    entity-map))
+  (db/-next-values [this]))
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (vec (entities-at-seq i entities business-time transact-time))))
+    (let [entity-index (->EntityTxIndex i business-time transact-time)]
+      (vec (mapcat #(db/-seek-values entity-index %) entities)))))
 
-(defn- content-hash+eid-by-content-hashes-seq [i content-hashes]
-  (for [content-hash content-hashes
-        :let [content-hash (idx/new-id content-hash)
-              seek-k (idx/encode-content-hash-prefix-key content-hash)]
-        eid (->> (all-keys-in-prefix-seq i seek-k)
-                 (map idx/decode-content-hash+entity-key->entity))]
-    [content-hash eid]))
+(defrecord ContentHashEntityIndex [i]
+  db/Index
+  (db/-seek-values [this k]
+    (->> (idx/encode-content-hash-prefix-key k)
+         (all-keys-in-prefix-seq i)
+         (map idx/decode-content-hash+entity-key->entity)))
+
+  (db/-next-values [this]))
 
 (defn content-hash+eid-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
-    (vec (content-hash+eid-by-content-hashes-seq i content-hashes))))
+    (let [content-hash-index (->ContentHashEntityIndex i)]
+      (vec (for [content-hash content-hashes
+                 entity (db/-seek-values content-hash-index content-hash)]
+             [content-hash entity])))))
 
-(defn- entities-for-content-hashes-seq [ci ei business-time transact-time content-hashes]
-  (for [content-hash+eids (->> content-hashes
-                               (content-hash+eid-by-content-hashes-seq ci)
-                               (partition-by first))
-        :let [content-hash (ffirst content-hash+eids)
-              eids (map second content-hash+eids)]
-        entity-map (entities-at-seq ei eids business-time transact-time)
+(defn- entities-for-content-hashes-seq [content-hash-index entity-tx-index content-hashes]
+  (for [content-hash content-hashes
+        entity (db/-seek-values content-hash-index content-hash)
+        entity-map (db/-seek-values entity-tx-index entity)
         :when (= content-hash (:content-hash entity-map))]
     entity-map))
 
-(defrecord EntityAttributeValueVirtualIndex [doc-index ci ei business-time transact-time]
+(defrecord EntityAttributeValueVirtualIndex [doc-index content-hash-entity-index entity-tx-index]
   db/Index
   (-seek-values [this k]
     (when-let [content-hashes (db/-seek-values doc-index k)]
-      (entities-for-content-hashes-seq ci ei business-time transact-time content-hashes)))
+      (entities-for-content-hashes-seq content-hash-entity-index entity-tx-index content-hashes)))
   (-next-values [this]
     (when-let [content-hashes (db/-next-values doc-index)]
-      (entities-for-content-hashes-seq ci ei business-time transact-time content-hashes))))
+      (entities-for-content-hashes-seq content-hash-entity-index entity-tx-index content-hashes))))
 
-(defn- entities-by-attribute-value-at-seq [entity-index min-v]
+(defn- entities-by-attribute-value-at-seq [entity-attribute-index min-v]
   (let [step (fn step [f-cons f-next]
                (when-let [k (f-cons)]
                  (lazy-cat k (step f-next f-next))))]
-    (step #(db/-seek-values entity-index min-v) #(db/-next-values entity-index))))
+    (step #(db/-seek-values entity-attribute-index min-v)
+          #(db/-next-values entity-attribute-index))))
 
 (defn entities-by-attribute-value-at [snapshot attr min-v max-v business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
     (let [doc-index (->DocAttrbuteValueIndex di attr max-v)
-          entity-index (->EntityAttributeValueVirtualIndex doc-index ci ei business-time transact-time)]
-      (vec (entities-by-attribute-value-at-seq entity-index min-v)))))
+          content-hash-entity-index (->ContentHashEntityIndex ci)
+          entity-tx-index (->EntityTxIndex ei business-time transact-time)
+          entity-attribute-index (->EntityAttributeValueVirtualIndex doc-index content-hash-entity-index entity-tx-index)]
+      (vec (entities-by-attribute-value-at-seq entity-attribute-index min-v)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
