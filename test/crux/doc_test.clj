@@ -77,15 +77,15 @@
                  (doc/doc-keys-by-attribute-value
                   snapshot :http://dbpedia.org/property/imageSize 230 231)))
 
-        (t/is (= []
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 231 255)))
-        (t/is (= []
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize 1 229)))
-        (t/is (= []
-                 (doc/doc-keys-by-attribute-value
-                  snapshot :http://dbpedia.org/property/imageSize -255 229)))))))
+        (t/is (empty?
+               (doc/doc-keys-by-attribute-value
+                snapshot :http://dbpedia.org/property/imageSize 231 255)))
+        (t/is (empty?
+               (doc/doc-keys-by-attribute-value
+                snapshot :http://dbpedia.org/property/imageSize 1 229)))
+        (t/is (empty?
+               (doc/doc-keys-by-attribute-value
+                snapshot :http://dbpedia.org/property/imageSize -255 229)))))))
 
 (t/deftest test-can-index-tx-ops
   (let [tx-log (tx/->DocTxLog f/*kv*)

@@ -51,10 +51,11 @@
 (defn doc-keys-by-attribute-value [snapshot attr min-v max-v]
   (with-open [i (ks/new-iterator snapshot)]
     (let [index (->DocAttrbuteValueIndex i attr max-v)]
-      (vec (when-let [k (db/-seek-values index min-v)]
-             (->> (repeatedly #(db/-next-values index))
-                  (take-while identity)
-                  (apply concat k)))))))
+      (when-let [k (db/-seek-values index min-v)]
+        (->> (repeatedly #(db/-next-values index))
+             (take-while identity)
+             (apply concat k)
+             (vec))))))
 
 (defn- normalize-value [v]
   (cond-> v
