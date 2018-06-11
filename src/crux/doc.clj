@@ -113,29 +113,25 @@
                :when entity-map]
            entity-map))))
 
-(defn eids-by-content-hashes [snapshot content-hashes]
+(defn content-hash+eid-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
-    (->> (for [content-hash content-hashes
-               :let [content-hash (idx/new-id content-hash)]]
-           [(idx/encode-content-hash-prefix-key content-hash)
-            content-hash])
-         (into (sorted-map-by bu/bytes-comparator))
-         (reduce-kv
-          (fn [acc seek-k content-hash]
-            (loop [k (ks/-seek i seek-k)
-                   acc acc]
-              (if (and k (bu/bytes=? seek-k k))
-                (recur (ks/-next i)
-                       (update acc
-                               content-hash
-                               conj
-                               (idx/decode-content-hash+entity-key->entity k)))
-                acc)))
-          {}))))
+    (vec (for [content-hash content-hashes
+               :let [content-hash (idx/new-id content-hash)
+                     seek-k (idx/encode-content-hash-prefix-key content-hash)]
+               eid (loop [k (ks/-seek i seek-k)
+                          acc []]
+                     (if (and k (bu/bytes=? seek-k k))
+                       (recur (ks/-next i)
+                              (conj acc (idx/decode-content-hash+entity-key->entity k)))
+                       acc))]
+           [content-hash eid]))))
 
 (defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
-  (for [[content-hash eids] (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
-                                 (eids-by-content-hashes snapshot))
+  (for [content-hash+eids (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
+                               (content-hash+eid-by-content-hashes snapshot)
+                               (partition-by first))
+        :let [content-hash (ffirst content-hash+eids)
+              eids (map second content-hash+eids)]
         entity-map (entities-at snapshot eids business-time transact-time)
         :when (= content-hash (:content-hash entity-map))]
     entity-map))

@@ -100,8 +100,8 @@
 
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "can find entity by content hash"
-        (t/is (= {content-hash [eid]}
-                 (doc/eids-by-content-hashes snapshot [content-hash]))))
+        (t/is (= [[content-hash eid]]
+                 (doc/content-hash+eid-by-content-hashes snapshot [content-hash]))))
 
       (t/testing "can see entity at transact and business time"
         (t/is (= [{:eid eid
@@ -152,8 +152,8 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= {new-content-hash [eid]}
-                   (doc/eids-by-content-hashes snapshot [new-content-hash])))
+          (t/is (= [[new-content-hash eid]]
+                   (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -177,8 +177,8 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= {new-content-hash [eid]}
-                   (doc/eids-by-content-hashes snapshot [new-content-hash])))
+          (t/is (= [[new-content-hash eid]]
+                   (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -209,8 +209,8 @@
 
             (with-open [snapshot (ks/new-snapshot f/*kv*)]
 
-              (t/is (= {new-content-hash [eid]}
-                       (doc/eids-by-content-hashes snapshot [new-content-hash])))
+              (t/is (= [[new-content-hash eid]]
+                       (doc/content-hash+eid-by-content-hashes snapshot [new-content-hash])))
               (t/is (= [{:eid eid
                          :content-hash new-content-hash
                          :bt new-business-time
