@@ -13,13 +13,14 @@
 
 ;; Utils
 
-(defn- all-key-values-in-prefix [snapshot ^bytes prefix]
-  (with-open [i (ks/new-iterator snapshot)]
-    (loop [acc (transient [])
-           k (ks/-seek i prefix)]
-      (if (and k (bu/bytes=? prefix k))
-        (recur (conj! acc [k (ks/-value i)]) (ks/-next i))
-        (persistent! acc)))))
+(defn- all-key-values-in-prefix-seq [i prefix]
+  (let [step (fn step [f-cons f-next]
+               (lazy-seq
+                (let [k (f-cons)]
+                  (when (and k (bu/bytes=? prefix k))
+                    (cons [k (ks/-value i)]
+                          (step f-next f-next))))))]
+    (step #(ks/-seek i prefix) #(ks/-next i))))
 
 ;; Docs
 
@@ -137,16 +138,18 @@
     entity-map))
 
 (defn all-entities [snapshot business-time transact-time]
-  (let [eids (->> (all-key-values-in-prefix snapshot (idx/encode-entity+bt+tt-prefix-key))
-                  (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first))
-                  (distinct))]
-    (entities-at snapshot eids business-time transact-time)))
+  (with-open [i (ks/new-iterator snapshot)]
+    (let [eids (->> (all-key-values-in-prefix-seq i (idx/encode-entity+bt+tt-prefix-key))
+                    (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first))
+                    (distinct))]
+      (entities-at snapshot eids business-time transact-time))))
 
 (defn entity-history [snapshot entity]
-  (let [seek-k (idx/encode-entity+bt+tt-prefix-key entity)]
-    (for [[k v] (all-key-values-in-prefix snapshot seek-k)]
-      (-> (idx/decode-entity+bt+tt+tx-id-key k)
-          (enrich-entity-map v)))))
+  (with-open [i (ks/new-iterator snapshot)]
+    (let [seek-k (idx/encode-entity+bt+tt-prefix-key entity)]
+      (vec (for [[k v] (all-key-values-in-prefix-seq i seek-k)]
+             (-> (idx/decode-entity+bt+tt+tx-id-key k)
+                 (enrich-entity-map v)))))))
 
 ;; Caching
 
