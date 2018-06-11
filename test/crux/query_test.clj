@@ -25,9 +25,9 @@
                                                    ['e :name 'name]]}))))
 
     (t/testing "Can query by single field"
-      (t/is (= #{[(:crux.kv/id ivan)]} (q/q (db *kv*) {:find ['e]
+      (t/is (= #{[(:crux.db/id ivan)]} (q/q (db *kv*) {:find ['e]
                                                        :where [['e :name "Ivan"]]})))
-      (t/is (= #{[(:crux.kv/id petr)]} (q/q (db *kv*) {:find ['e]
+      (t/is (= #{[(:crux.db/id petr)]} (q/q (db *kv*) {:find ['e]
                                                        :where [['e :name "Petr"]]}))))
 
     (t/testing "Can query using multiple terms"
@@ -48,12 +48,12 @@
 
     (let [[smith] (f/transact-people! *kv* [{:name "Smith" :last-name "Smith"}])]
       (t/testing "Can query across fields for same value"
-        (t/is (= #{[(:crux.kv/id smith)]}
+        (t/is (= #{[(:crux.db/id smith)]}
                  (q/q (db *kv*) {:find ['p1] :where [['p1 :name 'name]
                                                      ['p1 :last-name 'name]]}))))
 
       (t/testing "Can query across fields for same value when value is passed in"
-        (t/is (= #{[(:crux.kv/id smith)]}
+        (t/is (= #{[(:crux.db/id smith)]}
                  (q/q (db *kv*) {:find ['p1] :where [['p1 :name 'name]
                                                      ['p1 :last-name 'name]
                                                      ['p1 :name "Smith"]]})))))))
@@ -87,7 +87,7 @@
                      ['e :last-name "Sparks"]]}]
       (t/is (= #{} (q/q (doc/db *kv* #inst "1986-10-23")
                         q)))
-      (t/is (= #{[(:crux.kv/id malcolm)]} (q/q (db *kv*) q))))))
+      (t/is (= #{[(:crux.db/id malcolm)]} (q/q (db *kv*) q))))))
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
@@ -221,7 +221,7 @@
                                                       {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
 
     (t/testing "?p2 introduced only inside of an Or"
-      (t/is (= #{[(:crux.kv/id ivan)]} (q/q (db *kv*) '{:find [?p2]
+      (t/is (= #{[(:crux.db/id ivan)]} (q/q (db *kv*) '{:find [?p2]
                                                         :where [(or [(and [[?p2 :name "Petr"]
                                                                            [?p2 :sex :female]])
                                                                      (and [[?p2 :last-name "Ivanov"]
@@ -277,8 +277,8 @@
                                      '(>= age 50)]})))))
 
 (t/deftest test-can-use-idents-as-entities
-  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}
-                            {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
   (t/testing "Can query by single field"
     (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
                                          :where [[i :name "Ivan"]
@@ -292,8 +292,8 @@
            (s/conform :crux.query/where '[[i :age age]
                                           (< age 20)])))
 
-  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
-                            {:crux.kv/id :petr :name "Petr" :last-name "Petrov" :age 18}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
 
   (t/testing "Min search case"
     (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [i]
@@ -306,9 +306,9 @@
                                                  (< age 20)]})))))
 
 (t/deftest test-mutiple-values
-  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" }
-                            {:crux.kv/id :oleg :name "Oleg"}
-                            {:crux.kv/id :petr :name "Petr" :follows #{:ivan :oleg}}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }
+                            {:crux.db/id :oleg :name "Oleg"}
+                            {:crux.db/id :petr :name "Petr" :follows #{:ivan :oleg}}])
 
   (t/testing "One way"
     (t/is (= #{[:ivan] [:oleg]} (q/q (db *kv*) '{:find [x]
@@ -324,7 +324,7 @@
 (t/deftest test-use-another-datasource)
 
 (t/deftest test-sanitise-join
-  (f/transact-people! *kv* [{:crux.kv/id :ivan :name "Ivan" :last-name "Ivanov"}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
   (t/testing "Can query by single field"
     (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [e2]
                                          :where [[e :last-name "Ivanov"]

@@ -118,7 +118,7 @@
                   x)) rdf-map))
 
 (defn use-iri-as-id [m]
-  (assoc m :crux.kv/id (:crux.rdf/iri m)))
+  (assoc m :crux.db/id (:crux.rdf/iri m)))
 
 (defn entity-statements->map [entity-statements]
   (when-let [^Statement statement (first entity-statements)]
