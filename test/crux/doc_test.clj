@@ -104,18 +104,25 @@
                  (doc/eids-by-content-hashes snapshot [content-hash]))))
 
       (t/testing "can see entity at transact and business time"
-        (t/is (= {eid
-                  {:eid eid
+        (t/is (= [{:eid eid
                    :content-hash content-hash
                    :bt business-time
                    :tt transact-time
-                   :tx-id tx-id}}
+                   :tx-id tx-id}]
                  (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
-        (t/is (= [eid] (keys (doc/all-entities snapshot transact-time transact-time)))))
+        (t/is (= [{:eid eid
+                   :content-hash content-hash
+                   :bt business-time
+                   :tt transact-time
+                   :tx-id tx-id}] (doc/all-entities snapshot transact-time transact-time))))
 
       (t/testing "can find entity by secondary index"
-        (t/is (= [eid]
-                 (keys (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time)))))
+        (t/is (= [{:eid eid
+                   :content-hash content-hash
+                   :bt business-time
+                   :tt transact-time
+                   :tx-id tx-id}]
+                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time))))
 
       (t/testing "cannot see entity before business or transact time"
         (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -147,14 +154,17 @@
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/is (= {new-content-hash [eid]}
                    (doc/eids-by-content-hashes snapshot [new-content-hash])))
-          (t/is (= {eid
-                    {:eid eid
+          (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
                      :tt new-transact-time
-                     :tx-id new-tx-id}}
+                     :tx-id new-tx-id}]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-          (t/is (= [eid] (keys (doc/all-entities snapshot new-business-time new-transact-time))))
+          (t/is (= [{:eid eid
+                     :content-hash new-content-hash
+                     :bt new-business-time
+                     :tt new-transact-time
+                     :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time)))
 
           (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
@@ -169,21 +179,23 @@
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/is (= {new-content-hash [eid]}
                    (doc/eids-by-content-hashes snapshot [new-content-hash])))
-          (t/is (= {eid
-                    {:eid eid
+          (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
                      :tt new-transact-time
-                     :tx-id new-tx-id}}
+                     :tx-id new-tx-id}]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-          (t/is (= {eid
-                    {:eid eid
+          (t/is (= [{:eid eid
                      :content-hash content-hash
                      :bt business-time
                      :tt transact-time
-                     :tx-id tx-id}}
+                     :tx-id tx-id}]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time transact-time)))
-          (t/is (= [eid] (keys (doc/all-entities snapshot new-business-time new-transact-time)))))
+          (t/is (= [{:eid eid
+                     :content-hash new-content-hash
+                     :bt new-business-time
+                     :tt new-transact-time
+                     :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time))))
 
         (t/testing "can correct entity at earlier business time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -199,28 +211,31 @@
 
               (t/is (= {new-content-hash [eid]}
                        (doc/eids-by-content-hashes snapshot [new-content-hash])))
-              (t/is (= {eid
-                        {:eid eid
+              (t/is (= [{:eid eid
                          :content-hash new-content-hash
                          :bt new-business-time
                          :tt new-transact-time
-                         :tx-id new-tx-id}}
+                         :tx-id new-tx-id}]
                        (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-              (t/is (= [eid] (keys (doc/all-entities snapshot new-business-time new-transact-time))))
+              (t/is (= [{:eid eid
+                         :content-hash new-content-hash
+                         :bt new-business-time
+                         :tt new-transact-time
+                         :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time)))
 
               (t/is (= prev-tx-id (-> (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-transact-time prev-transact-time)
-                                      (get-in [eid :tx-id])))))
+                                      (first)
+                                      :tx-id))))
 
             (t/testing "compare and set does nothing with wrong content hash"
               (let [old-picasso (assoc picasso :baz :boz)]
                 @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                  (t/is (= {eid
-                            {:eid eid
+                  (t/is (= [{:eid eid
                              :content-hash new-content-hash
                              :bt new-business-time
                              :tt new-transact-time
-                             :tx-id new-tx-id}}
+                             :tx-id new-tx-id}]
                            (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))
 
             (t/testing "compare and set updates with correct content hash"
@@ -231,12 +246,11 @@
                      new-tx-id :tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                  (t/is (= {eid
-                            {:eid eid
+                  (t/is (= [{:eid eid
                              :content-hash new-content-hash
                              :bt new-business-time
                              :tt new-transact-time
-                             :tx-id new-tx-id}}
+                             :tx-id new-tx-id}]
                            (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))))
 
         (t/testing "can delete entity"
@@ -248,7 +262,8 @@
               (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (-> (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-transact-time)
-                                   (get-in [eid :tx-id]))))))))))
+                                   (first)
+                                   :tx-id)))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
@@ -274,8 +289,8 @@
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/testing "eviction removes secondary indexes"
-            (t/is (empty? (keys (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
-                                                                    new-transact-time new-transact-time))))
+            (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
+                                                              new-transact-time new-transact-time)))
             (t/is (empty? (doc/doc-keys-by-attribute-value snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo")))))))))
 
 (t/deftest test-store-and-retrieve-meta

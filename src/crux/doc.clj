@@ -24,11 +24,11 @@
 ;; Docs
 
 (defn doc-keys-by-attribute-value [snapshot k min-v max-v]
-  (with-open [i (ks/new-iterator snapshot)]
-    (when (and min-v max-v)
-      (assert (not (neg? (compare max-v min-v)))))
-    (let [min-seek-k (idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
-          max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))]
+  (when (and min-v max-v)
+    (assert (not (neg? (compare max-v min-v)))))
+  (let [min-seek-k (idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
+        max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))]
+    (with-open [i (ks/new-iterator snapshot)]
       (loop [k (ks/-seek i min-seek-k)
              acc []]
         (if (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
@@ -96,13 +96,12 @@
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (->> (for [seek-k (->> (for [entity entities]
-                             (idx/encode-entity+bt+tt-prefix-key
-                              entity
-                              business-time
-                              transact-time))
-                           (sort bu/bytes-comparator))
-               :let [entity-map (loop [k (ks/-seek i seek-k)]
+    (vec (for [entity entities
+               :let [seek-k (idx/encode-entity+bt+tt-prefix-key
+                             entity
+                             business-time
+                             transact-time)
+                     entity-map (loop [k (ks/-seek i seek-k)]
                                   (when (and k (bu/bytes=? seek-k entity-prefix-size k))
                                     (let [v (ks/-value i)
                                           entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
@@ -112,9 +111,7 @@
                                           entity-map)
                                         (recur (ks/-next i))))))]
                :when entity-map]
-           [(:eid entity-map) entity-map])
-         (into {}))))
-
+           entity-map))))
 
 (defn eids-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
@@ -139,14 +136,14 @@
 (defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
   (->> (for [[content-hash eids] (->> (doc-keys-by-attribute-value snapshot k min-v max-v)
                                       (eids-by-content-hashes snapshot))
-             [eid entity-map] (entities-at snapshot eids business-time transact-time)
+             entity-map (entities-at snapshot eids business-time transact-time)
              :when (= content-hash (:content-hash entity-map))]
-         [eid entity-map])
-       (into {})))
+         entity-map)))
 
 (defn all-entities [snapshot business-time transact-time]
   (let [eids (->> (all-key-values-in-prefix snapshot (idx/encode-entity+bt+tt-prefix-key))
-                  (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first)))]
+                  (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first))
+                  (distinct))]
     (entities-at snapshot eids business-time transact-time)))
 
 (defn entity-history [snapshot entity]
@@ -228,11 +225,11 @@
     (->DocSnapshot (ks/new-snapshot kv) (atom #{})))
 
   (entities [this query-context]
-    (for [[_ entity-map] (all-entities query-context business-time transact-time)]
+    (for [entity-map (all-entities query-context business-time transact-time)]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
-    (for [[_ entity-map] (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
+    (for [entity-map (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity-history [this query-context eid]
@@ -240,7 +237,7 @@
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity [this query-context eid]
-    (when-let [entity-map (get (entities-at query-context [eid] business-time transact-time) eid)]
+    (when-let [entity-map (first (entities-at query-context [eid] business-time transact-time)) ]
       (map->DocEntity (assoc entity-map :object-store object-store)))))
 
 (def ^:const default-await-tx-timeout 10000)
