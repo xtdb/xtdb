@@ -32,22 +32,29 @@
 
 ;; Docs
 
-(defn- doc-keys-by-attribute-value-seq [i k min-v max-v]
-  (when (and min-v max-v)
-    (assert (not (neg? (compare max-v min-v)))))
-  (let [min-seek-k (idx/encode-attribute+value-prefix-key k (or min-v idx/empty-byte-array))
-        max-seek-k (idx/encode-attribute+value-prefix-key k (or max-v idx/empty-byte-array))
-        step (fn step [f-cons f-next]
-               (lazy-seq
-                (let [k (f-cons)]
-                  (when (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-                    (cons (idx/decode-attribute+value+content-hash-key->content-hash k)
-                          (step f-next f-next))))))]
-    (step #(ks/-seek i min-seek-k) #(ks/-next i))))
+(defn- attribute-value+index-key->content-hashes [attr k max-v]
+  (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))]
+    (when (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
+      [(idx/decode-attribute+value+content-hash-key->content-hash k)])))
 
-(defn doc-keys-by-attribute-value [snapshot k min-v max-v]
+(defrecord DocAttrbuteValueIndex [i attr max-v]
+  db/Index
+  (-seek-values [this k]
+    (when-let [k (->> (or k idx/empty-byte-array)
+                      (idx/encode-attribute+value-prefix-key attr)
+                      (ks/-seek i))]
+      (attribute-value+index-key->content-hashes attr k max-v)))
+  (-next-values [this]
+    (when-let [k (ks/-next i)]
+      (attribute-value+index-key->content-hashes attr k max-v))))
+
+(defn doc-keys-by-attribute-value [snapshot attr min-v max-v]
   (with-open [i (ks/new-iterator snapshot)]
-    (vec (doc-keys-by-attribute-value-seq i k min-v max-v))))
+    (let [index (->DocAttrbuteValueIndex i attr max-v)]
+      (vec (when-let [k (db/-seek-values index min-v)]
+             (->> (repeatedly #(db/-next-values index))
+                  (take-while identity)
+                  (apply concat k)))))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -131,7 +138,7 @@
   (with-open [i (ks/new-iterator snapshot)]
     (vec (entities-at-seq i entities business-time transact-time))))
 
-(defn content-hash+eid-by-content-hashes-seq [i content-hashes]
+(defn- content-hash+eid-by-content-hashes-seq [i content-hashes]
   (for [content-hash content-hashes
         :let [content-hash (idx/new-id content-hash)
               seek-k (idx/encode-content-hash-prefix-key content-hash)]
@@ -143,8 +150,8 @@
   (with-open [i (ks/new-iterator snapshot)]
     (vec (content-hash+eid-by-content-hashes-seq i content-hashes))))
 
-(defn- entities-by-attribute-value-at-seq [di ci ei k min-v max-v business-time transact-time]
-  (for [content-hash+eids (->> (doc-keys-by-attribute-value-seq di k min-v max-v)
+(defn- entities-for-content-hashes-seq [ci ei business-time transact-time content-hashes]
+  (for [content-hash+eids (->> content-hashes
                                (content-hash+eid-by-content-hashes-seq ci)
                                (partition-by first))
         :let [content-hash (ffirst content-hash+eids)
@@ -153,11 +160,28 @@
         :when (= content-hash (:content-hash entity-map))]
     entity-map))
 
-(defn entities-by-attribute-value-at [snapshot k min-v max-v business-time transact-time]
+(defrecord EntityAttributeValueVirtualIndex [doc-index ci ei business-time transact-time]
+  db/Index
+  (-seek-values [this k]
+    (when-let [content-hashes (db/-seek-values doc-index k)]
+      (entities-for-content-hashes-seq ci ei business-time transact-time content-hashes)))
+  (-next-values [this]
+    (when-let [content-hashes (db/-next-values doc-index)]
+      (entities-for-content-hashes-seq ci ei business-time transact-time content-hashes))))
+
+(defn- entities-by-attribute-value-at-seq [entity-index min-v]
+  (let [step (fn step [f-cons f-next]
+               (when-let [k (f-cons)]
+                 (lazy-cat k (step f-next f-next))))]
+    (step #(db/-seek-values entity-index min-v) #(db/-next-values entity-index))))
+
+(defn entities-by-attribute-value-at [snapshot attr min-v max-v business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (vec (entities-by-attribute-value-at-seq di ci ei k min-v max-v business-time transact-time))))
+    (let [doc-index (->DocAttrbuteValueIndex di attr max-v)
+          entity-index (->EntityAttributeValueVirtualIndex doc-index ci ei business-time transact-time)]
+      (vec (entities-by-attribute-value-at-seq entity-index min-v)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
