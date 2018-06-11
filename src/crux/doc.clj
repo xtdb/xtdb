@@ -158,17 +158,11 @@
                   (map (comp :eid idx/decode-entity+bt+tt+tx-id-key first)))]
     (entities-at snapshot eids business-time transact-time)))
 
-(defn entity-histories [snapshot entities]
-  (->> (for [seek-k (->> (for [entity entities]
-                           (idx/encode-entity+bt+tt-prefix-key entity))
-                         (sort bu/bytes-comparator))
-             :let [[entity-map :as history] (for [[k v] (all-key-values-in-prefix snapshot seek-k)]
-                                              (-> (idx/decode-entity+bt+tt+tx-id-key k)
-                                                  (enrich-entity-map v)))]
-             :when entity-map]
-         {(:eid entity-map) history})
-       (into {})))
-
+(defn entity-history [snapshot entity]
+  (let [seek-k (idx/encode-entity+bt+tt-prefix-key entity)]
+    (for [[k v] (all-key-values-in-prefix snapshot seek-k)]
+      (-> (idx/decode-entity+bt+tt+tx-id-key k)
+          (enrich-entity-map v)))))
 
 ;; Caching
 
@@ -251,7 +245,7 @@
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity-history [this query-context eid]
-    (for [entity-map (get (entity-histories query-context [eid]) eid)]
+    (for [entity-map (entity-history query-context eid)]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity [this query-context eid]

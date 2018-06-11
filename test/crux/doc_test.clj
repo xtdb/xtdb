@@ -133,7 +133,7 @@
                    :bt business-time
                    :tt transact-time
                    :tx-id tx-id}]
-                 (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid)))))
+                 (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -251,7 +251,7 @@
 
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (let [picasso-history (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid)]
+        (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
           (t/is (= 6 (count (map :content-hash picasso-history)))))))
 
     (t/testing "can evict entity"
@@ -265,7 +265,7 @@
 
         (t/testing "eviction adds to and keeps tx history"
           (let [picasso-history (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                                  (get (doc/entity-histories snapshot [:http://dbpedia.org/resource/Pablo_Picasso]) eid))]
+                                  (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso))]
             ;; TODO: this is flaky
             ;; (t/is (= 7 (count (map :content-hash picasso-history))))
             (t/testing "eviction removes docs"
