@@ -2,9 +2,9 @@
   (:require [clojure.edn :as edn]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.doc.tx :as tx]
+            [crux.tx :as tx]
             [crux.kv-store :as kvs]
-            [crux.query :as q] 
+            [crux.query :as q]
             [ring.adapter.jetty :as j]
             [ring.util.request :as req])
   (:import [java.io Closeable]))
@@ -62,7 +62,7 @@
 (defn ^Closeable create-server
   ([kvs]
    (create-server kvs 3000))
-  
+
   ([kvs port]
    (let [server (j/run-jetty (partial handler kvs)
                              {:port port

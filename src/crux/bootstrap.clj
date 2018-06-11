@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
             [crux.doc :as doc]
-            [crux.doc.tx :as tx]
+            [crux.tx :as tx]
             [crux.http-server :as srv]
             [crux.kv-store :as kv-store]
             [crux.memdb]

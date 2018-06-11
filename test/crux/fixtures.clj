@@ -3,7 +3,7 @@
             [crux.bootstrap]
             [crux.db]
             [crux.doc]
-            [crux.doc.tx]
+            [crux.tx]
             [crux.rocksdb]
             [crux.lmdb]
             [crux.memdb]
@@ -35,7 +35,7 @@
   ([db people-mixins]
    (transact-people! db people-mixins (Date.)))
   ([db people-mixins ts]
-   (let [tx-log (crux.doc.tx/->DocTxLog db)
+   (let [tx-log (crux.tx/->DocTxLog db)
          people (->> people-mixins (map #(merge %1 %2) people))
          tx-ops (people->tx-ops people ts)]
      @(crux.db/submit-tx tx-log tx-ops)

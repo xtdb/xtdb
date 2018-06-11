@@ -3,8 +3,8 @@
   valid keywords. Uses one transaction per message."
   (:require [clojure.tools.logging :as log]
             [crux.db :as db]
-            [crux.doc.index :as idx]
-            [crux.doc.tx :as tx]
+            [crux.index :as idx]
+            [crux.tx :as tx]
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]

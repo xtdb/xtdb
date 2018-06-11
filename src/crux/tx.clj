@@ -1,8 +1,8 @@
-(ns crux.doc.tx
+(ns crux.tx
   (:require [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
-            [crux.doc.index :as idx]
+            [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db])
   (:import [java.util Date]))

@@ -1,4 +1,4 @@
-(ns crux.doc.index
+(ns crux.index
   (:require [crux.byte-utils :as bu]
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]

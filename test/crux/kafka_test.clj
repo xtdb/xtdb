@@ -5,7 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.doc.tx :as tx]
+            [crux.tx :as tx]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]

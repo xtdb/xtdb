@@ -1,6 +1,6 @@
 (ns crux.doc
   (:require [crux.byte-utils :as bu]
-            [crux.doc.index :as idx]
+            [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
             [crux.lru :as lru]

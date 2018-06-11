@@ -2,7 +2,7 @@
   (:require [criterium.core :as crit]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.doc.tx :as tx]
+            [crux.tx :as tx]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.kv-store :as ks]
             [crux.query :as q])
