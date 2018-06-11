@@ -83,7 +83,7 @@
                  :let [k (ks/-seek i seek-k)]
                  :when (and k (bu/bytes=? seek-k k))]
              [(idx/decode-doc-key k)
-            (nippy/fast-thaw (ks/-value i))])
+              (nippy/fast-thaw (ks/-value i))])
            (into {}))))
   (put-objects [this kvs]
     (ks/store kv (for [[k v] kvs]
@@ -135,8 +135,8 @@
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [entity-as-of-index (->EntityAsOfIndex i business-time transact-time)]
-      (vec (mapcat #(db/-seek-values entity-as-of-index %) entities)))))
+    (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
+      (vec (mapcat #(db/-seek-values entity-as-of-idx %) entities)))))
 
 (defrecord ContentHashEntityIndex [i]
   db/Index
@@ -149,43 +149,43 @@
 
 (defn content-hash+eid-by-content-hashes [snapshot content-hashes]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [content-hash-index (->ContentHashEntityIndex i)]
+    (let [content-hash-idx (->ContentHashEntityIndex i)]
       (vec (for [content-hash content-hashes
-                 entity (db/-seek-values content-hash-index content-hash)]
+                 entity (db/-seek-values content-hash-idx content-hash)]
              [content-hash entity])))))
 
-(defn- entities-for-content-hashes-seq [content-hash-index entity-as-of-index content-hashes]
-  (for [content-hash content-hashes
-        entity (db/-seek-values content-hash-index content-hash)
-        entity-map (db/-seek-values entity-as-of-index entity)
-        :when (= content-hash (:content-hash entity-map))]
-    entity-map))
+(defn- entities-for-content-hashes-seq [content-hash-idx entity-as-of-idx content-hashes]
+  (seq (for [content-hash content-hashes
+             entity (db/-seek-values content-hash-idx content-hash)
+             entity-map (db/-seek-values entity-as-of-idx entity)
+             :when (= content-hash (:content-hash entity-map))]
+         entity-map)))
 
-(defrecord EntityAttributeValueVirtualIndex [doc-index content-hash-entity-index entity-as-of-index]
+(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (-seek-values [this k]
-    (when-let [content-hashes (db/-seek-values doc-index k)]
-      (entities-for-content-hashes-seq content-hash-entity-index entity-as-of-index content-hashes)))
+    (->> (db/-seek-values doc-idx k)
+         (entities-for-content-hashes-seq content-hash-entity-idx entity-as-of-idx)))
   (-next-values [this]
-    (when-let [content-hashes (db/-next-values doc-index)]
-      (entities-for-content-hashes-seq content-hash-entity-index entity-as-of-index content-hashes))))
+    (->> (db/-next-values doc-idx)
+         (entities-for-content-hashes-seq content-hash-entity-idx entity-as-of-idx))))
 
-(defn- entities-by-attribute-value-at-seq [entity-attribute-index min-v]
+(defn- entities-by-attribute-value-at-seq [entity-attribute-idx min-v]
   (let [step (fn step [f-cons f-next]
                (when-let [k (f-cons)]
                  (lazy-cat k (step f-next f-next))))]
-    (step #(db/-seek-values entity-attribute-index min-v)
-          #(db/-next-values entity-attribute-index))))
+    (step #(db/-seek-values entity-attribute-idx min-v)
+          #(db/-next-values entity-attribute-idx))))
 
 (defn entities-by-attribute-value-at [snapshot attr min-v max-v business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (let [doc-index (->DocAttrbuteValueIndex di attr max-v)
-          content-hash-entity-index (->ContentHashEntityIndex ci)
-          entity-as-of-index (->EntityAsOfIndex ei business-time transact-time)
-          entity-attribute-index (->EntityAttributeValueVirtualIndex doc-index content-hash-entity-index entity-as-of-index)]
-      (vec (entities-by-attribute-value-at-seq entity-attribute-index min-v)))))
+    (let [doc-idx (->DocAttrbuteValueIndex di attr max-v)
+          content-hash-entity-idx (->ContentHashEntityIndex ci)
+          entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
+      (vec (entities-by-attribute-value-at-seq entity-attribute-idx min-v)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
