@@ -297,6 +297,28 @@
             (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
                                                               new-transact-time new-transact-time)))))))))
 
+(t/deftest test-can-perform-unary-leapfrog-join
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        object-store (doc/->DocObjectStore f/*kv*)
+        {:keys [transact-time tx-id]}
+        @(db/submit-tx tx-log (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 9 11]
+                                                                :b [0 2 6 7 8 9]
+                                                                :c [2 4 5 8 10]}
+                                                 v vs
+                                                 :let [eid (keyword (str (name relation) v))]]
+                                             [:crux.tx/put eid {:crux.db/id eid relation v}]))))]
+    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (t/testing "checking data is loaded before join"
+        (t/is (= (idx/new-id :a0)
+                 (:eid (first (doc/entities-at snapshot [:a0] transact-time transact-time)))))
+        (t/is (= 21 (count (doc/all-entities snapshot transact-time transact-time)))))
+
+      (t/testing "unary leapfrog join"
+        (t/is (= {8 #{(idx/new-id :a8)
+                      (idx/new-id :b8)
+                      (idx/new-id :c8)}}
+                 (doc/unary-leapfrog-join snapshot object-store [:a :b :c] transact-time transact-time)))))))
+
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
   (doc/store-meta f/*kv* :foo {:bar 2})

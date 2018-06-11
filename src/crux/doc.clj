@@ -1,5 +1,6 @@
 (ns crux.doc
-  (:require [crux.byte-utils :as bu]
+  (:require [clojure.tools.logging :as log]
+            [crux.byte-utils :as bu]
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
@@ -182,6 +183,55 @@
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (idx/decode-entity+bt+tt+tx-id-key k)
                  (enrich-entity-map v)))))))
+
+;; Join
+
+;; TODO: First cut, needs loads of work!
+(defn unary-leapfrog-join [snapshot object-store attrs business-time transact-time]
+  (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
+    (try
+      (with-open [ci (ks/new-iterator snapshot)
+                  ei (ks/new-iterator snapshot)]
+        (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
+              entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+              update-values (fn [attr entities]
+                              (->> (for [{:keys [eid content-hash]} entities
+                                         :let [v (get-in (db/get-objects object-store [content-hash]) [content-hash attr])]]
+                                     (do (log/debug :at attr v)
+                                         {v [eid]}))
+                                   (apply merge-with concat)))
+              attr->key+idx (->> (for [attr attrs
+                                       :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr nil)
+                                             entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
+                                             start-entities (db/-seek-values entity-idx nil)]]
+                                   [attr [(update-values attr start-entities) entity-idx]])
+                                 (into {}))]
+          (loop [attr->key+idx attr->key+idx
+                 acc {}]
+            (let [sorted (sort-by (comp first keys first val) attr->key+idx)
+                  attr (first (keys sorted))
+                  next-k (first (keys (first (val (last sorted)))))
+                  match? (apply = (map (comp first keys first val) attr->key+idx))
+                  acc (if match?
+                        (do (log/debug :match attrs next-k)
+                            (assoc acc next-k (reduce into #{} (mapcat (comp vals first val) attr->key+idx))))
+                        acc)
+                  idx (second (get attr->key+idx attr))
+                  next-entities (if match?
+                                  (do (log/debug :next attr)
+                                      (db/-next-values idx))
+                                  (do (log/debug :seek attr next-k)
+                                      (db/-seek-values idx next-k)))]
+              (if (seq next-entities)
+                (let [new-attr->key+idx (assoc attr->key+idx attr [(update-values attr next-entities) idx])]
+                  (if (= (mapcat (comp vals first val) new-attr->key+idx)
+                         (mapcat (comp vals first val) attr->key+idx))
+                    acc
+                    (recur new-attr->key+idx acc)))
+                acc)))))
+      (finally
+        (doseq [i (vals attr->di)]
+          (.close ^Closeable i))))))
 
 ;; Caching
 
