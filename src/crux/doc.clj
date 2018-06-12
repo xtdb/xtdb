@@ -187,6 +187,11 @@
 ;; Join
 
 ;; TODO: First cut, needs loads of work!
+;;    1. make Index fns return k + v.
+;;    2. avoid resorting, using the mod trick.
+;;    3. return all the data per attribute.
+;;    4. do the join directly on the DocAttrbuteValueIndex, not realising the doc (see 1).
+;;    5. cleanup/refactoring.
 (defn unary-leapfrog-join [snapshot object-store attrs business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
     (try
