@@ -14,7 +14,7 @@
 
 ;; Docs
 
-(defn- consume-next-values-for-k [i ^bytes current-k attr max-v peek]
+(defn- consume-attribute-values-for-current-key [i ^bytes current-k attr max-v peek]
   (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))
         prefix-length (- (alength current-k) idx/id-size)]
     (loop [acc []
@@ -35,10 +35,10 @@
     (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-prefix-key attr)
                       (ks/-seek i))]
-      (consume-next-values-for-k i k attr max-v peek)))
+      (consume-attribute-values-for-current-key i k attr max-v peek)))
   (-next-values [this]
     (when-let [k (or @peek (ks/-next i))]
-      (consume-next-values-for-k i k attr max-v peek))))
+      (consume-attribute-values-for-current-key i k attr max-v peek))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -157,9 +157,9 @@
              :when (= content-hash (:content-hash entity-map))]
          entity-map)))
 
-(defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx v+content-hashes]
-  (when-let [[[v] :as v+content-hashes] v+content-hashes]
-    (for [entity (->> (map second v+content-hashes)
+(defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
+  (when-let [[[v] :as value+content-hashes] value+content-hashes]
+    (for [entity (->> (map second value+content-hashes)
                       (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx))]
       [v entity])))
 
@@ -201,12 +201,12 @@
 
 ;; Join
 
-(defn- new-leapfrog-iterator-state [idx attr v+entities]
-  (let [[[v] :as v+entities] v+entities]
+(defn- new-leapfrog-iterator-state [idx attr value+entities]
+  (let [[[v] :as value+entities] value+entities]
     {:attr attr
      :idx idx
      :key v
-     :entities (mapv second v+entities)}))
+     :entities (mapv second value+entities)}))
 
 (defrecord UnaryJoinVirtualIndex [attr->di content-hash-entity-idx entity-as-of-idx max-v state]
   db/Index
@@ -224,15 +224,15 @@
       (let [{:keys [key attr idx]} (get iterators index)
             max-k (:key (get iterators (mod (dec index) (count iterators))))
             match? (bu/bytes=? key max-k)
-            next-v+entities (if match?
-                              (do (log/debug :next attr)
-                                  (db/-next-values idx))
-                              (do (log/debug :seek attr (bu/bytes->hex max-k))
-                                  (db/-seek-values idx (reify idx/ValueToBytes
-                                                         (value->bytes [_]
-                                                           max-k)))))]
-        (reset! state (when next-v+entities
-                        {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-v+entities))
+            next-value+entities (if match?
+                                  (do (log/debug :next attr)
+                                      (db/-next-values idx))
+                                  (do (log/debug :seek attr (bu/bytes->hex max-k))
+                                      (db/-seek-values idx (reify idx/ValueToBytes
+                                                             (value->bytes [_]
+                                                               max-k)))))]
+        (reset! state (when next-value+entities
+                        {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-value+entities))
                          :index (int (mod (inc index) (count iterators)))}))
         (if match?
           (do (log/debug :match (map :attr iterators) (bu/bytes->hex max-k))
