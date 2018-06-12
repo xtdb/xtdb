@@ -40,6 +40,9 @@
     (when-let [k (or @peek-state (ks/-next i))]
       (attribute-value+content-hashes-for-current-key i k attr max-v peek-state))))
 
+(defn- new-doc-attribute-value-index [i attr max-v]
+  (->DocAttributeValueIndex i attr max-v (atom nil)))
+
 (defn- normalize-value [v]
   (cond-> v
     (not (or (vector? v)
@@ -174,7 +177,7 @@
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (let [doc-idx (->DocAttributeValueIndex di attr max-v (atom nil))
+    (let [doc-idx (new-doc-attribute-value-index di attr max-v)
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
@@ -202,7 +205,7 @@
 ;; Join
 
 (defn- new-leapfrog-iterator-state [idx attr value+entities]
-  (let [[[v] :as value+entities] value+entities]
+  (let [[[v]] value+entities]
     {:attr attr
      :idx idx
      :key v
@@ -234,10 +237,13 @@
                         {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-value+entities))
                          :index (int (mod (inc index) (count iterators)))}))
         (if match?
-          (do (log/debug :match (map :attr iterators) (bu/bytes->hex max-k))
-              [max-k (zipmap (map :attr iterators)
-                             (map :entities iterators))])
+          (let [attrs (map :attr iterators)]
+            (log/debug :match attrs (bu/bytes->hex max-k))
+            [max-k (zipmap attrs (mapv :entities iterators))])
           (recur))))))
+
+(defn- new-unary-join-virtual-index [entity-indexes]
+  (->UnaryJoinVirtualIndex entity-indexes (atom nil)))
 
 (defn unary-leapfrog-join [snapshot attrs min-v max-v business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
@@ -247,9 +253,9 @@
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
               entity-indexes (for [[attr di] attr->di
-                                   :let [doc-idx (->DocAttributeValueIndex di attr max-v (atom nil))]]
+                                   :let [doc-idx (new-doc-attribute-value-index di attr max-v)]]
                                (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx))
-              unary-join-idx (->UnaryJoinVirtualIndex entity-indexes (atom nil))]
+              unary-join-idx (new-unary-join-virtual-index entity-indexes)]
           (when-let [result (db/-seek-values unary-join-idx min-v)]
             (->> (repeatedly #(db/-next-values unary-join-idx))
                  (take-while identity)
