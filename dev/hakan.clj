@@ -166,3 +166,25 @@
          (recur bs (apply str acc three-five-bit-chars)))
        (let [[x & bs] bs]
          (recur bs (str acc (char x))))))))
+
+(def ^:const max-run-length 16)
+
+(defn compress-run-lengths [s]
+  (->> (for [rl (partition-by identity s)
+             rl (partition-all max-run-length rl)]
+         (if (> (count rl) 2)
+           [(char (count rl)) (first rl)]
+           rl))
+       (reduce into [])
+       (apply str)))
+
+(defn decompress-run-lengths [s]
+  (loop [[c & rst] s
+         acc nil]
+    (if-not c
+      acc
+      (if (<= (int c) max-run-length)
+        (recur (rest rst)
+               (apply str acc (repeat (int c) (first rst))))
+        (recur rst
+               (str acc c))))))
