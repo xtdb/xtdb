@@ -17,30 +17,33 @@
           (.getMessage e) "\n"
           (ex-data e))})
 
-(defn on-get [kvs db-dir] ;; Health check
-  {:status 200
-   :headers {"Content-Type" "application/edn"}
-   :body (pr-str
-          {:kv-backend (type kvs)
-           :estimate-num-keys (kvs/count-keys kvs)
-           :kv-store-size (cio/folder-human-size db-dir)
-           :dev-db-size (cio/folder-human-size "dev-storage")})})
+(defn on-get [kvs db-dir request]
+  (println (req/path-info request))
+  (case (req/path-info request)
+    "/query"
+    (try
+      (let [query (edn/read-string (req/body-string request))]
+        (try
+          {:status 200
+           :headers {"Content-Type" "application/edn"}
+           :body (pr-str (q/q (doc/db kvs) query))}
+          (catch Exception e
+            (if (= "Invalid input" (.getMessage e))
+              (exception-response e 400) ;; Valid edn, invalid query
+              (exception-response e 500))))) ;; Valid query; something internal failed
+      (catch Exception e
+        (exception-response e 400))) ;; Invalid edn
 
-(defn on-post [kvs request] ;; Read
-  (try
-    (let [query (edn/read-string (req/body-string request))]
-      (try
-        {:status 200
-         :headers {"Content-Type" "application/edn"}
-         :body (pr-str (q/q (doc/db kvs) query))}
-        (catch Exception e
-          (if (= "Invalid input" (.getMessage e))
-            (exception-response e 400) ;; Valid edn, invalid query
-            (exception-response e 500))))) ;; Valid query; something internal failed
-    (catch Exception e
-      (exception-response e 400)))) ;; Invalid edn
+    ;; default: Status
+    {:status 200
+     :headers {"Content-Type" "application/edn"}
+     :body (pr-str
+            {:kv-backend (type kvs)
+             :estimate-num-keys (kvs/count-keys kvs)
+             :kv-store-size (cio/folder-human-size db-dir)
+             :dev-db-size (cio/folder-human-size "dev-storage")})}))
 
-(defn on-put [kvs tx-log request] ;; Write
+(defn on-post [kvs tx-log request] ;; Write
   (try
     (let [v (edn/read-string (req/body-string request))
           tx-op [:crux.tx/put
@@ -60,9 +63,8 @@
 
 (defn handler [kvs tx-log db-dir request]
   (case (:request-method request)
-    :get (on-get kvs db-dir)
-    :post (on-post kvs request)
-    :put (on-put kvs tx-log request)))
+    :get (on-get kvs db-dir request)
+    :post (on-post kvs tx-log request)))
 
 (defn ^Closeable create-server
   ([kvs tx-log db-dir]
