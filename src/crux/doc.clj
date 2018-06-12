@@ -161,7 +161,7 @@
          entity-map)))
 
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
-  (when-let [[[v] :as value+content-hashes] value+content-hashes]
+  (when-let [[[v]] value+content-hashes]
     (for [entity (->> (map second value+content-hashes)
                       (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx))]
       [v entity])))
