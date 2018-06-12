@@ -299,27 +299,34 @@
 
 (t/deftest test-can-perform-unary-leapfrog-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
+        tx-ops (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 8 9 11 12]
+                                                 :b [0 2 6 7 8 9 12 12]
+                                                 :c [2 4 5 8 10 12 12]}
+                                  [i v] (map-indexed vector vs)
+                                  :let [eid (keyword (str (name relation) i "-" v))]]
+                              [:crux.tx/put eid {:crux.db/id eid relation v}])))
         {:keys [transact-time tx-id]}
-        @(db/submit-tx tx-log (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 9 11]
-                                                                :b [0 2 6 7 8 9]
-                                                                :c [2 4 5 8 10]}
-                                                 v vs
-                                                 :let [eid (keyword (str (name relation) v))]]
-                                             [:crux.tx/put eid {:crux.db/id eid relation v}]))))]
+        @(db/submit-tx tx-log tx-ops)]
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "checking data is loaded before join"
-        (t/is (= (idx/new-id :a0)
-                 (:eid (first (doc/entities-at snapshot [:a0] transact-time transact-time)))))
-        (t/is (= 21 (count (doc/all-entities snapshot transact-time transact-time)))))
+        (t/is (= (idx/new-id :a0-0)
+                 (:eid (first (doc/entities-at snapshot [:a0-0] transact-time transact-time)))))
+        (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
 
       (t/testing "unary leapfrog join"
-        (t/is (= (sorted-map-by
-                  bu/bytes-comparator
-                  (idx/value->bytes 8)
-                  {:a #{(idx/new-id :a8)}
-                   :b #{(idx/new-id :b8)}
-                   :c #{(idx/new-id :c8)}})
-                 (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)))))))
+        (t/is (= [{:a #{(idx/new-id :a7-8)
+                        (idx/new-id :a8-8)}
+                   :b #{(idx/new-id :b4-8)}
+                   :c #{(idx/new-id :c3-8)}}
+                  {:a #{(idx/new-id :a11-12)}
+                   :b #{(idx/new-id :b6-12)
+                        (idx/new-id :b7-12)}
+                   :c #{(idx/new-id :c5-12)
+                        (idx/new-id :c6-12)}}]
+                 (for [[v matches] (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)]
+                   (->> (for [[k entities] matches]
+                          [k (set (map :eid entities))])
+                        (into {})))))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

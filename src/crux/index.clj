@@ -183,7 +183,6 @@
     (.position buffer (+ Short/BYTES id-size))
     [(doto (byte-array (- (.remaining buffer) id-size))
        (->> (.get buffer)))
-;     (.position buffer (- (alength k) id-size))
      (new-id (doto (byte-array id-size)
                (->> (.get buffer))))]))
 
