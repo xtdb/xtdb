@@ -26,12 +26,12 @@
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
 
-(defn size
+(defn folder-size
   "Total size of a file or folder in bytes"
   [^java.io.File f]
   (cond
-    (string? f) (size (io/file f))
-    (.isDirectory f) (apply + (map size (.listFiles f)))
+    (string? f) (folder-size (io/file f))
+    (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :default (.length f)))
 
 (def units {:KB 1000
@@ -56,5 +56,5 @@
      (format "%.3f" b)
      (str b " " (name unit)))))
 
-(defn human-size [f]
-  (->human-size (size f)))
+(defn folder-human-size [f]
+  (->human-size (folder-size f)))

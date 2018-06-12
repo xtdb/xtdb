@@ -80,6 +80,7 @@
                  doc-topic
                  doc-partitions
                  replication-factor
+                 db-dir
                  server-port]
           :as options} (merge default-options options)
          tx-log (k/->KafkaTxLog producer tx-topic doc-topic)
@@ -90,7 +91,7 @@
      (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
-     (with-open [http-server (srv/create-server kv-store tx-log server-port)]
+     (with-open [http-server (srv/create-server kv-store tx-log db-dir server-port)]
        (while @running?
          (k/consume-and-index-entities indexer consumer 100))))))
 
