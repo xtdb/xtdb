@@ -188,10 +188,9 @@
 ;; Join
 
 ;; TODO: First cut, needs loads of work!
-;;    1. avoid resorting, using the mod trick.
-;;    2. return all the data per attribute, needs doing next on match
+;;    1. return all the data per attribute, needs doing next on match
 ;;    for all iterators until they all changed.
-;;    3. cleanup/refactoring.
+;;    2. cleanup/refactoring.
 (defn unary-leapfrog-join [snapshot attrs min-v max-v business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
     (try
@@ -199,45 +198,43 @@
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              update-values (fn [attr v+entities]
-                              (->> (for [[v entities] v+entities
-                                         {:keys [eid content-hash]} entities]
-                                     (do (log/debug :at attr (bu/bytes->hex v))
-                                         (sorted-map-by bu/bytes-comparator v [eid])))
-                                   (apply merge-with concat)))
-              attr->key+idx (->> (for [attr attrs
-                                       :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr max-v)
-                                             entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
-                                             start-v+entities (db/-seek-values entity-idx min-v)]]
-                                   [attr [(update-values attr start-v+entities) entity-idx]])
-                                 (into {}))]
-          (loop [attr->key+idx attr->key+idx
-                 acc (sorted-map-by bu/bytes-comparator)]
-            (let [sorted (sort-by (comp first keys first val) bu/bytes-comparator attr->key+idx)
-                  attr (first (keys sorted))
-                  next-k (first (keys (first (val (last sorted)))))
-                  match? (reduce
-                          #(when (and %1 (bu/bytes=? %1 %2))
-                             %2)
-                          (map (comp first keys first val) attr->key+idx))
+              update-values (fn [idx attr v+entities]
+                              (let [[[v entities]] v+entities]
+                                {:attr attr :idx idx :key v :eids (set (map :eid entities))}))
+              attr+key+indexes (->> (for [attr attrs
+                                          :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr max-v)
+                                                entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]]
+                                      (update-values entity-idx attr (db/-seek-values entity-idx min-v)))
+                                    (sort-by :key bu/bytes-comparator)
+                                    (vec))]
+          (loop [attr+key+indexes attr+key+indexes
+                 acc (sorted-map-by bu/bytes-comparator)
+                 index 0]
+            (let [{:keys [key attr idx]} (get attr+key+indexes index)
+                  max-k (:key (get attr+key+indexes (mod (dec index) (count attr+key+indexes))))
+                  match? (->> (map :key attr+key+indexes)
+                              (reduce
+                               #(when (and %1 (bu/bytes=? %1 %2))
+                                  %2)))
                   acc (if match?
-                        (do (log/debug :match attrs (bu/bytes->hex next-k))
-                            (assoc acc next-k (reduce into #{} (mapcat (comp vals first val) attr->key+idx))))
+                        (do (log/debug :match attrs (bu/bytes->hex max-k))
+                            (update acc
+                                    max-k
+                                    (partial merge-with (fnil into #{}))
+                                    (zipmap (map :attr attr+key+indexes)
+                                            (map :eids attr+key+indexes))))
                         acc)
-                  idx (second (get attr->key+idx attr))
                   next-v+entities (if match?
                                     (do (log/debug :next attr)
                                         (db/-next-values idx))
-                                    (do (log/debug :seek attr (bu/bytes->hex next-k))
+                                    (do (log/debug :seek attr (bu/bytes->hex max-k))
                                         (db/-seek-values idx (reify idx/ValueToBytes
                                                                (value->bytes [_]
-                                                                 next-k)))))]
+                                                                 max-k)))))]
               (if (seq next-v+entities)
-                (let [new-attr->key+idx (assoc attr->key+idx attr [(update-values attr next-v+entities) idx])]
-                  (if (= (mapcat (comp vals first val) new-attr->key+idx)
-                         (mapcat (comp vals first val) attr->key+idx))
-                    acc
-                    (recur new-attr->key+idx acc)))
+                (recur (assoc attr+key+indexes index (update-values idx attr next-v+entities))
+                       acc
+                       (int (mod (inc index) (count attr+key+indexes))))
                 acc)))))
       (finally
         (doseq [i (vals attr->di)]

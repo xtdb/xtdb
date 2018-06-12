@@ -316,9 +316,9 @@
         (t/is (= (sorted-map-by
                   bu/bytes-comparator
                   (idx/value->bytes 8)
-                  #{(idx/new-id :a8)
-                    (idx/new-id :b8)
-                    (idx/new-id :c8)})
+                  {:a #{(idx/new-id :a8)}
+                   :b #{(idx/new-id :b8)}
+                   :c #{(idx/new-id :c8)}})
                  (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)))))))
 
 (t/deftest test-store-and-retrieve-meta
