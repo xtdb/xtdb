@@ -188,11 +188,10 @@
 ;; Join
 
 ;; TODO: First cut, needs loads of work!
-;;    1. make Index fns return k + v.
-;;    2. avoid resorting, using the mod trick.
-;;    3. return all the data per attribute, needs doing next on match
+;;    1. avoid resorting, using the mod trick.
+;;    2. return all the data per attribute, needs doing next on match
 ;;    for all iterators until they all changed.
-;;    4. cleanup/refactoring.
+;;    3. cleanup/refactoring.
 (defn unary-leapfrog-join [snapshot attrs min-v max-v business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
     (try
