@@ -42,17 +42,21 @@
 
 (defn on-put [kvs tx-log request] ;; Write
   (try
-    (let [v (read-string (req/body-string request))
+    (let [v (edn/read-string (req/body-string request))
           tx-op [:crux.tx/put
                  (java.util.UUID/randomUUID)
                  v
-                 (java.util.Date.)] ;; WIP; ought to use v directly and assume user provided valid tx-op syntax
-          return (db/submit-tx tx-log [tx-op])]      
-      {:status 200
-       :headers {"Content-Type" "application/edn"}
-       :body (pr-str @return)})
+                 (java.util.Date.)]] ;; WIP; ought to use v directly and assume user provided valid tx-op syntax
+      (try        
+        {:status 200
+         :headers {"Content-Type" "application/edn"}
+         :body (pr-str @(db/submit-tx tx-log [tx-op]))}
+        (catch Exception e
+          (if (= "Invalid input" (.getMessage e))
+            (exception-response e 400) ;; Valid edn, invalid tx-op
+            (exception-response e 500))))) ;; Valid tx-op; something internal failed
     (catch Exception e
-      (exception-response e 500)))) ;; TODO invalid requests need a 400
+      (exception-response e 400)))) ;; Invalid edn
 
 (defn handler [kvs tx-log db-dir request]
   (case (:request-method request)
