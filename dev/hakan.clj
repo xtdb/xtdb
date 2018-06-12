@@ -188,3 +188,30 @@
                (apply str acc (repeat (int c) (first rst))))
         (recur rst
                (str acc c))))))
+
+(defn compress-lzss [s]
+  (loop [idx 0
+         acc ""]
+    (if (= idx (count s))
+      acc
+      (let [prefix-s (subs s 0 idx)
+            [n sub-s-idx] (loop [n 0x1F]
+                            (when (> n 2)
+                              (let [sub-s (subs s idx (min (+ n idx) (count s)))]
+                                (if-let [idx (clojure.string/index-of prefix-s sub-s)]
+                                  [(count sub-s) idx]
+                                  (recur (dec n))))))]
+        (if (and sub-s-idx (pos? sub-s-idx))
+          (recur (+ idx (long n))
+                 (str acc (char (bit-or 0x80 n)) (char sub-s-idx)))
+          (recur (inc idx) (str acc (get s idx))))))))
+
+(defn decompress-lzss [s]
+  (loop [s s
+         acc ""]
+    (if-not (seq s)
+      acc
+      (let [[n idx & rst] s]
+        (if (= 0x80 (bit-and 0x80 (int n)))
+          (recur rst (str acc (subs acc (int idx) (+ (int idx) (bit-xor 0x80 (int n))))))
+          (recur (next s) (str acc n)))))))
