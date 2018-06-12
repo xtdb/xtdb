@@ -176,13 +176,16 @@
 (defn encode-attribute+value-prefix-key ^bytes [attr v]
   (encode-attribute+value+content-hash-key attr v empty-byte-array))
 
-(defn ^Id decode-attribute+value+content-hash-key->content-hash [^bytes k]
+(defn ^Id decode-attribute+value+content-hash-key->value+content-hash [^bytes k]
   (assert (<= (+ Short/BYTES id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)]
     (assert (= attribute+value+content-hash-index-id (.getShort buffer)))
-    (.position buffer (- (alength k) id-size))
-    (new-id (doto (byte-array id-size)
-              (->> (.get buffer))))))
+    (.position buffer (+ Short/BYTES id-size))
+    [(doto (byte-array (- (.remaining buffer) id-size))
+       (->> (.get buffer)))
+;     (.position buffer (- (alength k) id-size))
+     (new-id (doto (byte-array id-size)
+               (->> (.get buffer))))]))
 
 (defn encode-content-hash+entity-key ^bytes [content-hash eid]
   (let [eid (id->bytes eid)]

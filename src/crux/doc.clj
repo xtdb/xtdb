@@ -14,10 +14,10 @@
 
 ;; Docs
 
-(defn- attribute-value->content-hashes [attr k max-v]
+(defn- attribute-value->value+content-hashes [attr k max-v]
   (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))]
     (when (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-      [(idx/decode-attribute+value+content-hash-key->content-hash k)])))
+      [(idx/decode-attribute+value+content-hash-key->value+content-hash k)])))
 
 (defrecord DocAttrbuteValueIndex [i attr max-v]
   db/Index
@@ -25,10 +25,10 @@
     (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-prefix-key attr)
                       (ks/-seek i))]
-      (attribute-value->content-hashes attr k max-v)))
+      (attribute-value->value+content-hashes attr k max-v)))
   (-next-values [this]
     (when-let [k (ks/-next i)]
-      (attribute-value->content-hashes attr k max-v))))
+      (attribute-value->value+content-hashes attr k max-v))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -150,11 +150,11 @@
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (-seek-values [this k]
-    (->> (db/-seek-values doc-idx k)
-         (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx)))
+    (when-let [[[v content-hash]] (db/-seek-values doc-idx k)]
+      [[v (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx [content-hash])]]))
   (-next-values [this]
-    (->> (db/-next-values doc-idx)
-         (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx))))
+    (when-let [[[v content-hash]] (db/-next-values doc-idx)]
+      [[v (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx [content-hash])]])))
 
 (defn entities-by-attribute-value-at [snapshot attr min-v max-v business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
@@ -168,6 +168,7 @@
         (->> (repeatedly #(db/-next-values entity-attribute-idx))
              (take-while identity)
              (apply concat k)
+             (mapcat second)
              (vec))))))
 
 (defn all-entities [snapshot business-time transact-time]
@@ -189,46 +190,51 @@
 ;; TODO: First cut, needs loads of work!
 ;;    1. make Index fns return k + v.
 ;;    2. avoid resorting, using the mod trick.
-;;    3. return all the data per attribute.
-;;    4. do the join directly on the DocAttrbuteValueIndex, not realising the doc (see 1).
-;;    5. cleanup/refactoring.
-(defn unary-leapfrog-join [snapshot object-store attrs business-time transact-time]
+;;    3. return all the data per attribute, needs doing next on match
+;;    for all iterators until they all changed.
+;;    4. cleanup/refactoring.
+(defn unary-leapfrog-join [snapshot attrs min-v max-v business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
     (try
       (with-open [ci (ks/new-iterator snapshot)
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              update-values (fn [attr entities]
-                              (->> (for [{:keys [eid content-hash]} entities
-                                         :let [v (get-in (db/get-objects object-store [content-hash]) [content-hash attr])]]
-                                     (do (log/debug :at attr v)
-                                         {v [eid]}))
+              update-values (fn [attr v+entities]
+                              (->> (for [[v entities] v+entities
+                                         {:keys [eid content-hash]} entities]
+                                     (do (log/debug :at attr (bu/bytes->hex v))
+                                         (sorted-map-by bu/bytes-comparator v [eid])))
                                    (apply merge-with concat)))
               attr->key+idx (->> (for [attr attrs
-                                       :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr nil)
+                                       :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr max-v)
                                              entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
-                                             start-entities (db/-seek-values entity-idx nil)]]
-                                   [attr [(update-values attr start-entities) entity-idx]])
+                                             start-v+entities (db/-seek-values entity-idx min-v)]]
+                                   [attr [(update-values attr start-v+entities) entity-idx]])
                                  (into {}))]
           (loop [attr->key+idx attr->key+idx
-                 acc {}]
-            (let [sorted (sort-by (comp first keys first val) attr->key+idx)
+                 acc (sorted-map-by bu/bytes-comparator)]
+            (let [sorted (sort-by (comp first keys first val) bu/bytes-comparator attr->key+idx)
                   attr (first (keys sorted))
                   next-k (first (keys (first (val (last sorted)))))
-                  match? (apply = (map (comp first keys first val) attr->key+idx))
+                  match? (reduce
+                          #(when (and %1 (bu/bytes=? %1 %2))
+                             %2)
+                          (map (comp first keys first val) attr->key+idx))
                   acc (if match?
-                        (do (log/debug :match attrs next-k)
+                        (do (log/debug :match attrs (bu/bytes->hex next-k))
                             (assoc acc next-k (reduce into #{} (mapcat (comp vals first val) attr->key+idx))))
                         acc)
                   idx (second (get attr->key+idx attr))
-                  next-entities (if match?
-                                  (do (log/debug :next attr)
-                                      (db/-next-values idx))
-                                  (do (log/debug :seek attr next-k)
-                                      (db/-seek-values idx next-k)))]
-              (if (seq next-entities)
-                (let [new-attr->key+idx (assoc attr->key+idx attr [(update-values attr next-entities) idx])]
+                  next-v+entities (if match?
+                                    (do (log/debug :next attr)
+                                        (db/-next-values idx))
+                                    (do (log/debug :seek attr (bu/bytes->hex next-k))
+                                        (db/-seek-values idx (reify idx/ValueToBytes
+                                                               (value->bytes [_]
+                                                                 next-k)))))]
+              (if (seq next-v+entities)
+                (let [new-attr->key+idx (assoc attr->key+idx attr [(update-values attr next-v+entities) idx])]
                   (if (= (mapcat (comp vals first val) new-attr->key+idx)
                          (mapcat (comp vals first val) attr->key+idx))
                     acc

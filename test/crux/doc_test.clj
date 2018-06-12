@@ -299,7 +299,6 @@
 
 (t/deftest test-can-perform-unary-leapfrog-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (doc/->DocObjectStore f/*kv*)
         {:keys [transact-time tx-id]}
         @(db/submit-tx tx-log (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 9 11]
                                                                 :b [0 2 6 7 8 9]
@@ -314,10 +313,13 @@
         (t/is (= 21 (count (doc/all-entities snapshot transact-time transact-time)))))
 
       (t/testing "unary leapfrog join"
-        (t/is (= {8 #{(idx/new-id :a8)
-                      (idx/new-id :b8)
-                      (idx/new-id :c8)}}
-                 (doc/unary-leapfrog-join snapshot object-store [:a :b :c] transact-time transact-time)))))))
+        (t/is (= (sorted-map-by
+                  bu/bytes-comparator
+                  (idx/value->bytes 8)
+                  #{(idx/new-id :a8)
+                    (idx/new-id :b8)
+                    (idx/new-id :c8)})
+                 (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
