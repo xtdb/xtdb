@@ -60,9 +60,6 @@
                             :tx-id tx-id}]]
 
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/testing "can find entity by content hash"
-        (t/is (= [eid] (doc/eids-for-content-hash snapshot content-hash))))
-
       (t/testing "can see entity at transact and business time"
         (t/is (= expected-entities
                  (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time)))
@@ -162,7 +159,6 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -186,7 +182,6 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
           (t/is (= [{:eid eid
                      :content-hash new-content-hash
                      :bt new-business-time
@@ -216,8 +211,6 @@
                 @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
             (with-open [snapshot (ks/new-snapshot f/*kv*)]
-
-              (t/is (= [eid] (doc/eids-for-content-hash snapshot new-content-hash)))
               (t/is (= [{:eid eid
                          :content-hash new-content-hash
                          :bt new-business-time

@@ -16,11 +16,11 @@
 
 (defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr max-v peek-state]
   (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))
-        prefix-length (- (alength current-k) idx/id-size)]
+        prefix-size (- (alength current-k) idx/id-size)]
     (loop [acc []
            k current-k]
       (if-let [value+content-hash (when (and k
-                                             (bu/bytes=? current-k prefix-length k)
+                                             (bu/bytes=? current-k prefix-size k)
                                              (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
                                     (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
         (recur (conj acc value+content-hash)
@@ -113,17 +113,16 @@
 (defn- enrich-entity-map [entity-map content-hash]
   (assoc entity-map :content-hash (some-> content-hash not-empty idx/new-id)))
 
-(def ^:private ^:const entity-prefix-size (+ Short/BYTES idx/id-size))
-
 (defrecord EntityAsOfIndex [i business-time transact-time]
   db/Index
   (db/-seek-values [this k]
-    (let [seek-k (idx/encode-entity+bt+tt-prefix-key
+    (let [prefix-size (+ Short/BYTES idx/id-size)
+          seek-k (idx/encode-entity+bt+tt-prefix-key
                   k
                   business-time
                   transact-time)]
       (loop [k (ks/-seek i seek-k)]
-        (when (and k (bu/bytes=? seek-k entity-prefix-size k))
+        (when (and k (bu/bytes=? seek-k prefix-size k))
           (let [v (ks/-value i)
                 entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
                                (enrich-entity-map v))]
@@ -148,30 +147,22 @@
 
   (db/-next-values [this]))
 
-(defn eids-for-content-hash [snapshot content-hash]
-  (with-open [i (ks/new-iterator snapshot)]
-    (let [content-hash-idx (->ContentHashEntityIndex i)]
-      (vec (db/-seek-values content-hash-idx content-hash)))))
-
-(defn- entities-for-content-hashes [content-hash-idx entity-as-of-idx content-hashes]
-  (seq (for [content-hash content-hashes
-             entity (db/-seek-values content-hash-idx content-hash)
-             entity-map (db/-seek-values entity-as-of-idx entity)
-             :when (= content-hash (:content-hash entity-map))]
-         entity-map)))
-
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
   (when-let [[[v]] value+content-hashes]
-    (for [entity (->> (map second value+content-hashes)
-                      (entities-for-content-hashes content-hash-entity-idx entity-as-of-idx))]
-      [v entity])))
+    (for [content-hash (map second value+content-hashes)
+          entity (db/-seek-values content-hash-entity-idx content-hash)
+          entity-map (db/-seek-values entity-as-of-idx entity)
+          :when (= content-hash (:content-hash entity-map))]
+      [v entity-map])))
 
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (-seek-values [this k]
-    (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx (db/-seek-values doc-idx k)))
+    (->> (db/-seek-values doc-idx k)
+         (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx)))
   (-next-values [this]
-    (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx (db/-next-values doc-idx))))
+    (->> (db/-next-values doc-idx)
+         (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx))))
 
 (defn entities-by-attribute-value-at [snapshot attr min-v max-v business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
