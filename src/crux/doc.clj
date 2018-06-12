@@ -36,6 +36,7 @@
                       (idx/encode-attribute+value-prefix-key attr)
                       (ks/-seek i))]
       (attribute-value+content-hashes-for-current-key i k attr max-v peek-state)))
+
   (-next-values [this]
     (when-let [k (or @peek-state (ks/-next i))]
       (attribute-value+content-hashes-for-current-key i k attr max-v peek-state))))
@@ -71,10 +72,12 @@
              [(idx/decode-doc-key k)
               (nippy/fast-thaw (ks/-value i))])
            (into {}))))
+
   (put-objects [this kvs]
     (ks/store kv (for [[k v] kvs]
                    [(idx/encode-doc-key k)
                     (nippy/fast-freeze v)])))
+
   (delete-objects [this ks]
     (ks/delete kv (map idx/encode-doc-key ks)))
 
@@ -160,6 +163,7 @@
   (-seek-values [this k]
     (->> (db/-seek-values doc-idx k)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx)))
+
   (-next-values [this]
     (->> (db/-next-values doc-idx)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx))))
@@ -202,7 +206,7 @@
      :key v
      :entities (mapv second value+entities)}))
 
-(defrecord UnaryJoinVirtualIndex [entity-indexes state]
+(defrecord UnaryJoinVirtualIndex [entity-indexes iterators-state]
   db/Index
   (-seek-values [this k]
     (let [iterators (->> (for [entity-idx entity-indexes
@@ -210,12 +214,14 @@
                            (new-leapfrog-iterator-state entity-idx attr (db/-seek-values entity-idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
-      (reset! state {:iterators iterators :index 0})
+      (reset! iterators-state {:iterators iterators :index 0})
       (db/-next-values this)))
+
   (-next-values [this]
-    (when-let [{:keys [iterators ^long index]} @state]
+    (when-let [{:keys [iterators ^long index]} @iterators-state]
       (let [{:keys [key attr idx]} (get iterators index)
-            max-k (:key (get iterators (mod (dec index) (count iterators))))
+            max-index (mod (dec index) (count iterators))
+            max-k (:key (get iterators max-index))
             match? (bu/bytes=? key max-k)
             next-value+entities (if match?
                                   (do (log/debug :next attr)
@@ -224,9 +230,10 @@
                                       (db/-seek-values idx (reify idx/ValueToBytes
                                                              (value->bytes [_]
                                                                max-k)))))]
-        (reset! state (when next-value+entities
-                        {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-value+entities))
-                         :index (int (mod (inc index) (count iterators)))}))
+        (reset! iterators-state
+                (when next-value+entities
+                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-value+entities))
+                   :index (mod (inc index) (count iterators))}))
         (if match?
           (let [attrs (map :attr iterators)]
             (log/debug :match attrs (bu/bytes->hex max-k))
@@ -267,8 +274,10 @@
                k
                #(get (db/get-objects object-store [%]) %))])
          (into {})))
+
   (put-objects [this kvs]
     (db/put-objects object-store kvs))
+
   (delete-objects [this ks]
     (doseq [k ks]
       (lru/evict cache k))
@@ -283,13 +292,17 @@
   db/Entity
   (attr-val [this ident]
     (get (db/->map this) ident))
+
   (->id [this]
     ;; TODO: we want to get rid of the need for :crux.db/id
     (or (db/attr-val this :crux.db/id) eid))
+
   (->map [this]
     (get (db/get-objects object-store [content-hash]) content-hash))
+
   (->business-time [this]
     bt)
+
   (eq? [this that]
     (= eid (:eid that))))
 
@@ -297,8 +310,10 @@
   ks/KvIterator
   (-seek [_ k]
     (ks/-seek i k))
+
   (-next [_]
     (ks/-next i))
+
   (-value [_]
     (ks/-value i))
 
