@@ -37,6 +37,7 @@
                       (ks/-seek i))]
       (attribute-value+content-hashes-for-current-key i k attr max-v peek-state)))
 
+  db/OrderedIndex
   (-next-values [this]
     (when-let [k (or @peek-state (ks/-next i))]
       (attribute-value+content-hashes-for-current-key i k attr max-v peek-state))))
@@ -132,9 +133,7 @@
             (if (<= (compare (:tt entity-map) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
                 [entity-map])
-              (recur (ks/-next i))))))))
-
-  (db/-next-values [this]))
+              (recur (ks/-next i)))))))))
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -146,9 +145,7 @@
   (db/-seek-values [this k]
     (->> (idx/encode-content-hash-prefix-key k)
          (all-keys-in-prefix i)
-         (map idx/decode-content-hash+entity-key->entity)))
-
-  (db/-next-values [this]))
+         (map idx/decode-content-hash+entity-key->entity))))
 
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
   (when-let [[[v]] value+content-hashes]
@@ -164,6 +161,7 @@
     (->> (db/-seek-values doc-idx k)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx)))
 
+  db/OrderedIndex
   (-next-values [this]
     (->> (db/-next-values doc-idx)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx))))
@@ -217,6 +215,7 @@
       (reset! iterators-state {:iterators iterators :index 0})
       (db/-next-values this)))
 
+  db/OrderedIndex
   (-next-values [this]
     (when-let [{:keys [iterators ^long index]} @iterators-state]
       (let [{:keys [key attr idx]} (get iterators index)

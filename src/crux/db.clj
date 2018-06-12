@@ -15,7 +15,9 @@
   (eq? [this another]))
 
 (defprotocol Index
-  (-seek-values [this k])
+  (-seek-values [this k]))
+
+(defprotocol OrderedIndex
   (-next-values [this]))
 
 (defprotocol Indexer
