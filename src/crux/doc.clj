@@ -14,7 +14,7 @@
 
 ;; Docs
 
-(defn- consume-attribute-values-for-current-key [i ^bytes current-k attr max-v peek]
+(defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr max-v peek-state]
   (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))
         prefix-length (- (alength current-k) idx/id-size)]
     (loop [acc []
@@ -25,20 +25,20 @@
                                     (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
         (recur (conj acc value+content-hash)
                (ks/-next i))
-        (do (reset! peek k)
+        (do (reset! peek-state k)
             (when (seq acc)
               acc))))))
 
-(defrecord DocAttributeValueIndex [i attr max-v peek]
+(defrecord DocAttributeValueIndex [i attr max-v peek-state]
   db/Index
   (-seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-prefix-key attr)
                       (ks/-seek i))]
-      (consume-attribute-values-for-current-key i k attr max-v peek)))
+      (attribute-value+content-hashes-for-current-key i k attr max-v peek-state)))
   (-next-values [this]
-    (when-let [k (or @peek (ks/-next i))]
-      (consume-attribute-values-for-current-key i k attr max-v peek))))
+    (when-let [k (or @peek-state (ks/-next i))]
+      (attribute-value+content-hashes-for-current-key i k attr max-v peek-state))))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -208,16 +208,15 @@
      :key v
      :entities (mapv second value+entities)}))
 
-(defrecord UnaryJoinVirtualIndex [attr->di content-hash-entity-idx entity-as-of-idx max-v state]
+(defrecord UnaryJoinVirtualIndex [entity-indexes state]
   db/Index
   (-seek-values [this k]
-    (let [iterators (->> (for [[attr di] attr->di
-                               :let [doc-idx (->DocAttributeValueIndex di attr max-v (atom nil))
-                                     entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]]
+    (let [iterators (->> (for [entity-idx entity-indexes
+                               :let [attr (get-in entity-idx [:doc-idx :attr])]]
                            (new-leapfrog-iterator-state entity-idx attr (db/-seek-values entity-idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
-      (reset! state {:index 0 :iterators iterators})
+      (reset! state {:iterators iterators :index 0})
       (db/-next-values this)))
   (-next-values [this]
     (when-let [{:keys [iterators ^long index]} @state]
@@ -247,7 +246,10 @@
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              unary-join-idx (->UnaryJoinVirtualIndex attr->di content-hash-entity-idx entity-as-of-idx max-v (atom nil))]
+              entity-indexes (for [[attr di] attr->di
+                                   :let [doc-idx (->DocAttributeValueIndex di attr max-v (atom nil))]]
+                               (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx))
+              unary-join-idx (->UnaryJoinVirtualIndex entity-indexes (atom nil))]
           (when-let [result (db/-seek-values unary-join-idx min-v)]
             (->> (repeatedly #(db/-next-values unary-join-idx))
                  (take-while identity)
