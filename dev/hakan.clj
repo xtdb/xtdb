@@ -124,3 +124,45 @@
 ;; (? (parent A B))
 
 ;; (? (ancestor A B))
+
+(def five-bit-page (zipmap (sort (str (apply str (map char (range (int \a) (inc (int \z)))))
+                                      "-_:/#@"))
+                           (range)))
+(def five-bit-reverse-page (zipmap (vals five-bit-page)
+                                   (keys five-bit-page)))
+
+(defn compress-str
+  ([s]
+   (compress-str s (java.nio.ByteBuffer/allocate (count s))))
+  ([s ^java.nio.ByteBuffer acc]
+   (if (empty? s)
+     (doto (byte-array (.remaining (.flip acc)))
+       (->> (.get acc)))
+     (let [[head tail] (split-at 3 s)
+           three-five-bit-chars (map five-bit-page head)]
+       (if (= 3 (count (filter int? three-five-bit-chars)))
+         (let [[a b c] three-five-bit-chars]
+           (.put acc (unchecked-byte (bit-and 0xFF (bit-or 0x80
+                                                           (bit-shift-left a 2)
+                                                           (bit-shift-right b 3)))))
+           (.put acc (unchecked-byte (bit-and 0xFF (bit-or (bit-shift-left b 5) c))))
+           (recur tail acc))
+         (let [[a & tail] s]
+           (recur tail (.put acc (unchecked-byte (bit-and 0x7F (int a)))))))))))
+
+(defn decompress-to-str
+  ([bs]
+   (decompress-to-str bs ""))
+  ([bs acc]
+   (if (empty? bs)
+     acc
+     (if (= 0x80 (bit-and 0x80 (first bs)))
+       (let [[x y & bs] bs
+             a (bit-and 0x1F (bit-shift-right x 2))
+             b (bit-and 0x1F (bit-or (bit-shift-left x 3)
+                                     (bit-and 0x7 (bit-shift-right y 5))))
+             c (bit-and 0x1F y)
+             three-five-bit-chars (map five-bit-reverse-page [a b c])]
+         (recur bs (apply str acc three-five-bit-chars)))
+       (let [[x & bs] bs]
+         (recur bs (str acc (char x))))))))
