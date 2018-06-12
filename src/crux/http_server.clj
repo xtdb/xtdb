@@ -23,7 +23,7 @@
    :body (pr-str
           {:kv-backend (type kvs)
            :estimate-num-keys (kvs/count-keys kvs)
-           :db-dir-size (cio/folder-human-size db-dir)
+           :kv-store-size (cio/folder-human-size db-dir)
            :dev-db-size (cio/folder-human-size "dev-storage")})})
 
 (defn on-post [kvs request] ;; Read
