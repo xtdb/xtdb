@@ -201,9 +201,45 @@
 
 ;; Join
 
-;; TODO: First cut, needs loads of work!
-;;    1. cleanup/refactoring.
-;;    2. make it more lazy?
+(defn- new-leapfrog-iterator-state [idx attr v+entities]
+  (let [[[v] :as v+entities] v+entities]
+    {:attr attr
+     :idx idx
+     :key v
+     :entities (mapv second v+entities)}))
+
+(defrecord UnaryJoinVirtualIndex [attr->di content-hash-entity-idx entity-as-of-idx max-v state]
+  db/Index
+  (-seek-values [this k]
+    (let [iterators (->> (for [[attr di] attr->di
+                               :let [doc-idx (->DocAttributeValueIndex di attr max-v (atom nil))
+                                     entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]]
+                           (new-leapfrog-iterator-state entity-idx attr (db/-seek-values entity-idx k)))
+                         (sort-by :key bu/bytes-comparator)
+                         (vec))]
+      (reset! state {:index 0 :iterators iterators})
+      (db/-next-values this)))
+  (-next-values [this]
+    (when-let [{:keys [iterators ^long index]} @state]
+      (let [{:keys [key attr idx]} (get iterators index)
+            max-k (:key (get iterators (mod (dec index) (count iterators))))
+            match? (bu/bytes=? key max-k)
+            next-v+entities (if match?
+                              (do (log/debug :next attr)
+                                  (db/-next-values idx))
+                              (do (log/debug :seek attr (bu/bytes->hex max-k))
+                                  (db/-seek-values idx (reify idx/ValueToBytes
+                                                         (value->bytes [_]
+                                                           max-k)))))]
+        (reset! state (when next-v+entities
+                        {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-v+entities))
+                         :index (int (mod (inc index) (count iterators)))}))
+        (if match?
+          (do (log/debug :match (map :attr iterators) (bu/bytes->hex max-k))
+              [max-k (zipmap (map :attr iterators)
+                             (map :entities iterators))])
+          (recur))))))
+
 (defn unary-leapfrog-join [snapshot attrs min-v max-v business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
     (try
@@ -211,41 +247,12 @@
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              new-iterator-state (fn [idx attr v+entities]
-                                   (let [[[v] :as v+entities] v+entities]
-                                     {:attr attr
-                                      :idx idx
-                                      :key v
-                                      :entities (mapv second v+entities)}))
-              iterators (->> (for [attr attrs
-                                   :let [doc-idx (->DocAttributeValueIndex (get attr->di attr) attr max-v (atom nil))
-                                         entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]]
-                               (new-iterator-state entity-idx attr (db/-seek-values entity-idx min-v)))
-                             (sort-by :key bu/bytes-comparator)
-                             (vec))]
-          (loop [iterators iterators
-                 acc []
-                 index 0]
-            (let [{:keys [key attr idx]} (get iterators index)
-                  max-k (:key (get iterators (mod (dec index) (count iterators))))
-                  match? (bu/bytes=? key max-k)
-                  acc (if match?
-                        (do (log/debug :match attrs (bu/bytes->hex max-k))
-                            (conj acc [max-k (zipmap (map :attr iterators)
-                                                     (map :entities iterators))]))
-                        acc)
-                  next-v+entities (if match?
-                                    (do (log/debug :next attr)
-                                        (db/-next-values idx))
-                                    (do (log/debug :seek attr (bu/bytes->hex max-k))
-                                        (db/-seek-values idx (reify idx/ValueToBytes
-                                                               (value->bytes [_]
-                                                                 max-k)))))]
-              (if (seq next-v+entities)
-                (recur (assoc iterators index (new-iterator-state idx attr next-v+entities))
-                       acc
-                       (int (mod (inc index) (count iterators))))
-                acc)))))
+              unary-join-idx (->UnaryJoinVirtualIndex attr->di content-hash-entity-idx entity-as-of-idx max-v (atom nil))]
+          (when-let [result (db/-seek-values unary-join-idx min-v)]
+            (->> (repeatedly #(db/-next-values unary-join-idx))
+                 (take-while identity)
+                 (cons result)
+                 (vec)))))
       (finally
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
