@@ -19,7 +19,7 @@
     (when (and k (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
       [(idx/decode-attribute+value+content-hash-key->value+content-hash k)])))
 
-(defrecord DocAttrbuteValueIndex [i attr max-v]
+(defrecord DocAttributeValueIndex [i attr max-v]
   db/Index
   (-seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
@@ -160,7 +160,7 @@
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (let [doc-idx (->DocAttrbuteValueIndex di attr max-v)
+    (let [doc-idx (->DocAttributeValueIndex di attr max-v)
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
@@ -202,7 +202,7 @@
                               (let [[[v entities]] v+entities]
                                 {:attr attr :idx idx :key v :eids (set (map :eid entities))}))
               attr+key+indexes (->> (for [attr attrs
-                                          :let [doc-idx (->DocAttrbuteValueIndex (get attr->di attr) attr max-v)
+                                          :let [doc-idx (->DocAttributeValueIndex (get attr->di attr) attr max-v)
                                                 entity-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]]
                                       (update-values entity-idx attr (db/-seek-values entity-idx min-v)))
                                     (sort-by :key bu/bytes-comparator)
