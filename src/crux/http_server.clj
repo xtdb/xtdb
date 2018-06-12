@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.io :as cio]
             [crux.tx :as tx]
             [crux.kv-store :as kvs]
             [crux.query :as q]
@@ -21,7 +22,8 @@
    :headers {"Content-Type" "application/edn"}
    :body (pr-str
           {:kv-backend (type kvs)
-           :estimate-num-keys (kvs/count-keys kvs)})})
+           :estimate-num-keys (kvs/count-keys kvs)
+           :dev-db-size (cio/human-size "dev-storage")})})
 
 (defn on-post [kvs request] ;; Read
   (try

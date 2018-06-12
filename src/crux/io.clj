@@ -25,3 +25,36 @@
   (let [dir (io/file dir)]
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
+
+(defn size
+  "Total size of a file or folder in bytes"
+  [^java.io.File f]
+  (cond
+    (string? f) (size (io/file f))
+    (.isDirectory f) (apply + (map size (.listFiles f)))
+    :default (.length f)))
+
+(def units {:KB 1000
+            :MB 1000000
+            :GB 1000000000
+            :TB 1000000000000
+            :PB 1000000000000000})
+
+;; There are more elegant ways to do this but they'd require more imports.
+(defn ->human-size
+  "Converts byte units for human readability."
+  ([bytes]
+   (if (< bytes 1000)
+     (str bytes " B")
+     (let [unit (last (filter #(>= bytes (% units)) (keys units)))]
+       (->human-size bytes unit))))
+  
+  ([bytes unit]
+   (as-> bytes b
+     (/ b (unit units))
+     (double b)
+     (format "%.3f" b)
+     (str b " " (name unit)))))
+
+(defn human-size [f]
+  (->human-size (size f)))
