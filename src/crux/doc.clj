@@ -305,7 +305,7 @@
   (eq? [this that]
     (= eid (:eid that))))
 
-(defrecord DocCachedIterator [iterators i]
+(defrecord DocCachedIterator [iterators-state i]
   ks/KvIterator
   (-seek [_ k]
     (ks/-seek i k))
@@ -318,22 +318,22 @@
 
   Closeable
   (close [_]
-    (swap! iterators conj i)))
+    (swap! iterators-state conj i)))
 
-(defrecord DocSnapshot [^Closeable snapshot iterators]
+(defrecord DocSnapshot [^Closeable snapshot iterators-state]
   ks/KvSnapshot
   (new-iterator [_]
-    (let [is @iterators]
+    (let [is @iterators-state]
       (if-let [i (first is)]
-        (if (compare-and-set! iterators is (disj is i))
-          (->DocCachedIterator iterators i)
+        (if (compare-and-set! iterators-state is (disj is i))
+          (->DocCachedIterator iterators-state i)
           (recur))
         (->> (ks/new-iterator snapshot)
-             (->DocCachedIterator iterators)))))
+             (->DocCachedIterator iterators-state)))))
 
   Closeable
   (close [_]
-    (doseq [^Closeable i @iterators]
+    (doseq [^Closeable i @iterators-state]
       (.close i))
     (.close snapshot)))
 
