@@ -215,3 +215,53 @@
         (if (= 0x80 (bit-and 0x80 (int n)))
           (recur rst (str acc (subs acc (int idx) (+ (int idx) (bit-xor 0x80 (int n))))))
           (recur (next s) (str acc n)))))))
+
+(defn build-huffman-tree [s weight]
+  (loop [pq (->> (for [[i v] (map-indexed vector (reverse s))]
+                   [(Math/pow i weight) v])
+                 (sort-by first))]
+    (let [[[ia :as an] [ib :as bn] & pq] (seq pq)]
+      (if bn
+        (recur (conj (vec (sort-by first pq))
+                     [(+ ia ib) an bn]))
+        an))))
+
+(defn generate-huffman-codes
+  ([node]
+   (generate-huffman-codes "" node))
+  ([prefix [_ ln rn]]
+   (concat
+    (if (vector? ln)
+      (generate-huffman-codes
+       (if ln
+         (str prefix 0)
+         prefix)
+       ln)
+      (when ln
+        [[ln prefix]]))
+    (if (vector? rn)
+      (generate-huffman-codes
+       (if rn
+         (str prefix 1)
+         prefix)
+       rn)
+      (when rn
+        [[rn prefix]])))))
+
+(def alpha (str "-./:_"
+                "etaoinshrdlcumwfgypbvkjxqz"
+                "0123456789"
+                "ETAOINSHRDLCUMWFGYPBVKJXQZ"
+                " !\"#$%&'()*+,;<=>?@[\\]^`{|}~"))
+
+(def hc (->> (generate-huffman-codes
+              (build-huffman-tree
+               alpha
+               Math/E))
+             (into {})))
+
+(defn huffman-bits [s]
+  (reduce + (map (comp count hc) s)))
+
+(defn huffman-bytes [s]
+  (/ (huffman-bits s) 8.0))
