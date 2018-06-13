@@ -4,6 +4,7 @@
   (^java.io.Closeable new-query-context [this])
   (entities [this qc])
   (entities-for-attribute-value [this qc a min-v max-v])
+  (entity-join [this qc as min-v max-v])
   (entity [this qc eid])
   (entity-history [this qc eid]))
 

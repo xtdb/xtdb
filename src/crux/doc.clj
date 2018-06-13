@@ -201,7 +201,7 @@
   (let [[[v]] value+entities]
     {:attr attr
      :idx idx
-     :key v
+     :key (or v idx/nil-id-bytes)
      :entities (mapv second value+entities)}))
 
 (defrecord UnaryJoinVirtualIndex [entity-indexes iterators-state]
@@ -350,12 +350,20 @@
     (for [entity-map (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
-  (entity-history [this query-context eid]
-    (for [entity-map (entity-history query-context eid)]
+  (entity-join [this query-context attrs min-v max-v]
+    (for [entity-map (->> (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
+                          (map second)
+                          (mapcat vals)
+                          (apply concat)
+                          (distinct))]
       (map->DocEntity (assoc entity-map :object-store object-store))))
 
   (entity [this query-context eid]
-    (when-let [entity-map (first (entities-at query-context [eid] business-time transact-time)) ]
+    (when-let [entity-map (first (entities-at query-context [eid] business-time transact-time))]
+      (map->DocEntity (assoc entity-map :object-store object-store))))
+
+  (entity-history [this query-context eid]
+    (for [entity-map (entity-history query-context eid)]
       (map->DocEntity (assoc entity-map :object-store object-store)))))
 
 (def ^:const default-await-tx-timeout 10000)

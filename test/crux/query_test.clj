@@ -123,10 +123,10 @@
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
 
-  (t/is (= #{[:petr] } (q/q (db *kv*) '{:find [e2]
-                                        :where [[e :last-name name]
-                                                [e2 :follows name]
-                                                [e :name "Ivan"]]}))))
+  (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [e2]
+                                       :where [[e :last-name last-name]
+                                               [e2 :follows last-name]
+                                               [e :name "Ivan"]]}))))
 
 (t/deftest test-blanks
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])

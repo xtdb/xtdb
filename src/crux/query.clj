@@ -1,5 +1,6 @@
 (ns crux.query
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.db :as db]))
 
 (defn- expression-spec [sym spec]
@@ -82,7 +83,7 @@
   (bind-key [this])
   (bind [this query-context]))
 
-(defrecord EntityBinding [e a v range-vals]
+(defrecord EntityBinding [e a v range-vals join-attributes]
   Binding
   (bind-key [this] e)
   (bind [this query-context]
@@ -90,22 +91,33 @@
                            (if (seq results)
                              (let [db (get (first results) '$)]
                                (cond (and (symbol? v) (some #(get % v) results))
-                                     (for [[distinct-v results] (group-by (comp v-for-comparison #(get % v)) results)
-                                           je (db/entities-for-attribute-value db query-context a distinct-v distinct-v)
-                                           r results]
-                                       (assoc r e je))
+                                     (do (log/debug :secondary-index-result-join e a v join-attributes)
+                                         (for [[distinct-v results] (group-by (comp v-for-comparison #(get % v)) results)
+                                               je (db/entities-for-attribute-value db query-context a distinct-v distinct-v)
+                                               r results]
+                                           (assoc r e je)))
+
+                                     (and (symbol? v) join-attributes)
+                                     (do (log/debug :secondary-index-leapfrog-join e a v join-attributes range-vals)
+                                         (let [[min-v max-v] range-vals]
+                                           (for [r results je (db/entity-join db query-context join-attributes min-v max-v)]
+                                             (assoc r e je))))
 
                                      (and (symbol? v) range-vals)
-                                     (for [r results je (apply db/entities-for-attribute-value db query-context a range-vals)]
-                                       (assoc r e je))
+                                     (do (log/debug :secondary-index-range e a v range-vals)
+                                         (let [[min-v max-v] range-vals]
+                                           (for [r results je (db/entities-for-attribute-value db query-context a min-v max-v)]
+                                             (assoc r e je))))
 
                                      (and v (not (symbol? v)))
-                                     (for [r results je (db/entities-for-attribute-value db query-context a v v)]
-                                       (assoc r e je))
+                                     (do (log/debug :secondary-index-lookup e a v)
+                                         (for [r results je (db/entities-for-attribute-value db query-context a v v)]
+                                           (assoc r e je)))
 
                                      :else
-                                     (for [r results je (db/entities db query-context)]
-                                       (assoc r e je))))
+                                     (do (log/debug :secondary-index-scan e a v)
+                                         (for [r results je (db/entity-join db query-context [a] nil nil)]
+                                           (assoc r e je)))))
                              results)))))
 
 (defn- find-subsequent-range-terms [v terms]
@@ -119,8 +131,37 @@
       (when (or min-value max-value)
         [min-value max-value]))))
 
+(defn- find-subsequent-join-terms [a v terms]
+  (when (symbol? v)
+    (->> (for [[op term] terms
+               :when (= :fact op)
+               :let [[_ a term-v] term]
+               :when (= v term-v)]
+           a)
+         (not-empty)
+         (into [a])
+         (distinct))))
+
+(defn- find-subsequent-join-literals [as terms]
+  (let [as (set as)]
+    (->> (for [[op term] terms
+               :when (= :fact op)
+               :let [[_ term-a term-v] term]
+               :when (and (contains? as term-a)
+                          (not (nil? term-v))
+                          (not (symbol? term-v)))]
+           term-v)
+         (not-empty)
+         (into (sorted-set)))))
+
 (defn- fact->entity-binding [[e a v] terms]
-  (EntityBinding. e a v (find-subsequent-range-terms v terms)))
+  (let [join-attributes (find-subsequent-join-terms a v terms)
+        join-literals (find-subsequent-join-literals join-attributes terms)
+        range-vals (if (seq join-literals)
+                     [(first join-literals) (last join-literals)]
+                     (find-subsequent-range-terms v terms))]
+    (log/debug :entity-binding e a v range-vals join-attributes)
+    (->EntityBinding e a v range-vals join-attributes)))
 
 (defrecord VarBinding [e a s]
   Binding
@@ -128,11 +169,13 @@
   (bind [this _]
     (binding-xform s (fn [input]
                        (let [v (db/attr-val (get input e) a)]
+                         (log/debug :var-bind this e a s v)
                          (if (coll? v) v [v]))))))
 
 (defn- fact->var-binding [[e a v]]
   (when (and v (symbol? v))
-    (VarBinding. e a v)))
+    (log/debug :var-binding e a v)
+    (->VarBinding e a v)))
 
 (defn- query-plan->xform
   "Create a tranduce from the query-plan."
