@@ -256,14 +256,34 @@
                 "ETAOINSHRDLCUMWFGYPBVKJXQZ"
                 " !\"#$%&'()*+,;<=>?@[\\]^`{|}~"))
 
-(def hc (->> (generate-huffman-codes
-              (build-huffman-tree
-               alpha
-               Math/E))
-             (into (sorted-map))))
+(def ^"[Ljava.lang.Object;"
+  hc (->> (generate-huffman-codes
+           (build-huffman-tree
+            alpha
+            Math/E))
+          (reduce
+           (fn [^"[Ljava.lang.Object;" a [c ^String bits]]
+             (doto a
+               (aset (int c) (boolean-array (map (comp boolean #{\1}) bits)))))
+           (object-array Byte/MAX_VALUE))))
 
 (defn huffman-bits [s]
-  (reduce + (map (comp count hc) s)))
+  (->> (for [c s]
+         (count (aget hc (int c))))
+       (reduce +)))
 
 (defn huffman-bytes [s]
   (/ (huffman-bits s) 8.0))
+
+(defn compress-huffman [^String s]
+  (let [acc (java.util.BitSet. 0)
+        s-len (count s)]
+    (loop [s-idx 0
+           bit-idx 0]
+      (if (= s-idx s-len)
+        (.toByteArray acc)
+        (let [bits ^booleans (aget hc (.charAt s s-idx))]
+          (dotimes [idx (alength bits)]
+            (.set acc (unchecked-add-int bit-idx idx) (aget bits idx)))
+          (recur (unchecked-inc-int s-idx)
+                 (unchecked-add-int bit-idx (alength bits))))))))
