@@ -125,6 +125,9 @@
 
 ;; (? (ancestor A B))
 
+
+;;; Id compression spike
+
 (def five-bit-page (zipmap (sort (str (apply str (map char (range (int \a) (inc (int \z)))))
                                       "-_:/#@"))
                            (range)))
