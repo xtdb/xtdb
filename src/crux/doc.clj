@@ -277,18 +277,17 @@
                    (db/-seek-values idx seek)
                    (db/-next-values idx))]
       (swap! trie-state dissoc :seek)
-      (if values
-        (swap! trie-state #(-> %
-                               (update :result cons values)
-                               (update :depth (if (= (:depth %)
-                                                     (dec (count unary-join-virtual-indexes)))
-                                                dec
-                                                inc))))
-        (swap! trie-state #(-> (update :result next)
-                               (update :depth dec))))
-      (if (and values result (= depth (dec (count unary-join-virtual-indexes))))
-        (flatten (cons values result))
-        (recur)))))
+      (cond
+        (and values (= depth (dec (count unary-join-virtual-indexes))))
+        (do (swap! trie-state #(-> (update :result next)
+                                   (update :depth dec)))
+            (flatten (cons values result)))
+
+        values
+        (do (swap! trie-state #(-> %
+                                   (update :result cons values)
+                                   (update :depth inc)))
+            (recur))))))
 
 (defn- new-trie-join-virtual-index [unary-join-virtual-indexes]
   (->TrieJoinVirtualIndex unary-join-virtual-indexes (atom nil)))
