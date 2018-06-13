@@ -250,9 +250,9 @@
             [[n prefix]]))
         (reduce into []))))
 
-(def huffman-alphabet (str "-./:_"
+(def huffman-alphabet (str "\u0000"
+                           "-./:_"
                            "etaoinshrdlcumwfgypbvkjxqz"
-                           "\u0000"
                            "0123456789"
                            "ETAOINSHRDLCUMWFGYPBVKJXQZ"
                            " !\"#$%&'()*+,;<=>?@[\\]^`{|}~"))
