@@ -262,6 +262,37 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
+;; TODO: totally untested and speculative, a sketch.
+(defrecord TrieJoinVirtualIndex [unary-join-virtual-indexes trie-state]
+  db/Index
+  (-seek-values [this k]
+    (reset! trie-state {:depth 0 :seek k})
+    (db/-next-values this))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (let [{:keys [^long depth seek result]} @trie-state
+          idx (get unary-join-virtual-indexes depth)
+          values (if seek
+                   (db/-seek-values idx seek)
+                   (db/-next-values idx))]
+      (swap! trie-state dissoc :seek)
+      (if values
+        (swap! trie-state #(-> %
+                               (update :result cons values)
+                               (update :depth (if (= (:depth %)
+                                                     (dec (count unary-join-virtual-indexes)))
+                                                dec
+                                                inc))))
+        (swap! trie-state #(-> (update :result next)
+                               (update :depth dec))))
+      (if (and values result (= depth (dec (count unary-join-virtual-indexes))))
+        (flatten (cons values result))
+        (recur)))))
+
+(defn- new-trie-join-virtual-index [unary-join-virtual-indexes]
+  (->TrieJoinVirtualIndex unary-join-virtual-indexes (atom nil)))
+
 ;; Caching
 
 (defrecord CachedObjectStore [cache object-store]
