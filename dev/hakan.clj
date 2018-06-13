@@ -231,7 +231,7 @@
   (loop [pq (->> (for [[i v] (map-indexed vector (reverse s))]
                    [(Math/pow i weight) v])
                  (sort-by first))]
-    (let [[[ia :as an] [ib :as bn] & pq] (seq pq)]
+    (let [[[ia :as an] [ib :as bn] & pq] pq]
       (if bn
         (recur (conj (vec (sort-by first pq))
                      [(+ ia ib) an bn]))
@@ -241,23 +241,14 @@
   ([node]
    (generate-huffman-codes "" node))
   ([prefix [_ ln rn]]
-   (concat
-    (if (vector? ln)
-      (generate-huffman-codes
-       (if ln
-         (str prefix 0)
-         prefix)
-       ln)
-      (when ln
-        [[ln prefix]]))
-    (if (vector? rn)
-      (generate-huffman-codes
-       (if rn
-         (str prefix 1)
-         prefix)
-       rn)
-      (when rn
-        [[rn prefix]])))))
+   (->> (for [[n bit] [[ln 0] [rn 1]]]
+          (cond
+            (vector? n)
+            (generate-huffman-codes (str prefix bit) n)
+
+            n
+            [[n prefix]]))
+        (reduce into []))))
 
 (def alpha (str "-./:_"
                 "etaoinshrdlcumwfgypbvkjxqz"
@@ -269,7 +260,7 @@
               (build-huffman-tree
                alpha
                Math/E))
-             (into {})))
+             (into (sorted-map))))
 
 (defn huffman-bits [s]
   (reduce + (map (comp count hc) s)))
