@@ -251,11 +251,15 @@
         (reduce into []))))
 
 (def huffman-alphabet (str "\u0000"
-                           "-./:_"
+                           "-._"
+                           ":/"
                            "etaoinshrdlcumwfgypbvkjxqz"
                            "0123456789"
                            "ETAOINSHRDLCUMWFGYPBVKJXQZ"
-                           " !\"#$%&'()*+,;<=>?@[\\]^`{|}~"))
+                           "~"
+                           "?#[]@"
+                           "%"
+                           "!$&'()*+,;="))
 
 (def huffman-tree (build-huffman-tree huffman-alphabet Math/E))
 
