@@ -53,7 +53,7 @@
 
     (db/submit-tx tx-log tx-ops)
 
-    (let [docs (map k/consumer-record->value (.poll ek/*consumer* 5000))]
+    (let [docs (map k/consumer-record->value (.poll ek/*consumer* 10000))]
       (t/is (= 7 (count docs)))
       (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
                 :http://xmlns.com/foaf/0.1/surname "Picasso"}
