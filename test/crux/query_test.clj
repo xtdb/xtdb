@@ -119,6 +119,15 @@
                                       :where [['p1 :name 'name]
                                               ['p2 :name 'name]]}))))))
 
+(t/deftest test-join-over-two-attributes
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
+
+  (t/is (= #{[:petr] } (q/q (db *kv*) '{:find [e2]
+                                        :where [[e :last-name name]
+                                                [e2 :follows name]
+                                                [e :name "Ivan"]]}))))
+
 (t/deftest test-blanks
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
