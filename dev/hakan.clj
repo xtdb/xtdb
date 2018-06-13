@@ -51,6 +51,14 @@
      parent_child(X, Y) :- father_child(X, Y).
      parent_child(X, Y) :- mother_child(X, Y).])
 
+  ;; http://discovery.ucl.ac.uk/1474713/1/main.pdf
+  (s/conform
+   ::program
+   '[edge (1, 2).
+     edge (2, 3).
+     path (X, Y) :- edge(X, Y).
+     path (X, Z) :- path(X, Y), edge (Y, Z).])
+
   ;; https://github.com/racket/datalog/tree/master/tests/examples
   (s/conform
    ::program
