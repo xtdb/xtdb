@@ -321,6 +321,57 @@
                           [k (set (map :eid entities))])
                         (into {})))))))))
 
+;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
+
+;; (1, 3, 4)
+;; (1, 3, 5)
+;; (1, 4, 6)
+;; (1, 4, 8)
+;; (1, 4, 9)
+;; (1, 5, 2)
+;; (3, 5, 2)
+
+;; TODO: passes, but partial joins needs to be pruned, see below.
+(t/deftest test-can-perform-leapfrog-triejoin
+  (let [data [{:crux.db/id :r13 :ra 1 :rb 3} ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
+              ;; {:crux.db/id :r14 :ra 1 :rb 4} ;; TODO: adding this on its own should not be joined without an :sb 4.
+              ;; {:crux.db/id :r15 :ra 1 :rb 5}
+              {:crux.db/id :s34 :sb 3 :sc 4} ;; 9434448654674927dbc44b2280d44f92166ac350
+              ;; {:crux.db/id :s35 :sb 3 :sc 5}
+              ;; {:crux.db/id :s46 :sb 4 :sc 6}
+              ;; {:crux.db/id :s48 :sb 4 :sc 8}
+              ;; {:crux.db/id :s49 :sb 4 :sc 9}
+              ;; {:crux.db/id :s52 :sb 5 :sc 2}
+              {:crux.db/id :t14 :ta 1 :tc 4} ;; eed43fbbc28c9b627a8b3e0fba770bab9d7a9465
+              ;; {:crux.db/id :t15 :ta 1 :tc 5}
+              ;; {:crux.db/id :t16 :ta 1 :tc 6}
+              ;; {:crux.db/id :t18 :ta 1 :tc 8}
+              ;; {:crux.db/id :t19 :ta 1 :tc 9}
+              ;; {:crux.db/id :t12 :ta 1 :tc 2}
+              ;; {:crux.db/id :t32 :ta 3 :tc 2}
+              ]]
+    (let [tx-log (tx/->DocTxLog f/*kv*)
+          tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
+                                [:crux.tx/put id doc])))
+          {:keys [transact-time tx-id]}
+          @(db/submit-tx tx-log tx-ops)]
+      (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (t/testing "checking data is loaded before join"
+          (t/is (= (count tx-ops)
+                   (count (doc/all-entities snapshot transact-time transact-time)))))
+
+        (t/testing "leapfrog triejoin"
+          (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
+                   (set (for [[v matches] (doc/leapfrog-triejoin snapshot
+                                                                 [[:ra :ta]
+                                                                  [:rb :sb]
+                                                                  [:sc :tc]]
+                                                                 transact-time
+                                                                 transact-time)
+                              [_ entities] matches
+                              {:keys [eid]} entities]
+                          eid)))))))))
+
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
   (doc/store-meta f/*kv* :foo {:bar 2})

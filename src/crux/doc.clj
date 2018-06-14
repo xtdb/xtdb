@@ -262,35 +262,86 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
-;; TODO: totally untested and speculative, a sketch.
-(defrecord TrieJoinVirtualIndex [unary-join-virtual-indexes trie-state]
+
+;; TODO: does not handle min/max-v, needs to prune previous level from
+;; results based on join value (not id, as they are different
+;; entities) when opening a new level.
+(defrecord TriejoinVirtualIndex [unary-join-indexes trie-state]
   db/Index
   (-seek-values [this k]
-    (reset! trie-state {:depth 0 :seek k})
+    (reset! trie-state {:depth 0
+                        :needs-seek (set unary-join-indexes)
+                        :seek k
+                        :result nil})
     (db/-next-values this))
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [^long depth seek result]} @trie-state
-          idx (get unary-join-virtual-indexes depth)
-          values (if seek
+    (let [{:keys [^long depth needs-seek seek result] :as state} @trie-state
+          idx (get unary-join-indexes depth)
+          values (if (contains? needs-seek idx)
                    (db/-seek-values idx seek)
                    (db/-next-values idx))]
-      (swap! trie-state dissoc :seek)
+      (swap! trie-state update :needs-seek disj idx)
       (cond
-        (and values (= depth (dec (count unary-join-virtual-indexes))))
-        (do (swap! trie-state #(-> (update :result next)
-                                   (update :depth dec)))
-            (flatten (cons values result)))
+        (and values (= depth (dec (count unary-join-indexes))))
+        (do (log/debug :leaf-match depth (conj result values))
+            (swap! trie-state #(if (zero? depth)
+                                 (assoc % :result nil)
+                                 (-> %
+                                     (update :result next)
+                                     (update :depth dec))))
+            (loop [[[v matches :as level] & levels] (conj result values)
+                   v-acc []
+                   acc []]
+              (if level
+                (recur levels
+                       (conj v-acc v)
+                       (concat acc matches))
+                [v-acc (vec acc)])))
 
         values
-        (do (swap! trie-state #(-> %
-                                   (update :result cons values)
+        (do (log/debug :open-level depth)
+            (swap! trie-state #(-> %
+                                   (update :result conj values)
                                    (update :depth inc)))
+            (recur))
+
+        (and (nil? values) (pos? depth))
+        (do (log/debug :close-level depth)
+            (swap! trie-state #(-> %
+                                   (update :result next)
+                                   (update :depth dec)))
             (recur))))))
 
-(defn- new-trie-join-virtual-index [unary-join-virtual-indexes]
-  (->TrieJoinVirtualIndex unary-join-virtual-indexes (atom nil)))
+(defn- new-triejoin-virtual-index [unary-join-indexes]
+  (->TriejoinVirtualIndex unary-join-indexes (atom nil)))
+
+(defn leapfrog-triejoin [snapshot unary-attr-pairs business-time transact-time]
+  (let [attr->di (zipmap (flatten unary-attr-pairs)
+                         (repeatedly #(ks/new-iterator snapshot)))]
+     (try
+       (with-open [ci (ks/new-iterator snapshot)
+                   ei (ks/new-iterator snapshot)]
+         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
+               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+               attr->entity-indexes (->> (for [[attr di] attr->di
+                                               :let [doc-idx (new-doc-attribute-value-index di attr nil)]]
+                                           [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)])
+                                         (into {}))
+               triejoin-idx (->> (for [[source-attr target-attr :as attr-pair] unary-attr-pairs]
+                                   (new-unary-join-virtual-index (vec (for [attr [source-attr target-attr]]
+                                                                        (get attr->entity-indexes attr)))))
+                                 (vec)
+                                 (new-triejoin-virtual-index))]
+           (when-let [result (db/-seek-values triejoin-idx nil)]
+             (->> (repeatedly #(db/-next-values triejoin-idx))
+                  (take-while identity)
+                  (cons result)
+                  (vec)))))
+       (finally
+          (doseq [i (vals attr->di)]
+            (.close ^Closeable i))))))
 
 ;; Caching
 
