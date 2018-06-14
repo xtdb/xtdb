@@ -49,11 +49,7 @@
 
 (defn transact [tx-log request]
   (try
-    (let [v (edn/read-string (req/body-string request))
-          tx-op [:crux.tx/put
-                 (java.util.UUID/randomUUID)
-                 v
-                 (java.util.Date.)]] ;; WIP; ought to use v directly and assume user provided valid tx-op syntax
+    (let [tx-op (edn/read-string (req/body-string request))]
       (try        
         {:status 200
          :headers {"Content-Type" "application/edn"}
