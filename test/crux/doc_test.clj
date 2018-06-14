@@ -331,7 +331,7 @@
 ;; (1, 5, 2)
 ;; (3, 5, 2)
 
-;; TODO: passes, but partial joins needs to be pruned, see below.
+;; TODO: figure out if this is correct with/without shared attrs?
 (t/deftest test-can-perform-leapfrog-triejoin
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
               {:crux.db/id :r14 :ra 1 :rb 4}
@@ -366,34 +366,37 @@
                                                                  [[:ra :ta [nil nil]]
                                                                   [:rb :sb [nil nil]]
                                                                   [:sc :tc [nil nil]]]
+                                                                 []
+                                                                 #_[[:ra :rb]
+                                                                    [:sb :sc]
+                                                                    [:ta :tc]]
                                                                  transact-time
                                                                  transact-time)
                               [_ entities] matches
                               {:keys [eid]} entities]
                           eid)))))))))
 
-#_(t/deftest test-leapfrog-triejoin-prunes-values-based-on-later-joins
+(t/deftest test-leapfrog-triejoin-prunes-values-based-on-later-joins
   (let [data [;; d365d8e84bb127ed8f4d076f7528641a7ce08049
               {:crux.db/id :r13 :ra 1 :rb 3}
               ;; Unifies with :ta, but not with :sb
               ;; 597d68237e345bbb91eae7751e60a07fb904c8dd
               {:crux.db/id :r14 :ra 1 :rb 4}
               ;; Does not unify with :ta or :sb.
-              ;; {:crux.db/id :r25 :ra 2 :rb 5}
+              {:crux.db/id :r25 :ra 2 :rb 5}
                ;; 9434448654674927dbc44b2280d44f92166ac350
               {:crux.db/id :s34 :sb 3 :sc 4}
               ;; Unifies with :rb, but not with :tc
               ;; b824a31f61bf0fc0b498aa038dd9ae5bd08adb64
-              ;; {:crux.db/id :s37 :sb 3 :sc 7}
+              {:crux.db/id :s37 :sb 3 :sc 7}
                ;; eed43fbbc28c9b627a8b3e0fba770bab9d7a9465
               {:crux.db/id :t14 :ta 1 :tc 4}
               ;; Unifies with :ra, but not with :sc
               ;; 6c63a4086ad403653314c2ab546aadd54fff897d
-              ;; {:crux.db/id :t15 :ta 1 :tc 5}
+              {:crux.db/id :t15 :ta 1 :tc 5}
               ;; Unifies with :sc, but not with :ra
               ;; 41c3f3e9370cc85a4fea723d35b7327d33067c6e
-              ;;{:crux.db/id :t34 :ta 3 :tc 4}
-              ]]
+              {:crux.db/id :t34 :ta 3 :tc 4}]]
     (let [tx-log (tx/->DocTxLog f/*kv*)
           tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
                                 [:crux.tx/put id doc])))
@@ -407,6 +410,9 @@
                                                                [[:ra :ta [nil nil]]
                                                                 [:rb :sb [nil nil]]
                                                                 [:sc :tc [nil nil]]]
+                                                               [[:ra :rb]
+                                                                [:sb :sc]
+                                                                [:ta :tc]]
                                                                transact-time
                                                                transact-time)
                             [_ entities] matches

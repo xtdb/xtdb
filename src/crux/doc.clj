@@ -265,7 +265,7 @@
 ;; TODO: needs to prune previous level from results based on join
 ;; value (not id, as they are different entities) when opening a new
 ;; level.
-(defrecord TriejoinVirtualIndex [unary-join-indexes trie-state]
+(defrecord TriejoinVirtualIndex [unary-join-indexes shared-attrs trie-state]
   db/Index
   (-seek-values [this k]
     (reset! trie-state {:depth 0
@@ -284,7 +284,7 @@
       (swap! trie-state assoc :needs-seek? false)
       (cond
         (and values (= depth (dec (count unary-join-indexes))))
-        (do (log/debug :leaf-match depth (conj result values))
+        (do (log/debug :leaf-match (conj result values))
             (swap! trie-state #(if (zero? depth)
                                  (assoc % :result nil)
                                  (-> %
@@ -296,8 +296,20 @@
               (if level
                 (recur levels
                        (conj v-acc v)
-                       (concat acc matches))
-                [v-acc (vec acc)])))
+                       (vec (concat acc matches)))
+                (let [result (->> shared-attrs
+                                  (reduce
+                                   (fn [acc attrs]
+                                     (->> (map (comp set acc) attrs)
+                                          (apply (comp vec clojure.set/intersection))
+                                          (repeat)
+                                          (zipmap attrs)
+                                          (merge acc)))
+                                   (into {} acc))
+                                  (vec))]
+                  (log/debug :leaf-match-pre-filter acc)
+                  (log/debug :leaf-match-filtered result)
+                  [v-acc result]))))
 
         values
         (do (log/debug :open-level depth)
@@ -314,10 +326,10 @@
                                    (update :depth dec)))
             (recur))))))
 
-(defn- new-triejoin-virtual-index [unary-join-indexes]
-  (->TriejoinVirtualIndex unary-join-indexes (atom nil)))
+(defn- new-triejoin-virtual-index [unary-join-indexes shared-attrs]
+  (->TriejoinVirtualIndex unary-join-indexes shared-attrs (atom nil)))
 
-(defn leapfrog-triejoin [snapshot unary-attrs business-time transact-time]
+(defn leapfrog-triejoin [snapshot unary-attrs shared-attrs business-time transact-time]
   (let [attr->di+max-v (->> (for [attrs unary-attrs
                                   attr (butlast attrs)
                                   :let [[min-v max-v] (last attrs)]]
@@ -332,11 +344,11 @@
                                                :let [doc-idx (new-doc-attribute-value-index di attr max-v)]]
                                            [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)])
                                          (into {}))
-               triejoin-idx (->> (for [attrs unary-attrs]
-                                   (->> (mapv attr->entity-indexes (butlast attrs))
-                                        (new-unary-join-virtual-index )))
-                                 (vec)
-                                 (new-triejoin-virtual-index))
+               triejoin-idx (-> (for [attrs unary-attrs]
+                                  (->> (mapv attr->entity-indexes (butlast attrs))
+                                       (new-unary-join-virtual-index)))
+                                (vec)
+                                (new-triejoin-virtual-index shared-attrs))
                min-vs (vec (for [attrs unary-attrs
                                  :let [[min-v max-v] (last attrs)]]
                              min-v))]
