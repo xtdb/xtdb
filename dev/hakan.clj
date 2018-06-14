@@ -250,6 +250,18 @@
             [[n prefix]]))
         (reduce into []))))
 
+(def huffman-reverse-words (zipmap
+                            (map (comp str char) (range 1 32))
+                            ["w3.org/"
+                             "1999/02/22-rdf-syntax-ns#"
+                             "2000/01/rdf-schema#"
+                             "2001/XMLSchema#"
+                             "2002/07/owl#"
+                             "www." "http://" "https://"  ".com/" ".org/" ".net/"]))
+
+(def huffman-words (zipmap (vals huffman-reverse-words)
+                           (keys huffman-reverse-words)))
+
 (def huffman-alphabet (str "\u0000"
                            "-._"
                            ":/"
@@ -259,7 +271,8 @@
                            "~"
                            "?#[]@"
                            "%"
-                           "!$&'()*+,;="))
+                           "!$&'()*+,;="
+                           (apply str (vals huffman-words))))
 
 (def huffman-tree (build-huffman-tree huffman-alphabet Math/E))
 
@@ -271,12 +284,17 @@
             (aset (int c) (boolean-array (map (comp boolean #{\1}) bits)))))
         (object-array Byte/MAX_VALUE))))
 
+(defn- ^String replace-all [s m]
+  (reduce-kv (fn [s k v]
+               (clojure.string/replace s k v))
+             s m))
+
 (defn compress-huffman
   (^bytes [s]
    (compress-huffman huffman-codes s))
   (^bytes [^"[Ljava.lang.Object;" huffman-codes ^String s]
    (let [acc (java.util.BitSet.)
-         s (str s)
+         s (replace-all s huffman-words)
          s-len (count s)]
      (loop [s-idx 0
             bit-idx 0]
@@ -304,7 +322,7 @@
                               ln)]
          (if (char? c)
            (if (= (char 0) ^char c)
-             (str acc)
+             (replace-all (str acc) huffman-reverse-words)
              (recur (.append acc ^char c)
                     (unchecked-inc-int bit-idx)
                     huffman-tree))
