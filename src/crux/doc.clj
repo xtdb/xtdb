@@ -263,26 +263,26 @@
           (.close ^Closeable i))))))
 
 
-;; TODO: does not handle min/max-v, needs to prune previous level from
-;; results based on join value (not id, as they are different
-;; entities) when opening a new level.
+;; TODO: needs to prune previous level from results based on join
+;; value (not id, as they are different entities) when opening a new
+;; level.
 (defrecord TriejoinVirtualIndex [unary-join-indexes trie-state]
   db/Index
   (-seek-values [this k]
     (reset! trie-state {:depth 0
-                        :needs-seek (set unary-join-indexes)
-                        :seek k
+                        :needs-seek? true
+                        :min-vs (vec k)
                         :result nil})
     (db/-next-values this))
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [^long depth needs-seek seek result] :as state} @trie-state
+    (let [{:keys [^long depth needs-seek? min-vs result] :as state} @trie-state
           idx (get unary-join-indexes depth)
-          values (if (contains? needs-seek idx)
-                   (db/-seek-values idx seek)
+          values (if needs-seek?
+                   (db/-seek-values idx (get min-vs depth))
                    (db/-next-values idx))]
-      (swap! trie-state update :needs-seek disj idx)
+      (swap! trie-state assoc :needs-seek? false)
       (cond
         (and values (= depth (dec (count unary-join-indexes))))
         (do (log/debug :leaf-match depth (conj result values))
@@ -303,8 +303,7 @@
         values
         (do (log/debug :open-level depth)
             (swap! trie-state #(-> %
-                                   ;; TODO: should we reset the iterator here for each value?
-                                   (assoc :needs-seek #{(get unary-join-indexes (inc depth))})
+                                   (assoc :needs-seek? true)
                                    (update :result conj values)
                                    (update :depth inc)))
             (recur))
@@ -319,31 +318,37 @@
 (defn- new-triejoin-virtual-index [unary-join-indexes]
   (->TriejoinVirtualIndex unary-join-indexes (atom nil)))
 
-(defn leapfrog-triejoin [snapshot unary-attr-pairs business-time transact-time]
-  (let [attr->di (zipmap (flatten unary-attr-pairs)
-                         (repeatedly #(ks/new-iterator snapshot)))]
+(defn leapfrog-triejoin [snapshot unary-attrs business-time transact-time]
+  (let [attr->di+max-v (->> (for [attrs unary-attrs
+                                  attr (butlast attrs)
+                                  :let [[min-v max-v] (last attrs)]]
+                              [attr [(ks/new-iterator snapshot) max-v]])
+                            (into {}))]
      (try
        (with-open [ci (ks/new-iterator snapshot)
                    ei (ks/new-iterator snapshot)]
          (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
                entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-               attr->entity-indexes (->> (for [[attr di] attr->di
-                                               :let [doc-idx (new-doc-attribute-value-index di attr nil)]]
+               attr->entity-indexes (->> (for [[attr [di max-v]] attr->di+max-v
+                                               :let [doc-idx (new-doc-attribute-value-index di attr max-v)]]
                                            [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)])
                                          (into {}))
-               triejoin-idx (->> (for [[source-attr target-attr :as attr-pair] unary-attr-pairs]
-                                   (new-unary-join-virtual-index (vec (for [attr [source-attr target-attr]]
-                                                                        (get attr->entity-indexes attr)))))
+               triejoin-idx (->> (for [attrs unary-attrs]
+                                   (->> (mapv attr->entity-indexes (butlast attrs))
+                                        (new-unary-join-virtual-index )))
                                  (vec)
-                                 (new-triejoin-virtual-index))]
-           (when-let [result (db/-seek-values triejoin-idx nil)]
+                                 (new-triejoin-virtual-index))
+               min-vs (vec (for [attrs unary-attrs
+                                 :let [[min-v max-v] (last attrs)]]
+                             min-v))]
+           (when-let [result (db/-seek-values triejoin-idx min-vs)]
              (->> (repeatedly #(db/-next-values triejoin-idx))
                   (take-while identity)
                   (cons result)
                   (vec)))))
        (finally
-          (doseq [i (vals attr->di)]
-            (.close ^Closeable i))))))
+         (doseq [[i] (vals attr->di+max-v)]
+           (.close ^Closeable i))))))
 
 ;; Caching
 
