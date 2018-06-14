@@ -121,7 +121,7 @@
                           (map #(.timestamp ^ConsumerRecord %))
                           (sort)
                           (last))]
-    (db/store-index-meta indexer :crux.tx-log/tx-time tx-time)))
+    (db/store-index-meta indexer :crux.tx-log/tx-time (Date. ^long tx-time))))
 
 (defn consume-and-index-entities
   ([indexer consumer]

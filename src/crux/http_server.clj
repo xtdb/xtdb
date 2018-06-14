@@ -25,9 +25,7 @@
           {:kv-backend (type kvs)
            :estimate-num-keys (kvs/count-keys kvs)
            :kv-store-size (cio/folder-human-size db-dir)
-           :latest-tx-time (-> ^int (doc/read-meta kvs :crux.tx-log/tx-time)
-                        java.util.Date.
-                        str)})})
+           :latest-tx-time (doc/read-meta kvs :crux.tx-log/tx-time)})})
 
 (defn do-query [kvs request]
   (try
