@@ -1,5 +1,6 @@
 (ns crux.doc
   (:require [clojure.tools.logging :as log]
+            [clojure.set :as set]
             [crux.byte-utils :as bu]
             [crux.index :as idx]
             [crux.kv-store :as ks]
@@ -262,68 +263,69 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
-;; TODO: needs to prune previous level from results based on join
-;; value (not id, as they are different entities) when opening a new
-;; level.
+(defn- constrain-triejoin-result [result shared-attrs]
+  (->> shared-attrs
+       (reduce
+        (fn [result attrs]
+          (->> (map (comp set result) attrs)
+               (apply (comp vec set/intersection))
+               (repeat)
+               (zipmap attrs)
+               (merge result)))
+        (into {} result))
+       (vec)))
+
+(defn- flatten-triejoin-result-stack [result-stack]
+  (loop [[[v matches :as level] & levels] result-stack
+         v-acc []
+         acc []]
+    (if level
+      (recur levels
+             (conj v-acc v)
+             (vec (concat acc matches)))
+      [v-acc acc])))
+
 (defrecord TriejoinVirtualIndex [unary-join-indexes shared-attrs trie-state]
   db/Index
   (-seek-values [this k]
-    (reset! trie-state {:depth 0
-                        :needs-seek? true
+    (reset! trie-state {:needs-seek? true
                         :min-vs (vec k)
-                        :result nil})
+                        :result-stack []})
     (db/-next-values this))
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [^long depth needs-seek? min-vs result] :as state} @trie-state
+    (let [{:keys [needs-seek? min-vs result-stack]
+           :as state} @trie-state
+          depth (count result-stack)
+          max-depth (dec (count unary-join-indexes))
           idx (get unary-join-indexes depth)
           values (if needs-seek?
                    (db/-seek-values idx (get min-vs depth))
-                   (db/-next-values idx))]
+                   (db/-next-values idx))
+          result-stack (conj result-stack values)]
       (swap! trie-state assoc :needs-seek? false)
       (cond
-        (and values (= depth (dec (count unary-join-indexes))))
-        (do (log/debug :leaf-match (conj result values))
-            (swap! trie-state #(if (zero? depth)
-                                 (assoc % :result nil)
-                                 (-> %
-                                     (update :result next)
-                                     (update :depth dec))))
-            (loop [[[v matches :as level] & levels] (conj result values)
-                   v-acc []
-                   acc []]
-              (if level
-                (recur levels
-                       (conj v-acc v)
-                       (vec (concat acc matches)))
-                (let [result (->> shared-attrs
-                                  (reduce
-                                   (fn [acc attrs]
-                                     (->> (map (comp set acc) attrs)
-                                          (apply (comp vec clojure.set/intersection))
-                                          (repeat)
-                                          (zipmap attrs)
-                                          (merge acc)))
-                                   (into {} acc))
-                                  (vec))]
-                  (log/debug :leaf-match-pre-filter acc)
-                  (log/debug :leaf-match-filtered result)
-                  [v-acc result]))))
+        (and values (= depth max-depth))
+        (do (log/debug :leaf-match result-stack)
+            (swap! trie-state update :result-stack (if (zero? depth)
+                                                     empty
+                                                     pop))
+            (let [[max-ks result] (flatten-triejoin-result result-stack)
+                  result (constrain-triejoin-result result shared-attrs)]
+              (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks) result)
+              [max-ks result]))
 
         values
         (do (log/debug :open-level depth)
             (swap! trie-state #(-> %
                                    (assoc :needs-seek? true)
-                                   (update :result conj values)
-                                   (update :depth inc)))
+                                   (update :result-stack conj values)))
             (recur))
 
         (and (nil? values) (pos? depth))
         (do (log/debug :close-level depth)
-            (swap! trie-state #(-> %
-                                   (update :result next)
-                                   (update :depth dec)))
+            (swap! trie-state update :result-stack pop)
             (recur))))))
 
 (defn- new-triejoin-virtual-index [unary-join-indexes shared-attrs]
