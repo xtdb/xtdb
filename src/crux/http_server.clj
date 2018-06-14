@@ -25,7 +25,9 @@
           {:kv-backend (type kvs)
            :estimate-num-keys (kvs/count-keys kvs)
            :kv-store-size (cio/folder-human-size db-dir)
-           :dev-db-size (cio/folder-human-size "dev-storage")})})
+           :tx-time (-> ^int (doc/read-meta kvs :crux.tx-log/tx-time)
+                        java.util.Date.
+                        str)})})
 
 (defn do-query [kvs request]
   (try
