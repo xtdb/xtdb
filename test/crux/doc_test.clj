@@ -336,6 +336,7 @@
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3} ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
               ;; {:crux.db/id :r14 :ra 1 :rb 4} ;; TODO: adding this on its own should not be joined without an :sb 4.
               ;; {:crux.db/id :r15 :ra 1 :rb 5}
+              ;; {:crux.db/id :r35 :ra 3 :rb 5}
               {:crux.db/id :s34 :sb 3 :sc 4} ;; 9434448654674927dbc44b2280d44f92166ac350
               ;; {:crux.db/id :s35 :sb 3 :sc 5}
               ;; {:crux.db/id :s46 :sb 4 :sc 6}

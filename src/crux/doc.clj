@@ -303,6 +303,8 @@
         values
         (do (log/debug :open-level depth)
             (swap! trie-state #(-> %
+                                   ;; TODO: should we reset the iterator here for each value?
+                                   (assoc :needs-seek #{(get unary-join-indexes (inc depth))})
                                    (update :result conj values)
                                    (update :depth inc)))
             (recur))
