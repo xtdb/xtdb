@@ -22,10 +22,10 @@
   {:status 200
    :headers {"Content-Type" "application/edn"}
    :body (pr-str
-          {:kv-backend (type kvs)
-           :estimate-num-keys (kvs/count-keys kvs)
-           :kv-store-size (cio/folder-human-size db-dir)
-           :latest-tx-time (doc/read-meta kvs :crux.tx-log/tx-time)})})
+          {:crux.kv-store/kv-backend (.getName (class kvs))
+           :crux.kv-store/estimate-num-keys (kvs/count-keys kvs)
+           :crux.kv-store/size (cio/folder-human-size db-dir)
+           :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)})})
 
 (defn do-query [kvs request]
   (try
@@ -50,7 +50,7 @@
 (defn transact [tx-log request]
   (try
     (let [tx-op (edn/read-string (req/body-string request))]
-      (try        
+      (try
         {:status 200
          :headers {"Content-Type" "application/edn"}
          :body (pr-str @(db/submit-tx tx-log [tx-op]))}
