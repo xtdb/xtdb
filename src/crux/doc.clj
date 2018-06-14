@@ -262,7 +262,6 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
-
 ;; TODO: needs to prune previous level from results based on join
 ;; value (not id, as they are different entities) when opening a new
 ;; level.
