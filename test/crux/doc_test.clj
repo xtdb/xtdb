@@ -332,6 +332,7 @@
 ;; (3, 5, 2)
 
 ;; TODO: figure out if this is correct with/without shared attrs?
+;; Fix ordering test, commented out below - might be related issue.
 (t/deftest test-can-perform-leapfrog-triejoin
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
               {:crux.db/id :r14 :ra 1 :rb 4}
@@ -361,20 +362,36 @@
                    (count (doc/all-entities snapshot transact-time transact-time)))))
 
         (t/testing "leapfrog triejoin"
-          (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
-                   (set (for [[v matches] (doc/leapfrog-triejoin snapshot
-                                                                 [[:ra :ta [nil nil]]
-                                                                  [:rb :sb [nil nil]]
-                                                                  [:sc :tc [nil nil]]]
-                                                                 []
-                                                                 #_[[:ra :rb]
-                                                                    [:sb :sc]
-                                                                    [:ta :tc]]
-                                                                 transact-time
-                                                                 transact-time)
-                              [_ entities] matches
-                              {:keys [eid]} entities]
-                          eid)))))))))
+          (let [result (doc/leapfrog-triejoin snapshot
+                                              [[:ra :ta [nil nil]]
+                                               [:rb :sb [nil nil]]
+                                               [:sc :tc [nil nil]]]
+                                              []
+                                              #_[[:ra :rb]
+                                                 [:sb :sc]
+                                                 [:ta :tc]]
+                                              transact-time
+                                              transact-time)]
+            (t/testing "order of results"
+              #_(t/is (= (vec (for [[a b c] [[1 3 4]
+                                             [1 3 5]
+                                             [1 4 6]
+                                             [1 4 8]
+                                             [1 4 9]
+                                             [1 5 2]
+                                             [3 5 2]]]
+                                [(bu/bytes->hex (idx/value->bytes a))
+                                 (bu/bytes->hex (idx/value->bytes b))
+                                 (bu/bytes->hex (idx/value->bytes c))]))
+                         (vec (for [[[a b c] _] result]
+                                [(bu/bytes->hex a)
+                                 (bu/bytes->hex b)
+                                 (bu/bytes->hex c)])))))
+            (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
+                     (set (for [[v matches] result
+                                [_ entities] matches
+                                {:keys [eid]} entities]
+                            eid))))))))))
 
 (t/deftest test-leapfrog-triejoin-prunes-values-based-on-later-joins
   (let [data [;; d365d8e84bb127ed8f4d076f7528641a7ce08049
