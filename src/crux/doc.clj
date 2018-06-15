@@ -308,9 +308,6 @@
       (cond
         (and values (= depth max-depth))
         (do (log/debug :leaf-match result-stack)
-            (swap! trie-state update :result-stack (if (zero? depth)
-                                                     empty
-                                                     pop))
             (let [[max-ks result] (flatten-triejoin-result-stack result-stack)
                   result (constrain-triejoin-result result shared-attrs)]
               (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks) result)
