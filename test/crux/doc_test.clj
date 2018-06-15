@@ -330,9 +330,6 @@
 ;; (1, 4, 9)
 ;; (1, 5, 2)
 ;; (3, 5, 2)
-
-;; TODO: figure out if this is correct with/without shared attrs?
-;; Fix ordering test, commented out below - might be related issue.
 (t/deftest test-can-perform-leapfrog-triejoin
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
               {:crux.db/id :r14 :ra 1 :rb 4}
