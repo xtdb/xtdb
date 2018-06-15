@@ -15,36 +15,56 @@
 
 ;; Docs
 
-(defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr max-v peek-state]
-  (let [max-seek-k (idx/encode-attribute+value-prefix-key attr (or max-v idx/empty-byte-array))
+(defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr peek-state]
+  (let [seek-k (idx/encode-attribute+value-prefix-key attr idx/empty-byte-array)
         prefix-size (- (alength current-k) idx/id-size)]
-    (loop [acc []
-           k current-k]
-      (if-let [value+content-hash (when (and k
-                                             (bu/bytes=? current-k k prefix-size)
-                                             (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
-                                    (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
-        (recur (conj acc value+content-hash)
-               (ks/-next i))
-        (do (reset! peek-state k)
-            (when (seq acc)
-              acc))))))
+    (when (bu/bytes=? seek-k current-k (alength seek-k))
+      (loop [acc []
+             k current-k]
+        (if-let [value+content-hash (when (and k (bu/bytes=? current-k k prefix-size))
+                                      (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
+          (recur (conj acc value+content-hash)
+                 (ks/-next i))
+          (do (reset! peek-state k)
+              (when (seq acc)
+                acc)))))))
 
-(defrecord DocAttributeValueIndex [i attr max-v peek-state]
+(defrecord DocAttributeValueIndex [i attr peek-state]
   db/Index
   (-seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-prefix-key attr)
                       (ks/-seek i))]
-      (attribute-value+content-hashes-for-current-key i k attr max-v peek-state)))
+      (attribute-value+content-hashes-for-current-key i k attr peek-state)))
 
   db/OrderedIndex
   (-next-values [this]
     (when-let [k (or @peek-state (ks/-next i))]
-      (attribute-value+content-hashes-for-current-key i k attr max-v peek-state))))
+      (attribute-value+content-hashes-for-current-key i k attr peek-state))))
 
-(defn- new-doc-attribute-value-index [i attr max-v]
-  (->DocAttributeValueIndex i attr max-v (atom nil)))
+(defrecord PredicateVirtualIndex [i pred]
+  db/Index
+  (-seek-values [this k]
+    (seq (for [value+result (db/-seek-values i k)
+               :when (pred value+result)]
+           value+result)))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (seq (for [value+result (db/-next-values i)
+               :when (pred value+result)]
+           value+result))))
+
+(defn- new-less-than-virtual-index [i max-v]
+  (let [pred (if max-v
+               (let [max-seek-k (idx/value->bytes max-v)]
+                 (fn [[value result]]
+                   (not (neg? (bu/compare-bytes max-seek-k value)))))
+               (constantly true))]
+    (->PredicateVirtualIndex i pred)))
+
+(defn- new-doc-attribute-value-index [i attr]
+  (->DocAttributeValueIndex i attr (atom nil)))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -156,7 +176,7 @@
           :when (= content-hash (.content-hash ^EntityTx entity-tx))]
       [v entity-tx])))
 
-(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
+(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx attr]
   db/Index
   (-seek-values [this k]
     (->> (db/-seek-values doc-idx k)
@@ -171,10 +191,11 @@
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (let [doc-idx (new-doc-attribute-value-index di attr max-v)
+    (let [doc-idx (-> (new-doc-attribute-value-index di attr)
+                      (new-less-than-virtual-index max-v))
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
+          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)]
       (when-let [k (db/-seek-values entity-attribute-idx min-v)]
         (->> (repeatedly #(db/-next-values entity-attribute-idx))
              (take-while identity)
@@ -198,9 +219,9 @@
 
 ;; Join
 
-(defn- new-leapfrog-iterator-state [idx attr value+entities]
+(defn- new-leapfrog-iterator-state [idx value+entities]
   (let [[[v]] value+entities]
-    {:attr attr
+    {:attr (:attr idx)
      :idx idx
      :key (or v idx/nil-id-bytes)
      :entities (set (map second value+entities))}))
@@ -208,9 +229,8 @@
 (defrecord UnaryJoinVirtualIndex [entity-indexes iterators-state]
   db/Index
   (-seek-values [this k]
-    (let [iterators (->> (for [entity-idx entity-indexes
-                               :let [attr (get-in entity-idx [:doc-idx :attr])]]
-                           (new-leapfrog-iterator-state entity-idx attr (db/-seek-values entity-idx k)))
+    (let [iterators (->> (for [entity-idx entity-indexes]
+                           (new-leapfrog-iterator-state entity-idx (db/-seek-values entity-idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
       (reset! iterators-state {:iterators iterators :index 0})
@@ -232,7 +252,7 @@
                                                                max-k)))))]
         (reset! iterators-state
                 (when next-value+entities
-                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx attr next-value+entities))
+                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx next-value+entities))
                    :index (mod (inc index) (count iterators))}))
         (if match?
           (let [attrs (map :attr iterators)]
@@ -250,9 +270,11 @@
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              entity-indexes (for [[attr di] attr->di
-                                   :let [doc-idx (new-doc-attribute-value-index di attr max-v)]]
-                               (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx))
+              entity-indexes (for [attr attrs
+                                   :let [di (get attr->di attr)
+                                         doc-idx (-> (new-doc-attribute-value-index di attr)
+                                                     (new-less-than-virtual-index max-v))]]
+                               (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
           (when-let [result (db/-seek-values unary-join-idx min-v)]
             (->> (repeatedly #(db/-next-values unary-join-idx))
@@ -287,8 +309,7 @@
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [needs-seek? min-vs result-stack]
-           :as state} @trie-state
+    (let [{:keys [needs-seek? min-vs result-stack]} @trie-state
           depth (count result-stack)
           max-depth (dec (count unary-join-indexes))
           idx (get unary-join-indexes depth)
@@ -341,11 +362,13 @@
          (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
                entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
                attr->entity-indexes (->> (for [[attr [di max-v]] attr->di+max-v
-                                               :let [doc-idx (new-doc-attribute-value-index di attr max-v)]]
-                                           [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)])
+                                               :let [doc-idx (-> (new-doc-attribute-value-index di attr)
+                                                                 (new-less-than-virtual-index max-v))]]
+                                           [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)])
                                          (into {}))
                triejoin-idx (-> (for [attrs unary-attrs]
-                                  (->> (mapv attr->entity-indexes (butlast attrs))
+                                  (->> (butlast attrs)
+                                       (mapv attr->entity-indexes)
                                        (new-unary-join-virtual-index)))
                                 (vec)
                                 (new-triejoin-virtual-index shared-attrs))
