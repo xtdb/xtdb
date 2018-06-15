@@ -42,10 +42,10 @@
     (when-let [k (or @peek-state (ks/-next i))]
       (attribute-value+content-hashes-for-current-key i k attr peek-state))))
 
-(defrecord PredicateVirtualIndex [i pred]
+(defrecord PredicateVirtualIndex [i pred seek-k-fn]
   db/Index
   (-seek-values [this k]
-    (seq (for [value+result (db/-seek-values i k)
+    (seq (for [value+result (db/-seek-values i (seek-k-fn k))
                :when (pred value+result)]
            value+result)))
 
@@ -55,13 +55,34 @@
                :when (pred value+result)]
            value+result))))
 
+(defn- value-comparsion-predicate [compare-pred v]
+  (if v
+    (let [seek-k (idx/value->bytes v)]
+      (fn [[value result]]
+        (compare-pred (bu/compare-bytes value seek-k))))
+    (constantly true)))
+
+(defn- new-less-than-equal-virtual-index [i max-v]
+  (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
+    (->PredicateVirtualIndex i pred identity)))
+
 (defn- new-less-than-virtual-index [i max-v]
-  (let [pred (if max-v
-               (let [max-seek-k (idx/value->bytes max-v)]
-                 (fn [[value result]]
-                   (not (neg? (bu/compare-bytes max-seek-k value)))))
-               (constantly true))]
-    (->PredicateVirtualIndex i pred)))
+  (let [pred (value-comparsion-predicate pos? max-v)]
+    (->PredicateVirtualIndex i pred identity)))
+
+(defn- new-greater-than-equal-virtual-index [i min-v]
+  (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
+    (->PredicateVirtualIndex i pred (fn [k]
+                                      (if (pred [(idx/value->bytes k) nil])
+                                        k
+                                        min-v)))))
+
+(defn- new-greater-than-virtual-index [i min-v]
+  (let [pred (value-comparsion-predicate neg? min-v)]
+    (->PredicateVirtualIndex i pred (fn [k]
+                                      (if (pred [(idx/value->bytes k) nil])
+                                        k
+                                        min-v)))))
 
 (defn- new-doc-attribute-value-index [i attr]
   (->DocAttributeValueIndex i attr (atom nil)))
@@ -192,11 +213,12 @@
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
     (let [doc-idx (-> (new-doc-attribute-value-index di attr)
-                      (new-less-than-virtual-index max-v))
+                      (new-less-than-equal-virtual-index max-v)
+                      (new-greater-than-equal-virtual-index min-v))
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)]
-      (when-let [k (db/-seek-values entity-attribute-idx min-v)]
+      (when-let [k (db/-seek-values entity-attribute-idx nil)]
         (->> (repeatedly #(db/-next-values entity-attribute-idx))
              (take-while identity)
              (apply concat k)
@@ -273,10 +295,11 @@
               entity-indexes (for [attr attrs
                                    :let [di (get attr->di attr)
                                          doc-idx (-> (new-doc-attribute-value-index di attr)
-                                                     (new-less-than-virtual-index max-v))]]
+                                                     (new-less-than-equal-virtual-index max-v)
+                                                     (new-greater-than-equal-virtual-index min-v))]]
                                (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
-          (when-let [result (db/-seek-values unary-join-idx min-v)]
+          (when-let [result (db/-seek-values unary-join-idx nil)]
             (->> (repeatedly #(db/-next-values unary-join-idx))
                  (take-while identity)
                  (cons result)
@@ -351,19 +374,19 @@
   (->TriejoinVirtualIndex unary-join-indexes shared-attrs (atom nil)))
 
 (defn leapfrog-triejoin [snapshot unary-attrs shared-attrs business-time transact-time]
-  (let [attr->di+max-v (->> (for [attrs unary-attrs
-                                  attr (butlast attrs)
-                                  :let [[min-v max-v] (last attrs)]]
-                              [attr [(ks/new-iterator snapshot) max-v]])
+  (let [attr->di+range (->> (for [attrs unary-attrs
+                                  attr (butlast attrs)]
+                              [attr [(ks/new-iterator snapshot) (last attrs)]])
                             (into {}))]
      (try
        (with-open [ci (ks/new-iterator snapshot)
                    ei (ks/new-iterator snapshot)]
          (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
                entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-               attr->entity-indexes (->> (for [[attr [di max-v]] attr->di+max-v
+               attr->entity-indexes (->> (for [[attr [di [min-v max-v]]] attr->di+range
                                                :let [doc-idx (-> (new-doc-attribute-value-index di attr)
-                                                                 (new-less-than-virtual-index max-v))]]
+                                                                 (new-less-than-equal-virtual-index max-v)
+                                                                 (new-greater-than-equal-virtual-index min-v))]]
                                            [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)])
                                          (into {}))
                triejoin-idx (-> (for [attrs unary-attrs]
@@ -375,13 +398,13 @@
                min-vs (vec (for [attrs unary-attrs
                                  :let [[min-v max-v] (last attrs)]]
                              min-v))]
-           (when-let [result (db/-seek-values triejoin-idx min-vs)]
+           (when-let [result (db/-seek-values triejoin-idx nil)]
              (->> (repeatedly #(db/-next-values triejoin-idx))
                   (take-while identity)
                   (cons result)
                   (vec)))))
        (finally
-         (doseq [[i] (vals attr->di+max-v)]
+         (doseq [[i] (vals attr->di+range)]
            (.close ^Closeable i))))))
 
 ;; Caching
