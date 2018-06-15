@@ -263,27 +263,24 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
-;; TODO: this is too naive and might not work for some cases I
-;; think. Instead, this should really be done incrementally each time
-;; before we open a new level as the result needs to be constrained as
-;; early as possible. This would also be faster as it avoid extra
-;; work.
-(defn- constrain-triejoin-result [result shared-attrs]
+(defn- normalize-result [result]
+  (->> (for [[k v] result]
+         [k (set v)])
+       (into {})))
+
+(defn- constrain-triejoin-result [shared-attrs result]
   (->> shared-attrs
        (reduce
         (fn [result attrs]
-          (when result
+          (if (and result (every? result attrs))
             (some->> (map result attrs)
-                     (apply (comp vec set/intersection))
+                     (apply set/intersection)
                      (not-empty)
                      (repeat)
                      (zipmap attrs)
-                     (merge result))))
-        (->> (for [[k v] result]
-               [k (set v)])
-             (into {})))
-       (vec)
-       (not-empty)))
+                     (merge result))
+            result))
+        result)))
 
 (defrecord TriejoinVirtualIndex [unary-join-indexes shared-attrs trie-state]
   db/Index
@@ -303,24 +300,31 @@
           values (if needs-seek?
                    (db/-seek-values idx (get min-vs depth))
                    (db/-next-values idx))
-          result-stack (conj result-stack values)]
+          [max-k new-values] values
+          [_ parent-result] (last result-stack)
+          result (some->> new-values
+                          (normalize-result)
+                          (merge parent-result)
+                          (constrain-triejoin-result shared-attrs)
+                          (not-empty))]
       (swap! trie-state assoc :needs-seek? false)
       (cond
         (and values (= depth max-depth))
-        (do (log/debug :leaf-match-candidate result-stack)
-            (let [max-ks (mapv first result-stack)
-                  result (reduce into [] (map second result-stack))]
-              (if-let [result (constrain-triejoin-result result shared-attrs)]
-                (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks) result)
-                    [max-ks result])
-                (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
-                    (recur)))))
+        (let [max-ks (conj (mapv first result-stack) max-k)]
+          (log/debug :leaf-match-candidate (mapv bu/bytes->hex max-ks) result)
+          (if result
+            (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks))
+                [max-ks result])
+            (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
+                (recur))))
 
         values
-        (do (log/debug :open-level depth)
-            (swap! trie-state #(-> %
-                                   (assoc :needs-seek? true)
-                                   (update :result-stack conj values)))
+        (do (if result
+              (do (log/debug :open-level depth)
+                  (swap! trie-state #(-> %
+                                         (assoc :needs-seek? true)
+                                         (update :result-stack conj [max-k result]))))
+              (log/debug :open-level-constrained (bu/bytes->hex max-k)))
             (recur))
 
         (and (nil? values) (pos? depth))
