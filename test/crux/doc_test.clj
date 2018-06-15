@@ -366,30 +366,29 @@
                                               [[:ra :ta [nil nil]]
                                                [:rb :sb [nil nil]]
                                                [:sc :tc [nil nil]]]
-                                              []
-                                              #_[[:ra :rb]
-                                                 [:sb :sc]
-                                                 [:ta :tc]]
+                                              [[:ra :rb]
+                                               [:sb :sc]
+                                               [:ta :tc]]
                                               transact-time
                                               transact-time)]
             (t/testing "order of results"
-              #_(t/is (= (vec (for [[a b c] [[1 3 4]
-                                             [1 3 5]
-                                             [1 4 6]
-                                             [1 4 8]
-                                             [1 4 9]
-                                             [1 5 2]
-                                             [3 5 2]]]
-                                [(bu/bytes->hex (idx/value->bytes a))
-                                 (bu/bytes->hex (idx/value->bytes b))
-                                 (bu/bytes->hex (idx/value->bytes c))]))
-                         (vec (for [[[a b c] _] result]
-                                [(bu/bytes->hex a)
-                                 (bu/bytes->hex b)
-                                 (bu/bytes->hex c)])))))
+              (t/is (= (vec (for [[a b c] [[1 3 4]
+                                           [1 3 5]
+                                           [1 4 6]
+                                           [1 4 8]
+                                           [1 4 9]
+                                           [1 5 2]
+                                           [3 5 2]]]
+                              [(bu/bytes->hex (idx/value->bytes a))
+                               (bu/bytes->hex (idx/value->bytes b))
+                               (bu/bytes->hex (idx/value->bytes c))]))
+                       (vec (for [[[a b c] _] result]
+                              [(bu/bytes->hex a)
+                               (bu/bytes->hex b)
+                               (bu/bytes->hex c)])))))
             (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
                      (set (for [[v matches] result
-                                [_ entities] matches
+                                [k entities] matches
                                 {:keys [eid]} entities]
                             eid))))))))))
 

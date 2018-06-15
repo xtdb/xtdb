@@ -263,27 +263,27 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
+;; TODO: this is too naive and might not work for some cases I
+;; think. Instead, this should really be done incrementally each time
+;; before we open a new level as the result needs to be constrained as
+;; early as possible. This would also be faster as it avoid extra
+;; work.
 (defn- constrain-triejoin-result [result shared-attrs]
   (->> shared-attrs
        (reduce
         (fn [result attrs]
-          (->> (map (comp set result) attrs)
-               (apply (comp vec set/intersection))
-               (repeat)
-               (zipmap attrs)
-               (merge result)))
-        (into {} result))
-       (vec)))
-
-(defn- flatten-triejoin-result-stack [result-stack]
-  (loop [[[v matches :as level] & levels] result-stack
-         v-acc []
-         acc []]
-    (if level
-      (recur levels
-             (conj v-acc v)
-             (vec (concat acc matches)))
-      [v-acc acc])))
+          (when result
+            (some->> (map result attrs)
+                     (apply (comp vec set/intersection))
+                     (not-empty)
+                     (repeat)
+                     (zipmap attrs)
+                     (merge result))))
+        (->> (for [[k v] result]
+               [k (set v)])
+             (into {})))
+       (vec)
+       (not-empty)))
 
 (defrecord TriejoinVirtualIndex [unary-join-indexes shared-attrs trie-state]
   db/Index
@@ -307,11 +307,14 @@
       (swap! trie-state assoc :needs-seek? false)
       (cond
         (and values (= depth max-depth))
-        (do (log/debug :leaf-match result-stack)
-            (let [[max-ks result] (flatten-triejoin-result-stack result-stack)
-                  result (constrain-triejoin-result result shared-attrs)]
-              (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks) result)
-              [max-ks result]))
+        (do (log/debug :leaf-match-candidate result-stack)
+            (let [max-ks (mapv first result-stack)
+                  result (reduce into [] (map second result-stack))]
+              (if-let [result (constrain-triejoin-result result shared-attrs)]
+                (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks) result)
+                    [max-ks result])
+                (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
+                    (recur)))))
 
         values
         (do (log/debug :open-level depth)
