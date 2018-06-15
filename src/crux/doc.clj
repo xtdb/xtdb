@@ -203,7 +203,7 @@
     {:attr attr
      :idx idx
      :key (or v idx/nil-id-bytes)
-     :entities (mapv second value+entities)}))
+     :entities (set (map second value+entities))}))
 
 (defrecord UnaryJoinVirtualIndex [entity-indexes iterators-state]
   db/Index
@@ -237,7 +237,7 @@
         (if match?
           (let [attrs (map :attr iterators)]
             (log/debug :match attrs (bu/bytes->hex max-k))
-            [max-k (zipmap attrs (mapv :entities iterators))])
+            [max-k (zipmap attrs (map :entities iterators))])
           (recur))))))
 
 (defn- new-unary-join-virtual-index [entity-indexes]
@@ -262,11 +262,6 @@
       (finally
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
-
-(defn- normalize-result [result]
-  (->> (for [[k v] result]
-         [k (set v)])
-       (into {})))
 
 (defn- constrain-triejoin-result [shared-attrs result]
   (->> shared-attrs
@@ -303,7 +298,6 @@
           [max-k new-values] values
           [_ parent-result] (last result-stack)
           result (some->> new-values
-                          (normalize-result)
                           (merge parent-result)
                           (constrain-triejoin-result shared-attrs)
                           (not-empty))]
