@@ -9,7 +9,8 @@
             [taoensso.nippy :as nippy])
   (:import [java.nio ByteBuffer]
            [java.io Closeable]
-           [java.util Date]))
+           [java.util Date]
+           [crux.index EntityTx]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -115,8 +116,8 @@
 
 ;; Entities
 
-(defn- enrich-entity-map [entity-map content-hash]
-  (assoc entity-map :content-hash (some-> content-hash not-empty idx/new-id)))
+(defn- ^EntityTx enrich-entity-tx [entity-tx content-hash]
+  (assoc entity-tx :content-hash (some-> content-hash not-empty idx/new-id)))
 
 (defrecord EntityAsOfIndex [i business-time transact-time]
   db/Index
@@ -129,11 +130,11 @@
       (loop [k (ks/-seek i seek-k)]
         (when (and k (bu/bytes=? seek-k prefix-size k))
           (let [v (ks/-value i)
-                entity-map (-> (idx/decode-entity+bt+tt+tx-id-key k)
-                               (enrich-entity-map v))]
-            (if (<= (compare (:tt entity-map) transact-time) 0)
+                entity-tx (-> (idx/decode-entity+bt+tt+tx-id-key k)
+                              (enrich-entity-tx v))]
+            (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
-                [entity-map])
+                [entity-tx])
               (recur (ks/-next i)))))))))
 
 (defn entities-at [snapshot entities business-time transact-time]
@@ -152,9 +153,9 @@
   (when-let [[[v]] value+content-hashes]
     (for [content-hash (map second value+content-hashes)
           entity (db/-seek-values content-hash-entity-idx content-hash)
-          entity-map (db/-seek-values entity-as-of-idx entity)
-          :when (= content-hash (:content-hash entity-map))]
-      [v entity-map])))
+          entity-tx (db/-seek-values entity-as-of-idx entity)
+          :when (= content-hash (.content-hash ^EntityTx entity-tx))]
+      [v entity-tx])))
 
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
@@ -194,7 +195,7 @@
     (let [seek-k (idx/encode-entity+bt+tt-prefix-key entity)]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (idx/decode-entity+bt+tt+tx-id-key k)
-                 (enrich-entity-map v)))))))
+                 (enrich-entity-tx v)))))))
 
 ;; Join
 
@@ -442,28 +443,28 @@
     (->DocSnapshot (ks/new-snapshot kv) (atom #{})))
 
   (entities [this query-context]
-    (for [entity-map (all-entities query-context business-time transact-time)]
-      (map->DocEntity (assoc entity-map :object-store object-store))))
+    (for [entity-tx (all-entities query-context business-time transact-time)]
+      (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entities-for-attribute-value [this query-context ident min-v max-v]
-    (for [entity-map (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
-      (map->DocEntity (assoc entity-map :object-store object-store))))
+    (for [entity-tx (entities-by-attribute-value-at query-context ident min-v max-v business-time transact-time)]
+      (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-join [this query-context attrs min-v max-v]
-    (for [entity-map (->> (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
+    (for [entity-tx (->> (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
                           (map second)
                           (mapcat vals)
                           (apply concat)
                           (distinct))]
-      (map->DocEntity (assoc entity-map :object-store object-store))))
+      (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity [this query-context eid]
-    (when-let [entity-map (first (entities-at query-context [eid] business-time transact-time))]
-      (map->DocEntity (assoc entity-map :object-store object-store))))
+    (when-let [entity-tx (first (entities-at query-context [eid] business-time transact-time))]
+      (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-history [this query-context eid]
-    (for [entity-map (entity-history query-context eid)]
-      (map->DocEntity (assoc entity-map :object-store object-store)))))
+    (for [entity-tx (entity-history query-context eid)]
+      (map->DocEntity (assoc entity-tx :object-store object-store)))))
 
 (def ^:const default-await-tx-timeout 10000)
 

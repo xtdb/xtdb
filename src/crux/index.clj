@@ -240,12 +240,18 @@
   (^bytes [eid business-time transact-time]
    (encode-entity+bt+tt+tx-id-key eid business-time transact-time nil)))
 
-(defn decode-entity+bt+tt+tx-id-key [^bytes key]
+(defrecord EntityTx [eid bt tt tx-id content-hash]
+  IdToBytes
+  (id->bytes [this]
+    (id->bytes eid)))
+
+(defn ^crux.index.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
   (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
-    {:eid (new-id (doto (byte-array id-size)
-                    (->> (.get buffer))))
-     :bt (reverse-time-ms->date (.getLong buffer))
-     :tt (reverse-time-ms->date (.getLong buffer))
-     :tx-id (.getLong buffer)}))
+    (->EntityTx (new-id (doto (byte-array id-size)
+                          (->> (.get buffer))))
+                (reverse-time-ms->date (.getLong buffer))
+                (reverse-time-ms->date (.getLong buffer))
+                (.getLong buffer)
+                nil)))

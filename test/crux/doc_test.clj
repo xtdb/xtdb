@@ -53,11 +53,11 @@
         eid (idx/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:keys [transact-time tx-id]}
         @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])
-        expected-entities [{:eid eid
-                            :content-hash content-hash
-                            :bt business-time
-                            :tt transact-time
-                            :tx-id tx-id}]]
+        expected-entities [(idx/map->EntityTx {:eid eid
+                                               :content-hash content-hash
+                                               :bt business-time
+                                               :tt transact-time
+                                               :tx-id tx-id})]]
 
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "can see entity at transact and business time"
@@ -143,11 +143,11 @@
         (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-22"))))
 
       (t/testing "can see entity history"
-        (t/is (= [{:eid eid
-                   :content-hash content-hash
-                   :bt business-time
-                   :tt transact-time
-                   :tx-id tx-id}]
+        (t/is (= [(idx/map->EntityTx {:eid eid
+                                      :content-hash content-hash
+                                      :bt business-time
+                                      :tt transact-time
+                                      :tx-id tx-id})]
                  (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
 
     (t/testing "add new version of entity in the past"
@@ -159,17 +159,17 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [{:eid eid
-                     :content-hash new-content-hash
-                     :bt new-business-time
-                     :tt new-transact-time
-                     :tx-id new-tx-id}]
+          (t/is (= [(idx/map->EntityTx {:eid eid
+                                        :content-hash new-content-hash
+                                        :bt new-business-time
+                                        :tt new-transact-time
+                                        :tx-id new-tx-id})]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-          (t/is (= [{:eid eid
-                     :content-hash new-content-hash
-                     :bt new-business-time
-                     :tt new-transact-time
-                     :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time)))
+          (t/is (= [(idx/map->EntityTx {:eid eid
+                                        :content-hash new-content-hash
+                                        :bt new-business-time
+                                        :tt new-transact-time
+                                        :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-transact-time)))
 
           (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
@@ -182,23 +182,23 @@
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= [{:eid eid
-                     :content-hash new-content-hash
-                     :bt new-business-time
-                     :tt new-transact-time
-                     :tx-id new-tx-id}]
+          (t/is (= [(idx/map->EntityTx {:eid eid
+                                        :content-hash new-content-hash
+                                        :bt new-business-time
+                                        :tt new-transact-time
+                                        :tx-id new-tx-id})]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-          (t/is (= [{:eid eid
-                     :content-hash content-hash
-                     :bt business-time
-                     :tt transact-time
-                     :tx-id tx-id}]
+          (t/is (= [(idx/map->EntityTx {:eid eid
+                                        :content-hash content-hash
+                                        :bt business-time
+                                        :tt transact-time
+                                        :tx-id tx-id})]
                    (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time transact-time)))
-          (t/is (= [{:eid eid
-                     :content-hash new-content-hash
-                     :bt new-business-time
-                     :tt new-transact-time
-                     :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time))))
+          (t/is (= [(idx/map->EntityTx {:eid eid
+                                        :content-hash new-content-hash
+                                        :bt new-business-time
+                                        :tt new-transact-time
+                                        :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-transact-time))))
 
         (t/testing "can correct entity at earlier business time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -211,17 +211,17 @@
                 @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
             (with-open [snapshot (ks/new-snapshot f/*kv*)]
-              (t/is (= [{:eid eid
-                         :content-hash new-content-hash
-                         :bt new-business-time
-                         :tt new-transact-time
-                         :tx-id new-tx-id}]
+              (t/is (= [(idx/map->EntityTx {:eid eid
+                                            :content-hash new-content-hash
+                                            :bt new-business-time
+                                            :tt new-transact-time
+                                            :tx-id new-tx-id})]
                        (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
-              (t/is (= [{:eid eid
-                         :content-hash new-content-hash
-                         :bt new-business-time
-                         :tt new-transact-time
-                         :tx-id new-tx-id}] (doc/all-entities snapshot new-business-time new-transact-time)))
+              (t/is (= [(idx/map->EntityTx {:eid eid
+                                            :content-hash new-content-hash
+                                            :bt new-business-time
+                                            :tt new-transact-time
+                                            :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-transact-time)))
 
               (t/is (= prev-tx-id (-> (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-transact-time prev-transact-time)
                                       (first)
@@ -231,11 +231,11 @@
               (let [old-picasso (assoc picasso :baz :boz)]
                 @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                  (t/is (= [{:eid eid
-                             :content-hash new-content-hash
-                             :bt new-business-time
-                             :tt new-transact-time
-                             :tx-id new-tx-id}]
+                  (t/is (= [(idx/map->EntityTx {:eid eid
+                                                :content-hash new-content-hash
+                                                :bt new-business-time
+                                                :tt new-transact-time
+                                                :tx-id new-tx-id})]
                            (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))
 
             (t/testing "compare and set updates with correct content hash"
@@ -246,11 +246,11 @@
                      new-tx-id :tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
-                  (t/is (= [{:eid eid
-                             :content-hash new-content-hash
-                             :bt new-business-time
-                             :tt new-transact-time
-                             :tx-id new-tx-id}]
+                  (t/is (= [(idx/map->EntityTx {:eid eid
+                                                :content-hash new-content-hash
+                                                :bt new-business-time
+                                                :tt new-transact-time
+                                                :tx-id new-tx-id})]
                            (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))))
 
         (t/testing "can delete entity"
