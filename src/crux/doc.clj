@@ -293,7 +293,8 @@
           max-depth (dec (count unary-join-indexes))
           idx (get unary-join-indexes depth)
           values (if needs-seek?
-                   (db/-seek-values idx (get min-vs depth))
+                   (do (swap! trie-state assoc :needs-seek? false)
+                       (db/-seek-values idx (get min-vs depth)))
                    (db/-next-values idx))
           [max-k new-values] values
           [_ parent-result] (last result-stack)
@@ -301,7 +302,6 @@
                           (merge parent-result)
                           (constrain-triejoin-result shared-attrs)
                           (not-empty))]
-      (swap! trie-state assoc :needs-seek? false)
       (cond
         (and values (= depth max-depth))
         (let [max-ks (conj (mapv first result-stack) max-k)]
