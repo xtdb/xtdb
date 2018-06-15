@@ -112,6 +112,14 @@ public class ByteUtils {
         return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
     }
 
+    public static boolean equalBytes(byte[] a, byte[] b) {
+        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE) == 0;
+    }
+
+    public static boolean equalBytes(byte[] a, byte[] b, int maxLength) {
+        return ByteUtils.compareBytes(a, b, maxLength) == 0;
+    }
+
     public static class UnsignedBytesComparator implements Comparator<byte[]> {
         public int compare(byte[] a, byte[] b) {
             return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);

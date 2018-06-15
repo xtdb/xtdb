@@ -62,7 +62,7 @@
 
   (t/testing "seek within bounded prefix returns all matching keys"
     (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-             (for [[^bytes k v] (into [] (seek-and-iterate f/*kv* (partial bu/bytes=? (.getBytes "b")) (.getBytes "b")))]
+             (for [[^bytes k v] (into [] (seek-and-iterate f/*kv* #(bu/bytes=? (.getBytes "b") % (alength (.getBytes "b"))) (.getBytes "b")))]
                [(String. k) (bu/bytes->long v)]))))
 
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
@@ -104,7 +104,7 @@
 
 (defn value [kvs seek-k]
   (let [[k v] (seek kvs seek-k)]
-    (when (and k (zero? (bu/compare-bytes seek-k k)))
+    (when (and k (bu/bytes=? seek-k k))
       v)))
 
 (defn seek-and-iterate [kvs key-pred seek-k]

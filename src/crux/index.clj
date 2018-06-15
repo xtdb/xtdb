@@ -125,7 +125,7 @@
   (equals [this that]
     (or (identical? this that)
         (and (satisfies? IdToBytes that)
-             (Arrays/equals bytes (id->bytes that)))))
+             (bu/bytes=? bytes (id->bytes that)))))
 
   (hashCode [this]
     (when (zero? hash-code)

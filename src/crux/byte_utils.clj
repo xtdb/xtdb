@@ -43,6 +43,6 @@
 
 (defn bytes=?
   ([^bytes k1 ^bytes k2]
-   (zero? (ByteUtils/compareBytes k1 k2 (alength k1))))
-  ([^bytes k1 array-length ^bytes k2]
-   (zero? (ByteUtils/compareBytes k1 k2 array-length))))
+   (ByteUtils/equalBytes k1 k2))
+  ([^bytes k1 ^bytes k2 ^long max-length]
+   (ByteUtils/equalBytes k1 k2 max-length)))

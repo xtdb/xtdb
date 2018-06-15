@@ -7,8 +7,7 @@
             [crux.db :as db]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
-  (:import [java.nio ByteBuffer]
-           [java.io Closeable]
+  (:import [java.io Closeable]
            [java.util Date]
            [crux.index EntityTx]))
 
@@ -22,7 +21,7 @@
     (loop [acc []
            k current-k]
       (if-let [value+content-hash (when (and k
-                                             (bu/bytes=? current-k prefix-size k)
+                                             (bu/bytes=? current-k k prefix-size)
                                              (not (neg? (bu/compare-bytes max-seek-k k (alength max-seek-k)))))
                                     (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
         (recur (conj acc value+content-hash)
@@ -104,11 +103,11 @@
 (defn- all-keys-in-prefix
   ([i prefix]
    (all-keys-in-prefix i prefix false))
-  ([i prefix entries?]
+  ([i ^bytes prefix entries?]
    ((fn step [f-cons f-next]
           (lazy-seq
            (let [k (f-cons)]
-             (when (and k (bu/bytes=? prefix k))
+             (when (and k (bu/bytes=? prefix k (alength prefix)))
                (cons (if entries?
                        [k (ks/-value i)]
                        k) (step f-next f-next))))))
@@ -128,7 +127,7 @@
                   business-time
                   transact-time)]
       (loop [k (ks/-seek i seek-k)]
-        (when (and k (bu/bytes=? seek-k prefix-size k))
+        (when (and k (bu/bytes=? seek-k k prefix-size))
           (let [v (ks/-value i)
                 entity-tx (-> (idx/decode-entity+bt+tt+tx-id-key k)
                               (enrich-entity-tx v))]
