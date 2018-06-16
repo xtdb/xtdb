@@ -390,3 +390,11 @@
                    \0
                    \1))
           (.toByteArray (BigInteger. acc 2)))))))
+
+(defn bwt [s]
+  (->> (map-indexed (fn [i c]
+                      [(get s (dec i))
+                       (inc i)
+                       (subs s i (count s))]) s)
+       (sort-by last)
+       (vec)))
