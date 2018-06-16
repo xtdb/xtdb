@@ -329,3 +329,64 @@
            (recur acc
                   (unchecked-inc-int bit-idx)
                   node)))))))
+
+(defn encode-elias-omega-code [n]
+  (assert (pos? n))
+  (loop [acc "0"
+         n n]
+    (if (= 1 n)
+      acc
+      (let [bits (Integer/toBinaryString n)]
+        (recur (str bits acc) (dec (count bits)))))))
+
+(defn decode-elias-omega-code [c]
+  (loop [[c :as cs] c
+         n 1]
+    (if (or (= \0 c)
+            (>= (inc n) (count cs)))
+      n
+      (let [bits (subs (str cs) 0 (inc n))]
+        (recur (subs (str cs) (inc n))
+               (Integer/parseInt bits 2))))))
+
+(defn compress-rle-elias-omega [^bytes bs]
+  (let [bits (.toString (BigInteger. bs) 2)
+        last-bit (if (get bits 0)
+                   \1
+                   \0)]
+    (loop [idx 0
+           acc (str last-bit)
+           last-bit last-bit
+           rle 0]
+      (if (= idx (count bits))
+        (.toByteArray (BigInteger. (str acc (encode-elias-omega-code rle)) 2))
+        (if (= last-bit (get bits idx))
+          (recur (inc idx)
+                 acc
+                 last-bit
+                 (inc rle))
+          (recur (inc idx)
+                 (str acc (encode-elias-omega-code rle))
+                 (get bits idx)
+                 1))))))
+
+(defn decompress-rle-elias-omega ^bytes [^bytes bs]
+  (let [bits (.toString (BigInteger. bs) 2)
+        acc ""]
+    (loop [idx 1
+           acc acc
+           last-bit (get bits 0)]
+      (if (= idx (count bits))
+        (.toByteArray (BigInteger. acc 2))
+        (if-let [[oc new-idx] (loop [idx idx
+                                     n 1]
+                                (if (= \0 (get bits idx))
+                                  [n (inc idx)]
+                                  (let [new-idx (+ idx (inc n))]
+                                    (recur new-idx (Integer/parseInt (subs bits idx new-idx) 2)))))]
+          (recur (int new-idx)
+                 (apply str acc (repeat oc last-bit))
+                 (if (= \1 last-bit)
+                   \0
+                   \1))
+          (.toByteArray (BigInteger. acc 2)))))))
