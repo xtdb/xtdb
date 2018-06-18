@@ -123,6 +123,58 @@
                               [g :http://dbpedia.org/ontology/author p-iri]
                               [g :crux.rdf/iri g-iri]]}))))))
 
+;; TODO: doesn't seem to index the data properly.
+#_(t/deftest test-can-transact-and-query-lubm-entities
+  (let [tx-topic "test-can-transact-and-query-lubm-entities-tx"
+        doc-topic "test-can-transact-and-query-lubm-entities-doc"
+        tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
+                            (load-ntriples-example "lubm/University0_0.ntriples"))
+                    (map #(rdf/use-default-language % :en))
+                    (vec))
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
+
+    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+
+    (t/testing "ensure data is indexed"
+      (let [{:keys [transact-time]} @(db/submit-tx tx-log tx-ops)]
+        (t/testing "querying transacted data"
+          (t/is (= #{[:http://www.Department0.University0.edu/FullProfessor0]}
+                   (q/q (doc/db f/*kv* transact-time transact-time)
+                        {:find ['p-iri]
+                         :where [['p (keyword "http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#name") "FullProfessor0"]
+                                 ['p :crux.rdf/iri 'p-iri]]}))))))
+
+    ;; SPARQL
+    ;; PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    ;; PREFIX ub: <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#>
+    ;; SELECT ?X
+    ;; WHERE
+    ;; {?X rdf:type ub:GraduateStudent .
+    ;;   ?X ub:takesCourse
+    ;; http://www.Department0.University0.edu/GraduateCourse0}
+
+    ;; EmptyHeaded Datalog
+    ;; lubm1(a) :- b='http://www.Department0.University0.edu/GraduateCourse0',
+    ;;   c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
+    ;;   takesCourse(a,b),rdftype(a,c).
+    (t/testing "LUBM query 1"
+      (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
+                 [:http://www.Department0.University0.edu/GraduateStudent124]
+                 [:http://www.Department0.University0.edu/GraduateStudent142]
+                 [:http://www.Department0.University0.edu/GraduateStudent44]}
+               (q/q (doc/db f/*kv*)
+                    {:find ['a-iri]
+                     :where [['a
+                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
+                              :http://www.Department0.University0.edu/GraduateCourse0]
+                             ['a
+                              (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                              (keyword "http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent")]
+                             ['a :crux.rdf/iri 'a-iri]]}))))))
+
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
 ;; instance_types_en.nt contains type definitions only.
