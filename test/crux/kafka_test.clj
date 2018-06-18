@@ -53,11 +53,13 @@
 
     (let [docs (map k/consumer-record->value (.poll ek/*consumer* 10000))]
       (t/is (= 7 (count docs)))
-      (t/is (= {:http://xmlns.com/foaf/0.1/firstName "Pablo"
-                :http://xmlns.com/foaf/0.1/surname "Picasso"}
+      (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                 {:foaf/firstName "Pablo"
+                  :foaf/surname "Picasso"})
                (select-keys (first docs)
-                            [:http://xmlns.com/foaf/0.1/firstName
-                             :http://xmlns.com/foaf/0.1/surname]))))))
+                            (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                              [:foaf/firstName
+                               :foaf/surname])))))))
 
 (t/deftest test-can-transact-and-query-entities
   (let [tx-topic "test-can-transact-and-query-entities-tx"
@@ -84,8 +86,9 @@
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
                (q/q (doc/db f/*kv*)
-                    '{:find [e]
-                      :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]]}))))))
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                      '{:find [e]
+                        :where [[e :foaf/firstName "Pablo"]]})))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
@@ -108,14 +111,17 @@
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
                (q/q (doc/db f/*kv*)
-                    '{:find [e]
-                      :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]]})))
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                      '{:find [e]
+                        :where [[e :foaf/givenName "Pablo"]]}))))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
                (q/q (doc/db f/*kv*)
-                    '{:find [g]
-                      :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
-                              [g :http://dbpedia.org/ontology/author p]]}))))))
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
+                                      :dbo "http://dbpedia.org/ontology/"}
+                      '{:find [g]
+                        :where [[p :foaf/givenName "Pablo"]
+                                [g :dbo/author p]]})))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
@@ -180,10 +186,12 @@
                           (long n)))))))
 
           (t/testing "querying transacted data"
-            (t/is (= #{[:http://dbpedia.org/resource/Aristotle]
-                       [(keyword "http://dbpedia.org/resource/Aristotle_(painting)")]
-                       [(keyword "http://dbpedia.org/resource/Aristotle_(book)")]}
+            (t/is (= (rdf/with-prefix {:dbr "http://dbpedia.org/resource/"}
+                       #{[:dbr/Aristotle]
+                         [(keyword "dbr/Aristotle_(painting)")]
+                         [(keyword "dbr/Aristotle_(book)")]})
                      (q/q (doc/db f/*kv*)
+                          (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"})
                           '{:find [e]
-                            :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]]})))))
+                            :where [[e :foaf/name "Aristotle"]]})))))
       (t/is true "skipping"))))

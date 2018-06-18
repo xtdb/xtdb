@@ -4,6 +4,7 @@
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
            [java.util Arrays Date UUID]
+           [java.net URI]
            [clojure.lang IHashEq IPersistentMap Keyword]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -89,15 +90,19 @@
 
   ByteBuffer
   (id->bytes [this]
-    (.array this))
+    (bu/byte-buffer->bytes this))
 
   Keyword
   (id->bytes [this]
-    (bu/sha1 (.getBytes (str this))))
+    (bu/sha1 (.getBytes (subs (str this) 1))))
 
   UUID
   (id->bytes [this]
     (bu/sha1 (.getBytes (str this))))
+
+  URI
+  (id->bytes [this]
+    (bu/sha1 (.getBytes (str (.normalize this)))))
 
   String
   (id->bytes [this]
