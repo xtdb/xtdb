@@ -51,13 +51,11 @@
                  [:http://www.Department0.University0.edu/GraduateStudent142]
                  [:http://www.Department0.University0.edu/GraduateStudent44]}
                (q/q (doc/db f/*kv*)
-                    {:find ['x]
-                     :where [['x
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
-                              :http://www.Department0.University0.edu/GraduateCourse0]
-                             ['x
-                              (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]}))))
+                    (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                      :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                      '{:find [x]
+                        :where [[x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]
+                                [x :rdf/type :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]})))))
 
     ;; TODO: subOrganizationOf is transitive, should use rules.
 
@@ -65,25 +63,15 @@
     ;; there is a triangular pattern of relationships between the objects involved.
     (t/testing "LUBM query 2"
       (t/is (empty? (q/q (doc/db f/*kv*)
-                         {:find ['x 'y 'z]
-                          :where [['x
-                                   (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]
-                                  ['y
-                                   (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#University]
-                                  ['z
-                                   (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
-                                  ['x
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#memberOf
-                                   'z]
-                                  ['z
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
-                                   'y]
-                                  ['x
-                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#undergraduateDegreeFrom
-                                   'y]]}))))
+                         (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                           :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                           '{:find [x y z]
+                             :where [[x :rdf/type :ub/GraduateStudent]
+                                     [y :rdf/type :ub/University]
+                                     [z :rdf/type :ub/Department]
+                                     [x :ub/memberOf z]
+                                     [z :ub/subOrganizationOf y]
+                                     [x :ub/undergraduateDegreeFrom y]]})))))
 
     ;; TODO: Publication has subClassOf children, should use rules.
 
@@ -96,13 +84,11 @@
                  [:http://www.Department0.University0.edu/AssistantProfessor0/Publication4]
                  [:http://www.Department0.University0.edu/AssistantProfessor0/Publication5]}
                (q/q (doc/db f/*kv*)
-                    {:find ['x]
-                     :where [['x
-                              (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Publication]
-                             ['x
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#publicationAuthor
-                              :http://www.Department0.University0.edu/AssistantProfessor0]]}))))
+                    (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                      :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                      '{:find [x]
+                        :where [[x :rdf/type :ub/Publication]
+                                [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
 
     ;; TODO: AssociateProfessor should be Professor. Should return 35.
 
@@ -111,22 +97,14 @@
     ;; feature is that it queries about multiple properties of a single class.
     (t/testing "LUBM query 4"
       (t/is (= 14 (count (q/q (doc/db f/*kv*)
-                              {:find ['x 'y1 'y2 'y3]
-                               :where [['x
-                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#AssociateProfessor]
-                                       ['x
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
-                                        :http://www.Department0.University0.edu]
-                                       ['x
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name
-                                        'y1]
-                                       ['x
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
-                                        'y2]
-                                       ['x
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#telephone
-                                        'y3]]})))))
+                              (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                                :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                '{:find [x y1 y2 y3]
+                                  :where [[x :rdf/type :ub/AssociateProfessor]
+                                          [x :ub/worksFor :http://www.Department0.University0.edu]
+                                          [x :ub/name y1]
+                                          [x :ub/emailAddress y2]
+                                          [x :ub/telephone y3]]}))))))
 
 
     ;; This query assumes subClassOf relationship between Person and its subclasses
@@ -182,22 +160,14 @@
     ;; This query is further more complex than Query 7 by including one more property.
     (t/testing "LUBM query 8"
       (t/is (= 532 (count (q/q (doc/db f/*kv*)
-                               {:find ['x 'y 'z]
-                                :where [['x
-                                         (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#UndergraduateStudent]
-                                        ['y
-                                         (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
-                                        ['x
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#memberOf
-                                         'y]
-                                        ['y
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
-                                         :http://www.University0.edu]
-                                        ['x
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
-                                         'z]]})))))
+                               (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                                 :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                 '{:find [x y z]
+                                   :where [[x :rdf/type :ub/UndergraduateStudent]
+                                           [y :rdf/type :ub/Department]
+                                           [x :ub/memberOf y]
+                                           [y :ub/subOrganizationOf :http://www.University0.edu]
+                                           [x :ub/emailAddress z]]}))))))
 
     ;; Besides the aforementioned features of class Student and the wide hierarchy of
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
@@ -268,19 +238,13 @@
     ;; department. Input of this query is small as well.
     (t/testing "LUBM query 12"
       (t/is (= 10 (count (q/q (doc/db f/*kv*)
-                              {:find ['x 'y]
-                               :where [['x
-                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#FullProfessor]
-                                       ['y
-                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
-                                       ['x
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
-                                        'y]
-                                       ['y
-                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
-                                        :http://www.University0.edu]]})))))
+                              (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                                :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                '{:find [x y]
+                                  :where [[x :rdf/type :ub/FullProfessor]
+                                          [y :rdf/type :ub/Department]
+                                          [x :ub/worksFor y]
+                                          [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
 
     ;; Property hasAlumnus is defined in the benchmark ontology as the inverse of
     ;; property degreeFrom, which has three subproperties: undergraduateDegreeFrom,
@@ -307,7 +271,7 @@
     ;; not assume any hierarchy information or inference.
     (t/testing "LUBM query 14"
       (t/is (= 532 (count (q/q (doc/db f/*kv*)
-                               {:find ['x]
-                                :where [['x
-                                         (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#UndergraduateStudent]]})))))))
+                               (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                                 :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                 '{:find [x]
+                                   :where [[x :rdf/type :ub/UndergraduateStudent]]}))))))))

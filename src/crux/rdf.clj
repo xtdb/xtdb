@@ -199,3 +199,11 @@
                    (db/submit-tx tx-log tx-ops))
                  (+ n (count entities)))
                0)))
+
+(defn with-prefix [prefixes x]
+  (w/postwalk
+   #(if-let [ns (and (keyword? %)
+                     (get prefixes (keyword (namespace %))))]
+      (keyword (str ns (name %)))
+      %)
+   x))
