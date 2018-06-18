@@ -123,7 +123,6 @@
                           (last))]
     (db/store-index-meta indexer :crux.tx-log/tx-time (Date. ^long tx-time))))
 
-;; TODO: make this fn return something that makes sense.
 (defn consume-and-index-entities
   ([indexer consumer]
    (consume-and-index-entities indexer consumer 10000))
@@ -136,7 +135,10 @@
                   (reduce into []))]
      (store-topic-partition-offsets indexer consumer (.partitions records))
      (store-tx-log-time indexer records)
-     txs)))
+     (when-let [{txs true
+                 docs false} (not-empty (group-by tx-record? records))]
+       {:txs (count txs)
+        :docs (count docs)}))))
 
 (defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer ^List topics]
   (.subscribe consumer

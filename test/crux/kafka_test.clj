@@ -75,7 +75,7 @@
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
 
-      (t/is (= 20 (count (k/consume-and-index-entities indexer ek/*consumer*))))
+      (t/is (= {:txs 1 :docs 3} (k/consume-and-index-entities indexer ek/*consumer*)))
       (t/is (empty? (.poll ek/*consumer* 1000))))
 
     (t/testing "restoring to stored offsets"
@@ -106,7 +106,7 @@
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
-      (t/is (= 82 (count (k/consume-and-index-entities indexer ek/*consumer*)))))
+      (t/is (= {:txs 1 :docs 2} (k/consume-and-index-entities indexer ek/*consumer*))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
@@ -140,7 +140,7 @@
 
     (t/testing "ensure data is indexed"
       (let [{:keys [transact-time]} @(db/submit-tx tx-log tx-ops)]
-        (while (pos? (count (k/consume-and-index-entities indexer ek/*consumer* 10000))))
+        (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 1000)))
         (t/testing "querying transacted data"
           (t/is (= #{[:http://www.University0.edu]}
                    (q/q (doc/db f/*kv* transact-time transact-time)
@@ -231,9 +231,9 @@
                (with-open [in (io/input-stream mappingbased-properties-file)]
                  (reset! n-transacted (rdf/submit-ntriples tx-log in tx-size)))))
             (time
-             (loop [entities (k/consume-and-index-entities indexer ek/*consumer* 100)
+             (loop [{:keys [docs]} (k/consume-and-index-entities indexer ek/*consumer* 100)
                     n 0]
-               (let [n (add-and-print-progress n (count entities) "indexed")]
+               (let [n (add-and-print-progress n docs "indexed")]
                  (when-not (= n @n-transacted)
                    (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
                           (long n)))))))
