@@ -118,8 +118,7 @@
                       :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [g :http://dbpedia.org/ontology/author p]]}))))))
 
-;; TODO: not passing the LUBM query yet, takesCourse returns nothing.
-#_(t/deftest test-can-transact-and-query-lubm-entities
+(t/deftest test-can-transact-and-query-lubm-entities
   (let [tx-topic "test-can-transact-and-query-lubm-entities-tx"
         doc-topic "test-can-transact-and-query-lubm-entities-doc"
         tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
@@ -161,11 +160,11 @@
                      [:http://www.Department0.University0.edu/GraduateStudent142]
                      [:http://www.Department0.University0.edu/GraduateStudent44]}
                    (q/q (doc/db f/*kv* transact-time transact-time)
-                        {:find ['a]
-                         :where [['a
+                        {:find ['x]
+                         :where [['x
                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
                                   :http://www.Department0.University0.edu/GraduateCourse0]
-                                 ['a
+                                 ['x
                                   (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
                                   :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]}))))))))
 
