@@ -1,0 +1,16 @@
+X	Y
+http://www.Department0.University0.edu/FullProfessor7	http://www.Department0.University0.edu
+http://www.Department1.University0.edu/FullProfessor4	http://www.Department1.University0.edu
+http://www.Department10.University0.edu/FullProfessor5	http://www.Department10.University0.edu
+http://www.Department11.University0.edu/FullProfessor1	http://www.Department11.University0.edu
+http://www.Department12.University0.edu/FullProfessor2	http://www.Department12.University0.edu
+http://www.Department13.University0.edu/FullProfessor7	http://www.Department13.University0.edu
+http://www.Department14.University0.edu/FullProfessor6	http://www.Department14.University0.edu
+http://www.Department2.University0.edu/FullProfessor4	http://www.Department2.University0.edu
+http://www.Department3.University0.edu/FullProfessor4	http://www.Department3.University0.edu
+http://www.Department4.University0.edu/FullProfessor3	http://www.Department4.University0.edu
+http://www.Department5.University0.edu/FullProfessor4	http://www.Department5.University0.edu
+http://www.Department6.University0.edu/FullProfessor1	http://www.Department6.University0.edu
+http://www.Department7.University0.edu/FullProfessor1	http://www.Department7.University0.edu
+http://www.Department8.University0.edu/FullProfessor3	http://www.Department8.University0.edu
+http://www.Department9.University0.edu/FullProfessor0	http://www.Department9.University0.edu

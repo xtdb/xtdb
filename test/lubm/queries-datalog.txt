@@ -1,0 +1,59 @@
+## Based on EmptyHeaded https://github.com/HazyResearch/EmptyHeaded/blob/master/test/rdf/travis.py
+## Does not contain all 14 LUBM queries.
+
+# Query1
+# This query bears large input and high selectivity. It queries about just one class and
+# one property and does not assume any hierarchy information or inference.
+lubm1(a) :- b='http://www.Department0.University0.edu/GraduateCourse0',
+  c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
+  takesCourse(a,b),rdftype(a,c).
+
+# Query2
+# This query increases in complexity: 3 classes and 3 properties are involved. Additionally,
+# there is a triangular pattern of relationships between the objects involved.
+lubm2(a,b,c) :- x='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
+  y='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Department',
+  z='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#University',
+  memberOf(a,b),subOrganizationOf(b,c),undegraduateDegreeFrom(a,c),rdftype(a,x),rdftype(b,y),rdftype(c,z).
+
+# Query4
+# This query has small input and high selectivity. It assumes subClassOf relationship
+# between Professor and its subclasses. Class Professor has a wide hierarchy. Another
+# feature is that it queries about multiple properties of a single class.
+lubm4(a,b,c,d) :- e='http://www.Department0.University0.edu',
+  f='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#AssociateProfessor',
+  worksFor(a,e),name(a,b),emailAddress(a,d),telephone(a,c),rdftype(a,f).
+
+# Query6
+# This query queries about only one class. But it assumes both the explicit
+# subClassOf relationship between UndergraduateStudent and Student and the
+# implicit one between GraduateStudent and Student. In addition, it has large
+# input and low selectivity.
+lubm6(a) :- b='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#UndergraduateStudent',
+  rdftype(a,b).
+
+# Query7
+# This query is similar to Query 6 in terms of class Student but it increases in the
+# number of classes and properties and its selectivity is high.
+lubm7(a,b) :- c='http://www.Department0.University0.edu/AssociateProfessor0',
+  d='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Course',
+  e='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#UndergraduateStudent',
+  teacherOf(c,b),takesCourse(a,b),rdftype(b,d),rdftype(a,e).
+
+# Query8
+# This query is further more complex than Query 7 by including one more property.
+lubm8(a,b,c) :- d='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#UndergraduateStudent',
+  e='http://www.University0.edu',
+  f='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Department',
+  memberOf(a,b),emailAddress(a,c),rdftype(a,d),subOrganizationOf(b,e),rdftype(b,f).
+
+# Query12
+# The benchmark data do not produce any instances of class Chair. Instead, each
+# Department individual is linked to the chair professor of that department by
+# property headOf. Hence this query requires realization, i.e., inference that
+# that professor is an instance of class Chair because he or she is the head of a
+# department. Input of this query is small as well.
+lubm12(a,b) :- c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#FullProfessor',
+  d='http://www.University0.edu',
+  e='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#Department',
+  worksFor(a,b),rdftype(a,c),subOrganizationOf(b,d),rdftype(b,e).
