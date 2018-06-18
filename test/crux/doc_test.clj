@@ -21,7 +21,7 @@
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
          (map #(rdf/use-default-language % :en))
-         (#(rdf/maps-by-iri % false)))))
+         (#(rdf/maps-by-id %)))))
 
 (t/deftest test-can-store-doc
   (let [tx-log (tx/->DocTxLog f/*kv*)
@@ -29,7 +29,7 @@
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (idx/new-id picasso)]
-    (t/is (= 47 (count picasso)))
+    (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
     (db/submit-doc tx-log content-hash picasso)

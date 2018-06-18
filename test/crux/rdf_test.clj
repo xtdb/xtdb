@@ -7,7 +7,7 @@
   (with-open [in (io/input-stream (io/resource resource))]
     (->> (rdf/ntriples-seq in)
          (rdf/statements->maps)
-         (rdf/maps-by-iri))))
+         (rdf/maps-by-id))))
 
 ;; Example based on:
 ;; https://github.com/eclipse/rdf4j-doc/blob/master/examples/src/main/resources/example-data-artists.ttl
@@ -30,7 +30,7 @@
                (-> artist
                    :http://example.org/homeAddress
                    iri->entity
-                   (dissoc :crux.rdf/iri)))))))
+                   (dissoc :crux.db/id)))))))
 
 (t/deftest test-can-parse-dbpedia-entity
   (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")

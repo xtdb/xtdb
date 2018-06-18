@@ -36,9 +36,8 @@
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
     (vec (for [entity (->> (rdf/ntriples-seq in)
-                           (rdf/statements->maps)
-                           (map rdf/use-iri-as-id))]
-           [:crux.tx/put (:crux.rdf/iri entity) entity]))))
+                           (rdf/statements->maps))]
+           [:crux.tx/put (:crux.db/id entity) entity]))))
 
 (t/deftest test-can-transact-entities
   (let [tx-topic "test-can-transact-entities-tx"
@@ -86,9 +85,8 @@
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
                (q/q (doc/db f/*kv*)
-                    '{:find [iri]
-                      :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]
-                              [e :crux.rdf/iri iri]]}))))))
+                    '{:find [e]
+                      :where [[e :http://xmlns.com/foaf/0.1/firstName "Pablo"]]}))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
@@ -111,17 +109,14 @@
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
                (q/q (doc/db f/*kv*)
-                    '{:find [iri]
-                      :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]
-                              [e :crux.rdf/iri iri]]})))
+                    '{:find [e]
+                      :where [[e :http://xmlns.com/foaf/0.1/givenName "Pablo"]]})))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
                (q/q (doc/db f/*kv*)
-                    '{:find [g-iri]
+                    '{:find [g]
                       :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
-                              [p :crux.rdf/iri p-iri]
-                              [g :http://dbpedia.org/ontology/author p-iri]
-                              [g :crux.rdf/iri g-iri]]}))))))
+                              [g :http://dbpedia.org/ontology/author p]]}))))))
 
 ;; TODO: not passing the LUBM query yet, takesCourse returns nothing.
 #_(t/deftest test-can-transact-and-query-lubm-entities
@@ -140,41 +135,39 @@
 
     (t/testing "ensure data is indexed"
       (let [{:keys [transact-time]} @(db/submit-tx tx-log tx-ops)]
-        (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 1000)))
+        (while (not-empty (k/consume-and-index-entities indexer ek/*consumer*)))
         (t/testing "querying transacted data"
           (t/is (= #{[:http://www.University0.edu]}
                    (q/q (doc/db f/*kv* transact-time transact-time)
-                        {:find ['u-iri]
-                         :where [['u :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name "University0"]
-                                 ['u :crux.rdf/iri 'u-iri]]}))))))
+                        '{:find [u]
+                          :where [[u :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name "University0"]]}))))
 
-    ;; SPARQL
-    ;; PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-    ;; PREFIX ub: <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#>
-    ;; SELECT ?X
-    ;; WHERE
-    ;; {?X rdf:type ub:GraduateStudent .
-    ;;   ?X ub:takesCourse
-    ;; http://www.Department0.University0.edu/GraduateCourse0}
+        ;; SPARQL
+        ;; PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+        ;; PREFIX ub: <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#>
+        ;; SELECT ?X
+        ;; WHERE
+        ;; {?X rdf:type ub:GraduateStudent .
+        ;;   ?X ub:takesCourse
+        ;; http://www.Department0.University0.edu/GraduateCourse0}
 
-    ;; EmptyHeaded Datalog
-    ;; lubm1(a) :- b='http://www.Department0.University0.edu/GraduateCourse0',
-    ;;   c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
-    ;;   takesCourse(a,b),rdftype(a,c).
-    (t/testing "LUBM query 1"
-      (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
-                 [:http://www.Department0.University0.edu/GraduateStudent124]
-                 [:http://www.Department0.University0.edu/GraduateStudent142]
-                 [:http://www.Department0.University0.edu/GraduateStudent44]}
-               (q/q (doc/db f/*kv*)
-                    {:find ['a-iri]
-                     :where [['a
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
-                              :http://www.Department0.University0.edu/GraduateCourse0]
-                             ['a
-                              (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]
-                             ['a :crux.rdf/iri 'a-iri]]}))))))
+        ;; EmptyHeaded Datalog
+        ;; lubm1(a) :- b='http://www.Department0.University0.edu/GraduateCourse0',
+        ;;   c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
+        ;;   takesCourse(a,b),rdftype(a,c).
+        (t/testing "LUBM query 1"
+          (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
+                     [:http://www.Department0.University0.edu/GraduateStudent124]
+                     [:http://www.Department0.University0.edu/GraduateStudent142]
+                     [:http://www.Department0.University0.edu/GraduateStudent44]}
+                   (q/q (doc/db f/*kv* transact-time transact-time)
+                        {:find ['a]
+                         :where [['a
+                                  :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
+                                  :http://www.Department0.University0.edu/GraduateCourse0]
+                                 ['a
+                                  (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                  :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]}))))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
@@ -243,7 +236,6 @@
                        [(keyword "http://dbpedia.org/resource/Aristotle_(painting)")]
                        [(keyword "http://dbpedia.org/resource/Aristotle_(book)")]}
                      (q/q (doc/db f/*kv*)
-                          '{:find [iri]
-                            :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
-                                    [e :crux.rdf/iri iri]]})))))
+                          '{:find [e]
+                            :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]]})))))
       (t/is true "skipping"))))

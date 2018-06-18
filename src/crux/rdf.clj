@@ -117,9 +117,6 @@
                   (lang->str x language)
                   x)) rdf-map))
 
-(defn use-iri-as-id [m]
-  (assoc m :crux.db/id (:crux.rdf/iri m)))
-
 (defn entity-statements->map [entity-statements]
   (when-let [^Statement statement (first entity-statements)]
     (->> entity-statements
@@ -140,7 +137,7 @@
               (catch IllegalArgumentException e
                 (log/debug e "Could not turn RDF statement into Clojure:" statement)
                 m)))
-          (transient {:crux.rdf/iri (rdf->clj (.getSubject statement))}))
+          (transient {:crux.db/id (rdf->clj (.getSubject statement))}))
          (persistent!))))
 
 (defn statements->maps [statements]
@@ -149,14 +146,10 @@
                        (.getSubject s)))
        (map entity-statements->map)))
 
-(defn maps-by-iri
-  ([rdf-maps]
-   (maps-by-iri rdf-maps true))
-  ([rdf-maps keep-iri?]
-   (->> (for [m rdf-maps]
-          {(:crux.rdf/iri m) (cond-> m
-                               (not keep-iri?) (dissoc :crux.rdf/iri))})
-        (into {}))))
+(defn maps-by-id [rdf-maps]
+  (->> (for [m rdf-maps]
+         {(:crux.db/id m) m})
+       (into {})))
 
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
@@ -197,13 +190,12 @@
   (->> (ntriples-seq in)
        (statements->maps)
        (map #(use-default-language % *default-language*))
-       (map use-iri-as-id)
        (partition-all tx-size)
        (reduce (fn [^long n entities]
                  (when (zero? (long (mod n *ntriples-log-size*)))
                    (log/debug "submitted" n))
                  (let [tx-ops (vec (for [entity entities]
-                                     [:crux.tx/put (:crux.rdf/iri entity) entity]))]
+                                     [:crux.tx/put (:crux.db/id entity) entity]))]
                    (db/submit-tx tx-log tx-ops))
                  (+ n (count entities)))
                0)))
