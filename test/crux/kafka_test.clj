@@ -11,8 +11,7 @@
             [crux.query :as q]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
-  (:import [java.util Date]
-           [org.apache.kafka.clients.producer
+  (:import [org.apache.kafka.clients.producer
             ProducerRecord]
            [org.apache.kafka.common TopicPartition]))
 
@@ -117,56 +116,6 @@
                     '{:find [g]
                       :where [[p :http://xmlns.com/foaf/0.1/givenName "Pablo"]
                               [g :http://dbpedia.org/ontology/author p]]}))))))
-
-(t/deftest test-can-transact-and-query-lubm-entities
-  (let [tx-topic "test-can-transact-and-query-lubm-entities-tx"
-        doc-topic "test-can-transact-and-query-lubm-entities-doc"
-        tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
-                            (load-ntriples-example "lubm/University0_0.ntriples"))
-                    (map #(rdf/use-default-language % :en))
-                    (vec))
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
-
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
-
-    (t/testing "ensure data is indexed"
-      (let [{:keys [transact-time]} @(db/submit-tx tx-log tx-ops)]
-        (while (not-empty (k/consume-and-index-entities indexer ek/*consumer*)))
-        (t/testing "querying transacted data"
-          (t/is (= #{[:http://www.University0.edu]}
-                   (q/q (doc/db f/*kv* transact-time transact-time)
-                        '{:find [u]
-                          :where [[u :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name "University0"]]}))))
-
-        ;; SPARQL
-        ;; PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-        ;; PREFIX ub: <http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#>
-        ;; SELECT ?X
-        ;; WHERE
-        ;; {?X rdf:type ub:GraduateStudent .
-        ;;   ?X ub:takesCourse
-        ;; http://www.Department0.University0.edu/GraduateCourse0}
-
-        ;; EmptyHeaded Datalog
-        ;; lubm1(a) :- b='http://www.Department0.University0.edu/GraduateCourse0',
-        ;;   c='http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent',
-        ;;   takesCourse(a,b),rdftype(a,c).
-        (t/testing "LUBM query 1"
-          (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
-                     [:http://www.Department0.University0.edu/GraduateStudent124]
-                     [:http://www.Department0.University0.edu/GraduateStudent142]
-                     [:http://www.Department0.University0.edu/GraduateStudent44]}
-                   (q/q (doc/db f/*kv* transact-time transact-time)
-                        {:find ['x]
-                         :where [['x
-                                  :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
-                                  :http://www.Department0.University0.edu/GraduateCourse0]
-                                 ['x
-                                  (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                  :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]}))))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
