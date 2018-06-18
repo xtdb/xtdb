@@ -60,6 +60,7 @@
                               :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]]}))))
 
     ;; TODO: subOrganizationOf is transitive, should use rules.
+
     ;; This query increases in complexity: 3 classes and 3 properties are involved. Additionally,
     ;; there is a triangular pattern of relationships between the objects involved.
     (t/testing "LUBM query 2"
@@ -85,6 +86,7 @@
                                    'y]]}))))
 
     ;; TODO: Publication has subClassOf children, should use rules.
+
     ;; This query is similar to Query 1 but class Publication has a wide hierarchy.
     (t/testing "LUBM query 3"
       (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor0/Publication0]
@@ -102,28 +104,29 @@
                               :http://swat.cse.lehigh.edu/onto/univ-bench.owl#publicationAuthor
                               :http://www.Department0.University0.edu/AssistantProfessor0]]}))))
 
+    ;; TODO: AssociateProfessor should be Professor. Should return 35.
+
     ;; This query has small input and high selectivity. It assumes subClassOf relationship
     ;; between Professor and its subclasses. Class Professor has a wide hierarchy. Another
     ;; feature is that it queries about multiple properties of a single class.
-    #_(t/testing "LUBM query 4"
-        (t/is (= #{}
-                 (q/q (doc/db f/*kv*)
-                      {:find ['x 'y1 'y2 'y3]
-                       :where [['x
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Professor]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
-                                :http://www.Department0.University0.edu]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name
-                                'y1]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
-                                'y2]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#telephone
-                                'y3]]}))))
+    (t/testing "LUBM query 4"
+      (t/is (= 14 (count (q/q (doc/db f/*kv*)
+                              {:find ['x 'y1 'y2 'y3]
+                               :where [['x
+                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#AssociateProfessor]
+                                       ['x
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
+                                        :http://www.Department0.University0.edu]
+                                       ['x
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name
+                                        'y1]
+                                       ['x
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
+                                        'y2]
+                                       ['x
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#telephone
+                                        'y3]]})))))
 
 
     ;; This query assumes subClassOf relationship between Person and its subclasses
@@ -152,45 +155,49 @@
                                 (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
                                 :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Student]]}))))
 
+    ;; TODO: UndergraduateStudent should be Student. Does not work
+    ;; regardless, returns 1597.
+
     ;; This query is similar to Query 6 in terms of class Student but it increases in the
     ;; number of classes and properties and its selectivity is high.
     #_(t/testing "LUBM query 7"
-        (t/is (= #{}
-                 (q/q (doc/db f/*kv*)
-                      {:find ['x 'y]
-                       :where [['x
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Student]
-                               ['y
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Course]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
-                                'y]
-                               [:http://www.Department0.University0.edu/AssociateProfessor0
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#teacherOf
-                                'y]]}))))
+        (t/is (= 59 (count (q/q (doc/db f/*kv*)
+                                {:find ['x 'y]
+                                 :where [['x
+                                          (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                          :http://swat.cse.lehigh.edu/onto/univ-bench.owl#UndergraduateStudent]
+                                         ['y
+                                          (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                          :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Course]
+                                         ['x
+                                          :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
+                                          'y]
+                                         [:http://www.Department0.University0.edu/AssociateProfessor0
+                                          :http://swat.cse.lehigh.edu/onto/univ-bench.owl#teacherOf
+                                          'y]]})))))
+
+    ;; TODO: UndergraduateStudent should be Student. Really assumes
+    ;; more departments loaded. Should return 7791.
 
     ;; This query is further more complex than Query 7 by including one more property.
-    #_(t/testing "LUBM query 8"
-        (t/is (= #{}
-                 (q/q (doc/db f/*kv*)
-                      {:find ['x 'y 'z]
-                       :where [['x
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Student]
-                               ['y
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#memberOf
-                                'y]
-                               ['y
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
-                                :http://www.University0.edu]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
-                                'z]]}))))
+    (t/testing "LUBM query 8"
+      (t/is (= 532 (count (q/q (doc/db f/*kv*)
+                               {:find ['x 'y 'z]
+                                :where [['x
+                                         (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#UndergraduateStudent]
+                                        ['y
+                                         (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
+                                        ['x
+                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#memberOf
+                                         'y]
+                                        ['y
+                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
+                                         :http://www.University0.edu]
+                                        ['x
+                                         :http://swat.cse.lehigh.edu/onto/univ-bench.owl#emailAddress
+                                         'z]]})))))
 
     ;; Besides the aforementioned features of class Student and the wide hierarchy of
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
@@ -217,6 +224,7 @@
                                ['x
                                 :http://swat.cse.lehigh.edu/onto/univ-bench.owl#takesCourse
                                 'z]]}))))
+
     ;; This query differs from Query 6, 7, 8 and 9 in that it only requires the
     ;; (implicit) subClassOf relationship between GraduateStudent and Student, i.e.,
     ;; subClassOf rela-tionship between UndergraduateStudent and Student does not add
@@ -250,27 +258,29 @@
                                 :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
                                 :http://www.University0.edu]]}))))
 
+    ;; TODO: FullProfessor should really be Chair. Really assumes more
+    ;; departments loaded.  Should return 15.
+
     ;; The benchmark data do not produce any instances of class Chair. Instead, each
     ;; Department individual is linked to the chair professor of that department by
     ;; property headOf. Hence this query requires realization, i.e., inference that
     ;; that professor is an instance of class Chair because he or she is the head of a
     ;; department. Input of this query is small as well.
-    #_(t/testing "LUBM query 12"
-        (t/is (= #{}
-                 (q/q (doc/db f/*kv*)
-                      {:find ['x 'y]
-                       :where [['x
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Chair]
-                               ['y
-                                (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
-                               ['x
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
-                                'y]
-                               ['y
-                                :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
-                                :http://www.University0.edu]]}))))
+    (t/testing "LUBM query 12"
+      (t/is (= 10 (count (q/q (doc/db f/*kv*)
+                              {:find ['x 'y]
+                               :where [['x
+                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#FullProfessor]
+                                       ['y
+                                        (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#Department]
+                                       ['x
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#worksFor
+                                        'y]
+                                       ['y
+                                        :http://swat.cse.lehigh.edu/onto/univ-bench.owl#subOrganizationOf
+                                        :http://www.University0.edu]]})))))
 
     ;; Property hasAlumnus is defined in the benchmark ontology as the inverse of
     ;; property degreeFrom, which has three subproperties: undergraduateDegreeFrom,
@@ -289,7 +299,9 @@
                                 :http://swat.cse.lehigh.edu/onto/univ-bench.owl#hasAlumnus
                                 'x]]}))))
 
-    ;; TODO: really assumes more departments loaded.
+    ;; TODO: really assumes more departments loaded. Should return
+    ;; 5916.
+
     ;; This query is the simplest in the test set. This query
     ;; represents those with large input and low selectivity and does
     ;; not assume any hierarchy information or inference.
