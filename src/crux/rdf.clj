@@ -200,10 +200,18 @@
                  (+ n (count entities)))
                0)))
 
-(defn with-prefix [prefixes x]
-  (w/postwalk
-   #(if-let [ns (and (keyword? %)
-                     (get prefixes (keyword (namespace %))))]
-      (keyword (str ns (name %)))
-      %)
-   x))
+(def ^:dynamic *default-prefixes* {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                   :rdfs "http://www.w3.org/2000/01/rdf-schema#"
+                                   :xsd "http://www.w3.org/2001/XMLSchema#"
+                                   :owl "http://www.w3.org/2002/07/owl#"})
+
+(defn with-prefix
+  ([x] (with-prefix {} x))
+  ([prefixes x]
+   (let [prefixes (merge *default-prefixes* prefixes)]
+     (w/postwalk
+      #(if-let [ns (and (keyword? %)
+                        (get prefixes (keyword (namespace %))))]
+         (keyword (str ns (name %)))
+         %)
+      x))))
