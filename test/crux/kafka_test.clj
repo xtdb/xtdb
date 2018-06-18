@@ -123,7 +123,7 @@
                               [g :http://dbpedia.org/ontology/author p-iri]
                               [g :crux.rdf/iri g-iri]]}))))))
 
-;; TODO: doesn't seem to index the data properly.
+;; TODO: not passing the LUBM query yet, takesCourse returns nothing.
 #_(t/deftest test-can-transact-and-query-lubm-entities
   (let [tx-topic "test-can-transact-and-query-lubm-entities-tx"
         doc-topic "test-can-transact-and-query-lubm-entities-doc"
@@ -140,12 +140,13 @@
 
     (t/testing "ensure data is indexed"
       (let [{:keys [transact-time]} @(db/submit-tx tx-log tx-ops)]
+        (while (pos? (count (k/consume-and-index-entities indexer ek/*consumer* 10000))))
         (t/testing "querying transacted data"
-          (t/is (= #{[:http://www.Department0.University0.edu/FullProfessor0]}
+          (t/is (= #{[:http://www.University0.edu]}
                    (q/q (doc/db f/*kv* transact-time transact-time)
-                        {:find ['p-iri]
-                         :where [['p (keyword "http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#name") "FullProfessor0"]
-                                 ['p :crux.rdf/iri 'p-iri]]}))))))
+                        {:find ['u-iri]
+                         :where [['u :http://swat.cse.lehigh.edu/onto/univ-bench.owl#name "University0"]
+                                 ['u :crux.rdf/iri 'u-iri]]}))))))
 
     ;; SPARQL
     ;; PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -172,7 +173,7 @@
                               :http://www.Department0.University0.edu/GraduateCourse0]
                              ['a
                               (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-                              (keyword "http://www.lehigh.edu/~zhp2/2004/0401/univ-bench.owl#GraduateStudent")]
+                              :http://swat.cse.lehigh.edu/onto/univ-bench.owl#GraduateStudent]
                              ['a :crux.rdf/iri 'a-iri]]}))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology

@@ -518,7 +518,8 @@
     (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
       (Thread/sleep 100)
       (when (>= (System/currentTimeMillis) timeout-at)
-        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time)))))))
+        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time
+                                            " index has:" (read-meta kv :crux.tx-log/tx-time))))))))
 
 (def ^:const default-doc-cache-size 10240)
 

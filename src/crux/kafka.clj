@@ -123,6 +123,7 @@
                           (last))]
     (db/store-index-meta indexer :crux.tx-log/tx-time (Date. ^long tx-time))))
 
+;; TODO: make this fn return something that makes sense.
 (defn consume-and-index-entities
   ([indexer consumer]
    (consume-and-index-entities indexer consumer 10000))
