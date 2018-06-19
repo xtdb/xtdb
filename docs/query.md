@@ -39,7 +39,7 @@ before executing the query.
   reference](http://www.ldbcouncil.org/)
 + [RDFox Tests](http://www.cs.ox.ac.uk/isg/tools/RDFox/2014/AAAI/)
 + [LUBM: A Benchmark for OWL Knowledge Base
-    Systems](http://swat.cse.lehigh.edu/pubs/guo05a.pdf)
+  Systems](http://swat.cse.lehigh.edu/pubs/guo05a.pdf)
 + [LUBM](http://swat.cse.lehigh.edu/projects/lubm/)
 
 ### Indexes
