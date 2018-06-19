@@ -1,7 +1,8 @@
 (ns crux.query
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.db :as db]))
+            [crux.db :as db]
+            [crux.index :as idx]))
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -166,9 +167,14 @@
 (defrecord VarBinding [e a s]
   Binding
   (bind-key [this] s)
-  (bind [this _]
+  (bind [this qc]
     (binding-xform s (fn [input]
-                       (let [v (db/attr-val (get input e) a)]
+                       (let [v (db/attr-val (get input e) a)
+                             v (or (and (satisfies? idx/IdToBytes v)
+                                        (not (string? v))
+                                        (some-> (db/entity (get input '$) qc v)
+                                                (vector)))
+                                   v)]
                          (log/debug :var-bind this e a s v)
                          (if (coll? v) v [v]))))))
 

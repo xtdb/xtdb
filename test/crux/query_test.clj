@@ -291,7 +291,12 @@
   (t/testing "Can query by single field"
     (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
                                          :where [[i :name "Ivan"]
-                                                 [p :mentor i]]})))))
+                                                 [p :mentor i]]})))
+
+    (t/testing "Other direction"
+      (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
+                                           :where [[p :mentor i]
+                                                   [i :name "Ivan"]]}))))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:fact ['i :age 'age]]
