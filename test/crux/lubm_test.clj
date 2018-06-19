@@ -70,8 +70,8 @@
                (q/q (doc/db f/*kv*)
                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
-                        :where [[x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]
-                                [x :rdf/type :ub/GraduateStudent]]})))))
+                        :where [[x :rdf/type :ub/GraduateStudent]
+                                [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]})))))
 
     ;; TODO: subOrganizationOf is transitive, should use rules.
 
