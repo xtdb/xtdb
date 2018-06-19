@@ -46,21 +46,13 @@
     (contains? v1 v2)
     (= v1 v2)))
 
-(defn- maybe-entity [qc db e]
-  (when (and (satisfies? idx/IdToBytes e)
-             (not (string? e)))
-    (db/entity db qc e)))
+(defn- entity-literal? [e]
+  (and (satisfies? idx/IdToBytes e)
+       (not (string? e))))
 
 (defn- value-matches? [qc db [term-e term-a term-v] result]
-  (let [e (get result term-e)
-        e-entity (if (satisfies? db/Entity e)
-                   e
-                   (maybe-entity qc db e))
-        term-e-entity (maybe-entity qc db term-e)]
-    (when-let [v (and e-entity
-                      (or (not term-e-entity)
-                          (= e-entity term-e-entity))
-                      (db/attr-val e-entity term-a))]
+  (let [e (get result term-e)]
+    (when-let [v (db/attr-val e term-a)]
       (or (not term-v)
           (and (symbol? term-v)
                (compare-vals? v (some-> (result term-v) v-for-comparison)))
@@ -102,7 +94,7 @@
   (bind-key [this] e)
   (bind [this query-context]
     (binding-agg-xform e (fn [results]
-                           (if (seq results)
+                           (when (seq results)
                              (let [db (get (first results) '$)]
                                (cond (and (symbol? v) (some #(get % v) results))
                                      (do (log/debug :secondary-index-result-join e a v join-attributes)
@@ -131,8 +123,28 @@
                                      :else
                                      (do (log/debug :secondary-index-scan e a v)
                                          (for [r results je (db/entity-join db query-context [a] nil nil)]
-                                           (assoc r e je)))))
-                             results)))))
+                                           (assoc r e je))))))))))
+
+(defrecord LiteralEntityBinding [e a v range-vals]
+  Binding
+  (bind-key [this] e)
+  (bind [this query-context]
+    (binding-agg-xform e (fn [results]
+                           (when (seq results)
+                             (let [db (get (first results) '$)
+                                   entity (db/entity db query-context e)
+                                   [min-v max-v] range-vals
+                                   actual-v (db/attr-val entity a)]
+                               (when (or (and (symbol? v)
+                                              (if min-v
+                                                (not (neg? (compare actual-v min-v)))
+                                                true)
+                                              (if max-v
+                                                (not (pos? (compare actual-v max-v)))
+                                                true))
+                                         (compare-vals? actual-v v))
+                                 (for [r results]
+                                   (assoc r e entity)))))))))
 
 (defn- find-subsequent-range-terms [v terms]
   (when (symbol? v)
@@ -174,8 +186,11 @@
         range-vals (if (seq join-literals)
                      [(first join-literals) (last join-literals)]
                      (find-subsequent-range-terms v terms))]
-    (log/debug :entity-binding e a v range-vals join-attributes)
-    (->EntityBinding e a v range-vals join-attributes)))
+    (if (entity-literal? e)
+      (do (log/debug :literal-entity-binding e a v range-vals)
+          (->LiteralEntityBinding e a v range-vals))
+      (do (log/debug :entity-binding e a v range-vals join-attributes)
+          (->EntityBinding e a v range-vals join-attributes)))))
 
 (defrecord VarBinding [e a s]
   Binding
@@ -184,7 +199,8 @@
     (binding-xform s (fn [input]
                        (let [db (get input '$)
                              v (db/attr-val (get input e) a)
-                             v (or (some-> (maybe-entity qc db v)
+                             v (or (some-> (when (entity-literal? v)
+                                             (get input v (db/entity db qc v)))
                                            (vector))
                                    v)]
                          (log/debug :var-bind this e a s v)
