@@ -146,12 +146,12 @@
    (all-keys-in-prefix i prefix false))
   ([i ^bytes prefix entries?]
    ((fn step [f-cons f-next]
-          (lazy-seq
-           (let [k (f-cons)]
-             (when (and k (bu/bytes=? prefix k (alength prefix)))
-               (cons (if entries?
-                       [k (ks/-value i)]
-                       k) (step f-next f-next))))))
+      (lazy-seq
+       (let [k (f-cons)]
+         (when (and k (bu/bytes=? prefix k (alength prefix)))
+           (cons (if entries?
+                   [k (ks/-value i)]
+                   k) (step f-next f-next))))))
     #(ks/-seek i prefix) #(ks/-next i))))
 
 ;; Entities
@@ -378,34 +378,34 @@
                                   attr (butlast attrs)]
                               [attr [(ks/new-iterator snapshot) (last attrs)]])
                             (into {}))]
-     (try
-       (with-open [ci (ks/new-iterator snapshot)
-                   ei (ks/new-iterator snapshot)]
-         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
-               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-               attr->entity-indexes (->> (for [[attr [di [min-v max-v]]] attr->di+range
-                                               :let [doc-idx (-> (new-doc-attribute-value-index di attr)
-                                                                 (new-less-than-equal-virtual-index max-v)
-                                                                 (new-greater-than-equal-virtual-index min-v))]]
-                                           [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)])
-                                         (into {}))
-               triejoin-idx (-> (for [attrs unary-attrs]
-                                  (->> (butlast attrs)
-                                       (mapv attr->entity-indexes)
-                                       (new-unary-join-virtual-index)))
-                                (vec)
-                                (new-triejoin-virtual-index shared-attrs))
-               min-vs (vec (for [attrs unary-attrs
-                                 :let [[min-v max-v] (last attrs)]]
-                             min-v))]
-           (when-let [result (db/-seek-values triejoin-idx nil)]
-             (->> (repeatedly #(db/-next-values triejoin-idx))
-                  (take-while identity)
-                  (cons result)
-                  (vec)))))
-       (finally
-         (doseq [[i] (vals attr->di+range)]
-           (.close ^Closeable i))))))
+    (try
+      (with-open [ci (ks/new-iterator snapshot)
+                  ei (ks/new-iterator snapshot)]
+        (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
+              entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+              attr->entity-indexes (->> (for [[attr [di [min-v max-v]]] attr->di+range
+                                              :let [doc-idx (-> (new-doc-attribute-value-index di attr)
+                                                                (new-less-than-equal-virtual-index max-v)
+                                                                (new-greater-than-equal-virtual-index min-v))]]
+                                          [attr (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)])
+                                        (into {}))
+              triejoin-idx (-> (for [attrs unary-attrs]
+                                 (->> (butlast attrs)
+                                      (mapv attr->entity-indexes)
+                                      (new-unary-join-virtual-index)))
+                               (vec)
+                               (new-triejoin-virtual-index shared-attrs))
+              min-vs (vec (for [attrs unary-attrs
+                                :let [[min-v max-v] (last attrs)]]
+                            min-v))]
+          (when-let [result (db/-seek-values triejoin-idx nil)]
+            (->> (repeatedly #(db/-next-values triejoin-idx))
+                 (take-while identity)
+                 (cons result)
+                 (vec)))))
+      (finally
+        (doseq [[i] (vals attr->di+range)]
+          (.close ^Closeable i))))))
 
 ;; Caching
 
@@ -497,10 +497,10 @@
 
   (entity-join [this query-context attrs min-v max-v]
     (for [entity-tx (->> (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
-                          (map second)
-                          (mapcat vals)
-                          (apply concat)
-                          (distinct))]
+                         (map second)
+                         (mapcat vals)
+                         (apply concat)
+                         (distinct))]
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity [this query-context eid]
