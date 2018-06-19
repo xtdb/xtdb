@@ -46,12 +46,25 @@
     (contains? v1 v2)
     (= v1 v2)))
 
-(defn- value-matches? [db [term-e term-a term-v] result]
-  (when-let [v (db/attr-val (get result term-e) term-a)]
-    (or (not term-v)
-        (and (symbol? term-v)
-             (compare-vals? v (some-> (result term-v) v-for-comparison)))
-        (compare-vals? v term-v))))
+(defn- maybe-entity [qc db e]
+  (when (and (satisfies? idx/IdToBytes e)
+             (not (string? e)))
+    (db/entity db qc e)))
+
+(defn- value-matches? [qc db [term-e term-a term-v] result]
+  (let [e (get result term-e)
+        e-entity (if (satisfies? db/Entity e)
+                   e
+                   (maybe-entity qc db e))
+        term-e-entity (maybe-entity qc db term-e)]
+    (when-let [v (and e-entity
+                      (or (not term-e-entity)
+                          (= e-entity term-e-entity))
+                      (db/attr-val e-entity term-a))]
+      (or (not term-v)
+          (and (symbol? term-v)
+               (compare-vals? v (some-> (result term-v) v-for-comparison)))
+          (compare-vals? v term-v)))))
 
 (defn binding-xform [k f]
   (fn [rf]
@@ -169,11 +182,10 @@
   (bind-key [this] s)
   (bind [this qc]
     (binding-xform s (fn [input]
-                       (let [v (db/attr-val (get input e) a)
-                             v (or (and (satisfies? idx/IdToBytes v)
-                                        (not (string? v))
-                                        (some-> (db/entity (get input '$) qc v)
-                                                (vector)))
+                       (let [db (get input '$)
+                             v (db/attr-val (get input e) a)
+                             v (or (some-> (maybe-entity qc db v)
+                                           (vector))
                                    v)]
                          (log/debug :var-bind this e a s v)
                          (if (coll? v) v [v]))))))
@@ -200,7 +212,7 @@
                   :fact
                   [(remove nil? [(fact->entity-binding t terms)
                                  (fact->var-binding t)])
-                   (fn [db result] (value-matches? db t result))]
+                   (fn [db result] (value-matches? query-context db t result))]
 
                   :and
                   (let [sub-plan (query-terms->plan query-context t)]

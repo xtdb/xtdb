@@ -296,7 +296,29 @@
     (t/testing "Other direction"
       (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [p]
                                            :where [[p :mentor i]
-                                                   [i :name "Ivan"]]}))))))
+                                                   [i :name "Ivan"]]})))))
+
+  (t/testing "Can query by known entity"
+    (t/is (= #{["Ivan"]} (q/q (db *kv*) '{:find [n]
+                                          :where [[:ivan :name n]]})))
+
+    (t/is (= #{["Ivan"]} (q/q (db *kv*) '{:find [n]
+                                          :where [[:petr :mentor i]
+                                                  [i :name n]]})))
+
+    (t/testing "Other direction"
+      (t/is (= #{["Ivan"]} (q/q (db *kv*) '{:find [n]
+                                            :where [[i :name n]
+                                                    [:petr :mentor i]]}))))
+    (t/testing "No matches"
+      (t/is (= #{} (q/q (db *kv*) '{:find [n]
+                                    :where [[:ivan :mentor x]
+                                            [x :name n]]})))
+
+      (t/testing "Other direction"
+        (t/is (= #{} (q/q (db *kv*) '{:find [n]
+                                      :where [[x :name n]
+                                              [:ivan :mentor x]]})))))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:fact ['i :age 'age]]
