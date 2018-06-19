@@ -19,7 +19,20 @@
                            (rdf/statements->maps))]
            [:crux.tx/put (:crux.db/id entity) entity]))))
 
+;; See:
+;; http://swat.cse.lehigh.edu/projects/lubm/
+;; http://swat.cse.lehigh.edu/pubs/guo05a.pdf
+
+;; The data is generated via
+;; http://swat.cse.lehigh.edu/projects/lubm/uba1.7.zip and then
+;; post-processed a bit via rdf4j into a single, sorted ntriples
+;; document. The University0_0.ntriples file contains the subset from
+;; http://swat.cse.lehigh.edu/projects/lubm/University0_0.owl
+
 ;; TODO: most queries need rules, some assume more departments loaded.
+;; Full set is available in lubm/lubm10.ntriples, but query 2 does seem to
+;; be either very slow or never return, a few others also quite slow,
+;; but manageable. The full set is to large to submit in a single transaction.
 (t/deftest test-can-run-lubm-queries
   (let [tx-topic "test-can-run-lubm-queries"
         doc-topic "test-can-run-lubm-queries"
@@ -36,7 +49,10 @@
 
     (t/testing "ensure data is indexed"
       @(db/submit-tx tx-log tx-ops)
-      (while (not-empty (k/consume-and-index-entities indexer ek/*consumer*)))
+
+      (k/consume-and-index-entities indexer ek/*consumer*)
+      (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 100)))
+
       (t/testing "querying transacted data"
         (t/is (= #{[:http://www.University0.edu]}
                  (q/q (doc/db f/*kv*)
