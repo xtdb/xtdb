@@ -1,0 +1,108 @@
+PREFIX a1: <http://swat.cse.lehigh.edu/onto/univ-bench.owl#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX ruleml: <http://www.w3.org/2003/11/ruleml#>
+PREFIX swrl: <http://www.w3.org/2003/11/swrl#>
+PREFIX swrlb: <http://www.w3.org/2003/11/swrlb#>
+PREFIX swrlx: <http://www.w3.org/2003/11/swrlx#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+a1:University(?X1) :- a1:mastersDegreeFrom(?X,?X1) .
+a1:Person(?X) :- a1:title(?X,?X1) .
+a1:degreeFrom(?X,?Y) :- a1:hasAlumnus(?Y,?X) .
+a1:hasAlumnus(?X,?Y) :- a1:degreeFrom(?Y,?X) .
+a1:Employee(?X) :- a1:Faculty(?X) .
+a1:Faculty(?X) :- a1:Professor(?X) .
+a1:Course(?X1) :- a1:listedCourse(?X,?X1) .
+a1:Professor(?X) :- a1:AssociateProfessor(?X) .
+a1:Person(?X1) :- a1:member(?X,?X1) .
+a1:Professor(?X) :- a1:AssistantProfessor(?X) .
+a1:Organization(?X) :- a1:orgPublication(?X,?X1) .
+a1:Professor(?X) :- a1:Chair(?X) .
+a1:Article(?X) :- a1:TechnicalReport(?X) .
+a1:worksFor(?X,?Y) :- a1:headOf(?X,?Y) .
+a1:Person(?X) :- a1:age(?X,?X1) .
+a1:Person(?X) :- a1:degreeFrom(?X,?X1) .
+a1:University(?X1) :- a1:degreeFrom(?X,?X1) .
+a1:Publication(?X) :- a1:Specification(?X) .
+a1:AdministrativeStaff(?X) :- a1:SystemsStaff(?X) .
+a1:Person(?X1) :- a1:hasAlumnus(?X,?X1) .
+a1:Publication(?X1) :- a1:softwareDocumentation(?X,?X1) .
+a1:Faculty(?X) :- a1:PostDoc(?X) .
+a1:Software(?X) :- a1:softwareVersion(?X,?X1) .
+a1:Article(?X) :- a1:ConferencePaper(?X) .
+a1:TeachingAssistant(?X) :- a1:Person(?X), a1:teachingAssistantOf(?X,?X1), a1:Course(?X1) .
+a1:Person(?X1) :- a1:affiliateOf(?X,?X1) .
+a1:Chair(?X) :- a1:Person(?X), a1:headOf(?X,?X1), a1:Department(?X1) .
+a1:Director(?X) :- a1:Person(?X), a1:headOf(?X,?X1), a1:Program(?X1) .
+a1:memberOf(?X,?Y) :- a1:member(?Y,?X) .
+a1:member(?X,?Y) :- a1:memberOf(?Y,?X) .
+a1:Professor(?X) :- a1:tenured(?X,?X1) .
+a1:Course(?X1) :- a1:teacherOf(?X,?X1) .
+a1:University(?X) :- a1:hasAlumnus(?X,?X1) .
+a1:Work(?X) :- a1:Research(?X) .
+a1:Person(?X) :- a1:telephone(?X,?X1) .
+a1:Organization(?X) :- a1:Institute(?X) .
+a1:Organization(?X1) :- a1:subOrganizationOf(?X,?X1) .
+a1:memberOf(?X,?Y) :- a1:worksFor(?X,?Y) .
+a1:Person(?X) :- a1:Employee(?X) .
+a1:Software(?X) :- a1:softwareDocumentation(?X,?X1) .
+a1:Person(?X) :- a1:advisor(?X,?X1) .
+a1:Organization(?X) :- a1:member(?X,?X1) .
+a1:Organization(?X) :- a1:Department(?X) .
+a1:Publication(?X) :- a1:Article(?X) .
+a1:Faculty(?X) :- a1:Lecturer(?X) .
+a1:Person(?X1) :- a1:publicationAuthor(?X,?X1) .
+a1:Publication(?X) :- a1:Software(?X) .
+a1:Research(?X1) :- a1:researchProject(?X,?X1) .
+a1:Organization(?X) :- a1:Program(?X) .
+a1:Employee(?X) :- a1:AdministrativeStaff(?X) .
+a1:Professor(?X1) :- a1:advisor(?X,?X1) .
+a1:Work(?X) :- a1:Course(?X) .
+a1:Professor(?X) :- a1:FullProfessor(?X) .
+a1:Publication(?X) :- a1:Book(?X) .
+a1:Publication(?X) :- a1:publicationResearch(?X,?X1) .
+a1:AdministrativeStaff(?X) :- a1:ClericalStaff(?X) .
+a1:degreeFrom(?X,?Y) :- a1:doctoralDegreeFrom(?X,?Y) .
+a1:Organization(?X) :- a1:affiliatedOrganizationOf(?X,?X1) .
+a1:TeachingAssistant(?X) :- a1:teachingAssistantOf(?X,?X1) .
+a1:Professor(?X) :- a1:VisitingProfessor(?X) .
+a1:Person(?X) :- a1:undergraduateDegreeFrom(?X,?X1) .
+a1:Organization(?X) :- a1:University(?X) .
+a1:Article(?X) :- a1:JournalArticle(?X) .
+a1:Research(?X1) :- a1:publicationResearch(?X,?X1) .
+a1:Person(?X) :- a1:Director(?X) .
+a1:Person(?X) :- a1:doctoralDegreeFrom(?X,?X1) .
+a1:Publication(?X) :- a1:publicationDate(?X,?X1) .
+a1:Organization(?X1) :- a1:affiliatedOrganizationOf(?X,?X1) .
+a1:University(?X1) :- a1:doctoralDegreeFrom(?X,?X1) .
+a1:Course(?X1) :- a1:teachingAssistantOf(?X,?X1) .
+a1:University(?X1) :- a1:undergraduateDegreeFrom(?X,?X1) .
+a1:degreeFrom(?X,?Y) :- a1:mastersDegreeFrom(?X,?Y) .
+a1:Schedule(?X) :- a1:listedCourse(?X,?X1) .
+a1:Person(?X) :- a1:GraduateStudent(?X) .
+a1:Person(?X) :- a1:ResearchAssistant(?X) .
+a1:Student(?X) :- a1:UndergraduateStudent(?X) .
+a1:degreeFrom(?X,?Y) :- a1:undergraduateDegreeFrom(?X,?Y) .
+a1:Publication(?X) :- a1:publicationAuthor(?X,?X1) .
+a1:Person(?X) :- a1:mastersDegreeFrom(?X,?X1) .
+a1:Organization(?X) :- a1:College(?X) .
+a1:Organization(?X) :- a1:ResearchGroup(?X) .
+a1:Faculty(?X) :- a1:teacherOf(?X,?X1) .
+a1:Publication(?X) :- a1:UnofficialPublication(?X) .
+a1:Person(?X) :- a1:Chair(?X) .
+a1:Employee(?X) :- a1:Person(?X), a1:worksFor(?X,?X1), a1:Organization(?X1) .
+a1:ResearchGroup(?X) :- a1:researchProject(?X,?X1) .
+a1:Organization(?X) :- a1:affiliateOf(?X,?X1) .
+a1:Course(?X) :- a1:GraduateCourse(?X) .
+a1:Student(?X) :- a1:Person(?X), a1:takesCourse(?X,?X1), a1:Course(?X1) .
+a1:Professor(?X) :- a1:Dean(?X) .
+a1:Publication(?X1) :- a1:orgPublication(?X,?X1) .
+a1:Publication(?X) :- a1:Manual(?X) .
+a1:Dean(?X) :- a1:headOf(?X,?X1), a1:College(?X1) .
+a1:Person(?X) :- a1:TeachingAssistant(?X) .
+a1:Organization(?X) :- a1:subOrganizationOf(?X,?X1) .
+a1:Person(?X) :- a1:Student(?X) .
+a1:Person(?X) :- a1:emailAddress(?X,?X1) .
+a1:subOrganizationOf(?X,?Z) :- a1:subOrganizationOf(?X,?Y), a1:subOrganizationOf(?Y,?Z) .
