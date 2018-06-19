@@ -15,6 +15,14 @@
 
 ;; Docs
 
+;; TODO: create a DocAttributeValueContentHashIndex returning content
+;; hashes one by one for a stable value, so one can join across
+;; several values binding to the same entity. This is when you have
+;; more than one literal attribute for an entity but don't know which
+;; one is best to start with, so you can leapfrog among them using
+;; this method. It might be possible to extend this for joins on
+;; entities between the value and entity position as well, via the
+;; :crux.db/id attribute.
 (defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr peek-state]
   (let [seek-k (idx/encode-attribute+value-prefix-key attr idx/empty-byte-array)
         prefix-size (- (alength current-k) idx/id-size)]
