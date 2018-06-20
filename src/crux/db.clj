@@ -3,8 +3,8 @@
 (defprotocol Datasource
   (^java.io.Closeable new-query-context [this])
   (entities [this qc])
-  (entities-for-attribute-value [this qc a min-v max-v])
-  (entity-join [this qc as min-v max-v])
+  (entities-for-attribute-value [this qc a range-constraints])
+  (entity-join [this qc as range-constraints])
   (entity [this qc eid])
   (entity-history [this qc eid]))
 

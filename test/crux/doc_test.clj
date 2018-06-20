@@ -69,14 +69,22 @@
       (t/testing "can find entity by secondary index"
         (t/testing "single value attribute")
         (t/is (= expected-entities
-                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo" transact-time transact-time)))
+                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
+                                                     {:min-v "Pablo"
+                                                      :inclusive-min-v? true
+                                                      :max-v "Pablo"
+                                                      :inclusive-max-v? true}
+                                                     transact-time transact-time)))
 
         (t/testing "find multi valued attribute"
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://purl.org/dc/terms/subject
-                    :http://dbpedia.org/resource/Category:Cubist_artists :http://dbpedia.org/resource/Category:Cubist_artists
+                    {:min-v :http://dbpedia.org/resource/Category:Cubist_artists
+                     :inclusive-min-v? true
+                     :max-v :http://dbpedia.org/resource/Category:Cubist_artists
+                     :inclusive-max-v? true}
                     transact-time transact-time))))
 
         (t/testing "find attribute by range"
@@ -84,52 +92,97 @@
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    230 230
+                    {:min-v 230
+                     :inclusive-min-v? true
+                     :max-v 230
+                     :inclusive-max-v? true}
                     transact-time transact-time)))
 
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    229
-                    230
+                    {:min-v 229
+                     :inclusive-min-v? true
+                     :max-v 230
+                     :inclusive-max-v? true}
                     transact-time transact-time)))
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    229
-                    231
+                    {:min-v 229
+                     :inclusive-min-v? true
+                     :max-v 231
+                     :inclusive-max-v? true}
                     transact-time transact-time)))
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    230
-                    231
+                    {:min-v 230
+                     :inclusive-min-v? true
+                     :max-v 231
+                     :inclusive-max-v? true}
                     transact-time transact-time)))
 
-          (t/is (empty?
-                 (doc/entities-by-attribute-value-at
-                  snapshot
-                  :http://dbpedia.org/property/imageSize
-                  231
-                  255
-                  transact-time transact-time)))
-          (t/is (empty?
-                 (doc/entities-by-attribute-value-at
-                  snapshot
-                  :http://dbpedia.org/property/imageSize
-                  1
-                  229
-                  transact-time transact-time)))
-          (t/is (empty?
-                 (doc/entities-by-attribute-value-at
-                  snapshot
-                  :http://dbpedia.org/property/imageSize
-                  -255
-                  229
-                  transact-time transact-time)))))
+          (t/testing "not inclusive operator"
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v 230
+                     :inclusive-min-v? false
+                     :max-v 231
+                     :inclusive-max-v? true}
+                    transact-time transact-time)))
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v 229
+                     :inclusive-min-v? true
+                     :max-v 230
+                     :inclusive-max-v? false}
+                    transact-time transact-time)))
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v 230
+                     :inclusive-min-v? false
+                     :max-v 230
+                     :inclusive-max-v? false}
+                    transact-time transact-time))))
+
+          (t/testing "not within range"
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v 231
+                     :inclusive-min-v? true
+                     :max-v 255
+                     :inclusive-max-v? true}
+                    transact-time transact-time)))
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v 1
+                     :inclusive-min-v? true
+                     :max-v 229
+                     :inclusive-max-v? true}
+                    transact-time transact-time)))
+            (t/is (empty?
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    {:min-v -255
+                     :inclusive-min-v? true
+                     :max-v 229
+                     :inclusive-max-v? true}
+                    transact-time transact-time))))))
 
       (t/testing "cannot see entity before business or transact time"
         (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -287,7 +340,11 @@
                 (t/is (empty? (db/get-objects object-store (keep :content-hash picasso-history)))))))
 
           (t/testing "eviction removes secondary indexes"
-            (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName "Pablo" "Pablo"
+            (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
+                                                              {:min-v "Pablo"
+                                                               :inclusive-min-v? true
+                                                               :max-v "Pablo"
+                                                               :inclusive-max-v? true}
                                                               new-transact-time new-transact-time)))))))))
 
 (t/deftest test-can-perform-unary-leapfrog-join
@@ -316,7 +373,11 @@
                         (idx/new-id :b7-12)}
                    :c #{(idx/new-id :c5-12)
                         (idx/new-id :c6-12)}}]
-                 (for [matches (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)
+                 (for [matches (doc/unary-leapfrog-join snapshot [:a :b :c] {:min-v nil
+                                                                             :inclusive-min-v? true
+                                                                             :max-v nil
+                                                                             :inclusive-max-v? true}
+                                                        transact-time transact-time)
                        [v join-results] matches]
                    (->> (for [[k entities] join-results]
                           [k (set (map :eid entities))])
@@ -361,9 +422,18 @@
 
         (t/testing "leapfrog triejoin"
           (let [result (doc/leapfrog-triejoin snapshot
-                                              [[:ra :ta [nil nil]]
-                                               [:rb :sb [nil nil]]
-                                               [:sc :tc [nil nil]]]
+                                              [[:ra :ta {:min-v nil
+                                                         :inclusive-min-v? true
+                                                         :max-v nil
+                                                         :inclusive-max-v? true}]
+                                               [:rb :sb {:min-v nil
+                                                         :inclusive-min-v? true
+                                                         :max-v nil
+                                                         :inclusive-max-v? true}]
+                                               [:sc :tc {:min-v nil
+                                                         :inclusive-min-v? true
+                                                         :max-v nil
+                                                         :inclusive-max-v? true}]]
                                               [[:ra :rb]
                                                [:sb :sc]
                                                [:ta :tc]]
@@ -423,9 +493,18 @@
                    (idx/new-id :s34)
                    (idx/new-id :t14)}
                  (set (for [matches (doc/leapfrog-triejoin snapshot
-                                                           [[:ra :ta [nil nil]]
-                                                            [:rb :sb [nil nil]]
-                                                            [:sc :tc [nil nil]]]
+                                                           [[:ra :ta {:min-v nil
+                                                                      :inclusive-min-v? true
+                                                                      :max-v nil
+                                                                      :inclusive-max-v? true}]
+                                                            [:rb :sb {:min-v nil
+                                                                      :inclusive-min-v? true
+                                                                      :max-v nil
+                                                                      :inclusive-max-v? true}]
+                                                            [:sc :tc {:min-v nil
+                                                                      :inclusive-min-v? true
+                                                                      :max-v nil
+                                                                      :inclusive-max-v? true}]]
                                                            [[:ra :rb]
                                                             [:sb :sc]
                                                             [:ta :tc]]
@@ -453,13 +532,25 @@
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                    [expected-entity-tx]]]
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 0 2 transact-time transact-time)
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
+                                                                                        :inclusive-min-v? true
+                                                                                        :max-v 2
+                                                                                        :inclusive-max-v? true}
+                                                          transact-time transact-time)
                        [v entities] matches]
                    [(bu/bytes->hex v) entities])))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y 2 5 transact-time transact-time)))
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y 0 0 transact-time transact-time)))))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 2
+                                                                                 :inclusive-min-v? true
+                                                                                 :max-v 5
+                                                                                 :inclusive-max-v? true}
+                                                   transact-time transact-time)))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
+                                                                                 :inclusive-min-v? true
+                                                                                 :max-v 0
+                                                                                 :inclusive-max-v? true}
+                                                   transact-time transact-time)))))
 
       (t/testing "multiple values"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
@@ -468,19 +559,28 @@
                    [expected-entity-tx]]
                   [(bu/bytes->hex (idx/value->bytes 3))
                    [expected-entity-tx]]]
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :z 0 3 transact-time transact-time)
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 0
+                                                                                        :inclusive-min-v? true
+                                                                                        :max-v 3
+                                                                                        :inclusive-max-v? true} transact-time transact-time)
                        [v entities] matches]
                    [(bu/bytes->hex v) entities])))
 
         (t/testing "sub range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
                      [expected-entity-tx]]]
-                   (for [matches (doc/literal-entity-values object-store snapshot eid :z 2 2 transact-time transact-time)
+                   (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 2
+                                                                                          :inclusive-min-v? true
+                                                                                          :max-v 2
+                                                                                          :inclusive-max-v? true} transact-time transact-time)
                          [v entities] matches]
                      [(bu/bytes->hex v) entities]))))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z 4 10 transact-time transact-time))))))))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z {:min-v 4
+                                                                                 :inclusive-min-v? true
+                                                                                 :max-v 10
+                                                                                 :inclusive-max-v? true} transact-time transact-time))))))))
 
 (t/deftest test-shared-literal-attribute-entities-join
   (let [tx-log (tx/->DocTxLog f/*kv*)

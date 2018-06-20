@@ -322,9 +322,9 @@
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:fact {:e 'i :a :age :v 'age}]
-            [:range {:crux.query/fn <
-                     :crux.query/sym 'age
-                     :crux.query/val 20}]]
+            [:range {:op '<
+                     :sym 'age
+                     :val 20}]]
            (s/conform :crux.query/where '[[i :age age]
                                           (< age 20)])))
 
@@ -334,12 +334,25 @@
   (t/testing "Min search case"
     (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [i]
                                          :where [[i :age age]
-                                                 (> age 20)]}))))
+                                                 (> age 20)]})))
+    (t/is (= #{} (q/q (db *kv*) '{:find [i]
+                                  :where [[i :age age]
+                                          (> age 21)]})))
+
+    (t/is (= #{[:ivan]} (q/q (db *kv*) '{:find [i]
+                                         :where [[i :age age]
+                                                 (>= age 21)]}))))
 
   (t/testing "Max search case"
     (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
                                          :where [[i :age age]
-                                                 (< age 20)]})))))
+                                                 (< age 20)]})))
+    (t/is (= #{} (q/q (db *kv*) '{:find [i]
+                                  :where [[i :age age]
+                                          (< age 18)]})))
+    (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
+                                         :where [[i :age age]
+                                                 (<= age 18)]})))))
 
 (t/deftest test-mutiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }
