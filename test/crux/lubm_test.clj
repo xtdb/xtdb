@@ -33,6 +33,14 @@
 ;; Full set is available in lubm/lubm10.ntriples, but query 2 does seem to
 ;; be either very slow or never return, a few others also quite slow,
 ;; but manageable. The full set is to large to submit in a single transaction.
+
+;; Number of triples:
+;; 8519 test/lubm/University0_0.ntriples
+;; 100543 test/lubm/lubm10.ntriples
+
+;; Total time, without query 2:
+;; "Elapsed time: 4222.081773 msecs"
+;; "Elapsed time: 72691.917908 msecs"
 (t/deftest test-can-run-lubm-queries
   (let [tx-topic "test-can-run-lubm-queries"
         doc-topic "test-can-run-lubm-queries"
@@ -47,12 +55,17 @@
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
     (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
 
+    ;; "Elapsed time: 3541.99579 msecs"
+    ;; "Elapsed time: 6142.151144 msecs"
     (t/testing "ensure data is indexed"
-      @(db/submit-tx tx-log tx-ops)
+      (doseq [tx-ops (partition-all 1000 tx-ops)]
+        @(db/submit-tx tx-log (vec tx-ops)))
 
       (k/consume-and-index-entities indexer ek/*consumer*)
       (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 100)))
 
+      ;; "Elapsed time: 13.993752 msecs"
+      ;; "Elapsed time: 0.602848 msecs"
       (t/testing "querying transacted data"
         (t/is (= #{[:http://www.University0.edu]}
                  (q/q (doc/db f/*kv*)
@@ -62,6 +75,8 @@
 
     ;; This query bears large input and high selectivity. It queries about just one class and
     ;; one property and does not assume any hierarchy information or inference.
+    ;; "Elapsed time: 7.174778 msecs"
+    ;; "Elapsed time: 60.638423 msecs"
     (t/testing "LUBM query 1"
       (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
                  [:http://www.Department0.University0.edu/GraduateStudent124]
@@ -77,6 +92,8 @@
 
     ;; This query increases in complexity: 3 classes and 3 properties are involved. Additionally,
     ;; there is a triangular pattern of relationships between the objects involved.
+    ;; "Elapsed time: 1833.664714 msecs"
+    ;; DNF
     (t/testing "LUBM query 2"
       (t/is (empty? (q/q (doc/db f/*kv*)
                          (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -91,6 +108,8 @@
     ;; TODO: Publication has subClassOf children, should use rules.
 
     ;; This query is similar to Query 1 but class Publication has a wide hierarchy.
+    ;; "Elapsed time: 18.763819 msecs"
+    ;; "Elapsed time: 149.333853 msecs"
     (t/testing "LUBM query 3"
       (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor0/Publication0]
                  [:http://www.Department0.University0.edu/AssistantProfessor0/Publication1]
@@ -109,6 +128,8 @@
     ;; This query has small input and high selectivity. It assumes subClassOf relationship
     ;; between Professor and its subclasses. Class Professor has a wide hierarchy. Another
     ;; feature is that it queries about multiple properties of a single class.
+    ;; "Elapsed time: 3.680617 msecs"
+    ;; "Elapsed time: 8.05811 msecs"
     (t/testing "LUBM query 4"
       (t/is (= 14 (count (q/q (doc/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -147,6 +168,8 @@
 
     ;; This query is similar to Query 6 in terms of class Student but it increases in the
     ;; number of classes and properties and its selectivity is high.
+    ;; "Elapsed time: 480.39002 msecs"
+    ;; "Elapsed time: 65851.740685 msecs"
     (t/testing "LUBM query 7"
       (t/is (= 59 (count (q/q (doc/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -162,6 +185,8 @@
     ;; more departments loaded. Should return 7791.
 
     ;; This query is further more complex than Query 7 by including one more property.
+    ;; "Elapsed time: 40.463253 msecs"
+    ;; "Elapsed time: 1465.576616 msecs"
     (t/testing "LUBM query 8"
       (t/is (= 532 (count (q/q (doc/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -222,6 +247,8 @@
     ;; property headOf. Hence this query requires realization, i.e., inference that
     ;; that professor is an instance of class Chair because he or she is the head of a
     ;; department. Input of this query is small as well.
+    ;; "Elapsed time: 1.375493 msecs"
+    ;; "Elapsed time: 37.883395 msecs"
     (t/testing "LUBM query 12"
       (t/is (= 10 (count (q/q (doc/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -252,6 +279,8 @@
     ;; This query is the simplest in the test set. This query
     ;; represents those with large input and low selectivity and does
     ;; not assume any hierarchy information or inference.
+    ;; "Elapsed time: 7.821926 msecs"
+    ;; "Elapsed time: 83.661817 msecs"
     (t/testing "LUBM query 14"
       (t/is (= 532 (count (q/q (doc/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
