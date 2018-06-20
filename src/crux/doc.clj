@@ -260,6 +260,32 @@
              (-> (idx/decode-entity+bt+tt+tx-id-key k)
                  (enrich-entity-tx v)))))))
 
+(defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
+  db/Index
+  (-seek-values [this k]
+    (if-let [entity-tx (get @attr-state :entity-tx (first (db/-seek-values entity-as-of-idx entity)))]
+      (let [content-hash (.content-hash ^EntityTx entity-tx)
+            value (->> (get-in (db/get-objects object-store [content-hash])
+                               [content-hash attr])
+                       (normalize-value)
+                       (map idx/value->bytes)
+                       (into (sorted-set-by bu/bytes-comparator)))
+            [x & xs] (subseq value >= (idx/value->bytes k))
+            {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx})]
+        (when first
+          [first [entity-tx]]))
+      (reset! attr-state nil)))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (let [{:keys [first entity-tx]} (swap! attr-state (fn [{[x & xs] :rest}]
+                                                        {:first x :rest xs}))]
+      (when first
+        [first [entity-tx]]))))
+
+(defn- literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
+  (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil)))
+
 ;; Join
 
 (defn- new-leapfrog-iterator-state [idx value+entities]
