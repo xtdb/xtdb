@@ -532,13 +532,24 @@
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                    [expected-entity-tx]]]
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v nil
                                                                                         :inclusive-min-v? true
-                                                                                        :max-v 2
+                                                                                        :max-v nil
                                                                                         :inclusive-max-v? true}
                                                           transact-time transact-time)
                        [v entities] matches]
                    [(bu/bytes->hex v) entities])))
+
+        (t/testing "within range"
+          (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
+                     [expected-entity-tx]]]
+                   (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
+                                                                                          :inclusive-min-v? true
+                                                                                          :max-v 2
+                                                                                          :inclusive-max-v? true}
+                                                            transact-time transact-time)
+                         [v entities] matches]
+                     [(bu/bytes->hex v) entities]))))
 
         (t/testing "out of range"
           (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 2
