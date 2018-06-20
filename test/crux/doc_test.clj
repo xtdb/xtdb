@@ -598,6 +598,10 @@
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
                                                                                      [:z 2]] transact-time transact-time)
                        [v entities] matches]
+                   (idx/new-id v))))
+        (t/is (= [(idx/new-id :x12)]
+                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)
+                       [v entities] matches]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by content hash"
