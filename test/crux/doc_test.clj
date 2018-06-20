@@ -432,6 +432,61 @@
                             {:keys [eid]} entities]
                         eid))))))))
 
+(t/deftest test-literal-entity-attribute-values-virtual-index
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        object-store (doc/->DocObjectStore f/*kv*)
+        doc {:crux.db/id :x :y 1 :z #{1 2 3}}
+        eid (idx/new-id (:crux.db/id doc))
+        content-hash (idx/new-id doc)
+        {:keys [transact-time tx-id]}
+        @(db/submit-tx tx-log [[:crux.tx/put eid doc]])
+        expected-entity-tx (idx/map->EntityTx {:eid eid
+                                               :content-hash content-hash
+                                               :bt transact-time
+                                               :tt transact-time
+                                               :tx-id tx-id})]
+    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (t/testing "single value"
+        (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
+                   [expected-entity-tx]]]
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 0 2 transact-time transact-time)
+                       [v entities] matches]
+                   [(bu/bytes->hex v) entities])))
+
+        (t/testing "out of range"
+          (t/is (empty?
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 2 5 transact-time transact-time)
+                       [v entities] matches]
+                   [(bu/bytes->hex v) entities])))
+          (t/is (empty?
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 0 0 transact-time transact-time)
+                       [v entities] matches]
+                   [(bu/bytes->hex v) entities])))))
+
+      (t/testing "multiple values"
+        (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
+                   [expected-entity-tx]]
+                  [(bu/bytes->hex (idx/value->bytes 2))
+                   [expected-entity-tx]]
+                  [(bu/bytes->hex (idx/value->bytes 3))
+                   [expected-entity-tx]]]
+                 (for [matches (doc/literal-entity-values object-store snapshot eid :z 0 3 transact-time transact-time)
+                       [v entities] matches]
+                   [(bu/bytes->hex v) entities])))
+
+        (t/testing "sub range"
+          (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
+                     [expected-entity-tx]]]
+                   (for [matches (doc/literal-entity-values object-store snapshot eid :z 2 2 transact-time transact-time)
+                         [v entities] matches]
+                     [(bu/bytes->hex v) entities]))))
+
+        (t/testing "out of range"
+          (t/is (empty?
+                   (for [matches (doc/literal-entity-values object-store snapshot eid :z 4 10 transact-time transact-time)
+                         [v entities] matches]
+                     [(bu/bytes->hex v) entities]))))))))
+
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
   (doc/store-meta f/*kv* :foo {:bar 2})

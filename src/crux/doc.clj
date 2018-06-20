@@ -54,19 +54,19 @@
   db/Index
   (-seek-values [this k]
     (seq (for [value+result (db/-seek-values i (seek-k-fn k))
-               :when (pred value+result)]
+               :when (pred (first value+result))]
            value+result)))
 
   db/OrderedIndex
   (-next-values [this]
     (seq (for [value+result (db/-next-values i)
-               :when (pred value+result)]
+               :when (pred (first value+result))]
            value+result))))
 
 (defn- value-comparsion-predicate [compare-pred v]
   (if v
     (let [seek-k (idx/value->bytes v)]
-      (fn [[value result]]
+      (fn [value]
         (compare-pred (bu/compare-bytes value seek-k))))
     (constantly true)))
 
@@ -85,14 +85,14 @@
 (defn- new-greater-than-equal-virtual-index [i min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex i pred (fn [k]
-                                      (if (pred [(idx/value->bytes k) nil])
+                                      (if (pred (idx/value->bytes k))
                                         k
                                         min-v)))))
 
 (defn- new-greater-than-virtual-index [i min-v]
   (let [pred (value-comparsion-predicate neg? min-v)
         idx (->PredicateVirtualIndex i pred (fn [k]
-                                              (if (pred [(idx/value->bytes k) nil])
+                                              (if (pred (idx/value->bytes k))
                                                 k
                                                 min-v)))]
     (reify
@@ -274,7 +274,7 @@
             [x & xs] (subseq values >= (idx/value->bytes k))
             {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx :values values})]
         (when first
-          [first [entity-tx]]))
+          [[first [entity-tx]]]))
       (reset! attr-state nil)))
 
   db/OrderedIndex
@@ -283,10 +283,22 @@
                                                             :as attr-state}]
                                                         (assoc attr-state :first x :rest xs)))]
       (when first
-        [first [entity-tx]]))))
+        [[first [entity-tx]]]))))
 
-(defn- literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
+(defn- new-literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
   (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil)))
+
+(defn literal-entity-values [object-store snapshot entity attr min-v max-v business-time transact-time]
+  (with-open [ei (ks/new-iterator snapshot)]
+    (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+          literal-entity-attribute-values-idx (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
+                                                  (new-less-than-equal-virtual-index max-v)
+                                                  (new-greater-than-equal-virtual-index min-v))]
+      (when-let [result (db/-seek-values literal-entity-attribute-values-idx nil)]
+        (->> (repeatedly #(db/-next-values literal-entity-attribute-values-idx))
+             (take-while identity)
+             (cons result)
+             (vec))))))
 
 ;; Join
 
