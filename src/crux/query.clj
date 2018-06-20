@@ -28,12 +28,12 @@
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of logic-var? :kind vector?)
                                      :terms ::where)
-                    :range (s/cat :op '#{< <= >= >}
-                                  :sym logic-var?
-                                  :val (complement logic-var?))
-                    :pred (s/cat :pred-fn ::pred-fn
-                                 :args (s/* any?)
-                                 :kind list?)))
+                    :built-in (s/cat :op '#{< <= >= >}
+                                     :sym logic-var?
+                                     :val (complement logic-var?))
+                    :pred (s/and list?
+                                 (s/cat :pred-fn ::pred-fn
+                                        :args (s/* any?)))))
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -61,6 +61,14 @@
           (and (logic-var? v)
                (compare-vals? entity-v (some-> (result v) v-for-comparison)))
           (compare-vals? entity-v v)))))
+
+(defn- built-in-op [x {:keys [sym val op]}]
+  (let [diff (compare x val)]
+    (case op
+      < (neg? diff)
+      <= (not (pos? diff))
+      > (pos? diff)
+      >= (not (neg? diff)))))
 
 (defn binding-xform [k f]
   (fn [rf]
@@ -112,22 +120,22 @@
 
                                      (and (logic-var? v) join-attributes)
                                      (do (log/debug :secondary-index-leapfrog-join e a v join-attributes range-vals)
-                                         (let [[min-v max-v] range-vals]
-                                           (for [r results je (db/entity-join db query-context join-attributes
-                                                                              {:min-v (:val min-v)
-                                                                               :inclusive-min-v? (= '>= (:op min-v))
-                                                                               :max-v (:val max-v)
-                                                                               :inclusive-max-v? (= '<= (:op max-v))})]
+                                         (let [[min-v max-v] range-vals
+                                               range-constraints {:min-v (:val min-v)
+                                                                  :inclusive-min-v? (= '>= (:op min-v))
+                                                                  :max-v (:val max-v)
+                                                                  :inclusive-max-v? (= '<= (:op max-v))}]
+                                           (for [r results je (db/entity-join db query-context join-attributes range-constraints)]
                                              (assoc r e je))))
 
                                      (and (logic-var? v) range-vals)
                                      (do (log/debug :secondary-index-range e a v range-vals)
-                                         (let [[min-v max-v] range-vals]
-                                           (for [r results je (db/entities-for-attribute-value db query-context a
-                                                                                               {:min-v (:val min-v)
-                                                                                                :inclusive-min-v? (= '>= (:op min-v))
-                                                                                                :max-v (:val max-v)
-                                                                                                :inclusive-max-v? (= '<= (:op max-v))})]
+                                         (let [[min-v max-v] range-vals
+                                               range-constraints {:min-v (:val min-v)
+                                                                  :inclusive-min-v? (= '>= (:op min-v))
+                                                                  :max-v (:val max-v)
+                                                                  :inclusive-max-v? (= '<= (:op max-v))}]
+                                           (for [r results je (db/entities-for-attribute-value db query-context a range-constraints)]
                                              (assoc r e je))))
 
                                      (and v (not (logic-var? v)))
@@ -152,25 +160,25 @@
   (bind [this query-context]
     (binding-agg-xform e (fn [results]
                            (when (seq results)
-                             (let [db (get (first results) '$)
-                                   entity (db/entity db query-context e)
-                                   [min-v max-v] range-vals
-                                   actual-v (db/attr-val entity a)]
-                               (when (or (and (logic-var? v)
-                                              (if min-v
-                                                (not (neg? (compare actual-v min-v)))
-                                                true)
-                                              (if max-v
-                                                (not (pos? (compare actual-v max-v)))
-                                                true))
-                                         (compare-vals? actual-v v))
-                                 (for [r results]
-                                   (assoc r e entity)))))))))
+                             (let [db (get (first results) '$)]
+                               (when-let [entity (db/entity db query-context e)]
+                                 (let [[min-v max-v] range-vals
+                                       actual-v (db/attr-val entity a)]
+                                   (when (or (and (logic-var? v)
+                                                  (if min-v
+                                                    (built-in-op actual-v min-v)
+                                                    true)
+                                                  (if max-v
+                                                    (built-in-op actual-v max-v)
+                                                    true))
+                                             (compare-vals? actual-v v))
+                                     (for [r results]
+                                       (assoc r e entity)))))))))))
 
 (defn- find-subsequent-range-terms [v terms]
   (when (logic-var? v)
     (let [range-terms (->> terms
-                           (filter (fn [[op]] (= :range op)))
+                           (filter (fn [[op]] (= :built-in op)))
                            (map second)
                            (filter #(= v (:sym %))))
           min-value (last (sort-by :val (filter #(contains? '#{> >=} (:op %)) range-terms)))
@@ -288,19 +296,14 @@
                              result))))])
 
                   :pred
-                  (let [{:keys [:args :pred-fn]} t]
+                  (let [{:keys [args pred-fn]} t]
                     [nil (fn [_ result]
                            (let [args (map #(or (and (logic-var? %) (result %)) %) args)]
                              (apply pred-fn args)))])
 
-                  :range
+                  :built-in
                   [nil (fn [_ result]
-                         (let [diff (compare (result (:sym t)) (:val t))]
-                           (case (:op t)
-                             < (neg? diff)
-                             <= (not (pos? diff))
-                             > (pos? diff)
-                             >= (not (neg? diff)))))])]
+                         (built-in-op (result (:sym t)) t))])]
       (cons stage (query-terms->plan query-context terms)))))
 
 (defn- term-symbols [terms]

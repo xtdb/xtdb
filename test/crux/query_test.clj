@@ -283,7 +283,16 @@
              (q/q (db *kv*) {:find ['name]
                              :where [['e :name 'name]
                                      ['e :age 'age]
-                                     '(>= age 50)]})))))
+                                     '(>= age 50)]}))))
+
+
+
+  (t/testing "clojure.core predicate"
+    (t/is (= #{["Bob"] ["Dominic"]}
+             (q/q (db *kv*) {:find ['name]
+                             :where [['e :name 'name]
+                                     ['e :age 'age]
+                                     '(re-find #"o" name)]})))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -322,9 +331,9 @@
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:fact {:e 'i :a :age :v 'age}]
-            [:range {:op '<
-                     :sym 'age
-                     :val 20}]]
+            [:built-in {:op '<
+                        :sym 'age
+                        :val 20}]]
            (s/conform :crux.query/where '[[i :age age]
                                           (< age 20)])))
 
@@ -352,7 +361,10 @@
                                           (< age 18)]})))
     (t/is (= #{[:petr]} (q/q (db *kv*) '{:find [i]
                                          :where [[i :age age]
-                                                 (<= age 18)]})))))
+                                                 (<= age 18)]})))
+    (t/is (= #{[18]} (q/q (db *kv*) '{:find [age]
+                                      :where [[:petr :age age]
+                                              (<= age 18)]})))))
 
 (t/deftest test-mutiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }
