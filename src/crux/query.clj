@@ -2,7 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.db :as db]
-            [crux.index :as idx]))
+            [crux.index :as idx])
+  (:import [java.util ArrayList]))
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -84,7 +85,7 @@
 
 (defn binding-agg-xform [k aggregate-fn]
   (fn [rf]
-    (let [buf (java.util.ArrayList.)]
+    (let [buf (ArrayList.)]
       (fn
         ([]
          (rf))
