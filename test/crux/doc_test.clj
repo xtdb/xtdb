@@ -454,14 +454,8 @@
                    [(bu/bytes->hex v) entities])))
 
         (t/testing "out of range"
-          (t/is (empty?
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 2 5 transact-time transact-time)
-                       [v entities] matches]
-                   [(bu/bytes->hex v) entities])))
-          (t/is (empty?
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :y 0 0 transact-time transact-time)
-                       [v entities] matches]
-                   [(bu/bytes->hex v) entities])))))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y 2 5 transact-time transact-time)))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y 0 0 transact-time transact-time)))))
 
       (t/testing "multiple values"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
@@ -482,10 +476,38 @@
                      [(bu/bytes->hex v) entities]))))
 
         (t/testing "out of range"
-          (t/is (empty?
-                   (for [matches (doc/literal-entity-values object-store snapshot eid :z 4 10 transact-time transact-time)
-                         [v entities] matches]
-                     [(bu/bytes->hex v) entities]))))))))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z 4 10 transact-time transact-time))))))))
+
+(t/deftest test-shared-literal-attribute-entities-join
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        data [{:crux.db/id :x12 :y 1 :z 2}
+              {:crux.db/id :x22 :y 2 :z 2}
+              {:crux.db/id :y22 :y 2 :z 2}
+              {:crux.db/id :y32 :y 3 :z 3}]
+        tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
+                              [:crux.tx/put id doc])))
+        {:keys [transact-time tx-id]}
+        @(db/submit-tx tx-log tx-ops)]
+    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (t/testing "single entity"
+        (t/is (= [(idx/new-id :x12)]
+                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
+                                                                                     [:z 2]] transact-time transact-time)
+                       [v _] matches]
+                   (idx/new-id v)))))
+
+      (t/testing "multiple entities, ordered by content hash"
+        (t/is (= [(idx/new-id :y22)
+                  (idx/new-id :x22)]
+                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
+                                                                                     [:z 2]] transact-time transact-time)
+                       [v _] matches]
+                   (idx/new-id v)))))
+
+      (t/testing "no entities"
+        (t/is (empty?
+               (doc/shared-literal-attribute-entities-join snapshot [[:y 3]
+                                                                     [:z 2]] transact-time transact-time)))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
