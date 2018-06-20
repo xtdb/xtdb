@@ -364,7 +364,7 @@
         (if match?
           (let [attrs (map :attr iterators)]
             (log/debug :match attrs (bu/bytes->hex max-k))
-            [max-k (zipmap attrs (map :entities iterators))])
+            [[max-k (zipmap attrs (map :entities iterators))]])
           (recur))))))
 
 (defn- new-unary-join-virtual-index [indexes]
@@ -425,7 +425,7 @@
                    (do (swap! trie-state assoc :needs-seek? false)
                        (db/-seek-values idx (get min-vs depth)))
                    (db/-next-values idx))
-          [max-k new-values] values
+          [[max-k new-values]] values
           [_ parent-result] (last result-stack)
           result (some->> new-values
                           (merge parent-result)
@@ -437,7 +437,7 @@
           (log/debug :leaf-match-candidate (mapv bu/bytes->hex max-ks) result)
           (if result
             (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks))
-                [max-ks result])
+                [[max-ks result]])
             (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
                 (recur))))
 
@@ -493,7 +493,7 @@
           (.close ^Closeable i))))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
-  (when-let [[content-hash unary-join-result] content-hash+unary-join-results]
+  (when-let [[[content-hash unary-join-result]] content-hash+unary-join-results]
     (let [values+content-hashes [[content-hash (idx/new-id content-hash)]]]
       (->> (for [[_ entity-tx] (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values+content-hashes)]
              [(idx/value->bytes (:eid entity-tx)) [entity-tx]])

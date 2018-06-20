@@ -316,8 +316,9 @@
                         (idx/new-id :b7-12)}
                    :c #{(idx/new-id :c5-12)
                         (idx/new-id :c6-12)}}]
-                 (for [[v matches] (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)]
-                   (->> (for [[k entities] matches]
+                 (for [matches (doc/unary-leapfrog-join snapshot [:a :b :c] nil nil transact-time transact-time)
+                       [v join-results] matches]
+                   (->> (for [[k entities] join-results]
                           [k (set (map :eid entities))])
                         (into {})))))))))
 
@@ -379,30 +380,32 @@
                               [(bu/bytes->hex (idx/value->bytes a))
                                (bu/bytes->hex (idx/value->bytes b))
                                (bu/bytes->hex (idx/value->bytes c))]))
-                       (vec (for [[[a b c] _] result]
+                       (vec (for [matches result
+                                  [[a b c] join-results] matches]
                               [(bu/bytes->hex a)
                                (bu/bytes->hex b)
                                (bu/bytes->hex c)])))))
             (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
-                     (set (for [[v matches] result
-                                [k entities] matches
+                     (set (for [matches result
+                                [v join-results] matches
+                                [k entities] join-results
                                 {:keys [eid]} entities]
                             eid))))))))))
 
 (t/deftest test-leapfrog-triejoin-prunes-values-based-on-later-joins
-  (let [data [;; d365d8e84bb127ed8f4d076f7528641a7ce08049
+  (let [data [ ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
               {:crux.db/id :r13 :ra 1 :rb 3}
               ;; Unifies with :ta, but not with :sb
               ;; 597d68237e345bbb91eae7751e60a07fb904c8dd
               {:crux.db/id :r14 :ra 1 :rb 4}
               ;; Does not unify with :ta or :sb.
               {:crux.db/id :r25 :ra 2 :rb 5}
-               ;; 9434448654674927dbc44b2280d44f92166ac350
+              ;; 9434448654674927dbc44b2280d44f92166ac350
               {:crux.db/id :s34 :sb 3 :sc 4}
               ;; Unifies with :rb, but not with :tc
               ;; b824a31f61bf0fc0b498aa038dd9ae5bd08adb64
               {:crux.db/id :s37 :sb 3 :sc 7}
-               ;; eed43fbbc28c9b627a8b3e0fba770bab9d7a9465
+              ;; eed43fbbc28c9b627a8b3e0fba770bab9d7a9465
               {:crux.db/id :t14 :ta 1 :tc 4}
               ;; Unifies with :ra, but not with :sc
               ;; 6c63a4086ad403653314c2ab546aadd54fff897d
@@ -419,16 +422,17 @@
         (t/is (= #{(idx/new-id :r13)
                    (idx/new-id :s34)
                    (idx/new-id :t14)}
-                 (set (for [[v matches] (doc/leapfrog-triejoin snapshot
-                                                               [[:ra :ta [nil nil]]
-                                                                [:rb :sb [nil nil]]
-                                                                [:sc :tc [nil nil]]]
-                                                               [[:ra :rb]
-                                                                [:sb :sc]
-                                                                [:ta :tc]]
-                                                               transact-time
-                                                               transact-time)
-                            [_ entities] matches
+                 (set (for [matches (doc/leapfrog-triejoin snapshot
+                                                           [[:ra :ta [nil nil]]
+                                                            [:rb :sb [nil nil]]
+                                                            [:sc :tc [nil nil]]]
+                                                           [[:ra :rb]
+                                                            [:sb :sc]
+                                                            [:ta :tc]]
+                                                           transact-time
+                                                           transact-time)
+                            [v join-results] matches
+                            [k entities] join-results
                             {:keys [eid]} entities]
                         eid))))))))
 
@@ -493,7 +497,7 @@
         (t/is (= [(idx/new-id :x12)]
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
                                                                                      [:z 2]] transact-time transact-time)
-                       [v _] matches]
+                       [v entities] matches]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by content hash"
@@ -501,7 +505,7 @@
                   (idx/new-id :x22)]
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
                                                                                      [:z 2]] transact-time transact-time)
-                       [v _] matches]
+                       [v entities] matches]
                    (idx/new-id v)))))
 
       (t/testing "no entities"
