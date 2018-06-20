@@ -145,9 +145,9 @@
       (t/is (= "Find clause references unbound variable: bah" (.getMessage e))))))
 
 (t/deftest test-not-query
-  (t/is (= [[:fact ['e :name 'name]]
-            [:fact ['e :name "Ivan"]]
-            [:not [:fact ['e :last-name "Ivannotov"]]]]
+  (t/is (= [[:fact {:e 'e :a :name :v 'name}]
+            [:fact {:e 'e :a :name :v "Ivan"}]
+            [:not [:fact {:e 'e :a :last-name :v "Ivannotov"}]]]
 
            (s/conform :crux.query/where [['e :name 'name]
                                          ['e :name "Ivan"]
@@ -174,9 +174,9 @@
                             {:name "Bob" :last-name "Controlguy"}])
 
   ;; Here for dev reasons, delete when appropiate
-  (t/is (= '[[:fact [e :name name]]
-             [:fact [e :name "Ivan"]]
-             [:or [[:fact [e :last-name "Ivanov"]]]]]
+  (t/is (= '[[:fact {:e e :a :name :v name}]
+             [:fact {:e e :a :name :v "Ivan"}]
+             [:or [[:fact {:e e :a :last-name :v "Ivanov"}]]]]
            (s/conform :crux.query/where [['e :name 'name]
                                          ['e :name "Ivan"]
                                          '(or [[e :last-name "Ivanov"]])])))
@@ -321,7 +321,7 @@
                                               [:ivan :mentor x]]})))))))
 
 (t/deftest test-simple-numeric-range-search
-  (t/is (= [[:fact ['i :age 'age]]
+  (t/is (= [[:fact {:e 'i :a :age :v 'age}]
             [:range {:crux.query/fn <
                      :crux.query/sym 'age
                      :crux.query/val 20}]]
