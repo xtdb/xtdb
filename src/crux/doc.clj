@@ -625,12 +625,11 @@
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-join [this query-context attrs min-v max-v]
-    (for [entity-tx (->> (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
-                         (map second)
-                         (mapcat vals)
-                         (apply concat)
-                         (distinct))]
-      (map->DocEntity (assoc entity-tx :object-store object-store))))
+    (distinct (for [matches (unary-leapfrog-join query-context attrs min-v max-v business-time transact-time)
+                    [v join-results] matches
+                    [k entities] join-results
+                    entity-tx entities]
+                (map->DocEntity (assoc entity-tx :object-store object-store)))))
 
   (entity [this query-context eid]
     (when-let [entity-tx (first (entities-at query-context [eid] business-time transact-time))]
