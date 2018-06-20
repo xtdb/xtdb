@@ -206,9 +206,10 @@
   (assert (= (+ Short/BYTES id-size id-size) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= content-hash+entity-index-id (.getShort buffer)))
-    (.position buffer (+ Short/BYTES id-size))
-    (new-id (doto (byte-array id-size)
-              (->> (.get buffer))))))
+    [(doto (byte-array id-size)
+       (->> (.get buffer)))
+     (new-id (doto (byte-array id-size)
+               (->> (.get buffer))))]))
 
 (defn encode-meta-key ^bytes [k]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))

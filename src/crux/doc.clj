@@ -214,13 +214,15 @@
                               (enrich-entity-tx v))]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
-                [entity-tx])
+                [[(idx/id->bytes (.eid entity-tx)) entity-tx]])
               (recur (ks/-next i)))))))))
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
     (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
-      (vec (mapcat #(db/-seek-values entity-as-of-idx %) entities)))))
+      (vec (for [entity entities
+                 [_ entity-tx] (db/-seek-values entity-as-of-idx entity)]
+             entity-tx)))))
 
 (defrecord ContentHashEntityIndex [i]
   db/Index
@@ -232,8 +234,8 @@
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
   (when-let [[[v]] value+content-hashes]
     (for [content-hash (map second value+content-hashes)
-          entity (db/-seek-values content-hash-entity-idx content-hash)
-          entity-tx (db/-seek-values entity-as-of-idx entity)
+          [_ entity] (db/-seek-values content-hash-entity-idx content-hash)
+          [_ entity-tx] (db/-seek-values entity-as-of-idx entity)
           :when (= content-hash (.content-hash ^EntityTx entity-tx))]
       [v entity-tx])))
 
@@ -282,7 +284,8 @@
 (defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
   db/Index
   (-seek-values [this k]
-    (if-let [entity-tx (get @attr-state :entity-tx (first (db/-seek-values entity-as-of-idx entity)))]
+    (if-let [entity-tx (get @attr-state :entity-tx (let [[[_ entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+                                                     entity-tx))]
       (let [content-hash (.content-hash ^EntityTx entity-tx)
             values (get @attr-state :values
                         (->> (get-in (db/get-objects object-store [content-hash])
