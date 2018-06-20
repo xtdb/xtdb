@@ -265,21 +265,23 @@
   (-seek-values [this k]
     (if-let [entity-tx (get @attr-state :entity-tx (first (db/-seek-values entity-as-of-idx entity)))]
       (let [content-hash (.content-hash ^EntityTx entity-tx)
-            value (->> (get-in (db/get-objects object-store [content-hash])
-                               [content-hash attr])
-                       (normalize-value)
-                       (map idx/value->bytes)
-                       (into (sorted-set-by bu/bytes-comparator)))
-            [x & xs] (subseq value >= (idx/value->bytes k))
-            {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx})]
+            values (get @attr-state :values
+                        (->> (get-in (db/get-objects object-store [content-hash])
+                                     [content-hash attr])
+                             (normalize-value)
+                             (map idx/value->bytes)
+                             (into (sorted-set-by bu/bytes-comparator))))
+            [x & xs] (subseq values >= (idx/value->bytes k))
+            {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx :values values})]
         (when first
           [first [entity-tx]]))
       (reset! attr-state nil)))
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [first entity-tx]} (swap! attr-state (fn [{[x & xs] :rest}]
-                                                        {:first x :rest xs}))]
+    (let [{:keys [first entity-tx]} (swap! attr-state (fn [{[x & xs] :rest
+                                                            :as attr-state}]
+                                                        (assoc attr-state :first x :rest xs)))]
       (when first
         [first [entity-tx]]))))
 
