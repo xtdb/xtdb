@@ -123,7 +123,8 @@
                         :where [[x :rdf/type :ub/Publication]
                                 [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
 
-    ;; TODO: AssociateProfessor should be Professor. Should return 35.
+    ;; TODO: AssociateProfessor should be Professor.
+    ;; Should return 35 with lubm10.ntriples.
 
     ;; This query has small input and high selectivity. It assumes subClassOf relationship
     ;; between Professor and its subclasses. Class Professor has a wide hierarchy. Another
@@ -163,8 +164,9 @@
                         '{:find [x]
                           :where [[x :rdf/type :ub/Student]]})))))
 
-    ;; TODO: UndergraduateStudent should be Student. Really assumes
-    ;; more departments loaded. Should return 110.
+    ;; TODO: UndergraduateStudent should be Student.
+    ;; Should return 110 with lubm10.ntriples.
+    ;; EmptyHeaded also returns 59 for this with UndergraduateStudent.
 
     ;; This query is similar to Query 6 in terms of class Student but it increases in the
     ;; number of classes and properties and its selectivity is high.
@@ -181,8 +183,9 @@
                                            :ub/teacherOf
                                            y]]}))))))
 
-    ;; TODO: UndergraduateStudent should be Student. Really assumes
-    ;; more departments loaded. Should return 7791.
+    ;; TODO: UndergraduateStudent should be Student.
+    ;; Should return 7791 with lubm10.ntriples.
+    ;; EmptyHeaded also returns 5916 for this with UndergraduateStudent.
 
     ;; This query is further more complex than Query 7 by including one more property.
     ;; "Elapsed time: 40.463253 msecs"
@@ -239,8 +242,9 @@
                           :where [[x :rdf/type :ub/ResearchGroup]
                                   [x :ub/subOrganizationOf :http://www.University0.edu]]})))))
 
-    ;; TODO: FullProfessor should really be Chair. Really assumes more
-    ;; departments loaded.  Should return 15.
+    ;; TODO: FullProfessor should really be Chair.
+    ;; Should return 15 with lubm10.ntriples.
+    ;; EmptyHeaded also returns 125 for this with FullProfessor.
 
     ;; The benchmark data do not produce any instances of class Chair. Instead, each
     ;; Department individual is linked to the chair professor of that department by
@@ -273,8 +277,7 @@
                          :where [[x :rdf/type :ub/Person]
                                  [:http://www.University0.edu :ub/hasAlumnus x]]})))))
 
-    ;; TODO: really assumes more departments loaded. Should return
-    ;; 5916.
+    ;; TODO: Should return 5916 with lubm10.ntriples, which we do.
 
     ;; This query is the simplest in the test set. This query
     ;; represents those with large input and low selectivity and does

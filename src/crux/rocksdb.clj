@@ -24,16 +24,15 @@
   (close [this]
     (.close i)))
 
-(defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options]
+(defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
   KvSnapshot
   (new-iterator [this]
     (->RocksKvIterator (.newIterator db read-options)))
 
   Closeable
   (close [_]
-    (let [snapshot (.snapshot read-options)]
-      (.close read-options)
-      (.releaseSnapshot db snapshot))))
+    (.close read-options)
+    (.releaseSnapshot db snapshot)))
 
 (defrecord RocksKv [db-dir]
   KvStore
@@ -50,9 +49,12 @@
       (assoc this :db db :options opts :write-options (doto (WriteOptions.)
                                                         (.setDisableWAL true)))))
 
-  (new-snapshot [{:keys [^RocksDB db]} ]
-    (->RocksKvSnapshot db (doto (ReadOptions.)
-                            (.setSnapshot (.getSnapshot db)))))
+  (new-snapshot [{:keys [^RocksDB db]}]
+    (let [snapshot (.getSnapshot db)]
+      (->RocksKvSnapshot db
+                         (doto (ReadOptions.)
+                           (.setSnapshot snapshot))
+                         snapshot)))
 
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]

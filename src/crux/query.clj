@@ -57,11 +57,11 @@
 
 (defn- value-matches? [qc db {:keys [e a v]} result]
   (let [entity (get result e)]
-    (when-let [entity-v (db/attr-val entity a)]
-      (or (not v)
-          (and (logic-var? v)
-               (compare-vals? entity-v (some-> (result v) v-for-comparison)))
-          (compare-vals? entity-v v)))))
+    (or (not v)
+        (when-let [entity-v (db/attr-val entity a)]
+          (or (and (logic-var? v)
+                   (compare-vals? entity-v (some-> (result v) v-for-comparison)))
+              (compare-vals? entity-v v))))))
 
 (defn- built-in-op [x {:keys [sym val op]}]
   (let [diff (compare x val)]
