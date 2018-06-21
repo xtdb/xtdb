@@ -373,8 +373,8 @@
 (defrecord UnaryJoinVirtualIndex [indexes iterators-state]
   db/Index
   (-seek-values [this k]
-    (let [iterators (->> (for [entity-idx indexes]
-                           (new-leapfrog-iterator-state entity-idx (db/-seek-values entity-idx k)))
+    (let [iterators (->> (for [idx indexes]
+                           (new-leapfrog-iterator-state idx (db/-seek-values idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
       (reset! iterators-state {:iterators iterators :index 0})
