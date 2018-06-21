@@ -61,16 +61,16 @@
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
             [(idx/value->bytes content-hash) [content-hash]]))))))
 
-(defrecord PredicateVirtualIndex [i pred seek-k-fn]
+(defrecord PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
   (-seek-values [this k]
-    (when-let [value+results (db/-seek-values i (seek-k-fn k))]
+    (when-let [value+results (db/-seek-values idx (seek-k-fn k))]
       (when (pred (first value+results))
         value+results)))
 
   db/OrderedIndex
   (-next-values [this]
-    (when-let [value+results (db/-next-values i)]
+    (when-let [value+results (db/-next-values idx)]
       (when (pred (first value+results))
         value+results))))
 
@@ -81,31 +81,31 @@
         (compare-pred (bu/compare-bytes value seek-k))))
     (constantly true)))
 
-(defn- new-equal-virtual-index [i v]
+(defn- new-equal-virtual-index [idx v]
   (let [pred (value-comparsion-predicate zero? v)]
-    (->PredicateVirtualIndex i pred identity)))
+    (->PredicateVirtualIndex idx pred identity)))
 
-(defn- new-less-than-equal-virtual-index [i max-v]
+(defn- new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
-    (->PredicateVirtualIndex i pred identity)))
+    (->PredicateVirtualIndex idx pred identity)))
 
-(defn- new-less-than-virtual-index [i max-v]
+(defn- new-less-than-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate neg? max-v)]
-    (->PredicateVirtualIndex i pred identity)))
+    (->PredicateVirtualIndex idx pred identity)))
 
-(defn- new-greater-than-equal-virtual-index [i min-v]
+(defn- new-greater-than-equal-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
-    (->PredicateVirtualIndex i pred (fn [k]
-                                      (if (pred (idx/value->bytes k))
-                                        k
-                                        min-v)))))
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (pred (idx/value->bytes k))
+                                          k
+                                          min-v)))))
 
-(defn- new-greater-than-virtual-index [i min-v]
+(defn- new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
-        idx (->PredicateVirtualIndex i pred (fn [k]
-                                              (if (pred (idx/value->bytes k))
-                                                k
-                                                min-v)))]
+        idx (->PredicateVirtualIndex idx pred (fn [k]
+                                                (if (pred (idx/value->bytes k))
+                                                  k
+                                                  min-v)))]
     (reify
       db/Index
       (-seek-values [this k]
@@ -116,8 +116,8 @@
       (-next-values [this]
         (db/-next-values idx)))))
 
-(defn- new-doc-attribute-value-index [i attr]
-  (->DocAttributeValueIndex i attr (atom nil)))
+(defn- new-doc-attribute-value-index [idx attr]
+  (->DocAttributeValueIndex idx attr (atom nil)))
 
 (defn- wrap-with-range-constraints [idx {:keys [min-v inclusive-min-v? max-v inclusive-max-v?]
                                          :as range-constraints}]
