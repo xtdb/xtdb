@@ -373,11 +373,7 @@
                         (idx/new-id :b7-12)}
                    :c #{(idx/new-id :c5-12)
                         (idx/new-id :c6-12)}}]
-                 (for [[v join-results] (doc/unary-leapfrog-join snapshot [:a :b :c] {:min-v nil
-                                                                                      :inclusive-min-v? true
-                                                                                      :max-v nil
-                                                                                      :inclusive-max-v? true}
-                                                                 transact-time transact-time)]
+                 (for [[v join-results] (doc/unary-leapfrog-join snapshot [:a :b :c] nil transact-time transact-time)]
                    (->> (for [[k entities] join-results]
                           [k (set (map :eid entities))])
                         (into {})))))))))
@@ -421,18 +417,9 @@
 
         (t/testing "leapfrog triejoin"
           (let [result (doc/leapfrog-triejoin snapshot
-                                              [[:ra :ta {:min-v nil
-                                                         :inclusive-min-v? true
-                                                         :max-v nil
-                                                         :inclusive-max-v? true}]
-                                               [:rb :sb {:min-v nil
-                                                         :inclusive-min-v? true
-                                                         :max-v nil
-                                                         :inclusive-max-v? true}]
-                                               [:sc :tc {:min-v nil
-                                                         :inclusive-min-v? true
-                                                         :max-v nil
-                                                         :inclusive-max-v? true}]]
+                                              [[:ra :ta]
+                                               [:rb :sb]
+                                               [:sc :tc]]
                                               [[:ra :rb]
                                                [:sb :sc]
                                                [:ta :tc]]
@@ -490,18 +477,9 @@
                    (idx/new-id :s34)
                    (idx/new-id :t14)}
                  (set (for [[v join-results] (doc/leapfrog-triejoin snapshot
-                                                                    [[:ra :ta {:min-v nil
-                                                                               :inclusive-min-v? true
-                                                                               :max-v nil
-                                                                               :inclusive-max-v? true}]
-                                                                     [:rb :sb {:min-v nil
-                                                                               :inclusive-min-v? true
-                                                                               :max-v nil
-                                                                               :inclusive-max-v? true}]
-                                                                     [:sc :tc {:min-v nil
-                                                                               :inclusive-min-v? true
-                                                                               :max-v nil
-                                                                               :inclusive-max-v? true}]]
+                                                                    [[:ra :ta]
+                                                                     [:rb :sb]
+                                                                     [:sc :tc]]
                                                                     [[:ra :rb]
                                                                      [:sb :sc]
                                                                      [:ta :tc]]
@@ -528,11 +506,7 @@
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                    expected-entity-tx]]
-                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y {:min-v nil
-                                                                                             :inclusive-min-v? true
-                                                                                             :max-v nil
-                                                                                             :inclusive-max-v? true}
-                                                               transact-time transact-time)
+                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y nil transact-time transact-time)
                        entity entities]
                    [(bu/bytes->hex v) entity])))
 

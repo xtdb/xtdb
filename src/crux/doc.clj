@@ -503,8 +503,8 @@
 
 (defn leapfrog-triejoin [snapshot unary-attrs shared-attrs business-time transact-time]
   (let [attr->di+range-constraints (->> (for [attrs unary-attrs
-                                              attr (butlast attrs)]
-                                          [attr [(ks/new-iterator snapshot) (last attrs)]])
+                                              attr (take 2 attrs)]
+                                          [attr [(ks/new-iterator snapshot) (first (drop 2 attrs))]])
                                         (into {}))]
     (try
       (with-open [ci (ks/new-iterator snapshot)
@@ -516,7 +516,7 @@
                                           [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
                                         (into {}))
               triejoin-idx (-> (for [attrs unary-attrs]
-                                 (->> (for [attr (butlast attrs)]
+                                 (->> (for [attr (take 2 attrs)]
                                         (if (satisfies? db/Index attr)
                                           attr
                                           (get attr->entity-indexes attr)))

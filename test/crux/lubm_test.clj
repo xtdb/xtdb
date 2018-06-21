@@ -279,10 +279,7 @@
                                       :http://www.Department0.University0.edu/AssociateProfessor0
                                       (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                         :ub/teacherOf)
-                                      {:min-v nil
-                                       :inclusive-min-v? true
-                                       :max-v nil
-                                       :inclusive-max-v? true}
+                                      nil
                                       now now)
                 y-literal-result (for [[v entities] y-raw-literal-result]
                                    (idx/new-id v))
@@ -304,14 +301,8 @@
                 x-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex x-raw-result (atom nil)) :attr :crux.db/id_x_1)
                 x-takesCourse-y-raw-result (doc/leapfrog-triejoin snapshot
                                                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                    [[:ub/takesCourse y-literal-sorted-virtual-idx {:min-v nil
-                                                                                                                    :inclusive-min-v? true
-                                                                                                                    :max-v nil
-                                                                                                                    :inclusive-max-v? true}]
-                                                                     [:crux.db/id x-sorted-virtual-idx {:min-v nil
-                                                                                                        :inclusive-min-v? true
-                                                                                                        :max-v nil
-                                                                                                        :inclusive-max-v? true}]])
+                                                                    [[:ub/takesCourse y-literal-sorted-virtual-idx]
+                                                                     [:crux.db/id x-sorted-virtual-idx]])
                                                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                                                     [[:ub/takesCourse :crux.db/id_x_1]])
                                                                   now now)
