@@ -626,16 +626,16 @@
               [(idx/value->bytes 3) :c]]
              (atom nil))]
     (t/is (= :a
-             (second (db/-seek-values idx (idx/value->bytes 0)))))
+             (second (db/-seek-values idx 0))))
     (t/is (= :a
-             (second (db/-seek-values idx (idx/value->bytes 1)))))
+             (second (db/-seek-values idx 1))))
     (t/is (= :c
              (second (db/-next-values idx))))
     (t/is (= :c
-             (second (db/-seek-values idx (idx/value->bytes 2)))))
+             (second (db/-seek-values idx 2))))
     (t/is (= :c
-             (second (db/-seek-values idx (idx/value->bytes 3)))))
-    (t/is (nil? (db/-seek-values idx (idx/value->bytes 4))))))
+             (second (db/-seek-values idx 3))))
+    (t/is (nil? (db/-seek-values idx 4)))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

@@ -335,7 +335,7 @@
 (defrecord SortedVirtualIndex [values seq-state]
   db/Index
   (-seek-values [this k]
-    (let [idx (Collections/binarySearch values [k]
+    (let [idx (Collections/binarySearch values [(idx/value->bytes k)]
                                         (reify Comparator
                                           (compare [_ [a] [b]]
                                             (bu/compare-bytes (or a idx/nil-id-bytes)
@@ -419,11 +419,13 @@
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              entity-indexes (for [attr attrs
-                                   :let [di (get attr->di attr)
-                                         doc-idx (-> (new-doc-attribute-value-index di attr)
-                                                     (wrap-with-range-constraints range-constraints))]]
-                               (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr))
+              entity-indexes (for [attr attrs]
+                               (if (satisfies? db/Index attr)
+                                 attr
+                                 (let [di (get attr->di attr)
+                                       doc-idx (-> (new-doc-attribute-value-index di attr)
+                                                   (wrap-with-range-constraints range-constraints))]
+                                   (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr))))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
           (->> (new-unary-join-virtual-index entity-indexes)
                (idx->vec))))
@@ -513,7 +515,9 @@
                                         (into {}))
               triejoin-idx (-> (for [attrs unary-attrs]
                                  (->> (butlast attrs)
-                                      (mapv attr->entity-indexes)
+                                      (mapv #(if (satisfies? db/Index %)
+                                               %
+                                               (get attr->entity-indexes %)))
                                       (new-unary-join-virtual-index)))
                                (vec)
                                (new-triejoin-virtual-index shared-attrs))]

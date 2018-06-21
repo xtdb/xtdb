@@ -273,30 +273,50 @@
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (let [now (Date.)
-                y-literal-result (for [[v entities] (doc/literal-entity-values
-                                                     object-store
-                                                     snapshot
-                                                     :http://www.Department0.University0.edu/AssociateProfessor0
-                                                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                       :ub/teacherOf)
-                                                     {:min-v nil
-                                                      :inclusive-min-v? true
-                                                      :max-v nil
-                                                      :inclusive-max-v? true}
-                                                     now now)]
+                y-raw-literal-result (doc/literal-entity-values
+                                      object-store
+                                      snapshot
+                                      :http://www.Department0.University0.edu/AssociateProfessor0
+                                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                        :ub/teacherOf)
+                                      {:min-v nil
+                                       :inclusive-min-v? true
+                                       :max-v nil
+                                       :inclusive-max-v? true}
+                                      now now)
+                y-literal-result (for [[v entities] y-raw-literal-result]
                                    (idx/new-id v))
-                y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
-                                             snapshot
-                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                               [[:rdf/type :ub/Course]])
-                                             now now)]
+                y-raw-result (doc/shared-literal-attribute-entities-join
+                              snapshot
+                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                [[:rdf/type :ub/Course]])
+                              now now)
+                y-result (for [[v entities] y-raw-result]
                            (idx/new-id v))
-                x-result (for [[v entities] (doc/shared-literal-attribute-entities-join
-                                             snapshot
-                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                               [[:rdf/type :ub/UndergraduateStudent]])
-                                             now now)]
-                           (idx/new-id v))]
+                x-raw-result (doc/shared-literal-attribute-entities-join
+                              snapshot
+                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                [[:rdf/type :ub/UndergraduateStudent]])
+                              now now)
+                x-result (for [[v entities] x-raw-result]
+                           (idx/new-id v))
+                y-literal-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex y-raw-literal-result (atom nil)) :attr :crux.db/id_y_1)
+                x-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex x-raw-result (atom nil)) :attr :crux.db/id_x_1)
+                x-takesCourse-y-raw-result (doc/leapfrog-triejoin snapshot
+                                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                    [[:ub/takesCourse y-literal-sorted-virtual-idx {:min-v nil
+                                                                                                                    :inclusive-min-v? true
+                                                                                                                    :max-v nil
+                                                                                                                    :inclusive-max-v? true}]
+                                                                     [:crux.db/id x-sorted-virtual-idx {:min-v nil
+                                                                                                        :inclusive-min-v? true
+                                                                                                        :max-v nil
+                                                                                                        :inclusive-max-v? true}]])
+                                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                    [[:ub/takesCourse :crux.db/id_x_1]])
+                                                                  now now)
+                x-takesCourse-y-result (for [[v entities] x-takesCourse-y-raw-result]
+                                         (idx/new-id v))]
             (t/is (= (->> [:http://www.Department0.University0.edu/Course15
                            :http://www.Department0.University0.edu/Course16
                            :http://www.Department0.University0.edu/GraduateCourse17
@@ -305,7 +325,11 @@
                           (sort))
                      y-literal-result))
             (t/is (= 61 (count y-result)))
-            (t/is (= 532 (count x-result)))))))
+            (t/is (= 532 (count x-result)))
+            (t/is (= 59 (count (for [[v join-results] x-takesCourse-y-raw-result
+                                     {:keys [eid]} (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                       :ub/takesCourse))]
+                                 eid))))))))
 
     ;; TODO: UndergraduateStudent should be Student.
     ;; Should return 7791 with lubm10.ntriples.
