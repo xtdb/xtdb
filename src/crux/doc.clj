@@ -27,7 +27,7 @@
                  (ks/-next i))
           (do (reset! peek-state k)
               (when (seq acc)
-                acc)))))))
+                [(ffirst acc) (mapv second acc)])))))))
 
 (defrecord DocAttributeValueIndex [i attr peek-state]
   db/Index
@@ -50,7 +50,7 @@
       (when-let [k (ks/-seek i seek-k)]
         (when (bu/bytes=? k seek-k prefix-size)
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
-            [[(idx/value->bytes content-hash) content-hash]])))))
+            [(idx/value->bytes content-hash) [content-hash]])))))
 
   db/OrderedIndex
   (-next-values [this]
@@ -59,20 +59,20 @@
             prefix-size (alength seek-k)]
         (when (bu/bytes=? k seek-k prefix-size)
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
-            [[(idx/value->bytes content-hash) content-hash]]))))))
+            [(idx/value->bytes content-hash) [content-hash]]))))))
 
 (defrecord PredicateVirtualIndex [i pred seek-k-fn]
   db/Index
   (-seek-values [this k]
-    (seq (for [value+result (db/-seek-values i (seek-k-fn k))
-               :when (pred (first value+result))]
-           value+result)))
+    (when-let [value+results (db/-seek-values i (seek-k-fn k))]
+      (when (pred (first value+results))
+        value+results)))
 
   db/OrderedIndex
   (-next-values [this]
-    (seq (for [value+result (db/-next-values i)
-               :when (pred (first value+result))]
-           value+result))))
+    (when-let [value+results (db/-next-values i)]
+      (when (pred (first value+results))
+        value+results))))
 
 (defn- value-comparsion-predicate [compare-pred v]
   (if v
@@ -223,30 +223,38 @@
                               (enrich-entity-tx v))]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
-                [[(idx/id->bytes (.eid entity-tx)) entity-tx]])
+                [(idx/id->bytes (.eid entity-tx)) [entity-tx]])
               (recur (ks/-next i)))))))))
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
     (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
-      (vec (for [entity entities
-                 [_ entity-tx] (db/-seek-values entity-as-of-idx entity)]
-             entity-tx)))))
+      (some->> (for [entity entities
+                     :let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+                     :when entity-tx]
+                 entity-tx)
+               (not-empty)
+               (vec)))))
 
 (defrecord ContentHashEntityIndex [i]
   db/Index
   (db/-seek-values [this k]
-    (->> (idx/encode-content-hash-prefix-key k)
-         (all-keys-in-prefix i)
-         (map idx/decode-content-hash+entity-key->entity))))
+    (when-let [value+results (->> (idx/encode-content-hash-prefix-key k)
+                                  (all-keys-in-prefix i)
+                                  (map idx/decode-content-hash+entity-key->entity)
+                                  (seq))]
+      [(ffirst value+results) (mapv second value+results)])))
 
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
-  (when-let [[[v]] value+content-hashes]
-    (for [content-hash (map second value+content-hashes)
-          [_ entity] (db/-seek-values content-hash-entity-idx content-hash)
-          [_ entity-tx] (db/-seek-values entity-as-of-idx entity)
-          :when (= content-hash (.content-hash ^EntityTx entity-tx))]
-      [v entity-tx])))
+  (when-let [[v content-hashes] value+content-hashes]
+    (when-let [entity-txs (->> (for [content-hash content-hashes
+                                     :let [[_ entities] (db/-seek-values content-hash-entity-idx content-hash)]
+                                     entity entities
+                                     :let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+                                     :when (= content-hash (.content-hash ^EntityTx entity-tx))]
+                                 entity-tx)
+                               (seq))]
+      [v (vec entity-txs)])))
 
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx attr]
   db/Index
@@ -269,8 +277,8 @@
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)]
       (->> (idx->vec entity-attribute-idx)
-           (reduce into [])
-           (mapv second)))))
+           (mapcat second)
+           (vec)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -289,7 +297,7 @@
 (defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
   db/Index
   (-seek-values [this k]
-    (if-let [entity-tx (get @attr-state :entity-tx (let [[[_ entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+    (if-let [entity-tx (get @attr-state :entity-tx (let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
                                                      entity-tx))]
       (let [content-hash (.content-hash ^EntityTx entity-tx)
             values (get @attr-state :values
@@ -301,7 +309,7 @@
             [x & xs] (subseq values >= (idx/value->bytes k))
             {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx :values values})]
         (when first
-          [[first entity-tx]]))
+          [first [entity-tx]]))
       (reset! attr-state nil)))
 
   db/OrderedIndex
@@ -310,7 +318,7 @@
                                                             :as attr-state}]
                                                         (assoc attr-state :first x :rest xs)))]
       (when first
-        [[first entity-tx]]))))
+        [first [entity-tx]]))))
 
 (defn- new-literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
   (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil)))
@@ -327,17 +335,17 @@
 (defrecord SortedVirtualIndex [values seq-state]
   db/Index
   (-seek-values [this k]
-    (let [idx (Collections/binarySearch values [[k]]
+    (let [idx (Collections/binarySearch values [k]
                                         (reify Comparator
-                                          (compare [_ a b]
-                                            (bu/compare-bytes (or (ffirst a) idx/nil-id-bytes)
-                                                              (or (ffirst b) idx/nil-id-bytes)))))
+                                          (compare [_ [a] [b]]
+                                            (bu/compare-bytes (or a idx/nil-id-bytes)
+                                                              (or b idx/nil-id-bytes)))))
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
                                     idx))
           {:keys [first]} (reset! seq-state {:first x :rest xs})]
       (if first
-        (vec first)
+        first
         (reset! seq-state nil))))
 
   db/OrderedIndex
@@ -346,21 +354,21 @@
                                                  :as seq-state}]
                                              (assoc seq-state :first x :rest xs)))]
       (when first
-        (vec first)))))
+        first))))
 
 (defn- new-sorted-virtual-index [idx]
   (->SortedVirtualIndex
    (->> (idx->vec idx)
-        (sort-by ffirst bu/bytes-comparator)
+        (sort-by first bu/bytes-comparator)
         (vec))
    (atom nil)))
 
 (defn- new-leapfrog-iterator-state [idx value+entities]
-  (let [[[v]] value+entities]
+  (let [[v] value+entities]
     {:attr (:attr idx)
      :idx idx
      :key (or v idx/nil-id-bytes)
-     :entities (set (map second value+entities))}))
+     :entities (set (second value+entities))}))
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-state]
   db/Index
@@ -398,7 +406,7 @@
         (if match?
           (let [attrs (map :attr iterators)]
             (log/debug :match attrs (bu/bytes->hex max-k))
-            [[max-k (zipmap attrs (map :entities iterators))]])
+            [max-k (zipmap attrs (map :entities iterators))])
           (recur))))))
 
 (defn- new-unary-join-virtual-index [indexes]
@@ -455,7 +463,7 @@
                    (do (swap! trie-state assoc :needs-seek? false)
                        (db/-seek-values idx (get min-vs depth)))
                    (db/-next-values idx))
-          [[max-k new-values]] values
+          [max-k new-values] values
           [_ parent-result] (last result-stack)
           result (some->> new-values
                           (merge parent-result)
@@ -467,7 +475,7 @@
           (log/debug :leaf-match-candidate (mapv bu/bytes->hex max-ks) result)
           (if result
             (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks))
-                [[max-ks result]])
+                [max-ks result])
             (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
                 (recur))))
 
@@ -515,12 +523,10 @@
           (.close ^Closeable i))))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
-  (when-let [[[content-hash unary-join-result]] content-hash+unary-join-results]
-    (let [values+content-hashes [[content-hash (idx/new-id content-hash)]]]
-      (->> (for [[_ entity-tx] (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values+content-hashes)]
-             [(idx/value->bytes (:eid entity-tx)) entity-tx])
-           (not-empty)
-           (vec)))))
+  (when-let [[content-hash] content-hash+unary-join-results]
+    (let [value+content-hashes [content-hash [(idx/new-id content-hash)]]]
+      (when-let [[_ [entity-tx]] (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx value+content-hashes)]
+        [(idx/value->bytes (:eid entity-tx)) [entity-tx]]))))
 
 (defrecord SharedEntityLiteralAttributeValuesVirtualIndex [unary-join-literal-doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
@@ -645,8 +651,7 @@
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-join [this query-context attrs range-constraints]
-    (distinct (for [matches (unary-leapfrog-join query-context attrs range-constraints business-time transact-time)
-                    [v join-results] matches
+    (distinct (for [[v join-results] (unary-leapfrog-join query-context attrs range-constraints business-time transact-time)
                     [k entities] join-results
                     entity-tx entities]
                 (map->DocEntity (assoc entity-tx :object-store object-store)))))

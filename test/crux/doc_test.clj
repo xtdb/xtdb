@@ -193,7 +193,7 @@
 
       (t/testing "can see entity after business or transact time"
         (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" transact-time)))
-        (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time #inst "2018-05-22"))))
+        (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] transact-time transact-time))))
 
       (t/testing "can see entity history"
         (t/is (= [(idx/map->EntityTx {:eid eid
@@ -373,12 +373,11 @@
                         (idx/new-id :b7-12)}
                    :c #{(idx/new-id :c5-12)
                         (idx/new-id :c6-12)}}]
-                 (for [matches (doc/unary-leapfrog-join snapshot [:a :b :c] {:min-v nil
-                                                                             :inclusive-min-v? true
-                                                                             :max-v nil
-                                                                             :inclusive-max-v? true}
-                                                        transact-time transact-time)
-                       [v join-results] matches]
+                 (for [[v join-results] (doc/unary-leapfrog-join snapshot [:a :b :c] {:min-v nil
+                                                                                      :inclusive-min-v? true
+                                                                                      :max-v nil
+                                                                                      :inclusive-max-v? true}
+                                                                 transact-time transact-time)]
                    (->> (for [[k entities] join-results]
                           [k (set (map :eid entities))])
                         (into {})))))))))
@@ -450,14 +449,12 @@
                               [(bu/bytes->hex (idx/value->bytes a))
                                (bu/bytes->hex (idx/value->bytes b))
                                (bu/bytes->hex (idx/value->bytes c))]))
-                       (vec (for [matches result
-                                  [[a b c] join-results] matches]
+                       (vec (for [[[a b c] join-results] result]
                               [(bu/bytes->hex a)
                                (bu/bytes->hex b)
                                (bu/bytes->hex c)])))))
             (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
-                     (set (for [matches result
-                                [v join-results] matches
+                     (set (for [[v join-results] result
                                 [k entities] join-results
                                 {:keys [eid]} entities]
                             eid))))))))))
@@ -492,25 +489,24 @@
         (t/is (= #{(idx/new-id :r13)
                    (idx/new-id :s34)
                    (idx/new-id :t14)}
-                 (set (for [matches (doc/leapfrog-triejoin snapshot
-                                                           [[:ra :ta {:min-v nil
-                                                                      :inclusive-min-v? true
-                                                                      :max-v nil
-                                                                      :inclusive-max-v? true}]
-                                                            [:rb :sb {:min-v nil
-                                                                      :inclusive-min-v? true
-                                                                      :max-v nil
-                                                                      :inclusive-max-v? true}]
-                                                            [:sc :tc {:min-v nil
-                                                                      :inclusive-min-v? true
-                                                                      :max-v nil
-                                                                      :inclusive-max-v? true}]]
-                                                           [[:ra :rb]
-                                                            [:sb :sc]
-                                                            [:ta :tc]]
-                                                           transact-time
-                                                           transact-time)
-                            [v join-results] matches
+                 (set (for [[v join-results] (doc/leapfrog-triejoin snapshot
+                                                                    [[:ra :ta {:min-v nil
+                                                                               :inclusive-min-v? true
+                                                                               :max-v nil
+                                                                               :inclusive-max-v? true}]
+                                                                     [:rb :sb {:min-v nil
+                                                                               :inclusive-min-v? true
+                                                                               :max-v nil
+                                                                               :inclusive-max-v? true}]
+                                                                     [:sc :tc {:min-v nil
+                                                                               :inclusive-min-v? true
+                                                                               :max-v nil
+                                                                               :inclusive-max-v? true}]]
+                                                                    [[:ra :rb]
+                                                                     [:sb :sc]
+                                                                     [:ta :tc]]
+                                                                    transact-time
+                                                                    transact-time)
                             [k entities] join-results
                             {:keys [eid]} entities]
                         eid))))))))
@@ -532,23 +528,23 @@
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                    expected-entity-tx]]
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v nil
-                                                                                        :inclusive-min-v? true
-                                                                                        :max-v nil
-                                                                                        :inclusive-max-v? true}
-                                                          transact-time transact-time)
-                       [v entity] matches]
+                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y {:min-v nil
+                                                                                             :inclusive-min-v? true
+                                                                                             :max-v nil
+                                                                                             :inclusive-max-v? true}
+                                                               transact-time transact-time)
+                       entity entities]
                    [(bu/bytes->hex v) entity])))
 
         (t/testing "within range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                      expected-entity-tx]]
-                   (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
-                                                                                          :inclusive-min-v? true
-                                                                                          :max-v 2
-                                                                                          :inclusive-max-v? true}
-                                                            transact-time transact-time)
-                         [v entity] matches]
+                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
+                                                                                               :inclusive-min-v? true
+                                                                                               :max-v 2
+                                                                                               :inclusive-max-v? true}
+                                                                 transact-time transact-time)
+                         entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
@@ -570,21 +566,21 @@
                    expected-entity-tx]
                   [(bu/bytes->hex (idx/value->bytes 3))
                    expected-entity-tx]]
-                 (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 0
-                                                                                        :inclusive-min-v? true
-                                                                                        :max-v 3
-                                                                                        :inclusive-max-v? true} transact-time transact-time)
-                       [v entity] matches]
+                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z {:min-v 0
+                                                                                             :inclusive-min-v? true
+                                                                                             :max-v 3
+                                                                                             :inclusive-max-v? true} transact-time transact-time)
+                       entity entities]
                    [(bu/bytes->hex v) entity])))
 
         (t/testing "sub range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
                      expected-entity-tx]]
-                   (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 2
-                                                                                          :inclusive-min-v? true
-                                                                                          :max-v 2
-                                                                                          :inclusive-max-v? true} transact-time transact-time)
-                         [v entity] matches]
+                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z {:min-v 2
+                                                                                               :inclusive-min-v? true
+                                                                                               :max-v 2
+                                                                                               :inclusive-max-v? true} transact-time transact-time)
+                         entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
@@ -606,21 +602,21 @@
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "single entity"
         (t/is (= [(idx/new-id :x12)]
-                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
-                                                                                     [:z 2]] transact-time transact-time)
-                       [v entity] matches]
+                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
+                                                                                          [:z 2]] transact-time transact-time)
+                       entity entities]
                    (idx/new-id v))))
         (t/is (= [(idx/new-id :x12)]
-                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)
-                       [v entity] matches]
+                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)
+                       entity entities]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by eid"
         (t/is (= (sort [(idx/new-id :y22)
                         (idx/new-id :x22)])
-                 (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
-                                                                                     [:z 2]] transact-time transact-time)
-                       [v entity] matches]
+                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
+                                                                                          [:z 2]] transact-time transact-time)
+                       entity entities]
                    (idx/new-id v)))))
 
       (t/testing "no entities"
@@ -630,19 +626,19 @@
 
 (t/deftest test-sorted-virtual-index
   (let [idx (doc/->SortedVirtualIndex
-             [[[(idx/value->bytes 1) :a]]
-              [[(idx/value->bytes 3) :c]]]
+             [[(idx/value->bytes 1) :a]
+              [(idx/value->bytes 3) :c]]
              (atom nil))]
     (t/is (= :a
-             (second (first (db/-seek-values idx (idx/value->bytes 0))))))
+             (second (db/-seek-values idx (idx/value->bytes 0)))))
     (t/is (= :a
-             (second (first (db/-seek-values idx (idx/value->bytes 1))))))
+             (second (db/-seek-values idx (idx/value->bytes 1)))))
     (t/is (= :c
-             (second (first (db/-next-values idx)))))
+             (second (db/-next-values idx))))
     (t/is (= :c
-             (second (first (db/-seek-values idx (idx/value->bytes 2))))))
+             (second (db/-seek-values idx (idx/value->bytes 2)))))
     (t/is (= :c
-             (second (first (db/-seek-values idx (idx/value->bytes 3))))))
+             (second (db/-seek-values idx (idx/value->bytes 3)))))
     (t/is (nil? (db/-seek-values idx (idx/value->bytes 4))))))
 
 (t/deftest test-store-and-retrieve-meta
