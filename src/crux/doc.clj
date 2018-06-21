@@ -684,21 +684,24 @@
                 (or cache (lru/new-cache cache-size))))
        cache-name))
 
-(defn- new-cached-object-store [kv cache-size]
-  (->CachedObjectStore (named-cache (:state kv)::doc-cache cache-size)
-                       (->DocObjectStore kv)))
+(defn new-cached-object-store
+  ([kv]
+   (new-cached-object-store kv default-doc-cache-size))
+  ([kv cache-size]
+   (->CachedObjectStore (named-cache (:state kv)::doc-cache cache-size)
+                        (->DocObjectStore kv))))
 
 (defn db
   ([kv]
    (db kv (Date.)))
   ([kv business-time]
    (->DocDatasource kv
-                    (new-cached-object-store kv default-doc-cache-size)
+                    (new-cached-object-store kv)
                     business-time
                     (Date.)))
   ([kv business-time transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout)
    (->DocDatasource kv
-                    (new-cached-object-store kv default-doc-cache-size)
+                    (new-cached-object-store kv)
                     business-time
                     transact-time)))

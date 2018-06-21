@@ -52,7 +52,8 @@
                     (map #(rdf/use-default-language % :en))
                     (vec))
         tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
-        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
+        object-store (doc/new-cached-object-store f/*kv*)
+        indexer (tx/->DocIndexer f/*kv* tx-log object-store)]
 
     (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -134,7 +135,32 @@
                                      [z :rdf/type :ub/Department]
                                      [x :ub/memberOf z]
                                      [z :ub/subOrganizationOf y]
-                                     [x :ub/undergraduateDegreeFrom y]]})))))
+                                     [x :ub/undergraduateDegreeFrom y]]}))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (let [now (Date.)
+                y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/University]])
+                                             now now)]
+                           (idx/new-id v))
+                x-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/GraduateStudent]])
+                                             now now)]
+                           (idx/new-id v))
+                z-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/Department]])
+                                             now now)]
+                           (idx/new-id v))]
+            (t/is (= 237 (count y-result)))
+            (t/is (= 146 (count x-result)))
+            (t/is (= 1 (count z-result)))))))
 
     ;; TODO: Publication has subClassOf children, should use rules.
 
@@ -189,8 +215,19 @@
                                           [x :ub/worksFor :http://www.Department0.University0.edu]
                                           [x :ub/name y1]
                                           [x :ub/emailAddress y2]
-                                          [x :ub/telephone y3]]}))))))
+                                          [x :ub/telephone y3]]})))))
 
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (t/is (= 14
+                   (let [now (Date.)]
+                     (count (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                                snapshot
+                                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                  [[:rdf/type :ub/AssociateProfessor]
+                                                   [:ub/worksFor :http://www.Department0.University0.edu]])
+                                                now now)]
+                              (idx/new-id v)))))))))
 
     ;; This query assumes subClassOf relationship between Person and its subclasses
     ;; and subPropertyOf relationship between memberOf and its subproperties.
@@ -231,7 +268,35 @@
                                           [x :ub/takesCourse y]
                                           [:http://www.Department0.University0.edu/AssociateProfessor0
                                            :ub/teacherOf
-                                           y]]}))))))
+                                           y]]})))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (let [now (Date.)
+                y-literal-result (for [[v entities] (doc/literal-entity-values
+                                                     object-store
+                                                     snapshot
+                                                     :http://www.Department0.University0.edu/AssociateProfessor0
+                                                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                       :ub/teacherOf)
+                                                     nil
+                                                     now now)]
+                                   (idx/new-id v))
+                y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/Course]])
+                                             now now)]
+                           (idx/new-id v))
+                x-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/UndergraduateStudent]])
+                                             now now)]
+                           (idx/new-id v))]
+            (t/is (= 4 (count y-literal-result)))
+            (t/is (= 61 (count y-result)))
+            (t/is (= 532 (count x-result)))))))
 
     ;; TODO: UndergraduateStudent should be Student.
     ;; Should return 7791 with lubm10.ntriples.
@@ -248,7 +313,26 @@
                                            [y :rdf/type :ub/Department]
                                            [x :ub/memberOf y]
                                            [y :ub/subOrganizationOf :http://www.University0.edu]
-                                           [x :ub/emailAddress z]]}))))))
+                                           [x :ub/emailAddress z]]})))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (let [now (Date.)
+                y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/Department]
+                                                [:ub/subOrganizationOf :http://www.University0.edu]])
+                                             now now)]
+                           (idx/new-id v))
+                x-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/UndergraduateStudent]])
+                                             now now)]
+                           (idx/new-id v))]
+            (t/is (= 1 (count y-result)))
+            (t/is (= 532 (count x-result)))))))
 
     ;; Besides the aforementioned features of class Student and the wide hierarchy of
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
@@ -310,7 +394,26 @@
                                   :where [[x :rdf/type :ub/FullProfessor]
                                           [y :rdf/type :ub/Department]
                                           [x :ub/worksFor y]
-                                          [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+                                          [y :ub/subOrganizationOf :http://www.University0.edu]]})))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (let [now (Date.)
+                y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/Department]
+                                                [:ub/subOrganizationOf :http://www.University0.edu]])
+                                             now now)]
+                           (idx/new-id v))
+                x-result (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                             snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               [[:rdf/type :ub/FullProfessor]])
+                                             now now)]
+                           (idx/new-id v))]
+            (t/is (= 1 (count y-result)))
+            (t/is (= 10 (count x-result)))))))
 
     ;; Property hasAlumnus is defined in the benchmark ontology as the inverse of
     ;; property degreeFrom, which has three subproperties: undergraduateDegreeFrom,
