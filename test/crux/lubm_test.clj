@@ -279,7 +279,10 @@
                                                      :http://www.Department0.University0.edu/AssociateProfessor0
                                                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                                        :ub/teacherOf)
-                                                     nil
+                                                     {:min-v nil
+                                                      :inclusive-min-v? true
+                                                      :max-v nil
+                                                      :inclusive-max-v? true}
                                                      now now)]
                                    (idx/new-id v))
                 y-result (for [[v entities] (doc/shared-literal-attribute-entities-join
