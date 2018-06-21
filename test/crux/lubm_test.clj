@@ -3,12 +3,15 @@
             [clojure.java.io :as io]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.tx :as tx]
+            [crux.kv-store :as ks]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.fixtures :as f]
-            [crux.embedded-kafka :as ek]))
+            [crux.embedded-kafka :as ek])
+  (:import [java.util Date]))
 
 (t/use-fixtures :once ek/with-embedded-kafka-cluster)
 (t/use-fixtures :each ek/with-kafka-client f/with-kv-store)
@@ -71,7 +74,18 @@
                  (q/q (doc/db f/*kv*)
                       (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                         '{:find [u]
-                          :where [[u :ub/name "University0"]]}))))))
+                          :where [[u :ub/name "University0"]]}))))
+
+        (t/testing "low level index query"
+          (with-open [snapshot (ks/new-snapshot f/*kv*)]
+            (t/is (= [(idx/new-id :http://www.University0.edu)]
+                     (let [now (Date.)]
+                       (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                           snapshot
+                                           (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                             [[:ub/name "University0"]])
+                                           now now)]
+                         (idx/new-id v)))))))))
 
     ;; This query bears large input and high selectivity. It queries about just one class and
     ;; one property and does not assume any hierarchy information or inference.
@@ -86,7 +100,24 @@
                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
                         :where [[x :rdf/type :ub/GraduateStudent]
-                                [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]})))))
+                                [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]}))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (t/is (= (->>[:http://www.Department0.University0.edu/GraduateStudent101
+                        :http://www.Department0.University0.edu/GraduateStudent124
+                        :http://www.Department0.University0.edu/GraduateStudent142
+                        :http://www.Department0.University0.edu/GraduateStudent44]
+                       (map idx/new-id)
+                       (sort))
+                   (let [now (Date.)]
+                     (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                         snapshot
+                                         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                           [[:rdf/type :ub/GraduateStudent]
+                                            [:ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]])
+                                         now now)]
+                       (idx/new-id v))))))))
 
     ;; TODO: subOrganizationOf is transitive, should use rules.
 
@@ -121,7 +152,26 @@
                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
                         :where [[x :rdf/type :ub/Publication]
-                                [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
+                                [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]}))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (t/is (= (->> [:http://www.Department0.University0.edu/AssistantProfessor0/Publication0
+                         :http://www.Department0.University0.edu/AssistantProfessor0/Publication1
+                         :http://www.Department0.University0.edu/AssistantProfessor0/Publication2
+                         :http://www.Department0.University0.edu/AssistantProfessor0/Publication3
+                         :http://www.Department0.University0.edu/AssistantProfessor0/Publication4
+                         :http://www.Department0.University0.edu/AssistantProfessor0/Publication5]
+                        (map idx/new-id)
+                        (sort))
+                   (let [now (Date.)]
+                     (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                         snapshot
+                                         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                           [[:rdf/type :ub/Publication]
+                                            [:ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]])
+                                         now now)]
+                       (idx/new-id v))))))))
 
     ;; TODO: AssociateProfessor should be Professor.
     ;; Should return 35 with lubm10.ntriples.
@@ -288,4 +338,15 @@
       (t/is (= 532 (count (q/q (doc/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x]
-                                   :where [[x :rdf/type :ub/UndergraduateStudent]]}))))))))
+                                   :where [[x :rdf/type :ub/UndergraduateStudent]]})))))
+
+      (t/testing "low level index query"
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (t/is (= 532
+                   (let [now (Date.)]
+                     (count (for [[v entities] (doc/shared-literal-attribute-entities-join
+                                                snapshot
+                                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                  [[:rdf/type :ub/UndergraduateStudent]])
+                                                now now)]
+                              (idx/new-id v)))))))))))
