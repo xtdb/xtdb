@@ -105,12 +105,12 @@
 
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (= (->>[:http://www.Department0.University0.edu/GraduateStudent101
-                        :http://www.Department0.University0.edu/GraduateStudent124
-                        :http://www.Department0.University0.edu/GraduateStudent142
-                        :http://www.Department0.University0.edu/GraduateStudent44]
-                       (map idx/new-id)
-                       (sort))
+          (t/is (= (->> [:http://www.Department0.University0.edu/GraduateStudent101
+                         :http://www.Department0.University0.edu/GraduateStudent124
+                         :http://www.Department0.University0.edu/GraduateStudent142
+                         :http://www.Department0.University0.edu/GraduateStudent44]
+                        (map idx/new-id)
+                        (sort))
                    (let [now (Date.)]
                      (for [[v entities] (doc/shared-literal-attribute-entities-join
                                          snapshot
@@ -294,7 +294,13 @@
                                                [[:rdf/type :ub/UndergraduateStudent]])
                                              now now)]
                            (idx/new-id v))]
-            (t/is (= 4 (count y-literal-result)))
+            (t/is (= (->> [:http://www.Department0.University0.edu/Course15
+                           :http://www.Department0.University0.edu/Course16
+                           :http://www.Department0.University0.edu/GraduateCourse17
+                           :http://www.Department0.University0.edu/GraduateCourse18]
+                          (map idx/new-id)
+                          (sort))
+                     y-literal-result))
             (t/is (= 61 (count y-result)))
             (t/is (= 532 (count x-result)))))))
 
