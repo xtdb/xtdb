@@ -603,26 +603,22 @@
       (t/testing "single entity"
         (t/is (= [(idx/new-id :x12)]
                  (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
-                                                                                          [:z 2]] transact-time transact-time)
-                       entity entities]
+                                                                                          [:z 2]] transact-time transact-time)]
                    (idx/new-id v))))
         (t/is (= [(idx/new-id :x12)]
-                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)
-                       entity entities]
+                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by eid"
         (t/is (= (sort [(idx/new-id :y22)
                         (idx/new-id :x22)])
                  (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
-                                                                                          [:z 2]] transact-time transact-time)
-                       entity entities]
+                                                                                          [:z 2]] transact-time transact-time)]
                    (idx/new-id v)))))
 
       (t/testing "no entities"
-        (t/is (empty?
-               (doc/shared-literal-attribute-entities-join snapshot [[:y 3]
-                                                                     [:z 2]] transact-time transact-time)))))))
+        (t/is (empty? (doc/shared-literal-attribute-entities-join snapshot [[:y 3]
+                                                                            [:z 2]] transact-time transact-time)))))))
 
 (t/deftest test-sorted-virtual-index
   (let [idx (doc/->SortedVirtualIndex
