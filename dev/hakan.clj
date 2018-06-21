@@ -485,23 +485,6 @@
                         [(+ low (* range c-low))
                          (+ low (* range c-high))]))
                     [0.0M 1.0M] (str s \u0000))]
-    (loop [p (int (/ (count s) 3))]
-      (let [candidate (with-precision p
-                        (/ (+ low high) 2M))]
-        (if (= s (try
-                   (decompress-arithmetic arithmetic-reverse-lookup candidate)
-                   (catch ArithmeticException ignore)))
-          candidate
-          (recur (+ 2 p)))))))
-
-(defn compress-arithmetic [s]
-  (let [[low high] (reduce
-                    (fn [[low high] c]
-                      (let [range (- high low)
-                            [c-low c-high] (get arithmetic-lookup c)]
-                        [(+ low (* range c-low))
-                         (+ low (* range c-high))]))
-                    [0.0M 1.0M] (str s \u0000))]
     (loop [p (long (* 1.5 (count s)))]
       (let [candidate (with-precision p
                         (/ (+ low high) 2M))]
