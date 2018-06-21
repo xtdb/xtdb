@@ -136,6 +136,8 @@
 
 ;;; Id compression spike
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (def five-bit-page (zipmap (sort (str (apply str (map char (range (int \a) (inc (int \z)))))
                                       "-_:/#@"))
                            (range)))
@@ -152,7 +154,7 @@
      (let [[head tail] (split-at 3 s)
            three-five-bit-chars (map five-bit-page head)]
        (if (= 3 (count (filter int? three-five-bit-chars)))
-         (let [[a b c] three-five-bit-chars]
+         (let [[^long a ^long b ^long c] three-five-bit-chars]
            (.put acc (unchecked-byte (bit-and 0xFF (bit-or 0x80
                                                            (bit-shift-left a 2)
                                                            (bit-shift-right b 3)))))
@@ -167,8 +169,8 @@
   ([bs acc]
    (if (empty? bs)
      acc
-     (if (= 0x80 (bit-and 0x80 (first bs)))
-       (let [[x y & bs] bs
+     (if (= 0x80 (bit-and 0x80 ^long (first bs)))
+       (let [[^long x ^long y & bs] bs
              a (bit-and 0x1F (bit-shift-right x 2))
              b (bit-and 0x1F (bit-or (bit-shift-left x 3)
                                      (bit-and 0x7 (bit-shift-right y 5))))
@@ -206,14 +208,14 @@
     (if (= idx (count s))
       acc
       (let [prefix-s (subs s 0 idx)
-            [n sub-s-idx] (loop [n 0x1F]
-                            (when (> n 2)
-                              (let [sub-s (subs s idx (min (+ n idx) (count s)))]
-                                (if-let [idx (clojure.string/index-of prefix-s sub-s)]
-                                  [(count sub-s) idx]
-                                  (recur (dec n))))))]
+            [^long n ^long sub-s-idx] (loop [n 0x1F]
+                                        (when (> n 2)
+                                          (let [sub-s (subs s idx (min (+ n idx) (count s)))]
+                                            (if-let [idx (clojure.string/index-of prefix-s sub-s)]
+                                              [(count sub-s) idx]
+                                              (recur (dec n))))))]
         (if (and sub-s-idx (pos? sub-s-idx))
-          (recur (+ idx (long n))
+          (recur (+ idx n)
                  (str acc (char (bit-or 0x80 n)) (char sub-s-idx)))
           (recur (inc idx) (str acc (get s idx))))))))
 
@@ -231,7 +233,7 @@
   (loop [pq (->> (for [[i v] (map-indexed vector (reverse s))]
                    [(Math/pow i weight) v])
                  (sort-by first))]
-    (let [[[ia :as an] [ib :as bn] & pq] pq]
+    (let [[[^long ia :as an] [^long ib :as bn] & pq] pq]
       (if bn
         (recur (conj (vec (sort-by first pq))
                      [(+ ia ib) an bn]))
@@ -330,7 +332,7 @@
                   (unchecked-inc-int bit-idx)
                   node)))))))
 
-(defn encode-elias-omega-code [n]
+(defn encode-elias-omega-code [^long n]
   (assert (pos? n))
   (loop [acc "0"
          n n]
@@ -392,7 +394,7 @@
           (.toByteArray (BigInteger. acc 2)))))))
 
 (defn bwt [s]
-  (->> (map-indexed (fn [i c]
+  (->> (map-indexed (fn [^long i c]
                       [(get s (dec i))
                        (inc i)
                        (subs s i (count s))]) s)
@@ -416,10 +418,10 @@
         total-weights (bigdec (reduce + (map first weights)))
         lookup (for [[w x] weights]
                  [x (with-precision 5
-                      (/ w total-weights))])
+                      (.divide (bigdec w) total-weights *math-context*))])
         [_ lookup] (reduce
                     (fn [[idx acc] [x w]]
-                      (let [end-idx (min (+ idx w) 1M)]
+                      (let [end-idx (.min (.add ^BigDecimal idx w) 1M)]
                         [end-idx (assoc acc x [idx end-idx])]))
                     [0M {}] lookup)]
     lookup))
@@ -460,11 +462,28 @@
      (loop [acc ""
             n n]
        (let [[_ [c [low high]]] (first (rsubseq arithmetic-reverse-lookup <= n))
-             range (- high low)
-             n (/ (- n low) range)]
+             range (.subtract ^BigDecimal high low)
+             n (.divide (.subtract ^BigDecimal n low) range)]
          (if (= c \u0000)
            acc
            (recur (str acc c) n)))))))
+
+(defn decompress-arithmetic
+  ([n]
+   (decompress-arithmetic arithmetic-reverse-lookup n))
+  ([arithmetic-reverse-lookup n]
+   (with-precision (.scale (bigdec n))
+     (loop [acc ""
+            low 0M
+            high 1M]
+       (let [range (.subtract high low)
+             seek (.divide (.subtract ^BigDecimal n low) range)
+             [_ [c [l-low l-high]]] (first (rsubseq arithmetic-reverse-lookup <= seek))]
+         (if (= c \u0000)
+           acc
+           (recur (str acc c)
+                  (.add low (.multiply range l-low))
+                  (.add low (.multiply range l-high)))))))))
 
 ;; get encoded number
 ;; Do
@@ -477,17 +496,17 @@
 ;; number
 ;; divide encoded number by range
 ;; until no more symbols
-(defn compress-arithmetic [s]
+(defn ^BigDecimal compress-arithmetic [s]
   (let [[low high] (reduce
-                    (fn [[low high] c]
-                      (let [range (- high low)
+                    (fn [[^BigDecimal low ^BigDecimal high] c]
+                      (let [range (.subtract ^BigDecimal high low)
                             [c-low c-high] (get arithmetic-lookup c)]
-                        [(+ low (* range c-low))
-                         (+ low (* range c-high))]))
+                        [(.add low (.multiply range c-low))
+                         (.add low (.multiply range c-high))]))
                     [0.0M 1.0M] (str s \u0000))]
     (loop [p (long (* 1.5 (count s)))]
       (let [candidate (with-precision p
-                        (/ (+ low high) 2M))]
+                        (.add ^BigDecimal low (.divide (.subtract ^BigDecimal high low) 2M *math-context*)))]
         (if (= s (try
                    (decompress-arithmetic arithmetic-reverse-lookup candidate)
                    (catch ArithmeticException ignore)))
