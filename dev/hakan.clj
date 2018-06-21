@@ -398,3 +398,115 @@
                        (subs s i (count s))]) s)
        (sort-by last)
        (vec)))
+
+(def arithmetic-alphabet (str "\u0000"
+                              "-._"
+                              ":/"
+                              "etaoinshrdlcumwfgypbvkjxqz"
+                              "0123456789"
+                              "ETAOINSHRDLCUMWFGYPBVKJXQZ"
+                              "~ "
+                              "?#[]@"
+                              "%"
+                              "!$&'()*+,;="))
+
+(defn build-arithmetic-lookup [alphabet]
+  (let [weights (for [[i x] (map-indexed vector (reverse alphabet))]
+                  [(bigdec (Math/pow i Math/E)) x])
+        total-weights (bigdec (reduce + (map first weights)))
+        lookup (for [[w x] weights]
+                 [x (with-precision 5
+                      (/ w total-weights))])
+        [_ lookup] (reduce
+                    (fn [[idx acc] [x w]]
+                      (let [end-idx (min (+ idx w) 1M)]
+                        [end-idx (assoc acc x [idx end-idx])]))
+                    [0M {}] lookup)]
+    lookup))
+
+(defn- build-arithmetic-reverse-lookup [arithmetic-lookup]
+  (->> (zipmap (map first (vals arithmetic-lookup))
+               arithmetic-lookup)
+       (into (sorted-map))))
+
+(def arithmetic-lookup (build-arithmetic-lookup arithmetic-alphabet))
+(def arithmetic-reverse-lookup (build-arithmetic-reverse-lookup arithmetic-lookup))
+
+;; "bill gates"
+;; {\space [0.00M 0.10M]
+;;  \a [0.10M 0.20M]
+;;  \b [0.20M 0.30M]
+;;  \e [0.30M 0.40M]
+;;  \g [0.40M 0.50M]
+;;  \i [0.50M 0.60M]
+;;  \l [0.60M 0.80M]
+;;  \s [0.80M 0.90M]
+;;  \t [0.90M 1.00M]}
+
+;; Set low to 0.0
+;; Set high to 1.0
+;; While there are still input symbols do
+;; get an input symbol
+;; code range = high - low.
+;; high = low + range·high range(symbol)
+;; low = low + range·low range(symbol)
+;; End of While
+;; output low
+(defn decompress-arithmetic
+  ([n]
+   (decompress-arithmetic arithmetic-reverse-lookup n))
+  ([arithmetic-reverse-lookup n]
+   (with-precision (.scale (bigdec n))
+     (loop [acc ""
+            n n]
+       (let [[_ [c [low high]]] (first (rsubseq arithmetic-reverse-lookup <= n))
+             range (- high low)
+             n (/ (- n low) range)]
+         (if (= c \u0000)
+           acc
+           (recur (str acc c) n)))))))
+
+;; get encoded number
+;; Do
+;; find symbol whose range straddles
+;; the encoded number
+;; output the symbol
+;; range = symbol high value - symbol
+;; low value
+;; subtract symbol low value from encoded
+;; number
+;; divide encoded number by range
+;; until no more symbols
+(defn compress-arithmetic [s]
+  (let [[low high] (reduce
+                    (fn [[low high] c]
+                      (let [range (- high low)
+                            [c-low c-high] (get arithmetic-lookup c)]
+                        [(+ low (* range c-low))
+                         (+ low (* range c-high))]))
+                    [0.0M 1.0M] (str s \u0000))]
+    (loop [p (int (/ (count s) 3))]
+      (let [candidate (with-precision p
+                        (/ (+ low high) 2M))]
+        (if (= s (try
+                   (decompress-arithmetic arithmetic-reverse-lookup candidate)
+                   (catch ArithmeticException ignore)))
+          candidate
+          (recur (+ 2 p)))))))
+
+(defn compress-arithmetic [s]
+  (let [[low high] (reduce
+                    (fn [[low high] c]
+                      (let [range (- high low)
+                            [c-low c-high] (get arithmetic-lookup c)]
+                        [(+ low (* range c-low))
+                         (+ low (* range c-high))]))
+                    [0.0M 1.0M] (str s \u0000))]
+    (loop [p (long (* 1.5 (count s)))]
+      (let [candidate (with-precision p
+                        (/ (+ low high) 2M))]
+        (if (= s (try
+                   (decompress-arithmetic arithmetic-reverse-lookup candidate)
+                   (catch ArithmeticException ignore)))
+          candidate
+          (recur (inc p)))))))
