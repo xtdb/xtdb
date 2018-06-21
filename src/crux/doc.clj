@@ -301,7 +301,7 @@
             [x & xs] (subseq values >= (idx/value->bytes k))
             {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx :values values})]
         (when first
-          [[first [entity-tx]]]))
+          [[first entity-tx]]))
       (reset! attr-state nil)))
 
   db/OrderedIndex
@@ -310,7 +310,7 @@
                                                             :as attr-state}]
                                                         (assoc attr-state :first x :rest xs)))]
       (when first
-        [[first [entity-tx]]]))))
+        [[first entity-tx]]))))
 
 (defn- new-literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
   (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil)))
@@ -518,7 +518,7 @@
   (when-let [[[content-hash unary-join-result]] content-hash+unary-join-results]
     (let [values+content-hashes [[content-hash (idx/new-id content-hash)]]]
       (->> (for [[_ entity-tx] (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values+content-hashes)]
-             [(idx/value->bytes (:eid entity-tx)) [entity-tx]])
+             [(idx/value->bytes (:eid entity-tx)) entity-tx])
            (not-empty)
            (vec)))))
 

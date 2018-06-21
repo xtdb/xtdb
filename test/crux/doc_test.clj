@@ -531,25 +531,25 @@
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                   [expected-entity-tx]]]
+                   expected-entity-tx]]
                  (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v nil
                                                                                         :inclusive-min-v? true
                                                                                         :max-v nil
                                                                                         :inclusive-max-v? true}
                                                           transact-time transact-time)
-                       [v entities] matches]
-                   [(bu/bytes->hex v) entities])))
+                       [v entity] matches]
+                   [(bu/bytes->hex v) entity])))
 
         (t/testing "within range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                     [expected-entity-tx]]]
+                     expected-entity-tx]]
                    (for [matches (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
                                                                                           :inclusive-min-v? true
                                                                                           :max-v 2
                                                                                           :inclusive-max-v? true}
                                                             transact-time transact-time)
-                         [v entities] matches]
-                     [(bu/bytes->hex v) entities]))))
+                         [v entity] matches]
+                     [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
           (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 2
@@ -565,27 +565,27 @@
 
       (t/testing "multiple values"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                   [expected-entity-tx]]
+                   expected-entity-tx]
                   [(bu/bytes->hex (idx/value->bytes 2))
-                   [expected-entity-tx]]
+                   expected-entity-tx]
                   [(bu/bytes->hex (idx/value->bytes 3))
-                   [expected-entity-tx]]]
+                   expected-entity-tx]]
                  (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 0
                                                                                         :inclusive-min-v? true
                                                                                         :max-v 3
                                                                                         :inclusive-max-v? true} transact-time transact-time)
-                       [v entities] matches]
-                   [(bu/bytes->hex v) entities])))
+                       [v entity] matches]
+                   [(bu/bytes->hex v) entity])))
 
         (t/testing "sub range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
-                     [expected-entity-tx]]]
+                     expected-entity-tx]]
                    (for [matches (doc/literal-entity-values object-store snapshot eid :z {:min-v 2
                                                                                           :inclusive-min-v? true
                                                                                           :max-v 2
                                                                                           :inclusive-max-v? true} transact-time transact-time)
-                         [v entities] matches]
-                     [(bu/bytes->hex v) entities]))))
+                         [v entity] matches]
+                     [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
           (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z {:min-v 4
@@ -608,11 +608,11 @@
         (t/is (= [(idx/new-id :x12)]
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
                                                                                      [:z 2]] transact-time transact-time)
-                       [v entities] matches]
+                       [v entity] matches]
                    (idx/new-id v))))
         (t/is (= [(idx/new-id :x12)]
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)
-                       [v entities] matches]
+                       [v entity] matches]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by eid"
@@ -620,7 +620,7 @@
                         (idx/new-id :x22)])
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
                                                                                      [:z 2]] transact-time transact-time)
-                       [v entities] matches]
+                       [v entity] matches]
                    (idx/new-id v)))))
 
       (t/testing "no entities"
