@@ -615,9 +615,9 @@
                        [v entities] matches]
                    (idx/new-id v)))))
 
-      (t/testing "multiple entities, ordered by content hash"
-        (t/is (= [(idx/new-id :y22)
-                  (idx/new-id :x22)]
+      (t/testing "multiple entities, ordered by eid"
+        (t/is (= (sort [(idx/new-id :y22)
+                        (idx/new-id :x22)])
                  (for [matches (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
                                                                                      [:z 2]] transact-time transact-time)
                        [v entities] matches]
@@ -627,6 +627,23 @@
         (t/is (empty?
                (doc/shared-literal-attribute-entities-join snapshot [[:y 3]
                                                                      [:z 2]] transact-time transact-time)))))))
+
+(t/deftest test-sorted-virtual-index
+  (let [idx (doc/->SortedVirtualIndex
+             [[[(idx/value->bytes 1) :a]]
+              [[(idx/value->bytes 3) :c]]]
+             (atom nil))]
+    (t/is (= :a
+             (second (first (db/-seek-values idx (idx/value->bytes 0))))))
+    (t/is (= :a
+             (second (first (db/-seek-values idx (idx/value->bytes 1))))))
+    (t/is (= :c
+             (second (first (db/-next-values idx)))))
+    (t/is (= :c
+             (second (first (db/-seek-values idx (idx/value->bytes 2))))))
+    (t/is (= :c
+             (second (first (db/-seek-values idx (idx/value->bytes 3))))))
+    (t/is (nil? (db/-seek-values idx (idx/value->bytes 4))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

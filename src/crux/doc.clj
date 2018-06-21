@@ -8,7 +8,7 @@
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable]
-           [java.util Date]
+           [java.util Collections Comparator Date]
            [crux.index EntityTx]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -196,6 +196,13 @@
                    k) (step f-next f-next))))))
     #(ks/-seek i prefix) #(ks/-next i))))
 
+(defn- idx->vec [idx]
+  (when-let [result (db/-seek-values idx nil)]
+    (->> (repeatedly #(db/-next-values idx))
+         (take-while identity)
+         (cons result)
+         (vec))))
+
 ;; Entities
 
 (defn- ^EntityTx enrich-entity-tx [entity-tx content-hash]
@@ -261,12 +268,9 @@
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)]
-      (when-let [k (db/-seek-values entity-attribute-idx nil)]
-        (->> (repeatedly #(db/-next-values entity-attribute-idx))
-             (take-while identity)
-             (apply concat k)
-             (map second)
-             (vec))))))
+      (->> (idx->vec entity-attribute-idx)
+           (reduce into [])
+           (mapv second)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -316,13 +320,40 @@
     (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           literal-entity-attribute-values-idx (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
                                                   (wrap-with-range-constraints range-constraints))]
-      (when-let [result (db/-seek-values literal-entity-attribute-values-idx nil)]
-        (->> (repeatedly #(db/-next-values literal-entity-attribute-values-idx))
-             (take-while identity)
-             (cons result)
-             (vec))))))
+      (idx->vec literal-entity-attribute-values-idx))))
 
 ;; Join
+
+(defrecord SortedVirtualIndex [values seq-state]
+  db/Index
+  (-seek-values [this k]
+    (let [idx (Collections/binarySearch values [[k]]
+                                        (reify Comparator
+                                          (compare [_ a b]
+                                            (bu/compare-bytes (or (ffirst a) idx/nil-id-bytes)
+                                                              (or (ffirst b) idx/nil-id-bytes)))))
+          [x & xs] (subvec values (if (neg? idx)
+                                    (dec (- idx))
+                                    idx))
+          {:keys [first]} (reset! seq-state {:first x :rest xs})]
+      (if first
+        (vec first)
+        (reset! seq-state nil))))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (let [{:keys [first]} (swap! seq-state (fn [{[x & xs] :rest
+                                                 :as seq-state}]
+                                             (assoc seq-state :first x :rest xs)))]
+      (when first
+        (vec first)))))
+
+(defn- new-sorted-virtual-index [idx]
+  (->SortedVirtualIndex
+   (->> (idx->vec idx)
+        (sort-by ffirst bu/bytes-comparator)
+        (vec))
+   (atom nil)))
 
 (defn- new-leapfrog-iterator-state [idx value+entities]
   (let [[[v]] value+entities]
@@ -386,11 +417,8 @@
                                                      (wrap-with-range-constraints range-constraints))]]
                                (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
-          (when-let [result (db/-seek-values unary-join-idx nil)]
-            (->> (repeatedly #(db/-next-values unary-join-idx))
-                 (take-while identity)
-                 (cons result)
-                 (vec)))))
+          (->> (new-unary-join-virtual-index entity-indexes)
+               (idx->vec))))
       (finally
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
@@ -481,11 +509,7 @@
                                       (new-unary-join-virtual-index)))
                                (vec)
                                (new-triejoin-virtual-index shared-attrs))]
-          (when-let [result (db/-seek-values triejoin-idx nil)]
-            (->> (repeatedly #(db/-next-values triejoin-idx))
-                 (take-while identity)
-                 (cons result)
-                 (vec)))))
+          (idx->vec triejoin-idx)))
       (finally
         (doseq [[i] (vals attr->di+range-constraints)]
           (.close ^Closeable i))))))
@@ -525,11 +549,9 @@
                                                           unary-join-literal-doc-idx
                                                           content-hash-entity-idx
                                                           entity-as-of-idx)]
-          (when-let [result (db/-seek-values shared-entity-literal-attribute-values-idx nil)]
-            (->> (repeatedly #(db/-next-values shared-entity-literal-attribute-values-idx))
-                 (take-while identity)
-                 (cons result)
-                 (vec)))))
+          (->> shared-entity-literal-attribute-values-idx
+               (new-sorted-virtual-index)
+               (idx->vec))))
       (finally
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
