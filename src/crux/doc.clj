@@ -512,7 +512,7 @@
 
 (defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
   (let [attr->di+range-constraints (->> (for [attrs unary-attrs
-                                              :let [[attrs range-constraints] (unary-attrs->attrs+range-constraint attrs)]
+                                              :let [[attrs range-constraints] (unary-attrs->attrs+range-constraints attrs)]
                                               attr attrs
                                               :when (not (satisfies? db/Index attr))]
                                           [attr [(ks/new-iterator snapshot) range-constraints]])
