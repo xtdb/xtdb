@@ -458,32 +458,22 @@
   ([n]
    (decompress-arithmetic arithmetic-reverse-lookup n))
   ([arithmetic-reverse-lookup n]
-   (with-precision (.scale (bigdec n))
-     (loop [acc ""
-            n n]
-       (let [[_ [c [low high]]] (first (rsubseq arithmetic-reverse-lookup <= n))
-             range (.subtract ^BigDecimal high low)
-             n (.divide (.subtract ^BigDecimal n low) range)]
-         (if (= c \u0000)
-           acc
-           (recur (str acc c) n)))))))
-
-(defn decompress-arithmetic
-  ([n]
-   (decompress-arithmetic arithmetic-reverse-lookup n))
-  ([arithmetic-reverse-lookup n]
-   (with-precision (.scale (bigdec n))
-     (loop [acc ""
-            low 0M
-            high 1M]
-       (let [range (.subtract high low)
-             seek (.divide (.subtract ^BigDecimal n low) range)
-             [_ [c [l-low l-high]]] (first (rsubseq arithmetic-reverse-lookup <= seek))]
-         (if (= c \u0000)
-           acc
-           (recur (str acc c)
-                  (.add low (.multiply range l-low))
-                  (.add low (.multiply range l-high)))))))))
+   (let [n (if (bytes? n)
+             (let [bd (bigdec (biginteger ^butes n))]
+               (.movePointLeft bd (.precision bd)))
+             n)]
+     (with-precision (.scale (bigdec n))
+       (loop [acc ""
+              low 0M
+              high 1M]
+         (let [range (.subtract high low)
+               seek (.divide (.subtract ^BigDecimal n low) range java.math.RoundingMode/HALF_UP)
+               [_ [c [l-low l-high]]] (first (rsubseq arithmetic-reverse-lookup <= seek))]
+           (if (= c \u0000)
+             acc
+             (recur (str acc c)
+                    (.add low (.multiply range l-low))
+                    (.add low (.multiply range l-high))))))))))
 
 ;; get encoded number
 ;; Do
@@ -496,22 +486,25 @@
 ;; number
 ;; divide encoded number by range
 ;; until no more symbols
-(defn ^BigDecimal compress-arithmetic [s]
-  (let [[low high] (reduce
-                    (fn [[^BigDecimal low ^BigDecimal high] c]
-                      (let [range (.subtract ^BigDecimal high low)
-                            [c-low c-high] (get arithmetic-lookup c)]
-                        [(.add low (.multiply range c-low))
-                         (.add low (.multiply range c-high))]))
-                    [0.0M 1.0M] (str s \u0000))]
-    (loop [p (long (* 1.5 (count s)))]
-      (let [candidate (with-precision p
-                        (.stripTrailingZeros (.add ^BigDecimal low (.divide (.subtract ^BigDecimal high low) 2M *math-context*))))]
-        (if (= s (try
-                   (decompress-arithmetic arithmetic-reverse-lookup candidate)
-                   (catch ArithmeticException ignore)))
-          candidate
-          (recur (inc p)))))))
+(defn compress-arithmetic
+  (^bytes [s]
+   (compress-arithmetic s arithmetic-lookup))
+  (^bytes [s arithmetic-lookup]
+   (let [[low high] (reduce
+                     (fn [[^BigDecimal low ^BigDecimal high] c]
+                       (let [range (.subtract ^BigDecimal high low)
+                             [c-low c-high] (get arithmetic-lookup c)]
+                         [(.add low (.multiply range c-low))
+                          (.add low (.multiply range c-high))]))
+                     [0.0M 1.0M] (str s \u0000))]
+     (loop [p (long (* 1.5 (count s)))]
+       (let [candidate (with-precision p
+                         (.setScale (.add ^BigDecimal low (.divide (.subtract ^BigDecimal high low) 2M *math-context*)) p java.math.RoundingMode/HALF_UP))]
+         (if (= s (try
+                    (decompress-arithmetic arithmetic-reverse-lookup candidate)
+                    (catch ArithmeticException ignore)))
+           (.toByteArray (.unscaledValue (bigdec candidate)))
+           (recur (inc p))))))))
 
 ;; See https://marknelson.us/posts/2014/10/19/data-compression-with-arithmetic-coding.html
 ;; https://web.stanford.edu/class/ee398a/handouts/papers/WittenACM87ArithmCoding.pdf
