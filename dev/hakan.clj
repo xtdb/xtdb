@@ -513,11 +513,43 @@
           candidate
           (recur (inc p)))))))
 
-;; See http://www.drdobbs.com/cpp/data-compression-with-arithmetic-encodin/240169251?pgno=3
+;; int freq[No-of-symbolstlj - (
+;; 0,
+;; 1. 1, 1. 1. 1, 1, 1, 1, 1, 1, 124, 1, 1, 1, 1, 1,
+;; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+;; /* I l + $ t ( 1 l + / l /
+;; 1236, 1, 21, 9, 3, 1, 2:, 15, 2, 2, 2, 1, 7b, 19, 60, 1,
+;; /'012 3 4 5 6 7 S 9:;C - > ?*/
+;; 15, 15, 8, 5, 4, 7, 5, 4, 4, 6, 3, 2, 1, 1, 1, 1,
+;; /*@ A B C D E F C H I J K L M N O*/
+;; 1, 24, 15, 22, 12, 15, 10, 9, 16, 16, 8, 6, 12, 23, 13, 11,
+;; /'P Q R S T U V W X Y Z [ \ I .. l /
+;; 14, 1, 14, 26, 29, 6, 3, 11, 1, 3, 1, 1, 1, 1, 1, 5,
+;; /* ' b
+;; 1, 49:. 85, 17;,
+;; d
+;; 232, 74:,
+;; f h i j k 1 m 0 l /
+;; 127, ll:, 293, 418, 6, 39, 250, 139, 42:, 446.
+;; /*p q r 8 t x Y ( I ) - */
+;; 111, 5, 388, 375, 531, 159, 5:, 91, 12, 101, f. 2, 1, 2, 3. 1.
+;; 1. 1. 1, 1, 1, 1. 1, 1. 1. 1. 1, 1. 1. 1. 1, 1,
+;; 1, 1, 1, 1, 1, 1. 1, 1. 1, 1. 1, 1. 1. 1, 1. 1.
+;; 1. 1. 1. 1, 1, 1, 1, 1. 1, 1. 1, 1, 1, 1, 1. 1,
+;; 1, 1, 1. 1. 1, 1, 1, 1, 1. 1. 1. 1, 1, 1, 1, 1,
+;; 1. 1. 1. 1, 1, 1, 1, 1, 1. 1, 1. 1. 1. 1. 1. 1.
+;; 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+;; 1, 1, 1, 1, 1, 1, 1, 1, 1. 1, 1, 1, 1, 1, 1. 1.
+;; 1, 1, 1, 1, i, I, I, I, 1, 1, 1, 1, 1, I, I, 1,
+;; 1’
 
-(defn- char->weight [c]
+;; See https://marknelson.us/posts/2014/10/19/data-compression-with-arithmetic-coding.html
+;; https://web.stanford.edu/class/ee398a/handouts/papers/WittenACM87ArithmCoding.pdf
+
+(defn- char->weight ^long [c]
+  1
   (cond
-    (= \u0000 (char c))
+    (= 256 c)
     25
     (or (>= (long c) 128))
     1
@@ -534,233 +566,177 @@
     :else
     2))
 
+(defn- frequency-table-total-weight ^long [^ints frequency-table]
+  (loop [i (int 0)
+         acc 0]
+    (if (= (alength frequency-table) i)
+      acc
+      (let [p (aget frequency-table i)]
+        (recur (unchecked-inc-int i) (+ p acc))))))
+
+(defn- update-frequency-weight ^long [^ints frequency-table ^long total-weights c]
+  (let [max-weight Short/MAX_VALUE
+        weight (long (* 1.5 (char->weight (int c))))]
+    (if (> (+ weight total-weights) max-weight)
+      (do (loop [idx 0]
+            (when (< idx (alength frequency-table))
+              (aset frequency-table idx (int (quot (aget frequency-table idx) 2)))
+              (recur (inc idx))))
+          (recur frequency-table (frequency-table-total-weight frequency-table) c))
+      (do (aset frequency-table (int c) (int (+ weight (int (aget frequency-table (int c))))))
+          (+ weight total-weights)))))
+
+(defn- output-pending-bits ^long [^java.util.BitSet acc ^long idx ^Boolean bit ^long pending-bits]
+  (.set acc idx bit)
+  (loop [idx (inc idx)
+         pending-bits pending-bits]
+    (if (zero? pending-bits)
+      idx
+      (do (.set acc idx (not bit))
+          (recur (inc idx) (dec pending-bits))))))
+
 (defn compress-binary-arithmetic [s]
-  (let [
-        frequency-table (int-array (map char->weight (range 256)))
+  (let [eof 256
+        frequency-table (int-array (map char->weight (range (inc eof))))
         acc (java.util.BitSet.)
-;; ;; void output_bit_plus_pending(bool bit, int &pending_bits)
-;; ;; {
-;; ;;   output_bit( bit );
-;; ;;   while ( pending_bits-- )
-;; ;;     output_bit( !bit );
-;; ;; }
-        output-pending-bits (fn ^long [^long idx ^Boolean bit ^long pending-bits]
-                              ;; (prn idx bit pending-bits)
-                              (.set acc idx bit)
-                              (loop [idx (inc idx)
-                                     pending-bits pending-bits]
-                                (if (zero? pending-bits)
-                                  idx
-                                  (do (.set acc idx (not bit))
-                                      (recur (inc idx) (dec pending-bits))))))]
-;; ;; unsigned int high = 0xFFFFFFFFU;
-;; ;; unsigned int low = 0;
-;; ;; int pending_bits = 0;
-;; ;; char c;
-;; ;; while ( input >> c ) {
-    (loop [[c & s] (str s \u0000)
+        code-bits 32
+        top-value (dec (bit-shift-left 1 code-bits))
+        first-quarter (inc (quot top-value 4))
+        half (* 2 first-quarter)
+        third-quarter (* 3 first-quarter)]
+    (loop [[c & s] (concat (seq s) [eof])
            low 0
-           high 0xFFFFFFFF
+           high top-value
            idx 0
-           total-weights (long (loop [i (int 0)
-                                      acc 0]
-                                 (if (= (alength frequency-table) i)
-                                   acc
-                                   (let [p (aget frequency-table i)]
-                                     (recur (unchecked-inc-int i) (+ p acc))))))]
+           pending-bits 0
+           total-weights (frequency-table-total-weight frequency-table)]
       (if-not c
-        [frequency-table acc (.toByteArray acc) (count (.toByteArray acc))]
-;; ;;   int range = high - low + 1;
-;; ;;   prob p = model.getProbability(c);
-;; ;;   high = low + (range * p.upper)/p.denominator;
-;; ;;   low = low + (range * p.lower)/p.denominator;
-        (let [range (- high (inc low))
-              probability (long (aget frequency-table (int c)))
-              upto (long (loop [i (int 0)
-                                upto 0]
-                           (if (= (int c) i)
-                             upto
-                             (let [p (aget frequency-table i)]
-                               (recur (unchecked-inc-int i) (+ p upto))))))
-              p-lower upto
-              p-upper (+ upto probability)
-              high (+ low (quot (* range p-upper) total-weights))
-              low (+ low (quot (* range p-lower) total-weights))
-              weight (long (* 1.5 (long (char->weight c))))]
-          (aset frequency-table (int c) (int (+ weight (* 2.5 (int (aget frequency-table (int c)))))))
-;;          (prn idx c probability p-lower p-upper low high range weight total-weights)
-          (let [[low high idx]
+        (do (if (< low first-quarter)
+              (output-pending-bits acc idx false (inc pending-bits))
+              (output-pending-bits acc idx true (inc pending-bits)))
+          [frequency-table
+           acc
+           (.toByteArray acc)
+           (count (.toByteArray acc))])
+        (let [range (inc (- high low))
+              [^long p-low
+               ^long p-high] (loop [i (int 0)
+                                    p-low 0]
+                               (let [p-high (+ p-low (aget frequency-table i))]
+                                 (if (= i (int c))
+                                   [p-low p-high]
+                                   (recur (unchecked-inc-int i) p-high))))
+              high (dec (+ low (quot (* range p-high) total-weights)))
+              low (+ low (quot (* range p-low) total-weights))
+              total-weights (update-frequency-weight frequency-table total-weights c)]
+;;          (prn idx c p-low p-high low high range weight total-weights)
+          (let [[low high idx pending-bits]
                 (loop [low low
                        high high
-                       pending-bits 0
+                       pending-bits pending-bits
                        idx idx]
                   (cond
-                    ;; ;;     if ( high < 0x80000000U ) {
-                    ;; ;;       output_bit_plus_pending( 0 );
-                    ;; ;;       low <<= 1;
-                    ;; ;;       high << = 1;
-                    ;; ;;       high |= 1;
-                    (< high 0x80000000)
-                    (let [idx (long (output-pending-bits idx false pending-bits))]
-                      (recur (bit-and (bit-shift-left low 1) 0xFFFFFFFF)
-                             (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
+                    (< high half)
+                    (let [idx (long (output-pending-bits acc idx false pending-bits))]
+                      (recur (bit-shift-left low 1)
+                             (bit-or (bit-shift-left high 1) 1)
                              0
                              idx))
 
-                    ;; ;;     } else if ( low >= 0x80000000U ) {
-                    ;; ;;       output_bit_plus_pending( 1 );
-                    ;; ;;       low <<= 1;
-                    ;; ;;       high << = 1;
-                    ;; ;;       high |= 1;
-                    (>= low 0x80000000)
-                    (let [idx (long (output-pending-bits idx true pending-bits))]
-                      (recur (bit-and (bit-shift-left low 1)  0xFFFFFFFF)
-                             (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
+                    (>= low half)
+                    (let [idx (long (output-pending-bits acc idx true pending-bits))]
+                      (recur (bit-shift-left (- low half) 1)
+                             (bit-or (bit-shift-left (- high half) 1) 1)
                              0
                              idx))
 
-                    ;; ;;     } else if ( low >= 0x40000000 && high < 0xC0000000U )
-                    ;; ;;       pending_bits++;
-                    ;; ;;       low << = 1;
-                    ;; ;;       low &= 0x7FFFFFFF;
-                    ;; ;;       high << = 1;
-                    ;; ;;       high |= 0x80000001;
-                    (and (>= low 0x40000000)
-                         (< high 0xC0000000))
-                    (recur (bit-and (bit-shift-left low 1)
-                                    0x7FFFFFFF)
-                           (bit-and (bit-or (bit-shift-left high 1) 0x80000001) 0xFFFFFFFF)
+                    (and (>= low first-quarter)
+                         (< high third-quarter))
+                    (recur (bit-shift-left (- low first-quarter ) 1)
+                           (bit-or (bit-shift-left (- high first-quarter) 1) 1)
                            (inc pending-bits)
                            idx)
-                    ;; ;;     } else
-                    ;; ;;       break;
                     :else
-                    [low high idx]))]
-            (recur s (long low) (long high) (long idx) (+ total-weights weight))))))))
+                    [low high idx pending-bits]))]
+            (recur s (long low) (long high) (long idx) (long pending-bits) total-weights)))))))
 
-;; unsigned int high = 0xFFFFFFFFU;
-;; unsigned int low = 0;
-;; unsigned int value = 0;
-;; for ( int i = 0 ; i < 32 ; i++ ) {
-;;   value <<= 1;
-;;   value += m_input.get_bit() ? 1 : 0;
-;; }
-;; for ( ; ; ) {
-;;   unsigned int range = high - low + 1;
-;;   unsigned int count =  ((value - low + 1) * m_model.getCount() - 1 ) / range;
-;;   int c;
-;;   prob p = m_model.getChar( count, c );
-;;   if ( c == 256 )
-;;     break;
-;;   m_output.putByte(c);
-;;   high = low + (range*p.high)/p.count -1;
-;;   low = low + (range*p.low)/p.count;
-;;   for( ; ; ) {
-;;     if ( low >= 0x80000000U || high < 0x80000000U ) {
-;;       low <<= 1;
-;;       high << = 1;
-;;       high |= 1;
-;;       value += m_input.get_bit() ? 1 : 0;
-;;     } else if ( low >= 0x40000000 && high < 0xC0000000U ) {
-;;       low << = 1;
-;;       low &= 0x7FFFFFFF;
-;;       high << = 1;
-;;       high |= 0x80000001;
-;;       value += m_input.get_bit() ? 1 : 0;
-;;     } else
-;;       break;
-;;   }
-;; }
+(comment
+  (hakan/decompress-binary-arithmetic
+   (last (butlast (hakan/compress-binary-arithmetic "bill gates")))))
 
 (defn decompress-binary-arithmetic [^bytes bytes]
-  (let [frequency-table (int-array (map char->weight (range 256)))
-        bs (java.util.BitSet/valueOf bytes)]
+  (let [eof 256
+        frequency-table (int-array (map char->weight (range (inc eof))))
+        bs (java.util.BitSet/valueOf bytes)
+        code-bits 32
+        top-value (dec (bit-shift-left 1 code-bits))
+        first-quarter (inc (quot top-value 4))
+        half (* 2 first-quarter)
+        third-quarter (* 3 first-quarter)]
     (loop [acc ""
-           value (-> (java.nio.ByteBuffer/allocate 4)
-                     (.put bytes 0 4)
-                     ^java.nio.ByteBuffer (.flip)
-                     (.getInt)
-                     (Integer/toUnsignedLong)
-                     (bit-and 0xFFFFFFFF))
            low 0
-           high 0xFFFFFFFF
-           idx 32
-           total-weights (long (loop [i (int 0)
-                                      acc 0]
-                                 (if (= (alength frequency-table) i)
-                                   acc
-                                   (let [p (aget frequency-table i)]
-                                     (recur (unchecked-inc-int i) (+ p acc))))))]
-      ;;   unsigned int range = high - low + 1;
-      ;;   unsigned int count =  ((value - low + 1) * m_model.getCount() - 1 ) / range;
-      ;;   int c;
-      ;;   prob p = m_model.getChar( count, c );
-      ;;   if ( c == 256 )
-      ;;     break;
-      ;;   m_output.putByte(c);
-
-      (let [range (- high (inc low))
-            cnt (quot (dec (* (- value (inc low)) total-weights)) range)
-            [c ^long upto] (loop [i (int 0)
-                                  upto 0]
-                             (if (>= upto (int cnt))
-                               [i upto]
-                               (let [p (aget frequency-table i)]
-                                 (recur (unchecked-inc-int i) (+ p upto)))))
-            probability (long (aget frequency-table (int c)))
-            ;;   high = low + (range*p.high)/p.count -1;
-            ;;   low = low + (range*p.low)/p.count;
-            p-lower upto
-            p-upper (+ upto probability)
-            high (dec (+ low (quot (* range p-upper) probability)))
-            low (+ low (quot (* range p-lower) probability))
-            weight (long (* 1.5 (long (char->weight c))))]
-        (aset frequency-table (int c) (int (+ weight (* 2.5 (int (aget frequency-table (int c)))))))
-        (prn idx (char c) probability p-lower p-upper low high range weight total-weights)
-        #_(if (= \u0000 c)
+           high top-value
+           value (long (loop [idx 0
+                              value 0]
+                         (if (= code-bits idx)
+                           value
+                           (recur (inc idx)
+                                  (bit-or value (bit-shift-left (if (.get bs idx)
+                                                                  1
+                                                                  0)
+                                                                (- 31 idx)))))))
+           idx code-bits
+           total-weights (frequency-table-total-weight frequency-table)]
+      (let [range (inc (- high low))
+            cumulative (quot (dec (* (inc (- value low)) total-weights)) range)
+            [c
+             ^long p-low
+             ^long p-high] (loop [i (int 0)
+                                  p-low 0]
+                             (let [p-high (+ p-low (aget frequency-table i))]
+                               (if (> p-high cumulative)
+                                 [i p-low p-high]
+                                 (recur (unchecked-inc-int i) p-high))))
+            high (dec (+ low (quot (* range p-high) total-weights)))
+            low (+ low (quot (* range p-low) total-weights))
+            total-weights (update-frequency-weight frequency-table total-weights c)]
+;;        (prn idx (char c) p-low p-high low high range value total-weights)
+        (if (= eof c)
           [frequency-table (str acc)]
-          (let [[low high idx]
+          (let [[low high value idx]
                 (loop [low low
                        high high
                        value value
                        idx idx]
-
-                  ;;   for( ; ; ) {
-                  ;;     if ( low >= 0x80000000U || high < 0x80000000U ) {
-                  ;;       low <<= 1;
-                  ;;       high << = 1;
-                  ;;       high |= 1;
-                  ;;       value += m_input.get_bit() ? 1 : 0;
-                  ;;     } else if ( low >= 0x40000000 && high < 0xC0000000U ) {
-                  ;;       low << = 1;
-                  ;;       low &= 0x7FFFFFFF;
-                  ;;       high << = 1;
-                  ;;       high |= 0x80000001;
-                  ;;       value += m_input.get_bit() ? 1 : 0;
-                  ;;     } else
-                  ;;       break;
-                  ;;   }
-                  ;; }
-
                   (cond
-                    (or (>= low 0x80000000) (< high 0x80000000))
-                    (recur (bit-and (bit-shift-left low 1) 0xFFFFFFFF)
-                           (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
-                           (bit-and (+ value (if (.get bs idx)
-                                               1
-                                               0))
-                                    0xFFFFFFFF)
+                    (< high half)
+                    (recur (bit-shift-left low 1)
+                           (bit-or (bit-shift-left high 1) 1)
+                           (bit-or (bit-shift-left value 1)
+                                   (if (.get bs idx)
+                                     1
+                                     0))
                            (inc idx))
-                    (and (>= low 0x40000000)
-                         (< high 0xC0000000))
-                    (recur (bit-and (bit-shift-left low 1)
-                                    0x7FFFFFFF)
-                           (bit-and (bit-or (bit-shift-left high 1) 0x80000001) 0xFFFFFFFF)
-                           (bit-and (+ value (if (.get bs idx)
-                                               1
-                                               0))
-                                    0xFFFFFFFF)
+
+                    (>= low half)
+                    (recur (bit-shift-left (- low half) 1)
+                           (bit-or (bit-shift-left (- high half) 1) 1)
+                           (bit-or (bit-shift-left (- value half) 1)
+                                   (if (.get bs idx)
+                                     1
+                                     0))
                            (inc idx))
+
+                    (and (>= low first-quarter)
+                         (< high third-quarter))
+                    (recur (bit-shift-left (- low first-quarter) 1)
+                           (bit-or (bit-shift-left (- high first-quarter) 1) 1)
+                           (bit-or (bit-shift-left (- value first-quarter) 1)
+                                   (if (.get bs idx)
+                                     1
+                                     0))
+                           (inc idx))
+
                     :else
                     [low high value idx]))]
-            (recur (str acc c) value (long low) (long high) (long idx) (+ total-weights weight))))))))
+            (recur (str acc (char c)) (long low) (long high) (long value) (long idx) total-weights)))))))
