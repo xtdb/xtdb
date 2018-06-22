@@ -506,7 +506,7 @@
                     [0.0M 1.0M] (str s \u0000))]
     (loop [p (long (* 1.5 (count s)))]
       (let [candidate (with-precision p
-                        (.add ^BigDecimal low (.divide (.subtract ^BigDecimal high low) 2M *math-context*)))]
+                        (.stripTrailingZeros (.add ^BigDecimal low (.divide (.subtract ^BigDecimal high low) 2M *math-context*))))]
         (if (= s (try
                    (decompress-arithmetic arithmetic-reverse-lookup candidate)
                    (catch ArithmeticException ignore)))
