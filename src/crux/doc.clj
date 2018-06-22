@@ -256,7 +256,7 @@
                                (seq))]
       [v (vec entity-txs)])))
 
-(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx attr]
+(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (-seek-values [this k]
     (->> (db/-seek-values doc-idx k)
@@ -275,7 +275,7 @@
                       (wrap-with-range-constraints range-constraints))
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)]
+          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
       (->> (idx->vec entity-attribute-idx)
            (mapcat second)
            (vec)))))
@@ -417,7 +417,7 @@
                           [attr attr])
         doc-idx (-> (new-doc-attribute-value-index di attr)
                     (wrap-with-range-constraints range-constraints))]
-    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)
+    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
         (assoc :name idx-name))))
 
 (defn unary-leapfrog-join [snapshot attrs range-constraints business-time transact-time]
@@ -504,31 +504,37 @@
 (defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
   (->TriejoinVirtualIndex unary-join-indexes shared-names (atom nil)))
 
+(defn- unary-attrs->attrs+range-constraint [attrs]
+  (if (map? (last attrs))
+    [(butlast attrs) (last attrs)]
+    [attrs]))
+
 (defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
-  (let [attr->di+range-constraints (->> (for [attrs unary-attrs
-                                              attr (take 2 attrs)]
-                                          [attr [(ks/new-iterator snapshot) (first (drop 2 attrs))]])
-                                        (into {}))]
+  (let [attr->di (->> (for [attrs unary-attrs
+                            :let [[attrs] (unary-attrs->attrs+range-constraint attrs)]
+                            attr attrs
+                            :when (not (satisfies? db/Index attr))]
+                        [attr (ks/new-iterator snapshot)])
+                      (into {}))]
     (try
       (with-open [ci (ks/new-iterator snapshot)
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              attr->entity-indexes (->> (for [[attr [di range-constraints]] attr->di+range-constraints
-                                              :when (not (satisfies? db/Index attr))]
-                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
-                                        (into {}))
-              triejoin-idx (-> (for [attrs unary-attrs]
-                                 (->> (for [attr (take 2 attrs)]
+              triejoin-idx (-> (for [attrs unary-attrs
+                                     :let [[attrs range-constraints] (unary-attrs->attrs+range-constraint attrs)]]
+                                 (->> (for [attr attrs
+                                            :let [di (get attr->di attr)]]
                                         (if (satisfies? db/Index attr)
                                           attr
-                                          (get attr->entity-indexes attr)))
+                                          (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
+                                                                                    di attr range-constraints)))
                                       (new-unary-join-virtual-index)))
                                (vec)
                                (new-triejoin-virtual-index shared-names))]
           (idx->vec triejoin-idx)))
       (finally
-        (doseq [[i] (vals attr->di+range-constraints)]
+        (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
