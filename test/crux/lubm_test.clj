@@ -299,11 +299,11 @@
                 x-result (for [[v entities] x-raw-result]
                            (idx/new-id v))
 
-                y-literal-takesCourse-idx (doc/->SortedVirtualIndex y-raw-literal-result (atom nil))
+                y-literal-teacherOf-idx (doc/->SortedVirtualIndex y-raw-literal-result (atom nil))
                 y-type-course-idx (doc/->SortedVirtualIndex y-raw-result (atom nil))
                 x-type-UndergraduateStudent-idx (doc/->SortedVirtualIndex x-raw-result (atom nil))
 
-                ;; y-literal-takesCourse-idx contains result
+                ;; y-literal-teacherOf-idx contains result
                 ;; 5c5fbc4778d95f174e5579ba2c3a9b7243f2f23fy which is
                 ;; http://www.Department0.University0.edu/AssociateProfessor0
                 ;; That is, literal results have the literal (known)
@@ -317,7 +317,7 @@
                 raw-result (doc/leapfrog-triejoin snapshot
                                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                                     [[[:x_1 :ub/takesCourse]
-                                                      y-literal-takesCourse-idx
+                                                      y-literal-teacherOf-idx
                                                       (assoc y-type-course-idx :name :y_0)]
                                                      [(assoc x-type-UndergraduateStudent-idx :name :x_0)]])
                                                   [[:x_0 :x_1]
