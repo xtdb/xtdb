@@ -363,12 +363,11 @@
         (vec))
    (atom nil)))
 
-(defn- new-leapfrog-iterator-state [idx value+entities]
-  (let [[v] value+entities]
-    {:attr (:attr idx)
-     :idx idx
-     :key (or v idx/nil-id-bytes)
-     :entities (set (second value+entities))}))
+(defn- new-leapfrog-iterator-state [idx [value results]]
+  {:idx idx
+   :key (or value idx/nil-id-bytes)
+   :result-name (:name idx)
+   :results (set results)})
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-state]
   db/Index
@@ -383,39 +382,40 @@
   db/OrderedIndex
   (-next-values [this]
     (when-let [{:keys [iterators ^long index]} @iterators-state]
-      (let [{:keys [key attr idx]} (get iterators index)
+      (let [{:keys [key result-name idx]} (get iterators index)
             max-index (mod (dec index) (count iterators))
             max-k (:key (get iterators max-index))
             match? (bu/bytes=? key max-k)
-            next-value+entities (if match?
-                                  (do (log/debug :next attr)
-                                      (db/-next-values idx))
-                                  (do (log/debug :seek attr (bu/bytes->hex max-k))
-                                      (db/-seek-values idx (reify
-                                                             idx/ValueToBytes
-                                                             (value->bytes [_]
-                                                               max-k)
+            next-value+results (if match?
+                                 (do (log/debug :next result-name)
+                                     (db/-next-values idx))
+                                 (do (log/debug :seek result-name (bu/bytes->hex max-k))
+                                     (db/-seek-values idx (reify
+                                                            idx/ValueToBytes
+                                                            (value->bytes [_]
+                                                              max-k)
 
-                                                             idx/IdToBytes
-                                                             (id->bytes [_]
-                                                               max-k)))))]
+                                                            idx/IdToBytes
+                                                            (id->bytes [_]
+                                                              max-k)))))]
         (reset! iterators-state
-                (when next-value+entities
-                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx next-value+entities))
+                (when next-value+results
+                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx next-value+results))
                    :index (mod (inc index) (count iterators))}))
         (if match?
-          (let [attrs (map :attr iterators)]
-            (log/debug :match attrs (bu/bytes->hex max-k))
-            [max-k (zipmap attrs (map :entities iterators))])
+          (let [names (map :result-name iterators)]
+            (log/debug :match names (bu/bytes->hex max-k))
+            [max-k (zipmap names (map :results iterators))])
           (recur))))))
 
 (defn- new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn- new-entity-attribute-value-virtual-index [content-hash-entity-idx entity-as-of-idx di attr range-constraints]
+(defn- new-entity-attribute-value-virtual-index [content-hash-entity-idx entity-as-of-idx di attr range-constraints idx-name]
   (let [doc-idx (-> (new-doc-attribute-value-index di attr)
                     (wrap-with-range-constraints range-constraints))]
-    (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)))
+    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)
+        (assoc :name idx-name))))
 
 (defn unary-leapfrog-join [snapshot attrs range-constraints business-time transact-time]
   (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
@@ -428,7 +428,7 @@
                                    :let [di (get attr->di attr)]]
                                (if (satisfies? db/Index attr)
                                  attr
-                                 (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)))
+                                 (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints attr)))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
           (->> (new-unary-join-virtual-index entity-indexes)
                (idx->vec))))
@@ -436,21 +436,21 @@
         (doseq [i (vals attr->di)]
           (.close ^Closeable i))))))
 
-(defn- constrain-triejoin-result [shared-attrs result]
-  (->> shared-attrs
+(defn- constrain-triejoin-result [shared-names result]
+  (->> shared-names
        (reduce
-        (fn [result attrs]
-          (if (and result (every? result attrs))
-            (some->> (map result attrs)
+        (fn [result result-names]
+          (if (and result (every? result result-names))
+            (some->> (map result result-names)
                      (apply set/intersection)
                      (not-empty)
                      (repeat)
-                     (zipmap attrs)
+                     (zipmap result-names)
                      (merge result))
             result))
         result)))
 
-(defrecord TriejoinVirtualIndex [unary-join-indexes shared-attrs trie-state]
+(defrecord TriejoinVirtualIndex [unary-join-indexes shared-names trie-state]
   db/Index
   (-seek-values [this k]
     (reset! trie-state {:needs-seek? true
@@ -472,7 +472,7 @@
           [_ parent-result] (last result-stack)
           result (some->> new-values
                           (merge parent-result)
-                          (constrain-triejoin-result shared-attrs)
+                          (constrain-triejoin-result shared-names)
                           (not-empty))]
       (cond
         (and values (= depth max-depth))
@@ -498,10 +498,10 @@
             (swap! trie-state update :result-stack pop)
             (recur))))))
 
-(defn- new-triejoin-virtual-index [unary-join-indexes shared-attrs]
-  (->TriejoinVirtualIndex unary-join-indexes shared-attrs (atom nil)))
+(defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
+  (->TriejoinVirtualIndex unary-join-indexes shared-names (atom nil)))
 
-(defn leapfrog-triejoin [snapshot unary-attrs shared-attrs business-time transact-time]
+(defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
   (let [attr->di+range-constraints (->> (for [attrs unary-attrs
                                               attr (take 2 attrs)]
                                           [attr [(ks/new-iterator snapshot) (first (drop 2 attrs))]])
@@ -513,7 +513,7 @@
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
               attr->entity-indexes (->> (for [[attr [di range-constraints]] attr->di+range-constraints
                                               :when (not (satisfies? db/Index attr))]
-                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
+                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints attr)])
                                         (into {}))
               triejoin-idx (-> (for [attrs unary-attrs]
                                  (->> (for [attr (take 2 attrs)]
@@ -522,7 +522,7 @@
                                           (get attr->entity-indexes attr)))
                                       (new-unary-join-virtual-index)))
                                (vec)
-                               (new-triejoin-virtual-index shared-attrs))]
+                               (new-triejoin-virtual-index shared-names))]
           (idx->vec triejoin-idx)))
       (finally
         (doseq [[i] (vals attr->di+range-constraints)]
