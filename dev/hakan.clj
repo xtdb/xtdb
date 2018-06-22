@@ -512,3 +512,255 @@
                    (catch ArithmeticException ignore)))
           candidate
           (recur (inc p)))))))
+
+;; See http://www.drdobbs.com/cpp/data-compression-with-arithmetic-encodin/240169251?pgno=3
+
+(defn- char->weight [c]
+  (cond
+    (= \u0000 (char c))
+    25
+    (or (>= (long c) 128))
+    1
+    (Character/isLowerCase (char c))
+    30
+    (pos? (.indexOf "-._:/" (int c)))
+    25
+    (Character/isDigit (char c))
+    15
+    (Character/isUpperCase (char c))
+    10
+    (pos? (.indexOf "~?#[]@%!$&'()*+,;=" (int c)))
+    5
+    :else
+    2))
+
+(defn compress-binary-arithmetic [s]
+  (let [
+        frequency-table (int-array (map char->weight (range 256)))
+        acc (java.util.BitSet.)
+;; ;; void output_bit_plus_pending(bool bit, int &pending_bits)
+;; ;; {
+;; ;;   output_bit( bit );
+;; ;;   while ( pending_bits-- )
+;; ;;     output_bit( !bit );
+;; ;; }
+        output-pending-bits (fn ^long [^long idx ^Boolean bit ^long pending-bits]
+                              ;; (prn idx bit pending-bits)
+                              (.set acc idx bit)
+                              (loop [idx (inc idx)
+                                     pending-bits pending-bits]
+                                (if (zero? pending-bits)
+                                  idx
+                                  (do (.set acc idx (not bit))
+                                      (recur (inc idx) (dec pending-bits))))))]
+;; ;; unsigned int high = 0xFFFFFFFFU;
+;; ;; unsigned int low = 0;
+;; ;; int pending_bits = 0;
+;; ;; char c;
+;; ;; while ( input >> c ) {
+    (loop [[c & s] (str s \u0000)
+           low 0
+           high 0xFFFFFFFF
+           idx 0
+           total-weights (long (loop [i (int 0)
+                                      acc 0]
+                                 (if (= (alength frequency-table) i)
+                                   acc
+                                   (let [p (aget frequency-table i)]
+                                     (recur (unchecked-inc-int i) (+ p acc))))))]
+      (if-not c
+        [frequency-table acc (.toByteArray acc) (count (.toByteArray acc))]
+;; ;;   int range = high - low + 1;
+;; ;;   prob p = model.getProbability(c);
+;; ;;   high = low + (range * p.upper)/p.denominator;
+;; ;;   low = low + (range * p.lower)/p.denominator;
+        (let [range (- high (inc low))
+              probability (long (aget frequency-table (int c)))
+              upto (long (loop [i (int 0)
+                                upto 0]
+                           (if (= (int c) i)
+                             upto
+                             (let [p (aget frequency-table i)]
+                               (recur (unchecked-inc-int i) (+ p upto))))))
+              p-lower upto
+              p-upper (+ upto probability)
+              high (+ low (quot (* range p-upper) total-weights))
+              low (+ low (quot (* range p-lower) total-weights))
+              weight (long (* 1.5 (long (char->weight c))))]
+          (aset frequency-table (int c) (int (+ weight (* 2.5 (int (aget frequency-table (int c)))))))
+;;          (prn idx c probability p-lower p-upper low high range weight total-weights)
+          (let [[low high idx]
+                (loop [low low
+                       high high
+                       pending-bits 0
+                       idx idx]
+                  (cond
+                    ;; ;;     if ( high < 0x80000000U ) {
+                    ;; ;;       output_bit_plus_pending( 0 );
+                    ;; ;;       low <<= 1;
+                    ;; ;;       high << = 1;
+                    ;; ;;       high |= 1;
+                    (< high 0x80000000)
+                    (let [idx (long (output-pending-bits idx false pending-bits))]
+                      (recur (bit-and (bit-shift-left low 1) 0xFFFFFFFF)
+                             (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
+                             0
+                             idx))
+
+                    ;; ;;     } else if ( low >= 0x80000000U ) {
+                    ;; ;;       output_bit_plus_pending( 1 );
+                    ;; ;;       low <<= 1;
+                    ;; ;;       high << = 1;
+                    ;; ;;       high |= 1;
+                    (>= low 0x80000000)
+                    (let [idx (long (output-pending-bits idx true pending-bits))]
+                      (recur (bit-and (bit-shift-left low 1)  0xFFFFFFFF)
+                             (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
+                             0
+                             idx))
+
+                    ;; ;;     } else if ( low >= 0x40000000 && high < 0xC0000000U )
+                    ;; ;;       pending_bits++;
+                    ;; ;;       low << = 1;
+                    ;; ;;       low &= 0x7FFFFFFF;
+                    ;; ;;       high << = 1;
+                    ;; ;;       high |= 0x80000001;
+                    (and (>= low 0x40000000)
+                         (< high 0xC0000000))
+                    (recur (bit-and (bit-shift-left low 1)
+                                    0x7FFFFFFF)
+                           (bit-and (bit-or (bit-shift-left high 1) 0x80000001) 0xFFFFFFFF)
+                           (inc pending-bits)
+                           idx)
+                    ;; ;;     } else
+                    ;; ;;       break;
+                    :else
+                    [low high idx]))]
+            (recur s (long low) (long high) (long idx) (+ total-weights weight))))))))
+
+;; unsigned int high = 0xFFFFFFFFU;
+;; unsigned int low = 0;
+;; unsigned int value = 0;
+;; for ( int i = 0 ; i < 32 ; i++ ) {
+;;   value <<= 1;
+;;   value += m_input.get_bit() ? 1 : 0;
+;; }
+;; for ( ; ; ) {
+;;   unsigned int range = high - low + 1;
+;;   unsigned int count =  ((value - low + 1) * m_model.getCount() - 1 ) / range;
+;;   int c;
+;;   prob p = m_model.getChar( count, c );
+;;   if ( c == 256 )
+;;     break;
+;;   m_output.putByte(c);
+;;   high = low + (range*p.high)/p.count -1;
+;;   low = low + (range*p.low)/p.count;
+;;   for( ; ; ) {
+;;     if ( low >= 0x80000000U || high < 0x80000000U ) {
+;;       low <<= 1;
+;;       high << = 1;
+;;       high |= 1;
+;;       value += m_input.get_bit() ? 1 : 0;
+;;     } else if ( low >= 0x40000000 && high < 0xC0000000U ) {
+;;       low << = 1;
+;;       low &= 0x7FFFFFFF;
+;;       high << = 1;
+;;       high |= 0x80000001;
+;;       value += m_input.get_bit() ? 1 : 0;
+;;     } else
+;;       break;
+;;   }
+;; }
+
+(defn decompress-binary-arithmetic [^bytes bytes]
+  (let [frequency-table (int-array (map char->weight (range 256)))
+        bs (java.util.BitSet/valueOf bytes)]
+    (loop [acc ""
+           value (-> (java.nio.ByteBuffer/allocate 4)
+                     (.put bytes 0 4)
+                     ^java.nio.ByteBuffer (.flip)
+                     (.getInt)
+                     (Integer/toUnsignedLong)
+                     (bit-and 0xFFFFFFFF))
+           low 0
+           high 0xFFFFFFFF
+           idx 32
+           total-weights (long (loop [i (int 0)
+                                      acc 0]
+                                 (if (= (alength frequency-table) i)
+                                   acc
+                                   (let [p (aget frequency-table i)]
+                                     (recur (unchecked-inc-int i) (+ p acc))))))]
+      ;;   unsigned int range = high - low + 1;
+      ;;   unsigned int count =  ((value - low + 1) * m_model.getCount() - 1 ) / range;
+      ;;   int c;
+      ;;   prob p = m_model.getChar( count, c );
+      ;;   if ( c == 256 )
+      ;;     break;
+      ;;   m_output.putByte(c);
+
+      (let [range (- high (inc low))
+            cnt (quot (dec (* (- value (inc low)) total-weights)) range)
+            [c ^long upto] (loop [i (int 0)
+                                  upto 0]
+                             (if (>= upto (int cnt))
+                               [i upto]
+                               (let [p (aget frequency-table i)]
+                                 (recur (unchecked-inc-int i) (+ p upto)))))
+            probability (long (aget frequency-table (int c)))
+            ;;   high = low + (range*p.high)/p.count -1;
+            ;;   low = low + (range*p.low)/p.count;
+            p-lower upto
+            p-upper (+ upto probability)
+            high (dec (+ low (quot (* range p-upper) probability)))
+            low (+ low (quot (* range p-lower) probability))
+            weight (long (* 1.5 (long (char->weight c))))]
+        (aset frequency-table (int c) (int (+ weight (* 2.5 (int (aget frequency-table (int c)))))))
+        (prn idx (char c) probability p-lower p-upper low high range weight total-weights)
+        #_(if (= \u0000 c)
+          [frequency-table (str acc)]
+          (let [[low high idx]
+                (loop [low low
+                       high high
+                       value value
+                       idx idx]
+
+                  ;;   for( ; ; ) {
+                  ;;     if ( low >= 0x80000000U || high < 0x80000000U ) {
+                  ;;       low <<= 1;
+                  ;;       high << = 1;
+                  ;;       high |= 1;
+                  ;;       value += m_input.get_bit() ? 1 : 0;
+                  ;;     } else if ( low >= 0x40000000 && high < 0xC0000000U ) {
+                  ;;       low << = 1;
+                  ;;       low &= 0x7FFFFFFF;
+                  ;;       high << = 1;
+                  ;;       high |= 0x80000001;
+                  ;;       value += m_input.get_bit() ? 1 : 0;
+                  ;;     } else
+                  ;;       break;
+                  ;;   }
+                  ;; }
+
+                  (cond
+                    (or (>= low 0x80000000) (< high 0x80000000))
+                    (recur (bit-and (bit-shift-left low 1) 0xFFFFFFFF)
+                           (bit-and (bit-or (bit-shift-left high 1) 1) 0xFFFFFFFF)
+                           (bit-and (+ value (if (.get bs idx)
+                                               1
+                                               0))
+                                    0xFFFFFFFF)
+                           (inc idx))
+                    (and (>= low 0x40000000)
+                         (< high 0xC0000000))
+                    (recur (bit-and (bit-shift-left low 1)
+                                    0x7FFFFFFF)
+                           (bit-and (bit-or (bit-shift-left high 1) 0x80000001) 0xFFFFFFFF)
+                           (bit-and (+ value (if (.get bs idx)
+                                               1
+                                               0))
+                                    0xFFFFFFFF)
+                           (inc idx))
+                    :else
+                    [low high value idx]))]
+            (recur (str acc c) value (long low) (long high) (long idx) (+ total-weights weight))))))))
