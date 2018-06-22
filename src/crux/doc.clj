@@ -504,37 +504,39 @@
 (defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
   (->TriejoinVirtualIndex unary-join-indexes shared-names (atom nil)))
 
-(defn- unary-attrs->attrs+range-constraint [attrs]
-  (if (map? (last attrs))
+(defn- unary-attrs->attrs+range-constraints [attrs]
+  (if (and (map? (last attrs))
+           (not (record? (last attrs))))
     [(butlast attrs) (last attrs)]
     [attrs]))
 
 (defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
-  (let [attr->di (->> (for [attrs unary-attrs
-                            :let [[attrs] (unary-attrs->attrs+range-constraint attrs)]
-                            attr attrs
-                            :when (not (satisfies? db/Index attr))]
-                        [attr (ks/new-iterator snapshot)])
-                      (into {}))]
+  (let [attr->di+range-constraints (->> (for [attrs unary-attrs
+                                              :let [[attrs range-constraints] (unary-attrs->attrs+range-constraint attrs)]
+                                              attr attrs
+                                              :when (not (satisfies? db/Index attr))]
+                                          [attr [(ks/new-iterator snapshot) range-constraints]])
+                                        (into {}))]
     (try
       (with-open [ci (ks/new-iterator snapshot)
                   ei (ks/new-iterator snapshot)]
         (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
+              attr->entity-indexes (->> (for [[attr [di range-constraints]] attr->di+range-constraints]
+                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
+                                        (into {}))
               triejoin-idx (-> (for [attrs unary-attrs
-                                     :let [[attrs range-constraints] (unary-attrs->attrs+range-constraint attrs)]]
-                                 (->> (for [attr attrs
-                                            :let [di (get attr->di attr)]]
+                                     :let [[attrs] (unary-attrs->attrs+range-constraints attrs)]]
+                                 (->> (for [attr attrs]
                                         (if (satisfies? db/Index attr)
                                           attr
-                                          (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
-                                                                                    di attr range-constraints)))
+                                          (get attr->entity-indexes attr)))
                                       (new-unary-join-virtual-index)))
                                (vec)
                                (new-triejoin-virtual-index shared-names))]
           (idx->vec triejoin-idx)))
       (finally
-        (doseq [i (vals attr->di)]
+        (doseq [[i] (vals attr->di+range-constraints)]
           (.close ^Closeable i))))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
