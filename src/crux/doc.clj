@@ -411,8 +411,11 @@
 (defn- new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn- new-entity-attribute-value-virtual-index [content-hash-entity-idx entity-as-of-idx di attr range-constraints idx-name]
-  (let [doc-idx (-> (new-doc-attribute-value-index di attr)
+(defn- new-entity-attribute-value-virtual-index [content-hash-entity-idx entity-as-of-idx di attr range-constraints]
+  (let [[idx-name attr] (if (vector? attr)
+                          attr
+                          [attr attr])
+        doc-idx (-> (new-doc-attribute-value-index di attr)
                     (wrap-with-range-constraints range-constraints))]
     (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx attr)
         (assoc :name idx-name))))
@@ -428,7 +431,7 @@
                                    :let [di (get attr->di attr)]]
                                (if (satisfies? db/Index attr)
                                  attr
-                                 (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints attr)))
+                                 (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)))
               unary-join-idx (new-unary-join-virtual-index entity-indexes)]
           (->> (new-unary-join-virtual-index entity-indexes)
                (idx->vec))))
@@ -513,7 +516,7 @@
               entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
               attr->entity-indexes (->> (for [[attr [di range-constraints]] attr->di+range-constraints
                                               :when (not (satisfies? db/Index attr))]
-                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints attr)])
+                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
                                         (into {}))
               triejoin-idx (-> (for [attrs unary-attrs]
                                  (->> (for [attr (take 2 attrs)]

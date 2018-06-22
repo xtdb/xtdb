@@ -297,8 +297,8 @@
                               now now)
                 x-result (for [[v entities] x-raw-result]
                            (idx/new-id v))
-                y-literal-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex y-raw-literal-result (atom nil)) :attr :crux.db/id_y_1)
-                x-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex x-raw-result (atom nil)) :attr :crux.db/id_x_1)
+                y-literal-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex y-raw-literal-result (atom nil)) :name :crux.db/id_y_1)
+                x-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex x-raw-result (atom nil)) :name :crux.db/id_x_1)
                 x-takesCourse-y-raw-result (doc/leapfrog-triejoin snapshot
                                                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                                                     [[:ub/takesCourse y-literal-sorted-virtual-idx]
