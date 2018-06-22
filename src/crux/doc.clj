@@ -366,7 +366,7 @@
 (defn- new-leapfrog-iterator-state [idx [value results]]
   {:idx idx
    :key (or value idx/nil-id-bytes)
-   :result-name (:name idx)
+   :result-name (:name idx (gensym "result-name"))
    :results (set results)})
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-state]

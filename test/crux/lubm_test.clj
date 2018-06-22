@@ -1,6 +1,7 @@
 (ns crux.lubm-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
+            [clojure.set :as set]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.index :as idx]
@@ -297,17 +298,29 @@
                               now now)
                 x-result (for [[v entities] x-raw-result]
                            (idx/new-id v))
-                y-literal-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex y-raw-literal-result (atom nil)) :name :crux.db/id_y_1)
-                x-sorted-virtual-idx (assoc (doc/->SortedVirtualIndex x-raw-result (atom nil)) :name :crux.db/id_x_1)
-                x-takesCourse-y-raw-result (doc/leapfrog-triejoin snapshot
-                                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                    [[:ub/takesCourse y-literal-sorted-virtual-idx]
-                                                                     [:crux.db/id x-sorted-virtual-idx]])
-                                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                    [[:ub/takesCourse :crux.db/id_x_1]])
-                                                                  now now)
-                x-takesCourse-y-result (for [[v entities] x-takesCourse-y-raw-result]
-                                         (idx/new-id v))]
+
+                y-literal-takesCourse-idx (doc/->SortedVirtualIndex y-raw-literal-result (atom nil))
+                y-type-course-idx (doc/->SortedVirtualIndex y-raw-result (atom nil))
+                x-type-UndergraduateStudent-idx (doc/->SortedVirtualIndex x-raw-result (atom nil))
+
+                ;; y-literal-sorted-virtual-idx contains result
+                ;; 5c5fbc4778d95f174e5579ba2c3a9b7243f2f23fy which is
+                ;; http://www.Department0.University0.edu/AssociateProfessor0
+                ;; That is, literal results have the literal (known)
+                ;; entity in the results position, and the found
+                ;; results in the values. This needs some reflection.
+                raw-result (doc/leapfrog-triejoin snapshot
+                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                    [[[:x_1 :ub/takesCourse]
+                                                      y-literal-takesCourse-idx
+                                                      (assoc y-type-course-idx :name :y_0)]
+                                                     [(assoc x-type-UndergraduateStudent-idx :name :x_0)]])
+                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                    [[:x_0 :x_1]
+                                                     [:y_0]])
+                                                  now now)]
+
+            (t/is (= 2 (count (set/intersection (set y-result) (set y-literal-result)))))
             (t/is (= (->> [:http://www.Department0.University0.edu/Course15
                            :http://www.Department0.University0.edu/Course16
                            :http://www.Department0.University0.edu/GraduateCourse17
@@ -317,10 +330,20 @@
                      y-literal-result))
             (t/is (= 61 (count y-result)))
             (t/is (= 532 (count x-result)))
-            (t/is (= 59 (count (for [[v join-results] x-takesCourse-y-raw-result
-                                     {:keys [eid]} (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                       :ub/takesCourse))]
-                                 eid))))))))
+            (t/is (= 59 (count raw-result)))
+            ;; UndergraduateStudent388 takes both courses
+            (t/is (= 58 (count (set (for [[v join-results] raw-result
+                                          x (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                :x_0))]
+                                      x)))))
+            (t/is (= (->> [:http://www.Department0.University0.edu/Course15
+                           :http://www.Department0.University0.edu/Course16]
+                          (map idx/new-id)
+                          (set))
+                     (set (for [[v join-results] raw-result
+                                {:keys [eid]} (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                  :y_0))]
+                            (idx/new-id eid)))))))))
 
     ;; TODO: UndergraduateStudent should be Student.
     ;; Should return 7791 with lubm10.ntriples.
