@@ -467,7 +467,7 @@
               low 0M
               high 1M]
          (let [range (.subtract high low)
-               seek (.divide (.subtract ^BigDecimal n low) range java.math.RoundingMode/HALF_UP)
+               seek (.divide (.subtract ^BigDecimal n low) range *math-context*)
                [_ [c [l-low l-high]]] (first (rsubseq arithmetic-reverse-lookup <= seek))]
            (if (= c \u0000)
              acc
