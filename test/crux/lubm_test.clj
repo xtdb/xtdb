@@ -303,21 +303,25 @@
                 y-type-course-idx (doc/->SortedVirtualIndex y-raw-result (atom nil))
                 x-type-UndergraduateStudent-idx (doc/->SortedVirtualIndex x-raw-result (atom nil))
 
-                ;; y-literal-sorted-virtual-idx contains result
+                ;; y-literal-takesCourse-idx contains result
                 ;; 5c5fbc4778d95f174e5579ba2c3a9b7243f2f23fy which is
                 ;; http://www.Department0.University0.edu/AssociateProfessor0
                 ;; That is, literal results have the literal (known)
                 ;; entity in the results position, and the found
-                ;; results in the values. This needs some reflection.
+                ;; results in the values (in this case the
+                ;; courses). The results need not be entities, but
+                ;; keeping the known literal in the results position
+                ;; seems odd. Keeping the known literal in the
+                ;; results/entities is somewhat consistent, but not
+                ;; very useful. This needs some reflection.
                 raw-result (doc/leapfrog-triejoin snapshot
                                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                                     [[[:x_1 :ub/takesCourse]
                                                       y-literal-takesCourse-idx
                                                       (assoc y-type-course-idx :name :y_0)]
                                                      [(assoc x-type-UndergraduateStudent-idx :name :x_0)]])
-                                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                    [[:x_0 :x_1]
-                                                     [:y_0]])
+                                                  [[:x_0 :x_1]
+                                                   [:y_0]]
                                                   now now)]
 
             (t/is (= 2 (count (set/intersection (set y-result) (set y-literal-result)))))
@@ -333,16 +337,14 @@
             (t/is (= 59 (count raw-result)))
             ;; UndergraduateStudent388 takes both courses
             (t/is (= 58 (count (set (for [[v join-results] raw-result
-                                          x (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                :x_0))]
+                                          x (get join-results :x_0)]
                                       x)))))
             (t/is (= (->> [:http://www.Department0.University0.edu/Course15
                            :http://www.Department0.University0.edu/Course16]
                           (map idx/new-id)
                           (set))
                      (set (for [[v join-results] raw-result
-                                {:keys [eid]} (get join-results (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                  :y_0))]
+                                {:keys [eid]} (get join-results :y_0)]
                             (idx/new-id eid)))))))))
 
     ;; TODO: UndergraduateStudent should be Student.
