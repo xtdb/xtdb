@@ -518,11 +518,11 @@
 
 (def ^:const bac-eof 256)
 
-(def ^:const bac-code-bits 32)
+(def ^:const bac-code-bits 40)
 (def ^:const bac-top-value (dec (bit-shift-left 1 bac-code-bits)))
 (def ^:const bac-first-quarter (inc (quot bac-top-value 4)))
 (def ^:const bac-half (* 2 bac-first-quarter))
-(def ^:const bac-third-quarter (* 3 first-quarter))
+(def ^:const bac-third-quarter (* 3 bac-first-quarter))
 
 (def ^{:tag 'ints} brown-letter-frequencies
   (int-array (inc bac-eof)
@@ -566,7 +566,7 @@
 
 (defn- update-frequency-weight ^long [^ints frequency-table char->weight ^long total-weights c]
   (let [max-weight Short/MAX_VALUE
-        weight (long (* 1.5 (long (char->weight (int c)))))]
+        weight (long (* 0.5 (long (char->weight (int c)))))]
     (if (> (+ weight total-weights) max-weight)
       (do (loop [i 0]
             (when (< i (alength frequency-table))
