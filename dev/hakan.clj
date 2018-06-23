@@ -594,7 +594,7 @@
             pending-bits 0
             total-weights (frequency-table-total-weight frequency-table)]
        (if-not c
-         (do (if (< low first-quarter)
+         (do (if (< low bac-first-quarter)
                (output-pending-bits acc idx false (inc pending-bits))
                (output-pending-bits acc idx true (inc pending-bits)))
              (.toByteArray acc))
