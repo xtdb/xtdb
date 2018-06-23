@@ -731,34 +731,79 @@
     (when (= :clojure.spec.alpha/invalid q)
       (throw (ex-info "Invalid input" (s/explain-data ::q/query q))))
     (with-open [snapshot (new-cached-snapshot (ks/new-snapshot kv) true)]
-      (let [[type clause] (first where)
-            ;; TODO: this is too naive, will have to group and
-            ;; rearrange where clauses.
-            [joins var->names] (loop [joins {}
-                                      var->names {}
-                                      [[type clause] & clauses] where]
-                                 (if-not clause
-                                   [joins var->names]
-                                   (cond
-                                     (and (= :fact type)
-                                          (q/logic-var? (:e clause)) (not (q/logic-var? (:v clause))))
-                                     (let [{:keys [e a v]} clause
-                                           e-name (gensym e)]
-                                       (recur (merge-with into {e [(assoc (shared-literal-attribute-entities-join-internal
-                                                                           snapshot
-                                                                           [[a v]]
-                                                                           business-time transact-time)
-                                                                          :name e-name)]} joins)
-                                              (merge-with into {e [e-name]} var->names)
-                                              clauses))
-
-                                     :else
-                                     (throw (IllegalArgumentException. (str "Unknown clause: " (pr-str clause)))))))]
-        (set (for [[v join-results] (leapfrog-triejoin snapshot
+      (let [e-vars (set (for [[type clause] where
+                              :when (and (= :fact type)
+                                         (q/logic-var? (:e clause)))]
+                          (:e clause)))
+            e-var->v-var-clauses (->> (for [[type clause] where
+                                            :when (and (= :fact type)
+                                                       (q/logic-var? (:e clause))
+                                                       (q/logic-var? (:v clause))
+                                                       (not (contains? e-vars (:v clause))))]
+                                        clause)
+                                      (group-by :e))
+            var->names (->> (for [[_ clauses] e-var->v-var-clauses
+                                  clause clauses
+                                  :let [var (:v clause)]]
+                              [var [(gensym var)]])
+                            (into {}))
+            var->attr (->> (for [[e clauses] e-var->v-var-clauses
+                                 clause clauses]
+                             [(:v clause) (:a clause)])
+                           (into (zipmap e-vars (repeat :crux.db/id))))
+            v-var->e-var (->> (for [[e clauses] e-var->v-var-clauses
+                                    clause clauses]
+                                [(:v clause) (:e clause)])
+                              (into {}))
+            joins {}
+            e-var->literal-v-clauses (->> (for [[type clause] where
+                                                :when (and (= :fact type)
+                                                           (q/logic-var? (:e clause))
+                                                           (not (q/logic-var? (:v clause))))]
+                                            clause)
+                                          (group-by :e))
+            [joins var->names] (reduce
+                                (fn [[joins var->names] [var clauses]]
+                                  (let [var-name (gensym var)
+                                        idx (shared-literal-attribute-entities-join-internal
+                                             snapshot
+                                             (vec (for [{:keys [a v]} clauses]
+                                                    [a v]))
+                                             business-time transact-time)]
+                                    [(merge-with into {var [(assoc idx :name var-name)]} joins)
+                                     (merge-with into {var [var-name]} var->names)]))
+                                [joins var->names]
+                                e-var->literal-v-clauses)
+            e-var+v-var->join-clauses (->> (for [[type clause] where
+                                                 :when (and (= :fact type)
+                                                            (q/logic-var? (:e clause))
+                                                            (q/logic-var? (:v clause))
+                                                            (contains? e-vars (:v clause)))]
+                                             clause)
+                                           (group-by (juxt :e :v)))
+            [joins var->names] (reduce
+                                (fn [[joins var->names] [[e-var v-var] clauses]]
+                                  (let [var-name+clauses (for [clause clauses]
+                                                           [(gensym e-var) clause])]
+                                    [(merge-with into {v-var (vec (for [[var-name clause] var-name+clauses]
+                                                                    [var-name (:a clause)]))} joins)
+                                     (merge-with into {e-var (mapv first var-name+clauses)} var->names)]))
+                                [joins var->names]
+                                e-var+v-var->join-clauses)
+            cartesian (fn cartesian [[x & xs]]
+                        (if-not (seq x)
+                          [[]]
+                          (for [a x
+                                bs (cartesian xs)]
+                            (cons a bs))))]
+        (->> (for [[v join-results] (leapfrog-triejoin snapshot
                                                        (vec (vals joins))
                                                        (vec (vals var->names))
                                                        business-time transact-time)]
-               (for [var-name (map first (vals (select-keys var->names find)))
-                     {:keys [content-hash]} (get join-results var-name)
-                     :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]]
-                 (:crux.db/id doc))))))))
+               (map vec (cartesian
+                         (for [[var [var-name]] (select-keys var->names find)]
+                           (for [{:keys [content-hash]} (or (get join-results var-name)
+                                                            (get join-results (first (get var->names (get v-var->e-var var)))))
+                                 :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]]
+                             (get doc (get var->attr var)))))))
+             (reduce into #{}))))))

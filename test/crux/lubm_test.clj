@@ -110,6 +110,17 @@
                         :where [[x :rdf/type :ub/GraduateStudent]
                                 [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]}))))
 
+      (t/testing "index-based query"
+        (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
+                   [:http://www.Department0.University0.edu/GraduateStudent124]
+                   [:http://www.Department0.University0.edu/GraduateStudent142]
+                   [:http://www.Department0.University0.edu/GraduateStudent44]}
+                 (doc/q (doc/db f/*kv*)
+                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                          '{:find [x]
+                            :where [[x :rdf/type :ub/GraduateStudent]
+                                    [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]})))))
+
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/is (= (->> [:http://www.Department0.University0.edu/GraduateStudent101
@@ -143,6 +154,17 @@
                                      [x :ub/memberOf z]
                                      [z :ub/subOrganizationOf y]
                                      [x :ub/undergraduateDegreeFrom y]]}))))
+
+      (t/testing "index-based query"
+        (t/is (empty? (doc/q (doc/db f/*kv*)
+                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                               '{:find [x y z]
+                                 :where [[x :rdf/type :ub/GraduateStudent]
+                                         [y :rdf/type :ub/University]
+                                         [z :rdf/type :ub/Department]
+                                         [x :ub/memberOf z]
+                                         [z :ub/subOrganizationOf y]
+                                         [x :ub/undergraduateDegreeFrom y]]})))))
 
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
@@ -187,6 +209,19 @@
                         :where [[x :rdf/type :ub/Publication]
                                 [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]}))))
 
+      (t/testing "index-based query"
+        (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor0/Publication0]
+                   [:http://www.Department0.University0.edu/AssistantProfessor0/Publication1]
+                   [:http://www.Department0.University0.edu/AssistantProfessor0/Publication2]
+                   [:http://www.Department0.University0.edu/AssistantProfessor0/Publication3]
+                   [:http://www.Department0.University0.edu/AssistantProfessor0/Publication4]
+                   [:http://www.Department0.University0.edu/AssistantProfessor0/Publication5]}
+                 (doc/q (doc/db f/*kv*)
+                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                          '{:find [x]
+                            :where [[x :rdf/type :ub/Publication]
+                                    [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
+
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/is (= (->> [:http://www.Department0.University0.edu/AssistantProfessor0/Publication0
@@ -223,6 +258,21 @@
                                           [x :ub/name y1]
                                           [x :ub/emailAddress y2]
                                           [x :ub/telephone y3]]})))))
+
+      (t/testing "index-based query"
+        (let [result (doc/q (doc/db f/*kv*)
+                            (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                              '{:find [x y1 y2 y3]
+                                :where [[x :rdf/type :ub/AssociateProfessor]
+                                        [x :ub/worksFor :http://www.Department0.University0.edu]
+                                        [x :ub/name y1]
+                                        [x :ub/emailAddress y2]
+                                        [x :ub/telephone y3]]}))]
+          (t/is (= 14 (count result)))
+          (t/is (= [:http://www.Department0.University0.edu/AssociateProfessor8
+                    "AssociateProfessor8"
+                    "AssociateProfessor8@Department0.University0.edu"
+                    "xxx-xxx-xxxx"] (first result)))))
 
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
@@ -370,6 +420,16 @@
                                            [y :ub/subOrganizationOf :http://www.University0.edu]
                                            [x :ub/emailAddress z]]})))))
 
+      (t/testing "index-based query"
+        (t/is (= 532 (count (doc/q (doc/db f/*kv*)
+                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                     '{:find [x y z]
+                                       :where [[x :rdf/type :ub/UndergraduateStudent]
+                                               [y :rdf/type :ub/Department]
+                                               [x :ub/memberOf y]
+                                               [y :ub/subOrganizationOf :http://www.University0.edu]
+                                               [x :ub/emailAddress z]]}))))))
+
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (let [now (Date.)
@@ -451,6 +511,15 @@
                                           [x :ub/worksFor y]
                                           [y :ub/subOrganizationOf :http://www.University0.edu]]})))))
 
+      (t/testing "index-based query"
+        (t/is (= 10 (count (doc/q (doc/db f/*kv*)
+                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                    '{:find [x y]
+                                      :where [[x :rdf/type :ub/FullProfessor]
+                                              [y :rdf/type :ub/Department]
+                                              [x :ub/worksFor y]
+                                              [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (let [now (Date.)
@@ -497,6 +566,12 @@
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x]
                                    :where [[x :rdf/type :ub/UndergraduateStudent]]})))))
+
+      (t/testing "index-based query"
+        (t/is (= 532 (count (doc/q (doc/db f/*kv*)
+                                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                     '{:find [x]
+                                       :where [[x :rdf/type :ub/UndergraduateStudent]]}))))))
 
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
