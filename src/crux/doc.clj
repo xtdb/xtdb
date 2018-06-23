@@ -102,21 +102,23 @@
                                           k
                                           min-v)))))
 
+(defrecord GreaterThanVirtualIndex [predicate-idx]
+  db/Index
+  (-seek-values [this k]
+    (or (db/-seek-values predicate-idx k)
+        (db/-next-values predicate-idx)))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (db/-next-values predicate-idx)))
+
 (defn- new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred (idx/value->bytes k))
                                                   k
                                                   min-v)))]
-    (reify
-      db/Index
-      (-seek-values [this k]
-        (or (db/-seek-values idx k)
-            (db/-next-values idx)))
-
-      db/OrderedIndex
-      (-next-values [this]
-        (db/-next-values idx)))))
+    (->GreaterThanVirtualIndex idx)))
 
 (defn- new-doc-attribute-value-index [i attr]
   (->DocAttributeValueIndex i attr (atom nil)))
@@ -758,10 +760,6 @@
                                  :let [var (:v clause)]]
                              [var [(gensym var)]])
                            (into {}))
-           var->attr (->> (for [[e clauses] e-var->v-var-clauses
-                                clause clauses]
-                            [(:v clause) (:a clause)])
-                          (into (zipmap e-vars (repeat :crux.db/id))))
            v-var->e-var (->> (for [[e clauses] e-var->v-var-clauses
                                    clause clauses]
                                [(:v clause) (:e clause)])
@@ -785,7 +783,6 @@
                                     (merge-with into {var [var-name]} var->names)]))
                                [joins var->names]
                                e-var->literal-v-clauses)
-
            v-var->literal-e-clauses (->> (for [[type clause] where
                                                :when (and (= :fact type)
                                                           (not (logic-var? (:e clause)))
@@ -794,16 +791,20 @@
                                          (group-by :v))
            [joins var->names] (reduce
                                (fn [[joins var->names] [var clauses]]
-                                 (let [indexes (for [{:keys [e a]} clauses]
-                                                 (literal-entity-values-internal
-                                                  object-store
-                                                  snapshot
-                                                  e
-                                                  a
-                                                  nil
-                                                  business-time transact-time))]
+                                 (let [indexes (for [{:keys [e a]} clauses
+                                                     :let [var-name (gensym var)]]
+                                                 (assoc (literal-entity-values-internal
+                                                         object-store
+                                                         snapshot
+                                                         e
+                                                         a
+                                                         nil
+                                                         business-time transact-time)
+                                                        :name var-name))]
                                    [(merge-with into {var (vec indexes)} joins)
-                                    var->names]))
+                                    (if (contains? var->names var)
+                                      var->names
+                                      (merge-with into {var (mapv :name indexes)} var->names))]))
                                [joins var->names]
                                v-var->literal-e-clauses)
            e-var+v-var->join-clauses (->> (for [[type clause] where
@@ -822,6 +823,11 @@
                                     (merge-with into {e-var (mapv first var-name+clauses)} var->names)]))
                                [joins var->names]
                                e-var+v-var->join-clauses)
+           var->attr (->> (for [[_ clauses] (->> (apply dissoc v-var->literal-e-clauses e-vars)
+                                                 (concat e-var->v-var-clauses))
+                                clause clauses]
+                            [(:v clause) (:a clause)])
+                          (into (zipmap e-vars (repeat :crux.db/id))))
            cartesian (fn cartesian [[x & xs]]
                        (if-not (seq x)
                          [[]]
@@ -836,6 +842,7 @@
                           (for [[var [var-name]] (select-keys var->names find)]
                             (for [{:keys [content-hash]} (or (get join-results var-name)
                                                              (get join-results (first (get var->names (get v-var->e-var var)))))
-                                  :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]]
-                              (get doc (get var->attr var)))))]
+                                  :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
+                                  value (normalize-value (get doc (get var->attr var)))]
+                              value)))]
               (vec result)))))))
