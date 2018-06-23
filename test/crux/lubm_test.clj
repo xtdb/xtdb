@@ -327,6 +327,17 @@
                                            :ub/teacherOf
                                            y]]})))))
 
+      (t/testing "index-based query"
+        (t/is (= 59 (count (doc/q (doc/db f/*kv*)
+                                  (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                    '{:find [x y]
+                                      :where [[x :rdf/type :ub/UndergraduateStudent]
+                                              [y :rdf/type :ub/Course]
+                                              [x :ub/takesCourse y]
+                                              [:http://www.Department0.University0.edu/AssociateProfessor0
+                                               :ub/teacherOf
+                                               y]]}))))))
+
       (t/testing "low level index query"
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (let [now (Date.)

@@ -206,6 +206,8 @@
 
 ;; Entities
 
+(declare ^{:tag 'java.io.Closeable} new-cached-snapshot)
+
 (defn- ^EntityTx enrich-entity-tx [entity-tx content-hash]
   (assoc entity-tx :content-hash (some-> content-hash not-empty idx/new-id)))
 
@@ -324,17 +326,18 @@
 (defn- new-literal-entity-attribute-values-virtual-index [object-store entity-as-of-idx entity attr]
   (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil)))
 
+(defn literal-entity-values-internal [object-store snapshot entity attr range-constraints business-time transact-time]
+  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
+    (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
+        (wrap-with-range-constraints range-constraints))))
+
 (defn literal-entity-values [object-store snapshot entity attr range-constraints business-time transact-time]
-  (with-open [ei (ks/new-iterator snapshot)]
-    (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)]
-      (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
-          (wrap-with-range-constraints range-constraints)
-          (idx->seq)
-          (vec)))))
+  (with-open [snapshot (new-cached-snapshot snapshot false)]
+    (->> (literal-entity-values-internal object-store snapshot entity attr range-constraints business-time transact-time)
+         (idx->seq)
+         (vec))))
 
 ;; Join
-
-(declare ^{:tag 'java.io.Closeable} new-cached-snapshot)
 
 (defrecord SortedVirtualIndex [values seq-state]
   db/Index
@@ -774,6 +777,27 @@
                                      (merge-with into {var [var-name]} var->names)]))
                                 [joins var->names]
                                 e-var->literal-v-clauses)
+
+            v-var->literal-e-clauses (->> (for [[type clause] where
+                                                :when (and (= :fact type)
+                                                           (not (q/logic-var? (:e clause)))
+                                                           (q/logic-var? (:v clause)))]
+                                            clause)
+                                          (group-by :v))
+            [joins var->names] (reduce
+                                (fn [[joins var->names] [var clauses]]
+                                  (let [indexes (for [{:keys [e a]} clauses]
+                                                  (literal-entity-values-internal
+                                                   object-store
+                                                   snapshot
+                                                   e
+                                                   a
+                                                   nil
+                                                   business-time transact-time))]
+                                    [(merge-with into {var (vec indexes)} joins)
+                                     var->names]))
+                                [joins var->names]
+                                v-var->literal-e-clauses)
             e-var+v-var->join-clauses (->> (for [[type clause] where
                                                  :when (and (= :fact type)
                                                             (q/logic-var? (:e clause))
