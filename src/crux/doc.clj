@@ -196,12 +196,11 @@
                    k) (step f-next f-next))))))
     #(ks/-seek i prefix) #(ks/-next i))))
 
-(defn- idx->vec [idx]
+(defn- idx->seq [idx]
   (when-let [result (db/-seek-values idx nil)]
     (->> (repeatedly #(db/-next-values idx))
          (take-while identity)
-         (cons result)
-         (vec))))
+         (cons result))))
 
 ;; Entities
 
@@ -276,7 +275,7 @@
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
           entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
-      (->> (idx->vec entity-attribute-idx)
+      (->> (idx->seq entity-attribute-idx)
            (mapcat second)
            (vec)))))
 
@@ -325,12 +324,15 @@
 
 (defn literal-entity-values [object-store snapshot entity attr range-constraints business-time transact-time]
   (with-open [ei (ks/new-iterator snapshot)]
-    (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-          literal-entity-attribute-values-idx (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
-                                                  (wrap-with-range-constraints range-constraints))]
-      (idx->vec literal-entity-attribute-values-idx))))
+    (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)]
+      (-> (new-literal-entity-attribute-values-virtual-index object-store entity-as-of-idx entity attr)
+          (wrap-with-range-constraints range-constraints)
+          (idx->seq)
+          (vec)))))
 
 ;; Join
+
+(declare ^{:tag 'java.io.Closeable} new-cached-snapshot)
 
 (defrecord SortedVirtualIndex [values seq-state]
   db/Index
@@ -358,7 +360,7 @@
 
 (defn- new-sorted-virtual-index [idx]
   (->SortedVirtualIndex
-   (->> (idx->vec idx)
+   (->> (idx->seq idx)
         (sort-by first bu/bytes-comparator)
         (vec))
    (atom nil)))
@@ -421,23 +423,17 @@
         (assoc :name idx-name))))
 
 (defn unary-leapfrog-join [snapshot attrs range-constraints business-time transact-time]
-  (let [attr->di (zipmap attrs (repeatedly #(ks/new-iterator snapshot)))]
-    (try
-      (with-open [ci (ks/new-iterator snapshot)
-                  ei (ks/new-iterator snapshot)]
-        (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
-              entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              entity-indexes (for [attr attrs
-                                   :let [di (get attr->di attr)]]
-                               (if (satisfies? db/Index attr)
-                                 attr
-                                 (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)))
-              unary-join-idx (new-unary-join-virtual-index entity-indexes)]
-          (->> (new-unary-join-virtual-index entity-indexes)
-               (idx->vec))))
-      (finally
-        (doseq [i (vals attr->di)]
-          (.close ^Closeable i))))))
+  (with-open [snapshot (new-cached-snapshot snapshot false)]
+    (let [content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
+          entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
+          entity-indexes (for [attr attrs]
+                           (if (satisfies? db/Index attr)
+                             attr
+                             (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
+                                                                       (ks/new-iterator snapshot) attr range-constraints)))]
+      (->> (new-unary-join-virtual-index entity-indexes)
+           (idx->seq)
+           (vec)))))
 
 (defn- constrain-triejoin-result [shared-names result]
   (->> shared-names
@@ -502,7 +498,7 @@
             (recur))))))
 
 (defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
-  (->TriejoinVirtualIndex unary-join-indexes shared-names (atom nil)))
+  (->TriejoinVirtualIndex (vec unary-join-indexes) shared-names (atom nil)))
 
 (defn- unary-attrs->attrs+range-constraints [attrs]
   (if (and (map? (last attrs))
@@ -511,33 +507,20 @@
     [attrs]))
 
 (defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
-  (let [attr->di+range-constraints (->> (for [attrs unary-attrs
-                                              :let [[attrs range-constraints] (unary-attrs->attrs+range-constraints attrs)]
-                                              attr attrs
-                                              :when (not (satisfies? db/Index attr))]
-                                          [attr [(ks/new-iterator snapshot) range-constraints]])
-                                        (into {}))]
-    (try
-      (with-open [ci (ks/new-iterator snapshot)
-                  ei (ks/new-iterator snapshot)]
-        (let [content-hash-entity-idx (->ContentHashEntityIndex ci)
-              entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              attr->entity-indexes (->> (for [[attr [di range-constraints]] attr->di+range-constraints]
-                                          [attr (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx di attr range-constraints)])
-                                        (into {}))
-              triejoin-idx (-> (for [attrs unary-attrs
-                                     :let [[attrs] (unary-attrs->attrs+range-constraints attrs)]]
-                                 (->> (for [attr attrs]
-                                        (if (satisfies? db/Index attr)
-                                          attr
-                                          (get attr->entity-indexes attr)))
-                                      (new-unary-join-virtual-index)))
-                               (vec)
-                               (new-triejoin-virtual-index shared-names))]
-          (idx->vec triejoin-idx)))
-      (finally
-        (doseq [[i] (vals attr->di+range-constraints)]
-          (.close ^Closeable i))))))
+  (with-open [snapshot (new-cached-snapshot snapshot false)]
+    (let [content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
+          entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
+      (-> (for [attrs unary-attrs
+                :let [[attrs range-constraints] (unary-attrs->attrs+range-constraints attrs)]]
+            (->> (for [attr attrs]
+                   (if (satisfies? db/Index attr)
+                     attr
+                     (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
+                                                               (ks/new-iterator snapshot) attr range-constraints)))
+                 (new-unary-join-virtual-index)))
+          (new-triejoin-virtual-index shared-names)
+          (idx->seq)
+          (vec)))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
   (when-let [[content-hash] content-hash+unary-join-results]
@@ -558,26 +541,19 @@
           (recur)))))
 
 (defn shared-literal-attribute-entities-join [snapshot attr+values business-time transact-time]
-  (let [attr->di (zipmap (map first attr+values) (repeatedly #(ks/new-iterator snapshot)))]
-    (try
-      (with-open [ci (ks/new-iterator snapshot)
-                  ei (ks/new-iterator snapshot)]
-        (let [entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-              content-hash-entity-idx (->ContentHashEntityIndex ci)
-              unary-join-literal-doc-idx (->> (for [[attr value] attr+values]
-                                                (->DocLiteralAttributeValueIndex (get attr->di attr) attr value))
-                                              (vec)
-                                              (new-unary-join-virtual-index))
-              shared-entity-literal-attribute-values-idx (->SharedEntityLiteralAttributeValuesVirtualIndex
-                                                          unary-join-literal-doc-idx
-                                                          content-hash-entity-idx
-                                                          entity-as-of-idx)]
-          (->> shared-entity-literal-attribute-values-idx
-               (new-sorted-virtual-index)
-               (idx->vec))))
-      (finally
-        (doseq [i (vals attr->di)]
-          (.close ^Closeable i))))))
+  (with-open [snapshot (new-cached-snapshot snapshot false)]
+    (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
+          content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
+          unary-join-literal-doc-idx (->> (for [[attr value] attr+values]
+                                            (->DocLiteralAttributeValueIndex (ks/new-iterator snapshot) attr value))
+                                          (new-unary-join-virtual-index))]
+      (->> (->SharedEntityLiteralAttributeValuesVirtualIndex
+            unary-join-literal-doc-idx
+            content-hash-entity-idx
+            entity-as-of-idx)
+           (new-sorted-virtual-index)
+           (idx->seq)
+           (vec)))))
 
 ;; Caching
 
@@ -602,31 +578,28 @@
   Closeable
   (close [_]))
 
-;; Query
+(def ^:const default-doc-cache-size 10240)
 
-(defrecord DocEntity [object-store eid content-hash bt]
-  db/Entity
-  (attr-val [this ident]
-    (get (db/->map this) ident))
+(defn- named-cache [state cache-name cache-size]
+  (get (swap! state
+              update
+              cache-name
+              (fn [cache]
+                (or cache (lru/new-cache cache-size))))
+       cache-name))
 
-  (->id [this]
-    ;; TODO: we want to get rid of the need for :crux.db/id
-    (or (db/attr-val this :crux.db/id) eid))
-
-  (->map [this]
-    (get (db/get-objects object-store [content-hash]) content-hash))
-
-  (->business-time [this]
-    bt)
-
-  (eq? [this that]
-    (= eid (:eid that))))
+(defn new-cached-object-store
+  ([kv]
+   (new-cached-object-store kv default-doc-cache-size))
+  ([kv cache-size]
+   (->CachedObjectStore (named-cache (:state kv)::doc-cache cache-size)
+                        (->DocObjectStore kv))))
 
 (defn- ensure-iterator-open [closed-state]
   (when @closed-state
     (throw (IllegalStateException. "Iterator closed."))))
 
-(defrecord DocCachedIterator [i closed-state]
+(defrecord CachedIterator [i closed-state]
   ks/KvIterator
   (-seek [_ k]
     (locking i
@@ -648,7 +621,7 @@
     (ensure-iterator-open closed-state)
     (reset! closed-state true)))
 
-(defrecord DocSnapshot [^Closeable snapshot iterators-state]
+(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
   ks/KvSnapshot
   (new-iterator [_]
     (if-let [i (->> @iterators-state
@@ -657,7 +630,7 @@
       (if (compare-and-set! (:closed-state i) true false)
         i
         (recur))
-      (let [i (->DocCachedIterator (ks/new-iterator snapshot) (atom false))]
+      (let [i (->CachedIterator (ks/new-iterator snapshot) (atom false))]
         (swap! iterators-state conj i)
         i)))
 
@@ -667,12 +640,36 @@
       (locking i
         (reset! closed-state true)
         (.close i)))
-    (.close snapshot)))
+    (when close-snapshot?
+      (.close snapshot))))
+
+(defn new-cached-snapshot [snapshot close-snapshot?]
+  (->CachedSnapshot snapshot close-snapshot? (atom #{})))
+
+;; Query
+
+(defrecord DocEntity [object-store eid content-hash bt]
+  db/Entity
+  (attr-val [this ident]
+    (get (db/->map this) ident))
+
+  (->id [this]
+    ;; TODO: we want to get rid of the need for :crux.db/id
+    (or (db/attr-val this :crux.db/id) eid))
+
+  (->map [this]
+    (get (db/get-objects object-store [content-hash]) content-hash))
+
+  (->business-time [this]
+    bt)
+
+  (eq? [this that]
+    (= eid (:eid that))))
 
 (defrecord DocDatasource [kv object-store business-time transact-time]
   db/Datasource
   (new-query-context [this]
-    (->DocSnapshot (ks/new-snapshot kv) (atom #{})))
+    (new-cached-snapshot (ks/new-snapshot kv) true))
 
   (entities [this query-context]
     (for [entity-tx (all-entities query-context business-time transact-time)]
@@ -705,23 +702,6 @@
       (when (>= (System/currentTimeMillis) timeout-at)
         (throw (IllegalStateException. (str "Timed out waiting for: " transact-time
                                             " index has:" (read-meta kv :crux.tx-log/tx-time))))))))
-
-(def ^:const default-doc-cache-size 10240)
-
-(defn- named-cache [state cache-name cache-size]
-  (get (swap! state
-              update
-              cache-name
-              (fn [cache]
-                (or cache (lru/new-cache cache-size))))
-       cache-name))
-
-(defn new-cached-object-store
-  ([kv]
-   (new-cached-object-store kv default-doc-cache-size))
-  ([kv cache-size]
-   (->CachedObjectStore (named-cache (:state kv)::doc-cache cache-size)
-                        (->DocObjectStore kv))))
 
 (defn db
   ([kv]
