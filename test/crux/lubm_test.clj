@@ -78,6 +78,12 @@
                         '{:find [u]
                           :where [[u :ub/name "University0"]]}))))
 
+        (t/testing "index-based query"
+          (t/is (= #{[:http://www.University0.edu]}
+                   (doc/q (doc/db f/*kv*) (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                            '{:find [u]
+                                              :where [[u :ub/name "University0"]]})))))
+
         (t/testing "low level index query"
           (with-open [snapshot (ks/new-snapshot f/*kv*)]
             (t/is (= [(idx/new-id :http://www.University0.edu)]

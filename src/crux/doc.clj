@@ -1,11 +1,13 @@
 (ns crux.doc
   (:require [clojure.tools.logging :as log]
             [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
             [crux.lru :as lru]
+            [crux.query :as q]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable]
            [java.util Collections Comparator Date]
@@ -540,20 +542,23 @@
       (or (values+unary-join-results->value+entities content-hash-entity-idx entity-as-of-idx values+unary-join-results)
           (recur)))))
 
+(defn- shared-literal-attribute-entities-join-internal [snapshot attr+values business-time transact-time]
+  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
+        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
+        unary-join-literal-doc-idx (->> (for [[attr value] attr+values]
+                                          (->DocLiteralAttributeValueIndex (ks/new-iterator snapshot) attr value))
+                                        (new-unary-join-virtual-index))]
+    (->> (->SharedEntityLiteralAttributeValuesVirtualIndex
+          unary-join-literal-doc-idx
+          content-hash-entity-idx
+          entity-as-of-idx)
+         (new-sorted-virtual-index))))
+
 (defn shared-literal-attribute-entities-join [snapshot attr+values business-time transact-time]
   (with-open [snapshot (new-cached-snapshot snapshot false)]
-    (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
-          content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-          unary-join-literal-doc-idx (->> (for [[attr value] attr+values]
-                                            (->DocLiteralAttributeValueIndex (ks/new-iterator snapshot) attr value))
-                                          (new-unary-join-virtual-index))]
-      (->> (->SharedEntityLiteralAttributeValuesVirtualIndex
-            unary-join-literal-doc-idx
-            content-hash-entity-idx
-            entity-as-of-idx)
-           (new-sorted-virtual-index)
-           (idx->seq)
-           (vec)))))
+    (->> (shared-literal-attribute-entities-join-internal snapshot attr+values business-time transact-time)
+         (idx->seq)
+         (vec))))
 
 ;; Caching
 
@@ -643,7 +648,7 @@
     (when close-snapshot?
       (.close snapshot))))
 
-(defn new-cached-snapshot [snapshot close-snapshot?]
+(defn ^crux.doc.CachedSnapshot new-cached-snapshot [snapshot close-snapshot?]
   (->CachedSnapshot snapshot close-snapshot? (atom #{})))
 
 ;; Query
@@ -717,3 +722,43 @@
                     (new-cached-object-store kv)
                     business-time
                     transact-time)))
+
+;; Index-based Query
+
+(defn q
+  [{:keys [kv object-store business-time transact-time] :as db} q]
+  (let [{:keys [find where] :as q} (s/conform ::q/query q)]
+    (when (= :clojure.spec.alpha/invalid q)
+      (throw (ex-info "Invalid input" (s/explain-data ::q/query q))))
+    (with-open [snapshot (new-cached-snapshot (ks/new-snapshot kv) true)]
+      (let [[type clause] (first where)
+            ;; TODO: this is too naive, will have to group and
+            ;; rearrange where clauses.
+            [joins var->names] (loop [joins {}
+                                      var->names {}
+                                      [[type clause] & clauses] where]
+                                 (if-not clause
+                                   [joins var->names]
+                                   (cond
+                                     (and (= :fact type)
+                                          (q/logic-var? (:e clause)) (not (q/logic-var? (:v clause))))
+                                     (let [{:keys [e a v]} clause
+                                           e-name (gensym e)]
+                                       (recur (merge-with into {e [(assoc (shared-literal-attribute-entities-join-internal
+                                                                           snapshot
+                                                                           [[a v]]
+                                                                           business-time transact-time)
+                                                                          :name e-name)]} joins)
+                                              (merge-with into {e [e-name]} var->names)
+                                              clauses))
+
+                                     :else
+                                     (throw (IllegalArgumentException. (str "Unknown clause: " (pr-str clause)))))))]
+        (set (for [[v join-results] (leapfrog-triejoin snapshot
+                                                       (vec (vals joins))
+                                                       (vec (vals var->names))
+                                                       business-time transact-time)]
+               (for [var-name (map first (vals (select-keys var->names find)))
+                     {:keys [content-hash]} (get join-results var-name)
+                     :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]]
+                 (:crux.db/id doc))))))))
