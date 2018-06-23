@@ -82,7 +82,14 @@
           (t/is (= #{[:http://www.University0.edu]}
                    (doc/q (doc/db f/*kv*) (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                             '{:find [u]
-                                              :where [[u :ub/name "University0"]]})))))
+                                              :where [[u :ub/name "University0"]]}))))
+
+          (t/testing "lazy result"
+            (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+              (t/is (= '([:http://www.University0.edu])
+                       (doc/q snapshot (doc/db f/*kv*) (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                         '{:find [u]
+                                                           :where [[u :ub/name "University0"]]})))))))
 
         (t/testing "low level index query"
           (with-open [snapshot (ks/new-snapshot f/*kv*)]
