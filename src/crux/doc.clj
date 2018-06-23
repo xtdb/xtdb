@@ -728,6 +728,9 @@
 
 ;; Index-based Query
 
+(defn- logic-var? [x]
+  (symbol? x))
+
 (defn q
   [{:keys [kv object-store business-time transact-time] :as db} q]
   (let [{:keys [find where] :as q} (s/conform ::q/query q)]
@@ -736,12 +739,12 @@
     (with-open [snapshot (new-cached-snapshot (ks/new-snapshot kv) true)]
       (let [e-vars (set (for [[type clause] where
                               :when (and (= :fact type)
-                                         (q/logic-var? (:e clause)))]
+                                         (logic-var? (:e clause)))]
                           (:e clause)))
             e-var->v-var-clauses (->> (for [[type clause] where
                                             :when (and (= :fact type)
-                                                       (q/logic-var? (:e clause))
-                                                       (q/logic-var? (:v clause))
+                                                       (logic-var? (:e clause))
+                                                       (logic-var? (:v clause))
                                                        (not (contains? e-vars (:v clause))))]
                                         clause)
                                       (group-by :e))
@@ -761,8 +764,8 @@
             joins {}
             e-var->literal-v-clauses (->> (for [[type clause] where
                                                 :when (and (= :fact type)
-                                                           (q/logic-var? (:e clause))
-                                                           (not (q/logic-var? (:v clause))))]
+                                                           (logic-var? (:e clause))
+                                                           (not (logic-var? (:v clause))))]
                                             clause)
                                           (group-by :e))
             [joins var->names] (reduce
@@ -780,8 +783,8 @@
 
             v-var->literal-e-clauses (->> (for [[type clause] where
                                                 :when (and (= :fact type)
-                                                           (not (q/logic-var? (:e clause)))
-                                                           (q/logic-var? (:v clause)))]
+                                                           (not (logic-var? (:e clause)))
+                                                           (logic-var? (:v clause)))]
                                             clause)
                                           (group-by :v))
             [joins var->names] (reduce
@@ -800,8 +803,8 @@
                                 v-var->literal-e-clauses)
             e-var+v-var->join-clauses (->> (for [[type clause] where
                                                  :when (and (= :fact type)
-                                                            (q/logic-var? (:e clause))
-                                                            (q/logic-var? (:v clause))
+                                                            (logic-var? (:e clause))
+                                                            (logic-var? (:v clause))
                                                             (contains? e-vars (:v clause)))]
                                              clause)
                                            (group-by (juxt :e :v)))

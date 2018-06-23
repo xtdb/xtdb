@@ -11,7 +11,7 @@
          (s/conformer second)
          spec))
 
-(defn logic-var? [x]
+(defn- logic-var? [x]
   (symbol? x))
 
 (s/def ::pred-fn (s/and symbol?
