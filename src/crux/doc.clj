@@ -622,36 +622,51 @@
   (eq? [this that]
     (= eid (:eid that))))
 
-(defrecord DocCachedIterator [iterators-state i]
+(defn- ensure-iterator-open [closed-state]
+  (when @closed-state
+    (throw (IllegalStateException. "Iterator closed."))))
+
+(defrecord DocCachedIterator [i closed-state]
   ks/KvIterator
   (-seek [_ k]
-    (ks/-seek i k))
+    (locking i
+      (ensure-iterator-open closed-state)
+      (ks/-seek i k)))
 
   (-next [_]
-    (ks/-next i))
+    (locking i
+      (ensure-iterator-open closed-state)
+      (ks/-next i)))
 
   (-value [_]
-    (ks/-value i))
+    (locking i
+      (ensure-iterator-open closed-state)
+      (ks/-value i)))
 
   Closeable
   (close [_]
-    (swap! iterators-state conj i)))
+    (ensure-iterator-open closed-state)
+    (reset! closed-state true)))
 
 (defrecord DocSnapshot [^Closeable snapshot iterators-state]
   ks/KvSnapshot
   (new-iterator [_]
-    (let [is @iterators-state]
-      (if-let [i (first is)]
-        (if (compare-and-set! iterators-state is (disj is i))
-          (->DocCachedIterator iterators-state i)
-          (recur))
-        (->> (ks/new-iterator snapshot)
-             (->DocCachedIterator iterators-state)))))
+    (if-let [i (->> @iterators-state
+                    (filter (comp deref :closed-state))
+                    (first))]
+      (if (compare-and-set! (:closed-state i) true false)
+        i
+        (recur))
+      (let [i (->DocCachedIterator (ks/new-iterator snapshot) (atom false))]
+        (swap! iterators-state conj i)
+        i)))
 
   Closeable
   (close [_]
-    (doseq [^Closeable i @iterators-state]
-      (.close i))
+    (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
+      (locking i
+        (reset! closed-state true)
+        (.close i)))
     (.close snapshot)))
 
 (defrecord DocDatasource [kv object-store business-time transact-time]
