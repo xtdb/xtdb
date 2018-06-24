@@ -401,19 +401,17 @@
        (map last)
        (apply str)))
 
-(defn inverse-bwt [s eof-char-or-index]
-  (let [acc (vec (repeat (count s) ""))
-        result (reduce
-                (fn [acc _]
-                  (vec (sort (for [i (range (count s))]
-                               (str (get s i) (get acc i))))))
-                acc (range (count s)))]
-    (if (or (string? eof-char-or-index)
-            (char? eof-char-or-index))
-      (->> result
+(defn inverse-bwt [^String s eof-char-or-index]
+  (let [acc (object-array (repeat (count s) ""))]
+    (dotimes [_ (count s)]
+      (dotimes [i (count s)]
+        (aset acc i (str (.charAt s i) (aget acc i))))
+      (java.util.Arrays/sort acc))
+    (if (integer? eof-char-or-index)
+      (aget acc eof-char-or-index)
+      (->> acc
            (filter #(clojure.string/ends-with? % (str eof-char-or-index)))
-           (first))
-      (get result eof-char-or-index))))
+           (first)))))
 
 (defn encode-mtf [alphabet s]
   (loop [alphabet alphabet
