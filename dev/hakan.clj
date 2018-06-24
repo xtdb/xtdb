@@ -395,11 +395,14 @@
 
 ;; "^BANANA|" "BNN^AA|A"
 (defn bwt [s]
-  (->> (for [i (range (count s))]
-         (str (subs s i) (subs s 0 i)))
-       (sort)
-       (map last)
-       (apply str)))
+  (let [result (->> (for [i (range (count s))]
+                      (str (subs s i) (subs s 0 i)))
+                    (sort))]
+
+    [(->> result
+           (map last)
+           (apply str))
+     (count (first (partition-by #{s} result)))]))
 
 (defn inverse-bwt [^String s eof-char-or-index]
   (let [acc (object-array (repeat (count s) ""))]
