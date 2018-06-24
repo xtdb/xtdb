@@ -393,13 +393,27 @@
                    \1))
           (.toByteArray (BigInteger. acc 2)))))))
 
+;; "^BANANA|" "BNN^AA|A"
 (defn bwt [s]
-  (->> (map-indexed (fn [^long i c]
-                      [(get s (dec i))
-                       (inc i)
-                       (subs s i (count s))]) s)
-       (sort-by last)
-       (vec)))
+  (->> (for [i (range (count s))]
+         (str (subs s i) (subs s 0 i)))
+       (sort)
+       (map last)
+       (apply str)))
+
+(defn inverse-bwt [s eof-char-or-index]
+  (let [acc (vec (repeat (count s) ""))
+        result (reduce
+                (fn [acc _]
+                  (vec (sort (for [i (range (count s))]
+                               (str (get s i) (get acc i))))))
+                acc (range (count s)))]
+    (if (or (string? eof-char-or-index)
+            (char? eof-char-or-index))
+      (->> result
+           (filter #(clojure.string/ends-with? % (str eof-char-or-index)))
+           (first))
+      (get result eof-char-or-index))))
 
 (defn encode-mtf [alphabet s]
   (loop [alphabet alphabet
