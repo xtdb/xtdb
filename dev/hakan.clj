@@ -401,6 +401,31 @@
        (sort-by last)
        (vec)))
 
+(defn encode-mtf [alphabet s]
+  (loop [alphabet alphabet
+         [c & s] s
+         acc []]
+    (if-not c
+      (byte-array acc)
+      (let [idx (.indexOf (str alphabet) (int c))]
+        (recur (str (get alphabet idx)
+                    (subs alphabet 0 idx)
+                    (subs alphabet (inc idx)))
+               s (conj acc idx))))))
+
+(defn decode-mtf [alphabet bs]
+  (loop [alphabet alphabet
+         [x & xs] bs
+         acc ""]
+    (if-not x
+      acc
+      (let [idx (long x)]
+        (recur (str (get alphabet idx)
+                    (subs alphabet 0 idx)
+                    (subs alphabet (inc idx)))
+               xs
+               (str acc (get alphabet idx)))))))
+
 (def arithmetic-alphabet (str "\u0000"
                               "-._"
                               ":/"
