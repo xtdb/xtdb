@@ -38,7 +38,11 @@
      (.awaitShutdown kafka))))
 
 (defn with-crux-system [do-with-system-fn {:keys [bootstrap-servers
-                                                  group-id]
+                                                  group-id
+                                                  tx-topic
+                                                  doc-topic
+                                                  db-dir
+                                                  server-port]
                                            :as options}]
   (with-open [zookeeper (start-zookeeper options)
               kafka (start-kafka options)
@@ -47,7 +51,12 @@
               kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
               kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
-                                                         "request.timeout.ms" "5000"})]
+                                                         "request.timeout.ms" "5000"})
+              http-server (srv/create-server
+                           kv-store
+                           (k/->KafkaTxLog kafka-producer tx-topic doc-topic)
+                           db-dir
+                           (Long/parseLong server-port))]
     (->> {:zookeeper @zookeeper
           :kafka @kafka
           :kv-store kv-store
