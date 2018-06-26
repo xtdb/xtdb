@@ -783,6 +783,22 @@
                                     (merge-with into {var [var-name]} var->names)]))
                                [joins var->names]
                                e-var->literal-v-clauses)
+           e-var+v-var->join-clauses (->> (for [[type clause] where
+                                                :when (and (= :fact type)
+                                                           (logic-var? (:e clause))
+                                                           (logic-var? (:v clause))
+                                                           (contains? e-vars (:v clause)))]
+                                            clause)
+                                          (group-by (juxt :e :v)))
+           [joins var->names] (reduce
+                               (fn [[joins var->names] [[e-var v-var] clauses]]
+                                 (let [var-name+clauses (for [clause clauses]
+                                                          [(gensym e-var) clause])]
+                                   [(merge-with into {v-var (vec (for [[var-name clause] var-name+clauses]
+                                                                   [var-name (:a clause)]))} joins)
+                                    (merge-with into {e-var (mapv first var-name+clauses)} var->names)]))
+                               [joins var->names]
+                               e-var+v-var->join-clauses)
            v-var->literal-e-clauses (->> (for [[type clause] where
                                                :when (and (= :fact type)
                                                           (not (logic-var? (:e clause)))
@@ -807,22 +823,6 @@
                                       (merge-with into {var (mapv :name indexes)} var->names))]))
                                [joins var->names]
                                v-var->literal-e-clauses)
-           e-var+v-var->join-clauses (->> (for [[type clause] where
-                                                :when (and (= :fact type)
-                                                           (logic-var? (:e clause))
-                                                           (logic-var? (:v clause))
-                                                           (contains? e-vars (:v clause)))]
-                                            clause)
-                                          (group-by (juxt :e :v)))
-           [joins var->names] (reduce
-                               (fn [[joins var->names] [[e-var v-var] clauses]]
-                                 (let [var-name+clauses (for [clause clauses]
-                                                          [(gensym e-var) clause])]
-                                   [(merge-with into {v-var (vec (for [[var-name clause] var-name+clauses]
-                                                                   [var-name (:a clause)]))} joins)
-                                    (merge-with into {e-var (mapv first var-name+clauses)} var->names)]))
-                               [joins var->names]
-                               e-var+v-var->join-clauses)
            var->attr (->> (for [[_ clauses] (->> (apply dissoc v-var->literal-e-clauses e-vars)
                                                  (concat e-var->v-var-clauses))
                                 clause clauses]
@@ -836,12 +836,15 @@
                            (cons a bs))))]
        (->> (for [[v join-results] (idx->seq (leapfrog-triejoin-internal snapshot
                                                                          (vec (vals joins))
-                                                                         (vec (vals var->names))
+                                                                         (mapv var->names e-vars)
                                                                          business-time transact-time))
                   result (cartesian
                           (for [[var [var-name]] (select-keys var->names find)]
-                            (for [{:keys [content-hash]} (or (get join-results var-name)
-                                                             (get join-results (first (get var->names (get v-var->e-var var)))))
+                            (for [{:keys [content-hash]} (if-let [v (get v-var->e-var var)]
+                                                           (->> (get var->names v)
+                                                                (first)
+                                                                (get join-results))
+                                                           (get join-results var-name))
                                   :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
                                   value (normalize-value (get doc (get var->attr var)))]
                               value)))]
