@@ -339,6 +339,13 @@
                                                       [p :mentor i]
                                                       [i :name n]]})))
 
+    ;; TODO: Simplest case, this should also just return Ivan, as
+    ;; there are no other mentors. Note that this works as expected if
+    ;; one sets :name to "Ivan".
+    #_(t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
+                                              :where [[p :mentor i]
+                                                      [i :name n]]})))
+
     ;; TODO: For example, this works, but following i doesn't.
     (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
                                            :where [[p :name "Petr"]

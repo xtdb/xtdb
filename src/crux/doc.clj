@@ -767,14 +767,13 @@
                                        clause)
                                      (group-by :e))
            var->names (->> (for [[_ clauses] e-var->v-var-clauses
-                                 clause clauses
-                                 :let [var (:v clause)]]
-                             {var [(gensym var)]})
+                                 {:keys [v]} clauses]
+                             {v [(gensym v)]})
                            (apply merge-with into))
            v-var->e-var (->> (for [[e clauses] e-var->v-var-clauses
-                                   clause clauses
-                                   :when (not (contains? e-vars (:v clause)))]
-                               [(:v clause) (:e clause)])
+                                   {:keys [e v]} clauses
+                                   :when (not (contains? e-vars v))]
+                               [v e])
                              (into {}))
            var->joins {}
            e-var->literal-v-clauses (->> (for [clause bgp-clauses
@@ -809,22 +808,20 @@
                                           (group-by (juxt :e :v)))
            [var->joins var->names] (reduce
                                     (fn [[var->joins var->names] [[e-var v-var] clauses]]
-                                      (let [indexes (for [clause clauses
-                                                          :let [var-name (gensym e-var)]]
+                                      (let [indexes (for [clause clauses]
                                                       (assoc (entity-attribute-value-join-internal snapshot
                                                                                                    (:a clause)
                                                                                                    (get v-var->range-constrants v-var)
                                                                                                    business-time
                                                                                                    transact-time)
-                                                             :name var-name))]
+                                                             :name (gensym e-var)))]
                                         [(merge-with into {v-var (vec indexes)} var->joins)
                                          (merge-with into {e-var (mapv :name indexes)} var->names)]))
                                     [var->joins var->names]
                                     e-var+v-var->join-clauses)
            [var->joins var->names] (reduce
                                     (fn [[var->joins var->names] [v-var clauses]]
-                                      (let [indexes (for [{:keys [e a]} clauses
-                                                          :let [var-name (gensym v-var)]]
+                                      (let [indexes (for [{:keys [e a]} clauses]
                                                       (assoc (literal-entity-values-internal
                                                               object-store
                                                               snapshot
@@ -832,7 +829,7 @@
                                                               a
                                                               (get v-var->range-constrants v-var)
                                                               business-time transact-time)
-                                                             :name var-name))]
+                                                             :name (gensym v-var)))]
                                         [(merge-with into {v-var (vec indexes)} var->joins)
                                          (merge {v-var (mapv :name indexes)} var->names)]))
                                     [var->joins var->names]
@@ -845,8 +842,9 @@
            e-var-name->attr (zipmap (mapcat var->names e-vars)
                                     (repeat :crux.db/id))
            var-names->attr (merge v-var-name->attr e-var-name->attr)
-           preds (some->> (for [clause pred-clauses
-                                :let [{:keys [pred-fn args]} clause]]
+           ;; TODO: only find vars are available, need to temporarily
+           ;; add predicate vars as well to result.
+           preds (some->> (for [{:keys [pred-fn args]} pred-clauses]
                             (fn [var->result]
                               (->> (for [arg args]
                                      (get var->result arg arg))
