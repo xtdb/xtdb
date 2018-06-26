@@ -833,11 +833,10 @@
                                            (merge-with into {v-var (mapv :name indexes)} var->names))]))
                                     [var->joins var->names]
                                     v-var->literal-e-clauses)
-           v-var-name->attr (->> (for [[_ clauses] (concat v-var->literal-e-clauses
-                                                           e-var->v-var-clauses)
-                                       clause clauses
-                                       var-name (get var->names (:v clause))]
-                                   [var-name (:a clause)])
+           v-var-name->attr (->> (for [{:keys [a v]} bgp-clauses
+                                       :when (logic-var? v)
+                                       var-name (get var->names v)]
+                                   [var-name a])
                                  (into {}))
            e-var-name->attr (zipmap (mapcat var->names e-vars)
                                     (repeat :crux.db/id))
