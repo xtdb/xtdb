@@ -732,6 +732,20 @@
                              :when (and (= :fact type)
                                         (logic-var? (:e clause)))]
                          (:e clause)))
+           v-var->built-in-clauses (->> (for [[type clause] where
+                                              :when (and (= :built-in type)
+                                                         (not (contains? e-vars (:sym clause))))]
+                                          clause)
+                                        (group-by :sym))
+           v-var->range-constrants (->> (for [[v clauses] v-var->built-in-clauses]
+                                          (->> (for [{:keys [op val]} clauses]
+                                                 (case op
+                                                   < #(new-less-than-virtual-index val)
+                                                   <= #(new-less-than-equal-virtual-index val)
+                                                   > #(new-greater-than-virtual-index val)
+                                                   >= #(new-greater-than-equal-virtual-index val)))
+                                               (apply comp)))
+                                        {})
            e-var->v-var-clauses (->> (for [[type clause] where
                                            :when (and (= :fact type)
                                                       (logic-var? (:e clause))
@@ -780,7 +794,7 @@
                                                      :let [var-name (gensym e-var)]]
                                                  (assoc (entity-attribute-value-join-internal snapshot
                                                                                               (:a clause)
-                                                                                              nil
+                                                                                              (get v-var->range-constrants v-var)
                                                                                               business-time
                                                                                               transact-time)
                                                         :name var-name))]
@@ -795,21 +809,21 @@
                                            clause)
                                          (group-by :v))
            [joins var->names] (reduce
-                               (fn [[joins var->names] [var clauses]]
+                               (fn [[joins var->names] [v-var clauses]]
                                  (let [indexes (for [{:keys [e a]} clauses
-                                                     :let [var-name (gensym var)]]
+                                                     :let [var-name (gensym v-var)]]
                                                  (assoc (literal-entity-values-internal
                                                          object-store
                                                          snapshot
                                                          e
                                                          a
-                                                         nil
+                                                         (get v-var->range-constrants v-var)
                                                          business-time transact-time)
                                                         :name var-name))]
-                                   [(merge-with into {var (vec indexes)} joins)
-                                    (if (contains? var->names var)
+                                   [(merge-with into {v-var (vec indexes)} joins)
+                                    (if (contains? var->names v-var)
                                       var->names
-                                      (merge-with into {var (mapv :name indexes)} var->names))]))
+                                      (merge-with into {v-var (mapv :name indexes)} var->names))]))
                                [joins var->names]
                                v-var->literal-e-clauses)
            var->attr (->> (for [[_ clauses] (->> (apply dissoc v-var->literal-e-clauses e-vars)
