@@ -831,22 +831,33 @@
                                 clause clauses]
                             [(:v clause) (:a clause)])
                           (into (zipmap e-vars (repeat :crux.db/id))))
+           preds (some->> (for [[type clause] where
+                                :when (= :pred type)
+                                :let [{:keys [pred-fn args]} clause]]
+                            (fn [var->result]
+                              (->> (for [arg args]
+                                     (get var->result arg arg))
+                                   (apply pred-fn))))
+                          (not-empty)
+                          (apply every-pred))
            cartesian (fn cartesian [[x & xs]]
                        (if-not (seq x)
                          [[]]
                          (for [a x
                                bs (cartesian xs)]
                            (cons a bs))))]
-       (->> (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals joins))
-                                                                         (mapv var->names e-vars)))
-                  result (cartesian
-                          (for [[var [var-name]] (select-keys var->names find)]
-                            (for [{:keys [content-hash]} (if-let [v (get v-var->e-var var)]
-                                                           (->> (get var->names v)
-                                                                (first)
-                                                                (get join-results))
-                                                           (get join-results var-name))
-                                  :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
-                                  value (normalize-value (get doc (get var->attr var)))]
-                              value)))]
-              (vec result)))))))
+       (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals joins))
+                                                                    (mapv var->names e-vars)))
+             result (cartesian
+                     (for [var find
+                           :let [var-name (first (get var->names var))]]
+                       (for [{:keys [content-hash]} (if-let [v (get v-var->e-var var)]
+                                                      (->> (get var->names v)
+                                                           (first)
+                                                           (get join-results))
+                                                      (get join-results var-name))
+                             :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
+                             value (normalize-value (get doc (get var->attr var)))]
+                         value)))
+             :when (or (nil? preds) (preds (zipmap find result)))]
+         (vec result))))))
