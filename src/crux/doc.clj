@@ -828,9 +828,7 @@
                                                               business-time transact-time)
                                                              :name var-name))]
                                         [(merge-with into {v-var (vec indexes)} var->joins)
-                                         (if (contains? var->names v-var)
-                                           var->names
-                                           (merge-with into {v-var (mapv :name indexes)} var->names))]))
+                                         (merge {v-var (mapv :name indexes)} var->names)]))
                                     [var->joins var->names]
                                     v-var->literal-e-clauses)
            v-var-name->attr (->> (for [{:keys [a v]} bgp-clauses
