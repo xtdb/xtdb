@@ -42,18 +42,15 @@
                                      :where [['e :name "Ivan"]
                                              ['e :last-name "Ivanov-does-not-match"]]}))))
 
-    ;; TODO: issue when there are no literals and a single clause.
-    ;; "No implementation of method: :-seek-values of protocol: #'crux.db/Index found for class: nil"
-    #_(t/testing "Can query for multiple results"
+    (t/testing "Can query for multiple results"
         (t/is (= #{["Ivan"] ["Petr"]}
                  (doc/q (db *kv*) {:find ['name] :where [['e :name 'name]]}))))
 
     (let [[smith] (f/transact-people! *kv* [{:name "Smith" :last-name "Smith"}])]
-      ;; TODO: "Find clause references unbound variable: p1"
-      #_(t/testing "Can query across fields for same value"
-          (t/is (= #{[(:crux.db/id smith)]}
-                   (doc/q (db *kv*) {:find ['p1] :where [['p1 :name 'name]
-                                                         ['p1 :last-name 'name]]}))))
+      (t/testing "Can query across fields for same value"
+        (t/is (= #{[(:crux.db/id smith)]}
+                 (doc/q (db *kv*) {:find ['p1] :where [['p1 :name 'name]
+                                                       ['p1 :last-name 'name]]}))))
 
       (t/testing "Can query across fields for same value when value is passed in"
         (t/is (= #{[(:crux.db/id smith)]}
@@ -96,48 +93,42 @@
   ;; Five people, two of which share the same name:
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}])
 
-  ;; TODO: "Find clause references unbound variable: p1"
-  #_(t/testing "Five people, without a join"
-      (t/is (= 5 (count (doc/q (db *kv*) {:find ['p1]
-                                          :where [['p1 :name 'name]
-                                                  ['p1 :age 'age]
-                                                  ['p1 :salary 'salary]]})))))
+  (t/testing "Five people, without a join"
+    (t/is (= 5 (count (doc/q (db *kv*) {:find ['p1]
+                                        :where [['p1 :name 'name]
+                                                ['p1 :age 'age]
+                                                ['p1 :salary 'salary]]})))))
 
-  ;; TODO: returns 1
-  #_(t/testing "Five people, a cartesian product - joining without unification"
-      (t/is (= 25 (count (doc/q (db *kv*) {:find ['p1 'p2]
-                                           :where [['p1 :name]
-                                                   ['p2 :name]]})))))
+  (t/testing "Five people, a cartesian product - joining without unification"
+    (t/is (= 25 (count (doc/q (db *kv*) {:find ['p1 'p2]
+                                         :where [['p1 :name]
+                                                 ['p2 :name]]})))))
 
-  ;; TODO: returns 1
-  #_(t/testing "A single first result, joined to all possible subsequent results in next term"
-      (t/is (= 5 (count (doc/q (db *kv*) {:find ['p1 'p2]
-                                          :where [['p1 :name "Ivan"]
-                                                  ['p2 :name]]})))))
+  (t/testing "A single first result, joined to all possible subsequent results in next term"
+    (t/is (= 5 (count (doc/q (db *kv*) {:find ['p1 'p2]
+                                        :where [['p1 :name "Ivan"]
+                                                ['p2 :name]]})))))
 
   (t/testing "A single first result, with no subsequent results in next term"
     (t/is (= 0 (count (doc/q (db *kv*) {:find ['p1]
                                         :where [['p1 :name "Ivan"]
                                                 ['p2 :name "does-not-match"]]})))))
 
-  ;; TODO: Find clause references unbound variable: p1
-  #_(t/testing "Every person joins once, plus 2 more matches"
-      (t/is (= 7 (count (doc/q (db *kv*) {:find ['p1 'p2]
-                                          :where [['p1 :name 'name]
-                                                  ['p2 :name 'name]]}))))))
+  (t/testing "Every person joins once, plus 2 more matches"
+    (t/is (= 7 (count (doc/q (db *kv*) {:find ['p1 'p2]
+                                        :where [['p1 :name 'name]
+                                                ['p2 :name 'name]]}))))))
 
-;; TODO: Find clause references unbound variable: e2
-#_(t/deftest test-join-over-two-attributes
-    (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                              {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
+(t/deftest test-join-over-two-attributes
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
 
-    (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [e2]
-                                           :where [[e :last-name last-name]
-                                                   [e2 :follows last-name]
-                                                   [e :name "Ivan"]]}))))
+  (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [e2]
+                                         :where [[e :last-name last-name]
+                                                 [e2 :follows last-name]
+                                                 [e :name "Ivan"]]}))))
 
-;; TODO: nil index issue.
-#_(t/deftest test-blanks
+(t/deftest test-blanks
     (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
     (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
@@ -282,13 +273,13 @@
                                                      '(not (or [[e :last-name "Ivanov"]
                                                                 [e :name "Bob"]]))]})))))
 
-;; TODO: nil index issue - note, more clauses here.
-#_(t/deftest test-predicate-expression
-    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov" :age 30}
-                              {:name "Bob" :last-name "Ivanov" :age 40 }
-                              {:name "Dominic" :last-name "Monroe" :age 50}])
+(t/deftest test-predicate-expression
+  (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov" :age 30}
+                            {:name "Bob" :last-name "Ivanov" :age 40 }
+                            {:name "Dominic" :last-name "Monroe" :age 50}])
 
-    (t/testing "< predicate expression"
+  ;; TODO: issue with ranges
+  #_(t/testing "< predicate expression"
       (t/is (= #{["Ivan"] ["Bob"]}
                (doc/q (db *kv*) {:find ['name]
                                  :where [['e :name 'name]
@@ -301,12 +292,18 @@
                                          ['e :age 'age]
                                          '(>= age 50)]}))))
 
-    (t/testing "clojure.core predicate"
-      (t/is (= #{["Bob"] ["Dominic"]}
-               (doc/q (db *kv*) {:find ['name]
-                                 :where [['e :name 'name]
-                                         ['e :age 'age]
-                                         '(re-find #"o" name)]})))))
+  (t/testing "clojure.core predicate"
+    (t/is (= #{["Bob"] ["Dominic"]}
+             (doc/q (db *kv*) {:find ['name]
+                               :where [['e :name 'name]
+                                       ['e :age 'age]
+                                       '(re-find #"o" name)]})))
+
+    (t/testing "No results"
+      (t/is (empty? (doc/q (db *kv*) {:find ['name]
+                                      :where [['e :name 'name]
+                                              ['e :age 'age]
+                                              '(re-find #"X" name)]}))))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -345,7 +342,7 @@
                                           :where [[x :name n]
                                                   [:ivan :mentor x]]})))))))
 
-;; TODO: "Find clause references unbound variable: i"
+;; TODO: issue with ranges.
 #_(t/deftest test-simple-numeric-range-search
     (t/is (= [[:bgp {:e 'i :a :age :v 'age}]
               [:range {:op '<
@@ -401,11 +398,10 @@
 ;; TODO write:
 (t/deftest test-use-another-datasource)
 
-;; TODO: "Find clause references unbound variable: e2"
-#_(t/deftest test-sanitise-join
-    (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
-    (t/testing "Can query by single field"
-      (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [e2]
-                                             :where [[e :last-name "Ivanov"]
-                                                     [e :last-name name1]
-                                                     [e2 :last-name name1]]})))))
+(t/deftest test-sanitise-join
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
+  (t/testing "Can query by single field"
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [e2]
+                                           :where [[e :last-name "Ivanov"]
+                                                   [e :last-name name1]
+                                                   [e2 :last-name name1]]})))))

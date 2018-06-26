@@ -733,7 +733,10 @@
             range-clauses :range
             pred-clauses :pred} (->> (for [[type clause] where]
                                        (if (contains? #{:bgp :range :pred} type)
-                                         {type [clause]}
+                                         {type [(if (and (= :bgp type)
+                                                         (nil? (:v clause)))
+                                                  (assoc clause :v (gensym "_"))
+                                                  clause)]}
                                          (throw (IllegalArgumentException.
                                                  (str "Unsupported clause: "
                                                       type " "
@@ -791,10 +794,17 @@
                                          (merge-with into {var [var-name]} var->names)]))
                                     [var->joins var->names]
                                     e-var->literal-v-clauses)
-           e-var+v-var->join-clauses (->> (for [clause bgp-clauses
-                                                :when (and (logic-var? (:e clause))
-                                                           (logic-var? (:v clause))
-                                                           (contains? e-vars (:v clause)))]
+           v-var->literal-e-clauses (->> (for [clause bgp-clauses
+                                               :when (and (not (logic-var? (:e clause)))
+                                                          (logic-var? (:v clause)))]
+                                           clause)
+                                         (group-by :v))
+           e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                                :when (and (logic-var? e)
+                                                           (logic-var? v)
+                                                           (or (> (count (get var->names v)) 1)
+                                                               (and (not (contains? e-var->literal-v-clauses e))
+                                                                    (not (contains? v-var->literal-e-clauses v)))))]
                                             clause)
                                           (group-by (juxt :e :v)))
            [var->joins var->names] (reduce
@@ -811,11 +821,6 @@
                                          (merge-with into {e-var (mapv :name indexes)} var->names)]))
                                     [var->joins var->names]
                                     e-var+v-var->join-clauses)
-           v-var->literal-e-clauses (->> (for [clause bgp-clauses
-                                               :when (and (not (logic-var? (:e clause)))
-                                                          (logic-var? (:v clause)))]
-                                           clause)
-                                         (group-by :v))
            [var->joins var->names] (reduce
                                     (fn [[var->joins var->names] [v-var clauses]]
                                       (let [indexes (for [{:keys [e a]} clauses
