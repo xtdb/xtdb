@@ -278,8 +278,7 @@
                             {:name "Bob" :last-name "Ivanov" :age 40 }
                             {:name "Dominic" :last-name "Monroe" :age 50}])
 
-  ;; TODO: issue with ranges
-  #_(t/testing "< predicate expression"
+  (t/testing "< predicate expression"
       (t/is (= #{["Ivan"] ["Bob"]}
                (doc/q (db *kv*) {:find ['name]
                                  :where [['e :name 'name]
@@ -319,7 +318,7 @@
                                              :where [[p :mentor i]
                                                      [i :name "Ivan"]]})))))
 
-  ;; TODO: bug with literal entities.
+  ;; TODO: bug with joins to literal entity fields.
   #_(t/testing "Can query by known entity"
       (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
                                               :where [[:ivan :name n]]})))
@@ -342,43 +341,42 @@
                                           :where [[x :name n]
                                                   [:ivan :mentor x]]})))))))
 
-;; TODO: issue with ranges.
-#_(t/deftest test-simple-numeric-range-search
-    (t/is (= [[:bgp {:e 'i :a :age :v 'age}]
-              [:range {:op '<
-                       :sym 'age
-                       :val 20}]]
-             (s/conform :crux.query/where '[[i :age age]
-                                            (< age 20)])))
+(t/deftest test-simple-numeric-range-search
+  (t/is (= [[:bgp {:e 'i :a :age :v 'age}]
+            [:range {:op '<
+                     :sym 'age
+                     :val 20}]]
+           (s/conform :crux.query/where '[[i :age age]
+                                          (< age 20)])))
 
-    (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
-                              {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
 
-    (t/testing "Min search case"
-      (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
-                                             :where [[i :age age]
-                                                     (> age 20)]})))
-      (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                      :where [[i :age age]
-                                              (> age 21)]})))
+  (t/testing "Min search case"
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (> age 20)]})))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[i :age age]
+                                            (> age 21)]})))
 
-      (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
-                                             :where [[i :age age]
-                                                     (>= age 21)]}))))
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (>= age 21)]}))))
 
-    (t/testing "Max search case"
-      (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [i]
-                                             :where [[i :age age]
-                                                     (< age 20)]})))
-      (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                      :where [[i :age age]
-                                              (< age 18)]})))
-      (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [i]
-                                             :where [[i :age age]
-                                                     (<= age 18)]})))
-      (t/is (= #{[18]} (doc/q (db *kv*) '{:find [age]
-                                          :where [[:petr :age age]
-                                                  (<= age 18)]})))))
+  (t/testing "Max search case"
+    (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (< age 20)]})))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[i :age age]
+                                            (< age 18)]})))
+    (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (<= age 18)]})))
+    (t/is (= #{[18]} (doc/q (db *kv*) '{:find [age]
+                                        :where [[:petr :age age]
+                                                (<= age 18)]})))))
 
 (t/deftest test-mutiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }

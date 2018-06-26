@@ -752,15 +752,15 @@
                                                       (pr-str clause))))
                                          clause))
                                      (group-by :sym))
-           v-var->range-constrants (->> (for [[_ clauses] v-var->range-clauses]
-                                          (->> (for [{:keys [op val]} clauses]
-                                                 (case op
-                                                   < #(new-less-than-virtual-index val)
-                                                   <= #(new-less-than-equal-virtual-index val)
-                                                   > #(new-greater-than-virtual-index val)
-                                                   >= #(new-greater-than-equal-virtual-index val)))
-                                               (apply comp)))
-                                        {})
+           v-var->range-constrants (->> (for [[v-var clauses] v-var->range-clauses]
+                                          [v-var (->> (for [{:keys [op val]} clauses]
+                                                        (case op
+                                                          < #(new-less-than-virtual-index % val)
+                                                          <= #(new-less-than-equal-virtual-index % val)
+                                                          > #(new-greater-than-virtual-index % val)
+                                                          >= #(new-greater-than-equal-virtual-index % val)))
+                                                      (apply comp))])
+                                        (into {}))
            e-var->v-var-clauses (->> (for [clause bgp-clauses
                                            :when (and (logic-var? (:e clause))
                                                       (logic-var? (:v clause)))]
