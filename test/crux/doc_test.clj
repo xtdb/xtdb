@@ -357,26 +357,29 @@
                               [:crux.tx/put eid {:crux.db/id eid relation v}])))
         {:keys [transact-time tx-id]}
         @(db/submit-tx tx-log tx-ops)]
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
       (t/testing "checking data is loaded before join"
         (t/is (= (idx/new-id :a0-0)
                  (:eid (first (doc/entities-at snapshot [:a0-0] transact-time transact-time)))))
         (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
 
       (t/testing "unary leapfrog join"
-        (t/is (= [{:a #{(idx/new-id :a7-8)
-                        (idx/new-id :a8-8)}
-                   :b #{(idx/new-id :b4-8)}
-                   :c #{(idx/new-id :c3-8)}}
-                  {:a #{(idx/new-id :a11-12)}
-                   :b #{(idx/new-id :b6-12)
-                        (idx/new-id :b7-12)}
-                   :c #{(idx/new-id :c5-12)
-                        (idx/new-id :c6-12)}}]
-                 (for [[v join-results] (doc/unary-leapfrog-join snapshot [:a :b :c] nil transact-time transact-time)]
-                   (->> (for [[k entities] join-results]
-                          [k (set (map :eid entities))])
-                        (into {})))))))))
+        (let [a-idx (doc/entity-attribute-value-join-internal snapshot :a nil transact-time transact-time)
+              b-idx (doc/entity-attribute-value-join-internal snapshot :b nil transact-time transact-time)
+              c-idx (doc/entity-attribute-value-join-internal snapshot :c nil transact-time transact-time)]
+          (t/is (= [{:a #{(idx/new-id :a7-8)
+                          (idx/new-id :a8-8)}
+                     :b #{(idx/new-id :b4-8)}
+                     :c #{(idx/new-id :c3-8)}}
+                    {:a #{(idx/new-id :a11-12)}
+                     :b #{(idx/new-id :b6-12)
+                          (idx/new-id :b7-12)}
+                     :c #{(idx/new-id :c5-12)
+                          (idx/new-id :c6-12)}}]
+                   (for [[v join-results] (doc/unary-leapfrog-join [a-idx b-idx c-idx])]
+                     (->> (for [[k entities] join-results]
+                            [k (set (map :eid entities))])
+                          (into {}))))))))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
 
@@ -410,21 +413,24 @@
                                 [:crux.tx/put id doc])))
           {:keys [transact-time tx-id]}
           @(db/submit-tx tx-log tx-ops)]
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/testing "checking data is loaded before join"
+      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+               (t/testing "checking data is loaded before join"
           (t/is (= (count tx-ops)
                    (count (doc/all-entities snapshot transact-time transact-time)))))
 
         (t/testing "leapfrog triejoin"
-          (let [result (doc/leapfrog-triejoin snapshot
-                                              [[:ra :ta]
-                                               [:rb :sb]
-                                               [:sc :tc]]
+          (let [ra-idx (doc/entity-attribute-value-join-internal snapshot :ra nil transact-time transact-time)
+                ta-idx (doc/entity-attribute-value-join-internal snapshot :ta nil transact-time transact-time)
+                rb-idx (doc/entity-attribute-value-join-internal snapshot :rb nil transact-time transact-time)
+                sb-idx (doc/entity-attribute-value-join-internal snapshot :sb nil transact-time transact-time)
+                sc-idx (doc/entity-attribute-value-join-internal snapshot :sc nil transact-time transact-time)
+                tc-idx (doc/entity-attribute-value-join-internal snapshot :tc nil transact-time transact-time)
+                result (doc/leapfrog-triejoin [[ra-idx ta-idx]
+                                               [rb-idx sb-idx]
+                                               [sc-idx tc-idx]]
                                               [[:ra :rb]
                                                [:sb :sc]
-                                               [:ta :tc]]
-                                              transact-time
-                                              transact-time)]
+                                               [:ta :tc]])]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -472,22 +478,25 @@
                                 [:crux.tx/put id doc])))
           {:keys [transact-time tx-id]}
           @(db/submit-tx tx-log tx-ops)]
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (t/is (= #{(idx/new-id :r13)
-                   (idx/new-id :s34)
-                   (idx/new-id :t14)}
-                 (set (for [[v join-results] (doc/leapfrog-triejoin snapshot
-                                                                    [[:ra :ta]
-                                                                     [:rb :sb]
-                                                                     [:sc :tc]]
-                                                                    [[:ra :rb]
-                                                                     [:sb :sc]
-                                                                     [:ta :tc]]
-                                                                    transact-time
-                                                                    transact-time)
-                            [k entities] join-results
-                            {:keys [eid]} entities]
-                        eid))))))))
+      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+        (let [ra-idx (doc/entity-attribute-value-join-internal snapshot :ra nil transact-time transact-time)
+              ta-idx (doc/entity-attribute-value-join-internal snapshot :ta nil transact-time transact-time)
+              rb-idx (doc/entity-attribute-value-join-internal snapshot :rb nil transact-time transact-time)
+              sb-idx (doc/entity-attribute-value-join-internal snapshot :sb nil transact-time transact-time)
+              sc-idx (doc/entity-attribute-value-join-internal snapshot :sc nil transact-time transact-time)
+              tc-idx (doc/entity-attribute-value-join-internal snapshot :tc nil transact-time transact-time)]
+          (t/is (= #{(idx/new-id :r13)
+                     (idx/new-id :s34)
+                     (idx/new-id :t14)}
+                   (set (for [[v join-results] (doc/leapfrog-triejoin [[ra-idx ta-idx]
+                                                                       [rb-idx sb-idx]
+                                                                       [sc-idx tc-idx]]
+                                                                      [[:ra :rb]
+                                                                       [:sb :sc]
+                                                                       [:ta :tc]])
+                              [k entities] join-results
+                              {:keys [eid]} entities]
+                          eid)))))))))
 
 (t/deftest test-literal-entity-attribute-values-virtual-index
   (let [tx-log (tx/->DocTxLog f/*kv*)

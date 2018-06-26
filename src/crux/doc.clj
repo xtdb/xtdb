@@ -123,15 +123,31 @@
 (defn- new-doc-attribute-value-index [i attr]
   (->DocAttributeValueIndex i attr (atom nil)))
 
-(defn- wrap-with-range-constraints [idx {:keys [min-v inclusive-min-v? max-v inclusive-max-v?]
-                                         :as range-constraints}]
-  (-> idx
-      ((if inclusive-max-v?
-         new-less-than-equal-virtual-index
-         new-less-than-virtual-index) max-v)
-      ((if inclusive-min-v?
-         new-greater-than-equal-virtual-index
-         new-greater-than-virtual-index) min-v)))
+;; TODO: old range constraints format was a map, this will be replaced
+;; by wrapper fns.
+(defn- range-constraints-map->fn [{:keys [min-v inclusive-min-v? max-v inclusive-max-v?]
+                                   :as range-constraints}]
+  (fn [idx]
+    (-> idx
+        ((if inclusive-max-v?
+           new-less-than-equal-virtual-index
+           new-less-than-virtual-index) max-v)
+        ((if inclusive-min-v?
+           new-greater-than-equal-virtual-index
+           new-greater-than-virtual-index) min-v))))
+
+(defn- wrap-with-range-constraints [idx range-constraints]
+  (let [range-constraints-wrapper (cond
+                                    (map? range-constraints)
+                                    (range-constraints-map->fn range-constraints)
+
+                                    (nil? range-constraints)
+                                    identity
+
+                                    :else
+                                    range-constraints)]
+
+    (range-constraints-wrapper idx)))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -420,24 +436,10 @@
 (defn- new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn- new-entity-attribute-value-virtual-index [content-hash-entity-idx entity-as-of-idx di attr range-constraints]
-  (let [doc-idx (-> (new-doc-attribute-value-index di attr)
-                    (wrap-with-range-constraints range-constraints))]
-    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
-        (assoc :name attr))))
-
-(defn unary-leapfrog-join [snapshot indexes range-constraints business-time transact-time]
-  (with-open [snapshot (new-cached-snapshot snapshot false)]
-    (let [content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-          entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
-          entity-indexes (for [idx indexes]
-                           (if (keyword? idx)
-                             (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
-                                                                       (ks/new-iterator snapshot) idx range-constraints)
-                             idx))]
-      (->> (new-unary-join-virtual-index entity-indexes)
-           (idx->seq)
-           (vec)))))
+(defn unary-leapfrog-join [indexes]
+  (->> (new-unary-join-virtual-index indexes)
+       (idx->seq)
+       (vec)))
 
 (defn- constrain-triejoin-result [shared-names result]
   (->> shared-names
@@ -504,30 +506,13 @@
 (defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
   (->TriejoinVirtualIndex (vec unary-join-indexes) shared-names (atom nil)))
 
-(defn- unary-indexes->indexes+range-constraints [attrs]
-  (if (and (map? (last attrs))
-           (not (record? (last attrs))))
-    [(butlast attrs) (last attrs)]
-    [attrs]))
+(defn- leapfrog-triejoin-internal [unary-indexes shared-names]
+  (new-triejoin-virtual-index (mapv new-unary-join-virtual-index unary-indexes) shared-names))
 
-(defn- leapfrog-triejoin-internal [snapshot unary-indexes shared-names business-time transact-time]
-  (let [content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-        entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
-    (-> (for [indexes unary-indexes
-              :let [[indexes range-constraints] (unary-indexes->indexes+range-constraints indexes)]]
-          (->> (for [idx indexes]
-                 (if (keyword? idx)
-                   (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx
-                                                             (ks/new-iterator snapshot) idx range-constraints)
-                   idx))
-               (new-unary-join-virtual-index)))
-        (new-triejoin-virtual-index shared-names))))
-
-(defn leapfrog-triejoin [snapshot unary-attrs shared-names business-time transact-time]
-  (with-open [snapshot (new-cached-snapshot snapshot false)]
-    (->> (leapfrog-triejoin-internal snapshot unary-attrs shared-names business-time transact-time)
-         (idx->seq)
-         (vec))))
+(defn leapfrog-triejoin [unary-indexes shared-names]
+  (->> (leapfrog-triejoin-internal unary-indexes shared-names)
+       (idx->seq)
+       (vec)))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
   (when-let [[content-hash] content-hash+unary-join-results]
@@ -565,10 +550,13 @@
          (idx->seq)
          (vec))))
 
-(defn- entity-attribute-value-join-internal [snapshot attr range-constraints business-time transact-time]
+(defn entity-attribute-value-join-internal [snapshot attr range-constraints business-time transact-time]
   (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
-        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))]
-    (new-entity-attribute-value-virtual-index content-hash-entity-idx entity-as-of-idx (ks/new-iterator snapshot) attr range-constraints)))
+        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
+        doc-idx (-> (new-doc-attribute-value-index (ks/new-iterator snapshot) attr)
+                    (wrap-with-range-constraints range-constraints))]
+    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
+        (assoc :name attr))))
 
 ;; Caching
 
@@ -695,10 +683,12 @@
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-join [this query-context attrs range-constraints]
-    (distinct (for [[v join-results] (unary-leapfrog-join query-context attrs range-constraints business-time transact-time)
-                    [k entities] join-results
-                    entity-tx entities]
-                (map->DocEntity (assoc entity-tx :object-store object-store)))))
+    (let [indexes (for [attr attrs]
+                    (entity-attribute-value-join-internal query-context attr range-constraints transact-time transact-time))]
+      (distinct (for [[v join-results] (unary-leapfrog-join indexes)
+                      [k entities] join-results
+                      entity-tx entities]
+                  (map->DocEntity (assoc entity-tx :object-store object-store))))))
 
   (entity [this query-context eid]
     (when-let [entity-tx (first (entities-at query-context [eid] business-time transact-time))]
@@ -841,10 +831,8 @@
                          (for [a x
                                bs (cartesian xs)]
                            (cons a bs))))]
-       (->> (for [[v join-results] (idx->seq (leapfrog-triejoin-internal snapshot
-                                                                         (vec (vals joins))
-                                                                         (mapv var->names e-vars)
-                                                                         business-time transact-time))
+       (->> (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals joins))
+                                                                         (mapv var->names e-vars)))
                   result (cartesian
                           (for [[var [var-name]] (select-keys var->names find)]
                             (for [{:keys [content-hash]} (if-let [v (get v-var->e-var var)]
