@@ -736,6 +736,7 @@
                                          {type [clause]}
                                          (throw (IllegalArgumentException.
                                                  (str "Unsupported clause: "
+                                                      type " "
                                                       (pr-str clause))))))
                                      (apply merge-with into))
            e-vars (set (for [clause bgp-clauses
@@ -853,6 +854,9 @@
                          (for [a x
                                bs (cartesian xs)]
                            (cons a bs))))]
+       (doseq [var find
+               :when (not (contains? var->names var))]
+         (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
        (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals var->joins))
                                                                     (mapv var->names e-vars)))
              result (cartesian
