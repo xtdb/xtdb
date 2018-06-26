@@ -18,11 +18,11 @@
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
 (s/def ::find (s/coll-of logic-var? :kind vector?))
-(s/def ::fact (s/and vector?
-                     (s/cat :e (some-fn logic-var? keyword?)
-                            :a keyword?
-                            :v (s/? any?))))
-(s/def ::term (s/or :fact ::fact
+(s/def ::bgp (s/and vector?
+                    (s/cat :e (some-fn logic-var? keyword?)
+                           :a keyword?
+                           :v (s/? any?))))
+(s/def ::term (s/or :bgp ::bgp
                     :not (expression-spec 'not ::term)
                     :or (expression-spec 'or ::where)
                     :and (expression-spec 'and ::where)
@@ -190,7 +190,7 @@
 (defn- find-subsequent-join-terms [a first-v terms]
   (when (logic-var? first-v)
     (->> (for [[op term] terms
-               :when (= :fact op)
+               :when (= :bgp op)
                :let [{:keys [a v]} term]
                :when (= first-v v)]
            a)
@@ -201,7 +201,7 @@
 (defn- find-subsequent-join-literals [as terms]
   (let [as (set as)]
     (->> (for [[op term] terms
-               :when (= :fact op)
+               :when (= :bgp op)
                :let [{:keys [_ a v]} term]
                :when (and (contains? as a)
                           (not (nil? v))
@@ -210,7 +210,7 @@
          (not-empty)
          (into (sorted-set)))))
 
-(defn- fact->entity-binding [{:keys [e a v]} terms]
+(defn- bgp->entity-binding [{:keys [e a v]} terms]
   (let [join-attributes (find-subsequent-join-terms a v terms)
         join-literals (find-subsequent-join-literals join-attributes terms)
         range-vals (if (seq join-literals)
@@ -236,7 +236,7 @@
                          (log/debug :var-bind this e a s v)
                          (if (coll? v) v [v]))))))
 
-(defn- fact->var-binding [{:keys [e a v]}]
+(defn- bgp->var-binding [{:keys [e a v]}]
   (when (and v (logic-var? v))
     (log/debug :var-binding e a v)
     (->VarBinding e a v)))
@@ -255,9 +255,9 @@
   [query-context [[op t :as term] & terms]]
   (when term
     (let [stage (condp = op
-                  :fact
-                  [(remove nil? [(fact->entity-binding t terms)
-                                 (fact->var-binding t)])
+                  :bgp
+                  [(remove nil? [(bgp->entity-binding t terms)
+                                 (bgp->var-binding t)])
                    (fn [db result] (value-matches? query-context db t result))]
 
                   :and
