@@ -733,19 +733,20 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (throw (IllegalArgumentException.
                       (str "Invalid input: " (s/explain-str :crux.query/query q))))))
-     (let [{bgp-clauses :bgp
+     (let [type->clauses (->> (for [[type clause] where]
+                                (if (contains? #{:bgp :range :pred} type)
+                                  {type [(if (and (= :bgp type)
+                                                  (nil? (:v clause)))
+                                           (assoc clause :v (gensym "_"))
+                                           clause)]}
+                                  (throw (IllegalArgumentException.
+                                          (str "Unsupported clause: "
+                                               type " "
+                                               (pr-str clause))))))
+                              (apply merge-with into))
+           {bgp-clauses :bgp
             range-clauses :range
-            pred-clauses :pred} (->> (for [[type clause] where]
-                                       (if (contains? #{:bgp :range :pred} type)
-                                         {type [(if (and (= :bgp type)
-                                                         (nil? (:v clause)))
-                                                  (assoc clause :v (gensym "_"))
-                                                  clause)]}
-                                         (throw (IllegalArgumentException.
-                                                 (str "Unsupported clause: "
-                                                      type " "
-                                                      (pr-str clause))))))
-                                     (apply merge-with into))
+            pred-clauses :pred} type->clauses
            e-vars (set (for [clause bgp-clauses
                              :when (logic-var? (:e clause))]
                          (:e clause)))
@@ -846,8 +847,15 @@
            e-var-name->attr (zipmap (mapcat var->names e-vars)
                                     (repeat :crux.db/id))
            var-names->attr (merge v-var-name->attr e-var-name->attr)
-           ;; TODO: only find vars are available, need to temporarily
-           ;; add predicate vars as well to result.
+           predicate-vars (for [{:keys [pred-fn args]
+                                 :as clause} pred-clauses
+                                arg args
+                                :when (logic-var? arg)]
+                            (if (contains? var->names arg)
+                              arg
+                              (throw (IllegalArgumentException. (str "Predicate refers to unknown variable: "
+                                                                     arg " " (pr-str clause))))))
+           all-vars (distinct (concat find predicate-vars))
            preds (some->> (for [{:keys [pred-fn args]} pred-clauses]
                             (fn [var->result]
                               (->> (for [arg args]
@@ -867,7 +875,7 @@
        (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals var->joins))
                                                                     (mapv var->names e-vars)))
              result (cartesian
-                     (for [var find
+                     (for [var all-vars
                            :let [var-name (first (get var->names var))
                                  e-var-name (if-let [e-var (get v-var->e-var var)]
                                               (first (get var->names e-var))
@@ -876,5 +884,5 @@
                              :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
                              value (normalize-value (get doc (get var-names->attr var-name)))]
                          value)))
-             :when (or (nil? preds) (preds (zipmap find result)))]
-         (vec result))))))
+             :when (or (nil? preds) (preds (zipmap all-vars result)))]
+         (vec (take (count find) result)))))))
