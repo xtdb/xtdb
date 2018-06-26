@@ -833,13 +833,15 @@
                                            (merge-with into {v-var (mapv :name indexes)} var->names))]))
                                     [var->joins var->names]
                                     v-var->literal-e-clauses)
-           v-var->attr (->> (for [[_ clauses] (->> (apply dissoc v-var->literal-e-clauses e-vars)
-                                                   (concat e-var->v-var-clauses))
-                                  clause clauses]
-                              [(:v clause) (:a clause)])
-                            (into {}))
-           e-var->attr (zipmap e-vars (repeat :crux.db/id))
-           var->attr (merge v-var->attr e-var->attr)
+           v-var-name->attr (->> (for [[_ clauses] (concat v-var->literal-e-clauses
+                                                           e-var->v-var-clauses)
+                                       clause clauses
+                                       var-name (get var->names (:v clause))]
+                                   [var-name (:a clause)])
+                                 (into {}))
+           e-var-name->attr (zipmap (mapcat var->names e-vars)
+                                    (repeat :crux.db/id))
+           var-names->attr (merge v-var-name->attr e-var-name->attr)
            preds (some->> (for [clause pred-clauses
                                 :let [{:keys [pred-fn args]} clause]]
                             (fn [var->result]
@@ -858,14 +860,13 @@
                                                                     (mapv var->names e-vars)))
              result (cartesian
                      (for [var find
-                           :let [var-name (first (get var->names var))]]
-                       (for [{:keys [content-hash]} (if-let [v (get v-var->e-var var)]
-                                                      (->> (get var->names v)
-                                                           (first)
-                                                           (get join-results))
-                                                      (get join-results var-name))
+                           :let [var-name (first (get var->names var))
+                                 e-var-name (if-let [e-var (get v-var->e-var var)]
+                                              (first (get var->names e-var))
+                                              var-name)]]
+                       (for [{:keys [content-hash]} (get join-results e-var-name)
                              :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
-                             value (normalize-value (get doc (get var->attr var)))]
+                             value (normalize-value (get doc (get var-names->attr var-name)))]
                          value)))
              :when (or (nil? preds) (preds (zipmap find result)))]
          (vec result))))))
