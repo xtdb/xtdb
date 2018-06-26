@@ -318,20 +318,37 @@
                                              :where [[p :mentor i]
                                                      [i :name "Ivan"]]})))))
 
-  ;; TODO: bug with joins to literal entity fields.
-  #_(t/testing "Can query by known entity"
-      (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
-                                              :where [[:ivan :name n]]})))
+  ;; TODO: This isn't strictly about literal entities necessarily,
+  ;; it's about constraining the entity position based on the value
+  ;; position, as indexes are based on the values. Might need a new
+  ;; virtual index? Or some form of constraining similar to the shared
+  ;; names.
+  (t/testing "Can query by known entity"
+    (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
+                                            :where [[:ivan :name n]]})))
 
-      (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
+    #_(t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
                                               :where [[:petr :mentor i]
                                                       [i :name n]]})))
 
-      (t/testing "Other direction"
+    ;; TODO: Same underlying issue without literal entities, should
+    ;; also work, the [i :name n] clause is never joined with the rest
+    ;; of the query:
+    #_(t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
+                                              :where [[p :name "Petr"]
+                                                      [p :mentor i]
+                                                      [i :name n]]})))
+
+    ;; TODO: For example, this works, but following i doesn't.
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
+                                           :where [[p :name "Petr"]
+                                                   [p :mentor i]]})))
+
+    #_(t/testing "Other direction"
         (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
                                                 :where [[i :name n]
                                                         [:petr :mentor i]]}))))
-      (t/testing "No matches"
+    #_(t/testing "No matches"
         (t/is (= #{} (doc/q (db *kv*) '{:find [n]
                                         :where [[:ivan :mentor x]
                                                 [x :name n]]})))
