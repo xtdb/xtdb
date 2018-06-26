@@ -83,19 +83,19 @@
         (compare-pred (bu/compare-bytes value seek-k))))
     (constantly true)))
 
-(defn- new-equal-virtual-index [idx v]
+(defn new-equal-virtual-index [idx v]
   (let [pred (value-comparsion-predicate zero? v)]
-    (->PredicateVirtualIndex idx pred identity)))
+    (->PredicateVirtualIndex idx pred (constantly v))))
 
-(defn- new-less-than-equal-virtual-index [idx max-v]
+(defn new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn- new-less-than-virtual-index [idx max-v]
+(defn new-less-than-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate neg? max-v)]
     (->PredicateVirtualIndex idx pred identity)))
 
-(defn- new-greater-than-equal-virtual-index [idx min-v]
+(defn new-greater-than-equal-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred (idx/value->bytes k))
@@ -112,7 +112,7 @@
   (-next-values [this]
     (db/-next-values predicate-idx)))
 
-(defn- new-greater-than-virtual-index [idx min-v]
+(defn new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred (idx/value->bytes k))
@@ -123,31 +123,10 @@
 (defn- new-doc-attribute-value-index [i attr]
   (->DocAttributeValueIndex i attr (atom nil)))
 
-;; TODO: old range constraints format was a map, this will be replaced
-;; by wrapper fns.
-(defn- range-constraints-map->fn [{:keys [min-v inclusive-min-v? max-v inclusive-max-v?]
-                                   :as range-constraints}]
-  (fn [idx]
-    (-> idx
-        ((if inclusive-max-v?
-           new-less-than-equal-virtual-index
-           new-less-than-virtual-index) max-v)
-        ((if inclusive-min-v?
-           new-greater-than-equal-virtual-index
-           new-greater-than-virtual-index) min-v))))
-
 (defn- wrap-with-range-constraints [idx range-constraints]
-  (let [range-constraints-wrapper (cond
-                                    (map? range-constraints)
-                                    (range-constraints-map->fn range-constraints)
-
-                                    (nil? range-constraints)
-                                    identity
-
-                                    :else
-                                    range-constraints)]
-
-    (range-constraints-wrapper idx)))
+  (if range-constraints
+    (range-constraints idx)
+    idx))
 
 (defn- normalize-value [v]
   (cond-> v
@@ -669,6 +648,19 @@
   (eq? [this that]
     (= eid (:eid that))))
 
+;; TODO: old range constraints format was a map, still used by
+;; crux.query, this will be replaced by wrapper fns.
+(defn- range-constraints-map->fn [{:keys [min-v inclusive-min-v? max-v inclusive-max-v?]
+                                   :as range-constraints}]
+  (fn [idx]
+    (-> idx
+        ((if inclusive-max-v?
+           new-less-than-equal-virtual-index
+           new-less-than-virtual-index) max-v)
+        ((if inclusive-min-v?
+           new-greater-than-equal-virtual-index
+           new-greater-than-virtual-index) min-v))))
+
 (defrecord DocDatasource [kv object-store business-time transact-time]
   db/Datasource
   (new-query-context [this]
@@ -679,12 +671,12 @@
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entities-for-attribute-value [this query-context ident range-constraints]
-    (for [entity-tx (entities-by-attribute-value-at query-context ident range-constraints business-time transact-time)]
+    (for [entity-tx (entities-by-attribute-value-at query-context ident (range-constraints-map->fn range-constraints) business-time transact-time)]
       (map->DocEntity (assoc entity-tx :object-store object-store))))
 
   (entity-join [this query-context attrs range-constraints]
     (let [indexes (for [attr attrs]
-                    (entity-attribute-value-join-internal query-context attr range-constraints transact-time transact-time))]
+                    (entity-attribute-value-join-internal query-context attr (range-constraints-map->fn range-constraints) transact-time transact-time))]
       (distinct (for [[v join-results] (unary-leapfrog-join indexes)
                       [k entities] join-results
                       entity-tx entities]

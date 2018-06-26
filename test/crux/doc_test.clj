@@ -70,10 +70,7 @@
         (t/testing "single value attribute")
         (t/is (= expected-entities
                  (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
-                                                     {:min-v "Pablo"
-                                                      :inclusive-min-v? true
-                                                      :max-v "Pablo"
-                                                      :inclusive-max-v? true}
+                                                     #(doc/new-equal-virtual-index % "Pablo")
                                                      transact-time transact-time)))
 
         (t/testing "find multi valued attribute"
@@ -81,10 +78,7 @@
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://purl.org/dc/terms/subject
-                    {:min-v :http://dbpedia.org/resource/Category:Cubist_artists
-                     :inclusive-min-v? true
-                     :max-v :http://dbpedia.org/resource/Category:Cubist_artists
-                     :inclusive-max-v? true}
+                    #(doc/new-equal-virtual-index % :http://dbpedia.org/resource/Category:Cubist_artists)
                     transact-time transact-time))))
 
         (t/testing "find attribute by range"
@@ -92,38 +86,31 @@
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 230
-                     :inclusive-min-v? true
-                     :max-v 230
-                     :inclusive-max-v? true}
-                    transact-time transact-time)))
-
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    {:min-v 229
-                     :inclusive-min-v? true
-                     :max-v 230
-                     :inclusive-max-v? true}
+                    #(doc/new-equal-virtual-index % 230)
                     transact-time transact-time)))
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 229
-                     :inclusive-min-v? true
-                     :max-v 231
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 229)
+                         (doc/new-less-than-equal-virtual-index 230))
                     transact-time transact-time)))
           (t/is (= expected-entities
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 230
-                     :inclusive-min-v? true
-                     :max-v 231
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 229)
+                         (doc/new-less-than-equal-virtual-index 231))
+                    transact-time transact-time)))
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at
+                    snapshot
+                    :http://dbpedia.org/property/imageSize
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 230)
+                         (doc/new-less-than-equal-virtual-index 231))
                     transact-time transact-time)))
 
           (t/testing "not inclusive operator"
@@ -131,28 +118,25 @@
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 230
-                     :inclusive-min-v? false
-                     :max-v 231
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-virtual-index 230)
+                         (doc/new-less-than-equal-virtual-index 231))
                     transact-time transact-time)))
             (t/is (empty?
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 229
-                     :inclusive-min-v? true
-                     :max-v 230
-                     :inclusive-max-v? false}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 229)
+                         (doc/new-less-than-virtual-index 230))
                     transact-time transact-time)))
             (t/is (empty?
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 230
-                     :inclusive-min-v? false
-                     :max-v 230
-                     :inclusive-max-v? false}
+                    #(-> %
+                         (doc/new-greater-than-virtual-index 230)
+                         (doc/new-less-than-virtual-index 230))
                     transact-time transact-time))))
 
           (t/testing "not within range"
@@ -160,28 +144,25 @@
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 231
-                     :inclusive-min-v? true
-                     :max-v 255
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 231)
+                         (doc/new-less-than-equal-virtual-index 255))
                     transact-time transact-time)))
             (t/is (empty?
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v 1
-                     :inclusive-min-v? true
-                     :max-v 229
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index 1)
+                         (doc/new-less-than-equal-virtual-index 229))
                     transact-time transact-time)))
             (t/is (empty?
                    (doc/entities-by-attribute-value-at
                     snapshot
                     :http://dbpedia.org/property/imageSize
-                    {:min-v -255
-                     :inclusive-min-v? true
-                     :max-v 229
-                     :inclusive-max-v? true}
+                    #(-> %
+                         (doc/new-greater-than-equal-virtual-index -255)
+                         (doc/new-less-than-equal-virtual-index 229))
                     transact-time transact-time))))))
 
       (t/testing "cannot see entity before business or transact time"
@@ -341,10 +322,7 @@
 
           (t/testing "eviction removes secondary indexes"
             (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
-                                                              {:min-v "Pablo"
-                                                               :inclusive-min-v? true
-                                                               :max-v "Pablo"
-                                                               :inclusive-max-v? true}
+                                                              #(doc/new-equal-virtual-index % "Pablo")
                                                               new-transact-time new-transact-time)))))))))
 
 (t/deftest test-can-perform-unary-leapfrog-join
@@ -522,24 +500,24 @@
         (t/testing "within range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                      expected-entity-tx]]
-                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
-                                                                                               :inclusive-min-v? true
-                                                                                               :max-v 2
-                                                                                               :inclusive-max-v? true}
+                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y
+                                                                 #(-> %
+                                                                      (doc/new-greater-than-equal-virtual-index 0)
+                                                                      (doc/new-less-than-equal-virtual-index 2))
                                                                  transact-time transact-time)
                          entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 2
-                                                                                 :inclusive-min-v? true
-                                                                                 :max-v 5
-                                                                                 :inclusive-max-v? true}
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y
+                                                   #(-> %
+                                                        (doc/new-greater-than-equal-virtual-index 2)
+                                                        (doc/new-less-than-equal-virtual-index 5))
                                                    transact-time transact-time)))
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y {:min-v 0
-                                                                                 :inclusive-min-v? true
-                                                                                 :max-v 0
-                                                                                 :inclusive-max-v? true}
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y
+                                                   #(-> %
+                                                        (doc/new-greater-than-equal-virtual-index 0)
+                                                        (doc/new-less-than-equal-virtual-index 0))
                                                    transact-time transact-time)))))
 
       (t/testing "multiple values"
@@ -549,28 +527,31 @@
                    expected-entity-tx]
                   [(bu/bytes->hex (idx/value->bytes 3))
                    expected-entity-tx]]
-                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z {:min-v 0
-                                                                                             :inclusive-min-v? true
-                                                                                             :max-v 3
-                                                                                             :inclusive-max-v? true} transact-time transact-time)
+                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z
+                                                               #(-> %
+                                                                    (doc/new-greater-than-equal-virtual-index 0)
+                                                                    (doc/new-less-than-equal-virtual-index 3))
+                                                               transact-time transact-time)
                        entity entities]
                    [(bu/bytes->hex v) entity])))
 
         (t/testing "sub range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
                      expected-entity-tx]]
-                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z {:min-v 2
-                                                                                               :inclusive-min-v? true
-                                                                                               :max-v 2
-                                                                                               :inclusive-max-v? true} transact-time transact-time)
+                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z
+                                                                 #(-> %
+                                                                    (doc/new-greater-than-equal-virtual-index 2)
+                                                                    (doc/new-less-than-equal-virtual-index 2))
+                                                                 transact-time transact-time)
                          entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z {:min-v 4
-                                                                                 :inclusive-min-v? true
-                                                                                 :max-v 10
-                                                                                 :inclusive-max-v? true} transact-time transact-time))))))))
+          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z
+                                                   #(-> %
+                                                        (doc/new-greater-than-equal-virtual-index 4)
+                                                        (doc/new-less-than-equal-virtual-index 10))
+                                                   transact-time transact-time))))))))
 
 (t/deftest test-shared-literal-attribute-entities-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
