@@ -29,9 +29,9 @@
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of logic-var? :kind vector?)
                                      :terms ::where)
-                    :built-in (s/cat :op '#{< <= >= >}
-                                     :sym logic-var?
-                                     :val (complement logic-var?))
+                    :range (s/cat :op '#{< <= >= >}
+                                  :sym logic-var?
+                                  :val (complement logic-var?))
                     :pred (s/and list?
                                  (s/cat :pred-fn ::pred-fn
                                         :args (s/* any?)))))
@@ -63,7 +63,7 @@
                    (compare-vals? entity-v (some-> (result v) v-for-comparison)))
               (compare-vals? entity-v v))))))
 
-(defn- built-in-op [x {:keys [sym val op]}]
+(defn- range-op [x {:keys [sym val op]}]
   (let [diff (compare x val)]
     (case op
       < (neg? diff)
@@ -167,10 +167,10 @@
                                        actual-v (db/attr-val entity a)]
                                    (when (or (and (logic-var? v)
                                                   (if min-v
-                                                    (built-in-op actual-v min-v)
+                                                    (range-op actual-v min-v)
                                                     true)
                                                   (if max-v
-                                                    (built-in-op actual-v max-v)
+                                                    (range-op actual-v max-v)
                                                     true))
                                              (compare-vals? actual-v v))
                                      (for [r results]
@@ -179,7 +179,7 @@
 (defn- find-subsequent-range-terms [v terms]
   (when (logic-var? v)
     (let [range-terms (->> terms
-                           (filter (fn [[op]] (= :built-in op)))
+                           (filter (fn [[op]] (= :range op)))
                            (map second)
                            (filter #(= v (:sym %))))
           min-value (last (sort-by :val (filter #(contains? '#{> >=} (:op %)) range-terms)))
@@ -302,9 +302,9 @@
                            (let [args (map #(or (and (logic-var? %) (result %)) %) args)]
                              (apply pred-fn args)))])
 
-                  :built-in
+                  :range
                   [nil (fn [_ result]
-                         (built-in-op (result (:sym t)) t))])]
+                         (range-op (result (:sym t)) t))])]
       (cons stage (query-terms->plan query-context terms)))))
 
 (defn- term-symbols [terms]

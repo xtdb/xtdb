@@ -732,12 +732,13 @@
                              :when (and (= :fact type)
                                         (logic-var? (:e clause)))]
                          (:e clause)))
-           v-var->built-in-clauses (->> (for [[type clause] where
-                                              :when (and (= :built-in type)
-                                                         (not (contains? e-vars (:sym clause))))]
-                                          clause)
+           v-var->range-clauses (->> (for [[type clause] where
+                                           :when (= :range type)]
+                                       (if (contains? e-vars (:sym clause))
+                                         (throw (IllegalArgumentException. (str "Cannot add range constraints on entity var: " (pr-str clause))))
+                                         clause))
                                         (group-by :sym))
-           v-var->range-constrants (->> (for [[v clauses] v-var->built-in-clauses]
+           v-var->range-constrants (->> (for [[_ clauses] v-var->range-clauses]
                                           (->> (for [{:keys [op val]} clauses]
                                                  (case op
                                                    < #(new-less-than-virtual-index val)

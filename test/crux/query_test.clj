@@ -331,9 +331,9 @@
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:fact {:e 'i :a :age :v 'age}]
-            [:built-in {:op '<
-                        :sym 'age
-                        :val 20}]]
+            [:range {:op '<
+                     :sym 'age
+                     :val 20}]]
            (s/conform :crux.query/where '[[i :age age]
                                           (< age 20)])))
 
