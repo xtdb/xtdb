@@ -122,10 +122,7 @@
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (seek-k-pred (idx/value->bytes k))
                                           k
-                                          v))))
-  #_(-> idx
-      (new-less-than-equal-virtual-index v)
-      (new-greater-than-equal-virtual-index v)))
+                                          v)))))
 
 (defn- new-doc-attribute-value-index [i attr]
   (->DocAttributeValueIndex i attr (atom nil)))
