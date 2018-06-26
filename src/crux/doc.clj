@@ -747,9 +747,13 @@
            {bgp-clauses :bgp
             range-clauses :range
             pred-clauses :pred} type->clauses
-           e-vars (set (for [clause bgp-clauses
-                             :when (logic-var? (:e clause))]
-                         (:e clause)))
+           e-vars (set (for [{:keys [e]} bgp-clauses
+                             :when (logic-var? e)]
+                         e))
+           v-vars (set (for [{:keys [v]} bgp-clauses
+                             :when (logic-var? v)]
+                         v))
+           shared-e-v-vars (set/intersection e-vars v-vars)
            v-var->range-clauses (->> (for [clause range-clauses]
                                        (if (contains? e-vars (:sym clause))
                                          (throw (IllegalArgumentException.
@@ -787,15 +791,15 @@
                                            clause)
                                          (group-by :e))
            [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] [var clauses]]
-                                      (let [var-name (gensym var)
+                                    (fn [[var->joins var->names] [e-var clauses]]
+                                      (let [var-name (gensym e-var)
                                             idx (shared-literal-attribute-entities-join-internal
                                                  snapshot
                                                  (vec (for [{:keys [a v]} clauses]
                                                         [a v]))
                                                  business-time transact-time)]
-                                        [(merge-with into {var [(assoc idx :name var-name)]} var->joins)
-                                         (merge-with into {var [var-name]} var->names)]))
+                                        [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
+                                         (merge-with into {e-var [var-name]} var->names)]))
                                     [var->joins var->names]
                                     e-var->literal-v-clauses)
            v-var->literal-e-clauses (->> (for [clause bgp-clauses
@@ -805,10 +809,12 @@
                                          (group-by :v))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                 :when (and (logic-var? e)
-                                                           (logic-var? v)
-                                                           (or (> (count (get var->names v)) 1)
-                                                               (and (not (contains? e-var->literal-v-clauses e))
-                                                                    (not (contains? v-var->literal-e-clauses v)))))]
+                                                           (logic-var? v))
+                                                :let [leaf-v? (and (= (count (get var->names v)) 1)
+                                                                   (or (contains? e-var->literal-v-clauses e)
+                                                                       (contains? v-var->literal-e-clauses v))
+                                                                   (not (contains? e-vars v)))]
+                                                :when (not leaf-v?)]
                                             clause)
                                           (group-by (juxt :e :v)))
            [var->joins var->names] (reduce
@@ -868,12 +874,26 @@
                          [[]]
                          (for [a x
                                bs (cartesian xs)]
-                           (cons a bs))))]
+                           (cons a bs))))
+           var+joins (vec var->joins)
+           e-var->v-result-index (zipmap (map key var+joins) (range))
+           ;; TODO: this should preferably happen inside
+           ;; constrain-triejoin-result, needs associating a value
+           ;; index with the shared names.
+           result-consistent-with-join-keys? (fn [join-keys join-results]
+                                               (->> (for [var shared-e-v-vars
+                                                          :let [eid-bytes (get join-keys (get e-var->v-result-index var))]
+                                                          :when eid-bytes
+                                                          var-name (get var->names var)
+                                                          entity (get join-results var-name)]
+                                                      (bu/bytes=? eid-bytes (idx/id->bytes entity)))
+                                                    (every? true?)))]
        (doseq [var find
                :when (not (contains? var->names var))]
          (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
-       (for [[v join-results] (idx->seq (leapfrog-triejoin-internal (vec (vals var->joins))
-                                                                    (mapv var->names e-vars)))
+       (for [[join-keys join-results] (idx->seq (leapfrog-triejoin-internal (mapv val var+joins)
+                                                                            (mapv var->names e-vars)))
+             :when (result-consistent-with-join-keys? join-keys join-results)
              result (cartesian
                      (for [var all-vars
                            :let [var-name (first (get var->names var))

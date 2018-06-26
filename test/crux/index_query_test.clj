@@ -318,60 +318,40 @@
                                              :where [[p :mentor i]
                                                      [i :name "Ivan"]]})))))
 
-  ;; TODO: This isn't strictly about literal entities necessarily,
-  ;; it's about constraining the entity position based on the value
-  ;; position, as indexes are based on the values. Might need a new
-  ;; virtual index? Or some form of constraining similar to the shared
-  ;; names. For example, The tests below temporarily use predicates
-  ;; to enforce the join across the variable renamed twice, this
-  ;; should not be necessary.
   (t/testing "Can query by known entity"
     (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
                                             :where [[:ivan :name n]]})))
 
     (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
-                                            :where [[:petr :mentor i1]
-                                                    [i2 :name n]
-                                                    (= i1 i2)]})))
+                                            :where [[:petr :mentor i]
+                                                    [i :name n]]})))
 
-    ;; TODO: Same underlying issue without literal entities, should
-    ;; also work, the [i :name n] clause is never joined with the rest
-    ;; of the query:
     (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
                                             :where [[p :name "Petr"]
-                                                    [p :mentor i1]
-                                                    [i2 :name n]
-                                                    (= i1 i2)]})))
+                                                    [p :mentor i]
+                                                    [i :name n]]})))
 
-    ;; TODO: Simplest case, this should also just return Ivan, as
-    ;; there are no other mentors. Note that this works as expected if
-    ;; one sets :name to "Ivan".
     (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
-                                            :where [[p :mentor i1]
-                                                    [i2 :name n]
-                                                    (= i1 i2)]})))
+                                            :where [[p :mentor i]
+                                                    [i :name n]]})))
 
-    ;; TODO: For example, this works, but following i doesn't.
     (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [i]
                                            :where [[p :name "Petr"]
                                                    [p :mentor i]]})))
 
     (t/testing "Other direction"
       (t/is (= #{["Ivan"]} (doc/q (db *kv*) '{:find [n]
-                                              :where [[i1 :name n]
-                                                      [:petr :mentor i2]
-                                                      (= i1 i2)]}))))
+                                              :where [[i :name n]
+                                                      [:petr :mentor i]]}))))
     (t/testing "No matches"
       (t/is (= #{} (doc/q (db *kv*) '{:find [n]
-                                      :where [[:ivan :mentor x1]
-                                              [x2 :name n]
-                                              (= x1 x2)]})))
+                                      :where [[:ivan :mentor x]
+                                              [x :name n]]})))
 
       (t/testing "Other direction"
         (t/is (= #{} (doc/q (db *kv*) '{:find [n]
-                                        :where [[x1 :name n]
-                                                [:ivan :mentor x2]
-                                                (= x1 x2)]})))))))
+                                        :where [[x :name n]
+                                                [:ivan :mentor x]]})))))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:bgp {:e 'i :a :age :v 'age}]
