@@ -738,7 +738,7 @@
        (throw (throw (IllegalArgumentException.
                       (str "Invalid input: " (s/explain-str :crux.query/query q))))))
      (let [type->clauses (->> (for [[type clause] where]
-                                (if (contains? #{:bgp :range :pred} type)
+                                (if (contains? #{:bgp :range :pred :unify} type)
                                   {type [(if (and (= :bgp type)
                                                   (nil? (:v clause)))
                                            (assoc clause :v (gensym "_"))
@@ -750,7 +750,8 @@
                               (apply merge-with into))
            {bgp-clauses :bgp
             range-clauses :range
-            pred-clauses :pred} type->clauses
+            pred-clauses :pred
+            unify-clauses :unify} type->clauses
            e-vars (set (for [{:keys [e]} bgp-clauses
                              :when (logic-var? e)]
                          e))
@@ -882,10 +883,42 @@
                           (not-empty)
                           (apply every-pred))
            var+joins (vec var->joins)
-           e-var->v-result-index (zipmap (map key var+joins) (range))
+           var->v-result-index (zipmap (map key var+joins) (range))
+           unification-preds (for [{:keys [op x y]
+                                    :as clause} unify-clauses]
+                               (do (doseq [arg [x y]
+                                           :when (and (logic-var? arg)
+                                                      (not (contains? var->names arg)))]
+                                     (throw (IllegalArgumentException. (str "Unification refers to unknown variable: "
+                                                                            arg " " (pr-str clause)))))
+                                   (fn [join-keys join-results]
+                                     (let [[x y] (for [var [x y]]
+                                                   (if (logic-var? var)
+                                                     (or (some->> (get join-keys (get var->v-result-index var))
+                                                                  (sorted-set-by bu/bytes-comparator))
+                                                         (let [var-name (first (get var->names var))
+                                                               e-var (get v-var->e-var var)
+                                                               e-var-name (if e-var
+                                                                            (first (get var->names e-var))
+                                                                            var-name)]
+                                                           (some->> (get join-results e-var-name)
+                                                                    (map (comp idx/id->bytes :eid))
+                                                                    (into (sorted-set-by bu/bytes-comparator)))))
+                                                     (->> (map idx/value->bytes (normalize-value var))
+                                                          (into (sorted-set-by bu/bytes-comparator)))))]
+                                       (if (and x y)
+                                         (case op
+                                           == (boolean (not-empty (set/intersection x y)))
+                                           != (empty? (set/intersection x y)))
+                                         true)))))
+           constrain-triejoin-result-by-unification (fn [join-keys join-results]
+                                                      (when (->> (for [pred unification-preds]
+                                                                   (pred join-keys join-results))
+                                                                 (every? true?))
+                                                        join-results))
            constrain-triejoin-result-by-join-keys (fn [join-keys join-results]
                                                     (when (->> (for [e-var shared-e-v-vars
-                                                                     :let [eid-bytes (get join-keys (get e-var->v-result-index e-var))]
+                                                                     :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
                                                                      :when eid-bytes
                                                                      var-name (get var->names e-var)
                                                                      entity (get join-results var-name)]
@@ -895,6 +928,7 @@
            shared-names (mapv var->names e-vars)
            constrain-query-result-fn (fn [max-ks result]
                                        (some->> (constrain-triejoin-result-by-names shared-names max-ks result)
+                                                (constrain-triejoin-result-by-unification max-ks)
                                                 (constrain-triejoin-result-by-join-keys max-ks)))
            constrain-doc-by-needed-attributes (fn [doc var]
                                                 (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]

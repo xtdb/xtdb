@@ -344,10 +344,6 @@
                                               :where [[i :name n]
                                                       [:petr :mentor i]]}))))
     (t/testing "No matches"
-      (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                      :where [[p :name "Petrov"]
-                                              [p :mentor i]]})))
-
       (t/is (= #{} (doc/q (db *kv*) '{:find [n]
                                       :where [[:ivan :mentor x]
                                               [x :name n]]})))
@@ -355,34 +351,98 @@
       (t/testing "Other direction"
         (t/is (= #{} (doc/q (db *kv*) '{:find [n]
                                         :where [[x :name n]
-                                                [:ivan :mentor x]]}))))
+                                                [:ivan :mentor x]]})))))))
 
-      (t/testing "index seek bugs"
-        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
-                                        :where [[p :name "Pet"]]})))
+(t/deftest test-join-and-seek-bugs
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
 
-        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
-                                        :where [[p :name "I"]]})))
+  (t/testing "index seek bugs"
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[p :name "Petrov"]
+                                            [p :mentor i]]})))
 
-        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
-                                        :where [[p :name "Petrov"]]})))
 
-        (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                        :where [[p :name "Pet"]
-                                                [p :mentor i]]})))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                    :where [[p :name "Pet"]]})))
 
-        (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                        :where [[p :name "Petrov"]
-                                                [p :mentor i]]}))))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                    :where [[p :name "I"]]})))
 
-      (t/testing "join bugs"
-        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
-                                        :where [[p :name "Ivan"]
-                                                [p :mentor i]]})))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                    :where [[p :name "Petrov"]]})))
 
-        (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                        :where [[p :name "Ivan"]
-                                                [p :mentor i]]})))))))
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[p :name "Pet"]
+                                            [p :mentor i]]})))
+
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[p :name "Petrov"]
+                                            [p :mentor i]]}))))
+
+  (t/testing "join bugs"
+    (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                    :where [[p :name "Ivan"]
+                                            [p :mentor i]]})))
+
+    (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                    :where [[p :name "Ivan"]
+                                            [p :mentor i]]})))))
+
+(t/deftest test-index-unification
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
+
+  (t/is (= #{[:petr :petr]} (doc/q (db *kv*) '{:find [p1 p2]
+                                               :where [[p1 :name "Petr"]
+                                                       [p2 :mentor i]
+                                                       (== p1 p2)]})))
+
+  (t/is (= #{} (doc/q (db *kv*) '{:find [p1 p2]
+                                  :where [[p1 :name "Petr"]
+                                          [p2 :mentor i]
+                                          (== p1 i)]})))
+
+  (t/is (= #{} (doc/q (db *kv*) '{:find [p1 p2]
+                                  :where [[p1 :name "Petr"]
+                                          [p2 :mentor i]
+                                          (== p1 i)]})))
+
+  (t/is (= #{[:petr :petr]} (doc/q (db *kv*) '{:find [p1 p2]
+                                               :where [[p1 :name "Petr"]
+                                                       [p2 :mentor i]
+                                                       (!= p1 i)]})))
+
+  (t/is (= #{} (doc/q (db *kv*) '{:find [p1 p2]
+                                  :where [[p1 :name "Petr"]
+                                          [p2 :mentor i]
+                                          (!= p1 p2)]})))
+
+  (t/testing "unify with literal"
+    (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [p]
+                                           :where [[p :name n]
+                                                   (== n "Petr")]})))
+
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [p]
+                                           :where [[p :name n]
+                                                   (!= n "Petr")]}))))
+
+  (t/testing "multiple literals in set"
+    (t/is (= #{[:petr] [:ivan]} (doc/q (db *kv*) '{:find [p]
+                                                   :where [[p :name n]
+                                                           (== n #{"Petr" "Ivan"})]})))
+
+    (t/is (= #{[:ivan]} (doc/q (db *kv*) '{:find [p]
+                                           :where [[p :name n]
+                                                   (!= n #{"Petr"})]})))
+
+    (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                    :where [[p :name n]
+                                            (== n #{})]})))
+
+    (t/is (= #{[:petr] [:ivan]} (doc/q (db *kv*) '{:find [p]
+                                                   :where [[p :name n]
+                                                           (!= n #{})]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:bgp {:e 'i :a :age :v 'age}]
