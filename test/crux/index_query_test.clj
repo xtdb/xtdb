@@ -375,18 +375,14 @@
                                         :where [[p :name "Petrov"]
                                                 [p :mentor i]]}))))
 
-      ;; TODO: case where same entity var don't join up. Should work
-      ;; with single var and without explicit predicate.
       (t/testing "join bugs"
-        (t/is (= #{} (doc/q (db *kv*) '{:find [p1]
-                                        :where [[p1 :name "Ivan"]
-                                                [p2 :mentor i]
-                                                (= p1 p2)]})))
+        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                        :where [[p :name "Ivan"]
+                                                [p :mentor i]]})))
 
         (t/is (= #{} (doc/q (db *kv*) '{:find [i]
-                                        :where [[p1 :name "Ivan"]
-                                                [p2 :mentor i]
-                                                (= p1 p2)]})))))))
+                                        :where [[p :name "Ivan"]
+                                                [p :mentor i]]})))))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:bgp {:e 'i :a :age :v 'age}]

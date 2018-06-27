@@ -805,16 +805,21 @@
                                                           (logic-var? (:v clause)))]
                                            clause)
                                          (group-by :v))
+           leaf-v? (fn [e v]
+                     (and (= (count (get var->names v)) 1)
+                          (or (contains? e-var->literal-v-clauses e)
+                              (contains? v-var->literal-e-clauses v))
+                          (not (contains? e-vars v))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                                :when (and (logic-var? e)
-                                                           (logic-var? v))
-                                                :let [leaf-v? (and (= (count (get var->names v)) 1)
-                                                                   (or (contains? e-var->literal-v-clauses e)
-                                                                       (contains? v-var->literal-e-clauses v))
-                                                                   (not (contains? e-vars v)))]
-                                                :when (not leaf-v?)]
+                                                :when (and (logic-var? v)
+                                                           (not (leaf-v? e v)))]
                                             clause)
                                           (group-by (juxt :e :v)))
+           e-var->leaf-var-clauses (->> (for [{:keys [e a v] :as clause} bgp-clauses
+                                              :when (and (logic-var? v)
+                                                         (leaf-v? e v))]
+                                          clause)
+                                        (group-by :e))
            [var->joins var->names] (reduce
                                     (fn [[var->joins var->names] [[e-var v-var] clauses]]
                                       (let [indexes (for [clause clauses]
@@ -896,12 +901,17 @@
              result (cartesian
                      (for [var all-vars
                            :let [var-name (first (get var->names var))
-                                 e-var-name (if-let [e-var (get v-var->e-var var)]
+                                 e-var (get v-var->e-var var)
+                                 e-var-name (if e-var
                                               (first (get var->names e-var))
                                               var-name)]]
                        (for [{:keys [content-hash]} (get join-results e-var-name)
                              :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
+                             :when (->> (for [{:keys [a]} (get e-var->leaf-var-clauses (or e-var var))]
+                                          (contains? doc a))
+                                        (every? true?))
                              value (normalize-value (get doc (get var-names->attr var-name)))]
                          value)))
-             :when (or (nil? preds) (preds (zipmap all-vars result)))]
+             :when (and (seq result)
+                        (or (nil? preds) (preds (zipmap all-vars result))))]
          (vec (take (count find) result)))))))
