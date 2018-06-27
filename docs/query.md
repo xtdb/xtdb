@@ -126,6 +126,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Graphs](https://github.com/diegocaro/temporalgraphs/blob/master/docs/index.md)
 + [TripleBit: a Fast and Compact System for Large Scale RDF
   Data](http://www.vldb.org/pvldb/vol6/p517-yuan.pdf)
++ [Foundations of
+  Databases](http://webdam.inria.fr/Alice/)
 
 ### Retention
 
