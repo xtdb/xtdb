@@ -406,9 +406,10 @@
                 result (doc/leapfrog-triejoin [[ra-idx ta-idx]
                                                [rb-idx sb-idx]
                                                [sc-idx tc-idx]]
-                                              [[:ra :rb]
-                                               [:sb :sc]
-                                               [:ta :tc]])]
+                                              (partial doc/constrain-triejoin-result-by-names
+                                                       [[:ra :rb]
+                                                        [:sb :sc]
+                                                        [:ta :tc]]))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -469,9 +470,10 @@
                    (set (for [[v join-results] (doc/leapfrog-triejoin [[ra-idx ta-idx]
                                                                        [rb-idx sb-idx]
                                                                        [sc-idx tc-idx]]
-                                                                      [[:ra :rb]
-                                                                       [:sb :sc]
-                                                                       [:ta :tc]])
+                                                                      (partial doc/constrain-triejoin-result-by-names
+                                                                               [[:ra :rb]
+                                                                                [:sb :sc]
+                                                                                [:ta :tc]]))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))

@@ -424,7 +424,7 @@
        (idx->seq)
        (vec)))
 
-(defn- constrain-triejoin-result [shared-names result]
+(defn constrain-triejoin-result-by-names [shared-names max-ks result]
   (->> shared-names
        (reduce
         (fn [result result-names]
@@ -438,7 +438,7 @@
             result))
         result)))
 
-(defrecord TriejoinVirtualIndex [unary-join-indexes shared-names trie-state]
+(defrecord TriejoinVirtualIndex [unary-join-indexes constrain-result-fn trie-state]
   db/Index
   (-seek-values [this k]
     (reset! trie-state {:needs-seek? true
@@ -457,20 +457,20 @@
                        (db/-seek-values idx (get min-vs depth)))
                    (db/-next-values idx))
           [max-k new-values] values
+          max-ks (conj (mapv first result-stack) max-k)
           [_ parent-result] (last result-stack)
           result (some->> new-values
                           (merge parent-result)
-                          (constrain-triejoin-result shared-names)
+                          (constrain-result-fn max-ks)
                           (not-empty))]
       (cond
         (and values (= depth max-depth))
-        (let [max-ks (conj (mapv first result-stack) max-k)]
-          (log/debug :leaf-match-candidate (mapv bu/bytes->hex max-ks) result)
-          (if result
-            (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks))
-                [max-ks result])
-            (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
-                (recur))))
+        (do (log/debug :leaf-match-candidate (mapv bu/bytes->hex max-ks) result)
+            (if result
+              (do (log/debug :leaf-match (mapv bu/bytes->hex max-ks))
+                  [max-ks result])
+              (do (log/debug :leaf-match-constrained (mapv bu/bytes->hex max-ks))
+                  (recur))))
 
         values
         (do (if result
@@ -486,14 +486,14 @@
             (swap! trie-state update :result-stack pop)
             (recur))))))
 
-(defn- new-triejoin-virtual-index [unary-join-indexes shared-names]
-  (->TriejoinVirtualIndex (vec unary-join-indexes) shared-names (atom nil)))
+(defn- new-triejoin-virtual-index [unary-join-indexes constrain-result-fn]
+  (->TriejoinVirtualIndex (vec unary-join-indexes) constrain-result-fn (atom nil)))
 
-(defn- leapfrog-triejoin-internal [unary-indexes shared-names]
-  (new-triejoin-virtual-index (mapv new-unary-join-virtual-index unary-indexes) shared-names))
+(defn- leapfrog-triejoin-internal [unary-indexes constrain-result-fn]
+  (new-triejoin-virtual-index (mapv new-unary-join-virtual-index unary-indexes) constrain-result-fn))
 
-(defn leapfrog-triejoin [unary-indexes shared-names]
-  (->> (leapfrog-triejoin-internal unary-indexes shared-names)
+(defn leapfrog-triejoin [unary-indexes constrain-result-fn]
+  (->> (leapfrog-triejoin-internal unary-indexes constrain-result-fn)
        (idx->seq)
        (vec)))
 
@@ -877,23 +877,24 @@
                            (cons a bs))))
            var+joins (vec var->joins)
            e-var->v-result-index (zipmap (map key var+joins) (range))
-           ;; TODO: this should preferably happen inside
-           ;; constrain-triejoin-result, needs associating a value
-           ;; index with the shared names.
-           result-consistent-with-join-keys? (fn [join-keys join-results]
-                                               (->> (for [var shared-e-v-vars
-                                                          :let [eid-bytes (get join-keys (get e-var->v-result-index var))]
-                                                          :when eid-bytes
-                                                          var-name (get var->names var)
-                                                          entity (get join-results var-name)]
-                                                      (bu/bytes=? eid-bytes (idx/id->bytes entity)))
-                                                    (every? true?)))]
+           constrain-triejoin-result-by-join-keys (fn [join-keys join-results]
+                                                    (when (->> (for [e-var shared-e-v-vars
+                                                                     :let [eid-bytes (get join-keys (get e-var->v-result-index e-var))]
+                                                                     :when eid-bytes
+                                                                     var-name (get var->names e-var)
+                                                                     entity (get join-results var-name)]
+                                                                 (bu/bytes=? eid-bytes (idx/id->bytes entity)))
+                                                               (every? true?))
+                                                      join-results))
+           shared-names (mapv var->names e-vars)
+           constrain-query-result-fn (fn [max-ks result]
+                                       (some->> (constrain-triejoin-result-by-names shared-names max-ks result)
+                                                (constrain-triejoin-result-by-join-keys max-ks)))]
        (doseq [var find
                :when (not (contains? var->names var))]
          (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
-       (for [[join-keys join-results] (idx->seq (leapfrog-triejoin-internal (mapv val var+joins)
-                                                                            (mapv var->names e-vars)))
-             :when (result-consistent-with-join-keys? join-keys join-results)
+       (for [[_ join-results] (idx->seq (leapfrog-triejoin-internal (mapv val var+joins)
+                                                                    constrain-query-result-fn))
              result (cartesian
                      (for [var all-vars
                            :let [var-name (first (get var->names var))
