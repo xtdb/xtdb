@@ -91,4 +91,5 @@
    (let [server (j/run-jetty (p/wrap-params (partial handler kvs tx-log db-dir))
                              {:port port
                               :join? false})]
+     (println (str "HTTP server started on port " port))
      (reify Closeable (close [_] (.stop server))))))
