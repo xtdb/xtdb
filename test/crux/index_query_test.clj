@@ -344,6 +344,10 @@
                                               :where [[i :name n]
                                                       [:petr :mentor i]]}))))
     (t/testing "No matches"
+      (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                      :where [[p :name "Petrov"]
+                                              [p :mentor i]]})))
+
       (t/is (= #{} (doc/q (db *kv*) '{:find [n]
                                       :where [[:ivan :mentor x]
                                               [x :name n]]})))
@@ -351,7 +355,35 @@
       (t/testing "Other direction"
         (t/is (= #{} (doc/q (db *kv*) '{:find [n]
                                         :where [[x :name n]
-                                                [:ivan :mentor x]]})))))))
+                                                [:ivan :mentor x]]}))))
+
+      (t/testing "index seek bugs"
+        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                        :where [[p :name "Pet"]]})))
+
+        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                        :where [[p :name "I"]]})))
+
+        (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                        :where [[p :name "Petrov"]]})))
+
+        (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                        :where [[p :name "Pet"]
+                                                [p :mentor i]]})))
+
+        (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                        :where [[p :name "Petrov"]
+                                                [p :mentor i]]}))))
+
+      ;; TODO: case where same entity var don't join up.
+      #_(t/testing "join bugs"
+          (t/is (= #{} (doc/q (db *kv*) '{:find [p]
+                                          :where [[p :name "Ivan"]
+                                                  [p :mentor i]]})))
+
+          (t/is (= #{} (doc/q (db *kv*) '{:find [i]
+                                          :where [[p :name "Ivan"]
+                                                  [p :mentor i]]})))))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= [[:bgp {:e 'i :a :age :v 'age}]

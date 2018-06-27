@@ -47,19 +47,17 @@
 (defrecord DocLiteralAttributeValueIndex [i attr value]
   db/Index
   (-seek-values [this k]
-    (let [seek-k (idx/encode-attribute+value+content-hash-key attr value (or k idx/empty-byte-array))
-          prefix-size (- (alength seek-k) idx/id-size)]
-      (when-let [k (ks/-seek i seek-k)]
-        (when (bu/bytes=? k seek-k prefix-size)
+    (let [seek-k (idx/encode-attribute+value+content-hash-key attr value (or k idx/empty-byte-array))]
+      (when-let [^bytes k (ks/-seek i seek-k)]
+        (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
             [(idx/value->bytes content-hash) [content-hash]])))))
 
   db/OrderedIndex
   (-next-values [this]
-    (when-let [k (ks/-next i)]
-      (let [seek-k (idx/encode-attribute+value-prefix-key attr value)
-            prefix-size (alength seek-k)]
-        (when (bu/bytes=? k seek-k prefix-size)
+    (when-let [^bytes k (ks/-next i)]
+      (let [seek-k (idx/encode-attribute+value-prefix-key attr value)]
+        (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
             [(idx/value->bytes content-hash) [content-hash]]))))))
 
