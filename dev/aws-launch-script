@@ -5,29 +5,25 @@ tar -xzf kafka_2.11-1.1.0.tgz
 chmod -R 777 kafka_2.11-1.1.0
 cd kafka_2.11-1.1.0
 
+ZK_COUNT=5
+KAFKA_COUNT=3
+
 MY_IP="$(curl ipinfo.io/ip)"
 
-cp config/server.properties config/server1.properties
-cp config/server.properties config/server2.properties
-cp config/server.properties config/server3.properties
-
-sed -i 's/broker.id=0/broker.id=1/g' config/server1.properties
-sed -i 's/broker.id=0/broker.id=2/g' config/server2.properties
-sed -i 's/broker.id=0/broker.id=3/g' config/server3.properties
-
-sed -i 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/:9093/g' config/server1.properties
-sed -i 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/:9094/g' config/server2.properties
-sed -i 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/:9095/g' config/server3.properties
-
-sed -i 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/'"$MY_IP"':9093/g' config/server1.properties
-sed -i 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/'"$MY_IP"':9094/g' config/server2.properties
-sed -i 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/'"$MY_IP"':9095/g' config/server3.properties
-
-sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/tmp\/kafka-logs1/g' config/server1.properties
-sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/tmp\/kafka-logs2/g' config/server2.properties
-sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/tmp\/kafka-logs3/g' config/server3.properties
-
 nohup bin/zookeeper-server-start.sh config/zookeeper.properties > zookeeper.out &
-nohup bin/kafka-server-start.sh config/server1.properties > kafka-server1.out &
-nohup bin/kafka-server-start.sh config/server2.properties > kafka-server2.out &
-nohup bin/kafka-server-start.sh config/server3.properties > kafka-server3.out &
+
+mkdir -p /data/kafka
+
+for ((NB = 1; i <= $KAFKA_COUNT; ++i)); do
+    cp config/server.properties config/server$NB.properties
+    
+    sed -i 's/broker.id=0/broker.id='$NB'/g' config/server$NB.properties
+    
+    PORT=$((9092 + $NB))
+    sed -i 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/:'$PORT'/g' config/server$NB.properties
+    sed -i 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/'$MY_IP':'$PORT'/g' config/server$NB.properties
+    
+    sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/data\/kafka'$NB'/g' config/server$NB.properties
+    
+    nohup bin/kafka-server-start.sh config/server$NB.properties > kafka-server$NB.out &
+done
