@@ -402,7 +402,6 @@
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
                                           (== p1 i)]})))
-
   (t/is (= #{} (doc/q (db *kv*) '{:find [p1 p2]
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
@@ -417,6 +416,23 @@
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
                                           (!= p1 p2)]})))
+
+
+  ;; TODO: not optimal, but messy to turn it into a predicate on the
+  ;; fly. Alternative is to ensure leaf vars always are bound, or look
+  ;; them up in the doc.
+  (t/testing "requires variables that the query engine can bind"
+    (try
+      (doc/q (db *kv*) '{:find [p]
+                         :where [[p :name "Petr"]
+                                 [p :mentor i]
+                                 (== p i)]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (= "All unification variables were not bound, clause must be predicate: {:op ==, :x p, :y i}"
+                 (.getMessage e))))))
+
+
 
   (t/testing "unify with literal"
     (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [p]

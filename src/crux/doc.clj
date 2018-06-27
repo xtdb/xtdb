@@ -896,21 +896,22 @@
                                                    (if (logic-var? var)
                                                      (or (some->> (get join-keys (get var->v-result-index var))
                                                                   (sorted-set-by bu/bytes-comparator))
-                                                         (let [var-name (first (get var->names var))
-                                                               e-var (get v-var->e-var var)
-                                                               e-var-name (if e-var
-                                                                            (first (get var->names e-var))
-                                                                            var-name)]
-                                                           (some->> (get join-results e-var-name)
+                                                         (let [var-name (first (get var->names var))]
+                                                           (some->> (get join-results var-name)
                                                                     (map (comp idx/id->bytes :eid))
                                                                     (into (sorted-set-by bu/bytes-comparator)))))
                                                      (->> (map idx/value->bytes (normalize-value var))
-                                                          (into (sorted-set-by bu/bytes-comparator)))))]
+                                                          (into (sorted-set-by bu/bytes-comparator)))))
+                                           last-level-in-result? (= (count var+joins) (count join-keys))]
                                        (if (and x y)
                                          (case op
                                            == (boolean (not-empty (set/intersection x y)))
                                            != (empty? (set/intersection x y)))
-                                         true)))))
+                                         (if last-level-in-result?
+                                           (throw (IllegalArgumentException.
+                                                   (str "All unification variables were not bound, clause must be predicate: "
+                                                        (pr-str clause))))
+                                           true))))))
            constrain-triejoin-result-by-unification (fn [join-keys join-results]
                                                       (when (->> (for [pred unification-preds]
                                                                    (pred join-keys join-results))
