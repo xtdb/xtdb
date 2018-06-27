@@ -944,14 +944,24 @@
              result (cartesian-product
                      (for [var find-and-predicate-vars
                            :let [var-name (first (get var->names var))
+                                 attr (get var-names->attr var-name)
                                  e-var (get v-var->e-var var)
-                                 e-var-name (if e-var
-                                              (first (get var->names e-var))
-                                              var-name)
-                                 content-hashes (map :content-hash (get join-results e-var-name))]]
-                       (for [[_ doc] (db/get-objects object-store content-hashes)
+                                 result-var-name (if e-var
+                                                   (first (get var->names e-var))
+                                                   var-name)
+                                 entities (get join-results result-var-name)
+                                 content-hash->doc (->> (map :content-hash entities)
+                                                        (db/get-objects object-store))]]
+                       (for [[entity [_ doc]] (map vector entities content-hash->doc)
                              :when (constrain-doc-by-needed-attributes doc (or e-var var))
-                             value (normalize-value (get doc (get var-names->attr var-name)))]
-                         value)))
-             :when (or (nil? preds) (preds (zipmap find-and-predicate-vars result)))]
-         (vec (take (count find) result)))))))
+                             value (normalize-value (get doc attr))]
+                         {:value value
+                          :var var
+                          :attr attr
+                          :doc doc
+                          :entity entity})))
+             :let [values (map :value result)]
+             :when (or (nil? preds) (preds (zipmap find-and-predicate-vars values)))]
+         (with-meta
+           (vec (take (count find) values))
+           {:results (vec (take (count find) result))}))))))
