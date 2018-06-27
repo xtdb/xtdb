@@ -759,6 +759,11 @@
                              :when (logic-var? v)]
                          v))
            shared-e-v-vars (set/intersection e-vars v-vars)
+           unification-vars (set (for [{:keys [x y]
+                                        :as clause} unify-clauses
+                                       arg [x y]
+                                       :when (logic-var? arg)]
+                                   arg))
            v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                        (if (contains? e-vars sym)
                                          (throw (IllegalArgumentException.
@@ -818,6 +823,7 @@
                          (and (= (count (get var->names v)) 1)
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
+                              (not (contains? unification-vars v))
                               (not (contains? e-vars v))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                 :when (and (logic-var? v)
@@ -901,17 +907,12 @@
                                                                     (map (comp idx/id->bytes :eid))
                                                                     (into (sorted-set-by bu/bytes-comparator)))))
                                                      (->> (map idx/value->bytes (normalize-value var))
-                                                          (into (sorted-set-by bu/bytes-comparator)))))
-                                           last-level-in-result? (= (count var+joins) (count join-keys))]
+                                                          (into (sorted-set-by bu/bytes-comparator)))))]
                                        (if (and x y)
                                          (case op
                                            == (boolean (not-empty (set/intersection x y)))
                                            != (empty? (set/intersection x y)))
-                                         (if last-level-in-result?
-                                           (throw (IllegalArgumentException.
-                                                   (str "All unification variables were not bound, clause must be predicate: "
-                                                        (pr-str clause))))
-                                           true))))))
+                                         true)))))
            constrain-triejoin-result-by-unification (fn [join-keys join-results]
                                                       (when (->> (for [pred unification-preds]
                                                                    (pred join-keys join-results))
