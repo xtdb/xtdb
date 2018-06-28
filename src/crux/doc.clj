@@ -760,8 +760,8 @@
   ([snapshot {:keys [kv object-store business-time transact-time] :as db} q]
    (let [{:keys [find where] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
-       (throw (throw (IllegalArgumentException.
-                      (str "Invalid input: " (s/explain-str :crux.query/query q))))))
+       (throw (IllegalArgumentException.
+               (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (let [type->clauses (->> (for [[type clause] where]
                                 (if (contains? #{:bgp :range :pred :unify :not :or} type)
                                   {type [(case type
@@ -817,9 +817,9 @@
                                :when (logic-var? arg)]
                            arg))
            or-vars (set (for [or-clause or-clauses
-                              clause-group or-clause
+                              sub-clause or-clause
                               {:keys [e]
-                               :as clause} clause-group
+                               :as clause} sub-clause
                               :when (logic-var? e)]
                           e))
            e-vars (set/union e-vars or-vars)
@@ -861,47 +861,46 @@
                                                           (not (logic-var? v)))]
                                            clause)
                                          (group-by :e))
-           [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] [e-var clauses]]
-                                      (let [var-name (gensym e-var)
-                                            idx (shared-literal-attribute-entities-join-internal
-                                                 snapshot
-                                                 (vec (for [{:keys [a v]} clauses]
-                                                        [a v]))
-                                                 business-time transact-time)]
-                                        [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
-                                         (merge-with into {e-var [var-name]} var->names)]))
-                                    [var->joins var->names]
-                                    e-var->literal-v-clauses)
-           [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] clause]
-                                      (let [or-e-vars (set (for [sub-clauses clause
-                                                                 {:keys [e v]
-                                                                  :as clause} sub-clauses]
-                                                             e))
-                                            e-var (first or-e-vars)]
-                                        (when (or (not= 1 (count or-e-vars))
-                                                  (not (logic-var? e-var)))
-                                          (throw (IllegalArgumentException.
-                                                  (str "Or clause requires same logic variable in entity position: "
-                                                       (pr-str clause)))))
-                                        (let [var-name (gensym e-var)
-                                              idx (new-or-virtual-index
-                                                   (vec (for [sub-clauses clause]
-                                                          (shared-literal-attribute-entities-join-internal
-                                                           snapshot
-                                                           (vec (for [{:keys [a v]
-                                                                       :as clause} sub-clauses]
-                                                                  (do (when (logic-var? v)
-                                                                        (throw (IllegalArgumentException.
-                                                                                (str "Or clause requires literal in value position: "
-                                                                                     (pr-str clause)))))
-                                                                      [a v])))
-                                                           business-time transact-time))))]
-                                          [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
-                                           (merge-with into {e-var [var-name]} var->names)])))
-                                    [var->joins var->names]
-                                    or-clauses)
+           [var->joins var->names] (->> e-var->literal-v-clauses
+                                        (reduce
+                                         (fn [[var->joins var->names] [e-var clauses]]
+                                           (let [var-name (gensym e-var)
+                                                 idx (shared-literal-attribute-entities-join-internal
+                                                      snapshot
+                                                      (vec (for [{:keys [a v]} clauses]
+                                                             [a v]))
+                                                      business-time transact-time)]
+                                             [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
+                                              (merge-with into {e-var [var-name]} var->names)]))
+                                         [var->joins var->names]))
+           [var->joins var->names] (->> or-clauses
+                                        (reduce
+                                         (fn [[var->joins var->names] clause]
+                                           (let [or-e-vars (set (for [sub-clauses clause
+                                                                      {:keys [e]} sub-clauses]
+                                                                  e))
+                                                 e-var (first or-e-vars)]
+                                             (when (or (not= 1 (count or-e-vars))
+                                                       (not (logic-var? e-var)))
+                                               (throw (IllegalArgumentException.
+                                                       (str "Or clause requires same logic variable in entity position: "
+                                                            (pr-str clause)))))
+                                             (let [var-name (gensym e-var)
+                                                   idx (new-or-virtual-index
+                                                        (vec (for [sub-clauses clause]
+                                                               (shared-literal-attribute-entities-join-internal
+                                                                snapshot
+                                                                (vec (for [{:keys [a v]
+                                                                            :as clause} sub-clauses]
+                                                                       (do (when (logic-var? v)
+                                                                             (throw (IllegalArgumentException.
+                                                                                     (str "Or clause requires literal in value position: "
+                                                                                          (pr-str clause)))))
+                                                                           [a v])))
+                                                                business-time transact-time))))]
+                                               [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
+                                                (merge-with into {e-var [var-name]} var->names)])))
+                                         [var->joins var->names]))
            v-var->literal-e-clauses (->> (for [clause bgp-clauses
                                                :when (and (not (logic-var? (:e clause)))
                                                           (logic-var? (:v clause)))]
@@ -924,35 +923,35 @@
                                                            (leaf-v-var? e v))]
                                             clause)
                                           (group-by :e))
-           [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] [[e-var v-var] clauses]]
-                                      (let [indexes (for [{:keys [a]} clauses]
-                                                      (assoc (entity-attribute-value-join-internal
-                                                              snapshot
-                                                              a
-                                                              (get v-var->range-constrants v-var)
-                                                              business-time
-                                                              transact-time)
-                                                             :name (gensym e-var)))]
-                                        [(merge-with into {v-var (vec indexes)} var->joins)
-                                         (merge-with into {e-var (mapv :name indexes)} var->names)]))
-                                    [var->joins var->names]
-                                    e-var+v-var->join-clauses)
-           [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] [v-var clauses]]
-                                      (let [indexes (for [{:keys [e a]} clauses]
-                                                      (assoc (literal-entity-values-internal
-                                                              object-store
-                                                              snapshot
-                                                              e
-                                                              a
-                                                              (get v-var->range-constrants v-var)
-                                                              business-time transact-time)
-                                                             :name (gensym v-var)))]
-                                        [(merge-with into {v-var (vec indexes)} var->joins)
-                                         (merge {v-var (mapv :name indexes)} var->names)]))
-                                    [var->joins var->names]
-                                    v-var->literal-e-clauses)
+           [var->joins var->names] (->> e-var+v-var->join-clauses
+                                    (reduce
+                                     (fn [[var->joins var->names] [[e-var v-var] clauses]]
+                                       (let [indexes (for [{:keys [a]} clauses]
+                                                       (assoc (entity-attribute-value-join-internal
+                                                               snapshot
+                                                               a
+                                                               (get v-var->range-constrants v-var)
+                                                               business-time
+                                                               transact-time)
+                                                              :name (gensym e-var)))]
+                                         [(merge-with into {v-var (vec indexes)} var->joins)
+                                          (merge-with into {e-var (mapv :name indexes)} var->names)]))
+                                     [var->joins var->names]))
+           [var->joins var->names] (->> v-var->literal-e-clauses
+                                        (reduce
+                                         (fn [[var->joins var->names] [v-var clauses]]
+                                           (let [indexes (for [{:keys [e a]} clauses]
+                                                           (assoc (literal-entity-values-internal
+                                                                   object-store
+                                                                   snapshot
+                                                                   e
+                                                                   a
+                                                                   (get v-var->range-constrants v-var)
+                                                                   business-time transact-time)
+                                                                  :name (gensym v-var)))]
+                                             [(merge-with into {v-var (vec indexes)} var->joins)
+                                              (merge {v-var (mapv :name indexes)} var->names)]))
+                                         [var->joins var->names]))
            v-var-name->attr (->> (for [{:keys [a v]} bgp-clauses
                                        :when (logic-var? v)
                                        var-name (get var->names v)]
