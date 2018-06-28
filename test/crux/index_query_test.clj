@@ -145,28 +145,62 @@
         (t/is (= "Find clause references unbound variable: bah" (.getMessage e)))))))
 
 ;; TODO: lacks not support.
-#_(t/deftest test-not-query
-    (t/is (= [[:bgp {:e 'e :a :name :v 'name}]
-              [:bgp {:e 'e :a :name :v "Ivan"}]
-              [:not [:bgp {:e 'e :a :last-name :v "Ivannotov"}]]]
+(t/deftest test-not-query
+  (t/is (= [[:bgp {:e 'e :a :name :v 'name}]
+            [:bgp {:e 'e :a :name :v "Ivan"}]
+            [:not [:bgp {:e 'e :a :last-name :v "Ivannotov"}]]]
 
-             (s/conform :crux.query/where [['e :name 'name]
-                                           ['e :name "Ivan"]
-                                           '(not [e :last-name "Ivannotov"])])))
+           (s/conform :crux.query/where [['e :name 'name]
+                                         ['e :name "Ivan"]
+                                         '(not [e :last-name "Ivannotov"])])))
 
-    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
-                              {:name "Ivan" :last-name "Ivanov"}
-                              {:name "Ivan" :last-name "Ivannotov"}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}])
 
+  (t/testing "literal v"
     (t/is (= 1 (count (doc/q (db *kv*) {:find ['e]
                                         :where [['e :name 'name]
                                                 ['e :name "Ivan"]
+                                                '(not [e :last-name "Ivanov"])]}))))
+
+    (t/is (= 1 (count (doc/q (db *kv*) {:find ['e]
+                                        :where [['e :name 'name]
+                                                '(not [e :last-name "Ivanov"])]}))))
+
+    (t/is (= 1 (count (doc/q (db *kv*) {:find ['e]
+                                        :where [['e :name "Ivan"]
                                                 '(not [e :last-name "Ivanov"])]}))))
 
     (t/is (= 2 (count (doc/q (db *kv*) {:find ['e]
                                         :where [['e :name 'name]
                                                 ['e :name "Ivan"]
                                                 '(not [e :last-name "Ivannotov"])]})))))
+
+  (t/testing "variable v"
+    (t/is (= 0 (count (doc/q (db *kv*) {:find ['e]
+                                        :where [['e :name 'name]
+                                                ['e :name "Ivan"]
+                                                '(not [e :name name])]}))))
+
+    (t/is (= 0 (count (doc/q (db *kv*) {:find ['e]
+                                        :where [['e :name 'name]
+                                                '(not [e :name name])]}))))
+
+    (t/is (= 2 (count (doc/q (db *kv*) {:find ['e]
+                                        :where [['e :name 'name]
+                                                [:ivan-ivanovtov-1 :last-name 'i-name]
+                                                '(not [e :last-name i-name])]})))))
+
+  (t/testing "does not support literal entities"
+    (try
+      (doc/q (db *kv*) {:find ['e]
+                        :where [['e :name 'name]
+                                '(not [:ivan-ivanov-1 :name name])]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (= "Not requires logic var in e position: :ivan-ivanov-1 {:e :ivan-ivanov-1, :a :name, :v name}"
+                 (.getMessage e)))))))
 
 ;; TODO: lacks or support.
 #_(t/deftest test-or-query

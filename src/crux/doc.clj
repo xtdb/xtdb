@@ -728,6 +728,11 @@
           bs (or (cartesian-product xs) [[]])]
       (cons a bs))))
 
+(defn- normalize-bgp-clause [clause]
+  (if (nil? (:v clause))
+    (assoc clause :v (gensym "_"))
+    clause))
+
 (defn q
   ([{:keys [kv] :as db} q]
    (with-open [snapshot (new-cached-snapshot (ks/new-snapshot kv) true)]
@@ -738,10 +743,16 @@
        (throw (throw (IllegalArgumentException.
                       (str "Invalid input: " (s/explain-str :crux.query/query q))))))
      (let [type->clauses (->> (for [[type clause] where]
-                                (if (contains? #{:bgp :range :pred :unify} type)
-                                  {type [(if (and (= :bgp type)
-                                                  (nil? (:v clause)))
-                                           (assoc clause :v (gensym "_"))
+                                (if (contains? #{:bgp :range :pred :unify :not} type)
+                                  {type [(case type
+                                           :bgp (normalize-bgp-clause clause)
+                                           :not (let [[type clause] clause]
+                                                  (if-not (= :bgp type)
+                                                    (throw (IllegalArgumentException.
+                                                            (str "Unsupported not clause: "
+                                                                 type " "
+                                                                 (pr-str clause))))
+                                                    (normalize-bgp-clause clause)))
                                            clause)]}
                                   (throw (IllegalArgumentException.
                                           (str "Unsupported clause: "
@@ -751,7 +762,8 @@
            {bgp-clauses :bgp
             range-clauses :range
             pred-clauses :pred
-            unify-clauses :unify} type->clauses
+            unify-clauses :unify
+            not-clauses :not} type->clauses
            e-vars (set (for [{:keys [e]} bgp-clauses
                              :when (logic-var? e)]
                          e))
@@ -764,6 +776,11 @@
                                        arg [x y]
                                        :when (logic-var? arg)]
                                    arg))
+           not-vars (set (for [{:keys [e v]
+                                :as clause} not-clauses
+                               arg [e v]
+                               :when (logic-var? arg)]
+                           arg))
            v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                        (if (contains? e-vars sym)
                                          (throw (IllegalArgumentException.
@@ -824,6 +841,7 @@
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
                               (not (contains? unification-vars v))
+                              (not (contains? not-vars v))
                               (not (contains? e-vars v))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                 :when (and (logic-var? v)
@@ -913,11 +931,67 @@
                                            == (boolean (not-empty (set/intersection x y)))
                                            != (empty? (set/intersection x y)))
                                          true)))))
+           constrain-doc-by-needed-attributes (fn [doc var]
+                                                (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
+                                                       (contains? doc a))
+                                                     (every? true?)))
+           results-for-var (fn [join-results var]
+                             (let [var-name (first (get var->names var))
+                                   attr (get var-names->attr var-name)
+                                   e-var (get v-var->e-var var)
+                                   result-var-name (if e-var
+                                                     (first (get var->names e-var))
+                                                     var-name)
+                                   entities (get join-results result-var-name)
+                                   content-hash->doc (->> (map :content-hash entities)
+                                                          (db/get-objects object-store))]
+                               (for [[entity [_ doc]] (map vector entities content-hash->doc)
+                                     :when (constrain-doc-by-needed-attributes doc (or e-var var))
+                                     value (normalize-value (get doc attr))]
+                                 {:value value
+                                  :var var
+                                  :attr attr
+                                  :doc doc
+                                  :entity entity})))
+           not-constraints (for [{:keys [e a v]
+                                  :as clause} not-clauses]
+                             (do (when-not (logic-var? e)
+                                   (throw (IllegalArgumentException. (str "Not requires logic var in e position: "
+                                                                          e " " (pr-str clause)))))
+                                 (doseq [arg [e v]
+                                         :when (and (logic-var? arg)
+                                                    (not (contains? var->names arg)))]
+                                   (throw (IllegalArgumentException. (str "Not refers to unknown variable: "
+                                                                          arg " " (pr-str clause)))))
+                                 (fn [join-keys join-results]
+                                   (let [results (results-for-var join-results e)
+                                         vs (->> (if (logic-var? v)
+                                                   (->> (results-for-var join-results v)
+                                                        (map :value))
+                                                   (normalize-value v)))
+                                         entities-to-remove (set (for [{:keys [doc entity]} results
+                                                                       doc-v (normalize-value (get doc a))
+                                                                       v vs
+                                                                       :when (= doc-v v)]
+                                                                   entity))]
+                                     (->> (get var->names e)
+                                          (reduce
+                                           (fn [result var-name]
+                                             (update result var-name set/difference entities-to-remove))
+                                           join-results))))))
            constrain-triejoin-result-by-unification (fn [join-keys join-results]
                                                       (when (->> (for [pred unification-preds]
                                                                    (pred join-keys join-results))
                                                                  (every? true?))
                                                         join-results))
+           constrain-triejoin-result-by-not (fn [join-keys join-results]
+                                              (if (= (count join-keys) (count var->joins))
+                                                (reduce
+                                                 (fn [results not-constraint]
+                                                   (not-constraint join-keys results))
+                                                 join-results
+                                                 not-constraints)
+                                                join-results))
            constrain-triejoin-result-by-join-keys (fn [join-keys join-results]
                                                     (when (->> (for [e-var shared-e-v-vars
                                                                      :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
@@ -930,38 +1004,20 @@
            shared-names (mapv var->names e-vars)
            constrain-query-result-fn (fn [max-ks result]
                                        (some->> (constrain-triejoin-result-by-names shared-names max-ks result)
+                                                (constrain-triejoin-result-by-not max-ks)
                                                 (constrain-triejoin-result-by-unification max-ks)
-                                                (constrain-triejoin-result-by-join-keys max-ks)))
-           constrain-doc-by-needed-attributes (fn [doc var]
-                                                (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
-                                                       (contains? doc a))
-                                                     (every? true?)))]
+                                                (constrain-triejoin-result-by-join-keys max-ks)))]
        (doseq [var find
                :when (not (contains? var->names var))]
          (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
        (for [[_ join-results] (idx->seq (leapfrog-triejoin-internal (mapv val var+joins)
                                                                     constrain-query-result-fn))
              result (cartesian-product
-                     (for [var find-and-predicate-vars
-                           :let [var-name (first (get var->names var))
-                                 attr (get var-names->attr var-name)
-                                 e-var (get v-var->e-var var)
-                                 result-var-name (if e-var
-                                                   (first (get var->names e-var))
-                                                   var-name)
-                                 entities (get join-results result-var-name)
-                                 content-hash->doc (->> (map :content-hash entities)
-                                                        (db/get-objects object-store))]]
-                       (for [[entity [_ doc]] (map vector entities content-hash->doc)
-                             :when (constrain-doc-by-needed-attributes doc (or e-var var))
-                             value (normalize-value (get doc attr))]
-                         {:value value
-                          :var var
-                          :attr attr
-                          :doc doc
-                          :entity entity})))
+                     (for [var find-and-predicate-vars]
+                       (results-for-var join-results var)))
              :let [values (map :value result)]
              :when (or (nil? preds) (preds (zipmap find-and-predicate-vars values)))]
          (with-meta
            (vec (take (count find) values))
-           {:results (vec (take (count find) result))}))))))
+           (let [find-results (vec (take (count find) result))]
+             (zipmap (map :var find-results) find-results))))))))
