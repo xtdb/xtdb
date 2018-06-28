@@ -144,7 +144,6 @@
       (catch IllegalArgumentException e
         (t/is (= "Find clause references unbound variable: bah" (.getMessage e)))))))
 
-;; TODO: lacks not support.
 (t/deftest test-not-query
   (t/is (= [[:bgp {:e 'e :a :name :v 'name}]
             [:bgp {:e 'e :a :name :v "Ivan"}]
