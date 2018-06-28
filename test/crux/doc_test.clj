@@ -642,7 +642,13 @@
       (t/is (= :g
                (second (db/-next-values idx)))))
     (t/testing "returns nil after all indexes are done"
-      (t/is (nil? (db/-next-values idx))))))
+      (t/is (nil? (db/-next-values idx))))
+
+    (t/testing "can seek into indexes"
+      (t/is (= :d
+               (second (db/-seek-values idx 4))))
+       (t/is (= :e1
+               (second (db/-next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
