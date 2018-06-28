@@ -773,6 +773,20 @@
                                                                  type " "
                                                                  (pr-str clause))))
                                                     (normalize-bgp-clause clause)))
+                                           :or (for [[type clause] clause]
+                                                 (case type
+                                                   :bgp [(normalize-bgp-clause clause)]
+                                                   :and (vec (for [[type clause] clause]
+                                                               (if (not= :bgp type)
+                                                                 (throw (IllegalArgumentException.
+                                                                         (str "Unsupported and clause: "
+                                                                              type " "
+                                                                              (pr-str clause))))
+                                                                 (normalize-bgp-clause clause))))
+                                                   (throw (IllegalArgumentException.
+                                                           (str "Unsupported or clause: "
+                                                                type " "
+                                                                (pr-str clause))))))
                                            clause)]}
                                   (throw (IllegalArgumentException.
                                           (str "Unsupported clause: "
@@ -803,11 +817,12 @@
                                :when (logic-var? arg)]
                            arg))
            or-vars (set (for [or-clause or-clauses
-                              {:keys [e v]
-                               :as clause} or-clause
-                              arg [e v]
-                              :when (logic-var? arg)]
-                          arg))
+                              clause-group or-clause
+                              {:keys [e]
+                               :as clause} clause-group
+                              :when (logic-var? e)]
+                          e))
+           e-vars (set/union e-vars or-vars)
            v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                        (if (contains? e-vars sym)
                                          (throw (IllegalArgumentException.
@@ -859,31 +874,30 @@
                                     [var->joins var->names]
                                     e-var->literal-v-clauses)
            [var->joins var->names] (reduce
-                                    (fn [[var->joins var->names] clauses]
-                                      (let [clauses (for [[type clause] clauses]
-                                                      (if-not (or (= :bgp type))
-                                                        (throw (IllegalArgumentException.
-                                                                (str "Unsupported or clause: "
-                                                                     type " "
-                                                                     (pr-str clause))))
-                                                        (normalize-bgp-clause clause)))
-                                            or-e-vars (set (map :e clauses))
+                                    (fn [[var->joins var->names] clause]
+                                      (let [or-e-vars (set (for [sub-clauses clause
+                                                                 {:keys [e v]
+                                                                  :as clause} sub-clauses]
+                                                             e))
                                             e-var (first or-e-vars)]
                                         (when (or (not= 1 (count or-e-vars))
                                                   (not (logic-var? e-var)))
-                                          (throw (IllegalArgumentException. (str "Or clause requires same logic variable in entity position: "
-                                                                                 (pr-str clauses)))))
+                                          (throw (IllegalArgumentException.
+                                                  (str "Or clause requires same logic variable in entity position: "
+                                                       (pr-str clause)))))
                                         (let [var-name (gensym e-var)
                                               idx (new-or-virtual-index
-                                                   (vec (for [{:keys [a v]
-                                                               :as clause} clauses]
-                                                          (do (when (logic-var? v)
-                                                                (throw (IllegalArgumentException. (str "Or clause requires literal in value position: "
-                                                                                                       (pr-str clause)))))
-                                                              (shared-literal-attribute-entities-join-internal
-                                                               snapshot
-                                                               [[a v]]
-                                                               business-time transact-time)))))]
+                                                   (vec (for [sub-clauses clause]
+                                                          (shared-literal-attribute-entities-join-internal
+                                                           snapshot
+                                                           (vec (for [{:keys [a v]
+                                                                       :as clause} sub-clauses]
+                                                                  (do (when (logic-var? v)
+                                                                        (throw (IllegalArgumentException.
+                                                                                (str "Or clause requires literal in value position: "
+                                                                                     (pr-str clause)))))
+                                                                      [a v])))
+                                                           business-time transact-time))))]
                                           [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
                                            (merge-with into {e-var [var-name]} var->names)])))
                                     [var->joins var->names]
@@ -953,8 +967,9 @@
                                 :when (logic-var? arg)]
                             (if (contains? var->names arg)
                               arg
-                              (throw (IllegalArgumentException. (str "Predicate refers to unknown variable: "
-                                                                     arg " " (pr-str clause))))))
+                              (throw (IllegalArgumentException.
+                                      (str "Predicate refers to unknown variable: "
+                                           arg " " (pr-str clause))))))
            find-and-predicate-vars (distinct (concat find predicate-vars))
            preds (some->> (for [{:keys [pred-fn args]} pred-clauses]
                             (fn [var->result]
@@ -970,8 +985,9 @@
                                (do (doseq [arg [x y]
                                            :when (and (logic-var? arg)
                                                       (not (contains? var->names arg)))]
-                                     (throw (IllegalArgumentException. (str "Unification refers to unknown variable: "
-                                                                            arg " " (pr-str clause)))))
+                                     (throw (IllegalArgumentException.
+                                             (str "Unification refers to unknown variable: "
+                                                  arg " " (pr-str clause)))))
                                    (fn [join-keys join-results]
                                      (let [[x y] (for [var [x y]]
                                                    (if (logic-var? var)
@@ -1013,13 +1029,15 @@
            not-constraints (for [{:keys [e a v]
                                   :as clause} not-clauses]
                              (do (when-not (logic-var? e)
-                                   (throw (IllegalArgumentException. (str "Not requires logic variable in entity position: "
-                                                                          e " " (pr-str clause)))))
+                                   (throw (IllegalArgumentException.
+                                           (str "Not requires logic variable in entity position: "
+                                                e " " (pr-str clause)))))
                                  (doseq [arg [e v]
                                          :when (and (logic-var? arg)
                                                     (not (contains? var->names arg)))]
-                                   (throw (IllegalArgumentException. (str "Not refers to unknown variable: "
-                                                                          arg " " (pr-str clause)))))
+                                   (throw (IllegalArgumentException.
+                                           (str "Not refers to unknown variable: "
+                                                arg " " (pr-str clause)))))
                                  (fn [join-keys join-results]
                                    (let [results (results-for-var join-results e)
                                          vs (->> (if (logic-var? v)

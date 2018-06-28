@@ -234,11 +234,10 @@
                                                 ['e :name "Ivan"]
                                                 '(or [e :last-name "Ivanov"])]}))))))
 
-;; TODO: lacks and support - might not be supported.
-#_(t/deftest test-or-query-can-use-and
-    (f/transact-people! *kv* [{:name "Ivan" :sex :male}
-                              {:name "Bob" :sex :male}
-                              {:name "Ivana" :sex :female}])
+(t/deftest test-or-query-can-use-and
+  (let [[ivan] (f/transact-people! *kv* [{:name "Ivan" :sex :male}
+                                         {:name "Bob" :sex :male}
+                                         {:name "Ivana" :sex :female}])]
 
     (t/is (= #{["Ivan"]
                ["Ivana"]}
@@ -246,7 +245,17 @@
                                :where [['e :name 'name]
                                        '(or [e :sex :female]
                                             (and [e :sex :male]
-                                                 [e :name "Ivan"]))]}))))
+                                                 [e :name "Ivan"]))]})))
+
+    (t/is (= #{[(:crux.db/id ivan)]}
+             (doc/q (db *kv*) {:find ['e]
+                               :where ['(or [e :name "Ivan"])]})))
+
+    (t/is (= #{}
+             (doc/q (db *kv*) {:find ['name]
+                               :where [['e :name 'name]
+                                       '(or (and [e :sex :female]
+                                                 [e :name "Ivan"]))]})))))
 
 (t/deftest test-ors-must-use-same-vars
   (try
@@ -256,21 +265,20 @@
                                    [e2 :last-name "Ivanov"])]})
     (t/is (= true false) "Expected assertion error")
     (catch IllegalArgumentException e
-      (t/is (= "Or clause requires same logic variable in entity position: ({:e e1, :a :last-name, :v \"Ivanov\"} {:e e2, :a :last-name, :v \"Ivanov\"})"
+      (t/is (= "Or clause requires same logic variable in entity position: ([{:e e1, :a :last-name, :v \"Ivanov\"}] [{:e e2, :a :last-name, :v \"Ivanov\"}])"
                (.getMessage e))))))
 
-;; TODO bring back
-#_(t/deftest test-ors-can-introduce-new-bindings
-    (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}
-                                                        {:name "Ivan" :last-name "Ivanov" :sex :male}
-                                                        {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
+(t/deftest test-ors-can-introduce-new-bindings
+  (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}
+                                                      {:name "Ivan" :last-name "Ivanov" :sex :male}
+                                                      {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
 
-      (t/testing "?p2 introduced only inside of an Or"
-        (t/is (= #{[(:crux.db/id ivan)]} (doc/q (db *kv*) '{:find [?p2]
-                                                            :where [(or (and [?p2 :name "Petr"]
-                                                                             [?p2 :sex :female])
-                                                                        (and [?p2 :last-name "Ivanov"]
-                                                                             [?p2 :sex :male]))]}))))))
+    (t/testing "?p2 introduced only inside of an Or"
+      (t/is (= #{[(:crux.db/id ivan)]} (doc/q (db *kv*) '{:find [?p2]
+                                                          :where [(or (and [?p2 :name "Petr"]
+                                                                           [?p2 :sex :female])
+                                                                      (and [?p2 :last-name "Ivanov"]
+                                                                           [?p2 :sex :male]))]}))))))
 
 ;; TODO: lacks not-join support - might not be supported.
 #_(t/deftest test-not-join
@@ -533,9 +541,6 @@
     (t/is (= #{[:petr]} (doc/q (db *kv*) '{:find [i]
                                            :where [[x :name "Ivan"]
                                                    [i :follows x]]})))))
-
-;; TODO write:
-(t/deftest test-use-another-datasource)
 
 (t/deftest test-sanitise-join
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
