@@ -396,16 +396,16 @@
                   ;; seems odd. Keeping the known literal in the
                   ;; results/entities is somewhat consistent, but not
                   ;; very useful. This needs some reflection.
-                  raw-result (doc/leapfrog-triejoin snapshot
-                                                    (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                      ;; NOTE: have removed support for this version:
-                                                      [[[:x_1 :ub/takesCourse]
-                                                        y-literal-teacherOf-idx
-                                                        (assoc y-type-course-idx :name :y_0)]
-                                                       [(assoc x-type-UndergraduateStudent-idx :name :x_0)]])
-                                                    [[:x_0 :x_1]
-                                                     [:y_0]]
-                                                    now now)]
+                  raw-result (doc/n-ary-join snapshot
+                                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                               ;; NOTE: have removed support for this version:
+                                               [[[:x_1 :ub/takesCourse]
+                                                 y-literal-teacherOf-idx
+                                                 (assoc y-type-course-idx :name :y_0)]
+                                                [(assoc x-type-UndergraduateStudent-idx :name :x_0)]])
+                                             [[:x_0 :x_1]
+                                              [:y_0]]
+                                             now now)]
 
               (t/is (= 2 (count (set/intersection (set y-result) (set y-literal-result)))))
               (t/is (= (->> [:http://www.Department0.University0.edu/Course15

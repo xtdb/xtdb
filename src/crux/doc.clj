@@ -369,7 +369,7 @@
         (vec))
    (atom nil)))
 
-(defn- new-leapfrog-iterator-state [idx [value results]]
+(defn- new-unary-join-iterator-state [idx [value results]]
   {:idx idx
    :key (or value idx/nil-id-bytes)
    :result-name (:name idx (gensym "result-name"))
@@ -379,7 +379,7 @@
   db/Index
   (-seek-values [this k]
     (let [iterators (->> (for [idx indexes]
-                           (new-leapfrog-iterator-state idx (db/-seek-values idx k)))
+                           (new-unary-join-iterator-state idx (db/-seek-values idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
       (reset! iterators-state {:iterators iterators :index 0})
@@ -406,7 +406,7 @@
                                                               max-k)))))]
         (reset! iterators-state
                 (when next-value+results
-                  {:iterators (assoc iterators index (new-leapfrog-iterator-state idx next-value+results))
+                  {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
                    :index (mod (inc index) (count iterators))}))
         (if match?
           (let [names (map :result-name iterators)]
@@ -417,12 +417,12 @@
 (defn- new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn unary-leapfrog-join [indexes]
+(defn unary-join [indexes]
   (->> (new-unary-join-virtual-index indexes)
        (idx->seq)
        (vec)))
 
-(defn constrain-triejoin-result-by-names [shared-names max-ks result]
+(defn constrain-join-result-by-names [shared-names max-ks result]
   (->> shared-names
        (reduce
         (fn [result result-names]
@@ -436,22 +436,22 @@
             result))
         result)))
 
-(defrecord TriejoinVirtualIndex [unary-join-indexes constrain-result-fn trie-state]
+(defrecord NAryJoinVirtualIndex [unary-join-indexes constrain-result-fn join-state]
   db/Index
   (-seek-values [this k]
-    (reset! trie-state {:needs-seek? true
+    (reset! join-state {:needs-seek? true
                         :min-vs (vec k)
                         :result-stack []})
     (db/-next-values this))
 
   db/OrderedIndex
   (-next-values [this]
-    (let [{:keys [needs-seek? min-vs result-stack]} @trie-state
+    (let [{:keys [needs-seek? min-vs result-stack]} @join-state
           depth (count result-stack)
           max-depth (dec (count unary-join-indexes))
           idx (get unary-join-indexes depth)
           values (if needs-seek?
-                   (do (swap! trie-state assoc :needs-seek? false)
+                   (do (swap! join-state assoc :needs-seek? false)
                        (db/-seek-values idx (get min-vs depth)))
                    (db/-next-values idx))
           [max-k new-values] values
@@ -473,7 +473,7 @@
         values
         (do (if result
               (do (log/debug :open-level depth)
-                  (swap! trie-state #(-> %
+                  (swap! join-state #(-> %
                                          (assoc :needs-seek? true)
                                          (update :result-stack conj [max-k result]))))
               (log/debug :open-level-constrained (bu/bytes->hex max-k)))
@@ -481,17 +481,17 @@
 
         (and (nil? values) (pos? depth))
         (do (log/debug :close-level depth)
-            (swap! trie-state update :result-stack pop)
+            (swap! join-state update :result-stack pop)
             (recur))))))
 
-(defn- new-triejoin-virtual-index [unary-join-indexes constrain-result-fn]
-  (->TriejoinVirtualIndex (vec unary-join-indexes) constrain-result-fn (atom nil)))
+(defn- new-n-ary-join-virtual-index [unary-join-indexes constrain-result-fn]
+  (->NAryJoinVirtualIndex (vec unary-join-indexes) constrain-result-fn (atom nil)))
 
-(defn- leapfrog-triejoin-internal [unary-indexes constrain-result-fn]
-  (new-triejoin-virtual-index (mapv new-unary-join-virtual-index unary-indexes) constrain-result-fn))
+(defn- n-ary-join-internal [unary-indexes constrain-result-fn]
+  (new-n-ary-join-virtual-index (mapv new-unary-join-virtual-index unary-indexes) constrain-result-fn))
 
-(defn leapfrog-triejoin [unary-indexes constrain-result-fn]
-  (->> (leapfrog-triejoin-internal unary-indexes constrain-result-fn)
+(defn n-ary-join [unary-indexes constrain-result-fn]
+  (->> (n-ary-join-internal unary-indexes constrain-result-fn)
        (idx->seq)
        (vec)))
 
@@ -679,7 +679,7 @@
   (entity-join [this query-context attrs range-constraints]
     (let [indexes (for [attr attrs]
                     (entity-attribute-value-join-internal query-context attr (range-constraints-map->fn range-constraints) transact-time transact-time))]
-      (distinct (for [[v join-results] (unary-leapfrog-join indexes)
+      (distinct (for [[v join-results] (unary-join indexes)
                       [k entities] join-results
                       entity-tx entities]
                   (map->DocEntity (assoc entity-tx :object-store object-store))))))
@@ -979,39 +979,39 @@
                                            (fn [result var-name]
                                              (update result var-name set/difference entities-to-remove))
                                            join-results))))))
-           constrain-triejoin-result-by-unification (fn [join-keys join-results]
-                                                      (when (->> (for [pred unification-preds]
-                                                                   (pred join-keys join-results))
-                                                                 (every? true?))
-                                                        join-results))
-           constrain-triejoin-result-by-not (fn [join-keys join-results]
-                                              (if (= (count join-keys) (count var->joins))
-                                                (reduce
-                                                 (fn [results not-constraint]
-                                                   (not-constraint join-keys results))
-                                                 join-results
-                                                 not-constraints)
-                                                join-results))
-           constrain-triejoin-result-by-join-keys (fn [join-keys join-results]
-                                                    (when (->> (for [e-var shared-e-v-vars
-                                                                     :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
-                                                                     :when eid-bytes
-                                                                     var-name (get var->names e-var)
-                                                                     entity (get join-results var-name)]
-                                                                 (bu/bytes=? eid-bytes (idx/id->bytes entity)))
-                                                               (every? true?))
-                                                      join-results))
+           constrain-join-result-by-unification (fn [join-keys join-results]
+                                                  (when (->> (for [pred unification-preds]
+                                                               (pred join-keys join-results))
+                                                             (every? true?))
+                                                    join-results))
+           constrain-join-result-by-not (fn [join-keys join-results]
+                                          (if (= (count join-keys) (count var->joins))
+                                            (reduce
+                                             (fn [results not-constraint]
+                                               (not-constraint join-keys results))
+                                             join-results
+                                             not-constraints)
+                                            join-results))
+           constrain-join-result-by-join-keys (fn [join-keys join-results]
+                                                (when (->> (for [e-var shared-e-v-vars
+                                                                 :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
+                                                                 :when eid-bytes
+                                                                 var-name (get var->names e-var)
+                                                                 entity (get join-results var-name)]
+                                                             (bu/bytes=? eid-bytes (idx/id->bytes entity)))
+                                                           (every? true?))
+                                                  join-results))
            shared-names (mapv var->names e-vars)
            constrain-query-result-fn (fn [max-ks result]
-                                       (some->> (constrain-triejoin-result-by-names shared-names max-ks result)
-                                                (constrain-triejoin-result-by-not max-ks)
-                                                (constrain-triejoin-result-by-unification max-ks)
-                                                (constrain-triejoin-result-by-join-keys max-ks)))]
+                                       (some->> (constrain-join-result-by-names shared-names max-ks result)
+                                                (constrain-join-result-by-not max-ks)
+                                                (constrain-join-result-by-unification max-ks)
+                                                (constrain-join-result-by-join-keys max-ks)))]
        (doseq [var find
                :when (not (contains? var->names var))]
          (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
-       (for [[_ join-results] (idx->seq (leapfrog-triejoin-internal (mapv val var+joins)
-                                                                    constrain-query-result-fn))
+       (for [[_ join-results] (idx->seq (n-ary-join-internal (mapv val var+joins)
+                                                             constrain-query-result-fn))
              result (cartesian-product
                      (for [var find-and-predicate-vars]
                        (results-for-var join-results var)))

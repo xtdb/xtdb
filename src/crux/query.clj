@@ -123,7 +123,7 @@
                                            (assoc r e je)))
 
                                      (and (logic-var? v) join-attributes)
-                                     (do (log/debug :secondary-index-leapfrog-join e a v join-attributes range-vals)
+                                     (do (log/debug :secondary-index-unary-join e a v join-attributes range-vals)
                                          (let [[min-v max-v] range-vals
                                                range-constraints {:min-v (:val min-v)
                                                                   :inclusive-min-v? (= '>= (:op min-v))

@@ -325,7 +325,7 @@
                                                               #(doc/new-equal-virtual-index % "Pablo")
                                                               new-transact-time new-transact-time)))))))))
 
-(t/deftest test-can-perform-unary-leapfrog-join
+(t/deftest test-can-perform-unary-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
         tx-ops (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 8 9 11 12]
                                                  :b [0 2 6 7 8 9 12 12]
@@ -341,7 +341,7 @@
                  (:eid (first (doc/entities-at snapshot [:a0-0] transact-time transact-time)))))
         (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
 
-      (t/testing "unary leapfrog join"
+      (t/testing "unary join"
         (let [a-idx (doc/entity-attribute-value-join-internal snapshot :a nil transact-time transact-time)
               b-idx (doc/entity-attribute-value-join-internal snapshot :b nil transact-time transact-time)
               c-idx (doc/entity-attribute-value-join-internal snapshot :c nil transact-time transact-time)]
@@ -354,7 +354,7 @@
                           (idx/new-id :b7-12)}
                      :c #{(idx/new-id :c5-12)
                           (idx/new-id :c6-12)}}]
-                   (for [[v join-results] (doc/unary-leapfrog-join [a-idx b-idx c-idx])]
+                   (for [[v join-results] (doc/unary-join [a-idx b-idx c-idx])]
                      (->> (for [[k entities] join-results]
                             [k (set (map :eid entities))])
                           (into {}))))))))))
@@ -368,7 +368,7 @@
 ;; (1, 4, 9)
 ;; (1, 5, 2)
 ;; (3, 5, 2)
-(t/deftest test-can-perform-leapfrog-triejoin
+(t/deftest test-can-perform-n-ary-join
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
               {:crux.db/id :r14 :ra 1 :rb 4}
               {:crux.db/id :r15 :ra 1 :rb 5}
@@ -392,24 +392,24 @@
           {:keys [transact-time tx-id]}
           @(db/submit-tx tx-log tx-ops)]
       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-               (t/testing "checking data is loaded before join"
+        (t/testing "checking data is loaded before join"
           (t/is (= (count tx-ops)
                    (count (doc/all-entities snapshot transact-time transact-time)))))
 
-        (t/testing "leapfrog triejoin"
+        (t/testing "n-ary join"
           (let [ra-idx (doc/entity-attribute-value-join-internal snapshot :ra nil transact-time transact-time)
                 ta-idx (doc/entity-attribute-value-join-internal snapshot :ta nil transact-time transact-time)
                 rb-idx (doc/entity-attribute-value-join-internal snapshot :rb nil transact-time transact-time)
                 sb-idx (doc/entity-attribute-value-join-internal snapshot :sb nil transact-time transact-time)
                 sc-idx (doc/entity-attribute-value-join-internal snapshot :sc nil transact-time transact-time)
                 tc-idx (doc/entity-attribute-value-join-internal snapshot :tc nil transact-time transact-time)
-                result (doc/leapfrog-triejoin [[ra-idx ta-idx]
-                                               [rb-idx sb-idx]
-                                               [sc-idx tc-idx]]
-                                              (partial doc/constrain-triejoin-result-by-names
-                                                       [[:ra :rb]
-                                                        [:sb :sc]
-                                                        [:ta :tc]]))]
+                result (doc/n-ary-join [[ra-idx ta-idx]
+                                        [rb-idx sb-idx]
+                                        [sc-idx tc-idx]]
+                                       (partial doc/constrain-join-result-by-names
+                                                [[:ra :rb]
+                                                 [:sb :sc]
+                                                 [:ta :tc]]))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -431,7 +431,7 @@
                                 {:keys [eid]} entities]
                             eid))))))))))
 
-(t/deftest test-leapfrog-triejoin-prunes-values-based-on-later-joins
+(t/deftest test-n-ary-join-prunes-values-based-on-later-joins
   (let [data [ ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
               {:crux.db/id :r13 :ra 1 :rb 3}
               ;; Unifies with :ta, but not with :sb
@@ -467,13 +467,13 @@
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
-                   (set (for [[v join-results] (doc/leapfrog-triejoin [[ra-idx ta-idx]
-                                                                       [rb-idx sb-idx]
-                                                                       [sc-idx tc-idx]]
-                                                                      (partial doc/constrain-triejoin-result-by-names
-                                                                               [[:ra :rb]
-                                                                                [:sb :sc]
-                                                                                [:ta :tc]]))
+                   (set (for [[v join-results] (doc/n-ary-join [[ra-idx ta-idx]
+                                                                [rb-idx sb-idx]
+                                                                [sc-idx tc-idx]]
+                                                               (partial doc/constrain-join-result-by-names
+                                                                        [[:ra :rb]
+                                                                         [:sb :sc]
+                                                                         [:ta :tc]]))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
@@ -542,8 +542,8 @@
                      expected-entity-tx]]
                    (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z
                                                                  #(-> %
-                                                                    (doc/new-greater-than-equal-virtual-index 2)
-                                                                    (doc/new-less-than-equal-virtual-index 2))
+                                                                      (doc/new-greater-than-equal-virtual-index 2)
+                                                                      (doc/new-less-than-equal-virtual-index 2))
                                                                  transact-time transact-time)
                          entity entities]
                      [(bu/bytes->hex v) entity]))))
