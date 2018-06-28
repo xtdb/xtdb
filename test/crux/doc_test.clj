@@ -603,6 +603,47 @@
              (second (db/-seek-values idx 3))))
     (t/is (nil? (db/-seek-values idx 4)))))
 
+(t/deftest test-or-virtual-index
+  (let [idx-1 (doc/->SortedVirtualIndex
+               [[(idx/value->bytes 1) :a]
+                [(idx/value->bytes 3) :c]
+                [(idx/value->bytes 5) :e1]]
+               (atom nil))
+        idx-2 (doc/->SortedVirtualIndex
+               [[(idx/value->bytes 2) :b]
+                [(idx/value->bytes 4) :d]
+                [(idx/value->bytes 5) :e2]
+                [(idx/value->bytes 7) :g]]
+               (atom nil))
+        idx-3 (doc/->SortedVirtualIndex
+               [[(idx/value->bytes 5) :e3]
+                [(idx/value->bytes 6) :f]]
+               (atom nil))
+        idx (doc/->OrVirtualIndex [idx-1 idx-2 idx-3] (atom nil))]
+    (t/testing "interleaves results in value order"
+      (t/is (= :a
+               (second (db/-seek-values idx nil))))
+      (t/is (= :b
+               (second (db/-next-values idx))))
+      (t/is (= :c
+               (second (db/-next-values idx))))
+      (t/is (= :d
+               (second (db/-next-values idx)))))
+    (t/testing "shared values are returned in index order"
+      (t/is (= :e1
+               (second (db/-next-values idx))))
+      (t/is (= :e2
+               (second (db/-next-values idx))))
+      (t/is (= :e3
+               (second (db/-next-values idx)))))
+    (t/testing "can continue after one index is done"
+      (t/is (= :f
+               (second (db/-next-values idx))))
+      (t/is (= :g
+               (second (db/-next-values idx)))))
+    (t/testing "returns nil after all indexes are done"
+      (t/is (nil? (db/-next-values idx))))))
+
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
   (doc/store-meta f/*kv* :foo {:bar 2})
