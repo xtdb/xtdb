@@ -8,7 +8,7 @@
 (defn- expression-spec [sym spec]
   (s/and seq?
          #(= sym (first %))
-         (s/conformer second)
+         (s/conformer next)
          spec))
 
 (defn- logic-var? [x]
@@ -23,12 +23,12 @@
                            :a keyword?
                            :v (s/? any?))))
 (s/def ::term (s/or :bgp ::bgp
-                    :not (expression-spec 'not ::term)
-                    :or (expression-spec 'or ::where)
-                    :and (expression-spec 'and ::where)
+                    :not (expression-spec 'not (s/& ::term))
+                    :or (expression-spec 'or (s/+ ::term))
+                    :and (expression-spec 'and (s/+ ::term))
                     :not-join (s/cat :pred #{'not-join}
                                      :bindings (s/coll-of logic-var? :kind vector?)
-                                     :terms ::where)
+                                     :terms (s/+ ::term))
                     :range (s/cat :op '#{< <= >= >}
                                   :sym logic-var?
                                   :val (complement logic-var?))

@@ -215,19 +215,19 @@
              [:or [[:bgp {:e e :a :last-name :v "Ivanov"}]]]]
            (s/conform :crux.query/where [['e :name 'name]
                                          ['e :name "Ivan"]
-                                         '(or [[e :last-name "Ivanov"]])])))
+                                         '(or [e :last-name "Ivanov"])])))
 
   (t/testing "Or works as expected"
     (t/is (= 3 (count (doc/q (db *kv*) {:find ['e]
                                         :where [['e :name 'name]
                                                 ['e :name "Ivan"]
-                                                '(or [[e :last-name "Ivanov"]
-                                                      [e :last-name "Ivannotov"]])]}))))
+                                                '(or [e :last-name "Ivanov"]
+                                                     [e :last-name "Ivannotov"])]}))))
 
     (t/is (= 3 (count (doc/q (db *kv*) {:find ['e]
                                         :where [['e :name 'name]
-                                                '(or [[e :last-name "Ivanov"]
-                                                      [e :name "Bob"]])]})))))
+                                                '(or [e :last-name "Ivanov"]
+                                                     [e :name "Bob"])]})))))
 
   (t/testing "Or edge case - can take a single clause"
     ;; Unsure of the utility
@@ -246,17 +246,17 @@
                ["Ivana"]}
              (doc/q (db *kv*) {:find ['name]
                                :where [['e :name 'name]
-                                       '(or [[e :sex :female]
-                                             (and [[e :sex :male]
-                                                   [e :name "Ivan"]])])]}))))
+                                       '(or [e :sex :female]
+                                            (and [e :sex :male]
+                                                 [e :name "Ivan"]))]}))))
 
 ;; TODO: lacks or support.
 #_(t/deftest test-ors-must-use-same-vars
     (try
       (doc/q (db *kv*) {:find ['e]
                         :where [['e :name 'name]
-                                '(or [[e1 :last-name "Ivanov"]
-                                      [e2 :last-name "Ivanov"]])]})
+                                '(or [e1 :last-name "Ivanov"]
+                                     [e2 :last-name "Ivanov"])]})
       (t/is (= true false) "Expected assertion error")
       (catch java.lang.AssertionError e
         (t/is true))))
@@ -269,10 +269,10 @@
 
       (t/testing "?p2 introduced only inside of an Or"
         (t/is (= #{[(:crux.db/id ivan)]} (doc/q (db *kv*) '{:find [?p2]
-                                                            :where [(or [(and [[?p2 :name "Petr"]
-                                                                               [?p2 :sex :female]])
-                                                                         (and [[?p2 :last-name "Ivanov"]
-                                                                               [?p2 :sex :male]])])]}))))))
+                                                            :where [(or (and [?p2 :name "Petr"]
+                                                                             [?p2 :sex :female])
+                                                                        (and [?p2 :last-name "Ivanov"]
+                                                                             [?p2 :sex :male]))]}))))))
 
 ;; TODO: lacks not-join support - might not be supported.
 #_(t/deftest test-not-join
@@ -285,7 +285,7 @@
                (doc/q (db *kv*) {:find ['name]
                                  :where [['e :name 'name]
                                          '(not-join [e]
-                                                    [[e :last-name "Monroe"]])]})))))
+                                                    [e :last-name "Monroe"])]})))))
 
 ;; TODO: lacks nested expression support - might not be supported.
 #_(t/deftest test-mixing-expressions
@@ -298,14 +298,14 @@
       (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
                (doc/q (db *kv*) {:find ['name]
                                  :where [['e :name 'name]
-                                         '(or [[e :last-name "Ivanov"]
-                                               (not [e :name "Bob"])])]}))))
+                                         '(or [e :last-name "Ivanov"]
+                                              (not [e :name "Bob"]))]}))))
 
     (t/testing "Not can use Or expression"
       (t/is (= #{["Fred"]} (doc/q (db *kv*) {:find ['name]
                                              :where [['e :name 'name]
-                                                     '(not (or [[e :last-name "Ivanov"]
-                                                                [e :name "Bob"]]))]})))))
+                                                     '(not (or [e :last-name "Ivanov"]
+                                                               [e :name "Bob"]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov" :age 30}
