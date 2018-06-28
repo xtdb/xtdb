@@ -826,7 +826,6 @@
            v-vars (set (for [{:keys [v]} bgp-clauses
                              :when (logic-var? v)]
                          v))
-           shared-e-v-vars (set/intersection e-vars v-vars)
            unification-vars (set (for [{:keys [x y]
                                         :as clause} unify-clauses
                                        arg [x y]
@@ -844,6 +843,7 @@
                               :when (logic-var? e)]
                           e))
            e-vars (set/union e-vars or-vars)
+           shared-e-v-vars (set/intersection e-vars v-vars)
            v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                        (if (contains? e-vars sym)
                                          (throw (IllegalArgumentException.
