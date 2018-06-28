@@ -198,11 +198,10 @@
                                 '(not [:ivan-ivanov-1 :name name])]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (= "Not requires logic var in e position: :ivan-ivanov-1 {:e :ivan-ivanov-1, :a :name, :v name}"
+        (t/is (= "Not requires logic variable in entity position: :ivan-ivanov-1 {:e :ivan-ivanov-1, :a :name, :v name}"
                  (.getMessage e)))))))
 
-;; TODO: lacks or support.
-#_(t/deftest test-or-query
+(t/deftest test-or-query
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                             {:name "Ivan" :last-name "Ivanov"}
                             {:name "Ivan" :last-name "Ivannotov"}
@@ -233,7 +232,7 @@
     (t/is (= 2 (count (doc/q (db *kv*) {:find ['e]
                                         :where [['e :name 'name]
                                                 ['e :name "Ivan"]
-                                                '(or [[e :last-name "Ivanov"]])]}))))))
+                                                '(or [e :last-name "Ivanov"])]}))))))
 
 ;; TODO: lacks and support - might not be supported.
 #_(t/deftest test-or-query-can-use-and
@@ -249,16 +248,16 @@
                                             (and [e :sex :male]
                                                  [e :name "Ivan"]))]}))))
 
-;; TODO: lacks or support.
-#_(t/deftest test-ors-must-use-same-vars
-    (try
-      (doc/q (db *kv*) {:find ['e]
-                        :where [['e :name 'name]
-                                '(or [e1 :last-name "Ivanov"]
-                                     [e2 :last-name "Ivanov"])]})
-      (t/is (= true false) "Expected assertion error")
-      (catch java.lang.AssertionError e
-        (t/is true))))
+(t/deftest test-ors-must-use-same-vars
+  (try
+    (doc/q (db *kv*) {:find ['e]
+                      :where [['e :name 'name]
+                              '(or [e1 :last-name "Ivanov"]
+                                   [e2 :last-name "Ivanov"])]})
+    (t/is (= true false) "Expected assertion error")
+    (catch IllegalArgumentException e
+      (t/is (= "Or clause requires same logic variable in entity position: ({:e e1, :a :last-name, :v \"Ivanov\"} {:e e2, :a :last-name, :v \"Ivanov\"})"
+               (.getMessage e))))))
 
 ;; TODO bring back
 #_(t/deftest test-ors-can-introduce-new-bindings

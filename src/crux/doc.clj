@@ -369,6 +369,26 @@
         (vec))
    (atom nil)))
 
+(defrecord OrVirtualIndex [indexes peek-state]
+  db/Index
+  (-seek-values [this k]
+    (reset! peek-state (vec (for [idx indexes]
+                              (db/-seek-values idx k))))
+    (db/-next-values this))
+
+  db/OrderedIndex
+  (-next-values [this]
+    (let [[n value] (->> (map-indexed vector @peek-state)
+                         (remove (comp nil? second))
+                         (sort-by (comp first second) bu/bytes-comparator)
+                         (first))]
+      (when n
+        (swap! peek-state assoc n (db/-next-values (get indexes n))))
+      value)))
+
+(defn- new-or-virtual-index [indexes]
+  (->OrVirtualIndex indexes (atom nil)))
+
 (defn- new-unary-join-iterator-state [idx [value results]]
   {:idx idx
    :key (or value idx/nil-id-bytes)
@@ -743,7 +763,7 @@
        (throw (throw (IllegalArgumentException.
                       (str "Invalid input: " (s/explain-str :crux.query/query q))))))
      (let [type->clauses (->> (for [[type clause] where]
-                                (if (contains? #{:bgp :range :pred :unify :not} type)
+                                (if (contains? #{:bgp :range :pred :unify :not :or} type)
                                   {type [(case type
                                            :bgp (normalize-bgp-clause clause)
                                            :not (let [[type clause] clause]
@@ -763,7 +783,8 @@
             range-clauses :range
             pred-clauses :pred
             unify-clauses :unify
-            not-clauses :not} type->clauses
+            not-clauses :not
+            or-clauses :or} type->clauses
            e-vars (set (for [{:keys [e]} bgp-clauses
                              :when (logic-var? e)]
                          e))
@@ -781,6 +802,12 @@
                                arg [e v]
                                :when (logic-var? arg)]
                            arg))
+           or-vars (set (for [or-clause or-clauses
+                              {:keys [e v]
+                               :as clause} or-clause
+                              arg [e v]
+                              :when (logic-var? arg)]
+                          arg))
            v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                        (if (contains? e-vars sym)
                                          (throw (IllegalArgumentException.
@@ -831,6 +858,36 @@
                                          (merge-with into {e-var [var-name]} var->names)]))
                                     [var->joins var->names]
                                     e-var->literal-v-clauses)
+           [var->joins var->names] (reduce
+                                    (fn [[var->joins var->names] clauses]
+                                      (let [clauses (for [[type clause] clauses]
+                                                      (if-not (or (= :bgp type))
+                                                        (throw (IllegalArgumentException.
+                                                                (str "Unsupported or clause: "
+                                                                     type " "
+                                                                     (pr-str clause))))
+                                                        (normalize-bgp-clause clause)))
+                                            or-e-vars (set (map :e clauses))
+                                            e-var (first or-e-vars)]
+                                        (when (or (not= 1 (count or-e-vars))
+                                                  (not (logic-var? e-var)))
+                                          (throw (IllegalArgumentException. (str "Or clause requires same logic variable in entity position: "
+                                                                                 (pr-str clauses)))))
+                                        (let [var-name (gensym e-var)
+                                              idx (new-or-virtual-index
+                                                   (vec (for [{:keys [a v]
+                                                               :as clause} clauses]
+                                                          (do (when (logic-var? v)
+                                                                (throw (IllegalArgumentException. (str "Or clause requires literal in value position: "
+                                                                                                       (pr-str clause)))))
+                                                              (shared-literal-attribute-entities-join-internal
+                                                               snapshot
+                                                               [[a v]]
+                                                               business-time transact-time)))))]
+                                          [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
+                                           (merge-with into {e-var [var-name]} var->names)])))
+                                    [var->joins var->names]
+                                    or-clauses)
            v-var->literal-e-clauses (->> (for [clause bgp-clauses
                                                :when (and (not (logic-var? (:e clause)))
                                                           (logic-var? (:v clause)))]
@@ -840,9 +897,9 @@
                          (and (= (count (get var->names v)) 1)
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
-                              (not (contains? unification-vars v))
-                              (not (contains? not-vars v))
-                              (not (contains? e-vars v))))
+                              (->> (for [vars [unification-vars not-vars or-vars e-vars]]
+                                     (not (contains? vars v)))
+                                   (every? true?))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                 :when (and (logic-var? v)
                                                            (not (leaf-v-var? e v)))]
@@ -956,7 +1013,7 @@
            not-constraints (for [{:keys [e a v]
                                   :as clause} not-clauses]
                              (do (when-not (logic-var? e)
-                                   (throw (IllegalArgumentException. (str "Not requires logic var in e position: "
+                                   (throw (IllegalArgumentException. (str "Not requires logic variable in entity position: "
                                                                           e " " (pr-str clause)))))
                                  (doseq [arg [e v]
                                          :when (and (logic-var? arg)
