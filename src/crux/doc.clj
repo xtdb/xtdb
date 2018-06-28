@@ -7,7 +7,6 @@
             [crux.kv-store :as ks]
             [crux.db :as db]
             [crux.lru :as lru]
-            [crux.query :as q]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable]
            [java.util Collections Comparator Date]
@@ -742,6 +741,50 @@
 (defn- logic-var? [x]
   (symbol? x))
 
+(defn- expression-spec [sym spec]
+  (s/and seq?
+         #(= sym (first %))
+         (s/conformer next)
+         spec))
+
+(def ^:private  built-ins '#{not == !=})
+
+(s/def ::pred-fn (s/and symbol?
+                        (complement built-ins)
+                        (s/conformer #(some-> % resolve var-get))
+                        fn?))
+(s/def ::find (s/coll-of logic-var? :kind vector?))
+
+(s/def ::bgp (s/and vector?
+                    (s/cat :e (some-fn logic-var? keyword?)
+                           :a keyword?
+                           :v (s/? any?))))
+(s/def ::or-bgp (s/and vector?
+                       (s/cat :e logic-var?
+                              :a keyword?
+                              :v (complement logic-var?))))
+(s/def ::not-bgp (s/and vector?
+                        (s/cat :e logic-var?
+                               :a keyword?
+                               :v (s/? any?))))
+(s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
+
+(s/def ::term (s/or :bgp ::bgp
+                    :not (expression-spec 'not (s/& ::not-bgp))
+                    :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
+                                                        :and ::and)))
+                    :range (s/cat :op '#{< <= >= >}
+                                  :sym logic-var?
+                                  :val (complement logic-var?))
+                    :unify (s/cat :op '#{== !=}
+                                  :x any?
+                                  :y any?)
+                    :pred (s/and list?
+                                 (s/cat :pred-fn ::pred-fn
+                                        :args (s/* any?)))))
+(s/def ::where (s/coll-of ::term :kind vector?))
+(s/def ::query (s/keys :req-un [::find ::where]))
+
 (defn- cartesian-product [[x & xs]]
   (when (seq x)
     (for [a x
@@ -758,40 +801,18 @@
    (with-open [snapshot (new-cached-snapshot (ks/new-snapshot kv) true)]
      (set (crux.doc/q snapshot db q))))
   ([snapshot {:keys [kv object-store business-time transact-time] :as db} q]
-   (let [{:keys [find where] :as q} (s/conform :crux.query/query q)]
+   (let [{:keys [find where] :as q} (s/conform :crux.doc/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
-               (str "Invalid input: " (s/explain-str :crux.query/query q)))))
+               (str "Invalid input: " (s/explain-str :crux.doc/query q)))))
      (let [type->clauses (->> (for [[type clause] where]
-                                (if (contains? #{:bgp :range :pred :unify :not :or} type)
-                                  {type [(case type
-                                           :bgp (normalize-bgp-clause clause)
-                                           :not (let [[type clause] clause]
-                                                  (if-not (= :bgp type)
-                                                    (throw (IllegalArgumentException.
-                                                            (str "Unsupported not clause: "
-                                                                 type " "
-                                                                 (pr-str clause))))
-                                                    (normalize-bgp-clause clause)))
-                                           :or (for [[type clause] clause]
-                                                 (case type
-                                                   :bgp [(normalize-bgp-clause clause)]
-                                                   :and (vec (for [[type clause] clause]
-                                                               (if (not= :bgp type)
-                                                                 (throw (IllegalArgumentException.
-                                                                         (str "Unsupported and clause: "
-                                                                              type " "
-                                                                              (pr-str clause))))
-                                                                 (normalize-bgp-clause clause))))
-                                                   (throw (IllegalArgumentException.
-                                                           (str "Unsupported or clause: "
-                                                                type " "
-                                                                (pr-str clause))))))
-                                           clause)]}
-                                  (throw (IllegalArgumentException.
-                                          (str "Unsupported clause: "
-                                               type " "
-                                               (pr-str clause))))))
+                                {type [(case type
+                                         (:bgp, :not) (normalize-bgp-clause clause)
+                                         :or (for [[type clause] clause]
+                                               (case type
+                                                 :bgp [(normalize-bgp-clause clause)]
+                                                 :and (mapv normalize-bgp-clause clause)))
+                                         clause)]})
                               (apply merge-with into))
            {bgp-clauses :bgp
             range-clauses :range
@@ -880,8 +901,7 @@
                                                                       {:keys [e]} sub-clauses]
                                                                   e))
                                                  e-var (first or-e-vars)]
-                                             (when (or (not= 1 (count or-e-vars))
-                                                       (not (logic-var? e-var)))
+                                             (when (not= 1 (count or-e-vars))
                                                (throw (IllegalArgumentException.
                                                        (str "Or clause requires same logic variable in entity position: "
                                                             (pr-str clause)))))
@@ -892,11 +912,7 @@
                                                                 snapshot
                                                                 (vec (for [{:keys [a v]
                                                                             :as clause} sub-clauses]
-                                                                       (do (when (logic-var? v)
-                                                                             (throw (IllegalArgumentException.
-                                                                                     (str "Or clause requires literal in value position: "
-                                                                                          (pr-str clause)))))
-                                                                           [a v])))
+                                                                       [a v]))
                                                                 business-time transact-time))))]
                                                [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
                                                 (merge-with into {e-var [var-name]} var->names)])))
@@ -1027,11 +1043,7 @@
                                   :entity entity})))
            not-constraints (for [{:keys [e a v]
                                   :as clause} not-clauses]
-                             (do (when-not (logic-var? e)
-                                   (throw (IllegalArgumentException.
-                                           (str "Not requires logic variable in entity position: "
-                                                e " " (pr-str clause)))))
-                                 (doseq [arg [e v]
+                             (do (doseq [arg [e v]
                                          :when (and (logic-var? arg)
                                                     (not (contains? var->names arg)))]
                                    (throw (IllegalArgumentException.

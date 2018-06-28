@@ -32,9 +32,6 @@
                     :range (s/cat :op '#{< <= >= >}
                                   :sym logic-var?
                                   :val (complement logic-var?))
-                    :unify (s/cat :op '#{== !=}
-                                  :x any?
-                                  :y any?)
                     :pred (s/and list?
                                  (s/cat :pred-fn ::pred-fn
                                         :args (s/* any?)))))

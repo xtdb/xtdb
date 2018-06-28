@@ -198,8 +198,7 @@
                                 '(not [:ivan-ivanov-1 :name name])]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (= "Not requires logic variable in entity position: :ivan-ivanov-1 {:e :ivan-ivanov-1, :a :name, :v name}"
-                 (.getMessage e)))))))
+        (t/is (re-find #"Invalid input" (.getMessage e)))))))
 
 (t/deftest test-or-query
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
