@@ -128,6 +128,10 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Data](http://www.vldb.org/pvldb/vol6/p517-yuan.pdf)
 + [Foundations of
   Databases](http://webdam.inria.fr/Alice/)
++ [A relatively simple Datalog engine in
+  Rust](https://github.com/frankmcsherry/blog/blob/master/posts/2018-05-19.md)
++ [Differential
+  datalog](https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md)
 
 ### Retention
 
