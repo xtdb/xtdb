@@ -428,6 +428,18 @@
                                     :where [[p :name "Ivan"]
                                             [p :mentor i]]})))))
 
+(t/deftest test-queries-with-variables-only
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :mentor :petr}
+                            {:crux.db/id :petr :name "Petr" :mentor :oleg}
+                            {:crux.db/id :oleg :name "Oleg" :mentor :ivan}])
+
+  (t/is (= #{[:oleg "Oleg" :petr "Petr"]
+             [:ivan "Ivan" :oleg "Oleg"]
+             [:petr "Petr" :ivan "Ivan"]} (doc/q (db *kv*) '{:find [e1 n1 e2 n2]
+                                                             :where [[e1 :name n1]
+                                                                     [e2 :mentor e1]
+                                                                     [e2 :name n2]]}))))
+
 (t/deftest test-index-unification
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
