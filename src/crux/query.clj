@@ -230,10 +230,10 @@
         [var->joins var->names])))
 
 (defn- bound-results-for-var [object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results var]
-  (let [constrain-doc-by-needed-attributes (fn [doc var]
-                                             (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
-                                                    (contains? doc a))
-                                                  (every? true?)))
+  (let [doc-has-required-attributes? (fn [doc var]
+                                       (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
+                                              (contains? doc a))
+                                            (every? true?)))
         var-name (first (get var->names var))
         attr (get var-names->attr var-name)
         e-var (get v-var->e-var var)
@@ -244,7 +244,7 @@
         content-hashes (map :content-hash entities)
         content-hash->doc (db/get-objects object-store content-hashes)]
     (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-          :when (constrain-doc-by-needed-attributes doc (or e-var var))
+          :when (doc-has-required-attributes? doc (or e-var var))
           value (doc/normalize-value (get doc attr))]
       {:value value
        :var var
