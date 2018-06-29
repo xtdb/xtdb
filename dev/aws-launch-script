@@ -1,20 +1,22 @@
 #!/bin/bash
-yum update -y
-wget "http://mirrors.ukfast.co.uk/sites/ftp.apache.org/kafka/1.1.0/kafka_2.11-1.1.0.tgz"
-tar -xzf kafka_2.11-1.1.0.tgz
-chmod -R 777 kafka_2.11-1.1.0
-cd kafka_2.11-1.1.0
 
-ZK_COUNT=5
+#ZK_COUNT=1
 KAFKA_COUNT=3
-
 MY_IP="$(curl ipinfo.io/ip)"
+
+yum update -y
+mkdir -p /stack/kafka
+wget "http://mirrors.ukfast.co.uk/sites/ftp.apache.org/kafka/1.1.0/kafka_2.11-1.1.0.tgz" -P /stack/kafka
+tar -xzf /stack/kafka/kafka_2.11-1.1.0.tgz -C /stack/kafka --strip 1
+rm /stack/kafka/kafka_2.11-1.1.0.tgz
+chmod -R 777 /stack/kafka
+cd /stack/kafka
 
 nohup bin/zookeeper-server-start.sh config/zookeeper.properties > zookeeper.out &
 
-mkdir -p /data/kafka
+mkdir /stack/kafka/data
 
-for ((NB = 1; i <= $KAFKA_COUNT; ++i)); do
+for ((NB = 1; NB <= $KAFKA_COUNT; NB++ )); do
     cp config/server.properties config/server$NB.properties
     
     sed -i 's/broker.id=0/broker.id='$NB'/g' config/server$NB.properties
@@ -23,7 +25,7 @@ for ((NB = 1; i <= $KAFKA_COUNT; ++i)); do
     sed -i 's/#listeners=PLAINTEXT:\/\/:9092/listeners=PLAINTEXT:\/\/:'$PORT'/g' config/server$NB.properties
     sed -i 's/#advertised.listeners=PLAINTEXT:\/\/your.host.name:9092/advertised.listeners=PLAINTEXT:\/\/'$MY_IP':'$PORT'/g' config/server$NB.properties
     
-    sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/data\/kafka'$NB'/g' config/server$NB.properties
+    sed -i 's/log.dirs=\/tmp\/kafka-logs/log.dirs=\/stack\/kafka\/data\/kafka-logs'$NB'/g' config/server$NB.properties
     
     nohup bin/kafka-server-start.sh config/server$NB.properties > kafka-server$NB.out &
 done
