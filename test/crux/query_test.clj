@@ -141,7 +141,15 @@
                         :where [['e :name]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (= "Find clause references unbound variable: bah" (.getMessage e)))))))
+        (t/is (= "Find clause references unknown variable: bah" (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) {:find ['x]
+                        :where '[[x :foo]
+                                 (+ 1 bah)]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (= "Predicate clause references unknown variable: bah" (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= [[:bgp {:e 'e :a :name :v 'name}]

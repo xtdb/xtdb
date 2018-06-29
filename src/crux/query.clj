@@ -24,7 +24,7 @@
                         (complement built-ins)
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
-(s/def ::find (s/coll-of logic-var? :kind vector?))
+(s/def ::find (s/coll-of logic-var? :kind vector? :min-count 1))
 
 (s/def ::bgp (s/and vector?
                     (s/cat :e (some-fn logic-var? keyword?)
@@ -54,7 +54,7 @@
                                  (s/cat :pred-fn ::pred-fn
                                         :args (s/* any?)))))
 
-(s/def ::where (s/coll-of ::term :kind vector?))
+(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
 (defn- cartesian-product [[x & xs]]
@@ -78,6 +78,38 @@
                           :and (mapv normalize-bgp-clause clause)))
                   clause)]})
        (apply merge-with into)))
+
+(defn- collect-vars [{bgp-clauses :bgp
+                      unify-clauses :unify
+                      not-clauses :not
+                      or-clauses :or
+                      pred-clauses :pred}]
+  (let [or-e-vars (set (for [or-clause or-clauses
+                             sub-clause or-clause
+                             {:keys [e]} sub-clause]
+                         e))
+        not-v-vars (set (for [{:keys [v]} not-clauses
+                              :when (logic-var? v)]
+                          v))]
+    {:e-vars (->> (for [{:keys [e]} bgp-clauses
+                        :when (logic-var? e)]
+                    e)
+                  (into or-e-vars))
+     :v-vars (->> (for [{:keys [v]} bgp-clauses
+                        :when (logic-var? v)]
+                    v)
+                  (into not-v-vars))
+     :unification-vars (set (for [{:keys [x y]} unify-clauses
+                                  arg [x y]
+                                  :when (logic-var? arg)]
+                              arg))
+     :not-vars (->> (for [{:keys [e]} not-clauses]
+                      e)
+                    (into not-v-vars))
+     :pred-vars (set (for [{:keys [args]} pred-clauses
+                           arg args
+                           :when (logic-var? arg)]
+                       arg))}))
 
 (defn- v-var->range-constraints [e-vars range-clauses]
   (let [v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
@@ -169,7 +201,7 @@
              (merge {v-var (mapv :name indexes)} var->names)]))
         [var->joins var->names])))
 
-(defn- results-for-var [object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results var]
+(defn- bound-results-for-var [object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results var]
   (let [constrain-doc-by-needed-attributes (fn [doc var]
                                              (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
                                                     (contains? doc a))
@@ -237,20 +269,22 @@
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
-          (let [results (results-for-var object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results e)
-                vs (->> (if (logic-var? v)
-                          (->> (results-for-var object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results v)
-                               (map :value))
-                          (doc/normalize-value v)))
+          (let [results (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
+                                               var-names->attr v-var->e-var join-results e)
+                not-vs (set (if (logic-var? v)
+                              (->> (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
+                                                          var-names->attr v-var->e-var join-results v)
+                                   (map :value))
+                              (doc/normalize-value v)))
                 entities-to-remove (set (for [{:keys [doc entity]} results
-                                              doc-v (doc/normalize-value (get doc a))
-                                              v vs
-                                              :when (= doc-v v)]
+                                              :when (->> (set (doc/normalize-value (get doc a)))
+                                                         (set/intersection not-vs)
+                                                         (seq))]
                                           entity))]
             (->> (get var->names e)
                  (reduce
-                  (fn [result var-name]
-                    (update result var-name set/difference entities-to-remove))
+                  (fn [join-result var-name]
+                    (update join-result var-name set/difference entities-to-remove))
                   join-results)))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
@@ -292,32 +326,13 @@
             pred-clauses :pred
             unify-clauses :unify
             not-clauses :not
-            or-clauses :or} (normalize-clauses where)
-           e-vars (set (for [{:keys [e]} bgp-clauses
-                             :when (logic-var? e)]
-                         e))
-           v-vars (set (for [{:keys [v]} bgp-clauses
-                             :when (logic-var? v)]
-                         v))
-           unification-vars (set (for [{:keys [x y]
-                                        :as clause} unify-clauses
-                                       arg [x y]
-                                       :when (logic-var? arg)]
-                                   arg))
-           not-vars (set (for [{:keys [e v]
-                                :as clause} not-clauses
-                               arg [e v]
-                               :when (logic-var? arg)]
-                           arg))
-           or-vars (set (for [or-clause or-clauses
-                              sub-clause or-clause
-                              {:keys [e]
-                               :as clause} sub-clause
-                              :when (logic-var? e)]
-                          e))
-           e-vars (set/union e-vars or-vars)
-           shared-e-v-vars (set/intersection e-vars v-vars)
-           v-var->range-constrants (v-var->range-constraints e-vars range-clauses)
+            or-clauses :or
+            :as type->clauses} (normalize-clauses where)
+           {:keys [e-vars
+                   v-vars
+                   unification-vars
+                   not-vars
+                   pred-vars]} (collect-vars type->clauses)
            e-var->v-var-clauses (->> (for [{:keys [e v]
                                             :as clause} bgp-clauses
                                            :when (and (logic-var? e)
@@ -333,27 +348,26 @@
                                    :when (not (contains? e-vars v))]
                                [v e])
                              (into {}))
-           var->joins {}
            e-var->literal-v-clauses (->> (for [{:keys [e v]
                                                 :as clause} bgp-clauses
                                                :when (and (logic-var? e)
                                                           (not (logic-var? v)))]
                                            clause)
                                          (group-by :e))
-           [var->joins var->names] (e-var-literal-v-joins snapshot e-var->literal-v-clauses var->joins
-                                                          var->names business-time transact-time)
-           [var->joins var->names] (e-var-literal-v-or-joins snapshot or-clauses var->joins
-                                                             var->names business-time transact-time)
            v-var->literal-e-clauses (->> (for [clause bgp-clauses
                                                :when (and (not (logic-var? (:e clause)))
                                                           (logic-var? (:v clause)))]
                                            clause)
                                          (group-by :v))
+           [var->joins var->names] (e-var-literal-v-joins snapshot e-var->literal-v-clauses {}
+                                                          var->names business-time transact-time)
+           [var->joins var->names] (e-var-literal-v-or-joins snapshot or-clauses var->joins
+                                                             var->names business-time transact-time)
            leaf-v-var? (fn [e v]
                          (and (= (count (get var->names v)) 1)
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
-                              (->> (for [vars [unification-vars not-vars or-vars e-vars]]
+                              (->> (for [vars [unification-vars not-vars e-vars]]
                                      (not (contains? vars v)))
                                    (every? true?))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
@@ -366,6 +380,7 @@
                                                            (leaf-v-var? e v))]
                                             clause)
                                           (group-by :e))
+           v-var->range-constrants (v-var->range-constraints e-vars range-clauses)
            [var->joins var->names] (e-var-v-var-joins snapshot e-var+v-var->join-clauses v-var->range-constrants
                                                       var->joins var->names business-time transact-time)
            [var->joins var->names] (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
@@ -376,40 +391,36 @@
                                    [var-name a])
                                  (into {}))
            e-var-name->attr (zipmap (mapcat var->names e-vars)
-                                    (repeat :crux.db/id))
+                                   (repeat :crux.db/id))
            var-names->attr (merge v-var-name->attr e-var-name->attr)
-           predicate-vars (for [{:keys [pred-fn args]
-                                 :as clause} pred-clauses
-                                arg args
-                                :when (logic-var? arg)]
-                            (if (contains? var->names arg)
-                              arg
-                              (throw (IllegalArgumentException.
-                                      (str "Predicate refers to unknown variable: "
-                                           arg " " (pr-str clause))))))
-           find-and-predicate-vars (distinct (concat find predicate-vars))
-           preds (build-preds pred-clauses)
            var+joins (vec var->joins)
            var->v-result-index (zipmap (map key var+joins) (range))
            unification-preds (build-unification-preds unify-clauses var->names var->v-result-index)
            not-constraints (build-not-constraints object-store not-clauses e-var->leaf-v-var-clauses
                                                   var->names var-names->attr v-var->e-var)
            shared-names (mapv var->names e-vars)
-           constrain-query-result-fn (fn [max-ks result]
-                                       (some->> (doc/constrain-join-result-by-names shared-names max-ks result)
-                                                (constrain-join-result-by-unification unification-preds max-ks)
-                                                (constrain-join-result-by-not not-constraints var->joins max-ks)
-                                                (constrain-join-result-by-join-keys var->v-result-index var->names shared-e-v-vars max-ks)))]
+           shared-e-v-vars (set/intersection e-vars v-vars)
+           constrain-result-fn (fn [max-ks result]
+                                 (some->> (doc/constrain-join-result-by-names shared-names max-ks result)
+                                          (constrain-join-result-by-unification unification-preds max-ks)
+                                          (constrain-join-result-by-not not-constraints var->joins max-ks)
+                                          (constrain-join-result-by-join-keys var->v-result-index var->names shared-e-v-vars max-ks)))
+           preds (build-preds pred-clauses)
+           find-and-pred-vars (distinct (concat find pred-vars))]
        (doseq [var find
                :when (not (contains? var->names var))]
-         (throw (IllegalArgumentException. (str "Find clause references unbound variable: " var))))
-       (for [[_ join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index (mapv val var+joins)
-                                                                              constrain-query-result-fn))
+         (throw (IllegalArgumentException. (str "Find clause references unknown variable: " var))))
+       (doseq [var pred-vars
+               :when (not (contains? var->names var))]
+         (throw (IllegalArgumentException. (str "Predicate clause references unknown variable: " var))))
+       (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index (mapv val var+joins) constrain-result-fn)
+                                   (doc/idx->seq))
              result (cartesian-product
-                     (for [var find-and-predicate-vars]
-                       (results-for-var object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results var)))
+                     (for [var find-and-pred-vars]
+                       (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
+                                              var-names->attr v-var->e-var join-results var)))
              :let [values (map :value result)]
-             :when (or (nil? preds) (preds (zipmap find-and-predicate-vars values)))]
+             :when (or (nil? preds) (preds (zipmap find-and-pred-vars values)))]
          (with-meta
            (vec (take (count find) values))
            (let [find-results (vec (take (count find) result))]
