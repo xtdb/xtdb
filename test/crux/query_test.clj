@@ -335,7 +335,29 @@
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [e :age age]
-                                        (>= age 50)]}))))
+                                        (>= age 50)]})))
+
+    (t/testing "fallback to built in predicate for vars"
+      (t/is (= #{["Ivan" 30 "Ivan" 30]
+                 ["Ivan" 30 "Bob" 40]
+                 ["Ivan" 30 "Dominic" 50]
+                 ["Bob" 40 "Bob" 40]
+                 ["Bob" 40 "Dominic" 50]
+                 ["Dominic" 50 "Dominic" 50]}
+               (q/q (q/db *kv*) '{:find [name age1 name2 age2]
+                                  :where [[e :name name]
+                                          [e :age age1]
+                                          [e2 :name name2]
+                                          [e2 :age age2]
+                                          (<= age1 age2)]})))
+
+      (t/is (= #{["Ivan" "Dominic"]
+                 ["Ivan" "Bob"]
+                 ["Dominic" "Bob"]}
+               (q/q (q/db *kv*) '{:find [name1 name2]
+                                  :where [[e :name name1]
+                                          [e2 :name name2]
+                                          (> name1 name2)]})))))
 
   (t/testing "clojure.core predicate"
     (t/is (= #{["Bob"] ["Dominic"]}
@@ -565,10 +587,8 @@
                                                            (!= n #{})]})))))
 
 (t/deftest test-simple-numeric-range-search
-  (t/is (= '[[:bgp {:e i :a :age :v age}]
-             [:range {:op <
-                      :sym age
-                      :val 20}]]
+  (t/is (= '[[:bgp {:e i, :a :age, :v age}]
+             [:range [:sym-val {:op <, :sym age, :val 20}]]]
            (s/conform :crux.query/where '[[i :age age]
                                           (< age 20)])))
 
@@ -599,7 +619,16 @@
                                                    (<= age 18)]})))
     (t/is (= #{[18]} (q/q (q/db *kv*) '{:find [age]
                                         :where [[:petr :age age]
-                                                (<= age 18)]})))))
+                                                (<= age 18)]}))))
+
+  (t/testing "Reverse symbol and value"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (<= 20 age)]})))
+
+    (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (>= 20 age)]})))))
 
 (t/deftest test-mutiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }

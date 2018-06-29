@@ -12,45 +12,50 @@
 (defn- logic-var? [x]
   (symbol? x))
 
+(def ^:private literal? (complement logic-var?))
+(def ^:private entity-ident? keyword?)
+
 (defn- expression-spec [sym spec]
   (s/and seq?
          #(= sym (first %))
          (s/conformer next)
          spec))
 
-(def ^:private  built-ins '#{not == !=})
+(def ^:private built-ins '#{not == !=})
+(def ^:private built-in-range->pred {'< (comp neg? compare)
+                                     '<= (comp not pos? compare)
+                                     '> (comp pos? compare)
+                                     '>= (comp not neg? compare)})
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(some-> % resolve var-get))
+                        (s/conformer #(get built-in-range->pred % (some-> % resolve var-get)))
                         fn?))
 (s/def ::find (s/coll-of logic-var? :kind vector? :min-count 1))
 
-(s/def ::bgp (s/and vector?
-                    (s/cat :e (some-fn logic-var? keyword?)
-                           :a keyword?
-                           :v (s/? any?))))
-(s/def ::not-bgp (s/and vector?
-                        (s/cat :e logic-var?
-                               :a keyword?
-                               :v (s/? any?))))
-(s/def ::or-bgp (s/and vector?
-                       (s/cat :e logic-var?
-                              :a keyword?
-                              :v (complement logic-var?))))
+(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
+                                   :a keyword?
+                                   :v (s/? any?))))
+(s/def ::not-bgp (s/and ::bgp (comp logic-var? :e)))
+(s/def ::or-bgp (s/and ::bgp (comp logic-var? :e) (comp literal? :v)))
 (s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
 
 (s/def ::pred (s/and list?
                      (s/cat :pred-fn ::pred-fn
                             :args (s/* any?))))
 
+(s/def ::range-op '#{< <= >= >})
+
 (s/def ::term (s/or :bgp ::bgp
                     :not (expression-spec 'not (s/& ::not-bgp))
                     :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
                                                         :and ::and)))
-                    :range (s/cat :op '#{< <= >= >}
-                                  :sym logic-var?
-                                  :val (complement logic-var?))
+                    :range (s/or :sym-val (s/cat :op ::range-op
+                                                 :sym logic-var?
+                                                 :val literal?)
+                                 :val-sym (s/cat :op ::range-op
+                                                 :val literal?
+                                                 :sym logic-var?))
                     :unify (s/cat :op '#{== !=}
                                   :x any?
                                   :y any?)
@@ -71,6 +76,11 @@
     (assoc clause :v (gensym "_"))
     clause))
 
+(def ^:private range->inverse-range '{< >=
+                                      <= >
+                                      > <=
+                                      >= <})
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          {type [(case type
@@ -83,6 +93,10 @@
                         (case type
                           :bgp [(normalize-bgp-clause clause)]
                           :and (mapv normalize-bgp-clause clause)))
+                  :range (let [[type clause] clause]
+                           (if (= :val-sym type)
+                             (update clause :op range->inverse-range)
+                             clause))
                   clause)]})
        (apply merge-with into)))
 
@@ -397,11 +411,11 @@
            e-var->literal-v-clauses (->> (for [{:keys [e v]
                                                 :as clause} bgp-clauses
                                                :when (and (logic-var? e)
-                                                          (not (logic-var? v)))]
+                                                          (literal? v))]
                                            clause)
                                          (group-by :e))
            v-var->literal-e-clauses (->> (for [clause bgp-clauses
-                                               :when (and (not (logic-var? (:e clause)))
+                                               :when (and (entity-ident? (:e clause))
                                                           (logic-var? (:v clause)))]
                                            clause)
                                          (group-by :v))
