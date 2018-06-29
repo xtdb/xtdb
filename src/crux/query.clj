@@ -40,6 +40,10 @@
                               :v (complement logic-var?))))
 (s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
 
+(s/def ::pred (s/and list?
+                     (s/cat :pred-fn ::pred-fn
+                            :args (s/* any?))))
+
 (s/def ::term (s/or :bgp ::bgp
                     :not (expression-spec 'not (s/& ::not-bgp))
                     :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
@@ -50,9 +54,8 @@
                     :unify (s/cat :op '#{== !=}
                                   :x any?
                                   :y any?)
-                    :pred (s/and list?
-                                 (s/cat :pred-fn ::pred-fn
-                                        :args (s/* any?)))))
+                    :pred (s/or :pred ::pred
+                                :not-pred (expression-spec 'not (s/& ::pred)))))
 
 (s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
 (s/def ::query (s/keys :req-un [::find ::where]))
@@ -72,6 +75,10 @@
   (->> (for [[type clause] clauses]
          {type [(case type
                   (:bgp, :not) (normalize-bgp-clause clause)
+                  :pred (let [[type clause] clause]
+                          (case type
+                            :pred clause
+                            :not-pred (update clause :pred-fn complement)))
                   :or (for [[type clause] clause]
                         (case type
                           :bgp [(normalize-bgp-clause clause)]

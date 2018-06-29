@@ -324,7 +324,7 @@
                             {:name "Bob" :last-name "Ivanov" :age 40}
                             {:name "Dominic" :last-name "Monroe" :age 50}])
 
-  (t/testing "< predicate expression"
+  (t/testing "range expressions"
     (t/is (= #{["Ivan"] ["Bob"]}
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
@@ -347,6 +347,12 @@
       (t/is (empty? (q/q (q/db *kv*) '{:find [name]
                                        :where [[e :name name]
                                                (re-find #"X" name)]}))))
+
+    (t/testing "Not predicate"
+      (t/is (= #{["Ivan"]}
+             (q/q (q/db *kv*) '{:find [name]
+                                :where [[e :name name]
+                                        (not (re-find #"o" name))]}))))
 
     (t/testing "Several variables"
       (t/is (= #{["Bob"]}
