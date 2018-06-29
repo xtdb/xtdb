@@ -6,10 +6,10 @@
             [crux.doc :as doc]
             [crux.embedded-kafka :as ek]
             [crux.http-server :as srv]
+            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
-            [crux.query :as q]
             [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
@@ -104,7 +104,7 @@
                          in
                          1000))
 
-  (q/q (doc/db (:kv-store system))
-       '{:find [iri]
-         :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
-                 [e :crux.rdf/iri iri]]}))
+  (doc/q (doc/db (:kv-store system))
+         '{:find [iri]
+           :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
+                   [e :crux.rdf/iri iri]]}))

@@ -2,8 +2,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.doc :as doc :refer [db]]
-            [crux.query]))
+            [crux.doc :as doc :refer [db]]))
 
 (t/use-fixtures :each f/with-kv-store)
 
@@ -147,11 +146,11 @@
 (t/deftest test-not-query
   (t/is (= [[:bgp {:e 'e :a :name :v 'name}]
             [:bgp {:e 'e :a :name :v "Ivan"}]
-            [:not [:bgp {:e 'e :a :last-name :v "Ivannotov"}]]]
+            [:not {:e 'e :a :last-name :v "Ivannotov"}]]
 
-           (s/conform :crux.query/where [['e :name 'name]
-                                         ['e :name "Ivan"]
-                                         '(not [e :last-name "Ivannotov"])])))
+           (s/conform :crux.doc/where [['e :name 'name]
+                                       ['e :name "Ivan"]
+                                       '(not [e :last-name "Ivannotov"])])))
 
   (f/transact-people! *kv* [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
@@ -210,9 +209,9 @@
   (t/is (= '[[:bgp {:e e :a :name :v name}]
              [:bgp {:e e :a :name :v "Ivan"}]
              [:or [[:bgp {:e e :a :last-name :v "Ivanov"}]]]]
-           (s/conform :crux.query/where [['e :name 'name]
-                                         ['e :name "Ivan"]
-                                         '(or [e :last-name "Ivanov"])])))
+           (s/conform :crux.doc/where [['e :name 'name]
+                                       ['e :name "Ivan"]
+                                       '(or [e :last-name "Ivanov"])])))
 
   (t/testing "Or works as expected"
     (t/is (= 3 (count (doc/q (db *kv*) {:find ['e]
@@ -506,8 +505,8 @@
             [:range {:op '<
                      :sym 'age
                      :val 20}]]
-           (s/conform :crux.query/where '[[i :age age]
-                                          (< age 20)])))
+           (s/conform :crux.doc/where '[[i :age age]
+                                        (< age 20)])))
 
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
                             {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
