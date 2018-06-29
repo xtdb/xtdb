@@ -9,33 +9,6 @@
             [crux.db :as db])
   (:import [java.util Date]))
 
-(defrecord QueryDatasource [kv object-store business-time transact-time])
-
-(def ^:const default-await-tx-timeout 10000)
-
-(defn- await-tx-time [kv transact-time ^long timeout]
-  (let [timeout-at (+ timeout (System/currentTimeMillis))]
-    (while (pos? (compare transact-time (doc/read-meta kv :crux.tx-log/tx-time)))
-      (Thread/sleep 100)
-      (when (>= (System/currentTimeMillis) timeout-at)
-        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time
-                                            " index has:" (doc/read-meta kv :crux.tx-log/tx-time))))))))
-
-(defn db
-  ([kv]
-   (db kv (Date.)))
-  ([kv business-time]
-   (->QueryDatasource kv
-                      (doc/new-cached-object-store kv)
-                      business-time
-                      (Date.)))
-  ([kv business-time transact-time]
-   (await-tx-time kv transact-time default-await-tx-timeout)
-   (->QueryDatasource kv
-                      (doc/new-cached-object-store kv)
-                      business-time
-                      transact-time)))
-
 (defn- logic-var? [x]
   (symbol? x))
 
@@ -57,14 +30,14 @@
                     (s/cat :e (some-fn logic-var? keyword?)
                            :a keyword?
                            :v (s/? any?))))
-(s/def ::or-bgp (s/and vector?
-                       (s/cat :e logic-var?
-                              :a keyword?
-                              :v (complement logic-var?))))
 (s/def ::not-bgp (s/and vector?
                         (s/cat :e logic-var?
                                :a keyword?
                                :v (s/? any?))))
+(s/def ::or-bgp (s/and vector?
+                       (s/cat :e logic-var?
+                              :a keyword?
+                              :v (complement logic-var?))))
 (s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
 
 (s/def ::term (s/or :bgp ::bgp
@@ -80,6 +53,7 @@
                     :pred (s/and list?
                                  (s/cat :pred-fn ::pred-fn
                                         :args (s/* any?)))))
+
 (s/def ::where (s/coll-of ::term :kind vector?))
 (s/def ::query (s/keys :req-un [::find ::where]))
 
@@ -285,7 +259,6 @@
              (every? true?))
     join-results))
 
-
 (defn- constrain-join-result-by-not [not-constraints var->joins join-keys join-results]
   (if (= (count join-keys) (count var->joins))
     (reduce
@@ -441,3 +414,30 @@
            (vec (take (count find) values))
            (let [find-results (vec (take (count find) result))]
              (zipmap (map :var find-results) find-results))))))))
+
+(defrecord QueryDatasource [kv object-store business-time transact-time])
+
+(def ^:const default-await-tx-timeout 10000)
+
+(defn- await-tx-time [kv transact-time ^long timeout]
+  (let [timeout-at (+ timeout (System/currentTimeMillis))]
+    (while (pos? (compare transact-time (doc/read-meta kv :crux.tx-log/tx-time)))
+      (Thread/sleep 100)
+      (when (>= (System/currentTimeMillis) timeout-at)
+        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time
+                                            " index has:" (doc/read-meta kv :crux.tx-log/tx-time))))))))
+
+(defn db
+  ([kv]
+   (db kv (Date.)))
+  ([kv business-time]
+   (->QueryDatasource kv
+                      (doc/new-cached-object-store kv)
+                      business-time
+                      (Date.)))
+  ([kv business-time transact-time]
+   (await-tx-time kv transact-time default-await-tx-timeout)
+   (->QueryDatasource kv
+                      (doc/new-cached-object-store kv)
+                      business-time
+                      transact-time)))
