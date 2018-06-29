@@ -3,6 +3,7 @@
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.tx :as tx]
+            [crux.query :as q]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.kv-store :as ks])
   (:import [java.util Date UUID]))
@@ -35,11 +36,11 @@
 
 (defn- perform-query [ts query index]
   (let [q (query queries)
-        db-fn (fn [] (doc/db *kv* ts))]
+        db-fn (fn [] (q/db *kv* ts))]
     ;; Assert this query is in good working order first:
-    (assert (pos? (count (doc/q (db-fn) q))))
+    (assert (pos? (count (q/q (db-fn) q))))
 
-    (doc/q (db-fn) q)))
+    (q/q (db-fn) q)))
 
 (defn- do-benchmark [ts samples index speed verbose query]
   (when verbose (print (str query "... ")) (flush))

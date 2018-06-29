@@ -8,6 +8,7 @@
             [crux.tx :as tx]
             [crux.rdf :as rdf]
             [crux.kafka :as k]
+            [crux.query :as q]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
   (:import [org.apache.kafka.clients.producer
@@ -84,10 +85,10 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
-               (doc/q (doc/db f/*kv*)
-                      (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                        '{:find [e]
-                          :where [[e :foaf/firstName "Pablo"]]})))))))
+               (q/q (q/db f/*kv*)
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                      '{:find [e]
+                        :where [[e :foaf/firstName "Pablo"]]})))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
@@ -109,18 +110,18 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
-               (doc/q (doc/db f/*kv*)
-                      (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                        '{:find [e]
-                          :where [[e :foaf/givenName "Pablo"]]}))))
+               (q/q (q/db f/*kv*)
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                      '{:find [e]
+                        :where [[e :foaf/givenName "Pablo"]]}))))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-               (doc/q (doc/db f/*kv*)
-                      (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
-                                        :dbo "http://dbpedia.org/ontology/"}
-                        '{:find [g]
-                          :where [[p :foaf/givenName "Pablo"]
-                                  [g :dbo/author p]]})))))))
+               (q/q (q/db f/*kv*)
+                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
+                                      :dbo "http://dbpedia.org/ontology/"}
+                      '{:find [g]
+                        :where [[p :foaf/givenName "Pablo"]
+                                [g :dbo/author p]]})))))))
 
 ;; Download from http://wiki.dbpedia.org/services-resources/ontology
 ;; mappingbased_properties_en.nt is the main data.
@@ -189,8 +190,8 @@
                        #{[:dbr/Aristotle]
                          [(keyword "dbr/Aristotle_(painting)")]
                          [(keyword "dbr/Aristotle_(book)")]})
-                     (doc/q (doc/db f/*kv*)
-                            (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"})
-                            '{:find [e]
-                              :where [[e :foaf/name "Aristotle"]]})))))
+                     (q/q (q/db f/*kv*)
+                          (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"})
+                          '{:find [e]
+                            :where [[e :foaf/name "Aristotle"]]})))))
       (t/is true "skipping"))))

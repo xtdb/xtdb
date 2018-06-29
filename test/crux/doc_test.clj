@@ -9,6 +9,7 @@
             [crux.tx :as tx]
             [crux.kv-store :as ks]
             [crux.rdf :as rdf]
+            [crux.query :as q]
             [crux.fixtures :as f]
             [taoensso.nippy :as nippy])
   (:import [java.util Date]
@@ -342,9 +343,9 @@
         (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
 
       (t/testing "unary join"
-        (let [a-idx (doc/entity-attribute-value-join-internal snapshot :a nil transact-time transact-time)
-              b-idx (doc/entity-attribute-value-join-internal snapshot :b nil transact-time transact-time)
-              c-idx (doc/entity-attribute-value-join-internal snapshot :c nil transact-time transact-time)]
+        (let [a-idx (doc/new-entity-attribute-value-virtual-index snapshot :a nil transact-time transact-time)
+              b-idx (doc/new-entity-attribute-value-virtual-index snapshot :b nil transact-time transact-time)
+              c-idx (doc/new-entity-attribute-value-virtual-index snapshot :c nil transact-time transact-time)]
           (t/is (= [{:a #{(idx/new-id :a7-8)
                           (idx/new-id :a8-8)}
                      :b #{(idx/new-id :b4-8)}
@@ -354,7 +355,8 @@
                           (idx/new-id :b7-12)}
                      :c #{(idx/new-id :c5-12)
                           (idx/new-id :c6-12)}}]
-                   (for [[v join-results] (doc/unary-join [a-idx b-idx c-idx])]
+                   (for [[v join-results] (->> (doc/new-unary-join-virtual-index [a-idx b-idx c-idx])
+                                               (doc/idx->seq))]
                      (->> (for [[k entities] join-results]
                             [k (set (map :eid entities))])
                           (into {}))))))))))
@@ -397,19 +399,19 @@
                    (count (doc/all-entities snapshot transact-time transact-time)))))
 
         (t/testing "n-ary join"
-          (let [ra-idx (doc/entity-attribute-value-join-internal snapshot :ra nil transact-time transact-time)
-                ta-idx (doc/entity-attribute-value-join-internal snapshot :ta nil transact-time transact-time)
-                rb-idx (doc/entity-attribute-value-join-internal snapshot :rb nil transact-time transact-time)
-                sb-idx (doc/entity-attribute-value-join-internal snapshot :sb nil transact-time transact-time)
-                sc-idx (doc/entity-attribute-value-join-internal snapshot :sc nil transact-time transact-time)
-                tc-idx (doc/entity-attribute-value-join-internal snapshot :tc nil transact-time transact-time)
-                result (doc/n-ary-join [[ra-idx ta-idx]
-                                        [rb-idx sb-idx]
-                                        [sc-idx tc-idx]]
-                                       (partial doc/constrain-join-result-by-names
-                                                [[:ra :rb]
-                                                 [:sb :sc]
-                                                 [:ta :tc]]))]
+          (let [ra-idx (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                ta-idx (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                rb-idx (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                sb-idx (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                sc-idx (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                tc-idx (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                result (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
+                                                                        [rb-idx sb-idx]
+                                                                        [sc-idx tc-idx]]
+                                                                       (partial doc/constrain-join-result-by-names
+                                                                                [[:ra :rb]
+                                                                                 [:sb :sc]
+                                                                                 [:ta :tc]])))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -458,22 +460,22 @@
           {:keys [transact-time tx-id]}
           @(db/submit-tx tx-log tx-ops)]
       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-        (let [ra-idx (doc/entity-attribute-value-join-internal snapshot :ra nil transact-time transact-time)
-              ta-idx (doc/entity-attribute-value-join-internal snapshot :ta nil transact-time transact-time)
-              rb-idx (doc/entity-attribute-value-join-internal snapshot :rb nil transact-time transact-time)
-              sb-idx (doc/entity-attribute-value-join-internal snapshot :sb nil transact-time transact-time)
-              sc-idx (doc/entity-attribute-value-join-internal snapshot :sc nil transact-time transact-time)
-              tc-idx (doc/entity-attribute-value-join-internal snapshot :tc nil transact-time transact-time)]
+        (let [ra-idx (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+              ta-idx (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+              rb-idx (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+              sb-idx (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+              sc-idx (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+              tc-idx (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)]
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
-                   (set (for [[v join-results] (doc/n-ary-join [[ra-idx ta-idx]
-                                                                [rb-idx sb-idx]
-                                                                [sc-idx tc-idx]]
-                                                               (partial doc/constrain-join-result-by-names
-                                                                        [[:ra :rb]
-                                                                         [:sb :sc]
-                                                                         [:ta :tc]]))
+                   (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
+                                                                                                [rb-idx sb-idx]
+                                                                                                [sc-idx tc-idx]]
+                                                                                               (partial doc/constrain-join-result-by-names
+                                                                                                        [[:ra :rb]
+                                                                                                         [:sb :sc]
+                                                                                                         [:ta :tc]])))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
@@ -495,32 +497,36 @@
       (t/testing "single value"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                    expected-entity-tx]]
-                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y nil transact-time transact-time)
+                 (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y nil transact-time transact-time)
+                                         (doc/idx->seq))
                        entity entities]
                    [(bu/bytes->hex v) entity])))
 
         (t/testing "within range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
                      expected-entity-tx]]
-                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :y
-                                                                 #(-> %
-                                                                      (doc/new-greater-than-equal-virtual-index 0)
-                                                                      (doc/new-less-than-equal-virtual-index 2))
-                                                                 transact-time transact-time)
+                   (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
+                                                                                                  #(-> %
+                                                                                                       (doc/new-greater-than-equal-virtual-index 0)
+                                                                                                       (doc/new-less-than-equal-virtual-index 2))
+                                                                                                  transact-time transact-time)
+                                           (doc/idx->seq))
                          entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y
-                                                   #(-> %
-                                                        (doc/new-greater-than-equal-virtual-index 2)
-                                                        (doc/new-less-than-equal-virtual-index 5))
-                                                   transact-time transact-time)))
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :y
-                                                   #(-> %
-                                                        (doc/new-greater-than-equal-virtual-index 0)
-                                                        (doc/new-less-than-equal-virtual-index 0))
-                                                   transact-time transact-time)))))
+          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
+                                                                                    #(-> %
+                                                                                         (doc/new-greater-than-equal-virtual-index 2)
+                                                                                         (doc/new-less-than-equal-virtual-index 5))
+                                                                                    transact-time transact-time)
+                             (doc/idx->seq))))
+          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
+                                                                                    #(-> %
+                                                                                         (doc/new-greater-than-equal-virtual-index 0)
+                                                                                         (doc/new-less-than-equal-virtual-index 0))
+                                                                                    transact-time transact-time)
+                             (doc/idx->seq))))))
 
       (t/testing "multiple values"
         (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
@@ -529,31 +535,34 @@
                    expected-entity-tx]
                   [(bu/bytes->hex (idx/value->bytes 3))
                    expected-entity-tx]]
-                 (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z
-                                                               #(-> %
-                                                                    (doc/new-greater-than-equal-virtual-index 0)
-                                                                    (doc/new-less-than-equal-virtual-index 3))
-                                                               transact-time transact-time)
+                 (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
+                                                                                                #(-> %
+                                                                                                     (doc/new-greater-than-equal-virtual-index 0)
+                                                                                                     (doc/new-less-than-equal-virtual-index 3))
+                                                                                                transact-time transact-time)
+                                         (doc/idx->seq))
                        entity entities]
                    [(bu/bytes->hex v) entity])))
 
         (t/testing "sub range"
           (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
                      expected-entity-tx]]
-                   (for [[v entities] (doc/literal-entity-values object-store snapshot eid :z
-                                                                 #(-> %
-                                                                      (doc/new-greater-than-equal-virtual-index 2)
-                                                                      (doc/new-less-than-equal-virtual-index 2))
-                                                                 transact-time transact-time)
+                   (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
+                                                                                                  #(-> %
+                                                                                                       (doc/new-greater-than-equal-virtual-index 2)
+                                                                                                       (doc/new-less-than-equal-virtual-index 2))
+                                                                                                  transact-time transact-time)
+                                           (doc/idx->seq))
                          entity entities]
                      [(bu/bytes->hex v) entity]))))
 
         (t/testing "out of range"
-          (t/is (empty? (doc/literal-entity-values object-store snapshot eid :z
-                                                   #(-> %
-                                                        (doc/new-greater-than-equal-virtual-index 4)
-                                                        (doc/new-less-than-equal-virtual-index 10))
-                                                   transact-time transact-time))))))))
+          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
+                                                                                    #(-> %
+                                                                                         (doc/new-greater-than-equal-virtual-index 4)
+                                                                                         (doc/new-less-than-equal-virtual-index 10))
+                                                                                    transact-time transact-time)
+                             (doc/idx->seq)))))))))
 
 (t/deftest test-shared-literal-attribute-entities-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
@@ -568,29 +577,32 @@
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "single entity"
         (t/is (= [(idx/new-id :x12)]
-                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]
-                                                                                          [:z 2]] transact-time transact-time)]
+                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 1]
+                                                                                                            [:z 2]] transact-time transact-time)
+                                         (doc/idx->seq))]
                    (idx/new-id v))))
         (t/is (= [(idx/new-id :x12)]
-                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 1]] transact-time transact-time)]
+                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 1]] transact-time transact-time)
+                                         (doc/idx->seq))]
                    (idx/new-id v)))))
 
       (t/testing "multiple entities, ordered by eid"
         (t/is (= (sort [(idx/new-id :y22)
                         (idx/new-id :x22)])
-                 (for [[v entities] (doc/shared-literal-attribute-entities-join snapshot [[:y 2]
-                                                                                          [:z 2]] transact-time transact-time)]
+                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 2]
+                                                                                                            [:z 2]] transact-time transact-time)
+                                         (doc/idx->seq))]
                    (idx/new-id v)))))
 
       (t/testing "no entities"
-        (t/is (empty? (doc/shared-literal-attribute-entities-join snapshot [[:y 3]
-                                                                            [:z 2]] transact-time transact-time)))))))
+        (t/is (empty? (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 3]
+                                                                                              [:z 2]] transact-time transact-time)
+                           (doc/idx->seq))))))))
 
 (t/deftest test-sorted-virtual-index
-  (let [idx (doc/->SortedVirtualIndex
+  (let [idx (doc/new-sorted-virtual-index
              [[(idx/value->bytes 1) :a]
-              [(idx/value->bytes 3) :c]]
-             (atom nil))]
+              [(idx/value->bytes 3) :c]])]
     (t/is (= :a
              (second (db/-seek-values idx 0))))
     (t/is (= :a
@@ -604,22 +616,19 @@
     (t/is (nil? (db/-seek-values idx 4)))))
 
 (t/deftest test-or-virtual-index
-  (let [idx-1 (doc/->SortedVirtualIndex
+  (let [idx-1 (doc/new-sorted-virtual-index
                [[(idx/value->bytes 1) :a]
                 [(idx/value->bytes 3) :c]
-                [(idx/value->bytes 5) :e1]]
-               (atom nil))
-        idx-2 (doc/->SortedVirtualIndex
+                [(idx/value->bytes 5) :e1]])
+        idx-2 (doc/new-sorted-virtual-index
                [[(idx/value->bytes 2) :b]
                 [(idx/value->bytes 4) :d]
                 [(idx/value->bytes 5) :e2]
-                [(idx/value->bytes 7) :g]]
-               (atom nil))
-        idx-3 (doc/->SortedVirtualIndex
+                [(idx/value->bytes 7) :g]])
+        idx-3 (doc/new-sorted-virtual-index
                [[(idx/value->bytes 5) :e3]
-                [(idx/value->bytes 6) :f]]
-               (atom nil))
-        idx (doc/->OrVirtualIndex [idx-1 idx-2 idx-3] (atom nil))]
+                [(idx/value->bytes 6) :f]])
+        idx (doc/new-or-virtual-index [idx-1 idx-2 idx-3])]
     (t/testing "interleaves results in value order"
       (t/is (= :a
                (second (db/-seek-values idx nil))))
@@ -647,7 +656,7 @@
     (t/testing "can seek into indexes"
       (t/is (= :d
                (second (db/-seek-values idx 4))))
-       (t/is (= :e1
+      (t/is (= :e1
                (second (db/-next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta

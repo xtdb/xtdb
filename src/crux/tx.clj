@@ -5,7 +5,8 @@
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db])
-  (:import [java.util Date]))
+  (:import [java.util Date]
+           [crux.index EntityTx]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -41,9 +42,9 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [db tx-log [op] transact-time tx-id] op))
+(defmulti tx-command (fn [kv object-store tx-log [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [db tx-log [op k v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv object-store tx-log [op k v business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
@@ -58,7 +59,7 @@
        [[(idx/encode-content-hash+entity-key content-hash eid)
          idx/empty-byte-array]]))))
 
-(defmethod tx-command :crux.tx/delete [db tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     [[(idx/encode-entity+bt+tt+tx-id-key
@@ -68,12 +69,13 @@
        tx-id)
       idx/nil-id-bytes]]))
 
-(defmethod tx-command :crux.tx/cas [db tx-log [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv object-store tx-log [op k old-v new-v business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)
-        entity (with-open [qc (db/new-query-context db)]
-                 (db/entity db qc eid))
-        old-doc (db/->map entity)
+        {:keys [content-hash]
+         :as entity} (with-open [snapshot (ks/new-snapshot kv)]
+                       (first (doc/entities-at snapshot [eid] business-time transact-time)))
+        old-doc (get (db/get-objects object-store [content-hash]) content-hash)
         old-v (idx/id->bytes old-v)
         new-v (idx/new-id new-v)]
     (when (bu/bytes=? (idx/id->bytes old-doc) old-v)
@@ -88,14 +90,15 @@
          [[(idx/encode-content-hash+entity-key new-v eid)
             idx/empty-byte-array]])))))
 
-(defmethod tx-command :crux.tx/evict [db tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     (when tx-log
-      (doseq [entity (with-open [qc (db/new-query-context db)]
-                       (db/entity-history db qc eid))
-              :let [doc (db/->map entity)]
-              :when (and doc (<= (compare (db/->business-time entity) business-time) 0))]
+      (doseq [{:keys [content-hash]
+               :as entity} (with-open [snapshot (ks/new-snapshot kv)]
+                             (doc/entity-history snapshot eid))
+              :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
+              :when (and doc (<= (compare (.bt ^EntityTx entity) business-time) 0))]
         (db/submit-doc tx-log (idx/new-id doc) nil)))
     [[(idx/encode-entity+bt+tt+tx-id-key
        eid
@@ -119,11 +122,10 @@
             (doc/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (let [db (doc/db kv)]
-      (->> (for [tx-op tx-ops]
-             (tx-command db tx-log tx-op tx-time tx-id))
-           (reduce into (sorted-map-by bu/bytes-comparator))
-           (ks/store kv))))
+    (->> (for [tx-op tx-ops]
+           (tx-command kv object-store tx-log tx-op tx-time tx-id))
+         (reduce into (sorted-map-by bu/bytes-comparator))
+         (ks/store kv)))
 
   (store-index-meta [_ k v]
     (doc/store-meta kv k v))

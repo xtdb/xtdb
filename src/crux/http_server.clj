@@ -4,6 +4,7 @@
             [crux.doc :as doc]
             [crux.io :as cio]
             [crux.tx :as tx]
+            [crux.query :as q]
             [crux.kv-store :as kvs]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
@@ -38,7 +39,7 @@
       (try
         {:status 200
          :headers {"Content-Type" "application/edn"}
-         :body (pr-str (doc/q (doc/db kvs) query))}
+         :body (pr-str (q/q (q/db kvs) query))}
         (catch Exception e
           (if (= "Invalid input" (.getMessage e))
             (exception-response e 400) ;; Valid edn, invalid query
