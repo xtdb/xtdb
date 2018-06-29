@@ -358,7 +358,20 @@
       (t/is (= #{["Ivan"]}
                (q/q (q/db *kv*) '{:find [name]
                                   :where [[e :name name]
-                                          (= :ivan e)]}))))
+                                          (= :ivan e)]})))
+
+      (t/testing "Filtered by value"
+        (t/is (= #{[:bob] [:ivan]}
+                 (q/q (q/db *kv*) '{:find [e]
+                                    :where [[e :last-name last-name]
+                                            (= "Ivanov" last-name)]})))
+
+        (t/is (= #{[:ivan]}
+                 (q/q (q/db *kv*) '{:find [e]
+                                    :where [[e :last-name last-name]
+                                            [e :age age]
+                                            (= "Ivanov" last-name)
+                                            (= 30 age)]})))))
 
     (t/testing "Several variables"
       (t/is (= #{["Bob"]}
@@ -368,6 +381,13 @@
                                           (= 40 age)
                                           (re-find #"o" name)
                                           (not= age name)]})))
+
+      (t/is (= #{[:bob "Ivanov"]}
+               (q/q (q/db *kv*) '{:find [e last-name]
+                                  :where [[e :last-name last-name]
+                                          [e :age age]
+                                          (re-find #"ov$" last-name)
+                                          (not (= age 30))]})))
 
       (t/testing "No results"
         (t/is (= #{}
