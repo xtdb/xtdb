@@ -400,8 +400,7 @@
                    unification-vars
                    not-vars
                    pred-vars]} (collect-vars type->clauses)
-           e-var->v-var-clauses (->> (for [{:keys [e v]
-                                            :as clause} bgp-clauses
+           e-var->v-var-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                            :when (and (logic-var? e)
                                                       (logic-var? v))]
                                        clause)
@@ -415,15 +414,14 @@
                                    :when (not (contains? e-vars v))]
                                [v e])
                              (into {}))
-           e-var->literal-v-clauses (->> (for [{:keys [e v]
-                                                :as clause} bgp-clauses
+           e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                :when (and (logic-var? e)
                                                           (literal? v))]
                                            clause)
                                          (group-by :e))
-           v-var->literal-e-clauses (->> (for [clause bgp-clauses
-                                               :when (and (entity-ident? (:e clause))
-                                                          (logic-var? (:v clause)))]
+           v-var->literal-e-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                               :when (and (entity-ident? e)
+                                                          (logic-var? v))]
                                            clause)
                                          (group-by :v))
            [var->joins var->names] (e-var-literal-v-joins snapshot e-var->literal-v-clauses {}
@@ -458,7 +456,7 @@
                                    [var-name a])
                                  (into {}))
            e-var-name->attr (zipmap (mapcat var->names e-vars)
-                                   (repeat :crux.db/id))
+                                    (repeat :crux.db/id))
            var-names->attr (merge v-var-name->attr e-var-name->attr)
            var+joins (vec var->joins)
            var->v-result-index (zipmap (map key var+joins) (range))
