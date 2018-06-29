@@ -22,14 +22,10 @@
          spec))
 
 (def ^:private built-ins '#{not == !=})
-(def ^:private built-in-range->pred {'< (comp neg? compare)
-                                     '<= (comp not pos? compare)
-                                     '> (comp pos? compare)
-                                     '>= (comp not neg? compare)})
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(get built-in-range->pred % (some-> % resolve var-get)))
+                        (s/conformer #(some-> % resolve var-get))
                         fn?))
 (s/def ::find (s/coll-of logic-var? :kind vector? :min-count 1))
 
@@ -76,6 +72,11 @@
     (assoc clause :v (gensym "_"))
     clause))
 
+(def ^:private pred->built-in-range-pred {< (comp neg? compare)
+                                          <= (comp not pos? compare)
+                                          > (comp pos? compare)
+                                          >= (comp not neg? compare)})
+
 (def ^:private range->inverse-range '{< >=
                                       <= >
                                       > <=
@@ -85,10 +86,16 @@
   (->> (for [[type clause] clauses]
          {type [(case type
                   (:bgp, :not) (normalize-bgp-clause clause)
-                  :pred (let [[type clause] clause]
-                          (case type
-                            :pred clause
-                            :not-pred (update clause :pred-fn complement)))
+                  :pred (let [[type {:keys [pred-fn args]
+                                     :as clause}] clause]
+                          (let [clause (if-let [range-pred (and (= 2 (count args))
+                                                                (every? logic-var? args)
+                                                                (get pred->built-in-range-pred pred-fn))]
+                                         (assoc clause :pred-fn range-pred)
+                                         clause)]
+                            (case type
+                              :pred clause
+                              :not-pred (update clause :pred-fn complement))))
                   :or (for [[type clause] clause]
                         (case type
                           :bgp [(normalize-bgp-clause clause)]
