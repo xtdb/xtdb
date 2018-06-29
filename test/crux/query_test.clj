@@ -320,9 +320,9 @@
                                                                [e :name "Bob"]))]})))))
 
 (t/deftest test-predicate-expression
-  (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov" :age 30}
-                            {:name "Bob" :last-name "Ivanov" :age 40}
-                            {:name "Dominic" :last-name "Monroe" :age 50}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
+                            {:crux.db/id :bob :name "Bob" :last-name "Ivanov" :age 40}
+                            {:crux.db/id :dominic :name "Dominic" :last-name "Monroe" :age 50}])
 
   (t/testing "range expressions"
     (t/is (= #{["Ivan"] ["Bob"]}
@@ -353,6 +353,12 @@
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         (not (re-find #"o" name))]}))))
+
+    (t/testing "Entity variable"
+      (t/is (= #{["Ivan"]}
+               (q/q (q/db *kv*) '{:find [name]
+                                  :where [[e :name name]
+                                          (= :ivan e)]}))))
 
     (t/testing "Several variables"
       (t/is (= #{["Bob"]}
@@ -511,6 +517,15 @@
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [p]
                                            :where [[p :name n]
                                                    (!= n "Petr")]}))))
+
+  (t/testing "unify with entity"
+    (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [n]
+                                           :where [[p :name n]
+                                                   (== p :petr)]})))
+
+    (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [n]
+                                           :where [[i :name n]
+                                                   (!= i :petr)]}))))
 
   (t/testing "multiple literals in set"
     (t/is (= #{[:petr] [:ivan]} (q/q (q/db *kv*) '{:find [p]

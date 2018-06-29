@@ -242,12 +242,19 @@
 (defn- build-pred-constraints [object-store pred-clauses e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var var+joins]
   (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var+joins)]
                                [var (inc depth)])
-                             (into {}))]
+                             (into {}))
+        max-depth (count var+joins)]
     (for [{:keys [pred-fn args]
            :as clause} pred-clauses
           :let [pred-vars (filter logic-var? args)
-                pred-join-depth (->> pred-vars
-                                     (map var->join-depth)
+                ;; TODO: If the var isn't in the join, we default to
+                ;; max-depth. At this point we might have to do a full
+                ;; cartesian diff as the value might be different for
+                ;; different entities. The call to unique-result-value
+                ;; will throw an exception if this happens, so at
+                ;; least we'll notice.
+                pred-join-depth (->> (for [var pred-vars]
+                                       (get var->join-depth var max-depth))
                                      (reduce max))]]
       (do (doseq [var pred-vars
                   :when (not (contains? var->names var))]
