@@ -241,9 +241,9 @@
                           (first (get var->names e-var))
                           var-name)
         entities (get join-results result-var-name)
-        content-hash->doc (->> (map :content-hash entities)
-                               (db/get-objects object-store))]
-    (for [[entity [_ doc]] (map vector entities content-hash->doc)
+        content-hashes (map :content-hash entities)
+        content-hash->doc (db/get-objects object-store content-hashes)]
+    (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
           :when (constrain-doc-by-needed-attributes doc (or e-var var))
           value (doc/normalize-value (get doc attr))]
       {:value value
