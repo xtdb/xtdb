@@ -321,7 +321,7 @@
 
 (t/deftest test-predicate-expression
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov" :age 30}
-                            {:name "Bob" :last-name "Ivanov" :age 40 }
+                            {:name "Bob" :last-name "Ivanov" :age 40}
                             {:name "Dominic" :last-name "Monroe" :age 50}])
 
   (t/testing "< predicate expression"
@@ -341,14 +341,29 @@
     (t/is (= #{["Bob"] ["Dominic"]}
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
-                                        [e :age age]
                                         (re-find #"o" name)]})))
 
     (t/testing "No results"
       (t/is (empty? (q/q (q/db *kv*) '{:find [name]
                                        :where [[e :name name]
-                                               [e :age age]
-                                               (re-find #"X" name)]}))))))
+                                               (re-find #"X" name)]}))))
+
+    (t/testing "Several variables"
+      (t/is (= #{["Bob"]}
+               (q/q (q/db *kv*) '{:find [name]
+                                  :where [[e :name name]
+                                          [e :age age]
+                                          (= 40 age)
+                                          (re-find #"o" name)
+                                          (not= age name)]})))
+
+      (t/testing "No results"
+        (t/is (= #{}
+                 (q/q (q/db *kv*) '{:find [name]
+                                    :where [[e :name name]
+                                            [e :age age]
+                                            (re-find #"o" name)
+                                            (= age name)]})))))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
