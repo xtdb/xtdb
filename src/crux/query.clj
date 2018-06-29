@@ -260,11 +260,11 @@
                    (:var (first results)) " " values))))
     (first values)))
 
-(defn- build-pred-constraints [object-store pred-clauses e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var var+joins]
-  (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var+joins)]
+(defn- build-pred-constraints [object-store pred-clauses e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var var->joins]
+  (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var->joins)]
                                [var (inc depth)])
                              (into {}))
-        max-depth (count var+joins)]
+        max-depth (count var->joins)]
     (for [{:keys [pred-fn args]
            :as clause} pred-clauses
           :let [pred-vars (filter logic-var? args)
@@ -464,7 +464,7 @@
            not-constraints (build-not-constraints object-store not-clauses e-var->leaf-v-var-clauses
                                                   var->names var-names->attr v-var->e-var)
            pred-constraints (build-pred-constraints object-store pred-clauses e-var->leaf-v-var-clauses
-                                                    var->names var-names->attr v-var->e-var var+joins)
+                                                    var->names var-names->attr v-var->e-var var->joins)
            shared-names (mapv var->names e-vars)
            shared-e-v-vars (set/intersection e-vars v-vars)
            constrain-result-fn (fn [max-ks result]
