@@ -530,8 +530,7 @@
         content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
         doc-idx (-> (new-doc-attribute-value-index (ks/new-iterator snapshot) attr)
                     (wrap-with-range-constraints range-constraints))]
-    (-> (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)
-        (assoc :name attr))))
+    (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
 
 ;; Caching
 

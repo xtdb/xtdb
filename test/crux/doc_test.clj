@@ -343,9 +343,12 @@
         (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
 
       (t/testing "unary join"
-        (let [a-idx (doc/new-entity-attribute-value-virtual-index snapshot :a nil transact-time transact-time)
-              b-idx (doc/new-entity-attribute-value-virtual-index snapshot :b nil transact-time transact-time)
-              c-idx (doc/new-entity-attribute-value-virtual-index snapshot :c nil transact-time transact-time)]
+        (let [a-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :a nil transact-time transact-time)
+                        (assoc :name :a))
+              b-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :b nil transact-time transact-time)
+                        (assoc :name :b))
+              c-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :c nil transact-time transact-time)
+                        (assoc :name :c))]
           (t/is (= [{:a #{(idx/new-id :a7-8)
                           (idx/new-id :a8-8)}
                      :b #{(idx/new-id :b4-8)}
@@ -399,12 +402,18 @@
                    (count (doc/all-entities snapshot transact-time transact-time)))))
 
         (t/testing "n-ary join"
-          (let [ra-idx (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                ta-idx (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                rb-idx (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                sb-idx (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                sc-idx (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                tc-idx (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+          (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                           (assoc :name :ra))
+                ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                           (assoc :name :ta))
+                rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                           (assoc :name :rb))
+                sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                           (assoc :name :sb))
+                sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                           (assoc :name :sc))
+                tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                           (assoc :name :tc))
                 result (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
                                                                         [rb-idx sb-idx]
                                                                         [sc-idx tc-idx]]
@@ -460,12 +469,18 @@
           {:keys [transact-time tx-id]}
           @(db/submit-tx tx-log tx-ops)]
       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-        (let [ra-idx (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-              ta-idx (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-              rb-idx (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-              sb-idx (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-              sc-idx (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-              tc-idx (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)]
+        (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                         (assoc :name :ra))
+              ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                         (assoc :name :ta))
+              rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                         (assoc :name :rb))
+              sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                         (assoc :name :sb))
+              sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                         (assoc :name :sc))
+              tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                         (assoc :name :tc))]
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
