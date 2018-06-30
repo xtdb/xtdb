@@ -392,10 +392,14 @@
                    unification-vars
                    not-vars
                    pred-vars]} (collect-vars type->clauses)
-           e->v-var-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+           e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
                                        :when (logic-var? v)]
                                    clause)
                                  (group-by :e))
+           v->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
+                                       :when (logic-var? v)]
+                                   clause)
+                                 (group-by :v))
            v-var->e (->> (for [[e clauses] e->v-var-clauses
                                {:keys [e v]} clauses
                                :when (not (contains? e-vars v))]
@@ -416,7 +420,8 @@
            var->joins (e-var-literal-v-or-joins snapshot or-clauses var->joins
                                                 business-time transact-time)
            leaf-v-var? (fn [e v]
-                         (and (or (contains? e-var->literal-v-clauses e)
+                         (and (= 1 (count (get v->v-var-clauses v)))
+                              (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
                               (->> (for [vars [unification-vars not-vars pred-vars e-vars]]
                                      (not (contains? vars v)))
