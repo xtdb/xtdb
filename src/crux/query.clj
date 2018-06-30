@@ -270,9 +270,7 @@
           (fn [join-keys join-results]
             (if (= (count join-keys) pred-join-depth)
               ;; TODO: We might have to do a diff as the value might
-              ;; be different if bound to different entities?  Current
-              ;; implementation removes the entire result, which might
-              ;; be too aggressive.
+              ;; be different if bound to different entities?
               (when (->> (for [args (cartesian-product
                                      (for [arg args]
                                        (if (logic-var? arg)
@@ -280,7 +278,7 @@
                                               (map :value))
                                          [arg])))]
                            (boolean (apply pred-fn args)))
-                         (every? true?))
+                         (some true?))
                 join-results)
               join-results))))))
 
