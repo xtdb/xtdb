@@ -139,7 +139,7 @@
                            :when (logic-var? arg)]
                        arg))}))
 
-(defn- v-var->range-constraints [e-vars range-clauses]
+(defn- build-v-var-range-constraints [e-vars range-clauses]
   (let [v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
                                     (if (contains? e-vars sym)
                                       (throw (IllegalArgumentException.
@@ -438,7 +438,7 @@
                                                            (leaf-v-var? e v))]
                                             clause)
                                           (group-by :e))
-           v-var->range-constrants (v-var->range-constraints e-vars range-clauses)
+           v-var->range-constrants (build-v-var-range-constraints e-vars range-clauses)
            var->joins (e-var-v-var-joins snapshot e-var+v-var->join-clauses v-var->range-constrants
                                          var->joins business-time transact-time)
            var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
