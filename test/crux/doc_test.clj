@@ -403,24 +403,21 @@
 
         (t/testing "n-ary join"
           (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                           (assoc :name :ra))
+                           (assoc :name :r))
                 ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                           (assoc :name :ta))
+                           (assoc :name :t))
                 rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                           (assoc :name :rb))
+                           (assoc :name :r))
                 sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                           (assoc :name :sb))
+                           (assoc :name :s))
                 sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                           (assoc :name :sc))
+                           (assoc :name :s))
                 tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                           (assoc :name :tc))
+                           (assoc :name :t))
                 result (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
                                                                         [rb-idx sb-idx]
                                                                         [sc-idx tc-idx]]
-                                                                       (partial doc/constrain-join-result-by-names
-                                                                                [[:ra :rb]
-                                                                                 [:sb :sc]
-                                                                                 [:ta :tc]])))]
+                                                                       doc/constrain-join-result-by-empty-names))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -470,27 +467,24 @@
           @(db/submit-tx tx-log tx-ops)]
       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
         (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                         (assoc :name :ra))
+                         (assoc :name :r))
               ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                         (assoc :name :ta))
+                         (assoc :name :t))
               rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                         (assoc :name :rb))
+                         (assoc :name :r))
               sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                         (assoc :name :sb))
+                         (assoc :name :s))
               sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                         (assoc :name :sc))
+                         (assoc :name :s))
               tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                         (assoc :name :tc))]
+                         (assoc :name :t))]
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
                    (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
                                                                                                 [rb-idx sb-idx]
                                                                                                 [sc-idx tc-idx]]
-                                                                                               (partial doc/constrain-join-result-by-names
-                                                                                                        [[:ra :rb]
-                                                                                                         [:sb :sc]
-                                                                                                         [:ta :tc]])))
+                                                                                               doc/constrain-join-result-by-empty-names))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))

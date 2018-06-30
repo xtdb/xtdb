@@ -157,24 +157,22 @@
                        (apply comp))])
          (into {}))))
 
-(defn- e-var-literal-v-joins [snapshot e-var->literal-v-clauses var->joins var->names business-time transact-time]
+(defn- e-var-literal-v-joins [snapshot e-var->literal-v-clauses var->joins business-time transact-time]
   (->> e-var->literal-v-clauses
        (reduce
-        (fn [[var->joins var->names] [e-var clauses]]
-          (let [var-name (gensym e-var)
-                idx (doc/new-shared-literal-attribute-entities-virtual-index
+        (fn [var->joins [e-var clauses]]
+          (let [idx (doc/new-shared-literal-attribute-entities-virtual-index
                      snapshot
                      (vec (for [{:keys [a v]} clauses]
                             [a v]))
                      business-time transact-time)]
-            [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
-             (merge-with into {e-var [var-name]} var->names)]))
-        [var->joins var->names])))
+            (merge-with into {e-var [(assoc idx :name e-var)]} var->joins)))
+        var->joins)))
 
-(defn- e-var-literal-v-or-joins [snapshot or-clauses var->joins var->names business-time transact-time]
+(defn- e-var-literal-v-or-joins [snapshot or-clauses var->joins business-time transact-time]
   (->> or-clauses
        (reduce
-        (fn [[var->joins var->names] clause]
+        (fn [var->joins clause]
           (let [or-e-vars (set (for [sub-clauses clause
                                      {:keys [e]} sub-clauses]
                                  e))
@@ -183,8 +181,7 @@
               (throw (IllegalArgumentException.
                       (str "Or clause requires same logic variable in entity position: "
                            (pr-str clause)))))
-            (let [var-name (gensym e-var)
-                  idx (doc/new-or-virtual-index
+            (let [idx (doc/new-or-virtual-index
                        (vec (for [sub-clauses clause]
                               (doc/new-shared-literal-attribute-entities-virtual-index
                                snapshot
@@ -192,14 +189,13 @@
                                            :as clause} sub-clauses]
                                       [a v]))
                                business-time transact-time))))]
-              [(merge-with into {e-var [(assoc idx :name var-name)]} var->joins)
-               (merge-with into {e-var [var-name]} var->names)])))
-        [var->joins var->names])))
+              (merge-with into {e-var [(assoc idx :name e-var)]} var->joins))))
+        var->joins)))
 
-(defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins var->names business-time transact-time]
+(defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
        (reduce
-        (fn [[var->joins var->names] [[e-var v-var] clauses]]
+        (fn [var->joins [[e-var v-var] clauses]]
           (let [indexes (for [{:keys [a]} clauses]
                           (assoc (doc/new-entity-attribute-value-virtual-index
                                   snapshot
@@ -207,15 +203,14 @@
                                   (get v-var->range-constrants v-var)
                                   business-time
                                   transact-time)
-                                 :name (gensym e-var)))]
-            [(merge-with into {v-var (vec indexes)} var->joins)
-             (merge-with into {e-var (mapv :name indexes)} var->names)]))
-        [var->joins var->names])))
+                                 :name e-var))]
+            (merge-with into {v-var (vec indexes)} var->joins)))
+        var->joins)))
 
-(defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constrants var->joins var->names business-time transact-time]
+(defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constrants var->joins business-time transact-time]
   (->> v-var->literal-e-clauses
        (reduce
-        (fn [[var->joins var->names] [v-var clauses]]
+        (fn [var->joins [v-var clauses]]
           (let [indexes (for [{:keys [e a]} clauses]
                           (assoc (doc/new-literal-entity-attribute-values-virtual-index
                                   object-store
@@ -224,19 +219,23 @@
                                   a
                                   (get v-var->range-constrants v-var)
                                   business-time transact-time)
-                                 :name (gensym v-var)))]
-            [(merge-with into {v-var (vec indexes)} var->joins)
-             (merge {v-var (mapv :name indexes)} var->names)]))
-        [var->joins var->names])))
+                                 ;; TODO: what should this really be
+                                 ;; and how should it work? Needs
+                                 ;; unifying on value, but not entity.
+                                 ;; Something seems to constrain this,
+                                 ;; needs to figure out if it really
+                                 ;; works and why. Special case for
+                                 ;; this in bound-results-for-var
+                                 ;; Tests pass.
+                                 :name [::literal-e v-var]))]
+            (merge-with into {v-var (vec indexes)} var->joins)))
+        var->joins)))
 
-(defn- build-var-bindings [var->names var-names->attr v-var->e-var e-var->leaf-v-var-clauses vars]
+(defn- build-var-bindings [var->attr v-var->e-var e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
-             :let [var-name (first (get var->names var))
-                   e-var (get v-var->e-var var)]]
-         [var {:var-name (if e-var
-                           (first (get var->names e-var))
-                           var-name)
-               :attr (get var-names->attr var-name)
+             :let [e-var (get v-var->e-var var)]]
+         [var {:var (or e-var var)
+               :attr (get var->attr var (get var->attr e-var))
                :required-attrs (some->> (get e-var->leaf-v-var-clauses (or e-var var))
                                         (not-empty)
                                         (map :a)
@@ -244,8 +243,9 @@
        (into {})))
 
 (defn- bound-results-for-var [object-store var->bindings join-results var]
-  (let [{:keys [var-name attr required-attrs]} (get var->bindings var)
-        entities (get join-results var-name)
+  (let [{:keys [var attr required-attrs]} (get var->bindings var)
+        entities (or (get join-results var)
+                     (get join-results [::literal-e var]))
         content-hashes (map :content-hash entities)
         content-hash->doc (db/get-objects object-store content-hashes)]
     (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
@@ -313,8 +313,8 @@
                         (if (logic-var? var)
                           (or (some->> (get join-keys (get var->v-result-index var))
                                        (sorted-set-by bu/bytes-comparator))
-                              (let [{:keys [var-name]} (get var->bindings var)]
-                                (some->> (get join-results var-name)
+                              (let [{:keys [var]} (get var->bindings var)]
+                                (some->> (get join-results var)
                                          (map (comp idx/id->bytes :eid))
                                          (into (sorted-set-by bu/bytes-comparator)))))
                           (->> (map idx/value->bytes (doc/normalize-value var))
@@ -343,10 +343,8 @@
                 entities-to-remove (set (for [{:keys [doc entity]} results
                                               :when (contains? (set (doc/normalize-value (get doc a))) not-v)]
                                           entity))
-                {:keys [var-name]} (get var->bindings e)]
-            ;; TODO: is it safe to just do one var-name for the var?
-            ;; Not is executed at the leaf, so should probably be.
-            (update join-results var-name set/difference entities-to-remove))))))
+                {:keys [var]} (get var->bindings e)]
+            (update join-results var set/difference entities-to-remove))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
@@ -375,8 +373,8 @@
   (when (->> (for [e-var shared-e-v-vars
                    :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
                    :when eid-bytes
-                   :let [{:keys [var-name]} (get var->bindings e-var)]
-                   entity (get join-results var-name)]
+                   :let [{:keys [var]} (get var->bindings e-var)]
+                   entity (get join-results var)]
                (bu/bytes=? eid-bytes (idx/id->bytes entity)))
              (every? true?))
     join-results))
@@ -407,10 +405,6 @@
                                                       (logic-var? v))]
                                        clause)
                                      (group-by :e))
-           var->names (->> (for [[_ clauses] e-var->v-var-clauses
-                                 {:keys [v]} clauses]
-                             {v [(gensym v)]})
-                           (apply merge-with into))
            v-var->e-var (->> (for [[e clauses] e-var->v-var-clauses
                                    {:keys [e v]} clauses
                                    :when (not (contains? e-vars v))]
@@ -426,59 +420,57 @@
                                                           (logic-var? v))]
                                            clause)
                                          (group-by :v))
-           [var->joins var->names] (e-var-literal-v-joins snapshot e-var->literal-v-clauses {}
-                                                          var->names business-time transact-time)
-           [var->joins var->names] (e-var-literal-v-or-joins snapshot or-clauses var->joins
-                                                             var->names business-time transact-time)
+           var->joins (e-var-literal-v-joins snapshot e-var->literal-v-clauses {}
+                                             business-time transact-time)
+           var->joins (e-var-literal-v-or-joins snapshot or-clauses var->joins
+                                                business-time transact-time)
            leaf-v-var? (fn [e v]
-                         (and (= (count (get var->names v)) 1)
-                              (or (contains? e-var->literal-v-clauses e)
+                         (and (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
                               (->> (for [vars [unification-vars not-vars pred-vars e-vars]]
                                      (not (contains? vars v)))
                                    (every? true?))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                                :when (and (logic-var? v)
+                                                :when (and (logic-var? e)
+                                                           (logic-var? v)
                                                            (not (leaf-v-var? e v)))]
                                             clause)
                                           (group-by (juxt :e :v)))
            e-var->leaf-v-var-clauses (->> (for [{:keys [e a v] :as clause} bgp-clauses
-                                                :when (and (logic-var? v)
+                                                :when (and (logic-var? e)
+                                                           (logic-var? v)
                                                            (leaf-v-var? e v))]
                                             clause)
                                           (group-by :e))
            v-var->range-constrants (v-var->range-constraints e-vars range-clauses)
-           [var->joins var->names] (e-var-v-var-joins snapshot e-var+v-var->join-clauses v-var->range-constrants
-                                                      var->joins var->names business-time transact-time)
-           [var->joins var->names] (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
-                                                          var->joins var->names business-time transact-time)
-           v-var-name->attr (->> (for [{:keys [a v]} bgp-clauses
-                                       :when (logic-var? v)
-                                       var-name (get var->names v)]
-                                   [var-name a])
-                                 (into {}))
-           e-var-name->attr (zipmap (mapcat var->names e-vars)
-                                    (repeat :crux.db/id))
-           var-names->attr (merge v-var-name->attr e-var-name->attr)
+           var->joins (e-var-v-var-joins snapshot e-var+v-var->join-clauses v-var->range-constrants
+                                         var->joins business-time transact-time)
+           var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
+                                             var->joins business-time transact-time)
+           v-var->attr (->> (for [{:keys [a v]} bgp-clauses
+                                  :when (logic-var? v)]
+                              [v a])
+                            (into {}))
+           e-var->attr (zipmap e-vars (repeat :crux.db/id))
+           var->attr (merge v-var->attr e-var->attr)
            var+joins (vec var->joins)
            var->v-result-index (zipmap (map key var+joins) (range))
-           var->bindings (build-var-bindings var->names var-names->attr v-var->e-var e-var->leaf-v-var-clauses (keys var->names))
+           var->bindings (build-var-bindings var->attr v-var->e-var e-var->leaf-v-var-clauses (keys var->attr))
            unification-preds (build-unification-preds unify-clauses var->bindings var->v-result-index)
            not-constraints (build-not-constraints object-store not-clauses var->bindings)
            pred-constraints (build-pred-constraints object-store pred-clauses var->bindings var->joins)
-           shared-names (mapv var->names e-vars)
            shared-e-v-vars (set/intersection e-vars v-vars)
            constrain-result-fn (fn [max-ks result]
-                                 (some->> (doc/constrain-join-result-by-names shared-names max-ks result)
+                                 (some->> (doc/constrain-join-result-by-empty-names max-ks result)
                                           (constrain-join-result-by-join-keys var->v-result-index var->bindings shared-e-v-vars max-ks)
                                           (constrain-join-result-by-unification unification-preds max-ks)
                                           (constrain-join-result-by-not not-constraints var->joins max-ks)
                                           (constrain-join-result-by-preds pred-constraints max-ks)))]
        (doseq [var find
-               :when (not (contains? var->names var))]
+               :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Find clause references unknown variable: " var))))
        (doseq [var pred-vars
-               :when (not (contains? var->names var))]
+               :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Predicate clause references unknown variable: " var))))
        (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index (mapv val var+joins) constrain-result-fn)
                                    (doc/idx->seq))

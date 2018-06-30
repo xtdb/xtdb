@@ -429,20 +429,9 @@
 (defn new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn constrain-join-result-by-names [shared-names max-ks join-results]
-  (->> shared-names
-       (reduce
-        (fn [join-results result-names]
-          (if-let [name->results (->> (select-keys join-results result-names)
-                                      (not-empty))]
-            (some->> (vals name->results)
-                     (apply set/intersection)
-                     (not-empty)
-                     (repeat)
-                     (zipmap result-names)
-                     (merge join-results))
-            join-results))
-        join-results)))
+(defn constrain-join-result-by-empty-names [max-ks join-results]
+  (when (every? not-empty (vals join-results))
+    join-results))
 
 (defrecord NAryJoinVirtualIndex [unary-join-indexes constrain-result-fn join-state]
   db/Index
@@ -466,7 +455,7 @@
           max-ks (conj (mapv first result-stack) max-k)
           [_ parent-result] (last result-stack)
           result (some->> new-values
-                          (merge parent-result)
+                          (merge-with set/intersection parent-result)
                           (constrain-result-fn max-ks)
                           (not-empty))]
       (cond
