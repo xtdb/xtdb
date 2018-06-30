@@ -450,8 +450,7 @@
                             (into {}))
            e-var->attr (zipmap e-vars (repeat :crux.db/id))
            var->attr (merge v-var->attr e-var->attr)
-           var+joins (vec var->joins)
-           var->v-result-index (zipmap (map key var+joins) (range))
+           var->v-result-index (zipmap (keys var->joins) (range))
            var->bindings (build-var-bindings var->attr v-var->e e-var->leaf-v-var-clauses (keys var->attr))
            unification-preds (build-unification-preds unify-clauses var->bindings var->v-result-index)
            not-constraints (build-not-constraints object-store not-clauses var->bindings)
@@ -469,7 +468,7 @@
        (doseq [var pred-vars
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Predicate clause references unknown variable: " var))))
-       (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index (mapv val var+joins) constrain-result-fn)
+       (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index (vals var->joins) constrain-result-fn)
                                    (doc/idx->seq))
              result (cartesian-product
                      (for [var find]
