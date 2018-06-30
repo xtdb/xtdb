@@ -256,7 +256,7 @@
     (when-not (= 1 (count values))
       (throw (IllegalStateException.
               (str "Values not unique for var: "
-                   (:var (first results)) " " values))))
+                   (:e-var (first results)) " " values))))
     (first values)))
 
 (defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
@@ -475,7 +475,7 @@
                        (bound-results-for-var object-store var->bindings join-results var)))]
          (with-meta
            (mapv :value result)
-           (zipmap (map :var result) result)))))))
+           (zipmap (map :e-var result) result)))))))
 
 (defrecord QueryDatasource [kv object-store business-time transact-time])
 
