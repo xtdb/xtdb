@@ -433,11 +433,9 @@
   (->> shared-names
        (reduce
         (fn [join-results result-names]
-          (if-let [name-results (and join-results
-                                     (->> (map join-results result-names)
-                                          (remove nil?)
-                                          (not-empty)))]
-            (some->> name-results
+          (if-let [name->results (->> (select-keys join-results result-names)
+                                      (not-empty))]
+            (some->> (vals name->results)
                      (apply set/intersection)
                      (not-empty)
                      (repeat)
