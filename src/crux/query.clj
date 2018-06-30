@@ -339,9 +339,8 @@
                         v)
                 entities-to-remove (set (for [{:keys [doc entity]} results
                                               :when (contains? (set (doc/normalize-value (get doc a))) not-v)]
-                                          entity))
-                {:keys [e-var]} (get var->bindings e)]
-            (update join-results e-var set/difference entities-to-remove))))))
+                                          entity))]
+            (update join-results e set/difference entities-to-remove))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
