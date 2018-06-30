@@ -283,6 +283,12 @@
                          var " " (pr-str clause)))))
           (fn [join-keys join-results]
             (if (= (count join-keys) pred-join-depth)
+              ;; TODO: how to deal with multiple values in same
+              ;; entity. Currently the predicate gets called once per
+              ;; doc with the actual attribute value, which might be a
+              ;; collection without normalisation. Alternatively the
+              ;; predicate could be called with the cartesian product
+              ;; of the arguments.
               (let [args (for [arg args]
                            (if (logic-var? arg)
                              (->> (bound-results-for-var object-store var->bindings join-results arg)
