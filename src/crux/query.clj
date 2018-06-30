@@ -251,16 +251,6 @@
        :doc doc
        :entity entity})))
 
-;; TODO: how to deal with multiple values in same
-;; entity. The current logic is wrong in this case.
-(defn- unique-result-value [results]
-  (let [values (set (map :value results))]
-    (when-not (= 1 (count values))
-      (throw (IllegalStateException.
-              (str "Values not unique for var: "
-                   (:e-var (first results)) " " values))))
-    (first values)))
-
 (defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
   (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var->joins)]
                                [var (inc depth)])
@@ -269,12 +259,6 @@
     (for [{:keys [pred-fn args]
            :as clause} pred-clauses
           :let [pred-vars (filter logic-var? args)
-                ;; TODO: If the var isn't in the join, we default to
-                ;; max-depth. At this point we might have to do a full
-                ;; cartesian diff as the value might be different for
-                ;; different entities. The call to unique-result-value
-                ;; will throw an exception if this happens, so at
-                ;; least we'll notice.
                 pred-join-depth (->> (for [var pred-vars]
                                        (get var->join-depth var max-depth))
                                      (reduce max))]]
@@ -285,15 +269,19 @@
                          var " " (pr-str clause)))))
           (fn [join-keys join-results]
             (if (= (count join-keys) pred-join-depth)
-              ;; TODO: wrong when it comes to attributes with multiple
-              ;; values, see unique-result-value.
-              (let [args (for [arg args]
-                           (if (logic-var? arg)
-                             (->> (bound-results-for-var object-store var->bindings join-results arg)
-                                  (unique-result-value))
-                             arg))]
-                (when (apply pred-fn args)
-                  join-results))
+              ;; TODO: We might have to do a diff as the value might
+              ;; be different if bound to different entities?  Current
+              ;; implementation removes the entire result, which might
+              ;; be too aggressive.
+              (when (->> (for [args (cartesian-product
+                                     (for [arg args]
+                                       (if (logic-var? arg)
+                                         (->> (bound-results-for-var object-store var->bindings join-results arg)
+                                              (map :value))
+                                         [arg])))]
+                           (boolean (apply pred-fn args)))
+                         (every? true?))
+                join-results)
               join-results))))))
 
 (defn- build-unification-preds [unify-clauses var->bindings var->v-result-index]
@@ -333,12 +321,13 @@
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
           (let [results (bound-results-for-var object-store var->bindings join-results e)
-                not-v (if (logic-var? v)
-                        (->> (bound-results-for-var object-store var->bindings join-results v)
-                             (unique-result-value))
-                        v)
+                not-vs (if (logic-var? v)
+                         (->> (bound-results-for-var object-store var->bindings join-results v)
+                              (map :value)
+                              (set))
+                         #{v})
                 entities-to-remove (set (for [{:keys [doc entity]} results
-                                              :when (contains? (set (doc/normalize-value (get doc a))) not-v)]
+                                              :when (not-empty (set/intersection (set (doc/normalize-value (get doc a))) not-vs))]
                                           entity))]
             (update join-results e set/difference entities-to-remove))))))
 
