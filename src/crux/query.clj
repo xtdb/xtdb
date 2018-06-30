@@ -219,21 +219,13 @@
                                   a
                                   (get v-var->range-constrants v-var)
                                   business-time transact-time)
-                                 ;; TODO: what should this really be
-                                 ;; and how should it work? Needs
-                                 ;; unifying on value, but not entity.
-                                 ;; Something seems to constrain this,
-                                 ;; needs to figure out if it really
-                                 ;; works and why. Special case for
-                                 ;; this in bound-results-for-var
-                                 ;; Tests pass.
-                                 :name [::literal-e v-var]))]
+                                 :name e))]
             (merge-with into {v-var (vec indexes)} var->joins)))
         var->joins)))
 
-(defn- build-var-bindings [var->attr v-var->e-var e-var->leaf-v-var-clauses vars]
+(defn- build-var-bindings [var->attr v-var->e e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
-             :let [e-var (get v-var->e-var var)]]
+             :let [e-var (get v-var->e var)]]
          [var {:var (or e-var var)
                :attr (get var->attr var (get var->attr e-var))
                :required-attrs (some->> (get e-var->leaf-v-var-clauses (or e-var var))
@@ -244,8 +236,7 @@
 
 (defn- bound-results-for-var [object-store var->bindings join-results var]
   (let [{:keys [var attr required-attrs]} (get var->bindings var)
-        entities (or (get join-results var)
-                     (get join-results [::literal-e var]))
+        entities (get join-results var)
         content-hashes (map :content-hash entities)
         content-hash->doc (db/get-objects object-store content-hashes)]
     (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
@@ -400,16 +391,15 @@
                    unification-vars
                    not-vars
                    pred-vars]} (collect-vars type->clauses)
-           e-var->v-var-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                           :when (and (logic-var? e)
-                                                      (logic-var? v))]
-                                       clause)
-                                     (group-by :e))
-           v-var->e-var (->> (for [[e clauses] e-var->v-var-clauses
-                                   {:keys [e v]} clauses
-                                   :when (not (contains? e-vars v))]
-                               [v e])
-                             (into {}))
+           e->v-var-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                       :when (logic-var? v)]
+                                   clause)
+                                 (group-by :e))
+           v-var->e (->> (for [[e clauses] e->v-var-clauses
+                               {:keys [e v]} clauses
+                               :when (not (contains? e-vars v))]
+                           [v e])
+                         (into {}))
            e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                :when (and (logic-var? e)
                                                           (literal? v))]
@@ -455,7 +445,7 @@
            var->attr (merge v-var->attr e-var->attr)
            var+joins (vec var->joins)
            var->v-result-index (zipmap (map key var+joins) (range))
-           var->bindings (build-var-bindings var->attr v-var->e-var e-var->leaf-v-var-clauses (keys var->attr))
+           var->bindings (build-var-bindings var->attr v-var->e e-var->leaf-v-var-clauses (keys var->attr))
            unification-preds (build-unification-preds unify-clauses var->bindings var->v-result-index)
            not-constraints (build-not-constraints object-store not-clauses var->bindings)
            pred-constraints (build-pred-constraints object-store pred-clauses var->bindings var->joins)
