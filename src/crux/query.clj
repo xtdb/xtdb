@@ -229,22 +229,28 @@
              (merge {v-var (mapv :name indexes)} var->names)]))
         [var->joins var->names])))
 
-(defn- bound-results-for-var [object-store e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var join-results var]
-  (let [doc-has-required-attributes? (fn [doc var]
-                                       (->> (for [{:keys [a]} (get e-var->leaf-v-var-clauses var)]
-                                              (contains? doc a))
-                                            (every? true?)))
-        var-name (first (get var->names var))
-        attr (get var-names->attr var-name)
-        e-var (get v-var->e-var var)
-        result-var-name (if e-var
-                          (first (get var->names e-var))
-                          var-name)
-        entities (get join-results result-var-name)
+(defn- build-var-bindings [var->names var-names->attr v-var->e-var e-var->leaf-v-var-clauses vars]
+  (->> (for [var vars
+             :let [var-name (first (get var->names var))
+                   e-var (get v-var->e-var var)]]
+         [var {:var-name (if e-var
+                           (first (get var->names e-var))
+                           var-name)
+               :attr (get var-names->attr var-name)
+               :required-attrs (some->> (get e-var->leaf-v-var-clauses (or e-var var))
+                                        (not-empty)
+                                        (map :a)
+                                        (set))}])
+       (into {})))
+
+(defn- bound-results-for-var [object-store var->bindings join-results var]
+  (let [{:keys [var-name attr required-attrs]} (get var->bindings var)
+        entities (get join-results var-name)
         content-hashes (map :content-hash entities)
         content-hash->doc (db/get-objects object-store content-hashes)]
     (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-          :when (doc-has-required-attributes? doc (or e-var var))
+          :when (or (empty? required-attrs)
+                    (set/subset? required-attrs (set (keys doc))))
           value (doc/normalize-value (get doc attr))]
       {:value value
        :var var
@@ -260,7 +266,7 @@
                    (:var (first results)) " " values))))
     (first values)))
 
-(defn- build-pred-constraints [object-store pred-clauses e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var var->joins]
+(defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
   (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var->joins)]
                                [var (inc depth)])
                              (into {}))
@@ -278,7 +284,7 @@
                                        (get var->join-depth var max-depth))
                                      (reduce max))]]
       (do (doseq [var pred-vars
-                  :when (not (contains? var->names var))]
+                  :when (not (contains? var->bindings var))]
             (throw (IllegalArgumentException.
                     (str "Predicate refers to unknown variable: "
                          var " " (pr-str clause)))))
@@ -286,20 +292,19 @@
             (if (= (count join-keys) pred-join-depth)
               (let [args (for [arg args]
                            (if (logic-var? arg)
-                             (->> (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
-                                                         var-names->attr v-var->e-var join-results arg)
+                             (->> (bound-results-for-var object-store var->bindings join-results arg)
                                   (unique-result-value))
                              arg))]
                 (when (apply pred-fn args)
                   join-results))
               join-results))))))
 
-(defn- build-unification-preds [unify-clauses var->names var->v-result-index]
+(defn- build-unification-preds [unify-clauses var->bindings var->v-result-index]
   (for [{:keys [op x y]
          :as clause} unify-clauses]
     (do (doseq [arg [x y]
                 :when (and (logic-var? arg)
-                           (not (contains? var->names arg)))]
+                           (not (contains? var->bindings arg)))]
           (throw (IllegalArgumentException.
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
@@ -308,7 +313,7 @@
                         (if (logic-var? var)
                           (or (some->> (get join-keys (get var->v-result-index var))
                                        (sorted-set-by bu/bytes-comparator))
-                              (let [var-name (first (get var->names var))]
+                              (let [{:keys [var-name]} (get var->bindings var)]
                                 (some->> (get join-results var-name)
                                          (map (comp idx/id->bytes :eid))
                                          (into (sorted-set-by bu/bytes-comparator)))))
@@ -320,31 +325,28 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [object-store not-clauses e-var->leaf-v-var-clauses var->names var-names->attr v-var->e-var]
+(defn- build-not-constraints [object-store not-clauses var->bindings]
   (for [{:keys [e a v]
          :as clause} not-clauses]
     (do (doseq [arg [e v]
                 :when (and (logic-var? arg)
-                           (not (contains? var->names arg)))]
+                           (not (contains? var->bindings arg)))]
           (throw (IllegalArgumentException.
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
-          (let [results (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
-                                               var-names->attr v-var->e-var join-results e)
+          (let [results (bound-results-for-var object-store var->bindings join-results e)
                 not-v (if (logic-var? v)
-                        (->> (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
-                                                    var-names->attr v-var->e-var join-results v)
+                        (->> (bound-results-for-var object-store var->bindings join-results v)
                              (unique-result-value))
                         v)
                 entities-to-remove (set (for [{:keys [doc entity]} results
                                               :when (contains? (set (doc/normalize-value (get doc a))) not-v)]
-                                          entity))]
-            (->> (get var->names e)
-                 (reduce
-                  (fn [join-result var-name]
-                    (update join-result var-name set/difference entities-to-remove))
-                  join-results)))))))
+                                          entity))
+                {:keys [var-name]} (get var->bindings e)]
+            ;; TODO: is it safe to just do one var-name for the var?
+            ;; Not is executed at the leaf, so should probably be.
+            (update join-results var-name set/difference entities-to-remove))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
@@ -369,11 +371,11 @@
    join-results
    pred-constraints))
 
-(defn- constrain-join-result-by-join-keys [var->v-result-index var->names shared-e-v-vars join-keys join-results]
+(defn- constrain-join-result-by-join-keys [var->v-result-index var->bindings shared-e-v-vars join-keys join-results]
   (when (->> (for [e-var shared-e-v-vars
                    :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
                    :when eid-bytes
-                   var-name (get var->names e-var)
+                   :let [{:keys [var-name]} (get var->bindings e-var)]
                    entity (get join-results var-name)]
                (bu/bytes=? eid-bytes (idx/id->bytes entity)))
              (every? true?))
@@ -460,16 +462,15 @@
            var-names->attr (merge v-var-name->attr e-var-name->attr)
            var+joins (vec var->joins)
            var->v-result-index (zipmap (map key var+joins) (range))
-           unification-preds (build-unification-preds unify-clauses var->names var->v-result-index)
-           not-constraints (build-not-constraints object-store not-clauses e-var->leaf-v-var-clauses
-                                                  var->names var-names->attr v-var->e-var)
-           pred-constraints (build-pred-constraints object-store pred-clauses e-var->leaf-v-var-clauses
-                                                    var->names var-names->attr v-var->e-var var->joins)
+           var->bindings (build-var-bindings var->names var-names->attr v-var->e-var e-var->leaf-v-var-clauses (keys var->names))
+           unification-preds (build-unification-preds unify-clauses var->bindings var->v-result-index)
+           not-constraints (build-not-constraints object-store not-clauses var->bindings)
+           pred-constraints (build-pred-constraints object-store pred-clauses var->bindings var->joins)
            shared-names (mapv var->names e-vars)
            shared-e-v-vars (set/intersection e-vars v-vars)
            constrain-result-fn (fn [max-ks result]
                                  (some->> (doc/constrain-join-result-by-names shared-names max-ks result)
-                                          (constrain-join-result-by-join-keys var->v-result-index var->names shared-e-v-vars max-ks)
+                                          (constrain-join-result-by-join-keys var->v-result-index var->bindings shared-e-v-vars max-ks)
                                           (constrain-join-result-by-unification unification-preds max-ks)
                                           (constrain-join-result-by-not not-constraints var->joins max-ks)
                                           (constrain-join-result-by-preds pred-constraints max-ks)))]
@@ -483,8 +484,7 @@
                                    (doc/idx->seq))
              result (cartesian-product
                      (for [var find]
-                       (bound-results-for-var object-store e-var->leaf-v-var-clauses var->names
-                                              var-names->attr v-var->e-var join-results var)))]
+                       (bound-results-for-var object-store var->bindings join-results var)))]
          (with-meta
            (mapv :value result)
            (zipmap (map :var result) result)))))))

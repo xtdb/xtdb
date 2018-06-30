@@ -429,19 +429,22 @@
 (defn new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
-(defn constrain-join-result-by-names [shared-names max-ks result]
+(defn constrain-join-result-by-names [shared-names max-ks join-results]
   (->> shared-names
        (reduce
-        (fn [result result-names]
-          (if (and result (every? result result-names))
-            (some->> (map result result-names)
+        (fn [join-results result-names]
+          (if-let [name-results (and join-results
+                                     (->> (map join-results result-names)
+                                          (remove nil?)
+                                          (not-empty)))]
+            (some->> name-results
                      (apply set/intersection)
                      (not-empty)
                      (repeat)
                      (zipmap result-names)
-                     (merge result))
-            result))
-        result)))
+                     (merge join-results))
+            join-results))
+        join-results)))
 
 (defrecord NAryJoinVirtualIndex [unary-join-indexes constrain-result-fn join-state]
   db/Index
