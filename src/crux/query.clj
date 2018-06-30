@@ -225,18 +225,19 @@
 
 (defn- build-var-bindings [var->attr v-var->e e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
-             :let [e-var (get v-var->e var)]]
-         [var {:var (or e-var var)
-               :attr (get var->attr var (get var->attr e-var))
-               :required-attrs (some->> (get e-var->leaf-v-var-clauses (or e-var var))
+             :let [e (get v-var->e var var)]]
+         [var {:e-var e
+               :v-var var
+               :attr (get var->attr var)
+               :required-attrs (some->> (get e-var->leaf-v-var-clauses e)
                                         (not-empty)
                                         (map :a)
                                         (set))}])
        (into {})))
 
 (defn- bound-results-for-var [object-store var->bindings join-results var]
-  (let [{:keys [var attr required-attrs]} (get var->bindings var)
-        entities (get join-results var)
+  (let [{:keys [e-var v-var attr required-attrs]} (get var->bindings var)
+        entities (get join-results e-var)
         content-hashes (map :content-hash entities)
         content-hash->doc (db/get-objects object-store content-hashes)]
     (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
@@ -244,7 +245,8 @@
                     (set/subset? required-attrs (set (keys doc))))
           value (doc/normalize-value (get doc attr))]
       {:value value
-       :var var
+       :e-var e-var
+       :v-var v-var
        :attr attr
        :doc doc
        :entity entity})))
@@ -300,15 +302,15 @@
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
-          (let [[x y] (for [var [x y]]
-                        (if (logic-var? var)
-                          (or (some->> (get join-keys (get var->v-result-index var))
+          (let [[x y] (for [arg [x y]]
+                        (if (logic-var? arg)
+                          (or (some->> (get join-keys (get var->v-result-index arg))
                                        (sorted-set-by bu/bytes-comparator))
-                              (let [{:keys [var]} (get var->bindings var)]
-                                (some->> (get join-results var)
+                              (let [{:keys [e-var]} (get var->bindings arg)]
+                                (some->> (get join-results e-var)
                                          (map (comp idx/id->bytes :eid))
                                          (into (sorted-set-by bu/bytes-comparator)))))
-                          (->> (map idx/value->bytes (doc/normalize-value var))
+                          (->> (map idx/value->bytes (doc/normalize-value arg))
                                (into (sorted-set-by bu/bytes-comparator)))))]
             (if (and x y)
               (case op
@@ -334,8 +336,8 @@
                 entities-to-remove (set (for [{:keys [doc entity]} results
                                               :when (contains? (set (doc/normalize-value (get doc a))) not-v)]
                                           entity))
-                {:keys [var]} (get var->bindings e)]
-            (update join-results var set/difference entities-to-remove))))))
+                {:keys [e-var]} (get var->bindings e)]
+            (update join-results e-var set/difference entities-to-remove))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
@@ -360,12 +362,11 @@
    join-results
    pred-constraints))
 
-(defn- constrain-join-result-by-join-keys [var->v-result-index var->bindings shared-e-v-vars join-keys join-results]
+(defn- constrain-join-result-by-join-keys [var->v-result-index shared-e-v-vars join-keys join-results]
   (when (->> (for [e-var shared-e-v-vars
                    :let [eid-bytes (get join-keys (get var->v-result-index e-var))]
                    :when eid-bytes
-                   :let [{:keys [var]} (get var->bindings e-var)]
-                   entity (get join-results var)]
+                   entity (get join-results e-var)]
                (bu/bytes=? eid-bytes (idx/id->bytes entity)))
              (every? true?))
     join-results))
@@ -437,8 +438,9 @@
                                          var->joins business-time transact-time)
            var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
                                              var->joins business-time transact-time)
-           v-var->attr (->> (for [{:keys [a v]} bgp-clauses
-                                  :when (logic-var? v)]
+           v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
+                                  :when (and (logic-var? v)
+                                             (= e (get v-var->e v)))]
                               [v a])
                             (into {}))
            e-var->attr (zipmap e-vars (repeat :crux.db/id))
@@ -452,7 +454,7 @@
            shared-e-v-vars (set/intersection e-vars v-vars)
            constrain-result-fn (fn [max-ks result]
                                  (some->> (doc/constrain-join-result-by-empty-names max-ks result)
-                                          (constrain-join-result-by-join-keys var->v-result-index var->bindings shared-e-v-vars max-ks)
+                                          (constrain-join-result-by-join-keys var->v-result-index shared-e-v-vars max-ks)
                                           (constrain-join-result-by-unification unification-preds max-ks)
                                           (constrain-join-result-by-not not-constraints var->joins max-ks)
                                           (constrain-join-result-by-preds pred-constraints max-ks)))]
