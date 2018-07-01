@@ -444,31 +444,31 @@
                                         [d :name "Dominic"]
                                         [d :friends f]]}))))
 
-  #_(t/testing "clojure.core predicate filters values"
-      (t/is (= #{[:bob]}
-               (q/q (q/db *kv*) '{:find [f]
-                                  :where [[i :name "Ivan"]
-                                          [i :friends f]
-                                          (= f :bob)]}))))
+  (t/testing "clojure.core predicate filters values"
+    (t/is (= #{[:bob]}
+             (q/q (q/db *kv*) '{:find [f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        (= f :bob)]}))))
 
-  #_(t/testing "unification filters values"
-      (t/is (= #{[:bob]}
-               (q/q (q/db *kv*) '{:find [f]
-                                  :where [[i :name "Ivan"]
-                                          [i :friends f]
-                                          (== f :bob)]})))
+  (t/testing "unification filters values"
+    (t/is (= #{[:bob]}
+             (q/q (q/db *kv*) '{:find [f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        (== f :bob)]})))
 
-      (t/is (= #{[:bob] [:dominic]}
-               (q/q (q/db *kv*) '{:find [f]
-                                  :where [[i :name "Ivan"]
-                                          [i :friends f]
-                                          (== f #{:bob :dominic})]})))
+    (t/is (= #{[:bob] [:dominic]}
+             (q/q (q/db *kv*) '{:find [f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        (== f #{:bob :dominic})]})))
 
-      (t/is (= #{[:dominic]}
-               (q/q (q/db *kv*) '{:find [f]
-                                  :where [[i :name "Ivan"]
-                                          [i :friends f]
-                                          (!= f :bob)]})))))
+    (t/is (= #{[:dominic]}
+             (q/q (q/db *kv*) '{:find [f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        (!= f :bob)]})))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}

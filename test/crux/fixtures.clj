@@ -12,7 +12,7 @@
   (:import [java.io Closeable]
            [java.util Date UUID]))
 
-(defn random-person [] {:crux.db/id (str (UUID/randomUUID))
+(defn random-person [] {:crux.db/id (UUID/randomUUID)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
                         :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
                         :sex       (rand-nth [:male :female])
@@ -24,10 +24,7 @@
 (defn people->tx-ops [people ts]
   (vec (for [person people]
          [:crux.tx/put
-          (let [id (:crux.db/id person)]
-            (if (keyword? id)
-              id
-              (UUID/fromString id)))
+          (:crux.db/id person)
           person
           ts])))
 

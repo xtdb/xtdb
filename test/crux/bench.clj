@@ -6,7 +6,7 @@
             [crux.query :as q]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.kv-store :as ks])
-  (:import [java.util Date UUID]))
+  (:import [java.util Date]))
 
 (def queries {:name '{:find [e]
                       :where [[e :name "Ivan"]]}
