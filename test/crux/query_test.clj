@@ -141,7 +141,7 @@
                          :where [[e :name]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (= "Find clause references unknown variable: bah" (.getMessage e)))))
+        (t/is (= "Find refers to unknown variable: bah" (.getMessage e)))))
 
     (try
       (q/q (q/db *kv*) '{:find [x]
@@ -149,7 +149,7 @@
                                  (+ 1 bah)]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (= "Predicate clause references unknown variable: bah" (.getMessage e)))))))
+        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
@@ -271,8 +271,8 @@
                                    [e2 :last-name "Ivanov"])]})
     (t/is (= true false) "Expected assertion error")
     (catch IllegalArgumentException e
-      (t/is (= "Or clause requires same logic variable in entity position: ([{:e e1, :a :last-name, :v \"Ivanov\"}] [{:e e2, :a :last-name, :v \"Ivanov\"}])"
-               (.getMessage e))))))
+      (t/is (re-find #"Or requires same logic variable in entity position: "
+                     (.getMessage e))))))
 
 (t/deftest test-ors-can-introduce-new-bindings
   (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}

@@ -179,7 +179,7 @@
                 e-var (first or-e-vars)]
             (when (not= 1 (count or-e-vars))
               (throw (IllegalArgumentException.
-                      (str "Or clause requires same logic variable in entity position: "
+                      (str "Or requires same logic variable in entity position: "
                            (pr-str clause)))))
             (let [idx (doc/new-or-virtual-index
                        (vec (for [sub-clauses clause]
@@ -255,38 +255,51 @@
        :doc doc
        :entity entity})))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
-  (let [var->join-depth (->> (for [[depth [var]] (map-indexed vector var->joins)]
-                               [var (inc depth)])
-                             (into {}))
-        max-depth (count var->joins)]
-    (for [{:keys [pred-fn args]
-           :as clause} pred-clauses
-          :let [pred-vars (filter logic-var? args)
-                pred-join-depth (->> (for [var pred-vars]
-                                       (get var->join-depth var max-depth))
-                                     (reduce max))]]
-      (do (doseq [var pred-vars
-                  :when (not (contains? var->bindings var))]
-            (throw (IllegalArgumentException.
-                    (str "Predicate refers to unknown variable: "
-                         var " " (pr-str clause)))))
-          (fn [join-keys join-results]
-            (if (= (count join-keys) pred-join-depth)
-              ;; TODO: We probably want to split out leaf vars and
-              ;; avoid forcing them to participate in the join and
-              ;; scanning the entire index, and add predicates for
-              ;; them at the very end in the cartesian result outside
-              ;; the constrain-result-fn.
-              (when (->> (for [arg args]
-                           (if (logic-var? arg)
-                             (->> (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                  (first)
-                                  :value)
-                             arg))
-                         (apply pred-fn))
-                join-results)
-              join-results))))))
+(defn- build-pred-constraints [object-store pred-clauses var->bindings]
+  (for [{:keys [pred-fn args]
+         :as clause} pred-clauses
+        :let [pred-vars (filter logic-var? args)
+              pred-join-depths (for [var pred-vars]
+                                 (get-in var->bindings [var :result-index]))]
+        :when (not-any? nil? pred-join-depths)
+        :let [pred-join-depth (inc (apply max pred-join-depths))]]
+    (do (doseq [var pred-vars
+                :when (not (contains? var->bindings var))]
+          (throw (IllegalArgumentException.
+                  (str "Predicate refers to unknown variable: "
+                       var " " (pr-str clause)))))
+        (fn [join-keys join-results]
+          (if (= (count join-keys) pred-join-depth)
+            (when (->> (for [arg args]
+                         (if (logic-var? arg)
+                           (->> (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                (first)
+                                :value)
+                           arg))
+                       (apply pred-fn))
+              join-results)
+            join-results)))))
+
+(defn- build-leaf-pred [pred-clauses var->bindings]
+  (some->> (for [{:keys [pred-fn args]
+                  :as clause} pred-clauses
+                 :let [pred-vars (filter logic-var? args)
+                       pred-join-depths (for [var pred-vars]
+                                          (get-in var->bindings [var :result-index]))]
+                 :when (some nil? pred-join-depths)]
+             (do (doseq [var pred-vars
+                         :when (not (contains? var->bindings var))]
+                   (throw (IllegalArgumentException.
+                           (str "Predicate refers to unknown variable: "
+                                var " " (pr-str clause)))))
+                 (fn [var->result]
+                   (->> (for [arg args]
+                          (if (logic-var? arg)
+                            (get var->result arg)
+                            arg))
+                        (apply pred-fn)))))
+           (not-empty)
+           (apply every-pred)))
 
 (defn- build-unification-preds [unify-clauses var->bindings]
   (for [{:keys [op x y]
@@ -419,7 +432,7 @@
                          (and (= 1 (count (get v->v-var-clauses v)))
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
-                              (->> (for [vars [unification-vars not-vars pred-vars e-vars]]
+                              (->> (for [vars [unification-vars not-vars e-vars]]
                                      (not (contains? vars v)))
                                    (every? true?))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
@@ -450,28 +463,30 @@
            var->bindings (build-var-bindings var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses (keys var->attr))
            unification-preds (build-unification-preds unify-clauses var->bindings)
            not-constraints (build-not-constraints object-store not-clauses var->bindings)
-           pred-constraints (build-pred-constraints object-store pred-clauses var->bindings var->joins)
+           pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
            shared-e-v-vars (set/intersection e-vars v-vars)
            constrain-result-fn (fn [max-ks result]
                                  (some->> (doc/constrain-join-result-by-empty-names max-ks result)
                                           (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
                                           (constrain-join-result-by-unification unification-preds max-ks)
                                           (constrain-join-result-by-not not-constraints var->joins max-ks)
-                                          (constrain-join-result-by-preds pred-constraints max-ks)))]
+                                          (constrain-join-result-by-preds pred-constraints max-ks)))
+           leaf-pred (build-leaf-pred pred-clauses var->bindings)
+           all-vars (distinct (concat find pred-vars))]
        (doseq [var find
                :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException. (str "Find clause references unknown variable: " var))))
-       (doseq [var pred-vars
-               :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException. (str "Predicate clause references unknown variable: " var))))
+         (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
        (for [[join-keys join-results] (->> (doc/new-n-ary-join-virtual-index (vals var->joins) constrain-result-fn)
                                    (doc/idx->seq))
              result (cartesian-product
-                     (for [var find]
-                       (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                     (for [var all-vars]
+                       (bound-results-for-var object-store var->bindings join-keys join-results var)))
+             :when (or (nil? leaf-pred)
+                       (leaf-pred (zipmap all-vars (map :value result))))
+             :let [find-result (take (count find) result)]]
          (with-meta
-           (mapv :value result)
-           (zipmap (map :e-var result) result)))))))
+           (mapv :value find-result)
+           (zipmap (map :e-var find-result) find-result)))))))
 
 (defrecord QueryDatasource [kv object-store business-time transact-time])
 
