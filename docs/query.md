@@ -79,6 +79,9 @@ while running, which would be a post MVP feature.
 + [Secondary indexing with Redis](https://redis.io/topics/indexes)
 + [Leapfrog Triejoin: a worst-case optimal join
   algorithm](https://arxiv.org/abs/1210.0481)
++ [LogicBlox Technical Report: Leapfrog Triejoin: A Worst-Case Optimal
+  Join
+  Algorithm](https://developer.logicblox.com/wp-content/uploads/2013/10/LB1201_LeapfrogTriejoin.pdf)
 + [On the Way to Better SQL Joins in
   CockroachDB](https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/)
 + [Hippo: A Fast, yet Scalable, Database Indexing
