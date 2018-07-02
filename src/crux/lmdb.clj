@@ -125,15 +125,15 @@
 
 (defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
   ks/KvIterator
-  (-seek [_ k]
+  (seek [_ k]
     (with-open [stack (.push stack)]
       (let [k ^bytes k
             kb (.flip (.put (.malloc stack (alength k)) k))
             kv (.mv_data (MDBVal/callocStack stack) kb)]
         (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
-  (-next [this]
+  (next [this]
     (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
-  (-value [this]
+  (value [this]
     (bu/byte-buffer->bytes (.mv_data dv)))
 
   Closeable
@@ -196,7 +196,7 @@
       (let [stat (MDBStat/callocStack stack)]
         (LMDB/mdb_stat (:txn tx) dbi stat)
         (.ms_entries stat))))
-  
+
   Closeable
   (close [_]
     (env-close env)))

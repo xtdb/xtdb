@@ -99,8 +99,8 @@
 (defn seek [kvs k]
   (with-open [snapshot (ks/new-snapshot kvs)
               i (ks/new-iterator snapshot)]
-    (when-let [k (ks/-seek i k)]
-      [k (ks/-value i)])))
+    (when-let [k (ks/seek i k)]
+      [k (ks/value i)])))
 
 (defn value [kvs seek-k]
   (let [[k v] (seek kvs seek-k)]
@@ -111,8 +111,8 @@
   (with-open [snapshot (ks/new-snapshot kvs)
               i (ks/new-iterator snapshot)]
     (loop [acc (transient [])
-           k (ks/-seek i seek-k)]
+           k (ks/seek i seek-k)]
       (if (and k (key-pred k))
-        (recur (conj! acc [k (ks/-value i)])
-               (ks/-next i))
+        (recur (conj! acc [k (ks/value i)])
+               (ks/next i))
         (persistent! acc)))))

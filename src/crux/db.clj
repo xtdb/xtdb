@@ -1,10 +1,10 @@
 (ns crux.db)
 
 (defprotocol Index
-  (-seek-values [this k]))
+  (seek-values [this k]))
 
 (defprotocol OrderedIndex
-  (-next-values [this]))
+  (next-values [this]))
 
 (defprotocol Indexer
   (index-doc [this content-hash doc])

@@ -657,16 +657,16 @@
              [[(idx/value->bytes 1) :a]
               [(idx/value->bytes 3) :c]])]
     (t/is (= :a
-             (second (db/-seek-values idx 0))))
+             (second (db/seek-values idx 0))))
     (t/is (= :a
-             (second (db/-seek-values idx 1))))
+             (second (db/seek-values idx 1))))
     (t/is (= :c
-             (second (db/-next-values idx))))
+             (second (db/next-values idx))))
     (t/is (= :c
-             (second (db/-seek-values idx 2))))
+             (second (db/seek-values idx 2))))
     (t/is (= :c
-             (second (db/-seek-values idx 3))))
-    (t/is (nil? (db/-seek-values idx 4)))))
+             (second (db/seek-values idx 3))))
+    (t/is (nil? (db/seek-values idx 4)))))
 
 (t/deftest test-or-virtual-index
   (let [idx-1 (doc/new-sorted-virtual-index
@@ -684,33 +684,33 @@
         idx (doc/new-or-virtual-index [idx-1 idx-2 idx-3])]
     (t/testing "interleaves results in value order"
       (t/is (= :a
-               (second (db/-seek-values idx nil))))
+               (second (db/seek-values idx nil))))
       (t/is (= :b
-               (second (db/-next-values idx))))
+               (second (db/next-values idx))))
       (t/is (= :c
-               (second (db/-next-values idx))))
+               (second (db/next-values idx))))
       (t/is (= :d
-               (second (db/-next-values idx)))))
+               (second (db/next-values idx)))))
     (t/testing "shared values are returned in index order"
       (t/is (= :e1
-               (second (db/-next-values idx))))
+               (second (db/next-values idx))))
       (t/is (= :e2
-               (second (db/-next-values idx))))
+               (second (db/next-values idx))))
       (t/is (= :e3
-               (second (db/-next-values idx)))))
+               (second (db/next-values idx)))))
     (t/testing "can continue after one index is done"
       (t/is (= :f
-               (second (db/-next-values idx))))
+               (second (db/next-values idx))))
       (t/is (= :g
-               (second (db/-next-values idx)))))
+               (second (db/next-values idx)))))
     (t/testing "returns nil after all indexes are done"
-      (t/is (nil? (db/-next-values idx))))
+      (t/is (nil? (db/next-values idx))))
 
     (t/testing "can seek into indexes"
       (t/is (= :d
-               (second (db/-seek-values idx 4))))
+               (second (db/seek-values idx 4))))
       (t/is (= :e1
-               (second (db/-next-values idx)))))))
+               (second (db/next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta
   (t/is (nil? (doc/read-meta f/*kv* :foo)))

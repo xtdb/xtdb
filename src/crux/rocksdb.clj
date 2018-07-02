@@ -1,6 +1,6 @@
 (ns crux.rocksdb
   (:require [clojure.java.io :as io]
-            [crux.kv-store :refer :all])
+            [crux.kv-store :as ks])
   (:import java.io.Closeable
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
@@ -10,14 +10,14 @@
     (.key i)))
 
 (defrecord RocksKvIterator [^RocksIterator i]
-  KvIterator
-  (-seek [this k]
+  ks/KvIterator
+  (seek [this k]
     (.seek i k)
     (iterator->key i))
-  (-next [this]
+  (next [this]
     (.next i)
     (iterator->key i))
-  (-value [this]
+  (value [this]
     (.value i))
 
   Closeable
@@ -25,7 +25,7 @@
     (.close i)))
 
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
-  KvSnapshot
+  ks/KvSnapshot
   (new-iterator [this]
     (->RocksKvIterator (.newIterator db read-options)))
 
@@ -35,7 +35,7 @@
     (.releaseSnapshot db snapshot)))
 
 (defrecord RocksKv [db-dir]
-  KvStore
+  ks/KvStore
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)

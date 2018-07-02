@@ -25,36 +25,36 @@
         (if-let [value+content-hash (when (and k (bu/bytes=? current-k k prefix-size))
                                       (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
           (recur (conj acc value+content-hash)
-                 (ks/-next i))
+                 (ks/next i))
           (do (reset! peek-state k)
               (when (seq acc)
                 [(ffirst acc) (mapv second acc)])))))))
 
 (defrecord DocAttributeValueIndex [i attr peek-state]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-prefix-key attr)
-                      (ks/-seek i))]
+                      (ks/seek i))]
       (attribute-value+content-hashes-for-current-key i k attr peek-state)))
 
   db/OrderedIndex
-  (-next-values [this]
-    (when-let [k (or @peek-state (ks/-next i))]
+  (next-values [this]
+    (when-let [k (or @peek-state (ks/next i))]
       (attribute-value+content-hashes-for-current-key i k attr peek-state))))
 
 (defrecord DocLiteralAttributeValueIndex [i attr value]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (let [seek-k (idx/encode-attribute+value+content-hash-key attr value (or k idx/empty-byte-array))]
-      (when-let [^bytes k (ks/-seek i seek-k)]
+      (when-let [^bytes k (ks/seek i seek-k)]
         (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
             [(idx/value->bytes content-hash) [content-hash]])))))
 
   db/OrderedIndex
-  (-next-values [this]
-    (when-let [^bytes k (ks/-next i)]
+  (next-values [this]
+    (when-let [^bytes k (ks/next i)]
       (let [seek-k (idx/encode-attribute+value-prefix-key attr value)]
         (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
           (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
@@ -62,14 +62,14 @@
 
 (defrecord PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
-  (-seek-values [this k]
-    (when-let [value+results (db/-seek-values idx (seek-k-fn k))]
+  (seek-values [this k]
+    (when-let [value+results (db/seek-values idx (seek-k-fn k))]
       (when (pred (first value+results))
         value+results)))
 
   db/OrderedIndex
-  (-next-values [this]
-    (when-let [value+results (db/-next-values idx)]
+  (next-values [this]
+    (when-let [value+results (db/next-values idx)]
       (when (pred (first value+results))
         value+results))))
 
@@ -97,13 +97,13 @@
 
 (defrecord GreaterThanVirtualIndex [predicate-idx]
   db/Index
-  (-seek-values [this k]
-    (or (db/-seek-values predicate-idx k)
-        (db/-next-values predicate-idx)))
+  (seek-values [this k]
+    (or (db/seek-values predicate-idx k)
+        (db/next-values predicate-idx)))
 
   db/OrderedIndex
-  (-next-values [this]
-    (db/-next-values predicate-idx)))
+  (next-values [this]
+    (db/next-values predicate-idx)))
 
 (defn new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
@@ -152,10 +152,10 @@
                 i (ks/new-iterator snapshot)]
       (->> (for [seek-k (->> (map idx/encode-doc-key ks)
                              (sort bu/bytes-comparator))
-                 :let [k (ks/-seek i seek-k)]
+                 :let [k (ks/seek i seek-k)]
                  :when (and k (bu/bytes=? seek-k k))]
              [(idx/decode-doc-key k)
-              (nippy/fast-thaw (ks/-value i))])
+              (nippy/fast-thaw (ks/value i))])
            (into {}))))
 
   (put-objects [this kvs]
@@ -178,8 +178,8 @@
 (defn read-meta [kv k]
   (with-open [snapshot (ks/new-snapshot kv)
               i (ks/new-iterator snapshot)]
-    (when-let [k (ks/-seek i (idx/encode-meta-key k))]
-      (nippy/fast-thaw (ks/-value i)))))
+    (when-let [k (ks/seek i (idx/encode-meta-key k))]
+      (nippy/fast-thaw (ks/value i)))))
 
 ;; Utils
 
@@ -192,13 +192,13 @@
        (let [k (f-cons)]
          (when (and k (bu/bytes=? prefix k (alength prefix)))
            (cons (if entries?
-                   [k (ks/-value i)]
+                   [k (ks/value i)]
                    k) (step f-next f-next))))))
-    #(ks/-seek i prefix) #(ks/-next i))))
+    #(ks/seek i prefix) #(ks/next i))))
 
 (defn idx->seq [idx]
-  (when-let [result (db/-seek-values idx nil)]
-    (->> (repeatedly #(db/-next-values idx))
+  (when-let [result (db/seek-values idx nil)]
+    (->> (repeatedly #(db/next-values idx))
          (take-while identity)
          (cons result))))
 
@@ -211,27 +211,27 @@
 
 (defrecord EntityAsOfIndex [i business-time transact-time]
   db/Index
-  (db/-seek-values [this k]
+  (db/seek-values [this k]
     (let [prefix-size (+ Short/BYTES idx/id-size)
           seek-k (idx/encode-entity+bt+tt-prefix-key
                   k
                   business-time
                   transact-time)]
-      (loop [k (ks/-seek i seek-k)]
+      (loop [k (ks/seek i seek-k)]
         (when (and k (bu/bytes=? seek-k k prefix-size))
-          (let [v (ks/-value i)
+          (let [v (ks/value i)
                 entity-tx (-> (idx/decode-entity+bt+tt+tx-id-key k)
                               (enrich-entity-tx v))]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
                 [(idx/id->bytes (.eid entity-tx)) [entity-tx]])
-              (recur (ks/-next i)))))))))
+              (recur (ks/next i)))))))))
 
 (defn entities-at [snapshot entities business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
     (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
       (some->> (for [entity entities
-                     :let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+                     :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
                      :when entity-tx]
                  entity-tx)
                (not-empty)
@@ -239,7 +239,7 @@
 
 (defrecord ContentHashEntityIndex [i]
   db/Index
-  (db/-seek-values [this k]
+  (db/seek-values [this k]
     (when-let [value+results (->> (idx/encode-content-hash-prefix-key k)
                                   (all-keys-in-prefix i)
                                   (map idx/decode-content-hash+entity-key->entity)
@@ -249,9 +249,9 @@
 (defn- value+content-hashes->value+entities [content-hash-entity-idx entity-as-of-idx value+content-hashes]
   (when-let [[v content-hashes] value+content-hashes]
     (when-let [entity-txs (->> (for [content-hash content-hashes
-                                     :let [[_ entities] (db/-seek-values content-hash-entity-idx content-hash)]
+                                     :let [[_ entities] (db/seek-values content-hash-entity-idx content-hash)]
                                      entity entities
-                                     :let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+                                     :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
                                      :when (= content-hash (.content-hash ^EntityTx entity-tx))]
                                  entity-tx)
                                (seq))]
@@ -259,13 +259,13 @@
 
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
-  (-seek-values [this k]
-    (->> (db/-seek-values doc-idx k)
+  (seek-values [this k]
+    (->> (db/seek-values doc-idx k)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx)))
 
   db/OrderedIndex
-  (-next-values [this]
-    (->> (db/-next-values doc-idx)
+  (next-values [this]
+    (->> (db/next-values doc-idx)
          (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx))))
 
 (defn entities-by-attribute-value-at [snapshot attr range-constraints business-time transact-time]
@@ -299,8 +299,8 @@
 
 (defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
   db/Index
-  (-seek-values [this k]
-    (if-let [entity-tx (get @attr-state :entity-tx (let [[_ [entity-tx]] (db/-seek-values entity-as-of-idx entity)]
+  (seek-values [this k]
+    (if-let [entity-tx (get @attr-state :entity-tx (let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
                                                      entity-tx))]
       (let [content-hash (.content-hash ^EntityTx entity-tx)
             values (get @attr-state :values
@@ -316,7 +316,7 @@
       (reset! attr-state nil)))
 
   db/OrderedIndex
-  (-next-values [this]
+  (next-values [this]
     (let [{:keys [first entity-tx]} (swap! attr-state (fn [{[x & xs] :rest
                                                             :as attr-state}]
                                                         (assoc attr-state :first x :rest xs)))]
@@ -330,7 +330,7 @@
 
 (defrecord SortedVirtualIndex [values seq-state]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (let [idx (Collections/binarySearch values [(idx/value->bytes k)]
                                         (reify Comparator
                                           (compare [_ [a] [b]]
@@ -345,7 +345,7 @@
         (reset! seq-state nil))))
 
   db/OrderedIndex
-  (-next-values [this]
+  (next-values [this]
     (let [{:keys [first]} (swap! seq-state (fn [{[x & xs] :rest
                                                  :as seq-state}]
                                              (assoc seq-state :first x :rest xs)))]
@@ -363,19 +363,19 @@
 
 (defrecord OrVirtualIndex [indexes peek-state]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (reset! peek-state (vec (for [idx indexes]
-                              (db/-seek-values idx k))))
-    (db/-next-values this))
+                              (db/seek-values idx k))))
+    (db/next-values this))
 
   db/OrderedIndex
-  (-next-values [this]
+  (next-values [this]
     (let [[n value] (->> (map-indexed vector @peek-state)
                          (remove (comp nil? second))
                          (sort-by (comp first second) bu/bytes-comparator)
                          (first))]
       (when n
-        (swap! peek-state assoc n (db/-next-values (get indexes n))))
+        (swap! peek-state assoc n (db/next-values (get indexes n))))
       value)))
 
 (defn new-or-virtual-index [indexes]
@@ -389,16 +389,16 @@
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-state]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (let [iterators (->> (for [idx indexes]
-                           (new-unary-join-iterator-state idx (db/-seek-values idx k)))
+                           (new-unary-join-iterator-state idx (db/seek-values idx k)))
                          (sort-by :key bu/bytes-comparator)
                          (vec))]
       (reset! iterators-state {:iterators iterators :index 0})
-      (db/-next-values this)))
+      (db/next-values this)))
 
   db/OrderedIndex
-  (-next-values [this]
+  (next-values [this]
     (when-let [{:keys [iterators ^long index]} @iterators-state]
       (let [{:keys [key result-name idx]} (get iterators index)
             max-index (mod (dec index) (count iterators))
@@ -406,9 +406,9 @@
             match? (bu/bytes=? key max-k)
             next-value+results (if match?
                                  (do (log/debug :next result-name)
-                                     (db/-next-values idx))
+                                     (db/next-values idx))
                                  (do (log/debug :seek result-name (bu/bytes->hex max-k))
-                                     (db/-seek-values idx (reify
+                                     (db/seek-values idx (reify
                                                             idx/ValueToBytes
                                                             (value->bytes [_]
                                                               max-k)
@@ -435,22 +435,22 @@
 
 (defrecord NAryJoinVirtualIndex [unary-join-indexes constrain-result-fn join-state]
   db/Index
-  (-seek-values [this k]
+  (seek-values [this k]
     (reset! join-state {:needs-seek? true
                         :min-vs (vec k)
                         :result-stack []})
-    (db/-next-values this))
+    (db/next-values this))
 
   db/OrderedIndex
-  (-next-values [this]
+  (next-values [this]
     (let [{:keys [needs-seek? min-vs result-stack]} @join-state
           depth (count result-stack)
           max-depth (dec (count unary-join-indexes))
           idx (get unary-join-indexes depth)
           values (if needs-seek?
                    (do (swap! join-state assoc :needs-seek? false)
-                       (db/-seek-values idx (get min-vs depth)))
-                   (db/-next-values idx))
+                       (db/seek-values idx (get min-vs depth)))
+                   (db/next-values idx))
           [max-k new-values] values
           max-ks (conj (mapv first result-stack) max-k)
           [_ parent-result] (last result-stack)
@@ -492,13 +492,13 @@
 
 (defrecord SharedEntityLiteralAttributeValuesVirtualIndex [unary-join-literal-doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
-  (-seek-values [this k]
-    (->> (db/-seek-values unary-join-literal-doc-idx k)
+  (seek-values [this k]
+    (->> (db/seek-values unary-join-literal-doc-idx k)
          (values+unary-join-results->value+entities content-hash-entity-idx entity-as-of-idx)))
 
   db/OrderedIndex
-  (-next-values [this]
-    (when-let [values+unary-join-results (seq (db/-next-values unary-join-literal-doc-idx))]
+  (next-values [this]
+    (when-let [values+unary-join-results (seq (db/next-values unary-join-literal-doc-idx))]
       (or (values+unary-join-results->value+entities content-hash-entity-idx entity-as-of-idx values+unary-join-results)
           (recur)))))
 
@@ -567,20 +567,20 @@
 
 (defrecord CachedIterator [i closed-state]
   ks/KvIterator
-  (-seek [_ k]
+  (seek [_ k]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/-seek i k)))
+      (ks/seek i k)))
 
-  (-next [_]
+  (next [_]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/-next i)))
+      (ks/next i)))
 
-  (-value [_]
+  (value [_]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/-value i)))
+      (ks/value i)))
 
   Closeable
   (close [_]

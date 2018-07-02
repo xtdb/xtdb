@@ -16,17 +16,17 @@
 
 (defrecord MemKvIterator [db cursor]
   ks/KvIterator
-  (ks/-seek [this k]
+  (ks/seek [this k]
     (let [[x & xs] (subseq db >= k)]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
-  (ks/-next [this]
+  (ks/next [this]
     (some->> (swap! cursor (fn [{[x & xs] :rest}]
                              {:first x :rest xs}))
              :first
              (key)))
-  (ks/-value [this]
+  (ks/value [this]
     (some->> @cursor
              :first
              (val)))
