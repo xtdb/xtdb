@@ -686,12 +686,13 @@
                     (build-nested-index (map next prefix)))}])))
 
 (defn- relation-virtual-index-depth [iterators-state]
-  (count (get-in @iterators-state [:tree :parents-state])))
+  (dec (count (:indexes @iterators-state))))
 
 (defrecord RelationVirtualIndex [relation-name max-depth iterators-state]
   db/OrderedIndex
   (seek-values [this k]
-    (let [[k {:keys [value child-idx]}] (db/seek-values (get-in @iterators-state [:tree :idx]) k)]
+    (let [{:keys [indexes]} @iterators-state
+          [k {:keys [value child-idx]}] (db/seek-values (last indexes) k)]
       (swap! iterators-state merge {:child-idx child-idx
                                     :needs-seek? false})
       (when k
@@ -699,10 +700,10 @@
 
   db/Index
   (next-values [this]
-    (let [{:keys [needs-seek? tree]} @iterators-state]
+    (let [{:keys [needs-seek? indexes]} @iterators-state]
       (if needs-seek?
         (db/seek-values this nil)
-        (let [[k {:keys [value child-idx]}] (db/next-values (:idx tree))]
+        (let [[k {:keys [value child-idx]}] (db/next-values (last indexes))]
           (swap! iterators-state assoc :child-idx child-idx)
           (when k
             [k [value]])))))
@@ -712,28 +713,27 @@
     (when (= max-depth (relation-virtual-index-depth iterators-state))
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
     (swap! iterators-state
-           (fn [{:keys [tree child-idx]}]
-             {:tree {:idx child-idx
-                     :parents-state (conj (:parents-state tree) tree)}
+           (fn [{:keys [indexes child-idx]}]
+             {:indexes (conj indexes child-idx)
               :child-idx nil
               :needs-seek? true}))
     nil)
+
   (close-level [this]
     (when (zero? (relation-virtual-index-depth iterators-state))
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (swap! iterators-state (fn [{:keys [tree]}]
-                             {:tree (last (:parents-state tree))
+    (swap! iterators-state (fn [{:keys [indexes]}]
+                             {:indexes (pop indexes)
                               :child-idx nil
                               :needs-seek? false}))
     nil))
 
 (defn- new-relation-virtual-index [relation-name tuples]
   (let [tuples (sort tuples)
-        iterator-state (atom {:tree {:idx (build-nested-index tuples)
-                                     :parents-state []}
+        max-depth (count (first tuples))
+        iterator-state (atom {:indexes [(build-nested-index tuples)]
                               :child-idx nil
-                              :needs-seek? true})
-        max-depth (count (first tuples))]
+                              :needs-seek? true})]
     (->RelationVirtualIndex relation-name max-depth iterator-state)))
 
 ;; NOTE: variable order must align up with relation position order
