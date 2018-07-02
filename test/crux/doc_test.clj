@@ -489,50 +489,6 @@
                               {:keys [eid]} entities]
                           eid)))))))))
 
-;; TODO: does the normal n-ary-join, should evolve to support a join
-;; between n-ary joins of R(a, b), S(b, c) and T(a, c) tuples.
-(t/deftest test-n-ary-join-based-on-tuples
-  (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
-              {:crux.db/id :s40 :sb 4 :sc 0}
-              {:crux.db/id :s41 :sb 4 :sc 1}
-              {:crux.db/id :s42 :sb 4 :sc 2}
-              {:crux.db/id :s43 :sb 4 :sc 3}
-              {:crux.db/id :t70 :ta 7 :tc 0}
-              {:crux.db/id :t71 :ta 7 :tc 1}
-              {:crux.db/id :t72 :ta 7 :tc 2}]]
-    (let [tx-log (tx/->DocTxLog f/*kv*)
-          tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                [:crux.tx/put id doc])))
-          {:keys [transact-time tx-id]}
-          @(db/submit-tx tx-log tx-ops)]
-      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-        (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                         (assoc :name :r))
-              ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                         (assoc :name :t))
-              rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                         (assoc :name :r))
-              sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                         (assoc :name :s))
-              sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                         (assoc :name :s))
-              tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                         (assoc :name :t))]
-          (t/is (= #{(idx/new-id :r74)
-                     (idx/new-id :s40)
-                     (idx/new-id :s41)
-                     (idx/new-id :s42)
-                     (idx/new-id :t70)
-                     (idx/new-id :t71)
-                     (idx/new-id :t72)}
-                   (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
-                                                                                                [rb-idx sb-idx]
-                                                                                                [sc-idx tc-idx]]
-                                                                                               doc/constrain-join-result-by-empty-names))
-                              [k entities] join-results
-                              {:keys [eid]} entities]
-                          eid)))))))))
-
 (t/deftest test-literal-entity-attribute-values-virtual-index
   (let [tx-log (tx/->DocTxLog f/*kv*)
         object-store (doc/->DocObjectStore f/*kv*)
@@ -716,3 +672,138 @@
   (t/is (nil? (doc/read-meta f/*kv* :foo)))
   (doc/store-meta f/*kv* :foo {:bar 2})
   (t/is (= {:bar 2} (doc/read-meta f/*kv* :foo))))
+
+;; TODO: total spike exploring walking a relation as the above as a
+;; tree using LayeredIndex.  This will likely be cleaned up and used
+;; as a basis of parameter relations.
+(defn- build-nested-index
+  ([relation]
+   (build-nested-index [] relation))
+  ([path relation]
+   (doc/new-sorted-virtual-index
+    (for [prefix (partition-by first relation)
+          :let [value (ffirst prefix)]]
+      [(idx/value->bytes value)
+       [value
+        (when (seq? (next (first prefix)))
+          (build-nested-index (conj path value)
+                              (map next prefix)))]]))))
+
+;; TODO: should use single atom state.
+(defrecord RelationVirtualIndex [relation-name max-depth level-state idx-state values-state needs-seek-state?]
+  db/OrderedIndex
+  (seek-values [this k]
+    (reset! values-state (db/seek-values (second (:node @idx-state)) k))
+    (reset! needs-seek-state? false)
+    (when-let [[k [v]] @values-state]
+      [k [v]]))
+
+  db/Index
+  (next-values [this]
+    (if @needs-seek-state?
+      (db/seek-values this nil)
+      (reset! values-state (db/next-values (second (:node @idx-state)))))
+    (when-let [[k [v]] @values-state]
+      [k [v]]))
+
+  db/LayeredIndex
+  (open-level [this]
+    (when (= max-depth @level-state)
+      (throw (IllegalStateException.)))
+    (swap! level-state inc)
+    (reset! idx-state {:parent-state (conj (:parent-state @idx-state) @idx-state)
+                       :node (second @values-state)})
+    (reset! needs-seek-state? true)
+    nil)
+  (close-level [this]
+    (when (zero? @level-state)
+      (throw (IllegalStateException.)))
+    (swap! level-state dec)
+    (reset! idx-state (last (:parent-state @idx-state)))
+    (reset! needs-seek-state? false)
+    nil))
+
+(defn- new-relation-virtual-index [relation-name tuples]
+  (let [level-state (atom 0)
+        idx-state (atom {:node [nil (build-nested-index tuples)]
+                         :parent-state []})
+        values-state (atom nil)
+        needs-seek-state? (atom true)
+        max-depth (count (first tuples))]
+    (->RelationVirtualIndex relation-name max-depth level-state idx-state values-state needs-seek-state?)))
+
+;; NOTE: variable order must align up with relation position order
+;; here. This implies that a relation cannot use the same variable
+;; twice in two positions. All relations and the join order must be in
+;; the same order for it to work.
+(t/deftest test-n-ary-join-based-on-relational-tuples-with-layers
+  (let [r-idx (new-relation-virtual-index :r
+                                          [[7 4]])
+        s-idx (new-relation-virtual-index :s
+                                          [[4 0]
+                                           [4 1]
+                                           [4 2]
+                                           [4 3]])
+        t-idx (new-relation-virtual-index :t
+                                          [[7 0]
+                                           [7 1]
+                                           [7 2]])]
+    (t/is (= #{[7 4 0]
+               [7 4 1]
+               [7 4 2]}
+             (set (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index [[(assoc r-idx :name :a)
+                                                                                  (assoc t-idx :name :a)]
+                                                                                 [(assoc r-idx :name :b)
+                                                                                  (assoc s-idx :name :b)]
+                                                                                 [(assoc s-idx :name :c)
+                                                                                  (assoc t-idx :name :c)]]
+                                                                                doc/constrain-join-result-by-empty-names)
+                                              (doc/idx->seq))
+                        result (#'crux.query/cartesian-product
+                                (for [var [:a :b :c]]
+                                  (get join-results var)))]
+                    (vec result)))))))
+
+;; TODO: does the normal n-ary-join, should evolve to support a join
+;; between n-ary joins of R(a, b), S(b, c) and T(a, c) tuples.
+(t/deftest test-n-ary-join-based-on-tuples-without-layers
+  (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
+              {:crux.db/id :s40 :sb 4 :sc 0}
+              {:crux.db/id :s41 :sb 4 :sc 1}
+              {:crux.db/id :s42 :sb 4 :sc 2}
+              {:crux.db/id :s43 :sb 4 :sc 3}
+              {:crux.db/id :t70 :ta 7 :tc 0}
+              {:crux.db/id :t71 :ta 7 :tc 1}
+              {:crux.db/id :t72 :ta 7 :tc 2}]]
+    (let [tx-log (tx/->DocTxLog f/*kv*)
+          tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
+                                [:crux.tx/put id doc])))
+          {:keys [transact-time tx-id]}
+          @(db/submit-tx tx-log tx-ops)]
+      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+        (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                         (assoc :name :r))
+              ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                         (assoc :name :t))
+              rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                         (assoc :name :r))
+              sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                         (assoc :name :s))
+              sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                         (assoc :name :s))
+              tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                         (assoc :name :t))]
+          (t/is (= #{(idx/new-id :r74)
+                     (idx/new-id :s40)
+                     (idx/new-id :s41)
+                     (idx/new-id :s42)
+                     (idx/new-id :t70)
+                     (idx/new-id :t71)
+                     (idx/new-id :t72)}
+                   (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
+                                                                                                [rb-idx sb-idx]
+                                                                                                [sc-idx tc-idx]]
+                                                                                               doc/constrain-join-result-by-empty-names))
+                              [k entities] join-results
+                              {:keys [eid]} entities]
+                          eid)))))))))

@@ -392,44 +392,55 @@
    :result-name (:name idx (gensym "result-name"))
    :results (set results)})
 
-(defrecord UnaryJoinVirtualIndex [indexes iterators-state]
+(defrecord UnaryJoinVirtualIndex [indexes iterators-thunk-state]
   db/Index
   (seek-values [this k]
-    (let [iterators (->> (for [idx indexes]
-                           (new-unary-join-iterator-state idx (db/seek-values idx k)))
-                         (sort-by :key bu/bytes-comparator)
-                         (vec))]
-      (reset! iterators-state {:iterators iterators :index 0})
-      (db/next-values this)))
+    (->> #(let [iterators (->> (for [idx indexes]
+                                 (new-unary-join-iterator-state idx (db/seek-values idx k)))
+                               (sort-by :key bu/bytes-comparator)
+                               (vec))]
+            {:iterators iterators :index 0})
+         (reset! iterators-thunk-state))
+    (db/next-values this))
+
+  db/LayeredIndex
+  (open-level [this]
+    (doseq [idx indexes]
+      (db/open-level idx)))
+
+  (close-level [this]
+    (doseq [idx indexes]
+      (db/close-level idx)))
 
   db/OrderedIndex
   (next-values [this]
-    (when-let [{:keys [iterators ^long index]} @iterators-state]
-      (let [{:keys [key result-name idx]} (get iterators index)
-            max-index (mod (dec index) (count iterators))
-            max-k (:key (get iterators max-index))
-            match? (bu/bytes=? key max-k)
-            next-value+results (if match?
-                                 (do (log/debug :next result-name)
-                                     (db/next-values idx))
-                                 (do (log/debug :seek result-name (bu/bytes->hex max-k))
-                                     (db/seek-values idx (reify
-                                                            idx/ValueToBytes
-                                                            (value->bytes [_]
-                                                              max-k)
+    (when-let [iterators-thunk @iterators-thunk-state]
+      (when-let [{:keys [iterators ^long index]} (iterators-thunk)]
+        (let [{:keys [key result-name idx]} (get iterators index)
+              max-index (mod (dec index) (count iterators))
+              max-k (:key (get iterators max-index))
+              match? (bu/bytes=? key max-k)]
+          (->> #(let [next-value+results (if match?
+                                           (do (log/debug :next result-name)
+                                               (db/next-values idx))
+                                           (do (log/debug :seek result-name (bu/bytes->hex max-k))
+                                               (db/seek-values idx (reify
+                                                                     idx/ValueToBytes
+                                                                     (value->bytes [_]
+                                                                       max-k)
 
-                                                            idx/IdToBytes
-                                                            (id->bytes [_]
-                                                              max-k)))))]
-        (reset! iterators-state
-                (when next-value+results
-                  {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
-                   :index (mod (inc index) (count iterators))}))
-        (if match?
-          (let [names (map :result-name iterators)]
-            (log/debug :match names (bu/bytes->hex max-k))
-            [max-k (zipmap names (map :results iterators))])
-          (recur))))))
+                                                                     idx/IdToBytes
+                                                                     (id->bytes [_]
+                                                                       max-k)))))]
+                  (when next-value+results
+                    {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
+                     :index (mod (inc index) (count iterators))}))
+               (reset! iterators-thunk-state))
+          (if match?
+            (let [names (map :result-name iterators)]
+              (log/debug :match names (bu/bytes->hex max-k))
+              [max-k (zipmap names (map :results iterators))])
+            (recur)))))))
 
 (defn new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
@@ -445,15 +456,6 @@
                         :min-vs (vec k)
                         :result-stack []})
     (db/next-values this))
-
-  db/LayeredIndex
-  (open-level [this]
-    (doseq [idx unary-join-indexes]
-      (db/open-level idx)))
-
-  (close-level [this]
-    (doseq [idx unary-join-indexes]
-      (db/close-level idx)))
 
   db/OrderedIndex
   (next-values [this]
@@ -494,7 +496,7 @@
         (and (nil? values) (pos? depth))
         (do (log/debug :close-level depth)
             (swap! join-state update :result-stack pop)
-            (db/close-level idx)
+            (db/close-level (get unary-join-indexes (dec depth)))
             (recur))))))
 
 (defn new-n-ary-join-virtual-index [unary-index-groups constrain-result-fn]
