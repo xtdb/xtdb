@@ -6,6 +6,10 @@
 (defprotocol OrderedIndex
   (next-values [this]))
 
+(defprotocol LayeredIndex
+  (open-level [this])
+  (close-level [this]))
+
 (defprotocol Indexer
   (index-doc [this content-hash doc])
   (index-tx [this tx-ops tx-time tx-id])

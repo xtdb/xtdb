@@ -297,6 +297,11 @@
 
 ;; Join
 
+(extend-protocol db/LayeredIndex
+  Object
+  (open-level [_])
+  (close-level [_]))
+
 (defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
   db/Index
   (seek-values [this k]
@@ -441,6 +446,15 @@
                         :result-stack []})
     (db/next-values this))
 
+  db/LayeredIndex
+  (open-level [this]
+    (doseq [idx unary-join-indexes]
+      (db/open-level idx)))
+
+  (close-level [this]
+    (doseq [idx unary-join-indexes]
+      (db/close-level idx)))
+
   db/OrderedIndex
   (next-values [this]
     (let [{:keys [needs-seek? min-vs result-stack]} @join-state
@@ -472,13 +486,15 @@
               (do (log/debug :open-level depth)
                   (swap! join-state #(-> %
                                          (assoc :needs-seek? true)
-                                         (update :result-stack conj [max-k result]))))
+                                         (update :result-stack conj [max-k result])))
+                  (db/open-level idx))
               (log/debug :open-level-constrained (bu/bytes->hex max-k)))
             (recur))
 
         (and (nil? values) (pos? depth))
         (do (log/debug :close-level depth)
             (swap! join-state update :result-stack pop)
+            (db/close-level idx)
             (recur))))))
 
 (defn new-n-ary-join-virtual-index [unary-index-groups constrain-result-fn]
