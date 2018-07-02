@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.set :as set]
             [crux.byte-utils :as bu]
             [crux.db :as db]
             [crux.doc :as doc]
@@ -736,6 +737,59 @@
                               :needs-seek? true})]
     (->RelationVirtualIndex relation-name max-depth iterator-state)))
 
+(defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes depth-state]
+  db/Index
+  (seek-values [this k]
+    (db/seek-values (get unary-join-indexes @depth-state) k))
+
+  db/LayeredIndex
+  (open-level [this]
+    (db/open-level (get unary-join-indexes @depth-state))
+    (swap! depth-state inc)
+    nil)
+
+  (close-level [this]
+    (db/close-level (get unary-join-indexes (dec (long @depth-state))))
+    (swap! depth-state dec)
+    nil)
+
+  db/OrderedIndex
+  (next-values [this]
+    (db/next-values (get unary-join-indexes @depth-state))))
+
+(defn new-n-ary-join-layered-virtual-index [unary-index-groups]
+  (->NAryJoinLayeredVirtualIndex (mapv doc/new-unary-join-virtual-index unary-index-groups) (atom 0)))
+
+(defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
+  (let [acc (atom [])
+        step (fn step []
+               (lazy-seq
+                (if (< (long (count @acc)) max-depth)
+                  (do (when-not (zero? (long (count @acc)))
+                        (db/open-level idx))
+                      (if-let [result (db/seek-values idx nil)]
+                        (cons (swap! acc conj result) (step))
+                        (do (when (pos? (long (count @acc)))
+                              (db/close-level idx)
+                              (swap! acc pop))
+                            (when-let [result (db/next-values idx)]
+                              (cons (swap! acc conj result) (step))))))
+                  (if-let [result (db/next-values idx)]
+                    (cons (conj (butlast @acc) result) (step))
+                    (do (when (pos? (long (count @acc)))
+                          (db/close-level idx)
+                          (swap! acc pop))
+                        (when-let [result (db/next-values idx)]
+                          (cons (swap! acc conj result) (step))))))))]
+    (for [vs (step)
+          :when (= max-depth (count vs))
+          :let [join-keys (mapv first vs)
+                join-results (->> (map second vs)
+                                  (apply merge-with set/intersection)
+                                  (constrain-result-fn join-keys))]
+          :when join-results]
+      [join-keys join-results])))
+
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
 ;; twice in two positions. All relations and the join order must be in
@@ -751,18 +805,18 @@
         t-idx (new-relation-virtual-index :t
                                           [[7 0]
                                            [7 1]
-                                           [7 2]])]
+                                           [7 2]])
+        index-groups [[(assoc r-idx :name :a)
+                       (assoc t-idx :name :a)]
+                      [(assoc r-idx :name :b)
+                       (assoc s-idx :name :b)]
+                      [(assoc s-idx :name :c)
+                       (assoc t-idx :name :c)]]]
     (t/is (= #{[7 4 0]
                [7 4 1]
                [7 4 2]}
-             (set (for [[_ join-results] (->> (doc/new-n-ary-join-virtual-index [[(assoc r-idx :name :a)
-                                                                                  (assoc t-idx :name :a)]
-                                                                                 [(assoc r-idx :name :b)
-                                                                                  (assoc s-idx :name :b)]
-                                                                                 [(assoc s-idx :name :c)
-                                                                                  (assoc t-idx :name :c)]]
-                                                                                doc/constrain-join-result-by-empty-names)
-                                              (doc/idx->seq))
+             (set (for [[_ join-results] (-> (new-n-ary-join-layered-virtual-index index-groups)
+                                             (layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
                                   (get join-results var)))]
