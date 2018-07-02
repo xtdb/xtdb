@@ -477,7 +477,7 @@
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
        (for [[join-keys join-results] (->> (doc/new-n-ary-join-virtual-index (vals var->joins) constrain-result-fn)
-                                   (doc/idx->seq))
+                                           (doc/idx->seq))
              result (cartesian-product
                      (for [var all-vars]
                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
