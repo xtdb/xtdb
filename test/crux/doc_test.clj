@@ -676,61 +676,65 @@
 ;; TODO: total spike exploring walking a relation as the above as a
 ;; tree using LayeredIndex.  This will likely be cleaned up and used
 ;; as a basis of parameter relations.
-(defn- build-nested-index
-  ([relation]
-   (build-nested-index [] relation))
-  ([path relation]
-   (doc/new-sorted-virtual-index
-    (for [prefix (partition-by first relation)
-          :let [value (ffirst prefix)]]
-      [(idx/value->bytes value)
-       [value
-        (when (seq? (next (first prefix)))
-          (build-nested-index (conj path value)
-                              (map next prefix)))]]))))
+(defn- build-nested-index [tuples]
+  (doc/new-sorted-virtual-index
+   (for [prefix (partition-by first tuples)
+         :let [value (ffirst prefix)]]
+     [(idx/value->bytes value)
+      {:value value
+       :child-idx (when (seq (next (first prefix)))
+                    (build-nested-index (map next prefix)))}])))
 
-;; TODO: should use single atom state.
-(defrecord RelationVirtualIndex [relation-name max-depth level-state idx-state values-state needs-seek-state?]
+(defn- relation-virtual-index-depth [iterators-state]
+  (count (get-in @iterators-state [:tree :parents-state])))
+
+(defrecord RelationVirtualIndex [relation-name max-depth iterators-state]
   db/OrderedIndex
   (seek-values [this k]
-    (reset! values-state (db/seek-values (second (:node @idx-state)) k))
-    (reset! needs-seek-state? false)
-    (when-let [[k [v]] @values-state]
-      [k [v]]))
+    (let [[k {:keys [value child-idx]}] (db/seek-values (get-in @iterators-state [:tree :idx]) k)]
+      (swap! iterators-state merge {:child-idx child-idx
+                                    :needs-seek? false})
+      (when k
+        [k [value]])))
 
   db/Index
   (next-values [this]
-    (if @needs-seek-state?
-      (db/seek-values this nil)
-      (reset! values-state (db/next-values (second (:node @idx-state)))))
-    (when-let [[k [v]] @values-state]
-      [k [v]]))
+    (let [{:keys [needs-seek? tree]} @iterators-state]
+      (if needs-seek?
+        (db/seek-values this nil)
+        (let [[k {:keys [value child-idx]}] (db/next-values (:idx tree))]
+          (swap! iterators-state assoc :child-idx child-idx)
+          (when k
+            [k [value]])))))
 
   db/LayeredIndex
   (open-level [this]
-    (when (= max-depth @level-state)
-      (throw (IllegalStateException.)))
-    (swap! level-state inc)
-    (reset! idx-state {:parent-state (conj (:parent-state @idx-state) @idx-state)
-                       :node (second @values-state)})
-    (reset! needs-seek-state? true)
+    (when (= max-depth (relation-virtual-index-depth iterators-state))
+      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
+    (swap! iterators-state
+           (fn [{:keys [tree child-idx]}]
+             {:tree {:idx child-idx
+                     :parents-state (conj (:parents-state tree) tree)}
+              :child-idx nil
+              :needs-seek? true}))
     nil)
   (close-level [this]
-    (when (zero? @level-state)
-      (throw (IllegalStateException.)))
-    (swap! level-state dec)
-    (reset! idx-state (last (:parent-state @idx-state)))
-    (reset! needs-seek-state? false)
+    (when (zero? (relation-virtual-index-depth iterators-state))
+      (throw (IllegalStateException. "Cannot close level at root.")))
+    (swap! iterators-state (fn [{:keys [tree]}]
+                             {:tree (last (:parents-state tree))
+                              :child-idx nil
+                              :needs-seek? false}))
     nil))
 
 (defn- new-relation-virtual-index [relation-name tuples]
-  (let [level-state (atom 0)
-        idx-state (atom {:node [nil (build-nested-index tuples)]
-                         :parent-state []})
-        values-state (atom nil)
-        needs-seek-state? (atom true)
+  (let [tuples (sort tuples)
+        iterator-state (atom {:tree {:idx (build-nested-index tuples)
+                                     :parents-state []}
+                              :child-idx nil
+                              :needs-seek? true})
         max-depth (count (first tuples))]
-    (->RelationVirtualIndex relation-name max-depth level-state idx-state values-state needs-seek-state?)))
+    (->RelationVirtualIndex relation-name max-depth iterator-state)))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
