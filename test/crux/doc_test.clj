@@ -807,3 +807,72 @@
                                     (for [var [:x]]
                                       (get join-results var)))]
                         (vec result)))))))))
+
+(t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
+  (let [p-idx (doc/new-relation-virtual-index :p
+                                              [[1 3]
+                                               [2 4]
+                                               [2 20]]
+                                              2)
+        q-idx (doc/new-relation-virtual-index :q
+                                              [[1 10]
+                                               [2 20]
+                                               [3 30]]
+                                              2)
+        index-groups [[(assoc p-idx :name :x)
+                       (assoc q-idx :name :x)]
+                      [(assoc p-idx :name :y)]
+                      [(assoc q-idx :name :z)]]]
+    (t/testing "conjunction"
+      (t/is (= #{[1 3 10]
+                 [2 4 20]
+                 [2 20 20]}
+               (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                                               (doc/new-n-ary-join-layered-virtual-index)
+                                               (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
+                          result (#'crux.query/cartesian-product
+                                  (for [var [:x :y :z]]
+                                    (get join-results var)))]
+                      (vec result))))))
+
+    (t/testing "disjunction"
+      (let [zero-idx (doc/new-relation-virtual-index :zero
+                                                     [[0]]
+                                                     1)
+            lhs-index (doc/new-n-ary-join-layered-virtual-index
+                       [(doc/new-unary-join-virtual-index [(assoc p-idx :name :x)])
+                        (doc/new-unary-join-virtual-index [(assoc p-idx :name :y)])
+                        (doc/new-unary-join-virtual-index [(assoc zero-idx :name :z)])])]
+        (t/is (= #{[1 3 0]
+                   [2 4 0]
+                   [2 20 0]}
+                 (set (for [[_ join-results] (doc/layered-idx->seq lhs-index 3 doc/constrain-join-result-by-empty-names)
+                            result (#'crux.query/cartesian-product
+                                    (for [var [:x :y :z]]
+                                      (get join-results var)))]
+                        (vec result)))))
+        (let [rhs-index (doc/new-n-ary-join-layered-virtual-index
+                         [(doc/new-unary-join-virtual-index [(assoc q-idx :name :x)])
+                          (doc/new-unary-join-virtual-index [(assoc zero-idx :name :y)])
+                          (doc/new-unary-join-virtual-index [(assoc q-idx :name :z)])])]
+          (t/is (= #{[1 0 10]
+                     [2 0 20]
+                     [3 0 30]}
+                   (set (for [[_ join-results] (doc/layered-idx->seq rhs-index 3 doc/constrain-join-result-by-empty-names)
+                              result (#'crux.query/cartesian-product
+                                      (for [var [:x :y :z]]
+                                        (get join-results var)))]
+                          (vec result)))))
+          ;; TODO: implement. Do we need to specify the vars?
+          #_(let [n-ary-or (doc/new-n-ary-or-layered-virtual-index [lhs-index rhs-index])]
+              (t/is (= #{[1 3 0]
+                         [2 4 0]
+                         [1 0 10]
+                         [2 0 20]
+                         [2 20 0]
+                         [3 0 30]}
+                       (set (for [[_ join-results] (doc/layered-idx->seq n-ary-or 3 doc/constrain-join-result-by-empty-names)
+                                  result (#'crux.query/cartesian-product
+                                          (for [var [:x :y :z]]
+                                            (get join-results var)))]
+                              (vec result)))))))))))
