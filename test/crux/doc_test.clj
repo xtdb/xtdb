@@ -415,10 +415,11 @@
                            (assoc :name :s))
                 tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
                            (assoc :name :t))
-                result (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
-                                                                        [rb-idx sb-idx]
-                                                                        [sc-idx tc-idx]]
-                                                                       doc/constrain-join-result-by-empty-names))]
+                index-groups [[ra-idx ta-idx]
+                              [rb-idx sb-idx]
+                              [sc-idx tc-idx]]
+                result (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                           (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -478,14 +479,15 @@
               sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
                          (assoc :name :s))
               tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                         (assoc :name :t))]
+                         (assoc :name :t))
+              index-groups [[ra-idx ta-idx]
+                            [rb-idx sb-idx]
+                            [sc-idx tc-idx]]]
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
-                   (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
-                                                                                                [rb-idx sb-idx]
-                                                                                                [sc-idx tc-idx]]
-                                                                                               doc/constrain-join-result-by-empty-names))
+                   (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                                                   (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
@@ -674,153 +676,29 @@
   (doc/store-meta f/*kv* :foo {:bar 2})
   (t/is (= {:bar 2} (doc/read-meta f/*kv* :foo))))
 
-;; TODO: total spike exploring walking a relation as the above as a
-;; tree using LayeredIndex.  This will likely be cleaned up and used
-;; as a basis of parameter relations.
-(defn- build-nested-index [tuples]
-  (doc/new-sorted-virtual-index
-   (for [prefix (partition-by first tuples)
-         :let [value (ffirst prefix)]]
-     [(idx/value->bytes value)
-      {:value value
-       :child-idx (when (seq (next (first prefix)))
-                    (build-nested-index (map next prefix)))}])))
-
-(defn- relation-virtual-index-depth [iterators-state]
-  (dec (count (:indexes @iterators-state))))
-
-(defrecord RelationVirtualIndex [relation-name max-depth iterators-state]
-  db/OrderedIndex
-  (seek-values [this k]
-    (let [{:keys [indexes]} @iterators-state]
-      (when-let [idx (last indexes)]
-        (let [[k {:keys [value child-idx]}] (db/seek-values idx k)]
-          (swap! iterators-state merge {:child-idx child-idx
-                                        :needs-seek? false})
-          (when k
-            [k [value]])))))
-
-  db/Index
-  (next-values [this]
-    (let [{:keys [needs-seek? indexes]} @iterators-state]
-      (if needs-seek?
-        (db/seek-values this nil)
-        (when-let [idx (last indexes)]
-          (let [[k {:keys [value child-idx]}] (db/next-values idx)]
-            (swap! iterators-state assoc :child-idx child-idx)
-            (when k
-              [k [value]]))))))
-
-  db/LayeredIndex
-  (open-level [this]
-    (when (= max-depth (relation-virtual-index-depth iterators-state))
-      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (swap! iterators-state
-           (fn [{:keys [indexes child-idx]}]
-             {:indexes (conj indexes child-idx)
-              :child-idx nil
-              :needs-seek? true}))
-    nil)
-
-  (close-level [this]
-    (when (zero? (relation-virtual-index-depth iterators-state))
-      (throw (IllegalStateException. "Cannot close level at root.")))
-    (swap! iterators-state (fn [{:keys [indexes]}]
-                             {:indexes (pop indexes)
-                              :child-idx nil
-                              :needs-seek? false}))
-    nil))
-
-(defn- new-relation-virtual-index [relation-name tuples max-depth]
-  (let [tuples (sort tuples)
-        iterator-state (atom {:indexes [(build-nested-index tuples)]
-                              :child-idx nil
-                              :needs-seek? true})]
-    (->RelationVirtualIndex relation-name max-depth iterator-state)))
-
-(defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes depth-state]
-  db/Index
-  (seek-values [this k]
-    (db/seek-values (get unary-join-indexes @depth-state) k))
-
-  db/LayeredIndex
-  (open-level [this]
-    (db/open-level (get unary-join-indexes @depth-state))
-    (swap! depth-state inc)
-    nil)
-
-  (close-level [this]
-    (db/close-level (get unary-join-indexes (dec (long @depth-state))))
-    (swap! depth-state dec)
-    nil)
-
-  db/OrderedIndex
-  (next-values [this]
-    (db/next-values (get unary-join-indexes @depth-state))))
-
-(defn new-n-ary-join-layered-virtual-index [unary-index-groups]
-  (->NAryJoinLayeredVirtualIndex (mapv doc/new-unary-join-virtual-index unary-index-groups) (atom 0)))
-
-(defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
-  (let [build-result (fn [acc [k v]]
-                       (let [[acc-k acc-v] (last acc)
-                             join-keys (conj (or acc-k []) k)]
-                         (when-let [join-results (->> (merge-with set/intersection acc-v v)
-                                                      (constrain-result-fn join-keys))]
-                           (conj acc [join-keys join-results]))))
-        build-leaf-results (fn [acc idx]
-                             (->> (doc/idx->seq idx)
-                                  (reduce
-                                   (fn [leaf-results result]
-                                     (when leaf-results
-                                       (when-let [leaf-result (build-result acc result)]
-                                         (conj leaf-results (last leaf-result)))))
-                                   [])))
-        step (fn step [acc depth needs-seek?]
-               (let [open-level (fn [result]
-                                  (db/open-level idx)
-                                  (if-let [acc (build-result acc result)]
-                                    (step acc (inc depth) true)
-                                    (db/close-level idx)))
-                     close-level (fn []
-                                   (when (pos? depth)
-                                     (db/close-level idx)
-                                     (step (pop acc) (dec depth) false)))]
-                 (lazy-seq
-                  (if (= depth (dec max-depth))
-                    (if-let [leaf-results (build-leaf-results acc idx)]
-                      (concat leaf-results (close-level))
-                      (close-level))
-                    (if needs-seek?
-                      (open-level (db/seek-values idx nil))
-                      (if-let [result (db/next-values idx)]
-                        (open-level result)
-                        (close-level)))))))]
-    (step [] 0 true)))
-
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
 ;; twice in two positions. All relations and the join order must be in
 ;; the same order for it to work.
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-layers
-  (let [r-idx (new-relation-virtual-index :r
-                                          [[7 4]
-                                           ;; extra sanity check
-                                           [8 4]]
-                                          2)
-        s-idx (new-relation-virtual-index :s
-                                          [[4 0]
-                                           [4 1]
-                                           [4 2]
-                                           [4 3]]
-                                          2)
-        t-idx (new-relation-virtual-index :t
-                                          [[7 0]
-                                           [7 1]
-                                           [7 2]
-                                           [8 1]
-                                           [8 2]]
-                                          2)
+  (let [r-idx (doc/new-relation-virtual-index :r
+                                              [[7 4]
+                                               ;; extra sanity check
+                                               [8 4]]
+                                              2)
+        s-idx (doc/new-relation-virtual-index :s
+                                              [[4 0]
+                                               [4 1]
+                                               [4 2]
+                                               [4 3]]
+                                              2)
+        t-idx (doc/new-relation-virtual-index :t
+                                              [[7 0]
+                                               [7 1]
+                                               [7 2]
+                                               [8 1]
+                                               [8 2]]
+                                              2)
         index-groups [[(assoc r-idx :name :a)
                        (assoc t-idx :name :a)]
                       [(assoc r-idx :name :b)
@@ -832,8 +710,8 @@
                [7 4 2]
                [8 4 1]
                [8 4 2]}
-             (set (for [[_ join-results] (-> (new-n-ary-join-layered-virtual-index index-groups)
-                                             (layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
+             (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                                             (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
                                   (get join-results var)))]
@@ -867,7 +745,10 @@
               sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
                          (assoc :name :s))
               tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                         (assoc :name :t))]
+                         (assoc :name :t))
+              index-groups [[ra-idx ta-idx]
+                            [rb-idx sb-idx]
+                            [sc-idx tc-idx]]]
           (t/is (= #{(idx/new-id :r74)
                      (idx/new-id :s40)
                      (idx/new-id :s41)
@@ -875,10 +756,8 @@
                      (idx/new-id :t70)
                      (idx/new-id :t71)
                      (idx/new-id :t72)}
-                   (set (for [[v join-results] (doc/idx->seq (doc/new-n-ary-join-virtual-index [[ra-idx ta-idx]
-                                                                                                [rb-idx sb-idx]
-                                                                                                [sc-idx tc-idx]]
-                                                                                               doc/constrain-join-result-by-empty-names))
+                   (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                                                   (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
