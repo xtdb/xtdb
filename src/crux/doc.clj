@@ -504,17 +504,28 @@
                        (bu/compare-bytes (first lhs-value) (first rhs-value))))]
       (cond
         (zero? diff)
-        (do (swap! or-state update-in [:lhs :depth] inc)
+        (do (swap! or-state #(-> %
+                                 (update-in [:lhs :depth] inc)
+                                 (assoc-in [:lhs :last] nil)
+                                 (update-in [:lhs :parent-peek] conj (get-in % [:lhs :peek]))
+                                 (update-in [:rhs :depth] inc)
+                                 (assoc-in [:rhs :last] nil)
+                                 (update-in [:rhs :parent-peek] conj (get-in % [:rhs :peek]))))
             (db/open-level lhs)
-            (swap! or-state update-in [:rhs :depth] inc)
             (db/open-level rhs))
 
         (and (= lhs-depth depth) lhs-value (neg? diff))
-        (do (swap! or-state update-in [:lhs :depth] inc)
+        (do (swap! or-state #(-> %
+                                 (update-in [:lhs :depth] inc)
+                                 (assoc-in [:lhs :last] nil)
+                                 (update-in [:lhs :parent-peek] conj (get-in % [:lhs :peek]))))
             (db/open-level lhs))
 
         (and (= rhs-depth depth) rhs-value (pos? diff))
-        (do (swap! or-state update-in [:rhs :depth] inc)
+        (do (swap! or-state #(-> %
+                                 (update-in [:rhs :depth] inc)
+                                 (assoc-in [:rhs :last] nil)
+                                 (update-in [:rhs :parent-peek] conj (get-in % [:rhs :peek]))))
             (db/open-level rhs))))
     nil)
 
@@ -523,11 +534,19 @@
           rhs-depth (long (get-in @or-state [:rhs :depth]))
           depth (max lhs-depth rhs-depth)]
       (when (= lhs-depth depth)
-        (swap! or-state update-in [:lhs :depth] dec)
+        (swap! or-state #(-> %
+                             (update-in [:lhs :depth] dec)
+                             (assoc-in [:lhs :last] nil)
+                             (assoc-in [:lhs :peek] (last (get-in % [:lhs :parent-peek])))
+                             (update-in [:lhs :parent-peek] pop)))
         (db/close-level lhs))
 
       (when (= rhs-depth depth)
-        (swap! or-state update-in [:rhs :depth] dec)
+        (swap! or-state #(-> %
+                             (update-in [:rhs :depth] dec)
+                             (assoc-in [:rhs :last] nil)
+                             (assoc-in [:rhs :peek] (last (get-in % [:rhs :parent-peek])))
+                             (update-in [:rhs :parent-peek] pop)))
         (db/close-level rhs)))
     nil)
 
@@ -571,8 +590,8 @@
             rhs-value)))))
 
 (defn new-n-ary-or-layered-virtual-index [lhs rhs]
-  (->NAryOrLayeredVirtualIndex lhs rhs (atom {:lhs {:peek nil :depth 0}
-                                              :rhs {:peek nil :depth 0}})))
+  (->NAryOrLayeredVirtualIndex lhs rhs (atom {:lhs {:depth 0 :last nil :peek nil :parent-peek []}
+                                              :rhs {:depth 0 :last nil :peek nil :parent-peek []}})))
 
 (defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
   (let [build-result (fn [result-stack [max-k new-values]]
