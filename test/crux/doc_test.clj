@@ -680,7 +680,7 @@
 ;; here. This implies that a relation cannot use the same variable
 ;; twice in two positions. All relations and the join order must be in
 ;; the same order for it to work.
-(t/deftest test-n-ary-join-based-on-relational-tuples-with-layers
+(t/deftest test-n-ary-join-based-on-relational-tuples
   (let [r-idx (doc/new-relation-virtual-index :r
                                               [[7 4]
                                                ;; extra sanity check
@@ -715,49 +715,47 @@
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
                                   (get join-results var)))]
-                    (vec result)))))))
+                    (vec result)))))
 
-;; TODO: does the normal n-ary-join, should evolve to support a join
-;; between n-ary joins of R(a, b), S(b, c) and T(a, c) tuples.
-(t/deftest test-n-ary-join-based-on-tuples-without-layers
-  (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
-              {:crux.db/id :s40 :sb 4 :sc 0}
-              {:crux.db/id :s41 :sb 4 :sc 1}
-              {:crux.db/id :s42 :sb 4 :sc 2}
-              {:crux.db/id :s43 :sb 4 :sc 3}
-              {:crux.db/id :t70 :ta 7 :tc 0}
-              {:crux.db/id :t71 :ta 7 :tc 1}
-              {:crux.db/id :t72 :ta 7 :tc 2}]]
-    (let [tx-log (tx/->DocTxLog f/*kv*)
-          tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                [:crux.tx/put id doc])))
-          {:keys [transact-time tx-id]}
-          @(db/submit-tx tx-log tx-ops)]
-      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-        (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                         (assoc :name :r))
-              ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                         (assoc :name :t))
-              rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                         (assoc :name :r))
-              sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                         (assoc :name :s))
-              sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                         (assoc :name :s))
-              tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                         (assoc :name :t))
-              index-groups [[ra-idx ta-idx]
-                            [rb-idx sb-idx]
-                            [sc-idx tc-idx]]]
-          (t/is (= #{(idx/new-id :r74)
-                     (idx/new-id :s40)
-                     (idx/new-id :s41)
-                     (idx/new-id :s42)
-                     (idx/new-id :t70)
-                     (idx/new-id :t71)
-                     (idx/new-id :t72)}
-                   (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
-                                                   (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
-                              [k entities] join-results
-                              {:keys [eid]} entities]
-                          eid)))))))))
+    (t/testing "same join with kv indexes"
+      (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
+                  {:crux.db/id :s40 :sb 4 :sc 0}
+                  {:crux.db/id :s41 :sb 4 :sc 1}
+                  {:crux.db/id :s42 :sb 4 :sc 2}
+                  {:crux.db/id :s43 :sb 4 :sc 3}
+                  {:crux.db/id :t70 :ta 7 :tc 0}
+                  {:crux.db/id :t71 :ta 7 :tc 1}
+                  {:crux.db/id :t72 :ta 7 :tc 2}]]
+        (let [tx-log (tx/->DocTxLog f/*kv*)
+              tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
+                                    [:crux.tx/put id doc])))
+              {:keys [transact-time tx-id]}
+              @(db/submit-tx tx-log tx-ops)]
+          (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+            (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                             (assoc :name :r))
+                  ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                             (assoc :name :t))
+                  rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                             (assoc :name :r))
+                  sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                             (assoc :name :s))
+                  sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                             (assoc :name :s))
+                  tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                             (assoc :name :t))
+                  index-groups [[ra-idx ta-idx]
+                                [rb-idx sb-idx]
+                                [sc-idx tc-idx]]]
+              (t/is (= #{(idx/new-id :r74)
+                         (idx/new-id :s40)
+                         (idx/new-id :s41)
+                         (idx/new-id :s42)
+                         (idx/new-id :t70)
+                         (idx/new-id :t71)
+                         (idx/new-id :t72)}
+                       (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                                                       (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
+                                  [k entities] join-results
+                                  {:keys [eid]} entities]
+                              eid)))))))))))
