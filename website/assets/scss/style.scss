@@ -1,0 +1,62 @@
+$grey-colour: #494949;
+$red-colour: #E94D4E;
+@import url('https://fonts.googleapis.com/css?family=Open+Sans');
+
+body {
+  background-color: white;
+}
+
+header {
+  width: 100%;
+  top: 0px;
+  height: 60px;
+  background-color: $grey-colour;
+
+  nav {
+    position: relative;
+    top: 15px;
+    float: right;
+    a {
+      color: white;
+      padding-right: 60px;
+    }
+  }
+}
+
+h1,h2,h3,h4, p {
+  font-family: 'Open Sans', sans-serif;
+  color: $grey-colour;
+}
+
+h1 {
+  font-size: 40px;
+}
+
+h2 {
+  font-weight: lighter;
+}
+
+.ui.button {
+  border-radius: 0;
+}
+
+.ui.basic.negative.button {
+  border-radius: 0;
+}
+
+section {
+  width: 75%;
+  margin-top: 100px;
+  position: relative;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#title-section {
+  text-align: center;
+}
+
+#features {
+  position: relative;
+  width: 50%;
+}
