@@ -505,7 +505,8 @@
                                       (db/next-values idx))]
                       (open-level result)
                       (close-level))))))]
-    (step [] 0 true)))
+    (when (pos? max-depth)
+      (step [] 0 true))))
 
 (defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
   (when-let [[content-hash] content-hash+unary-join-results]
