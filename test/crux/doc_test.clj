@@ -692,22 +692,24 @@
 (defrecord RelationVirtualIndex [relation-name max-depth iterators-state]
   db/OrderedIndex
   (seek-values [this k]
-    (let [{:keys [indexes]} @iterators-state
-          [k {:keys [value child-idx]}] (db/seek-values (last indexes) k)]
-      (swap! iterators-state merge {:child-idx child-idx
-                                    :needs-seek? false})
-      (when k
-        [k [value]])))
+    (let [{:keys [indexes]} @iterators-state]
+      (when-let [idx (last indexes)]
+        (let [[k {:keys [value child-idx]}] (db/seek-values idx k)]
+          (swap! iterators-state merge {:child-idx child-idx
+                                        :needs-seek? false})
+          (when k
+            [k [value]])))))
 
   db/Index
   (next-values [this]
     (let [{:keys [needs-seek? indexes]} @iterators-state]
       (if needs-seek?
         (db/seek-values this nil)
-        (let [[k {:keys [value child-idx]}] (db/next-values (last indexes))]
-          (swap! iterators-state assoc :child-idx child-idx)
-          (when k
-            [k [value]])))))
+        (when-let [idx (last indexes)]
+          (let [[k {:keys [value child-idx]}] (db/next-values idx)]
+            (swap! iterators-state assoc :child-idx child-idx)
+            (when k
+              [k [value]]))))))
 
   db/LayeredIndex
   (open-level [this]
@@ -729,9 +731,8 @@
                               :needs-seek? false}))
     nil))
 
-(defn- new-relation-virtual-index [relation-name tuples]
+(defn- new-relation-virtual-index [relation-name tuples max-depth]
   (let [tuples (sort tuples)
-        max-depth (count (first tuples))
         iterator-state (atom {:indexes [(build-nested-index tuples)]
                               :child-idx nil
                               :needs-seek? true})]
@@ -761,31 +762,41 @@
   (->NAryJoinLayeredVirtualIndex (mapv doc/new-unary-join-virtual-index unary-index-groups) (atom 0)))
 
 (defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
-  (let [step (fn step [acc depth needs-seek?]
-               (lazy-seq
-                (if (= depth (dec max-depth))
-                  (concat (vec (for [x (doc/idx->seq idx)]
-                                 (conj acc x)))
-                          (when (pos? depth)
-                            (db/close-level idx)
-                            (step (pop acc) (dec depth) false)))
-                  (if needs-seek?
-                    (let [result (db/seek-values idx nil)]
-                      (db/open-level idx)
-                      (step (conj acc result) (inc depth) true))
-                    (if-let [result (db/next-values idx)]
-                      (do (db/open-level idx)
-                          (step (conj acc result) (inc depth) true))
-                      (when (pos? depth)
-                        (db/close-level idx)
-                        (step (pop acc) (dec depth) false)))))))]
-    (for [vs (step [] 0 true)
-          :let [join-keys (mapv first vs)
-                join-results (->> (map second vs)
-                                  (apply merge-with set/intersection)
-                                  (constrain-result-fn join-keys))]
-          :when join-results]
-      [join-keys join-results])))
+  (let [build-result (fn [acc [k v]]
+                       (let [[acc-k acc-v] (last acc)
+                             join-keys (conj (or acc-k []) k)]
+                         (when-let [join-results (->> (merge-with set/intersection acc-v v)
+                                                      (constrain-result-fn join-keys))]
+                           (conj acc [join-keys join-results]))))
+        build-leaf-results (fn [acc idx]
+                             (->> (doc/idx->seq idx)
+                                  (reduce
+                                   (fn [leaf-results result]
+                                     (when leaf-results
+                                       (when-let [leaf-result (build-result acc result)]
+                                         (conj leaf-results (last leaf-result)))))
+                                   [])))
+        step (fn step [acc depth needs-seek?]
+               (let [open-level (fn [result]
+                                  (db/open-level idx)
+                                  (if-let [acc (build-result acc result)]
+                                    (step acc (inc depth) true)
+                                    (db/close-level idx)))
+                     close-level (fn []
+                                   (when (pos? depth)
+                                     (db/close-level idx)
+                                     (step (pop acc) (dec depth) false)))]
+                 (lazy-seq
+                  (if (= depth (dec max-depth))
+                    (if-let [leaf-results (build-leaf-results acc idx)]
+                      (concat leaf-results (close-level))
+                      (close-level))
+                    (if needs-seek?
+                      (open-level (db/seek-values idx nil))
+                      (if-let [result (db/next-values idx)]
+                        (open-level result)
+                        (close-level)))))))]
+    (step [] 0 true)))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
@@ -795,18 +806,21 @@
   (let [r-idx (new-relation-virtual-index :r
                                           [[7 4]
                                            ;; extra sanity check
-                                           [8 4]])
+                                           [8 4]]
+                                          2)
         s-idx (new-relation-virtual-index :s
                                           [[4 0]
                                            [4 1]
                                            [4 2]
-                                           [4 3]])
+                                           [4 3]]
+                                          2)
         t-idx (new-relation-virtual-index :t
                                           [[7 0]
                                            [7 1]
                                            [7 2]
                                            [8 1]
-                                           [8 2]])
+                                           [8 2]]
+                                          2)
         index-groups [[(assoc r-idx :name :a)
                        (assoc t-idx :name :a)]
                       [(assoc r-idx :name :b)
