@@ -372,9 +372,9 @@
 
     (t/testing "Not predicate"
       (t/is (= #{["Ivan"]}
-             (q/q (q/db *kv*) '{:find [name]
-                                :where [[e :name name]
-                                        (not (re-find #"o" name))]}))))
+               (q/q (q/db *kv*) '{:find [name]
+                                  :where [[e :name name]
+                                          (not (re-find #"o" name))]}))))
 
     (t/testing "Entity variable"
       (t/is (= #{["Ivan"]}
@@ -613,12 +613,12 @@
 
   (t/testing "unify with entity"
     (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [n]
-                                           :where [[p :name n]
-                                                   (== p :petr)]})))
+                                            :where [[p :name n]
+                                                    (== p :petr)]})))
 
     (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [n]
-                                           :where [[i :name n]
-                                                   (!= i :petr)]}))))
+                                            :where [[i :name n]
+                                                    (!= i :petr)]}))))
 
   (t/testing "multiple literals in set"
     (t/is (= #{[:petr] [:ivan]} (q/q (q/db *kv*) '{:find [p]
