@@ -418,7 +418,8 @@
                 index-groups [[ra-idx ta-idx]
                               [rb-idx sb-idx]
                               [sc-idx tc-idx]]
-                result (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                result (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                           (doc/new-n-ary-join-layered-virtual-index)
                            (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
@@ -486,7 +487,8 @@
           (t/is (= #{(idx/new-id :r13)
                      (idx/new-id :s34)
                      (idx/new-id :t14)}
-                   (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                   (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                                                   (doc/new-n-ary-join-layered-virtual-index)
                                                    (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                               [k entities] join-results
                               {:keys [eid]} entities]
@@ -710,7 +712,8 @@
                [7 4 2]
                [8 4 1]
                [8 4 2]}
-             (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+             (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                                             (doc/new-n-ary-join-layered-virtual-index)
                                              (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
@@ -754,8 +757,53 @@
                          (idx/new-id :t70)
                          (idx/new-id :t71)
                          (idx/new-id :t72)}
-                       (set (for [[v join-results] (-> (doc/new-n-ary-join-layered-virtual-index index-groups)
+                       (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                                                       (doc/new-n-ary-join-layered-virtual-index)
                                                        (doc/layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                                   [k entities] join-results
                                   {:keys [eid]} entities]
                               eid)))))))))))
+
+(t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
+  (let [p-idx (doc/new-relation-virtual-index :p
+                                              [[1]
+                                               [2]
+                                               [3]]
+                                              1)
+        q-idx (doc/new-relation-virtual-index :q
+                                              [[2]
+                                               [3]
+                                               [4]]
+                                              1)
+        r-idx (doc/new-relation-virtual-index :r
+                                              [[3]
+                                               [4]
+                                               [5]]
+                                              1)]
+    (t/testing "conjunction"
+      (let [unary-and-idx (doc/new-unary-join-virtual-index [(assoc p-idx :name :x)
+                                                             (assoc q-idx :name :x)
+                                                             (assoc r-idx :name :x)])]
+        (t/is (= #{[3]}
+                 (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-and-idx])
+                                                 (doc/layered-idx->seq 1 doc/constrain-join-result-by-empty-names))
+                            result (#'crux.query/cartesian-product
+                                    (for [var [:x]]
+                                      (get join-results var)))]
+                        (vec result)))))))
+
+    (t/testing "disjunction"
+      (let [unary-or-idx (doc/new-or-virtual-index
+                          [(doc/new-unary-join-virtual-index [(assoc p-idx :name :x)])
+                           (doc/new-unary-join-virtual-index [(assoc q-idx :name :x)
+                                                              (assoc r-idx :name :x)])])]
+        (t/is (= #{[1]
+                   [2]
+                   [3]
+                   [4]}
+                 (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-or-idx])
+                                                 (doc/layered-idx->seq 1 doc/constrain-join-result-by-empty-names))
+                            result (#'crux.query/cartesian-product
+                                    (for [var [:x]]
+                                      (get join-results var)))]
+                        (vec result)))))))))

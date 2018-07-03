@@ -476,7 +476,8 @@
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (-> (doc/new-n-ary-join-layered-virtual-index (vals var->joins))
+       (for [[join-keys join-results] (-> (mapv doc/new-unary-join-virtual-index (vals var->joins))
+                                          (doc/new-n-ary-join-layered-virtual-index)
                                           (doc/layered-idx->seq (count var->joins) constrain-result-fn))
              result (cartesian-product
                      (for [var all-vars]

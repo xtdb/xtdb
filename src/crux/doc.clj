@@ -469,8 +469,8 @@
   (next-values [this]
     (db/next-values (get unary-join-indexes @depth-state))))
 
-(defn new-n-ary-join-layered-virtual-index [unary-index-groups]
-  (->NAryJoinLayeredVirtualIndex (mapv new-unary-join-virtual-index unary-index-groups) (atom 0)))
+(defn new-n-ary-join-layered-virtual-index [indexes]
+  (->NAryJoinLayeredVirtualIndex indexes (atom 0)))
 
 (defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
   (let [build-result (fn [result-stack [max-k new-values]]
