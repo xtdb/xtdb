@@ -761,28 +761,25 @@
   (->NAryJoinLayeredVirtualIndex (mapv doc/new-unary-join-virtual-index unary-index-groups) (atom 0)))
 
 (defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
-  (let [acc (atom [])
-        step (fn step []
+  (let [step (fn step [acc depth needs-seek?]
                (lazy-seq
-                (if (< (long (count @acc)) max-depth)
-                  (do (when-not (zero? (long (count @acc)))
-                        (db/open-level idx))
-                      (if-let [result (db/seek-values idx nil)]
-                        (cons (swap! acc conj result) (step))
-                        (do (when (pos? (long (count @acc)))
-                              (db/close-level idx)
-                              (swap! acc pop))
-                            (when-let [result (db/next-values idx)]
-                              (cons (swap! acc conj result) (step))))))
-                  (if-let [result (db/next-values idx)]
-                    (cons (conj (butlast @acc) result) (step))
-                    (do (when (pos? (long (count @acc)))
-                          (db/close-level idx)
-                          (swap! acc pop))
-                        (when-let [result (db/next-values idx)]
-                          (cons (swap! acc conj result) (step))))))))]
-    (for [vs (step)
-          :when (= max-depth (count vs))
+                (if (= depth (dec max-depth))
+                  (concat (vec (for [x (doc/idx->seq idx)]
+                                 (conj acc x)))
+                          (when (pos? depth)
+                            (db/close-level idx)
+                            (step (pop acc) (dec depth) false)))
+                  (if needs-seek?
+                    (let [result (db/seek-values idx nil)]
+                      (db/open-level idx)
+                      (step (conj acc result) (inc depth) true))
+                    (if-let [result (db/next-values idx)]
+                      (do (db/open-level idx)
+                          (step (conj acc result) (inc depth) true))
+                      (when (pos? depth)
+                        (db/close-level idx)
+                        (step (pop acc) (dec depth) false)))))))]
+    (for [vs (step [] 0 true)
           :let [join-keys (mapv first vs)
                 join-results (->> (map second vs)
                                   (apply merge-with set/intersection)
@@ -796,7 +793,9 @@
 ;; the same order for it to work.
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-layers
   (let [r-idx (new-relation-virtual-index :r
-                                          [[7 4]])
+                                          [[7 4]
+                                           ;; extra sanity check
+                                           [8 4]])
         s-idx (new-relation-virtual-index :s
                                           [[4 0]
                                            [4 1]
@@ -805,7 +804,9 @@
         t-idx (new-relation-virtual-index :t
                                           [[7 0]
                                            [7 1]
-                                           [7 2]])
+                                           [7 2]
+                                           [8 1]
+                                           [8 2]])
         index-groups [[(assoc r-idx :name :a)
                        (assoc t-idx :name :a)]
                       [(assoc r-idx :name :b)
@@ -814,7 +815,9 @@
                        (assoc t-idx :name :c)]]]
     (t/is (= #{[7 4 0]
                [7 4 1]
-               [7 4 2]}
+               [7 4 2]
+               [8 4 1]
+               [8 4 2]}
              (set (for [[_ join-results] (-> (new-n-ary-join-layered-virtual-index index-groups)
                                              (layered-idx->seq (count index-groups) doc/constrain-join-result-by-empty-names))
                         result (#'crux.query/cartesian-product
