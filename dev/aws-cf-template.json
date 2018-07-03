@@ -1,0 +1,732 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Metadata": {
+        "AWS::CloudFormation::Designer": {
+            "39904f27-fd66-49f7-b1b2-e36cfafe0665": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 170,
+                    "y": 360
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "23f8a230-9990-4562-88f9-882240ba9167"
+                ]
+            },
+            "1fe48219-2eac-493a-a0d8-10e89173b158": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 170,
+                    "y": 460
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "23f8a230-9990-4562-88f9-882240ba9167"
+                ]
+            },
+            "6e698076-8491-4e4a-a516-e3d6f0495467": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 170,
+                    "y": 550
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "23f8a230-9990-4562-88f9-882240ba9167"
+                ]
+            },
+            "23f8a230-9990-4562-88f9-882240ba9167": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 270
+                },
+                "z": 0,
+                "embeds": [],
+                "iscontainedinside": [
+                    "e359a9b8-c42e-4ac2-8caf-504cc9187537"
+                ]
+            },
+            "604d1be3-75a9-43bb-9202-ce44903f79b4": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -30,
+                    "y": 370
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "0585e240-da7b-4e62-a5bd-8fecd7188615"
+                ]
+            },
+            "0585e240-da7b-4e62-a5bd-8fecd7188615": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": -30,
+                    "y": 270
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "9a1bca65-05d9-4c24-8015-365cfcbb3841": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 70,
+                    "y": 270
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "0585e240-da7b-4e62-a5bd-8fecd7188615"
+                ]
+            },
+            "62f6ad80-e76a-4a8f-895c-639a8fbefc06": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 360
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "a2ca1df1-021c-4177-ad80-ad78e55f42bb": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 460
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "3fff56ad-4d39-4bd4-b798-3ee82c509c3f": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 550
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "ec200f74-21bc-42b4-9a17-81313e3a8b9f": {
+                "source": {
+                    "id": "62f6ad80-e76a-4a8f-895c-639a8fbefc06"
+                },
+                "target": {
+                    "id": "39904f27-fd66-49f7-b1b2-e36cfafe0665"
+                },
+                "z": 0
+            },
+            "5e250539-1d36-4ecc-952b-0a53661e0ebb": {
+                "source": {
+                    "id": "a2ca1df1-021c-4177-ad80-ad78e55f42bb"
+                },
+                "target": {
+                    "id": "1fe48219-2eac-493a-a0d8-10e89173b158"
+                },
+                "z": 0
+            },
+            "0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c": {
+                "source": {
+                    "id": "3fff56ad-4d39-4bd4-b798-3ee82c509c3f"
+                },
+                "target": {
+                    "id": "6e698076-8491-4e4a-a516-e3d6f0495467"
+                },
+                "z": 0
+            },
+            "84dbcc5a-6478-4dac-96af-f7bcd6599b96": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 170,
+                    "y": 640
+                },
+                "z": 0,
+                "embeds": [],
+                "isassociatedwith": [
+                    "23f8a230-9990-4562-88f9-882240ba9167"
+                ]
+            },
+            "506500c5-c465-4ade-b944-f1c78882f9a7": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 640
+                },
+                "z": 0,
+                "embeds": []
+            }
+        }
+    },
+    "Parameters": {
+        "KeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+            "Type": "String",
+            "MinLength": "1",
+            "MaxLength": "255",
+            "AllowedPattern": "[\\x20-\\x7E]*",
+            "ConstraintDescription": "can contain only ASCII characters."
+        }
+    },
+    "Resources": {
+        "Inst1": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "IamInstanceProfile": {
+                    "Ref": "ProfileCrux"
+                },
+                "ImageId": "ami-a36f8dc4",
+                "InstanceType": "t2.small",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "PrivateIpAddress": "172.31.0.11",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "SGCrux"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "NB=1",
+                                "PRIVATE_IP[1]=172.31.0.11",
+                                "PRIVATE_IP[2]=172.31.0.12",
+                                "PRIVATE_IP[3]=172.31.0.13",
+                                "yum update -y",
+                                "mkdir -p /stack/kafka/data",
+                                "mkdir -p /stack/zookeeper/data",
+                                "mkdir -p /stack/zookeeper/config",
+                                "wget \"http://mirrors.ukfast.co.uk/sites/ftp.apache.org/kafka/1.1.0/kafka_2.11-1.1.0.tgz\" -P /stack/kafka",
+                                "tar -xzf /stack/kafka/kafka_2.11-1.1.0.tgz -C /stack/kafka --strip 1",
+                                "rm /stack/kafka/kafka_2.11-1.1.0.tgz",
+                                "cd /stack/zookeeper",
+                                "cat << EOF > config/zookeeper-cluster.properties",
+                                "clientPort=2181",
+                                "dataDir=/stack/zookeeper/data",
+                                "tickTime=2000",
+                                "initLimit=5",
+                                "syncLimit=2",
+                                "server.1=${PRIVATE_IP[1]}:2888:3888",
+                                "server.2=${PRIVATE_IP[2]}:2888:3888",
+                                "server.3=${PRIVATE_IP[3]}:2888:3888",
+                                "EOF",
+                                "sed -i 's/^server.'$NB'.*/server.'$NB'=0.0.0.0:2888:3888/g' config/zookeeper-cluster.properties",
+                                "echo $NB >> data/myid",
+                                "nohup /stack/kafka/bin/zookeeper-server-start.sh /stack/zookeeper/config/zookeeper-cluster.properties > /stack/zookeeper/data/zookeeper.out &",
+                                "cd /stack/kafka",
+                                "PORT=$((9092 + $NB))",
+                                "cp config/server.properties config/server$NB.properties",
+                                "sed -i 's/broker.id=0/broker.id='$NB'/g' config/server$NB.properties",
+                                "sed -i 's/#listeners=PLAINTEXT:\\/\\/:9092/listeners=PLAINTEXT:\\/\\/:'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/#advertised.listeners=PLAINTEXT:\\/\\/your.host.name:9092/advertised.listeners=PLAINTEXT:\\/\\/'${PRIVATE_IP[$NB]}':'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/log.dirs=\\/tmp\\/kafka-logs/log.dirs=\\/stack\\/kafka\\/data\\/kafka-logs'$NB'/g' config/server$NB.properties",
+                                "nohup /stack/kafka/bin/kafka-server-start.sh /stack/kafka/config/server$NB.properties > /stack/kafka/data/kafka-server$NB.out &",
+                                "chmod -R 777 /stack"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "39904f27-fd66-49f7-b1b2-e36cfafe0665"
+                }
+            }
+        },
+        "Inst2": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "IamInstanceProfile": {
+                    "Ref": "ProfileCrux"
+                },
+                "ImageId": "ami-a36f8dc4",
+                "InstanceType": "t2.small",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "PrivateIpAddress": "172.31.0.12",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "SGCrux"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "NB=2",
+                                "PRIVATE_IP[1]=172.31.0.11",
+                                "PRIVATE_IP[2]=172.31.0.12",
+                                "PRIVATE_IP[3]=172.31.0.13",
+                                "yum update -y",
+                                "mkdir -p /stack/kafka/data",
+                                "mkdir -p /stack/zookeeper/data",
+                                "mkdir -p /stack/zookeeper/config",
+                                "wget \"http://mirrors.ukfast.co.uk/sites/ftp.apache.org/kafka/1.1.0/kafka_2.11-1.1.0.tgz\" -P /stack/kafka",
+                                "tar -xzf /stack/kafka/kafka_2.11-1.1.0.tgz -C /stack/kafka --strip 1",
+                                "rm /stack/kafka/kafka_2.11-1.1.0.tgz",
+                                "cd /stack/zookeeper",
+                                "cat << EOF > config/zookeeper-cluster.properties",
+                                "clientPort=2181",
+                                "dataDir=/stack/zookeeper/data",
+                                "tickTime=2000",
+                                "initLimit=5",
+                                "syncLimit=2",
+                                "server.1=${PRIVATE_IP[1]}:2888:3888",
+                                "server.2=${PRIVATE_IP[2]}:2888:3888",
+                                "server.3=${PRIVATE_IP[3]}:2888:3888",
+                                "EOF",
+                                "sed -i 's/^server.'$NB'.*/server.'$NB'=0.0.0.0:2888:3888/g' config/zookeeper-cluster.properties",
+                                "echo $NB >> data/myid",
+                                "nohup /stack/kafka/bin/zookeeper-server-start.sh /stack/zookeeper/config/zookeeper-cluster.properties > /stack/zookeeper/data/zookeeper.out &",
+                                "cd /stack/kafka",
+                                "PORT=$((9092 + $NB))",
+                                "cp config/server.properties config/server$NB.properties",
+                                "sed -i 's/broker.id=0/broker.id='$NB'/g' config/server$NB.properties",
+                                "sed -i 's/#listeners=PLAINTEXT:\\/\\/:9092/listeners=PLAINTEXT:\\/\\/:'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/#advertised.listeners=PLAINTEXT:\\/\\/your.host.name:9092/advertised.listeners=PLAINTEXT:\\/\\/'${PRIVATE_IP[$NB]}':'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/log.dirs=\\/tmp\\/kafka-logs/log.dirs=\\/stack\\/kafka\\/data\\/kafka-logs'$NB'/g' config/server$NB.properties",
+                                "nohup /stack/kafka/bin/kafka-server-start.sh /stack/kafka/config/server$NB.properties > /stack/kafka/data/kafka-server$NB.out &",
+                                "chmod -R 777 /stack"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "1fe48219-2eac-493a-a0d8-10e89173b158"
+                }
+            }
+        },
+        "Inst3": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "IamInstanceProfile": {
+                    "Ref": "ProfileCrux"
+                },
+                "ImageId": "ami-a36f8dc4",
+                "InstanceType": "t2.small",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "PrivateIpAddress": "172.31.0.13",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "SGCrux"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "NB=3",
+                                "PRIVATE_IP[1]=172.31.0.11",
+                                "PRIVATE_IP[2]=172.31.0.12",
+                                "PRIVATE_IP[3]=172.31.0.13",
+                                "yum update -y",
+                                "mkdir -p /stack/kafka/data",
+                                "mkdir -p /stack/zookeeper/data",
+                                "mkdir -p /stack/zookeeper/config",
+                                "wget \"http://mirrors.ukfast.co.uk/sites/ftp.apache.org/kafka/1.1.0/kafka_2.11-1.1.0.tgz\" -P /stack/kafka",
+                                "tar -xzf /stack/kafka/kafka_2.11-1.1.0.tgz -C /stack/kafka --strip 1",
+                                "rm /stack/kafka/kafka_2.11-1.1.0.tgz",
+                                "cd /stack/zookeeper",
+                                "cat << EOF > config/zookeeper-cluster.properties",
+                                "clientPort=2181",
+                                "dataDir=/stack/zookeeper/data",
+                                "tickTime=2000",
+                                "initLimit=5",
+                                "syncLimit=2",
+                                "server.1=${PRIVATE_IP[1]}:2888:3888",
+                                "server.2=${PRIVATE_IP[2]}:2888:3888",
+                                "server.3=${PRIVATE_IP[3]}:2888:3888",
+                                "EOF",
+                                "sed -i 's/^server.'$NB'.*/server.'$NB'=0.0.0.0:2888:3888/g' config/zookeeper-cluster.properties",
+                                "echo $NB >> data/myid",
+                                "nohup /stack/kafka/bin/zookeeper-server-start.sh /stack/zookeeper/config/zookeeper-cluster.properties > /stack/zookeeper/data/zookeeper.out &",
+                                "cd /stack/kafka",
+                                "PORT=$((9092 + $NB))",
+                                "cp config/server.properties config/server$NB.properties",
+                                "sed -i 's/broker.id=0/broker.id='$NB'/g' config/server$NB.properties",
+                                "sed -i 's/#listeners=PLAINTEXT:\\/\\/:9092/listeners=PLAINTEXT:\\/\\/:'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/#advertised.listeners=PLAINTEXT:\\/\\/your.host.name:9092/advertised.listeners=PLAINTEXT:\\/\\/'${PRIVATE_IP[$NB]}':'$PORT'/g' config/server$NB.properties",
+                                "sed -i 's/log.dirs=\\/tmp\\/kafka-logs/log.dirs=\\/stack\\/kafka\\/data\\/kafka-logs'$NB'/g' config/server$NB.properties",
+                                "nohup /stack/kafka/bin/kafka-server-start.sh /stack/kafka/config/server$NB.properties > /stack/kafka/data/kafka-server$NB.out &",
+                                "chmod -R 777 /stack"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "6e698076-8491-4e4a-a516-e3d6f0495467"
+                }
+            }
+        },
+        "InstCrux": {
+            "Type": "AWS::EC2::Instance",
+            "Properties": {
+                "IamInstanceProfile": {
+                    "Ref": "ProfileCrux"
+                },
+                "ImageId": "ami-a36f8dc4",
+                "InstanceType": "t2.small",
+                "KeyName": {
+                    "Ref": "KeyName"
+                },
+                "PrivateIpAddress": "172.31.1.11",
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "SGCrux"
+                    }
+                ],
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "#!/bin/bash",
+                                "PRIVATE_IP[1]=172.31.0.11",
+                                "PRIVATE_IP[2]=172.31.0.12",
+                                "PRIVATE_IP[3]=172.31.0.13",
+                                "yum update -y",
+                                "mkdir /stack",
+                                "chmod -R 777 /stack"
+                            ]
+                        ]
+                    }
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "84dbcc5a-6478-4dac-96af-f7bcd6599b96"
+                }
+            }
+        },
+        "SGCrux": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupName": "SGCrux",
+                "GroupDescription": "Accept requests for Kafka, Zookeeper, and ping",
+                "SecurityGroupIngress": [
+                    {
+                        "Description": "ping",
+                        "IpProtocol": "icmp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "8",
+                        "ToPort": "8"
+                    },
+                    {
+                        "Description": "SSH",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "Description": "HTTP",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "80",
+                        "ToPort": "80"
+                    },
+                    {
+                        "Description": "HTTPS",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "443",
+                        "ToPort": "443"
+                    },
+                    {
+                        "Description": "Kafka",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "9092",
+                        "ToPort": "9095"
+                    },
+                    {
+                        "Description": "Zookeeper",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "2181",
+                        "ToPort": "2181"
+                    },
+                    {
+                        "Description": "Zookeeper (connect to leader)",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "2888",
+                        "ToPort": "2888"
+                    },
+                    {
+                        "Description": "Zookeeper (leader election)",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "3888",
+                        "ToPort": "3888"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "23f8a230-9990-4562-88f9-882240ba9167"
+                }
+            }
+        },
+        "CLIReadOnly": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "CLIReadOnly",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "ec2:Describe*",
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "RoleCrux"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "604d1be3-75a9-43bb-9202-ce44903f79b4"
+                }
+            }
+        },
+        "RoleCrux": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "0585e240-da7b-4e62-a5bd-8fecd7188615"
+                }
+            }
+        },
+        "ProfileCrux": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Roles": [
+                    {
+                        "Ref": "RoleCrux"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "9a1bca65-05d9-4c24-8015-365cfcbb3841"
+                }
+            }
+        },
+        "Vol1": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "Inst1",
+                        "AvailabilityZone"
+                    ]
+                },
+                "Size": "8",
+                "VolumeType": "gp2"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "62f6ad80-e76a-4a8f-895c-639a8fbefc06"
+                }
+            }
+        },
+        "Vol2": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "Inst2",
+                        "AvailabilityZone"
+                    ]
+                },
+                "Size": "8",
+                "VolumeType": "gp2"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "a2ca1df1-021c-4177-ad80-ad78e55f42bb"
+                }
+            }
+        },
+        "Vol3": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "Inst3",
+                        "AvailabilityZone"
+                    ]
+                },
+                "Size": "8",
+                "VolumeType": "gp2"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "3fff56ad-4d39-4bd4-b798-3ee82c509c3f"
+                }
+            }
+        },
+        "VolCrux": {
+            "Type": "AWS::EC2::Volume",
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::GetAtt": [
+                        "InstCrux",
+                        "AvailabilityZone"
+                    ]
+                },
+                "Size": "8",
+                "VolumeType": "gp2"
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "506500c5-c465-4ade-b944-f1c78882f9a7"
+                }
+            }
+        },
+        "VolAtt1": {
+            "Type": "AWS::EC2::VolumeAttachment",
+            "Properties": {
+                "Device": "/dev/sdh",
+                "InstanceId": {
+                    "Ref": "Inst1"
+                },
+                "VolumeId": {
+                    "Ref": "Vol1"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "ec200f74-21bc-42b4-9a17-81313e3a8b9f"
+                }
+            }
+        },
+        "VolAtt2": {
+            "Type": "AWS::EC2::VolumeAttachment",
+            "Properties": {
+                "Device": "/dev/sdh",
+                "InstanceId": {
+                    "Ref": "Inst2"
+                },
+                "VolumeId": {
+                    "Ref": "Vol2"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "5e250539-1d36-4ecc-952b-0a53661e0ebb"
+                }
+            }
+        },
+        "VolAtt3": {
+            "Type": "AWS::EC2::VolumeAttachment",
+            "Properties": {
+                "Device": "/dev/sdh",
+                "InstanceId": {
+                    "Ref": "Inst3"
+                },
+                "VolumeId": {
+                    "Ref": "Vol3"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c"
+                }
+            }
+        },
+        "VolAttCrux": {
+            "Type": "AWS::EC2::VolumeAttachment",
+            "Properties": {
+                "Device": "/dev/sdh",
+                "InstanceId": {
+                    "Ref": "InstCrux"
+                },
+                "VolumeId": {
+                    "Ref": "VolCrux"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c"
+                }
+            }
+        }
+    }
+}
