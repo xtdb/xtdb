@@ -863,8 +863,9 @@
                                       (for [var [:x :y :z]]
                                         (get join-results var)))]
                           (vec result)))))
-          ;; TODO: implement. Do we need to specify the vars?
-          #_(let [n-ary-or (doc/new-n-ary-or-layered-virtual-index [lhs-index rhs-index])]
+          ;; TODO: Does not pass, missing [2 20 0] [2 4 0].
+          ;; Should we need to specify the vars?
+          #_(let [n-ary-or (doc/new-n-ary-or-layered-virtual-index lhs-index rhs-index)]
               (t/is (= #{[1 3 0]
                          [2 4 0]
                          [1 0 10]
