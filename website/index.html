@@ -8,13 +8,16 @@
 </head>
 
 <body>
-  <header>
-    <!--<h1>Crux</h1>-->
+  <header class="bg-black-wave">
+    <div id="logo">
+      <div id="logo-circle"></div>
+      <h2>Crux</h2><h5>v1.2rc</h5>
+    </div>
     <nav>
-      <a href="/search/">Search</a>
-      <a href="/blog/">Blog</a>
-      <a href="/docs/">Docs</a>
-      <a href="/github/">Github</a>
+      <a href="/search/"><img width="3%" src="assets/img/search.png"/> Search</a>
+      <a href="/blog/"><img width="3%" src="assets/img/blog.png"/> Blog</a>
+      <a href="/docs/"><img width="3%" src="assets/img/docs.png"/> Docs</a>
+      <a href="/github/"><img width="3%" src="assets/img/github.png"/> Github</a>
     </nav>
   </header>
 
@@ -22,65 +25,140 @@
   <section id="title-section">
     <h1>Crux</h1>
     <h2>A mutable graph database on top of RocksDB</h2>
-    <button class="ui negative basic button">Read Docs</button>
+    <button class="ui primary basic button">Read Docs</button>
     <button class="ui red button">Get Started</button>
   </section>
 
   <!-- Grid Section -->
-  <section></section>
+  <section>
+    <div class="ui four column grid">
+  <div class="row">
+    <div class="column"><div class="grid-container"><div><img src="assets/img/scalable-query.svg"/></div><div><span>Scalable Query Engine</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+    <div class="column"><div class="grid-container bottom"><img src="assets/img/additive-schema.svg"/><div><span>Additive Schema</span></div></div></div>
+    <div class="column"><div class="grid-container bottom"><img src="assets/img/bitemporal.svg"/><div><span>Bitemporal</span></div></div></div>
+    <div class="column"><div class="grid-container"><div><img src="assets/img/rapid-data-ingestion.svg"/></div><div><span>Rapid Data Ingestion</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+  </div>
+  <div class="row">
+    <div class="column"></div>
+    <div class="column"><div class="grid-container"><p class="top">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+    <div class="column"><div class="grid-container"><p class="top">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+    <div class="column"></div>
+  </div>
+</div>
+  <div class="ui three column grid">
+    <div class="column"><div class="grid-container"><div><img src="assets/img/graph-query.svg"/></div><div><span>Graph Query</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+    <div class="column"><div class="grid-container" style="margin-top: 50px;"><div><img src="assets/img/composable.svg"/></div><div><span>Composable</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+    <div class="column"><div class="grid-container"><div><img src="assets/img/data-retention.svg"/></div><div><span>Data Retention</span></div><div><span>(GDPR)</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
+  </div>
+  </section>
 
   <!-- Demo Section -->
   <section>
-    <div id="features">
-      <div class="ui vertical segment">
-        <h4>Find all feature</h4>
-        <p>Description of feature 1</p>
+    <div class="ui grid">
+      <div class="five wide column">
+        <div class="ui vertical segment">
+          <h4>Find all feature</h4>
+          <p>Description of feature 1</p>
+        </div>
+        <div class="ui vertical segment">
+          <h4>Find all feature</h4>
+          <p>Description of feature 1</p>
+        </div>
+        <div class="ui vertical segment">
+          <h4>Find all feature</h4>
+          <p>Description of feature 1</p>
+        </div>
+        <div class="ui vertical segment">
+          <h4>Find all feature</h4>
+          <p>Description of feature 1</p>
+        </div>
       </div>
-      <div class="ui vertical segment">
-        <h4>Find all feature</h4>
-        <p>Description of feature 1</p>
+      <div class="eleven wide column">
+        <div id="demo-box">
+          <div class="circle" id="circle1"></div>
+          <div class="circle" id="circle2"></div>
+          <div class="circle" id="circle3"></div>
+          <div id="text-view"><p>Test</p></div>
+        </div>
       </div>
-      <div class="ui vertical segment">
-        <h4>Find all feature</h4>
-        <p>Description of feature 1</p>
-      </div>
+
     </div>
-    <div id="demo-box">
-      <div>
+
   </section>
+
 
   <!-- Testimony Section -->
   <section>
-    <h1>Great dev teams deserve a great database</h1>
-    <div id="testimony">
-      <div class="ui vertical segment">
-        <p></p>
+    <h3 style="width:60%">Great dev teams deserve a great database</h3>
+    <div class="ui grid">
+      <div class="six wide column">
+        <div class="ui vertical segment">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est. Maecenas id ultrices lacus, convallis ultrices dui.</p>
+          <div class="client">
+            <div class="picture"></div>
+            <span>Winston McMilan</span><br/>
+            <span>CEO Frierce Tech.</span>
+          </div>
+        </div>
+        <div class="ui vertical segment">
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est. Maecenas id ultrices lacus, convallis ultrices dui.</p>
+          <div class="client">
+            <div class="picture"></div>
+            <span>Winston McMilan</span><br/>
+            <span>CEO Frierce Tech.</span>
+          </div>
+        </div>
       </div>
-      <div class="ui vertical segment">
-        <p></p>
+      <div class="ten wide column">
       </div>
     </div>
-    <img src="img/companies.png" />
   </section>
 
   <!-- Support Section -->
-  <section>
-    <img src="img/building.png">
-    <div id="support">
+  <section id="support">
+    <img width="15%" src="assets/img/enterprise-building.svg" />
+    <div>
       <h3>Enterprise Support</h3>
-      <h3>Talk about how JUXT provides support around Crux database</h3>
+      <h3 style="font-weight: lighter;">Talk about how JUXT provides support around Crux database</h3>
+      <button class="ui primary basic button">Contact Sales</button>
     </div>
   </section>
 
   <footer>
-    <div class="ui grid">
+    <div class="ui grid" style="margin-left:auto;margin-right:auto;">
+      <div class="two wide column"></div>
       <div class="four wide column">
-        <img src="img/logo.png" />
-        <h4>Copyright 2018, JUXT LTD</h4>
+        <img width="50%" src="assets/img/juxt-logo.svg" /><br>
+        <span id="copyright">Copyright 2018, JUXT LTD<span>
       </div>
-      <div class="four wide column">Col 1</div>
-      <div class="four wide column">Col 2</div>
-      <div class="four wide column">Col 3 </div>
+      <div class="two wide column">
+        <ul>
+          <li class="first-li">DOCS</li>
+          <li><a href="#">Installation</a></li>
+          <li><a href="#">Get Started</a></li>
+          <li><a href="#">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="two wide column">
+        <ul>
+          <li class="first-li">CHANNELS</li>
+          <li><a href="#">Github</a></li>
+          <li><a href="#">StackOverflow</a></li>
+          <li><a href="#">Slack Chat</a></li>
+        </ul>
+      </div>
+      <div class="three wide column">
+        <ul>
+          <li class="first-li">STAY UPDATED</li>
+          <li>
+            <div class="ui input">
+              <input placeholder="yourname@domail.com" type="text">
+            </div>
+          </li>
+          <li><button class="ui button">Signup for updates</button></li>
+        </ul>
+      </div>
+      <div class="two wide column"></div>
     </div>
   </footer>
 
