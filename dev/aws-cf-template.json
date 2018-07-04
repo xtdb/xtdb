@@ -160,10 +160,10 @@
             },
             "0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c": {
                 "source": {
-                    "id": "3fff56ad-4d39-4bd4-b798-3ee82c509c3f"
+                    "id": "506500c5-c465-4ade-b944-f1c78882f9a7"
                 },
                 "target": {
-                    "id": "6e698076-8491-4e4a-a516-e3d6f0495467"
+                    "id": "84dbcc5a-6478-4dac-96af-f7bcd6599b96"
                 },
                 "z": 0
             },
@@ -174,12 +174,15 @@
                 },
                 "position": {
                     "x": 170,
-                    "y": 640
+                    "y": 220
                 },
                 "z": 0,
                 "embeds": [],
                 "isassociatedwith": [
                     "23f8a230-9990-4562-88f9-882240ba9167"
+                ],
+                "dependson": [
+                    "39904f27-fd66-49f7-b1b2-e36cfafe0665"
                 ]
             },
             "506500c5-c465-4ade-b944-f1c78882f9a7": {
@@ -188,8 +191,8 @@
                     "height": 60
                 },
                 "position": {
-                    "x": 270,
-                    "y": 640
+                    "x": 170,
+                    "y": 120
                 },
                 "z": 0,
                 "embeds": []
@@ -197,7 +200,7 @@
         }
     },
     "Parameters": {
-        "KeyName": {
+        "SSHKeyName": {
             "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instance",
             "Type": "String",
             "MinLength": "1",
@@ -216,12 +219,18 @@
                 "ImageId": "ami-a36f8dc4",
                 "InstanceType": "t2.small",
                 "KeyName": {
-                    "Ref": "KeyName"
+                    "Ref": "SSHKeyName"
                 },
                 "PrivateIpAddress": "172.31.0.11",
                 "SecurityGroupIds": [
                     {
                         "Ref": "SGCrux"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "ZK-box-1"
                     }
                 ],
                 "UserData": {
@@ -284,12 +293,18 @@
                 "ImageId": "ami-a36f8dc4",
                 "InstanceType": "t2.small",
                 "KeyName": {
-                    "Ref": "KeyName"
+                    "Ref": "SSHKeyName"
                 },
                 "PrivateIpAddress": "172.31.0.12",
                 "SecurityGroupIds": [
                     {
                         "Ref": "SGCrux"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "ZK-box-2"
                     }
                 ],
                 "UserData": {
@@ -352,12 +367,18 @@
                 "ImageId": "ami-a36f8dc4",
                 "InstanceType": "t2.small",
                 "KeyName": {
-                    "Ref": "KeyName"
+                    "Ref": "SSHKeyName"
                 },
                 "PrivateIpAddress": "172.31.0.13",
                 "SecurityGroupIds": [
                     {
                         "Ref": "SGCrux"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "ZK-box-3"
                     }
                 ],
                 "UserData": {
@@ -420,12 +441,18 @@
                 "ImageId": "ami-a36f8dc4",
                 "InstanceType": "t2.small",
                 "KeyName": {
-                    "Ref": "KeyName"
+                    "Ref": "SSHKeyName"
                 },
                 "PrivateIpAddress": "172.31.1.11",
                 "SecurityGroupIds": [
                     {
                         "Ref": "SGCrux"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "Crux-box"
                     }
                 ],
                 "UserData": {
@@ -438,7 +465,73 @@
                                 "PRIVATE_IP[2]=172.31.0.12",
                                 "PRIVATE_IP[3]=172.31.0.13",
                                 "yum update -y",
-                                "mkdir /stack",
+                                "mkdir -p /stack",
+                                "yum remove -y java-1.7.0-openjdk-1.7.0.181-2.6.14.8.80.amzn1.x86_64",
+                                "yum install -y java-1.8.0-openjdk-devel",
+                                "yum install -y git",
+                                "wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein",
+                                "chmod a+x lein",
+                                "mv lein /bin/",
+                                "cat << EOF > ~/.ssh/id_rsa",
+                                "-----BEGIN RSA PRIVATE KEY-----",
+                                "MIIJKAIBAAKCAgEA4aRyjovbQ9QREc4hFDjd9hjL93gc9sDg8IrsTS3P+63cS18E",
+                                "frfuVxVe0n2nyWN/WtjPNLN+hlnA/Ve9G7Gl0yX9z+8exQftH7D+kEFKDnYCgB8f",
+                                "HNXogV5pI3HajeQbwBDdAsONwnXESStZXhKIbqHEvooZeByIRfRpAXRmcSHZ144+",
+                                "SjPjvlBWKlT1dLA8L1wto2WzZYWqYqQ3PR89nlPTOnBaVZDNgVQVHGV3pwoi5xfd",
+                                "pMfOS5AxKvcHwAgAPHSjYMfaZRkQTcoi/h+3H10iS/vih7bbrLa30ouLOQrlASAl",
+                                "G/kJhhrpQVBFa+YyYTsvBTt1hz+jWBXYLvpwcK0D6V3AGy7jw18DE0xXGR80s+27",
+                                "InGXD9ULY+gA+gYUiOD2zSA1XKn35bZ8mCsXPk43FvecfKFYxBEweb72FHjUP/C0",
+                                "K+mMsdZOH4UrZnKtOAWqDqNGpO4fAErPT56ltgguDurwCfeDqs2zVa454levy2Ot",
+                                "9mbHEMpgMyqn3wcFbLegqIY8lrT89libFH3AKNunegVo6YnBWPKzJYYcVxlkxee9",
+                                "4yEW086jMmVjVEcD9qatc6NyW769WUCi+hjq95qHSLFuTelhtvt64VBBWFin7lYR",
+                                "vzyorC8LSjrGpVchxcT4HKWjSttHlD91Qxk10K2KEidcO2CgM8es7xzbJW0CAwEA",
+                                "AQKCAgBjhrCM1X16dpCs5NnMXKTyxs84sX89C6hsESrXhAyH+5D+ocOOzTxQpvlz",
+                                "KL+YYc2r2ZPTsBRv2Cj61fdwvrPg5ZIFZHiS+cMKxnwSTuoGZOEHeDK1+lgar/T6",
+                                "EF8RVPs0hXumm3DsxBs3FurNRqls+ueYD7vaMeOdz4d9f8Urw32dyX0KJ8cdi7vl",
+                                "4iF+PbnePe9XciVl80ZLShmfWSdJrbmuvh3qPfuXPuos40iaoirw+aLm6sbAp7I4",
+                                "PEvr1Nudzui9aImZLCv30+AJbR3NtLvK/ihWKj7M+K8uLCTVnUuTaoVTyE3+G+Kk",
+                                "z24/gILaRkugKDDX3icDVGdNmWN8S4hSJcNW/MHcKaE2Kl09iQzEM5ezhj+nO49X",
+                                "lGMFDZ9h4tETnZNjUKqk8XRThg3VlGwU0uMjnyIMGJIr4y0vM2HeWrZhiPKhliQA",
+                                "Ontm0om1OfZ7MusNz2IZJF+PQia9gwNF5Cv78SYlqOIEqDQlg4YCozh6HCx3YE/F",
+                                "sxmi5WXzpZ+VNeTrClKJvB+OUHgwkbpJpZkSChPAmWo1c3WjBgS1WNO+kLf5cY82",
+                                "zDTJUcT3R5O55YJ2y6/H8l4U9HC12GFfkrT2D/V5NIJwiyaFOEpZSQByIggoVe6p",
+                                "nL9wAvCQxtXwsNbLqHeKLXg29Zz/xHOBZdut5yB/AopsE0hw1QKCAQEA90eeMTFh",
+                                "gaXHnhOr2JGnCabQsJz2Wgu7wzWwjRQzlfBFqONcYaLwOcmc+gWv90GIMR4TNntP",
+                                "7Z8Vewm9xA+VnCGbruYsfwWwEWs9f1qdUghe0+s8HBnZIRAQ/6QT4dPY8sn/mavL",
+                                "yJQYGVEQDM1vYrLeCjvMHHZ8AhnuIh7vWWMTFRP/2bEeF243HmwvTwg2ybxPot96",
+                                "fPZXg5I/gKRUy9m8kXH3PwxhfsgcKB82lG2VkkpiAvgs1Mw+5CSDhGNEQeb130Ra",
+                                "/zRnvG8ozIOFNQJRKrGrlYKPAy2mNWc9Lwqduv+own0IQtiROhABtK/vgoTaaY5H",
+                                "9SNwxIMDoWOvhwKCAQEA6Zl+EZPvUQs2duncsQiMYANA+ebbUSRbB1FPrLIeOMUp",
+                                "mM9p62aj+4MsFhEkoeKOSTijIISLCt8ETFNPr51wbkETJYVgXllSsDGHlwfL3VMr",
+                                "9xzM+Mb/uohNJ3AHqHf+/Ii07edMXpSLSHV1SFxXrvfKDCHWpgo7s7Ed9jxHYzyD",
+                                "xod/T/RPFCkkSTNK9IxGwG1WHeWHyI84wYa8FRTDuH/NyOIkXMMlQpey0XvJ99s+",
+                                "MOvBvmhGFGs68zR1sKISODYfeSXJ4ru0GTCI3TsN0hiRgwjDsCBT5oqIA8TxYHQl",
+                                "ksxKxVqGFafRNwVgcXrJ2ugeST3HC1NVDlzc5ir4awKCAQBM5IVJcLyMTxuqiR1n",
+                                "w6r4cln0gWqNh5aEVj6nL//2gPd4U/LXHY6ruYjJqlkUftk1xM9eoquxDUXls5rB",
+                                "y8LPARhjI4n0mbUtRXajEm9XIeky5rQTXOpKwK84fzH7iB+vJ6cGhwhgP8Taon1m",
+                                "Lb+UJmCrN/r5YtKe6KdHDu2IkylM5aIqdEwSJyCWojd30OsQgjEVSX7SOtvtut1q",
+                                "SC9iEDv10kV64oOyo9E1nLchIo5fJigiGj/+j+CCmuQWl7OS9pnAKoZNU2NqkfpS",
+                                "1hbm6+iHaSYc4LNN3rUPaCH7bcasbnFwwOZ/us42CuIs6ISGxn8QUcEIdlPLl53a",
+                                "YqAjAoIBACjKeM0w+/U29AfHxpXTXE/XwZzhxyJgKtUYScVqRQS8yQq6DVDh13iv",
+                                "6x7fV3o9SYNXtISVIIKBdwqs8ZlE8MEP8/v1UmKnTl0eCQNChULcpyy7hr9aYIV+",
+                                "D5r3YR719Ty70nxIi3lojvnUKOq91UHkWw/LSOQtnUc/gm/hDsYxZwFf38dibfyj",
+                                "QobVwhz58dDgRs1pq1BGUi7ZDDbSLWsmRhTyCE96dCMwwjT6XMY/Lpj0UhyhsLsY",
+                                "Dm8xleuGIZBXQx+wjZReGpDbfMrE6SDq0V4ERceXnY8AWcfuuAeTwIvlyJi1ufxG",
+                                "Fa557eFjA6SKK9+2Pe+oWY3sgVZf4okCggEBAIa4pj94cRvqChyI866b0FJi84og",
+                                "WKTKBIQM/VtK3/QweFWmWPDXdux2LsjMR2RbYK6WgSq9hcL6jMyFEc5+vQH8nAvS",
+                                "DXcY3/dC6Eb3N4PW4LdvnrlFNFx0TCZJ6+MN9eXgCglwlh35QrLIY+EGUmUNH50i",
+                                "pEzMplg8f0OGTt91guS8zVkQKmd9HiLXp0abanJNGYP6FScKV7r3O8MRGIyorgMu",
+                                "8RfgUgGNp04VEfFxCd7Vi29zCO7/gUc4nzGRd90VmB0P3j0bu/K8BLAWqsXpvZ69",
+                                "5E2Y5q+RU5cicJNE5MxI0M91NaopvskGDRk9XsXWj3WqM7aP+eOjHNal+yQ=",
+                                "-----END RSA PRIVATE KEY-----",
+                                "EOF",
+                                "chmod 700 ~/.ssh/id_rsa",
+                                "#THIS IS NOT SECURE but it'll go away by the time we go public.",
+                                "ssh-keyscan github.com >> ~/.ssh/known_hosts",
+                                "git clone git@github.com:juxt/crux.git /stack/crux",
+                                "mkdir -p /stack/crux/data",
+                                "cd /stack/crux",
+                                "nohup lein run -b ${PRIVATE_IP[1]}:9093 > /stack/crux/data/crux.out &",
                                 "chmod -R 777 /stack"
                             ]
                         ]
@@ -449,7 +542,10 @@
                 "AWS::CloudFormation::Designer": {
                     "id": "84dbcc5a-6478-4dac-96af-f7bcd6599b96"
                 }
-            }
+            },
+            "DependsOn": [
+                "Inst1"
+            ]
         },
         "SGCrux": {
             "Type": "AWS::EC2::SecurityGroup",
@@ -484,6 +580,13 @@
                         "CidrIp": "0.0.0.0/0",
                         "FromPort": "443",
                         "ToPort": "443"
+                    },
+                    {
+                        "Description": "Crux HTTP server",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "3000",
+                        "ToPort": "3000"
                     },
                     {
                         "Description": "Kafka",
