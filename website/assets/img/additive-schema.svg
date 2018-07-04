@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="66px" height="56px" viewBox="0 0 66 56" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 50 (54983) - http://www.bohemiancoding.com/sketch -->
+    <title>growth</title>
+    <desc>Created with Sketch.</desc>
+    <defs></defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="001" transform="translate(-507.000000, -678.000000)" fill-rule="nonzero">
+            <g id="Group-5" transform="translate(108.000000, 490.000000)">
+                <g id="Group-10" transform="translate(324.000000, 188.000000)">
+                    <g id="growth" transform="translate(75.777778, 0.000000)">
+                        <polygon id="Shape" fill="#E94D4D" points="45.9396195 18.4586914 45.9396195 55.9172343 55.1276473 55.9172343 55.1276473 9.2707935"></polygon>
+                        <polygon id="Shape" fill="#E94D4D" points="27.5638237 18.4586914 27.5638237 55.9172343 36.7517216 55.9172343 36.7517216 27.6465893"></polygon>
+                        <polygon id="Shape" fill="#E94D4D" points="9.18789791 36.8346172 9.18789791 55.9172343 18.3759258 55.9172343 18.3759258 27.6465893"></polygon>
+                        <polygon id="Shape" fill="#FF8D8D" points="55.1276473 9.2707935 55.1276473 55.9172343 64.3155452 55.9172343 64.3155452 0.0827656613"></polygon>
+                        <polygon id="Shape" fill="#FF8D8D" points="36.7517216 27.6465893 36.7517216 55.9172343 45.9396195 55.9172343 45.9396195 18.4586914"></polygon>
+                        <polygon id="Shape" fill="#FF8D8D" points="18.3759258 27.6465893 18.3759258 55.9172343 27.5638237 55.9172343 27.5638237 18.4586914"></polygon>
+                        <polygon id="Shape" fill="#FF8D8D" points="0 46.0225151 0 55.9172343 9.18789791 55.9172343 9.18789791 36.8346172"></polygon>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>
