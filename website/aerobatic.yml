@@ -1,0 +1,13 @@
+id: dbd07e7a-0fcb-4272-85d7-835fe4f9eef5
+deploy:
+  ignore: []
+  directory: .
+plugins:
+  - name: password-protect
+    path: /
+    options:
+      password: Ko3hahF0aC4ouFa
+      maxFailures: 5
+      failureWindow: 600
+      lockoutDuration: 600
+      ignorePatterns: []
