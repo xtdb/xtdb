@@ -222,6 +222,9 @@ section {
   box-shadow: 0 0 0 1px white inset !important;
   font-weight: bold;
 }
+#support div .ui.basic.primary.button:hover {
+  background-color: #d01919 !important;
+}
 
 footer {
   margin-top: 100px;
