@@ -1,3 +1,4 @@
+#!/bin/sh
 set -e
 
 # latest commit
@@ -10,3 +11,6 @@ if [ $WEBSITE_COMMIT = $LATEST_COMMIT ];
     then
         echo "website being updated"
         .circleci/aerobatic_deploy.sh
+    else
+      echo "no changes"
+fi
