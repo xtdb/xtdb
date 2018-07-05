@@ -53,8 +53,8 @@
                     "height": 60
                 },
                 "position": {
-                    "x": 270,
-                    "y": 270
+                    "x": 40,
+                    "y": 460
                 },
                 "z": 0,
                 "embeds": [],
@@ -69,7 +69,7 @@
                 },
                 "position": {
                     "x": -30,
-                    "y": 370
+                    "y": 170
                 },
                 "z": 0,
                 "embeds": [],
@@ -179,7 +179,8 @@
                 "z": 0,
                 "embeds": [],
                 "isassociatedwith": [
-                    "23f8a230-9990-4562-88f9-882240ba9167"
+                    "23f8a230-9990-4562-88f9-882240ba9167",
+                    "9e309c5a-6e48-4756-abc1-079468fe7233"
                 ],
                 "dependson": [
                     "39904f27-fd66-49f7-b1b2-e36cfafe0665"
@@ -193,6 +194,18 @@
                 "position": {
                     "x": 170,
                     "y": 120
+                },
+                "z": 0,
+                "embeds": []
+            },
+            "9e309c5a-6e48-4756-abc1-079468fe7233": {
+                "size": {
+                    "width": 60,
+                    "height": 60
+                },
+                "position": {
+                    "x": 270,
+                    "y": 220
                 },
                 "z": 0,
                 "embeds": []
@@ -210,7 +223,7 @@
         }
     },
     "Resources": {
-        "Inst1": {
+        "InstZK1": {
             "Type": "AWS::EC2::Instance",
             "Properties": {
                 "IamInstanceProfile": {
@@ -224,7 +237,7 @@
                 "PrivateIpAddress": "172.31.0.11",
                 "SecurityGroupIds": [
                     {
-                        "Ref": "SGCrux"
+                        "Ref": "SGZK"
                     }
                 ],
                 "Tags": [
@@ -284,7 +297,7 @@
                 }
             }
         },
-        "Inst2": {
+        "InstZK2": {
             "Type": "AWS::EC2::Instance",
             "Properties": {
                 "IamInstanceProfile": {
@@ -298,7 +311,7 @@
                 "PrivateIpAddress": "172.31.0.12",
                 "SecurityGroupIds": [
                     {
-                        "Ref": "SGCrux"
+                        "Ref": "SGZK"
                     }
                 ],
                 "Tags": [
@@ -358,7 +371,7 @@
                 }
             }
         },
-        "Inst3": {
+        "InstZK3": {
             "Type": "AWS::EC2::Instance",
             "Properties": {
                 "IamInstanceProfile": {
@@ -372,7 +385,7 @@
                 "PrivateIpAddress": "172.31.0.13",
                 "SecurityGroupIds": [
                     {
-                        "Ref": "SGCrux"
+                        "Ref": "SGZK"
                     }
                 ],
                 "Tags": [
@@ -544,13 +557,13 @@
                 }
             },
             "DependsOn": [
-                "Inst1"
+                "InstZK1"
             ]
         },
-        "SGCrux": {
+        "SGZK": {
             "Type": "AWS::EC2::SecurityGroup",
             "Properties": {
-                "GroupName": "SGCrux",
+                "GroupName": "SGZK",
                 "GroupDescription": "Accept requests for Kafka, Zookeeper, and ping",
                 "SecurityGroupIngress": [
                     {
@@ -566,27 +579,6 @@
                         "CidrIp": "0.0.0.0/0",
                         "FromPort": "22",
                         "ToPort": "22"
-                    },
-                    {
-                        "Description": "HTTP",
-                        "IpProtocol": "tcp",
-                        "CidrIp": "0.0.0.0/0",
-                        "FromPort": "80",
-                        "ToPort": "80"
-                    },
-                    {
-                        "Description": "HTTPS",
-                        "IpProtocol": "tcp",
-                        "CidrIp": "0.0.0.0/0",
-                        "FromPort": "443",
-                        "ToPort": "443"
-                    },
-                    {
-                        "Description": "Crux HTTP server",
-                        "IpProtocol": "tcp",
-                        "CidrIp": "0.0.0.0/0",
-                        "FromPort": "3000",
-                        "ToPort": "3000"
                     },
                     {
                         "Description": "Kafka",
@@ -691,12 +683,12 @@
                 }
             }
         },
-        "Vol1": {
+        "VolZK1": {
             "Type": "AWS::EC2::Volume",
             "Properties": {
                 "AvailabilityZone": {
                     "Fn::GetAtt": [
-                        "Inst1",
+                        "InstZK1",
                         "AvailabilityZone"
                     ]
                 },
@@ -709,12 +701,12 @@
                 }
             }
         },
-        "Vol2": {
+        "VolZK2": {
             "Type": "AWS::EC2::Volume",
             "Properties": {
                 "AvailabilityZone": {
                     "Fn::GetAtt": [
-                        "Inst2",
+                        "InstZK2",
                         "AvailabilityZone"
                     ]
                 },
@@ -727,12 +719,12 @@
                 }
             }
         },
-        "Vol3": {
+        "VolZK3": {
             "Type": "AWS::EC2::Volume",
             "Properties": {
                 "AvailabilityZone": {
                     "Fn::GetAtt": [
-                        "Inst3",
+                        "InstZK3",
                         "AvailabilityZone"
                     ]
                 },
@@ -763,15 +755,15 @@
                 }
             }
         },
-        "VolAtt1": {
+        "VolAttZK1": {
             "Type": "AWS::EC2::VolumeAttachment",
             "Properties": {
                 "Device": "/dev/sdh",
                 "InstanceId": {
-                    "Ref": "Inst1"
+                    "Ref": "InstZK1"
                 },
                 "VolumeId": {
-                    "Ref": "Vol1"
+                    "Ref": "VolZK1"
                 }
             },
             "Metadata": {
@@ -780,15 +772,15 @@
                 }
             }
         },
-        "VolAtt2": {
+        "VolAttZK2": {
             "Type": "AWS::EC2::VolumeAttachment",
             "Properties": {
                 "Device": "/dev/sdh",
                 "InstanceId": {
-                    "Ref": "Inst2"
+                    "Ref": "InstZK2"
                 },
                 "VolumeId": {
-                    "Ref": "Vol2"
+                    "Ref": "VolZK2"
                 }
             },
             "Metadata": {
@@ -797,15 +789,15 @@
                 }
             }
         },
-        "VolAtt3": {
+        "VolAttZK3": {
             "Type": "AWS::EC2::VolumeAttachment",
             "Properties": {
                 "Device": "/dev/sdh",
                 "InstanceId": {
-                    "Ref": "Inst3"
+                    "Ref": "InstZK3"
                 },
                 "VolumeId": {
-                    "Ref": "Vol3"
+                    "Ref": "VolZK3"
                 }
             },
             "Metadata": {
@@ -828,6 +820,55 @@
             "Metadata": {
                 "AWS::CloudFormation::Designer": {
                     "id": "0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c"
+                }
+            }
+        },
+        "SGCrux": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupName": "SGCrux",
+                "GroupDescription": "Accept requests for Crux, HTTP, and ping",
+                "SecurityGroupIngress": [
+                    {
+                        "Description": "ping",
+                        "IpProtocol": "icmp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "8",
+                        "ToPort": "8"
+                    },
+                    {
+                        "Description": "SSH",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "22",
+                        "ToPort": "22"
+                    },
+                    {
+                        "Description": "HTTP",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "80",
+                        "ToPort": "80"
+                    },
+                    {
+                        "Description": "HTTPS",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "443",
+                        "ToPort": "443"
+                    },
+                    {
+                        "Description": "Crux HTTP server",
+                        "IpProtocol": "tcp",
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "3000",
+                        "ToPort": "3000"
+                    }
+                ]
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Designer": {
+                    "id": "9e309c5a-6e48-4756-abc1-079468fe7233"
                 }
             }
         }
