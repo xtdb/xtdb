@@ -3,23 +3,43 @@
 
 <head>
   <title>Crux Homepage</title>
+   <meta charset="UTF-8">
   <link rel="stylesheet" type="text/css" href="assets/css/semantic.min.css">
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
   <link rel="stylesheet" type="text/css" href="assets/css/style.css">
 </head>
 
 <body>
-  <header class="bg-black-wave">
+
+  <nav class="navbar navbar-expand-lg navbar-dark">
     <div id="logo">
       <div id="logo-circle"></div>
-      <h2>Crux</h2><h5>v1.2rc</h5>
+      <h2>Crux</h2>
+      <h5>v1.2rc</h5>
     </div>
-    <nav>
-      <a href="/search/"><img width="3%" src="assets/img/search.png"/> Search</a>
-      <a href="/blog/"><img width="3%" src="assets/img/blog.png"/> Blog</a>
-      <a href="/docs/"><img width="3%" src="assets/img/docs.png"/> Docs</a>
-      <a href="/github/"><img width="3%" src="assets/img/github.png"/> Github</a>
-    </nav>
-  </header>
+    <a class="navbar-brand" href="#"></a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarTogglerDemo02" aria-controls="navbarTogglerDemo02" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+
+    <div class="collapse navbar-collapse" id="navbarTogglerDemo02">
+      <ul class="navbar-nav ml-auto mt-2 mt-lg-0">
+        <li class="nav-item active">
+          <a class="nav-link" href="/search/"><img width="15px" src="assets/img/search.png"/>Search</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/blog/"><img width="15px" src="assets/img/blog.png"/>Blog</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/docs/"><img width="15px" src="assets/img/docs.png"/>Docs</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/github/"><img width="15px" src="assets/img/github.png"/>Github</a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
 
   <!--- First Section -->
   <section id="title-section">
@@ -31,25 +51,74 @@
 
   <!-- Grid Section -->
   <section>
-    <div class="ui four column grid">
-  <div class="row">
-    <div class="column"><div class="grid-container"><div><img src="assets/img/scalable-query.svg"/></div><div><span>Scalable Query Engine</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-    <div class="column"><div class="grid-container bottom"><img src="assets/img/additive-schema.svg"/><div><span>Additive Schema</span></div></div></div>
-    <div class="column"><div class="grid-container bottom"><img src="assets/img/bitemporal.svg"/><div><span>Bitemporal</span></div></div></div>
-    <div class="column"><div class="grid-container"><div><img src="assets/img/rapid-data-ingestion.svg"/></div><div><span>Rapid Data Ingestion</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-  </div>
-  <div class="row">
-    <div class="column"></div>
-    <div class="column"><div class="grid-container"><p class="top">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-    <div class="column"><div class="grid-container"><p class="top">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-    <div class="column"></div>
-  </div>
-</div>
-  <div class="ui three column grid">
-    <div class="column"><div class="grid-container"><div><img src="assets/img/graph-query.svg"/></div><div><span>Graph Query</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-    <div class="column"><div class="grid-container" style="margin-top: 50px;"><div><img src="assets/img/composable.svg"/></div><div><span>Composable</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-    <div class="column"><div class="grid-container"><div><img src="assets/img/data-retention.svg"/></div><div><span>Data Retention</span></div><div><span>(GDPR)</span></div><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p></div></div>
-  </div>
+    <div class="stackable ui four column grid">
+      <div class="row">
+        <div class="column">
+          <div class="grid-container">
+            <div><img src="assets/img/scalable-query.svg" /></div>
+            <div><span>Scalable Query Engine</span></div>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+          </div>
+        </div>
+        <div class="column">
+          <div id="additive-schema" class="grid-container bottom"><img src="assets/img/additive-schema.svg" />
+            <div><span>Additive Schema</span></div>
+          </div>
+        </div>
+        <div class="column">
+          <div id="bitemporal" class="grid-container bottom"><img src="assets/img/bitemporal.svg" />
+            <div><span>Bitemporal</span></div>
+          </div>
+        </div>
+        <div class="column">
+          <div class="grid-container">
+            <div><img src="assets/img/rapid-data-ingestion.svg" /></div>
+            <div><span>Rapid Data Ingestion</span></div>
+            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="column"></div>
+        <div class="column">
+          <div class="grid-container" id="additive-schema-container">
+            <p class="top" id="additive-schema-text">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+          </div>
+        </div>
+        <div class="column">
+          <div class="grid-container" id="bitemporal-container">
+            <p class="top" id="bitemporal-text">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+          </div>
+        </div>
+        <div class="column"></div>
+      </div>
+
+    </div>
+    <div class="stackable ui three column grid">
+      <div class="column">
+        <div class="grid-container">
+          <div><img src="assets/img/graph-query.svg" /></div>
+          <div><span>Graph Query</span></div>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+        </div>
+      </div>
+      <div class="column">
+        <div class="grid-container" style="margin-top: 50px;">
+          <div><img src="assets/img/composable.svg" /></div>
+          <div><span>Composable</span></div>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+        </div>
+      </div>
+      <div class="column">
+        <div class="grid-container">
+          <div><img src="assets/img/data-retention.svg" /></div>
+          <div><span>Data Retention</span></div>
+          <div><span>(GDPR)</span></div>
+          <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris et eros molestie, porta justo ut, sodales est.</p>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- Demo Section -->
@@ -78,7 +147,9 @@
           <div class="circle" id="circle1"></div>
           <div class="circle" id="circle2"></div>
           <div class="circle" id="circle3"></div>
-          <div id="text-view"><p>Test 6</p></div>
+          <div id="text-view">
+            <p>Test 6</p>
+          </div>
         </div>
       </div>
 
@@ -125,7 +196,7 @@
   </section>
 
   <footer>
-    <div class="ui grid" style="margin-left:auto;margin-right:auto;">
+    <div class="stackable ui grid" style="margin-left:auto;margin-right:auto;">
       <div class="two wide column"></div>
       <div class="four wide column">
         <img width="50%" src="assets/img/juxt-logo.svg" /><br>
@@ -162,7 +233,11 @@
     </div>
   </footer>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
   <script src="assets/js/semantic.min.js"></script>
+  <!-- Customised bootstrap, only contains things for navbar -->
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js" integrity="sha384-smHYKdLADwkXOn1EmN1qk/HfnUcbVRZyYmZ4qpPea6sjB/pTJ0euyQp0Mk8ck+5T" crossorigin="anonymous"></script>
+  <script src="assets/js/main.js"></script>
 </body>
 
 </html>
