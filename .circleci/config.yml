@@ -36,4 +36,4 @@ jobs:
           key: v1-dependencies-{{ checksum "project.clj" }}
 
       - run: lein test
-      - run: .circleci/commit_check.sh
+      - bash .circleci/commit_check.sh
