@@ -54,8 +54,6 @@ $(document).ready(function() {
       $("body").removeClass().toggleClass("media-query-md");
       // Reformat graphic
       shrinkGraphic();
-      //$('#additive-schema').append($('#additive-schema-text'));
-      //$('#bitemporal').append($('#bitemporal-text'));
     }
 
     if (mediaQueryLg) {
@@ -82,9 +80,22 @@ $(document).ready(function() {
 
 
 $(".feature").mouseover(function() {
-  $(this).children().css("color","#E94D4D");
+    $(this).children().css("color", "#E94D4D");
+  })
+  .mouseout(function() {
+    $(this).find("h4").css("color", "#4A4A4A");
+    $(this).find("p").css("color", "#979797");
+  });
+
+$("#feature1").mouseover(function() {
+  $("#text-view p").text("Feature 1");
 })
-.mouseout(function() {
-  $(this).find("h4").css("color","#4A4A4A");
-  $(this).find("p").css("color","##979797");
-});
+$("#feature2").mouseover(function() {
+  $("#text-view p").text("Feature 2");
+})
+$("#feature3").mouseover(function() {
+  $("#text-view p").text("Feature 3");
+})
+$("#feature4").mouseover(function() {
+  $("#text-view p").text("Feature 4");
+})
