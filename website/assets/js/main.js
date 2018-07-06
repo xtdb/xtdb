@@ -2,30 +2,32 @@ $(document).ready(function() {
   // Add some invisible elements with Bootstrap CSS visibile utility classes
   $("body").append("<div style='display:none;' class='viewport-check'><span class='d-block'></span><span class='d-sm-block'></span><span class='d-md-block'></span><span class='d-lg-block'></span><span class='d-xl-block'></span></div>");
 
-  // Checks if the span is set to display blcok via CSS
+  // Checks if the span is set to display block via CSS
   function checkIfBlock(target) {
     var target = $(target).css('display') == 'block';
     return target;
   }
 
-  function toggleGraphicClasses() {
-    $('#additive-schema').toggleClass("bottom");
-    $('#bitemporal').toggleClass("bottom");
-    $('#additive-schema-text').toggleClass("top");
-    $('#bitemporal-text').toggleClass("top");
-  }
-
+// TODO: // Clean this up
   function restoreGraphic() {
-    toggleGraphicClasses();
+    $('#additive-schema').addClass("bottom");
+    $('#bitemporal').addClass("bottom");
+    $('#additive-schema-text').removeClass("top");
+    $('#bitemporal-text').removeClass("top");
+
     $("#additive-schema-container").append($('#additive-schema-text'));
     $("#bitemporal-container").append($('#bitemporal-text'))
-    $('#additive-schema').remove($('#additive-schema-text'));
-    $('#bitemporal').remove($('#bitemporal-text'));
+    $('#additive-schema').remove('#additive-schema-text');
+    $('#bitemporal').remove('#bitemporal-text');
   }
 
 
   function shrinkGraphic() {
-    toggleGraphicClasses();
+    $('#additive-schema').removeClass("bottom");
+    $('#bitemporal').removeClass("bottom");
+    $('#additive-schema-text').addClass("top");
+    $('#bitemporal-text').addClass("top");
+
     $('#additive-schema').append($('#additive-schema-text'));
     $('#bitemporal').append($('#bitemporal-text'));
   }
@@ -52,7 +54,6 @@ $(document).ready(function() {
 
     if (mediaQueryMd) {
       $("body").removeClass().toggleClass("media-query-md");
-      // Reformat graphic
       shrinkGraphic();
     }
 
@@ -74,8 +75,6 @@ $(document).ready(function() {
 
   // Load detection script
   checkSize();
-
-
 });
 
 
