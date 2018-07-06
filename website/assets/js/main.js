@@ -15,37 +15,59 @@ $(document).ready(function() {
     $('#bitemporal-text').toggleClass("top");
   }
 
-  function checkSize() {
-    var mediaQueryMd = checkIfBlock('.viewport-check .d-md-block');
-    var mediaQueryLg = checkIfBlock('.viewport-check .d-lg-block');
-    var mediaQueryXl = checkIfBlock('.viewport-check .d-xl-block');
-
-    if (mediaQueryMd == true) {
-      $("body").removeClass().toggleClass("media-query-md");
-      // Reformat graphic
-      toggleGraphicClasses();
-      $('#additive-schema').append($('#additive-schema-text'));
-      $('#bitemporal').append($('#bitemporal-text'));
-    }
-
-    if (mediaQueryLg == true) {
-      $("body").removeClass().toggleClass("media-query-lg");
-      // Restore graphic
-      restoreGraphic();
-    }
-
-    if (mediaQueryXl == true) {
-      $("body").removeClass().toggleClass("media-query-xl");
-      restoreGraphic();
-    }
-  }
-
   function restoreGraphic() {
     toggleGraphicClasses();
     $("#additive-schema-container").append($('#additive-schema-text'));
     $("#bitemporal-container").append($('#bitemporal-text'))
     $('#additive-schema').remove($('#additive-schema-text'));
     $('#bitemporal').remove($('#bitemporal-text'));
+  }
+
+
+  function shrinkGraphic() {
+    toggleGraphicClasses();
+    $('#additive-schema').append($('#additive-schema-text'));
+    $('#bitemporal').append($('#bitemporal-text'));
+  }
+
+
+  function checkSize() {
+    var mediaQueryXs = checkIfBlock('.viewport-check .d-block');
+    var mediaQuerySm = checkIfBlock('.viewport-check .d-sm-block');
+    var mediaQueryMd = checkIfBlock('.viewport-check .d-md-block');
+    var mediaQueryLg = checkIfBlock('.viewport-check .d-lg-block');
+    var mediaQueryXl = checkIfBlock('.viewport-check .d-xl-block');
+
+
+    if (mediaQueryXs) {
+      $("body").removeClass().toggleClass("media-query-xs");
+      shrinkGraphic();
+    }
+
+    if (mediaQuerySm) {
+      $("body").removeClass().toggleClass("media-query-sm");
+      shrinkGraphic();
+    }
+
+
+    if (mediaQueryMd) {
+      $("body").removeClass().toggleClass("media-query-md");
+      // Reformat graphic
+      shrinkGraphic();
+      //$('#additive-schema').append($('#additive-schema-text'));
+      //$('#bitemporal').append($('#bitemporal-text'));
+    }
+
+    if (mediaQueryLg) {
+      $("body").removeClass().toggleClass("media-query-lg");
+      // Restore graphic
+      restoreGraphic();
+    }
+
+    if (mediaQueryXl) {
+      $("body").removeClass().toggleClass("media-query-xl");
+      restoreGraphic();
+    }
   }
 
   $(window).resize(function() {
@@ -55,4 +77,14 @@ $(document).ready(function() {
   // Load detection script
   checkSize();
 
+
+});
+
+
+$(".feature").mouseover(function() {
+  $(this).children().css("color","#E94D4D");
+})
+.mouseout(function() {
+  $(this).find("h4").css("color","#4A4A4A");
+  $(this).find("p").css("color","##979797");
 });

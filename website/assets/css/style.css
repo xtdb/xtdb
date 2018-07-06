@@ -48,6 +48,9 @@ span#copyright {
   color: white;
   background-color: #4A4A4A;
 }
+.navbar-dark .nav-link img {
+  padding-right: 5px;
+}
 
 .navbar-toggler {
   align-self: flex-end;
@@ -113,6 +116,7 @@ h3 {
 }
 
 .ui.basic.primary.button {
+  margin: 10px;
   border-radius: 0;
   color: #4A4A4A !important;
   box-shadow: 0 0 0 1px #E94D4D inset !important;
@@ -120,6 +124,7 @@ h3 {
 }
 
 .ui.basic.primary.button:hover {
+  margin: 10px;
   color: #E94D4D !important;
   box-shadow: 0 0 0 1px #E94D4D inset !important;
 }
@@ -142,7 +147,6 @@ section {
 }
 
 #demo-box {
-  float: right;
   border-radius: 10px;
   background-color: #4A4A4A;
   width: 100%;
@@ -193,31 +197,26 @@ section {
 
 #support {
   background-color: #E94D4D;
-  border-radius: 10px;
-  height: 250px;
+  border-radius: 5px;
+  min-height: 150px;
 }
-#support img {
-  position: relative;
-  top: 100%;
-  transform: translateY(-100%);
-  margin-left: 5%;
+#support .column {
+  padding-bottom: 0;
+}
+#support .column img {
+  padding-left: 20px;
 }
 #support h3 {
   color: white;
 }
-#support div {
-  padding-top: 50px;
-  float: right;
-  position: relative;
-  width: 70%;
-}
-#support div .ui.basic.primary.button {
+#support .ui.basic.primary.basic.button {
+  margin-top: 10px;
   border-radius: 0;
   color: white !important;
   box-shadow: 0 0 0 1px white inset !important;
   font-weight: bold;
 }
-#support div .ui.basic.primary.button:hover {
+#support .ui.basic.primary.button:hover {
   background-color: #d01919 !important;
 }
 
@@ -232,19 +231,24 @@ footer ul {
   margin: 0;
   padding: 0;
 }
+footer ul li a {
+  margin: 0;
+}
 footer .ui.grid > .column:not(.row) {
   padding-bottom: none !important;
+}
+footer .ui.input {
+  width: 100%;
 }
 footer .ui.input > input {
   background-color: #4A4A4A;
   border-radius: 0;
   border-color: white;
   color: white;
-  width: 50%;
+  width: 100%;
   border-radius: 2px;
 }
 footer .ui.button {
-  float: right;
   min-width: 100px;
   margin-top: 5px;
   background-color: #E94D4D;
@@ -252,7 +256,6 @@ footer .ui.button {
   border-radius: 2px;
   display: block;
   line-height: 25px;
-  word-wrap: break-word;
   font-size: x-small;
 }
 footer .ui.button:hover {
