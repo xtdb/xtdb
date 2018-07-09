@@ -8,31 +8,31 @@ $(document).ready(function() {
     return target;
   }
 
-// TODO: // Clean this up
-  function restoreGraphic() {
-    $('#additive-schema').addClass("bottom");
-    $('#bitemporal').addClass("bottom");
-    $('#additive-schema-text').removeClass("top");
-    $('#bitemporal-text').removeClass("top");
+  // Toggle css that aligns graphic elements
+  function toggleClasses() {
+    $("#additive-schema").toggleClass("bottom", true);
+    $("#bitemporal").toggleClass("bottom", true);
+    $("#additive-schema-text").toggleClass("top");
+    $("#bitemporal-text").toggleClass("top");
+  }
 
+  // Restore the page to normal when size > medium
+  function restoreGraphic() {
+    toggleClasses();
     $("#additive-schema-container").append($('#additive-schema-text'));
     $("#bitemporal-container").append($('#bitemporal-text'))
     $('#additive-schema').remove('#additive-schema-text');
     $('#bitemporal').remove('#bitemporal-text');
   }
 
-
+  // Change dom elements for mobile when size < medium
   function shrinkGraphic() {
-    $('#additive-schema').removeClass("bottom");
-    $('#bitemporal').removeClass("bottom");
-    $('#additive-schema-text').addClass("top");
-    $('#bitemporal-text').addClass("top");
-
+    toggleClasses();
     $('#additive-schema').append($('#additive-schema-text'));
     $('#bitemporal').append($('#bitemporal-text'));
   }
 
-
+  // Check the screen size to determine shrink or restore 
   function checkSize() {
     var mediaQueryXs = checkIfBlock('.viewport-check .d-block');
     var mediaQuerySm = checkIfBlock('.viewport-check .d-sm-block');

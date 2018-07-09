@@ -140,6 +140,10 @@ section {
 #title-section {
   text-align: center;
 }
+#title-section div > .button {
+  margin-left: auto;
+  margin-right: auto;
+}
 #title-section #read-docs {
   margin: 10px;
   border-radius: 0;
@@ -158,11 +162,6 @@ section {
 #title-section h1,
 #title-section h2 {
   margin-bottom: 20px;
-}
-
-#features {
-  width: 30%;
-  float: left;
 }
 
 #demo-box {
@@ -203,6 +202,11 @@ section {
   color: #DBDBDB;
 }
 
+@media only mobile {
+  #demo-box {
+    min-height: 300px;
+  }
+}
 .client .picture {
   float: left;
   border-radius: 100%;
@@ -285,6 +289,7 @@ footer .ui.button {
 }
 footer .ui.button:hover {
   background-color: #d01919;
+  color: white;
 }
 footer .first-li {
   padding-bottom: 5px;
@@ -294,7 +299,6 @@ footer .first-li {
 .grid-container {
   margin-right: auto;
   margin-left: auto;
-  max-width: 150px;
   text-align: center;
 }
 .grid-container span {
@@ -303,6 +307,10 @@ footer .first-li {
 .grid-container p {
   padding-top: 20px;
   text-align: justify;
+}
+
+#additive-schema-text, #bitemporal-text {
+  padding: 0;
 }
 
 .bottom {
