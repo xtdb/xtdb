@@ -4,5 +4,5 @@ sudo apt-get install npm
 sudo npm install aerobatic-cli -g
 sudo npm install sass -g
 cd ~/crux/website
-sass assets/scss/style.css assets/css/style.css
+sass assets/scss/style.scss assets/css/style.css
 aero deploy
