@@ -194,7 +194,15 @@
                                  (+ 1 bah)]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))))
+        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) '{:find [e]
+                         :where [[e :name]]
+                         :args [{:name  "Ivan"}]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (= "Argument refers to unknown variable: name" (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
