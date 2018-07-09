@@ -83,6 +83,17 @@
                                                           :args [{:name "Ivan"}
                                                                  {:name "Petr"}]}))))
 
+    (t/testing "Can query entity by non existent argument"
+      (t/is (= #{} (q/q (q/db *kv*) '{:find [e]
+                                      :where [[e :name name]]
+                                      :args [{:name "Bob"}]}))))
+
+    (t/testing "Can query entity with empty arguments"
+      (t/is (= #{[(:crux.db/id ivan)]
+                 [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]]
+                                                          :args []}))))
+
     (t/testing "Can query entity with tuple arguments"
       (t/is (= #{[(:crux.db/id ivan)]
                  [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
