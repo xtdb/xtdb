@@ -69,6 +69,31 @@
                                                           :where [[e :name name]]
                                                           :args [{:name "Petr"}]}))))
 
+    (t/testing "Can query entity by entity position"
+      (t/is (= #{["Ivan"]
+                 ["Petr"]} (q/q (q/db *kv*) {:find '[name]
+                                             :where '[[e :name name]]
+                                             :args [{:e (:crux.db/id ivan)}
+                                                    {:e (:crux.db/id petr)}]})))
+
+      (t/is (= #{["Ivan" "Ivanov"]
+                 ["Petr" "Petrov"]} (q/q (q/db *kv*) {:find '[name last-name]
+                                                      :where '[[e :name name]
+                                                               [e :last-name last-name]]
+                                                      :args [{:e (:crux.db/id ivan)}
+                                                             {:e (:crux.db/id petr)}]}))))
+
+    (t/testing "Can match on both entity and value position"
+      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) {:find '[name]
+                                             :where '[[e :name name]]
+                                             :args [{:e (:crux.db/id ivan)
+                                                     :name "Ivan"}]})))
+
+      (t/is (= #{} (q/q (q/db *kv*) {:find '[name]
+                                     :where '[[e :name name]]
+                                     :args [{:e (:crux.db/id ivan)
+                                             :name "Petr"}]}))))
+
     (t/testing "Can query entity by single field with several arguments"
       (t/is (= #{[(:crux.db/id ivan)]
                  [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]

@@ -234,7 +234,7 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [args var->joins]
+(defn- arg-joins [snapshot args e-vars var->joins business-time transact-time]
   (let [arg-keys-in-join-order (sort (keys (first args)))
         relation (doc/new-relation-virtual-index (gensym "args")
                                                  (for [arg args]
@@ -242,12 +242,25 @@
                                                  (count arg-keys-in-join-order))
         arg-vars (arg-vars args)]
     (doseq [arg-var arg-vars]
-      (when-not (contains? var->joins arg-var)
+      (when (and (not (contains? var->joins arg-var))
+                 (not (contains? e-vars arg-var)))
         (throw (IllegalArgumentException. (str "Argument refers to unknown variable: " arg-var)))))
     (->> arg-vars
          (reduce
           (fn [var->joins arg-var]
-            (merge-with into var->joins {arg-var [relation]}))
+            (->> (merge
+                  {arg-var
+                   (cond-> [relation]
+                     (and (not (contains? var->joins arg-var))
+                          (contains? e-vars arg-var))
+                     (conj (assoc (doc/new-entity-attribute-value-virtual-index
+                                   snapshot
+                                   :crux.db/id
+                                   nil
+                                   business-time
+                                   transact-time)
+                                  :name arg-var)))})
+                 (merge-with into var->joins)))
           var->joins))))
 
 (defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
@@ -479,7 +492,7 @@
                                          var->joins business-time transact-time)
            var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
                                              var->joins business-time transact-time)
-           var->joins (arg-joins args var->joins)
+           var->joins (arg-joins snapshot args e-vars var->joins business-time transact-time)
            v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                   :when (and (logic-var? v)
                                              (= e (get v-var->e v)))]
