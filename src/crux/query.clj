@@ -168,7 +168,8 @@
                      snapshot
                      (vec (for [{:keys [a v]} clauses]
                             [a v]))
-                     business-time transact-time)]
+                     business-time
+                     transact-time)]
             (merge-with into var->joins {e-var [(assoc idx :name e-var)]})))
         var->joins)))
 
@@ -191,7 +192,8 @@
                                (vec (for [{:keys [a v]
                                            :as clause} sub-clauses]
                                       [a v]))
-                               business-time transact-time))))]
+                               business-time
+                               transact-time))))]
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
@@ -221,7 +223,8 @@
                                   e
                                   a
                                   (get v-var->range-constrants v-var)
-                                  business-time transact-time)
+                                  business-time
+                                  transact-time)
                                  :name e))]
             (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
@@ -465,10 +468,16 @@
                                            clause)
                                          (group-by :v))
            var->joins (sorted-map)
-           var->joins (e-var-literal-v-joins snapshot e-var->literal-v-clauses var->joins
-                                             business-time transact-time)
-           var->joins (e-var-literal-v-or-joins snapshot or-clauses var->joins
-                                                business-time transact-time)
+           var->joins (e-var-literal-v-joins snapshot
+                                             e-var->literal-v-clauses
+                                             var->joins
+                                             business-time
+                                             transact-time)
+           var->joins (e-var-literal-v-or-joins snapshot
+                                                or-clauses
+                                                var->joins
+                                                business-time
+                                                transact-time)
            non-leaf-v-vars (set/union unification-vars not-vars e-vars (arg-vars args))
            leaf-v-var? (fn [e v]
                          (and (= 1 (count (get v->v-var-clauses v)))
@@ -488,11 +497,25 @@
                                             clause)
                                           (group-by :e))
            v-var->range-constrants (build-v-var-range-constraints e-vars range-clauses)
-           var->joins (e-var-v-var-joins snapshot e-var+v-var->join-clauses v-var->range-constrants
-                                         var->joins business-time transact-time)
-           var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
-                                             var->joins business-time transact-time)
-           var->joins (arg-joins snapshot args e-vars var->joins business-time transact-time)
+           var->joins (e-var-v-var-joins snapshot
+                                         e-var+v-var->join-clauses
+                                         v-var->range-constrants
+                                         var->joins
+                                         business-time
+                                         transact-time)
+           var->joins (v-var-literal-e-joins snapshot
+                                             object-store
+                                             v-var->literal-e-clauses
+                                             v-var->range-constrants
+                                             var->joins
+                                             business-time
+                                             transact-time)
+           var->joins (arg-joins snapshot
+                                 args
+                                 e-vars
+                                 var->joins
+                                 business-time
+                                 transact-time)
            v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                   :when (and (logic-var? v)
                                              (= e (get v-var->e v)))]
@@ -501,7 +524,11 @@
            e-var->attr (zipmap e-vars (repeat :crux.db/id))
            var->attr (merge v-var->attr e-var->attr)
            var->values-result-index (zipmap (keys var->joins) (range))
-           var->bindings (build-var-bindings var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses (keys var->attr))
+           var->bindings (build-var-bindings var->attr
+                                             v-var->e
+                                             var->values-result-index
+                                             e-var->leaf-v-var-clauses
+                                             (keys var->attr))
            unification-preds (build-unification-preds unify-clauses var->bindings)
            not-constraints (build-not-constraints object-store not-clauses var->bindings)
            pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
