@@ -58,8 +58,11 @@
                     :pred (s/or :pred ::pred
                                 :not-pred (expression-spec 'not (s/& ::pred)))))
 
+(s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
+(s/def ::args (s/coll-of ::arg-tuple :kind vector?))
+
 (s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
-(s/def ::query (s/keys :req-un [::find ::where]))
+(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args]))
 
 (defn- cartesian-product [[x & xs]]
   (when (seq x)
@@ -166,7 +169,7 @@
                      (vec (for [{:keys [a v]} clauses]
                             [a v]))
                      business-time transact-time)]
-            (merge-with into {e-var [(assoc idx :name e-var)]} var->joins)))
+            (merge-with into var->joins {e-var [(assoc idx :name e-var)]})))
         var->joins)))
 
 (defn- e-var-literal-v-or-joins [snapshot or-clauses var->joins business-time transact-time]
@@ -189,7 +192,7 @@
                                            :as clause} sub-clauses]
                                       [a v]))
                                business-time transact-time))))]
-              (merge-with into {e-var [(assoc idx :name e-var)]} var->joins))))
+              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins business-time transact-time]
@@ -204,7 +207,7 @@
                                   business-time
                                   transact-time)
                                  :name e-var))]
-            (merge-with into {v-var (vec indexes)} var->joins)))
+            (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
 
 (defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constrants var->joins business-time transact-time]
@@ -220,8 +223,32 @@
                                   (get v-var->range-constrants v-var)
                                   business-time transact-time)
                                  :name e))]
-            (merge-with into {v-var (vec indexes)} var->joins)))
+            (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
+
+(defn- arg-vars [args]
+  (let [ks (keys (first args))]
+    (doseq [m args]
+      (when-not (every? #(contains? m %) ks)
+        (throw (IllegalArgumentException. (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))
+    (set (for [k ks]
+           (symbol (name k))))))
+
+(defn- arg-joins [args var->joins]
+  (let [arg-keys-in-join-order (sort (keys (first args)))
+        relation (doc/new-relation-virtual-index (gensym "args")
+                                                 (for [arg args]
+                                                   (mapv arg arg-keys-in-join-order))
+                                                 (count arg-keys-in-join-order))
+        arg-vars (arg-vars args)]
+    (doseq [arg-var arg-vars]
+      (when-not (contains? var->joins arg-var)
+        (throw (IllegalArgumentException. (str "Argument refers to unknown variable: " arg-var)))))
+    (->> arg-vars
+         (reduce
+          (fn [var->joins arg-var]
+            (merge-with into var->joins {arg-var [relation]}))
+          var->joins))))
 
 (defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
@@ -385,7 +412,7 @@
    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
      (set (crux.query/q snapshot db q))))
   ([snapshot {:keys [kv object-store business-time transact-time] :as db} q]
-   (let [{:keys [find where] :as q} (s/conform :crux.query/query q)]
+   (let [{:keys [find where args] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
@@ -424,17 +451,17 @@
                                                           (logic-var? v))]
                                            clause)
                                          (group-by :v))
-           var->joins (e-var-literal-v-joins snapshot e-var->literal-v-clauses {}
+           var->joins (sorted-map)
+           var->joins (e-var-literal-v-joins snapshot e-var->literal-v-clauses var->joins
                                              business-time transact-time)
            var->joins (e-var-literal-v-or-joins snapshot or-clauses var->joins
                                                 business-time transact-time)
+           non-leaf-v-vars (set/union unification-vars not-vars e-vars (arg-vars args))
            leaf-v-var? (fn [e v]
                          (and (= 1 (count (get v->v-var-clauses v)))
                               (or (contains? e-var->literal-v-clauses e)
                                   (contains? v-var->literal-e-clauses v))
-                              (->> (for [vars [unification-vars not-vars e-vars]]
-                                     (not (contains? vars v)))
-                                   (every? true?))))
+                              (not (contains? non-leaf-v-vars v))))
            e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                                 :when (and (logic-var? e)
                                                            (logic-var? v)
@@ -452,6 +479,7 @@
                                          var->joins business-time transact-time)
            var->joins (v-var-literal-e-joins snapshot object-store v-var->literal-e-clauses v-var->range-constrants
                                              var->joins business-time transact-time)
+           var->joins (arg-joins args var->joins)
            v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                   :when (and (logic-var? v)
                                              (= e (get v-var->e v)))]

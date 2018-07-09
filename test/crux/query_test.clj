@@ -15,7 +15,7 @@
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                                               {:name "Petr" :last-name "Petrov"}])]
 
-    (t/testing "Can query by single field"
+    (t/testing "Can query value by single field"
       (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
                                               :where [[e :name "Ivan"]
                                                       [e :name name]]})))
@@ -23,7 +23,7 @@
                                               :where [[e :name "Petr"]
                                                       [e :name name]]}))))
 
-    (t/testing "Can query by single field"
+    (t/testing "Can query entity by single field"
       (t/is (= #{[(:crux.db/id ivan)]} (q/q (q/db *kv*) '{:find [e]
                                                           :where [[e :name "Ivan"]]})))
       (t/is (= #{[(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
@@ -56,6 +56,40 @@
                  (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
                                                        [p1 :last-name name]
                                                        [p1 :name "Smith"]]})))))))
+
+(t/deftest test-query-with-arguments
+  (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                                              {:name "Petr" :last-name "Petrov"}])]
+
+    (t/testing "Can query entity by single field"
+      (t/is (= #{[(:crux.db/id ivan)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Ivan"}]})))
+      (t/is (= #{[(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Petr"}]}))))
+
+    (t/testing "Can query entity by single field with several arguments"
+      (t/is (= #{[(:crux.db/id ivan)]
+                 [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Ivan"}
+                                                                 {:name "Petr"}]}))))
+
+    (t/testing "Can query entity by single field with literals"
+      (t/is (= #{[(:crux.db/id ivan)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]
+                                                                  [e :last-name "Ivanov"]]
+                                                          :args [{:name "Ivan"}
+                                                                 {:name "Petr"}]}))))
+
+    (t/testing "Can query entity with tuple arguments"
+      (t/is (= #{[(:crux.db/id ivan)]
+                 [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
+                                                          :where [[e :name name]
+                                                                  [e :last-name last-name]]
+                                                          :args [{:name "Ivan" :last-name "Ivanov"}
+                                                                 {:name "Petr" :last-name "Petrov"}]}))))))
 
 (t/deftest test-multiple-results
   (f/transact-people! *kv* [{:name "Ivan" :last-name "1"}
