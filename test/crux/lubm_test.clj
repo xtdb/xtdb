@@ -74,15 +74,15 @@
       (t/testing "querying transacted data"
         (t/is (= #{[:http://www.University0.edu]}
                  (q/q (q/db f/*kv*) (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                        '{:find [u]
-                                          :where [[u :ub/name "University0"]]}))))
+                                      '{:find [u]
+                                        :where [[u :ub/name "University0"]]}))))
 
         (t/testing "lazy result"
           (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
             (t/is (= '([:http://www.University0.edu])
                      (q/q snapshot (q/db f/*kv*) (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                     '{:find [u]
-                                                       :where [[u :ub/name "University0"]]}))))))))
+                                                   '{:find [u]
+                                                     :where [[u :ub/name "University0"]]}))))))))
 
     ;; This query bears large input and high selectivity. It queries about just one class and
     ;; one property and does not assume any hierarchy information or inference.
@@ -131,7 +131,17 @@
                (q/q (q/db f/*kv*)
                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
-                        :where [[x :rdf/type :ub/Publication]
+                        :where [;; [x :rdf/type :ub/Publication]
+                                (or [x :rdf/type :ub/Publication]
+                                    [x :rdf/type :ub/Article]
+                                    [x :rdf/type :ub/ConferencePaper]
+                                    [x :rdf/type :ub/JournalArticle]
+                                    [x :rdf/type :ub/TechReport]
+                                    [x :rdf/type :ub/Book]
+                                    [x :rdf/type :ub/Manual]
+                                    [x :rdf/type :ub/Software]
+                                    [x :rdf/type :ub/Specification]
+                                    [x :rdf/type :ub/UnofficialPublication])
                                 [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
 
     ;; TODO: AssociateProfessor should be Professor.
@@ -146,53 +156,92 @@
       (let [result (q/q (q/db f/*kv*)
                         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                           '{:find [x y1 y2 y3]
-                            :where [[x :rdf/type :ub/AssociateProfessor]
+                            :where [;; [x :rdf/type :ub/Professor]
+                                    (or [x :rdf/type :ub/Professor]
+                                        [x :rdf/type :ub/AssistantProfessor]
+                                        [x :rdf/type :ub/AssociateProfessor]
+                                        [x :rdf/type :ub/Chair]
+                                        [x :rdf/type :ub/Dean]
+                                        [x :rdf/type :ub/FullProfessor]
+                                        [x :rdf/type :ub/VisitingProfessor])
                                     [x :ub/worksFor :http://www.Department0.University0.edu]
                                     [x :ub/name y1]
                                     [x :ub/emailAddress y2]
                                     [x :ub/telephone y3]]}))]
-        (t/is (= 14 (count result)))
-        (t/is (= [:http://www.Department0.University0.edu/AssociateProfessor8
-                  "AssociateProfessor8"
-                  "AssociateProfessor8@Department0.University0.edu"
-                  "xxx-xxx-xxxx"] (first result)))))
+        (t/is (= 34 (count result)))
+        (t/is (contains? result [:http://www.Department0.University0.edu/AssistantProfessor0
+                                 "AssistantProfessor0"
+                                 "AssistantProfessor0@Department0.University0.edu"
+                                 "xxx-xxx-xxxx"]))))
+
+    ;; TODO: This should really us rules for subClassOf and
+    ;; subPropertyOf.
 
     ;; This query assumes subClassOf relationship between Person and its subclasses
     ;; and subPropertyOf relationship between memberOf and its subproperties.
     ;; Moreover, class Person features a deep and wide hierarchy.
-    #_(t/testing "LUBM query 5"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        '{:find [x]
-                          :where [[x :rdf/type :ub/Person]
-                                  [x :ub/memberOf :http://www.Department0.University0.edu]]})))))
+    (t/testing "LUBM query 5"
+      (t/is (= 719 (count (q/q (q/db f/*kv*)
+                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                 '{:find [x]
+                                   :where [;; [x :rdf/type :ub/Person]
+                                           (or [x :rdf/type :ub/Person]
+                                               [x :rdf/type :ub/Employee]
+                                               [x :rdf/type :ub/AdministrativeStaff]
+                                               [x :rdf/type :ub/Faculty]
+                                               [x :rdf/type :ub/PostDoc]
+                                               [x :rdf/type :ub/Lecturer]
+                                               [x :rdf/type :ub/Professor]
+                                               [x :rdf/type :ub/AssistantProfessor]
+                                               [x :rdf/type :ub/AssociateProfessor]
+                                               [x :rdf/type :ub/Chair]
+                                               [x :rdf/type :ub/Dean]
+                                               [x :rdf/type :ub/FullProfessor]
+                                               [x :rdf/type :ub/VisitingProfessor]
+                                               [x :rdf/type :ub/Student]
+                                               [x :rdf/type :ub/UndergraduateStudent]
+                                               [x :rdf/type :ub/GraduateStudent]
+                                               [x :rdf/type :ub/Director]
+                                               [x :rdf/type :ub/TeachingAssistant]
+                                               [x :rdf/type :ub/ResearchAssistant])
+                                           ;; [x :ub/memberOf :http://www.Department0.University0.edu]
+                                           (or [x :ub/memberOf :http://www.Department0.University0.edu]
+                                               [x :ub/worksFor :http://www.Department0.University0.edu])]}))))))
+
+    ;; TODO: Should use rules. Should return 7790 with lubm10.ntriples.
 
     ;; This query queries about only one class. But it assumes both the explicit
     ;; subClassOf relationship between UndergraduateStudent and Student and the
     ;; implicit one between GraduateStudent and Student. In addition, it has large
     ;; input and low selectivity.
-    #_(t/testing "LUBM query 6"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        '{:find [x]
-                          :where [[x :rdf/type :ub/Student]]})))))
+    (t/testing "LUBM query 6"
+      (t/is (= 678 (count (q/q (q/db f/*kv*)
+                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                 '{:find [x]
+                                   :where [;; [x :rdf/type :ub/Student]
+                                           (or [x :rdf/type :ub/Student]
+                                               [x :rdf/type :ub/UndergraduateStudent]
+                                               [x :rdf/type :ub/GraduateStudent])]}))))))
 
-    ;; TODO: UndergraduateStudent should be Student.
-    ;; Should return 110 with lubm10.ntriples.
-    ;; EmptyHeaded also returns 59 for this with UndergraduateStudent.
+    ;; TODO: Should use rules.
+    ;; Should return 110 with lubm10.ntriples (is this for UndergraduateStudent?).
+    ;; EmptyHeaded returns 59 for this with UndergraduateStudent.
 
     ;; This query is similar to Query 6 in terms of class Student but it increases in the
     ;; number of classes and properties and its selectivity is high.
     ;; "Elapsed time: 480.39002 msecs"
     ;; "Elapsed time: 65851.740685 msecs"
     (t/testing "LUBM query 7"
-      (t/is (= 59 (count (q/q (q/db f/*kv*)
+      (t/is (= 67 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                 '{:find [x y]
-                                  :where [[x :rdf/type :ub/UndergraduateStudent]
-                                          [y :rdf/type :ub/Course]
+                                  :where [;; [x :rdf/type :ub/Student]
+                                          (or [x :rdf/type :ub/Student]
+                                              [x :rdf/type :ub/UndergraduateStudent]
+                                              [x :rdf/type :ub/GraduateStudent])
+                                          ;; [y :rdf/type :ub/Course]
+                                          (or [y :rdf/type :ub/Course]
+                                              [y :rdf/type :ub/GraduateCourse])
                                           [x :ub/takesCourse y]
                                           [:http://www.Department0.University0.edu/AssociateProfessor0
                                            :ub/teacherOf
@@ -206,49 +255,74 @@
                                             :ub/teacherOf
                                             y]]})))))))
 
-    ;; TODO: UndergraduateStudent should be Student.
-    ;; Should return 7791 with lubm10.ntriples.
-    ;; EmptyHeaded also returns 5916 for this with UndergraduateStudent.
+    ;; TODO: Should use rules. Cannot use or for memberOf/worksFor here.
+    ;; Should return 7791 with lubm10.ntriples (is this for UndergraduateStudent?).
+    ;; EmptyHeaded returns 5916 for this with UndergraduateStudent.
 
     ;; This query is further more complex than Query 7 by including one more property.
     ;; "Elapsed time: 40.463253 msecs"
     ;; "Elapsed time: 1465.576616 msecs"
     (t/testing "LUBM query 8"
-      (t/is (= 532 (count (q/q (q/db f/*kv*)
+      (t/is (= 678 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x y z]
-                                   :where [[x :rdf/type :ub/UndergraduateStudent]
+                                   :where [;; [x :rdf/type :ub/Student]
+                                           (or [x :rdf/type :ub/Student]
+                                               [x :rdf/type :ub/UndergraduateStudent]
+                                               [x :rdf/type :ub/GraduateStudent])
                                            [y :rdf/type :ub/Department]
                                            [x :ub/memberOf y]
                                            [y :ub/subOrganizationOf :http://www.University0.edu]
                                            [x :ub/emailAddress z]]}))))))
 
+    ;; TODO: Should use rules.
+
     ;; Besides the aforementioned features of class Student and the wide hierarchy of
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
     ;; properties in the query set and there is a triangular pattern of relationships.
-    #_(t/testing "LUBM query 9"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        '{:find [x y z]
-                          :where [[x :rdf/type :ub/Student]
-                                  [y :rdf/type :ub/Faculty]
-                                  [z :rdf/type :ub/Course]
-                                  [x :ub/advisor y]
-                                  [y :ub/teacherOf z]
-                                  [x :ub/takesCourse z]]})))))
+    (t/testing "LUBM query 9"
+      (t/is (= 13 (count (q/q (q/db f/*kv*)
+                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                '{:find [x y z]
+                                  :where [;; [x :rdf/type :ub/Student]
+                                          (or [x :rdf/type :ub/Student]
+                                              [x :rdf/type :ub/UndergraduateStudent]
+                                              [x :rdf/type :ub/GraduateStudent])
+                                          ;; [y :rdf/type :ub/Faculty]
+                                          (or [y :rdf/type :ub/Faculty]
+                                              [y :rdf/type :ub/PostDoc]
+                                              [y :rdf/type :ub/Lecturer]
+                                              [y :rdf/type :ub/Professor]
+                                              [y :rdf/type :ub/AssistantProfessor]
+                                              [y :rdf/type :ub/AssociateProfessor]
+                                              [y :rdf/type :ub/Chair]
+                                              [y :rdf/type :ub/Dean]
+                                              [y :rdf/type :ub/FullProfessor]
+                                              [y :rdf/type :ub/VisitingProfessor])
+                                          ;; [z :rdf/type :ub/Course]
+                                          (or [z :rdf/type :ub/Course]
+                                              [z :rdf/type :ub/GraduateCourse])
+                                          [x :ub/advisor y]
+                                          [y :ub/teacherOf z]
+                                          [x :ub/takesCourse z]]}))))))
+
+    ;; TODO: Should use rules.
 
     ;; This query differs from Query 6, 7, 8 and 9 in that it only requires the
     ;; (implicit) subClassOf relationship between GraduateStudent and Student, i.e.,
     ;; subClassOf rela-tionship between UndergraduateStudent and Student does not add
     ;; to the results.
-    #_(t/testing "LUBM query 10"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        '{:find [x]
-                          :where [[x :rdf/type :ub/Student]
-                                  [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]})))))
+    (t/testing "LUBM query 10"
+      (t/is (= 4 (count (q/q (q/db f/*kv*)
+                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                               '{:find [x]
+                                 :where [;; [x :rdf/type :ub/Student]
+                                         (or [x :rdf/type :ub/Student]
+                                             [x :rdf/type :ub/UndergraduateStudent]
+                                             [x :rdf/type :ub/GraduateStudent])
+                                         [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]}))))))
+
+    ;; TODO: should use transitive rule.
 
     ;; Query 11, 12 and 13 are intended to verify the presence of certain OWL reasoning
     ;; capabilities in the system. In this query, property subOrganizationOf is defined
@@ -257,17 +331,19 @@
     ;; a University individual, inference about the subOrgnizationOf relationship between
     ;; instances of ResearchGroup and University is required to answer this query.
     ;; Additionally, its input is small.
-    #_(t/testing "LUBM query 11"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        '{:find [x]
-                          :where [[x :rdf/type :ub/ResearchGroup]
-                                  [x :ub/subOrganizationOf :http://www.University0.edu]]})))))
+    (t/testing "LUBM query 11"
+      (t/is (= 10 (count (q/q (q/db f/*kv*)
+                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                '{:find [x]
+                                  :where [[x :rdf/type :ub/ResearchGroup]
+                                          [x :ub/subOrganizationOf d]
+                                          [d :rdf/type :ub/Department]
+                                          ;; [x :ub/subOrganizationOf :http://www.University0.edu]
+                                          [d :ub/subOrganizationOf :http://www.University0.edu]]}))))))
 
     ;; TODO: FullProfessor should really be Chair.
     ;; Should return 15 with lubm10.ntriples.
-    ;; EmptyHeaded also returns 125 for this with FullProfessor.
+    ;; EmptyHeaded returns 125 for this with FullProfessor.
 
     ;; The benchmark data do not produce any instances of class Chair. Instead, each
     ;; Department individual is linked to the chair professor of that department by
@@ -283,7 +359,17 @@
                                   :where [[x :rdf/type :ub/FullProfessor]
                                           [y :rdf/type :ub/Department]
                                           [x :ub/worksFor y]
-                                          [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+                                          [y :ub/subOrganizationOf :http://www.University0.edu]]})))))
+
+      ;; TODO: actual result, should use rules.
+      (t/is (= 1 (count (q/q (q/db f/*kv*)
+                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                               '{:find [x y]
+                                 :where [[y :rdf/type :ub/Department]
+                                         [x :ub/headOf y]
+                                         [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+
+    ;; TODO: should use rules.
 
     ;; Property hasAlumnus is defined in the benchmark ontology as the inverse of
     ;; property degreeFrom, which has three subproperties: undergraduateDegreeFrom,
@@ -291,14 +377,36 @@
     ;; an alumnus of a university using one of these three subproperties instead of
     ;; hasAlumnus. Therefore, this query assumes subPropertyOf relationships between
     ;; degreeFrom and its subproperties, and also requires inference about inverseOf.
-    #_(t/testing "LUBM query 13"
-        (t/is (= #{}
-                 (q/q (q/db f/*kv*)
-                      (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-                                        :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                        {:find [x]
-                         :where [[x :rdf/type :ub/Person]
-                                 [:http://www.University0.edu :ub/hasAlumnus x]]})))))
+    (t/testing "LUBM query 13"
+      (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor2]}
+               (q/q (q/db f/*kv*)
+                    (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                                      :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                      '{:find [x]
+                        :where [;; [x :rdf/type :ub/Person]
+                                (or [x :rdf/type :ub/Person]
+                                    [x :rdf/type :ub/Employee]
+                                    [x :rdf/type :ub/AdministrativeStaff]
+                                    [x :rdf/type :ub/Faculty]
+                                    [x :rdf/type :ub/PostDoc]
+                                    [x :rdf/type :ub/Lecturer]
+                                    [x :rdf/type :ub/Professor]
+                                    [x :rdf/type :ub/AssistantProfessor]
+                                    [x :rdf/type :ub/AssociateProfessor]
+                                    [x :rdf/type :ub/Chair]
+                                    [x :rdf/type :ub/Dean]
+                                    [x :rdf/type :ub/FullProfessor]
+                                    [x :rdf/type :ub/VisitingProfessor]
+                                    [x :rdf/type :ub/Student]
+                                    [x :rdf/type :ub/UndergraduateStudent]
+                                    [x :rdf/type :ub/GraduateStudent]
+                                    [x :rdf/type :ub/Director]
+                                    [x :rdf/type :ub/TeachingAssistant]
+                                    [x :rdf/type :ub/ResearchAssistant])
+                                ;; [:http://www.University0.edu :ub/hasAlumnus x]
+                                (or [x :ub/undergraduateDegreeFrom :http://www.University0.edu]
+                                    [x :ub/mastersDegreeFrom :http://www.University0.edu]
+                                    [x :ub/doctoralDegreeFrom :http://www.University0.edu])]})))))
 
     ;; TODO: Should return 5916 with lubm10.ntriples, which we do.
 
