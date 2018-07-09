@@ -16,6 +16,7 @@ body {
   background-color: $black-colour;
 }
 
+// White page container (excludes navbar)
 #container {
   position: absolute;
   top: 60px;
@@ -24,24 +25,8 @@ body {
   border-radius: 10px;
 }
 
-a {
-  font-family: inherit;
-  text-decoration: none;
-  color: inherit;
-  margin-left: 10px;
-}
-
-a:hover {
-  color: $red-colour;
-}
-
 span {
   color: $black-colour;
-}
-
-span#copyright {
-  font-weight: bold;
-  color: white;
 }
 
 nav {
@@ -182,16 +167,19 @@ section {
     display: inline-block;
   }
 
+// Red
   #circle1 {
     left: 5px;
     background-color: #FF484b;
   }
 
+// Yellow
   #circle2 {
     left: 10px;
     background-color: #F7E71E;
   }
 
+// Blue
   #circle3 {
     left: 15px;
     background-color: #3CFED2;
@@ -208,12 +196,6 @@ section {
     p {
       color: $black-lighter-colour;
     }
-  }
-}
-
-@media only mobile {
-  #demo-box {
-    min-height: 300px;
   }
 }
 
@@ -277,6 +259,22 @@ footer {
   width: 100%;
   background-color: $black-colour;
   color: white;
+
+  span {
+    font-weight: bold;
+    color: white;
+  }
+
+  a {
+    font-family: inherit;
+    text-decoration: none;
+    color: inherit;
+    margin-left: 10px;
+  }
+
+  a:hover {
+    color: $red-colour;
+  }
 
   ul {
     list-style: none;
