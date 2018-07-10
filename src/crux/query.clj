@@ -393,10 +393,12 @@
             (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
-                    (let [entities-to-remove (->> (bound-results-for-var object-store var->bindings join-keys join-results e)
-                                                  (map :entity)
-                                                  (set))]
-                      (update parent-join-results e set/difference entities-to-remove)))
+                    (let [entities-to-remove (zipmap not-vars
+                                                     (for [var not-vars]
+                                                       (->> (bound-results-for-var object-store var->bindings join-keys join-results var)
+                                                            (map :entity)
+                                                            (set))))]
+                      (merge-with set/difference parent-join-results entities-to-remove)))
                   join-results)))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
