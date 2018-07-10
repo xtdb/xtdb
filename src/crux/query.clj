@@ -100,7 +100,6 @@
                             (case type
                               :pred clause
                               :not-pred (update clause :pred-fn complement))))
-                  :or clause
                   :range (let [[type clause] clause]
                            (if (= :val-sym type)
                              (update clause :op range->inverse-range)
@@ -132,7 +131,8 @@
                                   arg [x y]
                                   :when (logic-var? arg)]
                               arg))
-     :not-vars (->> (for [{:keys [e]} not-clauses]
+     :not-vars (->> (for [{:keys [e]} not-clauses
+                          :when (logic-var? e)]
                       e)
                     (into not-v-vars))
      :pred-vars (set (for [{:keys [args]} pred-clauses
@@ -373,7 +373,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [object-store not-clauses var->bindings]
+(defn- build-not-constraints [snapshot db object-store not-clauses not-vars var->bindings]
   (for [{:keys [e a v]
          :as clause} not-clauses]
     (do (doseq [arg [e v]
@@ -383,16 +383,21 @@
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
-          (let [results (bound-results-for-var object-store var->bindings join-keys join-results e)
-                not-vs (if (logic-var? v)
-                         (->> (bound-results-for-var object-store var->bindings join-keys join-results v)
-                              (map :value)
-                              (set))
-                         #{v})
-                entities-to-remove (set (for [{:keys [doc entity]} results
-                                              :when (not-empty (set/intersection (set (doc/normalize-value (get doc a))) not-vs))]
-                                          entity))]
-            (update join-results e set/difference entities-to-remove))))))
+          (let [args (vec (for [tuple (cartesian-product
+                                       (for [var not-vars]
+                                         (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                            (zipmap not-vars (map :value tuple))))
+                {:keys [n-ary-join
+                        var->bindings
+                        var->joins]} (build-sub-query snapshot db [] [[:bgp clause]] args #{})]
+            (->> (doc/layered-idx->seq n-ary-join (count var->joins))
+                 (reduce
+                  (fn [parent-join-results [join-keys join-results]]
+                    (let [entities-to-remove (->> (bound-results-for-var object-store var->bindings join-keys join-results e)
+                                                  (map :entity)
+                                                  (set))]
+                      (update parent-join-results e set/difference entities-to-remove)))
+                  join-results)))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
@@ -532,7 +537,7 @@
                                                  e-var->leaf-v-var-clauses
                                                  (keys var->attr)))
         unification-preds (build-unification-preds unify-clauses var->bindings)
-        not-constraints (build-not-constraints object-store not-clauses var->bindings)
+        not-constraints (build-not-constraints snapshot db object-store not-clauses not-vars var->bindings)
         pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
