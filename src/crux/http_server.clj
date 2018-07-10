@@ -68,6 +68,13 @@
     :crux.kv-store/size (cio/folder-human-size db-dir)
     :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)}))
 
+;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
+(defn history [kvs request]
+  (let-valid [snapshot (kvs/new-snapshot kvs)
+              entity (param request "entity")]
+    (success-response
+     (doc/entity-history snapshot entity))))
+
 (defn query [kvs request]
   (let-valid [query-map (param request "q")]
     (success-response
@@ -86,6 +93,8 @@
     (check-path request ["/"] [:get])
     (status kvs db-dir)
 
+    (check-path request ["/h" "/history"] [:get :post])
+    (history kvs request)
 
     (check-path request ["/q" "/query"] [:get :post])
     (query kvs request)
