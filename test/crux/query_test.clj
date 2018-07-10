@@ -12,50 +12,51 @@
                                   :where [[e :name "Ivan"]]}))))
 
 (t/deftest test-basic-query
-  (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
-                                              {:name "Petr" :last-name "Petrov"}])]
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov"}])
 
-    (t/testing "Can query value by single field"
-      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
-                                              :where [[e :name "Ivan"]
-                                                      [e :name name]]})))
-      (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [name]
-                                              :where [[e :name "Petr"]
-                                                      [e :name name]]}))))
+  (t/testing "Can query value by single field"
+    (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
+                                            :where [[e :name "Ivan"]
+                                                    [e :name name]]})))
+    (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [name]
+                                            :where [[e :name "Petr"]
+                                                    [e :name name]]}))))
 
-    (t/testing "Can query entity by single field"
-      (t/is (= #{[(:crux.db/id ivan)]} (q/q (q/db *kv*) '{:find [e]
-                                                          :where [[e :name "Ivan"]]})))
-      (t/is (= #{[(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
-                                                          :where [[e :name "Petr"]]}))))
+  (t/testing "Can query entity by single field"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [e]
+                                           :where [[e :name "Ivan"]]})))
+    (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [e]
+                                           :where [[e :name "Petr"]]}))))
 
-    (t/testing "Can query using multiple terms"
-      (t/is (= #{["Ivan" "Ivanov"]} (q/q (q/db *kv*) '{:find [name last-name]
-                                                       :where [[e :name name]
-                                                               [e :last-name last-name]
-                                                               [e :name "Ivan"]
-                                                               [e :last-name "Ivanov"]]}))))
+  (t/testing "Can query using multiple terms"
+    (t/is (= #{["Ivan" "Ivanov"]} (q/q (q/db *kv*) '{:find [name last-name]
+                                                     :where [[e :name name]
+                                                             [e :last-name last-name]
+                                                             [e :name "Ivan"]
+                                                             [e :last-name "Ivanov"]]}))))
 
-    (t/testing "Negate query based on subsequent non-matching clause"
-      (t/is (= #{} (q/q (q/db *kv*) '{:find [e]
-                                      :where [[e :name "Ivan"]
-                                              [e :last-name "Ivanov-does-not-match"]]}))))
+  (t/testing "Negate query based on subsequent non-matching clause"
+    (t/is (= #{} (q/q (q/db *kv*) '{:find [e]
+                                    :where [[e :name "Ivan"]
+                                            [e :last-name "Ivanov-does-not-match"]]}))))
 
-    (t/testing "Can query for multiple results"
-      (t/is (= #{["Ivan"] ["Petr"]}
-               (q/q (q/db *kv*) '{:find [name] :where [[e :name name]]}))))
+  (t/testing "Can query for multiple results"
+    (t/is (= #{["Ivan"] ["Petr"]}
+             (q/q (q/db *kv*) '{:find [name] :where [[e :name name]]}))))
 
-    (let [[smith] (f/transact-people! *kv* [{:name "Smith" :last-name "Smith"}])]
-      (t/testing "Can query across fields for same value"
-        (t/is (= #{[(:crux.db/id smith)]}
-                 (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
-                                                       [p1 :last-name name]]}))))
 
-      (t/testing "Can query across fields for same value when value is passed in"
-        (t/is (= #{[(:crux.db/id smith)]}
-                 (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
-                                                       [p1 :last-name name]
-                                                       [p1 :name "Smith"]]})))))))
+  (f/transact-people! *kv* [{:crux.db/id :smith :name "Smith" :last-name "Smith"}])
+  (t/testing "Can query across fields for same value"
+    (t/is (= #{[:smith]}
+             (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
+                                                   [p1 :last-name name]]}))))
+
+  (t/testing "Can query across fields for same value when value is passed in"
+    (t/is (= #{[:smith]}
+             (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
+                                                   [p1 :last-name name]
+                                                   [p1 :name "Smith"]]})))))
 
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
@@ -148,9 +149,9 @@
                                                               [e :sex :female]]})))))
 
 (t/deftest test-basic-query-at-t
-  (let [[malcolm] (f/transact-people! *kv* [{:name "Malcolm" :last-name "Sparks"}]
+  (let [[malcolm] (f/transact-people! *kv* [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
                                       #inst "1986-10-22")]
-    (f/transact-people! *kv* [{:name "Malcolma" :last-name "Sparks"}] #inst "1986-10-24")
+    (f/transact-people! *kv* [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}] #inst "1986-10-24")
     (let [q '{:find [e]
               :where [[e :name "Malcolma"]
                       [e :last-name "Sparks"]]}]
@@ -306,6 +307,26 @@
                                                  (or [e :last-name "Ivanov"]
                                                      [e :last-name "Ivannotov"])]}))))
 
+    (t/is (= 4 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [(or [e :last-name "Ivanov"]
+                                                     [e :last-name "Ivannotov"]
+                                                     [e :last-name "Controlguy"])]}))))
+
+    (t/is (= 0 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [(or [e :last-name "Controlguy"])
+                                                 (or [e :last-name "Ivanov"]
+                                                     [e :last-name "Ivannotov"])]}))))
+
+
+    (t/is (= 0 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [(or [e :last-name "Ivanov"])
+                                                 (or [e :last-name "Ivannotov"])]}))))
+
+    (t/is (= 0 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [[e :last-name "Controlguy"]
+                                                 (or [e :last-name "Ivanov"]
+                                                     [e :last-name "Ivannotov"])]}))))
+
     (t/is (= 3 (count (q/q (q/db *kv*) '{:find [e]
                                          :where [[e :name name]
                                                  (or [e :last-name "Ivanov"]
@@ -349,7 +370,7 @@
                                    [e2 :last-name "Ivanov"])]})
     (t/is (= true false) "Expected assertion error")
     (catch IllegalArgumentException e
-      (t/is (re-find #"Or requires same logic variable in entity position: "
+      (t/is (re-find #"Or requires same logic variables"
                      (.getMessage e))))))
 
 (t/deftest test-ors-can-introduce-new-bindings

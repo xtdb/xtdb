@@ -387,10 +387,17 @@
   (->OrVirtualIndex indexes (atom nil)))
 
 (defn- new-unary-join-iterator-state [idx [value results]]
-  {:idx idx
-   :key (or value idx/nil-id-bytes)
-   :result-name (:name idx (gensym "result-name"))
-   :results (set results)})
+  (let [result-name (:name idx (gensym "result-name"))]
+    {:idx idx
+     :key (or value idx/nil-id-bytes)
+     :result-name result-name
+     :results (cond
+                (nil? results)
+                nil
+                (map? results)
+                results
+                :else
+                {result-name (set results)})}))
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-thunk-state]
   db/Index
@@ -439,7 +446,10 @@
           (if match?
             (let [names (map :result-name iterators)]
               (log/debug :match names (bu/bytes->hex max-k))
-              [max-k (zipmap names (map :results iterators))])
+              (when-let [result (->> (map :results iterators)
+                                     (apply merge-with set/intersection)
+                                     (not-empty))]
+                [max-k result]))
             (recur)))))))
 
 (defn new-unary-join-virtual-index [indexes]

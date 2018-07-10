@@ -19,8 +19,6 @@
                         :age       (rand-int 100)
                         :salary    (rand-int 100000)})
 
-(def people (repeatedly random-person))
-
 (defn people->tx-ops [people ts]
   (vec (for [person people]
          [:crux.tx/put
@@ -33,7 +31,7 @@
    (transact-people! db people-mixins (Date.)))
   ([db people-mixins ts]
    (let [tx-log (crux.tx/->DocTxLog db)
-         people (->> people-mixins (map #(merge %1 %2) people))
+         people (->> people-mixins (map merge (repeatedly random-person)))
          tx-ops (people->tx-ops people ts)]
      @(crux.db/submit-tx tx-log tx-ops)
      people)))

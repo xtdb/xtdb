@@ -89,6 +89,7 @@
   (->> (for [[type clause] clauses]
          {type [(case type
                   (:bgp, :not) (normalize-bgp-clause clause)
+                  :and (mapv normalize-bgp-clause clause)
                   :pred (let [[type {:keys [pred-fn args]
                                      :as clause}] clause]
                           (let [clause (if-let [range-pred (and (= 2 (count args))
@@ -99,10 +100,7 @@
                             (case type
                               :pred clause
                               :not-pred (update clause :pred-fn complement))))
-                  :or (for [[type clause] clause]
-                        (case type
-                          :bgp [(normalize-bgp-clause clause)]
-                          :and (mapv normalize-bgp-clause clause)))
+                  :or clause
                   :range (let [[type clause] clause]
                            (if (= :val-sym type)
                              (update clause :op range->inverse-range)
@@ -173,29 +171,34 @@
             (merge-with into var->joins {e-var [(assoc idx :name e-var)]})))
         var->joins)))
 
-(defn- e-var-literal-v-or-joins [snapshot or-clauses var->joins business-time transact-time]
+(declare build-sub-query)
+
+;; TODO: needs to ensure constraints are handled while walking the sub
+;; tree. Needs cleanup.  How state is transferred and shared between
+;; sub-query and parent query needs work. Constraints needs to be
+;; connected to the sub query as its walked.
+(defn- or-joins [snapshot db or-clauses var->joins e-vars]
   (->> or-clauses
        (reduce
-        (fn [var->joins clause]
-          (let [or-e-vars (set (for [sub-clauses clause
-                                     {:keys [e]} sub-clauses]
-                                 e))
-                e-var (first or-e-vars)]
-            (when (not= 1 (count or-e-vars))
-              (throw (IllegalArgumentException.
-                      (str "Or requires same logic variable in entity position: "
-                           (pr-str clause)))))
-            (let [idx (doc/new-or-virtual-index
-                       (vec (for [sub-clauses clause]
-                              (doc/new-shared-literal-attribute-entities-virtual-index
-                               snapshot
-                               (vec (for [{:keys [a v]
-                                           :as clause} sub-clauses]
-                                      [a v]))
-                               business-time
-                               transact-time))))]
-              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
-        var->joins)))
+        (fn [[or-var->bindings var->joins] clause]
+          (let [sub-query-state (->> (for [sub-clauses clause]
+                                       (assoc (build-sub-query snapshot db [] [sub-clauses] [] e-vars)
+                                              :sub-clauses sub-clauses))
+                                     (reduce
+                                      (fn [lhs rhs]
+                                        (when-not (= (set (keys (:var->bindings lhs)))
+                                                     (set (keys (:var->bindings rhs))))
+                                          (throw (IllegalArgumentException.
+                                                  (str "Or requires same logic variables: "
+                                                       (pr-str (:sub-clauses lhs)) " "
+                                                       (pr-str (:sub-clauses rhs))))))
+                                        (-> (merge-with merge lhs (select-keys rhs [:var->joins :var->bindings]))
+                                            (update :n-ary-join doc/new-n-ary-or-layered-virtual-index (:n-ary-join rhs))))))
+                idx (:n-ary-join sub-query-state)]
+            [(merge or-var->bindings (:var->bindings sub-query-state))
+             (apply merge-with into var->joins (for [v (keys (:var->bindings sub-query-state))]
+                                                 {v [(assoc idx :name v)]}))]))
+        [nil var->joins])))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
@@ -423,6 +426,130 @@
              (every? true?))
     join-results))
 
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args parent-vars]
+  (let [{bgp-clauses :bgp
+         and-clauses :and
+         :as type->clauses} (normalize-clauses where)
+        {bgp-clauses :bgp
+         range-clauses :range
+         pred-clauses :pred
+         unify-clauses :unify
+         not-clauses :not
+         or-clauses :or
+         :as type->clauses} (assoc type->clauses
+         :bgp (or bgp-clauses (apply concat and-clauses)))
+        {:keys [e-vars
+                v-vars
+                unification-vars
+                not-vars
+                pred-vars]} (collect-vars type->clauses)
+        e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
+                                    :when (logic-var? v)]
+                                clause)
+                              (group-by :e))
+        v->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
+                                    :when (logic-var? v)]
+                                clause)
+                              (group-by :v))
+        v-var->e (->> (for [[e clauses] e->v-var-clauses
+                            {:keys [e v]} clauses
+                            :when (not (contains? e-vars v))]
+                        [v e])
+                      (into {}))
+        e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                            :when (and (logic-var? e)
+                                                       (literal? v))]
+                                        clause)
+                                      (group-by :e))
+        v-var->literal-e-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                            :when (and (entity-ident? e)
+                                                       (logic-var? v))]
+                                        clause)
+                                      (group-by :v))
+        var->joins (sorted-map)
+        [or-var->bindings var->joins] (or-joins snapshot
+                                                db
+                                                or-clauses
+                                                var->joins
+                                                e-vars)
+        e-vars (set/union e-vars (set (for [[_ {:keys [e-var]}] or-var->bindings]
+                                        e-var)))
+        var->joins (e-var-literal-v-joins snapshot
+                                          e-var->literal-v-clauses
+                                          var->joins
+                                          business-time
+                                          transact-time)
+        non-leaf-v-vars (set/union unification-vars not-vars e-vars (arg-vars args) parent-vars)
+        leaf-v-var? (fn [e v]
+                      (and (= 1 (count (get v->v-var-clauses v)))
+                           (or (contains? e-var->literal-v-clauses e)
+                               (contains? v-var->literal-e-clauses v))
+                           (not (contains? non-leaf-v-vars v))))
+        e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
+                                             :when (and (logic-var? e)
+                                                        (logic-var? v)
+                                                        (not (leaf-v-var? e v)))]
+                                         clause)
+                                       (group-by (juxt :e :v)))
+        e-var->leaf-v-var-clauses (->> (for [{:keys [e a v] :as clause} bgp-clauses
+                                             :when (and (logic-var? e)
+                                                        (logic-var? v)
+                                                        (leaf-v-var? e v))]
+                                         clause)
+                                       (group-by :e))
+        v-var->range-constrants (build-v-var-range-constraints e-vars range-clauses)
+        var->joins (e-var-v-var-joins snapshot
+                                      e-var+v-var->join-clauses
+                                      v-var->range-constrants
+                                      var->joins
+                                      business-time
+                                      transact-time)
+        var->joins (v-var-literal-e-joins snapshot
+                                          object-store
+                                          v-var->literal-e-clauses
+                                          v-var->range-constrants
+                                          var->joins
+                                          business-time
+                                          transact-time)
+        var->joins (arg-joins snapshot
+                              args
+                              e-vars
+                              var->joins
+                              business-time
+                              transact-time)
+        v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
+                               :when (and (logic-var? v)
+                                          (= e (get v-var->e v)))]
+                           [v a])
+                         (into {}))
+        e-var->attr (zipmap e-vars (repeat :crux.db/id))
+        var->attr (merge v-var->attr e-var->attr)
+        var->values-result-index (zipmap (keys var->joins) (range))
+        var->bindings (merge or-var->bindings
+                             (build-var-bindings var->attr
+                                                 v-var->e
+                                                 var->values-result-index
+                                                 e-var->leaf-v-var-clauses
+                                                 (keys var->attr)))
+        unification-preds (build-unification-preds unify-clauses var->bindings)
+        not-constraints (build-not-constraints object-store not-clauses var->bindings)
+        pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
+        shared-e-v-vars (set/intersection e-vars v-vars)
+        constrain-result-fn (fn [max-ks result]
+                              (some->> (doc/constrain-join-result-by-empty-names max-ks result)
+                                       (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
+                                       (constrain-join-result-by-unification unification-preds max-ks)
+                                       (constrain-join-result-by-not not-constraints var->joins max-ks)
+                                       (constrain-join-result-by-preds pred-constraints max-ks)))
+        leaf-pred (build-leaf-pred pred-clauses var->bindings)]
+    {:leaf-pred leaf-pred
+     :pred-vars pred-vars
+     :n-ary-join (-> (mapv doc/new-unary-join-virtual-index (vals var->joins))
+                     (doc/new-n-ary-join-layered-virtual-index))
+     :var->bindings var->bindings
+     :var->joins var->joins
+     :constrain-result-fn constrain-result-fn}))
+
 (defn q
   ([{:keys [kv] :as db} q]
    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
@@ -432,121 +559,17 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
-     (let [{bgp-clauses :bgp
-            range-clauses :range
-            pred-clauses :pred
-            unify-clauses :unify
-            not-clauses :not
-            or-clauses :or
-            :as type->clauses} (normalize-clauses where)
-           {:keys [e-vars
-                   v-vars
-                   unification-vars
-                   not-vars
-                   pred-vars]} (collect-vars type->clauses)
-           e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
-                                       :when (logic-var? v)]
-                                   clause)
-                                 (group-by :e))
-           v->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
-                                       :when (logic-var? v)]
-                                   clause)
-                                 (group-by :v))
-           v-var->e (->> (for [[e clauses] e->v-var-clauses
-                               {:keys [e v]} clauses
-                               :when (not (contains? e-vars v))]
-                           [v e])
-                         (into {}))
-           e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                               :when (and (logic-var? e)
-                                                          (literal? v))]
-                                           clause)
-                                         (group-by :e))
-           v-var->literal-e-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                               :when (and (entity-ident? e)
-                                                          (logic-var? v))]
-                                           clause)
-                                         (group-by :v))
-           var->joins (sorted-map)
-           var->joins (e-var-literal-v-joins snapshot
-                                             e-var->literal-v-clauses
-                                             var->joins
-                                             business-time
-                                             transact-time)
-           var->joins (e-var-literal-v-or-joins snapshot
-                                                or-clauses
-                                                var->joins
-                                                business-time
-                                                transact-time)
-           non-leaf-v-vars (set/union unification-vars not-vars e-vars (arg-vars args))
-           leaf-v-var? (fn [e v]
-                         (and (= 1 (count (get v->v-var-clauses v)))
-                              (or (contains? e-var->literal-v-clauses e)
-                                  (contains? v-var->literal-e-clauses v))
-                              (not (contains? non-leaf-v-vars v))))
-           e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                                :when (and (logic-var? e)
-                                                           (logic-var? v)
-                                                           (not (leaf-v-var? e v)))]
-                                            clause)
-                                          (group-by (juxt :e :v)))
-           e-var->leaf-v-var-clauses (->> (for [{:keys [e a v] :as clause} bgp-clauses
-                                                :when (and (logic-var? e)
-                                                           (logic-var? v)
-                                                           (leaf-v-var? e v))]
-                                            clause)
-                                          (group-by :e))
-           v-var->range-constrants (build-v-var-range-constraints e-vars range-clauses)
-           var->joins (e-var-v-var-joins snapshot
-                                         e-var+v-var->join-clauses
-                                         v-var->range-constrants
-                                         var->joins
-                                         business-time
-                                         transact-time)
-           var->joins (v-var-literal-e-joins snapshot
-                                             object-store
-                                             v-var->literal-e-clauses
-                                             v-var->range-constrants
-                                             var->joins
-                                             business-time
-                                             transact-time)
-           var->joins (arg-joins snapshot
-                                 args
-                                 e-vars
-                                 var->joins
-                                 business-time
-                                 transact-time)
-           v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
-                                  :when (and (logic-var? v)
-                                             (= e (get v-var->e v)))]
-                              [v a])
-                            (into {}))
-           e-var->attr (zipmap e-vars (repeat :crux.db/id))
-           var->attr (merge v-var->attr e-var->attr)
-           var->values-result-index (zipmap (keys var->joins) (range))
-           var->bindings (build-var-bindings var->attr
-                                             v-var->e
-                                             var->values-result-index
-                                             e-var->leaf-v-var-clauses
-                                             (keys var->attr))
-           unification-preds (build-unification-preds unify-clauses var->bindings)
-           not-constraints (build-not-constraints object-store not-clauses var->bindings)
-           pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
-           shared-e-v-vars (set/intersection e-vars v-vars)
-           constrain-result-fn (fn [max-ks result]
-                                 (some->> (doc/constrain-join-result-by-empty-names max-ks result)
-                                          (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
-                                          (constrain-join-result-by-unification unification-preds max-ks)
-                                          (constrain-join-result-by-not not-constraints var->joins max-ks)
-                                          (constrain-join-result-by-preds pred-constraints max-ks)))
-           leaf-pred (build-leaf-pred pred-clauses var->bindings)
+     (let [{:keys [leaf-pred
+                   pred-vars
+                   n-ary-join
+                   var->bindings
+                   var->joins
+                   constrain-result-fn]} (build-sub-query snapshot db find where args #{})
            all-vars (distinct (concat find pred-vars))]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (-> (mapv doc/new-unary-join-virtual-index (vals var->joins))
-                                          (doc/new-n-ary-join-layered-virtual-index)
-                                          (doc/layered-idx->seq (count var->joins) constrain-result-fn))
+       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins) constrain-result-fn)
              result (cartesian-product
                      (for [var all-vars]
                        (bound-results-for-var object-store var->bindings join-keys join-results var)))

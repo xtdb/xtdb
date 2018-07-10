@@ -131,7 +131,7 @@
                (q/q (q/db f/*kv*)
                     (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
-                        :where [;; [x :rdf/type :ub/Publication]
+                        :where [ ;; [x :rdf/type :ub/Publication]
                                 (or [x :rdf/type :ub/Publication]
                                     [x :rdf/type :ub/Article]
                                     [x :rdf/type :ub/ConferencePaper]
@@ -156,7 +156,7 @@
       (let [result (q/q (q/db f/*kv*)
                         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                           '{:find [x y1 y2 y3]
-                            :where [;; [x :rdf/type :ub/Professor]
+                            :where [ ;; [x :rdf/type :ub/Professor]
                                     (or [x :rdf/type :ub/Professor]
                                         [x :rdf/type :ub/AssistantProfessor]
                                         [x :rdf/type :ub/AssociateProfessor]
@@ -184,7 +184,7 @@
       (t/is (= 719 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x]
-                                   :where [;; [x :rdf/type :ub/Person]
+                                   :where [ ;; [x :rdf/type :ub/Person]
                                            (or [x :rdf/type :ub/Person]
                                                [x :rdf/type :ub/Employee]
                                                [x :rdf/type :ub/AdministrativeStaff]
@@ -218,7 +218,7 @@
       (t/is (= 678 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x]
-                                   :where [;; [x :rdf/type :ub/Student]
+                                   :where [ ;; [x :rdf/type :ub/Student]
                                            (or [x :rdf/type :ub/Student]
                                                [x :rdf/type :ub/UndergraduateStudent]
                                                [x :rdf/type :ub/GraduateStudent])]}))))))
@@ -235,7 +235,7 @@
       (t/is (= 67 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                 '{:find [x y]
-                                  :where [;; [x :rdf/type :ub/Student]
+                                  :where [ ;; [x :rdf/type :ub/Student]
                                           (or [x :rdf/type :ub/Student]
                                               [x :rdf/type :ub/UndergraduateStudent]
                                               [x :rdf/type :ub/GraduateStudent])
@@ -266,7 +266,7 @@
       (t/is (= 678 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                  '{:find [x y z]
-                                   :where [;; [x :rdf/type :ub/Student]
+                                   :where [ ;; [x :rdf/type :ub/Student]
                                            (or [x :rdf/type :ub/Student]
                                                [x :rdf/type :ub/UndergraduateStudent]
                                                [x :rdf/type :ub/GraduateStudent])
@@ -284,7 +284,7 @@
       (t/is (= 13 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                 '{:find [x y z]
-                                  :where [;; [x :rdf/type :ub/Student]
+                                  :where [ ;; [x :rdf/type :ub/Student]
                                           (or [x :rdf/type :ub/Student]
                                               [x :rdf/type :ub/UndergraduateStudent]
                                               [x :rdf/type :ub/GraduateStudent])
@@ -316,7 +316,7 @@
       (t/is (= 4 (count (q/q (q/db f/*kv*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x]
-                                 :where [;; [x :rdf/type :ub/Student]
+                                 :where [ ;; [x :rdf/type :ub/Student]
                                          (or [x :rdf/type :ub/Student]
                                              [x :rdf/type :ub/UndergraduateStudent]
                                              [x :rdf/type :ub/GraduateStudent])
@@ -383,7 +383,7 @@
                     (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
                                       :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                       '{:find [x]
-                        :where [;; [x :rdf/type :ub/Person]
+                        :where [ ;; [x :rdf/type :ub/Person]
                                 (or [x :rdf/type :ub/Person]
                                     [x :rdf/type :ub/Employee]
                                     [x :rdf/type :ub/AdministrativeStaff]
