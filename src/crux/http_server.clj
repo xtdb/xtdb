@@ -68,6 +68,12 @@
     :crux.kv-store/size (cio/folder-human-size db-dir)
     :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)}))
 
+(defn document [kvs request]
+  (let-valid [object-store (doc/->DocObjectStore kvs)
+              content-hash (param request "hash")]
+    (success-response
+     (db/get-objects object-store [content-hash])))) ;;TODO doesn't work
+
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn history [kvs request]
   (let-valid [snapshot (kvs/new-snapshot kvs)
@@ -92,6 +98,9 @@
   (cond
     (check-path request ["/"] [:get])
     (status kvs db-dir)
+
+    (check-path request ["/d" "/document"] [:get :post])
+    (document kvs request)
 
     (check-path request ["/h" "/history"] [:get :post])
     (history kvs request)
