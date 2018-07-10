@@ -35,7 +35,7 @@
 
 (defn success-response [m]
   {:status 200
-   :headers {"Content-Type" "text/plain"}
+   :headers {"Content-Type" "application/edn"}
    :body (pr-str m)})
 
 
