@@ -603,33 +603,69 @@
   (->NAryOrLayeredVirtualIndex lhs rhs (atom {:lhs {:depth 0 :last nil :peek nil :parent-peek []}
                                               :rhs {:depth 0 :last nil :peek nil :parent-peek []}})))
 
-(defn layered-idx->seq [idx ^long max-depth constrain-result-fn]
-  (let [build-result (fn [result-stack [max-k new-values]]
-                       (let [[max-ks parent-result] (last result-stack)
-                             join-keys (conj (or max-ks []) max-k)]
-                         (when-let [join-results (->> (merge-with set/intersection parent-result new-values)
-                                                      (constrain-result-fn join-keys)
-                                                      (not-empty))]
-                           (conj result-stack [join-keys join-results]))))
-        build-leaf-results (fn [acc idx]
+
+(defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
+  (let [[max-ks parent-result] (last result-stack)
+        join-keys (conj (or max-ks []) max-k)]
+    (when-let [join-results (->> (merge-with set/intersection parent-result new-values)
+                                 (constrain-result-fn join-keys)
+                                 (not-empty))]
+      (conj result-stack [join-keys join-results]))))
+
+(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn walk-state]
+  db/Index
+  (seek-values [this k]
+    (when-let [values (db/seek-values n-ary-index k)]
+      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+        (do (swap! walk-state assoc :last result)
+            [(first values) (second (last result))])
+        (db/next-values this))))
+
+  db/LayeredIndex
+  (open-level [this]
+    (db/open-level n-ary-index)
+    (swap! walk-state #(assoc % :result-stack (:last %)))
+    nil)
+
+  (close-level [this]
+    (db/close-level n-ary-index)
+    (swap! walk-state update :result-stack pop)
+    nil)
+
+  db/OrderedIndex
+  (next-values [this]
+    (when-let [values (db/next-values n-ary-index)]
+      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+        (do (swap! walk-state assoc :last result)
+            [(first values) (second (last result))])
+        (recur)))))
+
+(defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
+
+(defn layered-idx->seq [idx ^long max-depth]
+  (let [build-result (fn [max-ks [max-k new-values]]
+                       (when new-values
+                         (conj max-ks max-k)))
+        build-leaf-results (fn [max-ks idx]
                              (vec (for [result (idx->seq idx)
-                                        :let [leaf-result (build-result acc result)]
-                                        :when leaf-result]
-                                    (last leaf-result))))
-        step (fn step [acc ^long depth needs-seek?]
+                                        :let [leaf-key (build-result max-ks result)]
+                                        :when leaf-key]
+                                    [leaf-key (last result)])))
+        step (fn step [max-ks ^long depth needs-seek?]
                (let [close-level (fn []
                                    (when (pos? depth)
                                      (db/close-level idx)
-                                     (step (pop acc) (dec depth) false)))
+                                     (step (pop max-ks) (dec depth) false)))
                      open-level (fn [result]
                                   (db/open-level idx)
-                                  (if-let [acc (build-result acc result)]
-                                    (step acc (inc depth) true)
+                                  (if-let [max-ks (build-result max-ks result)]
+                                    (step max-ks (inc depth) true)
                                     (do (db/close-level idx)
-                                        (step acc depth false))))]
+                                        (step max-ks depth false))))]
                  (lazy-seq
                   (if (= depth (dec max-depth))
-                    (concat (build-leaf-results acc idx)
+                    (concat (build-leaf-results max-ks idx)
                             (close-level))
                     (if-let [result (if needs-seek?
                                       (db/seek-values idx nil)

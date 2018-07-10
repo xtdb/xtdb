@@ -545,10 +545,10 @@
     {:leaf-pred leaf-pred
      :pred-vars pred-vars
      :n-ary-join (-> (mapv doc/new-unary-join-virtual-index (vals var->joins))
-                     (doc/new-n-ary-join-layered-virtual-index))
+                     (doc/new-n-ary-join-layered-virtual-index)
+                     (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings
-     :var->joins var->joins
-     :constrain-result-fn constrain-result-fn}))
+     :var->joins var->joins}))
 
 (defn q
   ([{:keys [kv] :as db} q]
@@ -563,13 +563,12 @@
                    pred-vars
                    n-ary-join
                    var->bindings
-                   var->joins
-                   constrain-result-fn]} (build-sub-query snapshot db find where args #{})
+                   var->joins]} (build-sub-query snapshot db find where args #{})
            all-vars (distinct (concat find pred-vars))]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins) constrain-result-fn)
+       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))
              result (cartesian-product
                      (for [var all-vars]
                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
