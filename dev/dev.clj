@@ -105,6 +105,5 @@
                          1000))
 
   (doc/q (doc/db (:kv-store system))
-         '{:find [iri]
-           :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]
-                   [e :crux.rdf/iri iri]]}))
+         '{:find [e]
+           :where [[e :http://xmlns.com/foaf/0.1/name "Aristotle"]]}))
