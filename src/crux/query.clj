@@ -36,9 +36,9 @@
 (s/def ::or-bgp (s/and ::bgp (comp logic-var? :e) (comp literal? :v)))
 (s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
 
-(s/def ::pred (s/and list?
-                     (s/cat :pred-fn ::pred-fn
-                            :args (s/* any?))))
+(s/def ::pred (s/tuple (s/and list?
+                              (s/cat :pred-fn ::pred-fn
+                                     :args (s/* any?)))))
 
 (s/def ::range-op '#{< <= >= >})
 
@@ -46,15 +46,15 @@
                     :not (expression-spec 'not (s/& ::not-bgp))
                     :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
                                                         :and ::and)))
-                    :range (s/or :sym-val (s/cat :op ::range-op
-                                                 :sym logic-var?
-                                                 :val literal?)
-                                 :val-sym (s/cat :op ::range-op
-                                                 :val literal?
-                                                 :sym logic-var?))
-                    :unify (s/cat :op '#{== !=}
-                                  :x any?
-                                  :y any?)
+                    :range (s/tuple (s/or :sym-val (s/cat :op ::range-op
+                                                          :sym logic-var?
+                                                          :val literal?)
+                                          :val-sym (s/cat :op ::range-op
+                                                          :val literal?
+                                                          :sym logic-var?)))
+                    :unify (s/tuple (s/cat :op '#{== !=}
+                                           :x any?
+                                           :y any?))
                     :pred (s/or :pred ::pred
                                 :not-pred (expression-spec 'not (s/& ::pred)))))
 
@@ -90,20 +90,22 @@
          {type [(case type
                   (:bgp, :not) (normalize-bgp-clause clause)
                   :and (mapv normalize-bgp-clause clause)
-                  :pred (let [[type {:keys [pred-fn args]
-                                     :as clause}] clause]
-                          (let [clause (if-let [range-pred (and (= 2 (count args))
-                                                                (every? logic-var? args)
-                                                                (get pred->built-in-range-pred pred-fn))]
-                                         (assoc clause :pred-fn range-pred)
-                                         clause)]
-                            (case type
-                              :pred clause
-                              :not-pred (update clause :pred-fn complement))))
-                  :range (let [[type clause] clause]
+                  :pred (let [[type pred-clause] clause
+                              {:keys [pred-fn args]
+                               :as clause} (first pred-clause)
+                              clause (if-let [range-pred (and (= 2 (count args))
+                                                              (every? logic-var? args)
+                                                              (get pred->built-in-range-pred pred-fn))]
+                                       (assoc clause :pred-fn range-pred)
+                                       clause)]
+                          (case type
+                            :pred clause
+                            :not-pred (update clause :pred-fn complement)))
+                  :range (let [[type clause] (first clause)]
                            (if (= :val-sym type)
                              (update clause :op range->inverse-range)
                              clause))
+                  :unify (first clause)
                   clause)]})
        (apply merge-with into)))
 

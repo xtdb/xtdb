@@ -217,7 +217,7 @@
     (try
       (q/q (q/db *kv*) '{:find [x]
                          :where [[x :foo]
-                                 (+ 1 bah)]})
+                                 [(+ 1 bah)]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
         (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))
@@ -428,13 +428,13 @@
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [e :age age]
-                                        (< age 50)]})))
+                                        [(< age 50)]]})))
 
     (t/is (= #{["Dominic"]}
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [e :age age]
-                                        (>= age 50)]})))
+                                        [(>= age 50)]]})))
 
     (t/testing "fallback to built in predicate for vars"
       (t/is (= #{["Ivan" 30 "Ivan" 30]
@@ -448,7 +448,7 @@
                                           [e :age age1]
                                           [e2 :name name2]
                                           [e2 :age age2]
-                                          (<= age1 age2)]})))
+                                          [(<= age1 age2)]]})))
 
       (t/is (= #{["Ivan" "Dominic"]
                  ["Ivan" "Bob"]
@@ -456,67 +456,67 @@
                (q/q (q/db *kv*) '{:find [name1 name2]
                                   :where [[e :name name1]
                                           [e2 :name name2]
-                                          (> name1 name2)]})))))
+                                          [(> name1 name2)]]})))))
 
   (t/testing "clojure.core predicate"
     (t/is (= #{["Bob"] ["Dominic"]}
              (q/q (q/db *kv*) '{:find [name]
                                 :where [[e :name name]
-                                        (re-find #"o" name)]})))
+                                        [(re-find #"o" name)]]})))
 
     (t/testing "No results"
       (t/is (empty? (q/q (q/db *kv*) '{:find [name]
                                        :where [[e :name name]
-                                               (re-find #"X" name)]}))))
+                                               [(re-find #"X" name)]]}))))
 
     (t/testing "Not predicate"
       (t/is (= #{["Ivan"]}
                (q/q (q/db *kv*) '{:find [name]
                                   :where [[e :name name]
-                                          (not (re-find #"o" name))]}))))
+                                          (not [(re-find #"o" name)])]}))))
 
     (t/testing "Entity variable"
       (t/is (= #{["Ivan"]}
                (q/q (q/db *kv*) '{:find [name]
                                   :where [[e :name name]
-                                          (= :ivan e)]})))
+                                          [(= :ivan e)]]})))
 
       (t/testing "Filtered by value"
         (t/is (= #{[:bob] [:ivan]}
                  (q/q (q/db *kv*) '{:find [e]
                                     :where [[e :last-name last-name]
-                                            (= "Ivanov" last-name)]})))
+                                            [(= "Ivanov" last-name)]]})))
 
         (t/is (= #{[:ivan]}
                  (q/q (q/db *kv*) '{:find [e]
                                     :where [[e :last-name last-name]
                                             [e :age age]
-                                            (= "Ivanov" last-name)
-                                            (= 30 age)]})))))
+                                            [(= "Ivanov" last-name)]
+                                            [(= 30 age)]]})))))
 
     (t/testing "Several variables"
       (t/is (= #{["Bob"]}
                (q/q (q/db *kv*) '{:find [name]
                                   :where [[e :name name]
                                           [e :age age]
-                                          (= 40 age)
-                                          (re-find #"o" name)
-                                          (not= age name)]})))
+                                          [(= 40 age)]
+                                          [(re-find #"o" name)]
+                                          [(not= age name)]]})))
 
       (t/is (= #{[:bob "Ivanov"]}
                (q/q (q/db *kv*) '{:find [e last-name]
                                   :where [[e :last-name last-name]
                                           [e :age age]
-                                          (re-find #"ov$" last-name)
-                                          (not (= age 30))]})))
+                                          [(re-find #"ov$" last-name)]
+                                          (not [(= age 30)])]})))
 
       (t/testing "No results"
         (t/is (= #{}
                  (q/q (q/db *kv*) '{:find [name]
                                     :where [[e :name name]
                                             [e :age age]
-                                            (re-find #"o" name)
-                                            (= age name)]})))))))
+                                            [(re-find #"o" name)]
+                                            [(= age name)]]})))))))
 
 (t/deftest test-attributes-with-multiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
@@ -548,26 +548,26 @@
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        (= f :bob)]}))))
+                                        [(= f :bob)]]}))))
 
   (t/testing "unification filters values"
     (t/is (= #{[:bob]}
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        (== f :bob)]})))
+                                        [(== f :bob)]]})))
 
     (t/is (= #{[:bob] [:dominic]}
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        (== f #{:bob :dominic})]})))
+                                        [(== f #{:bob :dominic})]]})))
 
     (t/is (= #{[:dominic]}
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        (!= f :bob)]})))))
+                                        [(!= f :bob)]]})))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
@@ -673,74 +673,74 @@
   (t/is (= #{[:petr :petr]} (q/q (q/db *kv*) '{:find [p1 p2]
                                                :where [[p1 :name "Petr"]
                                                        [p2 :mentor i]
-                                                       (== p1 p2)]})))
+                                                       [(== p1 p2)]]})))
 
   (t/is (= #{} (q/q (q/db *kv*) '{:find [p1 p2]
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
-                                          (== p1 i)]})))
+                                          [(== p1 i)]]})))
 
   (t/is (= #{} (q/q (q/db *kv*) '{:find [p1 p2]
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
-                                          (== p1 i)]})))
+                                          [(== p1 i)]]})))
 
   (t/is (= #{[:petr :petr]} (q/q (q/db *kv*) '{:find [p1 p2]
                                                :where [[p1 :name "Petr"]
                                                        [p2 :mentor i]
-                                                       (!= p1 i)]})))
+                                                       [(!= p1 i)]]})))
 
   (t/is (= #{} (q/q (q/db *kv*) '{:find [p1 p2]
                                   :where [[p1 :name "Petr"]
                                           [p2 :mentor i]
-                                          (!= p1 p2)]})))
+                                          [(!= p1 p2)]]})))
 
 
   (t/is (= #{} (q/q (q/db *kv*) '{:find [p]
                                   :where [[p :name "Petr"]
                                           [p :mentor i]
-                                          (== p i)]})))
+                                          [(== p i)]]})))
 
   (t/testing "unify with literal"
     (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [p]
                                            :where [[p :name n]
-                                                   (== n "Petr")]})))
+                                                   [(== n "Petr")]]})))
 
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [p]
                                            :where [[p :name n]
-                                                   (!= n "Petr")]}))))
+                                                   [(!= n "Petr")]]}))))
 
   (t/testing "unify with entity"
     (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [n]
                                             :where [[p :name n]
-                                                    (== p :petr)]})))
+                                                    [(== p :petr)]]})))
 
     (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [n]
                                             :where [[i :name n]
-                                                    (!= i :petr)]}))))
+                                                    [(!= i :petr)]]}))))
 
   (t/testing "multiple literals in set"
     (t/is (= #{[:petr] [:ivan]} (q/q (q/db *kv*) '{:find [p]
                                                    :where [[p :name n]
-                                                           (== n #{"Petr" "Ivan"})]})))
+                                                           [(== n #{"Petr" "Ivan"})]]})))
 
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [p]
                                            :where [[p :name n]
-                                                   (!= n #{"Petr"})]})))
+                                                   [(!= n #{"Petr"})]]})))
 
     (t/is (= #{} (q/q (q/db *kv*) '{:find [p]
                                     :where [[p :name n]
-                                            (== n #{})]})))
+                                            [(== n #{})]]})))
 
     (t/is (= #{[:petr] [:ivan]} (q/q (q/db *kv*) '{:find [p]
                                                    :where [[p :name n]
-                                                           (!= n #{})]})))))
+                                                           [(!= n #{})]]})))))
 
 (t/deftest test-simple-numeric-range-search
   (t/is (= '[[:bgp {:e i, :a :age, :v age}]
-             [:range [:sym-val {:op <, :sym age, :val 20}]]]
+             [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
            (s/conform :crux.query/where '[[i :age age]
-                                          (< age 20)])))
+                                          [(< age 20)]])))
 
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
                             {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
@@ -748,37 +748,37 @@
   (t/testing "Min search case"
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (> age 20)]})))
+                                                   [(> age 20)]]})))
     (t/is (= #{} (q/q (q/db *kv*) '{:find [i]
                                     :where [[i :age age]
-                                            (> age 21)]})))
+                                            [(> age 21)]]})))
 
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (>= age 21)]}))))
+                                                   [(>= age 21)]]}))))
 
   (t/testing "Max search case"
     (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (< age 20)]})))
+                                                   [(< age 20)]]})))
     (t/is (= #{} (q/q (q/db *kv*) '{:find [i]
                                     :where [[i :age age]
-                                            (< age 18)]})))
+                                            [(< age 18)]]})))
     (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (<= age 18)]})))
+                                                   [(<= age 18)]]})))
     (t/is (= #{[18]} (q/q (q/db *kv*) '{:find [age]
                                         :where [[:petr :age age]
-                                                (<= age 18)]}))))
+                                                [(<= age 18)]]}))))
 
   (t/testing "Reverse symbol and value"
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (<= 20 age)]})))
+                                                   [(<= 20 age)]]})))
 
     (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [i]
                                            :where [[i :age age]
-                                                   (>= 20 age)]})))))
+                                                   [(>= 20 age)]]})))))
 
 (t/deftest test-mutiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" }

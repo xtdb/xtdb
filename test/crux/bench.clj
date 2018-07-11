@@ -19,7 +19,7 @@
                               [e2 :last-name name1]]}
               :range '{:find [e]
                        :where [[e :age age]
-                               (> age 20)]}})
+                               [(> age 20)]]}})
 
 (defmacro duration
   "Times the execution of a function,
