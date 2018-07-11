@@ -15,23 +15,47 @@
 ;; ---------------------------------------------------
 ;; Utils
 
+(defn uuid-str? [s]
+  (re-matches #"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" s))
+
+(defn sha1-20-str? [s]
+  (re-matches #"[a-f0-9]{20}" s))
+
+(defn read-unknown [s]
+  (cond
+    (uuid-str? s)
+    (java.util.UUID/fromString s)
+    
+    (sha1-20-str? s)
+    s
+    
+    (try (edn/read-string s)
+         (catch Exception e false))
+    (edn/read-string s)
+    
+    :default
+    (keyword s)))
+
+(defn param
+  ([request]
+   (param request nil))
+  ([request param-name]
+   (case (:request-method request)
+     :get (-> request
+              :query-params
+              (find param-name)
+              last
+              read-unknown)
+     :post (-> request
+               req/body-string
+               edn/read-string))))
+
 (defn check-path [request valid-paths valid-methods]
   (let [path (req/path-info request)
         method (:request-method request)]
     (and (some #{path} valid-paths)
          (some #{method} valid-methods))))
 
-(defn param
-  ([request]
-   (param request nil))
-  ([request param-name]
-   (-> (case (:request-method request)
-         :get (-> request
-                  :query-params
-                  (find param-name)
-                  last)
-         :post (req/body-string request))
-       edn/read-string)))
 
 (defn success-response [m]
   {:status 200
