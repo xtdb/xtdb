@@ -802,3 +802,96 @@
                                            :where [[e :last-name "Ivanov"]
                                                    [e :last-name name1]
                                                    [e2 :last-name name1]]})))))
+
+(t/deftest test-basic-rules
+  (t/is (= '[[:bgp {:e i, :a :age, :v age}]
+             [:rule {:name over-twenty-one?, :args [age]}]]
+           (s/conform :crux.query/where '[[i :age age]
+                                          (over-twenty-one? age)])))
+
+  (t/is (= [{:head '{:name over-twenty-one?, :args [age]},
+             :body '[[:range [[:sym-val {:op >=, :sym age, :val 21}]]]]}
+            {:head '{:name over-twenty-one?, :args [age]},
+             :body
+             [[:pred
+               [:not-pred
+                [{:pred-fn <, :args '[age 21]}]]]]}]
+           (s/conform :crux.query/rules '[[(over-twenty-one? age)
+                                           [(>= age 21)]]
+                                          [(over-twenty-one? age)
+                                           (not [(< age 21)])]])))
+
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                            {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
+
+  (t/testing "without rule"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   [(>= age 21)]]}))))
+
+  (t/testing "rule using same variable name as body"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (over-twenty-one? age)]
+                                           :rules [[(over-twenty-one? age)
+                                                    [(>= age 21)]]]}))))
+
+  (t/testing "rule using required bound args"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (over-twenty-one? age)]
+                                           :rules [[(over-twenty-one? [age])
+                                                    [(>= age 21)]]]}))))
+
+  (t/testing "rule using different variable name from body"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (over-twenty-one? age)]
+                                           :rules [[(over-twenty-one? x)
+                                                    [(>= x 21)]]]}))))
+
+  (t/testing "nested rules"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (over-twenty-one? age)]
+                                           :rules [[(over-twenty-one? x)
+                                                    (over-twenty-one-internal? x)]
+                                                   [(over-twenty-one-internal? y)
+                                                    [(>= y 21)]]]}))))
+
+  (t/testing "rule using multiple arguments"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [[i :age age]
+                                                   (over-age? age 21)]
+                                           :rules [[(over-age? [age] required-age)
+                                                    [(>= age required-age)]]]}))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [i]
+                       :where [[i :age age]
+                               (over-twenty-one? age)]
+                       :rules [[(over-twenty-one? x)
+                                [(>= x 21)]]
+                               [(over-twenty-one? x)
+                                (not [(< x 21)])]]})
+    (t/is (= true false) "Expected exception")
+    (catch UnsupportedOperationException e
+      (t/is (re-find #"Cannot do or between rules yet: " (.getMessage e)))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [i]
+                       :where [[i :age age]
+                               (over-twenty-one? age)]})
+    (t/is (= true false) "Expected exception")
+    (catch IllegalArgumentException e
+      (t/is (re-find #"Unknown rule: " (.getMessage e)))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [i]
+                       :where [[i :age age]
+                               (over-twenty-one? age)]
+                       :rules [[(over-twenty-one? x)
+                                (over-twenty-one? x)]]})
+    (t/is (= true false) "Expected exception")
+    (catch UnsupportedOperationException e
+      (t/is (re-find #"Cannot do recursive rules yet: " (.getMessage e))))))

@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.walk :as w]
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.index :as idx]
@@ -40,6 +41,10 @@
                               (s/cat :pred-fn ::pred-fn
                                      :args (s/* any?)))))
 
+(s/def ::rule (s/and list?
+                     (s/cat :name (s/and symbol? (complement built-ins))
+                            :args (s/+ any?))))
+
 (s/def ::range-op '#{< <= >= >})
 
 (s/def ::term (s/or :bgp ::bgp
@@ -55,14 +60,25 @@
                     :unify (s/tuple (s/cat :op '#{== !=}
                                            :x any?
                                            :y any?))
+                    :rule ::rule
                     :pred (s/or :pred ::pred
                                 :not-pred (expression-spec 'not (s/& ::pred)))))
 
 (s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
 (s/def ::args (s/coll-of ::arg-tuple :kind vector?))
 
+
+(s/def ::rule-head (s/and list?
+                          (s/cat :name (s/and symbol? (complement built-ins))
+                                 :bound-args (s/? (s/tuple logic-var?))
+                                 :args (s/* logic-var?))))
+(s/def ::rule-definition (s/and vector?
+                                (s/cat :head ::rule-head
+                                       :body (s/+ ::term))))
+
 (s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
-(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args]))
+(s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules]))
 
 (defn- cartesian-product [[x & xs]]
   (when (seq x)
@@ -113,7 +129,8 @@
                       unify-clauses :unify
                       not-clauses :not
                       or-clauses :or
-                      pred-clauses :pred}]
+                      pred-clauses :pred
+                      rule-clauses :rule}]
   (let [or-e-vars (set (for [or-clause or-clauses
                              sub-clause or-clause
                              {:keys [e]} sub-clause]
@@ -138,6 +155,10 @@
                       e)
                     (into not-v-vars))
      :pred-vars (set (for [{:keys [args]} pred-clauses
+                           arg args
+                           :when (logic-var? arg)]
+                       arg))
+     :rule-vars (set (for [{:keys [args]} rule-clauses
                            arg args
                            :when (logic-var? arg)]
                        arg))}))
@@ -179,12 +200,12 @@
 ;; tree. Needs cleanup.  How state is transferred and shared between
 ;; sub-query and parent query needs work. Constraints needs to be
 ;; connected to the sub query as its walked.
-(defn- or-joins [snapshot db or-clauses var->joins e-vars]
+(defn- or-joins [snapshot db rules or-clauses var->joins e-vars]
   (->> or-clauses
        (reduce
         (fn [[or-var->bindings var->joins] clause]
           (let [sub-query-state (->> (for [sub-clauses clause]
-                                       (assoc (build-sub-query snapshot db [] [sub-clauses] [] e-vars)
+                                       (assoc (build-sub-query snapshot db [] [sub-clauses] [] rules e-vars)
                                               :sub-clauses sub-clauses))
                                      (reduce
                                       (fn [lhs rhs]
@@ -375,7 +396,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store not-clauses not-vars var->bindings]
+(defn- build-not-constraints [snapshot db object-store rules not-clauses not-vars var->bindings]
   (for [{:keys [e a v]
          :as clause} not-clauses]
     (do (doseq [arg [e v]
@@ -391,7 +412,7 @@
                             (zipmap not-vars (map :value tuple))))
                 {:keys [n-ary-join
                         var->bindings
-                        var->joins]} (build-sub-query snapshot db [] [[:bgp clause]] args #{})]
+                        var->joins]} (build-sub-query snapshot db [] [[:bgp clause]] args rules #{})]
             (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
@@ -435,8 +456,28 @@
              (every? true?))
     join-results))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args parent-vars]
-  (let [{bgp-clauses :bgp
+(defn- expand-rules [where rule-name->rules seen-rules]
+  (->> (for [[type clause :as sub-clause] where]
+         (if (= :rule type)
+           (let [rule-name (:name clause)
+                 [rule :as rules] (get rule-name->rules rule-name)
+                 rule-var->query-var (zipmap (concat (get-in rule [:head :bound-args])
+                                                     (get-in rule [:head :args]))
+                                             (:args clause))]
+             (when-not rule
+               (throw (IllegalArgumentException. (str "Unknown rule: " (pr-str sub-clause)))))
+             (when (contains? seen-rules rule-name)
+               (throw (UnsupportedOperationException. (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
+             (when (> (count rules) 1)
+               (throw (UnsupportedOperationException. (str "Cannot do or between rules yet: " (pr-str sub-clause)))))
+             (expand-rules (w/postwalk-replace rule-var->query-var (:body rule)) rule-name->rules (conj seen-rules rule-name)))
+           [sub-clause]))
+       (reduce into [])))
+
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules parent-vars]
+  (let [rule-name->rules (group-by (comp :name :head) rules)
+        where (expand-rules where rule-name->rules #{})
+        {bgp-clauses :bgp
          and-clauses :and
          :as type->clauses} (normalize-clauses where)
         {bgp-clauses :bgp
@@ -445,13 +486,14 @@
          unify-clauses :unify
          not-clauses :not
          or-clauses :or
-         :as type->clauses} (assoc type->clauses
-         :bgp (or bgp-clauses (apply concat and-clauses)))
+         rule-clauses :rule
+         :as type->clauses} (assoc type->clauses :bgp (or bgp-clauses (apply concat and-clauses)))
         {:keys [e-vars
                 v-vars
                 unification-vars
                 not-vars
-                pred-vars]} (collect-vars type->clauses)
+                pred-vars
+                rule-vars]} (collect-vars type->clauses)
         e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
                                     :when (logic-var? v)]
                                 clause)
@@ -478,6 +520,7 @@
         var->joins (sorted-map)
         [or-var->bindings var->joins] (or-joins snapshot
                                                 db
+                                                rules
                                                 or-clauses
                                                 var->joins
                                                 e-vars)
@@ -541,7 +584,7 @@
                                                  e-var->leaf-v-var-clauses
                                                  (keys var->attr)))
         unification-preds (build-unification-preds unify-clauses var->bindings)
-        not-constraints (build-not-constraints snapshot db object-store not-clauses not-vars var->bindings)
+        not-constraints (build-not-constraints snapshot db object-store rules not-clauses not-vars var->bindings)
         pred-constraints (build-pred-constraints object-store pred-clauses var->bindings)
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
@@ -564,7 +607,7 @@
    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
      (set (crux.query/q snapshot db q))))
   ([snapshot {:keys [kv object-store business-time transact-time] :as db} q]
-   (let [{:keys [find where args] :as q} (s/conform :crux.query/query q)]
+   (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
@@ -572,7 +615,7 @@
                    pred-vars
                    n-ary-join
                    var->bindings
-                   var->joins]} (build-sub-query snapshot db find where args #{})
+                   var->joins]} (build-sub-query snapshot db find where args rules #{})
            all-vars (distinct (concat find pred-vars))]
        (doseq [var find
                :when (not (contains? var->bindings var))]
