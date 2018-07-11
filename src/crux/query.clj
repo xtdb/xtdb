@@ -465,9 +465,9 @@
   (->> (for [[type clause :as sub-clause] where]
          (if (= :rule type)
            (let [rule-name (:name clause)
-                 [rule :as rules] (get rule-name->rules rule-name)
-                 rule-var->query-var (zipmap (concat (get-in rule [:head :bound-args])
-                                                     (get-in rule [:head :args]))
+                 [{:keys [head body] :as rule} :as rules] (get rule-name->rules rule-name)
+                 rule-var->query-var (zipmap (concat (:bound-args head)
+                                                     (:args head))
                                              (:args clause))]
              (when-not rule
                (throw (IllegalArgumentException. (str "Unknown rule: " (pr-str sub-clause)))))
@@ -475,7 +475,7 @@
                (throw (UnsupportedOperationException. (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
              (when (> (count rules) 1)
                (throw (UnsupportedOperationException. (str "Cannot do or between rules yet: " (pr-str sub-clause)))))
-             (expand-rules (w/postwalk-replace rule-var->query-var (:body rule)) rule-name->rules (conj seen-rules rule-name)))
+             (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))
            [sub-clause]))
        (reduce into [])))
 
