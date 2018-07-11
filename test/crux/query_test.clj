@@ -266,7 +266,7 @@
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
              [:bgp {:e e :a :name :v "Ivan"}]
-             [:not {:e e :a :last-name :v "Ivannotov"}]]
+             [:not [[:bgp {:e e :a :last-name :v "Ivannotov"}]]]]
 
            (s/conform :crux.query/where '[[e :name name]
                                           [e :name "Ivan"]
@@ -310,14 +310,11 @@
                                                  [:ivan-ivanovtov-1 :last-name i-name]
                                                  (not [e :last-name i-name])]})))))
 
-  (t/testing "does not support literal entities"
-    (try
-      (q/q (q/db *kv*) '{:find [e]
-                         :where [[e :name name]
-                                 (not [:ivan-ivanov-1 :name name])]})
-      (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Invalid input" (.getMessage e)))))))
+  ;; TODO: should work.
+  #_(t/testing "literal entities"
+      (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
+                                           :where [[e :name name]
+                                                   (not [:ivan-ivanov-1 :name name])]}))))))
 
 (t/deftest test-or-query
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
@@ -844,11 +841,8 @@
 
   (t/is (= [{:head '{:name over-twenty-one?, :args [age]},
              :body '[[:range [[:sym-val {:op >=, :sym age, :val 21}]]]]}
-            {:head '{:name over-twenty-one?, :args [age]},
-             :body
-             [[:pred
-               [:not-pred
-                [{:pred-fn <, :args '[age 21]}]]]]}]
+            '{:head {:name over-twenty-one?, :args [age]},
+              :body [[:not [[:range [[:sym-val {:op <, :sym age, :val 21}]]]]]]}]
            (s/conform :crux.query/rules '[[(over-twenty-one? age)
                                            [(>= age 21)]]
                                           [(over-twenty-one? age)

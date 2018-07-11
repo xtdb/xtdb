@@ -60,14 +60,13 @@
                                        :y any?))))
 
 (s/def ::term (s/or :bgp ::bgp
-                    :not (expression-spec 'not (s/& ::not-bgp))
+                    :not (expression-spec 'not (s/+ ::term))
                     :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
                                                         :and ::and)))
                     :range ::range
                     :unify ::unify
                     :rule ::rule
-                    :pred (s/or :pred ::pred
-                                :not-pred (expression-spec 'not (s/& ::pred)))))
+                    :pred (s/or :pred ::pred)))
 
 (s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
 (s/def ::args (s/coll-of ::arg-tuple :kind vector?))
@@ -109,7 +108,7 @@
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          {type [(case type
-                  (:bgp, :not) (normalize-bgp-clause clause)
+                  :bgp (normalize-bgp-clause clause)
                   :and (mapv normalize-bgp-clause clause)
                   :pred (let [[type pred-clause] clause
                               {:keys [pred-fn args]
@@ -142,8 +141,9 @@
                          (:e-vars (collect-vars (normalize-clauses c))))
                        (reduce into #{}))
         not-vars (when (seq not-clauses)
-                   (collect-vars (normalize-clauses (for [not-clause not-clauses]
-                                                      [:bgp not-clause]))))]
+                   (->> (for [not-clause not-clauses]
+                          (collect-vars (normalize-clauses not-clause)))
+                        (apply merge-with set/union)))]
     {:e-vars (->> (for [{:keys [e]} bgp-clauses
                         :when (logic-var? e)]
                     e)
@@ -156,7 +156,7 @@
                                   arg [x y]
                                   :when (logic-var? arg)]
                               arg))
-     :not-vars (into (:e-vars not-vars) (:v-vars not-vars))
+     :not-vars (reduce into #{} (vals not-vars))
      :pred-vars (set (for [{:keys [args]} pred-clauses
                            arg args
                            :when (logic-var? arg)]
@@ -409,14 +409,13 @@
               true))))))
 
 (defn- build-not-constraints [snapshot db object-store rules not-clauses not-vars var->bindings]
-  (for [{:keys [e a v]
-         :as clause} not-clauses]
-    (do (doseq [arg [e v]
+  (for [not-clause not-clauses]
+    (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
           (throw (IllegalArgumentException.
                   (str "Not refers to unknown variable: "
-                       arg " " (pr-str clause)))))
+                       arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
           (let [args (vec (for [tuple (cartesian-product
                                        (for [var not-vars]
@@ -424,16 +423,22 @@
                             (zipmap not-vars (map :value tuple))))
                 {:keys [n-ary-join
                         var->bindings
-                        var->joins]} (build-sub-query snapshot db [] [[:bgp clause]] args rules #{})]
+                        var->joins]} (build-sub-query snapshot db [] not-clause args rules #{})]
             (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
-                    (let [entities-to-remove (zipmap not-vars
-                                                     (for [var not-vars]
-                                                       (->> (bound-results-for-var object-store var->bindings join-keys join-results var)
-                                                            (map :entity)
-                                                            (set))))]
-                      (merge-with set/difference parent-join-results entities-to-remove)))
+                    (let [results (for [var not-vars]
+                                    (bound-results-for-var object-store var->bindings join-keys join-results var))]
+                      (when (empty? (for [result results
+                                          {:keys [arg-var]} result
+                                          :when arg-var]
+                                      arg-var))
+                        (let [entities-to-remove (zipmap not-vars
+                                                         (for [result results]
+                                                           (->> result
+                                                                (map :entity)
+                                                                (set))))]
+                          (merge-with set/difference parent-join-results entities-to-remove)))))
                   join-results)))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
