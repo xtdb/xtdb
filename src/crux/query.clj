@@ -46,20 +46,25 @@
                             :args (s/+ any?))))
 
 (s/def ::range-op '#{< <= >= >})
+(s/def ::range (s/tuple (s/and list?
+                               (s/or :sym-val (s/cat :op ::range-op
+                                                     :sym logic-var?
+                                                     :val literal?)
+                                     :val-sym (s/cat :op ::range-op
+                                                     :val literal?
+                                                     :sym logic-var?)))))
+
+(s/def ::unify  (s/tuple (s/and list?
+                                (s/cat :op '#{== !=}
+                                       :x any?
+                                       :y any?))))
 
 (s/def ::term (s/or :bgp ::bgp
                     :not (expression-spec 'not (s/& ::not-bgp))
                     :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
                                                         :and ::and)))
-                    :range (s/tuple (s/or :sym-val (s/cat :op ::range-op
-                                                          :sym logic-var?
-                                                          :val literal?)
-                                          :val-sym (s/cat :op ::range-op
-                                                          :val literal?
-                                                          :sym logic-var?)))
-                    :unify (s/tuple (s/cat :op '#{== !=}
-                                           :x any?
-                                           :y any?))
+                    :range ::range
+                    :unify ::unify
                     :rule ::rule
                     :pred (s/or :pred ::pred
                                 :not-pred (expression-spec 'not (s/& ::pred)))))
