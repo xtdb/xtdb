@@ -134,15 +134,16 @@
                       unify-clauses :unify
                       not-clauses :not
                       or-clauses :or
+                      and-clauses :and
                       pred-clauses :pred
                       rule-clauses :rule}]
-  (let [or-e-vars (set (for [or-clause or-clauses
-                             sub-clause or-clause
-                             {:keys [e]} sub-clause]
-                         e))
-        not-v-vars (set (for [{:keys [v]} not-clauses
-                              :when (logic-var? v)]
-                          v))]
+  (let [bgp-clauses (or bgp-clauses (apply concat and-clauses))
+        or-e-vars (->> (for [c or-clauses]
+                         (:e-vars (collect-vars (normalize-clauses c))))
+                       (reduce into #{}))
+        not-vars (when (seq not-clauses)
+                   (collect-vars (normalize-clauses (for [not-clause not-clauses]
+                                                      [:bgp not-clause]))))]
     {:e-vars (->> (for [{:keys [e]} bgp-clauses
                         :when (logic-var? e)]
                     e)
@@ -150,15 +151,12 @@
      :v-vars (->> (for [{:keys [v]} bgp-clauses
                         :when (logic-var? v)]
                     v)
-                  (into not-v-vars))
+                  (into (set (:v-vars not-vars))))
      :unification-vars (set (for [{:keys [x y]} unify-clauses
                                   arg [x y]
                                   :when (logic-var? arg)]
                               arg))
-     :not-vars (->> (for [{:keys [e]} not-clauses
-                          :when (logic-var? e)]
-                      e)
-                    (into not-v-vars))
+     :not-vars (into (:e-vars not-vars) (:v-vars not-vars))
      :pred-vars (set (for [{:keys [args]} pred-clauses
                            arg args
                            :when (logic-var? arg)]
