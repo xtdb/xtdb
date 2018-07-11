@@ -33,7 +33,6 @@
 (s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
                                    :a keyword?
                                    :v (s/? any?))))
-(s/def ::not-bgp (s/and ::bgp (comp logic-var? :e)))
 (s/def ::or-bgp (s/and ::bgp (comp logic-var? :e) (comp literal? :v)))
 (s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
 
@@ -66,7 +65,7 @@
                     :range ::range
                     :unify ::unify
                     :rule ::rule
-                    :pred (s/or :pred ::pred)))
+                    :pred ::pred))
 
 (s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
 (s/def ::args (s/coll-of ::arg-tuple :kind vector?))
@@ -110,17 +109,14 @@
          {type [(case type
                   :bgp (normalize-bgp-clause clause)
                   :and (mapv normalize-bgp-clause clause)
-                  :pred (let [[type pred-clause] clause
+                  :pred (let [pred-clause clause
                               {:keys [pred-fn args]
-                               :as clause} (first pred-clause)
-                              clause (if-let [range-pred (and (= 2 (count args))
-                                                              (every? logic-var? args)
-                                                              (get pred->built-in-range-pred pred-fn))]
-                                       (assoc clause :pred-fn range-pred)
-                                       clause)]
-                          (case type
-                            :pred clause
-                            :not-pred (update clause :pred-fn complement)))
+                               :as clause} (first pred-clause)]
+                          (if-let [range-pred (and (= 2 (count args))
+                                                   (every? logic-var? args)
+                                                   (get pred->built-in-range-pred pred-fn))]
+                            (assoc clause :pred-fn range-pred)
+                            clause))
                   :range (let [[type clause] (first clause)]
                            (if (= :val-sym type)
                              (update clause :op range->inverse-range)
