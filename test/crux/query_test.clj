@@ -126,7 +126,48 @@
                                                           :where [[e :name name]
                                                                   [e :last-name last-name]]
                                                           :args [{:name "Ivan" :last-name "Ivanov"}
-                                                                 {:name "Petr" :last-name "Petrov"}]}))))))
+                                                                 {:name "Petr" :last-name "Petrov"}]}))))
+
+    (t/testing "Can query predicates based on arguments alone"
+      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
+                                              :where [[(re-find #"I" name)]]
+                                              :args [{:name "Ivan"}
+                                                     {:name "Petr"}]})))
+
+      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
+                                              :where [[(re-find #"I" name)]
+                                                      [(= last-name "Ivanov")]]
+                                              :args [{:name "Ivan" :last-name "Ivanov"}
+                                                     {:name "Petr" :last-name "Petrov"}]})))
+
+      (t/is (= #{["Ivan"]
+                 ["Petr"]} (q/q (q/db *kv*) '{:find [name]
+                                              :where [[(string? name)]]
+                                              :args [{:name "Ivan"}
+                                                     {:name "Petr"}]})))
+
+      (t/is (= #{["Ivan" "Ivanov"]
+                 ["Petr" "Petrov"]} (q/q (q/db *kv*) '{:find [name
+                                                              last-name]
+                                                       :where [[(not= last-name name)]]
+                                                       :args [{:name "Ivan" :last-name "Ivanov"}
+                                                              {:name "Petr" :last-name "Petrov"}]})))
+
+      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
+                                              :where [[(string? name)]
+                                                      [(re-find #"I" name)]]
+                                              :args [{:name "Ivan"}
+                                                     {:name "Petr"}]})))
+
+      (t/is (= #{} (q/q (q/db *kv*) '{:find [name]
+                                      :where [[(number? name)]]
+                                      :args [{:name "Ivan"}
+                                             {:name "Petr"}]})))
+
+      (t/is (= #{} (q/q (q/db *kv*) '{:find [name]
+                                      :where [(not [(string? name)])]
+                                      :args [{:name "Ivan"}
+                                             {:name "Petr"}]}))))))
 
 (t/deftest test-multiple-results
   (f/transact-people! *kv* [{:name "Ivan" :last-name "1"}
@@ -220,15 +261,7 @@
                                  [(+ 1 bah)]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))
-
-    (try
-      (q/q (q/db *kv*) '{:find [e]
-                         :where [[e :name]]
-                         :args [{:name  "Ivan"}]})
-      (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (= "Argument refers to unknown variable: name" (.getMessage e)))))))
+        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]

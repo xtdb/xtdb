@@ -271,18 +271,13 @@
         relation (doc/new-relation-virtual-index (gensym "args")
                                                  (for [arg args]
                                                    (mapv arg arg-keys-in-join-order))
-                                                 (count arg-keys-in-join-order))
-        arg-vars (arg-vars args)]
-    (doseq [arg-var arg-vars]
-      (when (and (not (contains? var->joins arg-var))
-                 (not (contains? e-vars arg-var)))
-        (throw (IllegalArgumentException. (str "Argument refers to unknown variable: " arg-var)))))
-    (->> arg-vars
+                                                 (count arg-keys-in-join-order))]
+    (->> (arg-vars args)
          (reduce
           (fn [var->joins arg-var]
             (->> (merge
                   {arg-var
-                   (cond-> [relation]
+                   (cond-> [(assoc relation :name (symbol "crux.query.args" (name arg-var)))]
                      (and (not (contains? var->joins arg-var))
                           (contains? e-vars arg-var))
                      (conj (assoc (doc/new-entity-attribute-value-virtual-index
@@ -302,30 +297,44 @@
                :var var
                :attr (get var->attr var)
                :result-index (get var->values-result-index var)
+               :result-name e
                :required-attrs (some->> (get e-var->leaf-v-var-clauses e)
                                         (not-empty)
                                         (map :a)
                                         (set))}])
        (into {})))
 
+(defn- build-arg-var-bindings [var->values-result-index arg-vars]
+  (->> (for [var arg-vars]
+         [var {:var var
+               :result-name (symbol "crux.query.args" (name var))
+               :result-index (get var->values-result-index var)
+               :arg-var? true}])
+       (into {})))
+
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index required-attrs]} (get var->bindings var)
-        entities (get join-results e-var)
-        content-hashes (map :content-hash entities)
-        content-hash->doc (db/get-objects object-store content-hashes)
-        value-bytes (get join-keys result-index)]
-    (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-          :when (or (empty? required-attrs)
-                    (set/subset? required-attrs (set (keys doc))))
-          value (doc/normalize-value (get doc attr))
-          :when (or (nil? value-bytes)
-                    (bu/bytes=? value-bytes (idx/value->bytes value)))]
-      {:value value
-       :e-var e-var
-       :v-var var
-       :attr attr
-       :doc doc
-       :entity entity})))
+  (let [{:keys [e-var var attr result-index result-name required-attrs arg-var?]} (get var->bindings var)]
+    (if arg-var?
+      (let [results (get join-results result-name)]
+        (for [value results]
+          {:value value
+           :arg-var var}))
+      (let [entities (get join-results e-var)
+            content-hashes (map :content-hash entities)
+            content-hash->doc (db/get-objects object-store content-hashes)
+            value-bytes (get join-keys result-index)]
+        (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
+              :when (or (empty? required-attrs)
+                        (set/subset? required-attrs (set (keys doc))))
+              value (doc/normalize-value (get doc attr))
+              :when (or (nil? value-bytes)
+                        (bu/bytes=? value-bytes (idx/value->bytes value)))]
+          {:value value
+           :e-var e-var
+           :v-var var
+           :attr attr
+           :doc doc
+           :entity entity})))))
 
 (defn- build-pred-constraints [object-store pred-clauses var->bindings]
   (for [{:keys [pred-fn args]
@@ -534,7 +543,8 @@
                                           var->joins
                                           business-time
                                           transact-time)
-        non-leaf-v-vars (set/union unification-vars not-vars e-vars (arg-vars args) parent-vars)
+        arg-vars (arg-vars args)
+        non-leaf-v-vars (set/union unification-vars not-vars e-vars arg-vars parent-vars)
         leaf-v-var? (fn [e v]
                       (and (= 1 (count (get v->v-var-clauses v)))
                            (or (contains? e-var->literal-v-clauses e)
@@ -580,7 +590,8 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge v-var->attr e-var->attr)
         var->values-result-index (zipmap (keys var->joins) (range))
-        var->bindings (merge or-var->bindings
+        var->bindings (merge (build-arg-var-bindings var->values-result-index arg-vars)
+                             or-var->bindings
                              (build-var-bindings var->attr
                                                  v-var->e
                                                  var->values-result-index
