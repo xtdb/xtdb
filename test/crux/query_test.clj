@@ -328,7 +328,7 @@
   ;; Here for dev reasons, delete when appropiate
   (t/is (= '[[:bgp {:e e :a :name :v name}]
              [:bgp {:e e :a :name :v "Ivan"}]
-             [:or [[:bgp {:e e :a :last-name :v "Ivanov"}]]]]
+             [:or [[:term [:bgp {:e e :a :last-name :v "Ivanov"}]]]]]
            (s/conform :crux.query/where '[[e :name name]
                                           [e :name "Ivan"]
                                           (or [e :last-name "Ivanov"])])))
@@ -431,25 +431,25 @@
                                           (not-join [e]
                                                     [e :last-name "Monroe"])]})))))
 
-;; TODO: lacks nested expression support - might not be supported.
-#_(t/deftest test-mixing-expressions
-    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
-                              {:name "Derek" :last-name "Ivanov"}
-                              {:name "Bob" :last-name "Ivannotov"}
-                              {:name "Fred" :last-name "Ivannotov"}])
+(t/deftest test-mixing-expressions
+  (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                            {:name "Derek" :last-name "Ivanov"}
+                            {:name "Bob" :last-name "Ivannotov"}
+                            {:name "Fred" :last-name "Ivannotov"}])
 
-    (t/testing "Or can use not expression"
+  ;; TODO: should work.
+  #_(t/testing "Or can use not expression"
       (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
                (q/q (q/db *kv*) '{:find [name]
                                   :where [[e :name name]
                                           (or [e :last-name "Ivanov"]
                                               (not [e :name "Bob"]))]}))))
 
-    (t/testing "Not can use Or expression"
-      (t/is (= #{["Fred"]} (q/q (q/db *kv*) '{:find [name]
-                                              :where [[e :name name]
-                                                      (not (or [e :last-name "Ivanov"]
-                                                               [e :name "Bob"]))]})))))
+  (t/testing "Not can use Or expression"
+    (t/is (= #{["Fred"]} (q/q (q/db *kv*) '{:find [name]
+                                            :where [[e :name name]
+                                                    (not (or [e :last-name "Ivanov"]
+                                                             [e :name "Bob"]))]})))))
 
 (t/deftest test-predicate-expression
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}

@@ -22,7 +22,7 @@
          (s/conformer next)
          spec))
 
-(def ^:private built-ins '#{not == !=})
+(def ^:private built-ins '#{and not == !=})
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
@@ -33,8 +33,7 @@
 (s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
                                    :a keyword?
                                    :v (s/? any?))))
-(s/def ::or-bgp (s/and ::bgp (comp logic-var? :e) (comp literal? :v)))
-(s/def ::and (expression-spec 'and (s/+ ::or-bgp)))
+(s/def ::and (expression-spec 'and (s/+ ::term)))
 
 (s/def ::pred (s/tuple (s/and list?
                               (s/cat :pred-fn ::pred-fn
@@ -60,7 +59,7 @@
 
 (s/def ::term (s/or :bgp ::bgp
                     :not (expression-spec 'not (s/+ ::term))
-                    :or (expression-spec 'or (s/+ (s/or :bgp ::or-bgp
+                    :or (expression-spec 'or (s/+ (s/or :term ::term
                                                         :and ::and)))
                     :range ::range
                     :unify ::unify
@@ -108,7 +107,6 @@
   (->> (for [[type clause] clauses]
          {type [(case type
                   :bgp (normalize-bgp-clause clause)
-                  :and (mapv normalize-bgp-clause clause)
                   :pred (let [pred-clause clause
                               {:keys [pred-fn args]
                                :as clause} (first pred-clause)]
@@ -129,21 +127,21 @@
                       unify-clauses :unify
                       not-clauses :not
                       or-clauses :or
-                      and-clauses :and
                       pred-clauses :pred
                       rule-clauses :rule}]
-  (let [bgp-clauses (or bgp-clauses (apply concat and-clauses))
-        or-e-vars (->> (for [c or-clauses]
-                         (:e-vars (collect-vars (normalize-clauses c))))
-                       (reduce into #{}))
-        not-vars (when (seq not-clauses)
-                   (->> (for [not-clause not-clauses]
-                          (collect-vars (normalize-clauses not-clause)))
-                        (apply merge-with set/union)))]
+  (let [or-vars (->> (for [or-clause or-clauses
+                           [type sub-clauses] or-clause]
+                       (collect-vars (normalize-clauses (case type
+                                                          :term [sub-clauses]
+                                                          :and sub-clauses))))
+                     (apply merge-with set/union))
+        not-vars (->> (for [not-clause not-clauses]
+                        (collect-vars (normalize-clauses not-clause)))
+                      (apply merge-with set/union))]
     {:e-vars (->> (for [{:keys [e]} bgp-clauses
                         :when (logic-var? e)]
                     e)
-                  (into or-e-vars))
+                  (into (set (:e-vars or-vars))))
      :v-vars (->> (for [{:keys [v]} bgp-clauses
                         :when (logic-var? v)]
                     v)
@@ -203,8 +201,16 @@
   (->> or-clauses
        (reduce
         (fn [[or-var->bindings var->joins] clause]
-          (let [sub-query-state (->> (for [sub-clauses clause]
-                                       (assoc (build-sub-query snapshot db [] [sub-clauses] [] rules e-vars)
+          (let [sub-query-state (->> (for [[type sub-clauses] clause]
+                                       (assoc (build-sub-query snapshot
+                                                               db
+                                                               []
+                                                               (case type
+                                                                 :term [sub-clauses]
+                                                                 :and sub-clauses)
+                                                               []
+                                                               rules
+                                                               e-vars)
                                               :sub-clauses sub-clauses))
                                      (reduce
                                       (fn [lhs rhs]
@@ -508,16 +514,13 @@
   (let [rule-name->rules (group-by (comp :name :head) rules)
         where (expand-rules where rule-name->rules #{})
         {bgp-clauses :bgp
-         and-clauses :and
-         :as type->clauses} (normalize-clauses where)
-        {bgp-clauses :bgp
          range-clauses :range
          pred-clauses :pred
          unify-clauses :unify
          not-clauses :not
          or-clauses :or
          rule-clauses :rule
-         :as type->clauses} (assoc type->clauses :bgp (or bgp-clauses (apply concat and-clauses)))
+         :as type->clauses} (normalize-clauses where)
         {:keys [e-vars
                 v-vars
                 unification-vars
