@@ -103,6 +103,14 @@
                                       > <=
                                       >= <})
 
+;; TODO: currently unused, turns a range clause to a normal predicate,
+;; might be used in or containing only predicates.
+(defn- range->pred [[type [[range-type {:keys [op sym val]}]]]]
+  (let [pred (get pred->built-in-range-pred (var-get (resolve op)))]
+    [:pred [(case range-type
+              :sym-val {:pred-fn pred :args [sym val]}
+              :val-sym {:pref-fn pred :args [val sym]})]]))
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          {type [(case type
@@ -193,10 +201,10 @@
 
 (declare build-sub-query)
 
-;; TODO: needs to ensure constraints are handled while walking the sub
-;; tree. Needs cleanup.  How state is transferred and shared between
-;; sub-query and parent query needs work. Constraints needs to be
-;; connected to the sub query as its walked.
+;; TODO: Needs cleanup.  How state is transferred and shared between
+;; sub-query and parent query needs work. Cannot deal with predicates
+;; or not expressions on their own as there's nothing to join on in
+;; that branch.
 (defn- or-joins [snapshot db rules or-clauses var->joins e-vars]
   (->> or-clauses
        (reduce
@@ -496,17 +504,19 @@
   (->> (for [[type clause :as sub-clause] where]
          (if (= :rule type)
            (let [rule-name (:name clause)
-                 [{:keys [head body] :as rule} :as rules] (get rule-name->rules rule-name)
-                 rule-var->query-var (zipmap (concat (:bound-args head)
-                                                     (:args head))
-                                             (:args clause))]
-             (when-not rule
+                 rules (get rule-name->rules rule-name)]
+             (when-not rules
                (throw (IllegalArgumentException. (str "Unknown rule: " (pr-str sub-clause)))))
              (when (contains? seen-rules rule-name)
                (throw (UnsupportedOperationException. (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
              (when (> (count rules) 1)
                (throw (UnsupportedOperationException. (str "Cannot do or between rules yet: " (pr-str sub-clause)))))
-             (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))
+             (->> (for [{:keys [head body] :as rule} rules
+                        :let [rule-var->query-var (zipmap (concat (:bound-args head)
+                                                                  (:args head))
+                                                          (:args clause))]]
+                    (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))
+                  (first)))
            [sub-clause]))
        (reduce into [])))
 
