@@ -32,13 +32,13 @@
                         (complement built-ins)
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
-(s/def ::pred (s/tuple (s/and list?
-                              (s/cat :pred-fn ::pred-fn
-                                     :args (s/* any?)))))
+(s/def ::pred (s/and vector? (s/cat :pred (s/and list?
+                                                 (s/cat :pred-fn ::pred-fn
+                                                        :args (s/* any?)))
+                                    :return (s/? logic-var?))))
 
-(s/def ::rule (s/and list?
-                     (s/cat :name (s/and symbol? (complement built-ins))
-                            :args (s/+ any?))))
+(s/def ::rule (s/and list? (s/cat :name (s/and symbol? (complement built-ins))
+                                  :args (s/+ any?))))
 
 (s/def ::range-op '#{< <= >= >})
 (s/def ::range (s/tuple (s/and list?
@@ -49,10 +49,10 @@
                                                      :val literal?
                                                      :sym logic-var?)))))
 
-(s/def ::unify  (s/tuple (s/and list?
-                                (s/cat :op '#{== !=}
-                                       :x any?
-                                       :y any?))))
+(s/def ::unify (s/tuple (s/and list?
+                               (s/cat :op '#{== !=}
+                                      :x any?
+                                      :y any?))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
@@ -127,13 +127,12 @@
   (->> (for [[type clause] clauses]
          {type [(case type
                   :bgp (normalize-bgp-clause clause)
-                  :pred (let [pred-clause clause
-                              {:keys [pred-fn args]
-                               :as clause} (first pred-clause)]
+                  :pred (let [{:keys [pred]} clause
+                              {:keys [pred-fn args]} pred]
                           (if-let [range-pred (and (= 2 (count args))
                                                    (every? logic-var? args)
                                                    (get pred->built-in-range-pred pred-fn))]
-                            (assoc clause :pred-fn range-pred)
+                            (assoc-in clause [:pred :pred-fn] range-pred)
                             clause))
                   :range (let [[type clause] (first clause)]
                            (if (= :val-sym type)
@@ -177,8 +176,8 @@
                                        :when (logic-var? arg)]
                                    arg))
           :not-vars (reduce into not-join-vars (vals not-vars))
-          :pred-vars (set (for [{:keys [args]} pred-clauses
-                                arg args
+          :pred-vars (set (for [{:keys [pred return]} pred-clauses
+                                arg (cons return (:args pred))
                                 :when (logic-var? arg)]
                             arg))
           :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
@@ -380,8 +379,25 @@
                :arg-var? true}])
        (into {})))
 
+;; TODO: These should really be dynamic relations participating in the
+;; join, similar to the arg-joins. can be done by modifyng the
+;; iterator-state internals of RelationVirtualIndex and build a new
+;; nested index for the pred results. This introduces dependencies on
+;; the join order, as these indexes will be modified during the tree
+;; walk, so the join on the return var must happen after any argument
+;; vars. Might be possible to still use alphabetic sort order with
+;; some renaming?  Recursive rules will work similarly.
+(defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
+  (->> (for [{:keys [return]} pred-clauses
+             :when return]
+         [return {:var return
+                  :result-name (symbol "crux.query.pred" (name return))
+                  :result-index (get var->values-result-index return)
+                  :pred-var? true}])
+       (into {})))
+
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name required-attrs arg-var? leaf-var?]} (get var->bindings var)
+  (let [{:keys [e-var var attr result-index result-name required-attrs arg-var? pred-var? leaf-var?]} (get var->bindings var)
         bound-leaf-var? (and leaf-var?
                              (not= e-var result-name)
                              (contains? join-results result-name))]
@@ -391,6 +407,14 @@
         (for [value results]
           {:value value
            :arg-var var
+           :result-name result-name
+           :leaf-var? true}))
+
+      pred-var?
+      (let [results (get join-results result-name)]
+        (for [value results]
+          {:value value
+           :pred-var var
            :result-name result-name
            :leaf-var? true}))
 
@@ -423,9 +447,9 @@
            :entity entity})))))
 
 (defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
-  (for [{:keys [pred-fn args]
-         :as clause} pred-clauses
-        :let [pred-vars (filter logic-var? args)
+  (for [{:keys [pred return] :as clause} pred-clauses
+        :let [{:keys [pred-fn args]} pred
+              pred-vars (filter logic-var? args)
               pred-join-depths (for [var pred-vars]
                                  (or (get-in var->bindings [var :result-index])
                                      (dec (count var->joins))))
@@ -443,12 +467,19 @@
                                           (bound-results-for-var object-store var->bindings join-keys join-results arg)
                                           [{:value arg
                                             :literal-arg? true}])))
-                       :when (apply pred-fn (map :value args-to-apply))
+                       :let [pred-result (apply pred-fn (map :value args-to-apply))]
+                       :when pred-result
                        {:keys [result-name value entity leaf-var? literal-arg?] :as result} args-to-apply
                        :when (not literal-arg?)]
-                   {result-name #{(if leaf-var?
-                                    value
-                                    entity)}})
+                   (cond-> {result-name #{(if leaf-var?
+                                            value
+                                            entity)}}
+                     ;; TODO: these should really be collected and
+                     ;; inserted into the right RelationVirtualIndex
+                     ;; atom, and not put directly into the results,
+                     ;; see comment above.
+                     return (assoc (symbol "crux.query.pred" (name return))
+                                   #{pred-result})))
                  (apply merge-with into))
             join-results)))))
 
@@ -708,7 +739,8 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge v-var->attr e-var->attr)
         var->values-result-index (zipmap (keys var->joins) (range))
-        var->bindings (merge (build-arg-var-bindings var->values-result-index arg-vars)
+        var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
+                             (build-arg-var-bindings var->values-result-index arg-vars)
                              or-var->bindings
                              (build-var-bindings var->attr
                                                  v-var->e

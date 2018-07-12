@@ -589,7 +589,14 @@
                                     :where [[e :name name]
                                             [e :age age]
                                             [(re-find #"o" name)]
-                                            [(= age name)]]})))))))
+                                            [(= age name)]]})))))
+
+    (t/testing "Bind result to var"
+      (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+               (q/q (q/db *kv*) '{:find [name half-age]
+                                  :where [[e :name name]
+                                          [e :age age]
+                                          [(quot age 2) half-age]]}))))))
 
 (t/deftest test-attributes-with-multiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
