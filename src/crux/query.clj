@@ -221,15 +221,6 @@
 
 (declare build-sub-query)
 
-;; TODO: Might be used as a union of all hidden vars between the or
-;; branches where other branches supply dummy relational value like
-;; true for the var so all branches in an or-join have the same vars.
-(defn- local-vars-in-or-join [args body]
-  (let [body-vars (->> (collect-vars (normalize-clauses body))
-                       (vals)
-                       (reduce into #{}))]
-    (set/difference body-vars (set args))))
-
 ;; TODO: Needs cleanup.  How state is transferred and shared between
 ;; sub-query and parent query needs work. Cannot deal with predicates
 ;; or not expressions on their own as there's nothing to join on in
@@ -238,23 +229,45 @@
   (->> or-clauses
        (reduce
         (fn [[or-var->bindings var->joins] clause]
-          (let [sub-query-state (->> (for [[type sub-clauses] (case or-type
-                                                                :or clause
-                                                                :or-join (:body clause))
-                                           :let [where (case type
-                                                         :term [sub-clauses]
-                                                         :and sub-clauses)
-                                                 [local-vars where] (if (= :or-join or-type)
-                                                                      [(local-vars-in-or-join (:args clause) where) where]
-                                                                      [nil where])
-                                                 local-var->local-hidden-var (zipmap local-vars (map gensym local-vars))
+          (let [or-join? (= :or-join or-type)
+                or-join-args (when or-join?
+                               (set (:args clause)))
+                or-branches (for [[type sub-clauses] (case or-type
+                                                       :or clause
+                                                       :or-join (:body clause))
+                                  :let [where (case type
+                                                :term [sub-clauses]
+                                                :and sub-clauses)
+                                        local->hidden-var (when or-join?
+                                                            (let [body-vars (->> (collect-vars (normalize-clauses (:body clause)))
+                                                                                 (vals)
+                                                                                 (reduce into #{}))
+                                                                  local-vars (set/difference body-vars or-join-args)]
+                                                              (zipmap local-vars (map gensym local-vars))))]]
+                              {:local-vars (vals local->hidden-var)
+                               :where (if or-join?
+                                        (w/postwalk-replace local->hidden-var where)
+                                        where)
+                               :sub-clauses sub-clauses})
+                all-local-vars (->> (map :local-vars or-branches)
+                                    (reduce into #{}))
+                sub-query-state (->> (for [{:keys [local-vars where sub-clauses]} or-branches
+                                           :let [other-local-vars (set/difference all-local-vars local-vars)
+                                                 place-holder-args (vec (for [var other-local-vars]
+                                                                          {var true}))
+                                                 ;; TODO: Do we need to add these clauses to force
+                                                 ;; the hidden args into the join?
+                                                 where (->> (for [var other-local-vars]
+                                                              [(list 'true? var)])
+                                                            (concat where)
+                                                            (vec))
                                                  sub-query-state (build-sub-query snapshot
                                                                                   db
                                                                                   []
-                                                                                  (w/postwalk-replace local-var->local-hidden-var where)
-                                                                                  []
+                                                                                  where
+                                                                                  place-holder-args
                                                                                   rules)]]
-                                       (assoc sub-query-state :sub-clauses sub-clauses :local-hidden-vars (set (vals local-var->local-hidden-var))))
+                                       (assoc sub-query-state :sub-clauses sub-clauses))
                                      (reduce
                                       (fn [lhs rhs]
                                         (let [lhs-vars (set (keys (:var->bindings lhs)))
@@ -272,7 +285,7 @@
             [(merge or-var->bindings (:var->bindings sub-query-state))
              (apply merge-with into var->joins (for [v (case or-type
                                                          :or (keys (:var->bindings sub-query-state))
-                                                         :or-join (:args clause))]
+                                                         :or-join (concat all-local-vars or-join-args))]
                                                  {v [(assoc idx :name v)]}))]))
         [nil var->joins])))
 
