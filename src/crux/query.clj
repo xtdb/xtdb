@@ -158,27 +158,26 @@
         not-vars (->> (for [not-clause not-clauses]
                         (collect-vars (normalize-clauses not-clause)))
                       (apply merge-with set/union))]
-    {:e-vars (->> (for [{:keys [e]} bgp-clauses
-                        :when (logic-var? e)]
-                    e)
-                  (into (set (:e-vars or-vars))))
-     :v-vars (->> (for [{:keys [v]} bgp-clauses
-                        :when (logic-var? v)]
-                    v)
-                  (into (set (:v-vars not-vars))))
-     :unification-vars (set (for [{:keys [x y]} unify-clauses
-                                  arg [x y]
-                                  :when (logic-var? arg)]
-                              arg))
-     :not-vars (reduce into not-join-vars (vals not-vars))
-     :pred-vars (set (for [{:keys [args]} pred-clauses
-                           arg args
-                           :when (logic-var? arg)]
-                       arg))
-     :rule-vars (set (for [{:keys [args]} rule-clauses
-                           arg args
-                           :when (logic-var? arg)]
-                       arg))}))
+    (->> {:e-vars (set (for [{:keys [e]} bgp-clauses
+                             :when (logic-var? e)]
+                         e))
+          :v-vars (set (for [{:keys [v]} bgp-clauses
+                             :when (logic-var? v)]
+                         v))
+          :unification-vars (set (for [{:keys [x y]} unify-clauses
+                                       arg [x y]
+                                       :when (logic-var? arg)]
+                                   arg))
+          :not-vars (reduce into not-join-vars (vals not-vars))
+          :pred-vars (set (for [{:keys [args]} pred-clauses
+                                arg args
+                                :when (logic-var? arg)]
+                            arg))
+          :rule-vars (set (for [{:keys [args]} rule-clauses
+                                arg args
+                                :when (logic-var? arg)]
+                            arg))}
+         (merge-with set/union or-vars))))
 
 (defn- build-v-var-range-constraints [e-vars range-clauses]
   (let [v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
@@ -220,7 +219,7 @@
 (defn- or-joins [snapshot db rules or-clauses var->joins e-vars]
   (->> or-clauses
        (reduce
-        (fn [[or-var->bindings var->joins] clause]
+        (fn [var->joins clause]
           (let [sub-query-state (->> (for [[type sub-clauses] clause]
                                        (assoc (build-sub-query snapshot
                                                                db
@@ -229,8 +228,7 @@
                                                                  :term [sub-clauses]
                                                                  :and sub-clauses)
                                                                []
-                                                               rules
-                                                               e-vars)
+                                                               rules)
                                               :sub-clauses sub-clauses))
                                      (reduce
                                       (fn [lhs rhs]
@@ -243,10 +241,9 @@
                                         (-> (merge-with merge lhs (select-keys rhs [:var->joins :var->bindings]))
                                             (update :n-ary-join doc/new-n-ary-or-layered-virtual-index (:n-ary-join rhs))))))
                 idx (:n-ary-join sub-query-state)]
-            [(merge or-var->bindings (:var->bindings sub-query-state))
-             (apply merge-with into var->joins (for [v (keys (:var->bindings sub-query-state))]
-                                                 {v [(assoc idx :name v)]}))]))
-        [nil var->joins])))
+            (apply merge-with into var->joins (for [v (keys (:var->bindings sub-query-state))]
+                                                {v [(assoc idx :name v)]}))))
+        var->joins)))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
@@ -459,7 +456,7 @@
                 parent-var->bindings var->bindings
                 {:keys [n-ary-join
                         var->bindings
-                        var->joins]} (build-sub-query snapshot db [] not-clause args rules #{})]
+                        var->joins]} (build-sub-query snapshot db [] not-clause args rules)]
             (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
@@ -558,7 +555,7 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules parent-vars]
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules]
   (let [rule-name->rules (group-by (comp :name :head) rules)
         where (expand-rules where rule-name->rules #{})
         {bgp-clauses :bgp
@@ -600,21 +597,19 @@
                                         clause)
                                       (group-by :v))
         var->joins (sorted-map)
-        [or-var->bindings var->joins] (or-joins snapshot
-                                                db
-                                                rules
-                                                or-clauses
-                                                var->joins
-                                                e-vars)
-        e-vars (set/union e-vars (set (for [[_ {:keys [e-var]}] or-var->bindings]
-                                        e-var)))
+        var->joins (or-joins snapshot
+                             db
+                             rules
+                             or-clauses
+                             var->joins
+                             e-vars)
         var->joins (e-var-literal-v-joins snapshot
                                           e-var->literal-v-clauses
                                           var->joins
                                           business-time
                                           transact-time)
         arg-vars (arg-vars args)
-        non-leaf-v-vars (set/union unification-vars not-vars e-vars arg-vars parent-vars)
+        non-leaf-v-vars (set/union unification-vars not-vars e-vars arg-vars)
         leaf-v-var? (fn [e v]
                       (and (= 1 (count (get v->v-var-clauses v)))
                            (or (contains? e-var->literal-v-clauses e)
@@ -661,7 +656,6 @@
         var->attr (merge v-var->attr e-var->attr)
         var->values-result-index (zipmap (keys var->joins) (range))
         var->bindings (merge (build-arg-var-bindings var->values-result-index arg-vars)
-                             or-var->bindings
                              (build-var-bindings var->attr
                                                  v-var->e
                                                  var->values-result-index
@@ -695,7 +689,7 @@
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (let [{:keys [n-ary-join
                    var->bindings
-                   var->joins]} (build-sub-query snapshot db find where args rules #{})]
+                   var->joins]} (build-sub-query snapshot db find where args rules)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
