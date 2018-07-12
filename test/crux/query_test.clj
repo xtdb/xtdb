@@ -946,6 +946,28 @@
   (try
     (q/q (q/db *kv*) '{:find [i]
                        :where [[i :age age]
+                               (over-twenty-one? i age)]
+                       :rules [[(over-twenty-one? x)
+                                [(>= x 21)]]]})
+    (t/is (= true false) "Expected exception")
+    (catch IllegalArgumentException e
+      (t/is (re-find #"Rule invocation has wrong arity, expected: 1" (.getMessage e)))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [i]
+                       :where [[i :age age]
+                               (is-ivan-or-petr? i name)]
+                       :rules [[(is-ivan-or-petr? i name)
+                                [i :name "Ivan"]]
+                               [(is-ivan-or-petr? i)
+                                [i :name "Petr"]]]})
+    (t/is (= true false) "Expected exception")
+    (catch IllegalArgumentException e
+      (t/is (re-find #"Rule definitions require same arity:" (.getMessage e)))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [i]
+                       :where [[i :age age]
                                (over-twenty-one? age)]
                        :rules [[(over-twenty-one? x)
                                 (over-twenty-one? x)]]})

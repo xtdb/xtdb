@@ -512,19 +512,32 @@
              (when (contains? seen-rules rule-name)
                (throw (UnsupportedOperationException.
                        (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
-             (let [expanded-rules (for [{:keys [head body] :as rule} rules
-                                        :let [rule-var->query-var (zipmap (concat (:bound-args head)
-                                                                                  (:args head))
-                                                                          (:args clause))]]
-                                    (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))]
-               (if (= (count rules) 1)
-                 (first expanded-rules)
-                 (do (doseq [expanded-rule expanded-rules
-                             :when (not (contains? (set (map first expanded-rule)) :bgp))]
-                       (throw (UnsupportedOperationException.
-                               (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
-                     [[:or (vec (for [expanded-rule expanded-rules]
-                                  [:and expanded-rule]))]]))))
+             (let [rule-args+body (for [{:keys [head body]} rules]
+                                    [(vec (concat (:bound-args head)
+                                                  (:args head)))
+                                     body])
+                   [arity :as arities] (->> rule-args+body
+                                            (map (comp count first))
+                                            (distinct))]
+               (when-not (= 1 (count arities))
+                 (throw (IllegalArgumentException. (str "Rule definitions require same arity: " (pr-str rules)))))
+               (when-not (= arity (count (:args clause)))
+                 (throw (IllegalArgumentException.
+                         (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
+               (let [expanded-rules (for [[rule-args body] rule-args+body
+                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))]]
+                                      (expand-rules (w/postwalk-replace rule-arg->query-arg body)
+                                                    rule-name->rules
+                                                    (conj seen-rules rule-name)))]
+                 (if (= (count rules) 1)
+                   (first expanded-rules)
+                   (do (doseq [expanded-rule expanded-rules
+                               :let [clause-types (set (map first expanded-rule))]
+                               :when (not (contains? clause-types :bgp))]
+                         (throw (UnsupportedOperationException.
+                                 (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
+                       [[:or (vec (for [expanded-rule expanded-rules]
+                                    [:and expanded-rule]))]])))))
            [sub-clause]))
        (reduce into [])))
 
