@@ -437,7 +437,9 @@
                             {:name "Bob" :last-name "Ivannotov"}
                             {:name "Fred" :last-name "Ivannotov"}])
 
-  ;; TODO: should work.
+  ;; TODO: as or is implemented as a n-ary join, having a predicate or
+  ;; a not sub-query on its own doesn't work currently, as there's
+  ;; nothing local to join on.
   #_(t/testing "Or can use not expression"
       (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
                (q/q (q/db *kv*) '{:find [name]
