@@ -417,6 +417,8 @@
                                        (for [var not-vars]
                                          (bound-results-for-var object-store var->bindings join-keys join-results var)))]
                             (zipmap not-vars (map :value tuple))))
+                parent-join-keys join-keys
+                parent-var->bindings var->bindings
                 {:keys [n-ary-join
                         var->bindings
                         var->joins]} (build-sub-query snapshot db [] not-clause args rules #{})]
@@ -424,16 +426,24 @@
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
                     (let [results (for [var not-vars]
-                                    (bound-results-for-var object-store var->bindings join-keys join-results var))]
-                      (when (empty? (for [result results
-                                          {:keys [arg-var]} result
-                                          :when arg-var]
-                                      arg-var))
-                        (let [entities-to-remove (zipmap not-vars
-                                                         (for [result results]
-                                                           (->> result
-                                                                (map :entity)
-                                                                (set))))]
+                                    (bound-results-for-var object-store var->bindings join-keys join-results var))
+                          no-arg-matches? (empty? (for [result results
+                                                        {:keys [arg-var]} result
+                                                        :when arg-var]
+                                                    arg-var))]
+                      (when no-arg-matches?
+                        (let [not-var->values (zipmap not-vars
+                                                      (for [result results]
+                                                        (->> result
+                                                             (map :value)
+                                                             (set))))
+                              entities-to-remove (->> (for [[var not-vs] not-var->values
+                                                            :let [parent-results (bound-results-for-var object-store parent-var->bindings
+                                                                                                        parent-join-keys parent-join-results var)]
+                                                            {:keys [e-var value entity]} parent-results
+                                                            :when (contains? not-vs value)]
+                                                        {e-var #{entity}})
+                                                      (apply merge-with into))]
                           (merge-with set/difference parent-join-results entities-to-remove)))))
                   join-results)))))))
 

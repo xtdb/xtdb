@@ -310,11 +310,14 @@
                                                  [:ivan-ivanovtov-1 :last-name i-name]
                                                  (not [e :last-name i-name])]})))))
 
-  ;; TODO: should work.
-  #_(t/testing "literal entities"
-      (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
-                                           :where [[e :name name]
-                                                   (not [:ivan-ivanov-1 :name name])]}))))))
+  (t/testing "literal entities"
+    (t/is (= 0 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [[e :name name]
+                                                 (not [:ivan-ivanov-1 :name name])]}))))
+
+    (t/is (= 1 (count (q/q (q/db *kv*) '{:find [e]
+                                         :where [[e :last-name last-name]
+                                                 (not [:ivan-ivanov-1 :last-name last-name])]}))))))
 
 (t/deftest test-or-query
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
