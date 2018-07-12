@@ -22,19 +22,16 @@
          (s/conformer next)
          spec))
 
-(def ^:private built-ins '#{and not == !=})
+(def ^:private built-ins '#{and == !=})
+
+(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
+                                   :a keyword?
+                                   :v (s/? any?))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
                         (s/conformer #(some-> % resolve var-get))
                         fn?))
-(s/def ::find (s/coll-of logic-var? :kind vector? :min-count 1))
-
-(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
-                                   :a keyword?
-                                   :v (s/? any?))))
-(s/def ::and (expression-spec 'and (s/+ ::term)))
-
 (s/def ::pred (s/tuple (s/and list?
                               (s/cat :pred-fn ::pred-fn
                                      :args (s/* any?)))))
@@ -57,29 +54,40 @@
                                        :x any?
                                        :y any?))))
 
+(s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
+
+(s/def ::not (expression-spec 'not (s/+ ::term)))
+(s/def ::not-join (expression-spec 'not-join (s/cat :args ::args-list
+                                                    :body (s/+ ::term))))
+
+(s/def ::and (expression-spec 'and (s/+ ::term)))
+(s/def ::or (expression-spec 'or (s/+ (s/or :term ::term
+                                            :and ::and))))
+
 (s/def ::term (s/or :bgp ::bgp
-                    :not (expression-spec 'not (s/+ ::term))
-                    :or (expression-spec 'or (s/+ (s/or :term ::term
-                                                        :and ::and)))
+                    :not ::not
+                    :not-join ::not-join
+                    :or ::or
                     :range ::range
                     :unify ::unify
                     :rule ::rule
                     :pred ::pred))
 
+(s/def ::find ::args-list)
+(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
+
 (s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
 (s/def ::args (s/coll-of ::arg-tuple :kind vector?))
 
-
 (s/def ::rule-head (s/and list?
                           (s/cat :name (s/and symbol? (complement built-ins))
-                                 :bound-args (s/? (s/tuple logic-var?))
+                                 :bound-args (s/? ::args-list)
                                  :args (s/* logic-var?))))
 (s/def ::rule-definition (s/and vector?
                                 (s/cat :head ::rule-head
                                        :body (s/+ ::term))))
-
-(s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
 (s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+
 (s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules]))
 
 (defn- cartesian-product [[x & xs]]
@@ -134,6 +142,7 @@
 (defn- collect-vars [{bgp-clauses :bgp
                       unify-clauses :unify
                       not-clauses :not
+                      not-join-clauses :not-join
                       or-clauses :or
                       pred-clauses :pred
                       rule-clauses :rule}]
@@ -143,6 +152,9 @@
                                                           :term [sub-clauses]
                                                           :and sub-clauses))))
                      (apply merge-with set/union))
+        not-join-vars (set (for [not-join-clause not-join-clauses
+                                 arg (:args not-join-clause)]
+                             arg))
         not-vars (->> (for [not-clause not-clauses]
                         (collect-vars (normalize-clauses not-clause)))
                       (apply merge-with set/union))]
@@ -158,7 +170,7 @@
                                   arg [x y]
                                   :when (logic-var? arg)]
                               arg))
-     :not-vars (reduce into #{} (vals not-vars))
+     :not-vars (reduce into not-join-vars (vals not-vars))
      :pred-vars (set (for [{:keys [args]} pred-clauses
                            arg args
                            :when (logic-var? arg)]
@@ -425,9 +437,13 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store rules not-clauses var->bindings]
+(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
-        :let [{:keys [not-vars]} (collect-vars (normalize-clauses [[:not not-clause]]))]]
+        :let [[not-vars not-clause] (case not-type
+                                      :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
+                                            not-clause]
+                                      :not-join [(:args not-clause)
+                                                 (:body not-clause)])]]
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
@@ -550,6 +566,7 @@
          pred-clauses :pred
          unify-clauses :unify
          not-clauses :not
+         not-join-clauses :not-join
          or-clauses :or
          rule-clauses :rule
          :as type->clauses} (normalize-clauses where)
@@ -651,7 +668,8 @@
                                                  e-var->leaf-v-var-clauses
                                                  (keys var->attr)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (build-not-constraints snapshot db object-store rules not-clauses var->bindings))
+        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings)
+                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings var->joins))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]

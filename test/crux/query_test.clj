@@ -443,18 +443,31 @@
                                                                       (and [?p2 :last-name "Ivanov"]
                                                                            [?p2 :sex :male]))]}))))))
 
-;; TODO: lacks not-join support - might not be supported.
-#_(t/deftest test-not-join
-    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
-                              {:name "Malcolm" :last-name "Ofsparks"}
-                              {:name "Dominic" :last-name "Monroe"}])
+(t/deftest test-not-join
+  (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                            {:name "Malcolm" :last-name "Ofsparks"}
+                            {:name "Dominic" :last-name "Monroe"}])
 
-    (t/testing "Rudimentary or-join"
-      (t/is (= #{["Ivan"] ["Malcolm"]}
-               (q/q (q/db *kv*) '{:find [name]
-                                  :where [[e :name name]
-                                          (not-join [e]
-                                                    [e :last-name "Monroe"])]})))))
+  (t/testing "Rudimentary not-join"
+    (t/is (= #{["Ivan"] ["Malcolm"]}
+             (q/q (q/db *kv*) '{:find [name]
+                                :where [[e :name name]
+                                        (not-join [e]
+                                                  [e :last-name "Monroe"])]})))
+
+    (t/is (= #{["Ivan"] ["Malcolm"]}
+             (q/q (q/db *kv*) '{:find [name]
+                                :where [[e :name name]
+                                        (not-join [e]
+                                                  [e :last-name last-name]
+                                                  [(= last-name "Monroe")])]})))
+
+    (t/is (= #{["Dominic"]}
+             (q/q (q/db *kv*) '{:find [name]
+                                :where [[e :name name]
+                                        (not-join [e]
+                                                  [e :last-name last-name]
+                                                  [(not= last-name "Monroe")])]})))))
 
 (t/deftest test-mixing-expressions
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
