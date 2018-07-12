@@ -272,7 +272,8 @@
   (let [ks (keys (first args))]
     (doseq [m args]
       (when-not (every? #(contains? m %) ks)
-        (throw (IllegalArgumentException. (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))
+        (throw (IllegalArgumentException.
+                (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))
     (set (for [k ks]
            (symbol (name k))))))
 
@@ -506,17 +507,24 @@
            (let [rule-name (:name clause)
                  rules (get rule-name->rules rule-name)]
              (when-not rules
-               (throw (IllegalArgumentException. (str "Unknown rule: " (pr-str sub-clause)))))
+               (throw (IllegalArgumentException.
+                       (str "Unknown rule: " (pr-str sub-clause)))))
              (when (contains? seen-rules rule-name)
-               (throw (UnsupportedOperationException. (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
-             (when (> (count rules) 1)
-               (throw (UnsupportedOperationException. (str "Cannot do or between rules yet: " (pr-str sub-clause)))))
-             (->> (for [{:keys [head body] :as rule} rules
-                        :let [rule-var->query-var (zipmap (concat (:bound-args head)
-                                                                  (:args head))
-                                                          (:args clause))]]
-                    (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))
-                  (first)))
+               (throw (UnsupportedOperationException.
+                       (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
+             (let [expanded-rules (for [{:keys [head body] :as rule} rules
+                                        :let [rule-var->query-var (zipmap (concat (:bound-args head)
+                                                                                  (:args head))
+                                                                          (:args clause))]]
+                                    (expand-rules (w/postwalk-replace rule-var->query-var body) rule-name->rules (conj seen-rules rule-name)))]
+               (if (= (count rules) 1)
+                 (first expanded-rules)
+                 (do (doseq [expanded-rule expanded-rules
+                             :when (not (contains? (set (map first expanded-rule)) :bgp))]
+                       (throw (UnsupportedOperationException.
+                               (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
+                     [[:or (vec (for [expanded-rule expanded-rules]
+                                  [:and expanded-rule]))]]))))
            [sub-clause]))
        (reduce into [])))
 
@@ -658,7 +666,8 @@
                    var->joins]} (build-sub-query snapshot db find where args rules #{})]
        (doseq [var find
                :when (not (contains? var->bindings var))]
-         (throw (IllegalArgumentException. (str "Find refers to unknown variable: " var))))
+         (throw (IllegalArgumentException.
+                 (str "Find refers to unknown variable: " var))))
        (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))
              result (cartesian-product
                      (for [var find]
@@ -676,8 +685,9 @@
     (while (pos? (compare transact-time (doc/read-meta kv :crux.tx-log/tx-time)))
       (Thread/sleep 100)
       (when (>= (System/currentTimeMillis) timeout-at)
-        (throw (IllegalStateException. (str "Timed out waiting for: " transact-time
-                                            " index has:" (doc/read-meta kv :crux.tx-log/tx-time))))))))
+        (throw (IllegalStateException.
+                (str "Timed out waiting for: " transact-time
+                     " index has:" (doc/read-meta kv :crux.tx-log/tx-time))))))))
 
 (defn db
   ([kv]

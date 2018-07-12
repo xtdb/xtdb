@@ -898,6 +898,31 @@
                                            :rules [[(over-age? [age] required-age)
                                                     [(>= age required-age)]]]}))))
 
+  (t/testing "rule using multiple branches"
+    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [(is-ivan-or-bob? i)]
+                                           :rules [[(is-ivan-or-bob? i)
+                                                    [i :name "Ivan"]
+                                                    [i :last-name "Ivanov"]]
+                                                   [(is-ivan-or-bob? i)
+                                                    [i :name "Bob"]]]})))
+
+    (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [name]
+                                            :where [[i :name name]
+                                                    (not (is-ivan-or-bob? i))]
+                                            :rules [[(is-ivan-or-bob? i)
+                                                     [i :name "Ivan"]]
+                                                    [(is-ivan-or-bob? i)
+                                                     [i :name "Bob"]]]})))
+
+    (t/is (= #{[:ivan]
+               [:petr]} (q/q (q/db *kv*) '{:find [i]
+                                           :where [(is-ivan-or-petr? i)]
+                                           :rules [[(is-ivan-or-petr? i)
+                                                    [i :name "Ivan"]]
+                                                   [(is-ivan-or-petr? i)
+                                                    [i :name "Petr"]]]}))))
+
   (try
     (q/q (q/db *kv*) '{:find [i]
                        :where [[i :age age]
@@ -908,7 +933,7 @@
                                 (not [(< x 21)])]]})
     (t/is (= true false) "Expected exception")
     (catch UnsupportedOperationException e
-      (t/is (re-find #"Cannot do or between rules yet: " (.getMessage e)))))
+      (t/is (re-find #"Cannot do or between rules without basic graph patterns: " (.getMessage e)))))
 
   (try
     (q/q (q/db *kv*) '{:find [i]
