@@ -302,6 +302,18 @@
                                                    (not [e :last-name "Ivannotov"]
                                                         [e :name "Ivan"])]}))))
 
+      (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
+                                           :where [[e :name name]
+                                                   [e :name "Ivan"]
+                                                   (not [e :last-name "Ivannotov"]
+                                                        [(string? name)])]}))))
+
+      (t/is (= 3 (count (q/q (q/db *kv*) '{:find [e]
+                                           :where [[e :name name]
+                                                   [e :name "Ivan"]
+                                                   (not [e :last-name "Ivannotov"]
+                                                        [(number? name)])]}))))
+
       (t/is (= 3 (count (q/q (q/db *kv*) '{:find [e]
                                            :where [[e :name name]
                                                    [e :name "Ivan"]
