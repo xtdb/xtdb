@@ -425,8 +425,9 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store rules not-clauses not-vars var->bindings]
-  (for [not-clause not-clauses]
+(defn- build-not-constraints [snapshot db object-store rules not-clauses var->bindings]
+  (for [not-clause not-clauses
+        :let [{:keys [not-vars]} (collect-vars (normalize-clauses [[:not not-clause]]))]]
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
@@ -650,7 +651,7 @@
                                                  e-var->leaf-v-var-clauses
                                                  (keys var->attr)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (build-not-constraints snapshot db object-store rules not-clauses not-vars var->bindings))
+        not-constraints (vec (build-not-constraints snapshot db object-store rules not-clauses var->bindings))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings var->joins))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
