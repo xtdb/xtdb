@@ -766,7 +766,7 @@
                               :needs-seek? false}))
     nil))
 
-(defn update-relation-virtual-index [relation tuples]
+(defn update-relation-virtual-index! [relation tuples]
   (reset! (:iterators-state relation) {:indexes [(build-nested-index (sort tuples))]
                                        :child-idx nil
                                        :needs-seek? true})
@@ -774,7 +774,7 @@
 
 (defn new-relation-virtual-index [relation-name tuples max-depth]
   (let [iterators-state (atom nil)]
-    (update-relation-virtual-index (->RelationVirtualIndex relation-name max-depth iterators-state) tuples)))
+    (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth iterators-state) tuples)))
 
 ;; Caching
 

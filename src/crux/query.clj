@@ -504,11 +504,11 @@
                                                                           value
                                                                           entity)}}])]
               (when return
-                (doc/update-relation-virtual-index (get pred-return->relations return)
-                                                   (->> (for [[pred-result] pred-result+result-maps]
-                                                          [pred-result])
-                                                        (distinct)
-                                                        (vec))))
+                (doc/update-relation-virtual-index! (get pred-return->relations return)
+                                                    (->> (for [[pred-result] pred-result+result-maps]
+                                                           [pred-result])
+                                                         (distinct)
+                                                         (vec))))
               (->> (map second pred-result+result-maps)
                    (apply merge-with into)))
             join-results)))))
