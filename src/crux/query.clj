@@ -246,7 +246,7 @@
                                                 :term [sub-clauses]
                                                 :and sub-clauses)
                                         local->hidden-var (when or-join?
-                                                            (let [body-vars (->> (collect-vars (normalize-clauses (:body clause)))
+                                                            (let [body-vars (->> (collect-vars (normalize-clauses where))
                                                                                  (vals)
                                                                                  (reduce into #{}))
                                                                   local-vars (set/difference body-vars or-join-args)]
@@ -260,12 +260,9 @@
                                     (reduce into #{}))
                 sub-query-state (->> (for [{:keys [local-vars where sub-clauses]} or-branches
                                            :let [other-local-vars (set/difference all-local-vars local-vars)
-                                                 place-holder-args (vec (for [var other-local-vars]
-                                                                          {var true}))
-                                                 where (->> (for [var other-local-vars]
-                                                              [(list 'true? var)])
-                                                            (concat where)
-                                                            (vec))
+                                                 place-holder-args [(->> (for [var other-local-vars]
+                                                                            [var true])
+                                                                          (into {}))]
                                                  sub-query-state (build-sub-query snapshot
                                                                                   db
                                                                                   []
@@ -286,11 +283,13 @@
                                         (-> (merge-with merge lhs (select-keys rhs [:var->joins :var->bindings]))
                                             (update :local-hidden-vars set/union (:local-hidden-vars rhs))
                                             (update :n-ary-join doc/new-n-ary-or-layered-virtual-index (:n-ary-join rhs))))))
-                idx (:n-ary-join sub-query-state)]
+                idx (:n-ary-join sub-query-state)
+                sub-query-var->joins (:var->joins sub-query-state)]
             [(merge or-var->bindings (:var->bindings sub-query-state))
              (apply merge-with into var->joins (for [v (case or-type
                                                          :or (keys (:var->bindings sub-query-state))
-                                                         :or-join (concat all-local-vars or-join-args))]
+                                                         :or-join (concat all-local-vars or-join-args))
+                                                     :when (contains? sub-query-var->joins v)]
                                                  {v [(assoc idx :name v)]}))]))
         [nil var->joins])))
 

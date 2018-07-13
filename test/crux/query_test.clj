@@ -1231,36 +1231,34 @@
                      [?e :name ?n]))]
       #{:1 :2 :3 :4 :5 :6}
 
-      ;; TODO: should pass.
-      ;; [[?e  :name ?a]
-      ;;  [?e2 :name ?a]
-      ;;  (or-join [?e]
-      ;;           (and [?e  :age ?a]
-      ;;                [?e2 :age ?a]))]
-      ;; #{:1 :2 :3 :4 :5 :6}
-      )))
+      [[?e  :name ?a]
+       [?e2 :name ?a]
+       (or-join [?e]
+                  (and [?e  :age ?a]
+                       [?e2 :age ?a]))]
+      #{:1 :2 :3 :4 :5 :6})))
 
 (defn even-kw? [x]
   (even? (Long/parseLong (name x))))
 
-#_(t/deftest test-rules
-    (f/transact-entity-maps! f/*kv* [{:crux.db/id :5 :follow :3}
-                                     {:crux.db/id :1 :follow :2}
-                                     {:crux.db/id :2 :follow :3}
-                                     {:crux.db/id :3 :follow :4}
-                                     {:crux.db/id :4 :follow :6}
-                                     {:crux.db/id :2 :follow :4}])
-    (let [db (q/db *kv*)]
-      (t/is (= (q/q db
-                    '{:find  [?e1 ?e2]
-                      :where [(follow ?e1 ?e2)]
-                      :rules [[(follow ?x ?y)
-                               [?x :follow ?y]]]})
-               #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
+(t/deftest test-rules
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :5 :follow :3}
+                                   {:crux.db/id :1 :follow :2}
+                                   {:crux.db/id :2 :follow #{:3 :4}}
+                                   {:crux.db/id :3 :follow :4}
+                                   {:crux.db/id :4 :follow :6}])
+  (let [db (q/db *kv*)]
+    (t/is (= (q/q db
+                  '{:find  [?e1 ?e2]
+                    :where [(follow ?e1 ?e2)]
+                    :rules [[(follow ?x ?y)
+                             [?x :follow ?y]]]})
+             #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
 
-      ;; NOTE: Crux does not support vars in attribute position, so
-      ;; :follow is explicit.
-      (t/testing "Joining regular clauses with rule"
+    ;; NOTE: Crux does not support vars in attribute position, so
+    ;; :follow is explicit.
+    ;; TODO: Should work.
+    #_(t/testing "Joining regular clauses with rule"
         (t/is (= (q/q db
                       '{:find [?y ?x]
                         :where [[_ :follow ?x]
@@ -1270,17 +1268,18 @@
                                  [?a :follow ?b]]]})
                  #{[:3 :2] [:6 :4] [:4 :2]})))
 
-      ;; NOTE: Crux does not support vars in attribute position.
-      #_(t/testing "Rule context is isolated from outer context"
-          (t/is (= (q/q db
-                        '{:find [?x]
-                          :where [[?e _ _]
-                                  (rule ?x)]
-                          :rules [[(rule ?e)
-                                   [_ ?e _]]]})
-                   #{[:follow]})))
+    ;; NOTE: Crux does not support vars in attribute position.
+    #_(t/testing "Rule context is isolated from outer context"
+        (t/is (= (q/q db
+                      '{:find [?x]
+                        :where [[?e _ _]
+                                (rule ?x)]
+                        :rules [[(rule ?e)
+                                 [_ ?e _]]]})
+                 #{[:follow]})))
 
-      (t/testing "Rule with branches"
+    ;; TODO: Should work.
+    #_(t/testing "Rule with branches"
         (t/is (= (q/q db
                       '{:find [?e2]
                         :where [(follow ?e1 ?e2)]
@@ -1292,7 +1291,8 @@
                                  [?t  :follow ?e1]]]})
                  #{[:2] [:3] [:4]})))
 
-      (t/testing "Recursive rules"
+    ;; TODO: Crux does not currently support recursive rules.
+    #_(t/testing "Recursive rules"
         (t/is (= (q/q db
                       '{:find  [?e2]
                         :where [(follow ?e1 ?e2)]
@@ -1333,7 +1333,8 @@
                                        (follow ?e2 ?e1)]]})
                        #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]}))))))
 
-      (t/testing "Mutually recursive rules"
+    ;; TODO: Crux does not currently support recursive rules.
+    #_(t/testing "Mutually recursive rules"
         (f/with-kv-store
           (fn []
             (f/transact-entity-maps! f/*kv* [{:crux.db/id :0 :f1 :1}
@@ -1362,42 +1363,42 @@
                          [:3 :5]
                          [:4 :5]}))))))
 
-      ;; TODO: Crux does not currently support variables in predicate position.
-      #_(t/testing "Passing ins to rule"
-          (t/is (= (q/q db
-                        {:find '[?x ?y]
-                         :where '[(match ?even ?x ?y)]
-                         :rules '[[(match ?pred ?e ?e2)
-                                   [?e :follow ?e2]
-                                   [(?pred ?e)]
-                                   [(?pred ?e2)]]]
-                         :args [{:?even even-kw?}]})
-                   #{[:4 :6] [:2 :4]})))
-
-      (t/testing "Using built-ins inside rule"
+    ;; TODO: Crux does not currently support variables in predicate position.
+    #_(t/testing "Passing ins to rule"
         (t/is (= (q/q db
-                      '{:find [?x ?y]
-                        :where [(match ?x ?y)]
-                        :rules [[(match ?e ?e2)
+                      {:find '[?x ?y]
+                       :where '[(match ?even ?x ?y)]
+                       :rules '[[(match ?pred ?e ?e2)
                                  [?e :follow ?e2]
-                                 [(crux.query-test/even-kw? ?e)]
-                                 [(crux.query-test/even-kw? ?e2)]]]})
+                                 [(?pred ?e)]
+                                 [(?pred ?e2)]]]
+                       :args [{:?even even-kw?}]})
                  #{[:4 :6] [:2 :4]})))
 
-      ;; TODO: Crux does not currently support variables in predicate position.
-      #_(t/testing "Calling rule twice (#44)"
-          (f/with-kv-store
-            (fn []
-              (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
-              (let [db (q/db *kv*)]
-                (q/q db
-                     {:find '[?p]
-                      :where '[(rule ?p ?fn "a")
-                               (rule ?p ?fn "b")]
-                      :rules '[[(rule ?p ?fn ?x)
-                                [?p :attr ?x]
-                                [(?fn ?x)]]]
-                      :args [{:?fn (constantly true)}]})))))))
+    (t/testing "Using built-ins inside rule"
+      (t/is (= (q/q db
+                    '{:find [?x ?y]
+                      :where [(match ?x ?y)]
+                      :rules [[(match ?e ?e2)
+                               [?e :follow ?e2]
+                               [(crux.query-test/even-kw? ?e)]
+                               [(crux.query-test/even-kw? ?e2)]]]})
+               #{[:4 :6] [:2 :4]})))
+
+    ;; TODO: Crux does not currently support variables in predicate position.
+    #_(t/testing "Calling rule twice (#44)"
+        (f/with-kv-store
+          (fn []
+            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
+            (let [db (q/db *kv*)]
+              (q/q db
+                   {:find '[?p]
+                    :where '[(rule ?p ?fn "a")
+                             (rule ?p ?fn "b")]
+                    :rules '[[(rule ?p ?fn ?x)
+                              [?p :attr ?x]
+                              [(?fn ?x)]]]
+                    :args [{:?fn (constantly true)}]})))))))
 
 ;; https://github.com/tonsky/datascript/issues/218
 (t/deftest datascript-test-rules-false-arguments
