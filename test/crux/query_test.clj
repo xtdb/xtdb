@@ -1058,3 +1058,355 @@
     (t/is (= true false) "Expected exception")
     (catch UnsupportedOperationException e
       (t/is (re-find #"Cannot do recursive rules yet: " (.getMessage e))))))
+
+
+;; Tests borrowed from Datascript:
+;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
+
+(defn populate-datascript-test-db []
+  (f/transact-entity-maps! *kv* [{:crux.db/id :1 :name "Ivan" :age 10}
+                                 {:crux.db/id :2 :name "Ivan" :age 20}
+                                 {:crux.db/id :3 :name "Oleg" :age 10}
+                                 {:crux.db/id :4 :name "Oleg" :age 20}
+                                 {:crux.db/id :5 :name "Ivan" :age 10}
+                                 {:crux.db/id :6 :name "Ivan" :age 20} ]))
+
+#_(t/deftest datascript-test-not
+  (populate-datascript-test-db)
+  (let [db (q/db *kv*)]
+    (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
+                      (into #{} (map vector) res))
+      [[?e :name]
+       (not [?e :name "Ivan"])]
+      #{:3 :4}
+
+      [[?e :name]
+       (not
+        [?e :name "Ivan"]
+        [?e :age  10])]
+      #{:2 :3 :4 :6}
+
+      [[?e :name]
+       (not [?e :name "Ivan"])
+       (not [?e :age 10])]
+      #{:4}
+
+      ;; full exclude
+      [[?e :name]
+       (not [?e :age])]
+      #{}
+
+      ;; not-intersecting rels
+      [[?e :name "Ivan"]
+       (not [?e :name "Oleg"])]
+      #{:1 :2 :5 :6}
+
+      ;; exclude empty set
+      [[?e :name]
+       (not [?e :name "Ivan"]
+            [?e :name "Oleg"])]
+      #{:1 :2 :3 :4 :5 :6}
+
+      ;; nested excludes
+      [[?e :name]
+       (not [?e :name "Ivan"]
+            (not [?e :age 10]))]
+      #{:1 :3 :4 :5})))
+
+#_(t/deftest datascript-test-not-join
+  (populate-datascript-test-db)
+  (let [db (q/db *kv*)]
+    (t/is (= (q/q '{:find [?e ?a]
+                    :where [[?e :name]
+                            [?e :age  ?a]
+                            (not-join [?e]
+                                      [?e :name "Oleg"]
+                                      [?e :age ?a])]}
+                  db)
+             #{[:1 10] [:2 20] [:5 10] [:6 20]}))
+
+    (t/is (= (q/q '{:find [?e ?a]
+                    :where [[?e :name]
+                            [?e :age  ?a]
+                            [?e :age  10]
+                            (not-join [?e]
+                                      [?e :name "Oleg"]
+                                      [?e :age  10]
+                                      [?e :age ?a])]}
+                  db)
+             #{[:1 10] [:5 10]}))))
+
+#_(t/deftest datascript-test-not-impl-edge-cases
+  (populate-datascript-test-db)
+  (let [db (q/db *kv*)]
+    (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
+                      (into #{} (map vector) res))
+      ;; const \ empty
+      [[?e :name "Oleg"]
+       [?e :age  10]
+       (not [?e :age 20])]
+      #{:3}
+
+      ;; const \ const
+      [[?e :name "Oleg"]
+       [?e :age  10]
+       (not [?e :age 10])]
+      #{}
+
+      ;; rel \ const
+      [[?e :name "Oleg"]
+       (not [?e :age 10])]
+      #{:4})
+
+    ;; 2 rels \ 2 rels
+    (t/is (= (q/q db
+                  '{:find [?e ?e2]
+                    :where [[?e  :name "Ivan"]
+                            [?e2 :name "Ivan"]
+                            (not [?e :age 10]
+                                 [?e2 :age 20])]})
+             #{[:2 :1] [:6 :5] [:1 :1] [:2 :2] [:5 :5] [:6 :6] [:2 :5] [:1 :5] [:2 :6] [:6 :1] [:5 :1] [:6 :2]}))
+
+    ;; 2 rels \ rel + const
+    (t/is (= (q/q db
+                  '{:find [?e ?e2]
+                    :where [[?e  :name "Ivan"]
+                            [?e2 :name "Oleg"]
+                            (not [?e :age 10]
+                                 [?e2 :age 20])]})
+             #{[:2 :3] [:1 :3] [:2 :4] [:6 :3] [:5 :3] [:6 :4]}))
+
+    ;; 2 rels \ 2 consts
+    (t/is (= (q/q db
+                  '{:find [?e ?e2]
+                    :where [[?e  :name "Oleg"]
+                            [?e2 :name "Oleg"]
+                            (not [?e :age 10]
+                                 [?e2 :age 20])]})
+             #{[:4 :3] [:3 :3] [:4 :4]}))))
+
+#_(t/deftest datascript-test-or
+  (populate-datascript-test-db)
+  (let [db (q/db *kv*)]
+    (t/are [q res]  (= (q/q db {:find '[?e] :where (quote q)})
+                       (into #{} (map vector) res))
+
+      ;; intersecting results
+      [(or [?e :name "Oleg"]
+           [?e :age 10])]
+      #{:1 :3 :4 :5}
+
+      ;; one branch empty
+      [(or [?e :name "Oleg"]
+           [?e :age 30])]
+      #{:3 :4}
+
+      ;; both empty
+      [(or [?e :name "Petr"]
+           [?e :age 30])]
+      #{}
+
+      ;; join with 1 var
+      [[?e :name "Ivan"]
+       (or [?e :name "Oleg"]
+           [?e :age 10])]
+      #{:1 :5}
+
+      ;; join with 2 vars
+      [[?e :age ?a]
+       (or (and [?e :name "Ivan"]
+                [:1  :age  ?a])
+           (and [?e :name "Oleg"]
+                [:2  :age  ?a]))]
+      #{:1 :5 :4})))
+
+#_(t/deftest datascript-test-or-join
+  (populate-datascript-test-db)
+  (let [db (q/db *kv*)]
+    (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
+                      (into #{} (map vector) res))
+      [(or-join [?e]
+                [?e :name ?n]
+                (and [?e :age ?a]
+                     [?e :name ?n]))]
+      #{:1 :2 :3 :4 :5 :6}
+
+      [[?e  :name ?a]
+       [?e2 :name ?a]
+       (or-join [?e]
+                (and [?e  :age ?a]
+                     [?e2 :age ?a]))]
+      #{:1 :2 :3 :4 :5 :6})))
+
+(defn even-kw? [x]
+  (even? (Long/parseLong (name x))))
+
+#_(t/deftest test-rules
+    (f/transact-entity-maps! f/*kv* [{:crux.db/id :5 :follow :3}
+                                     {:crux.db/id :1 :follow :2}
+                                     {:crux.db/id :2 :follow :3}
+                                     {:crux.db/id :3 :follow :4}
+                                     {:crux.db/id :4 :follow :6}
+                                     {:crux.db/id :2 :follow :4}])
+    (let [db (q/db *kv*)]
+      (t/is (= (q/q db
+                    '{:find  [?e1 ?e2]
+                      :where [(follow ?e1 ?e2)]
+                      :rules [[(follow ?x ?y)
+                               [?x :follow ?y]]]})
+               #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
+
+      (t/testing "Joining regular clauses with rule"
+        (t/is (= (q/q db
+                      '{:find [?y ?x]
+                        :where [[_ _ ?x]
+                                (rule ?x ?y)
+                                [(crux.query-test/even-kw? ?x)]]
+                        :rules [[(rule ?a ?b)
+                                 [?a :follow ?b]]]})
+                 #{[:3 :2] [:6 :4] [:4 :2]})))
+
+      (t/testing "Rule context is isolated from outer context"
+        (t/is (= (q/q '{:find [?x]
+                        :where [[?e _ _]
+                                (rule ?x)]
+                        :rules [[(rule ?e)
+                                 [_ ?e _]]]})
+                 #{[:follow]})))
+
+      (t/testing "Rule with branches"
+        (t/is (= (q/q db
+                      '{:find  ?e2
+                        :where [(follow ?e1 ?e2)]
+                        :args [{:?e1 1}]
+                        :rules [[(follow ?e2 ?e1)
+                                 [?e2 :follow ?e1]]
+                                [(follow ?e2 ?e1)
+                                 [?e2 :follow ?t]
+                                 [?t  :follow ?e1]]]})
+                 #{[:2] [:3] [:4]})))
+
+      (t/testing "Recursive rules"
+        (t/is (= (q/q db
+                      '{:find  [?e2]
+                        :where [(follow ?e1 ?e2)]
+                        :args [{:?e2 1}]
+                        :rules [[(follow ?e1 ?e2)
+                                 [?e1 :follow ?e2]]
+                                [(follow ?e1 ?e2)
+                                 [?e1 :follow ?t]
+                                 (follow ?t ?e2)]]})
+                 #{[:2] [:3] [:4] [:6]}))
+
+        (f/with-kv-store
+          (fn []
+            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
+                                             {:crux.db/id :2 :follow :3}])
+            (let [db (q/db *kv*)]
+              (t/is (= (q/q db
+                            '{:find [?e1 ?e2]
+                              :where [(follow ?e1 ?e2)]}
+                            '[[(follow ?e1 ?e2)
+                               [?e1 :follow ?e2]]
+                              [(follow ?e1 ?e2)
+                               (follow ?e2 ?e1)]])
+                       #{[:1 :2] [:2 :3] [:2 :1] [:3 :2]})))))
+
+        (f/with-kv-store
+          (fn []
+            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
+                                             {:crux.db/id :2 :follow :3}
+                                             {:crux.db/id :3 :follow :1}])
+            (let [db (q/db *kv*)]
+              (t/is (= (q/q db
+                            '{:find [?e1 ?e2]
+                              :where [(follow ?e1 ?e2)]
+                              :rules [[(follow ?e1 ?e2)
+                                       [?e1 :follow ?e2]]
+                                      [(follow ?e1 ?e2)
+                                       (follow ?e2 ?e1)]]})
+                       #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]}))))))
+
+      (t/testing "Mutually recursive rules"
+        (f/with-kv-store
+          (fn []
+            (f/transact-entity-maps! f/*kv* [{:crux.db/id :0 :f1 :1}
+                                             {:crux.db/id :1 :f2 :2}
+                                             {:crux.db/id :2 :f1 :3}
+                                             {:crux.db/id :3 :f2 :4}
+                                             {:crux.db/id :4 :f1 :5}
+                                             {:crux.db/id :5 :f2 :6}])
+            (let [db (q/db *kv*)]
+              (t/is (= (q/q db
+                            '{:find [?e1 ?e2]
+                              :where [(f1 ?e1 ?e2)]
+                              :rules [[(f1 ?e1 ?e2)
+                                       [?e1 :f1 ?e2]]
+                                      [(f1 ?e1 ?e2)
+                                       [?t :f1 ?e2]
+                                       (f2 ?e1 ?t)]
+                                      [(f2 ?e1 ?e2)
+                                       [?e1 :f2 ?e2]]
+                                      [(f2 ?e1 ?e2)
+                                       [?t :f2 ?e2]
+                                       (f1 ?e1 ?t)]]})
+                       #{[:0 :1] [:0 :3] [:0 :5]
+                         [:1 :3] [:1 :5]
+                         [:2 :3] [:2 :5]
+                         [:3 :5]
+                         [:4 :5]}))))))
+
+      (t/testing "Passing ins to rule"
+        (t/is (= (q/q db
+                      {:find '[?x ?y]
+                       :where '[(match ?even ?x ?y)]
+                       :rules '[[(match ?pred ?e ?e2)
+                                 [?e :follow ?e2]
+                                 [(?pred ?e)]
+                                 [(?pred ?e2)]]]
+                       :args [{:?even even-kw?}]})
+                 #{[:4 :6] [:2 :4]})))
+
+      (t/testing "Using built-ins inside rule"
+        (t/is (= (q/q db
+                      '{:find [?x ?y]
+                        :where [(match ?x ?y)]
+                        :rules [[(match ?e ?e2)
+                                 [?e :follow ?e2]
+                                 [(crux.query-test/even-kw? ?e)]
+                                 [(crux.query-test/even-kw? ?e2)]]]})
+                 #{[:4 :6] [:2 :4]})))
+
+      (t/testing "Calling rule twice (#44)"
+        (f/with-kv-store
+          (fn []
+            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
+            (let [db (q/db *kv*)]
+              (q/q db
+                   '{:find '[?p]
+                     :where '[(rule ?p ?fn "a")
+                              (rule ?p ?fn "b")]
+                     :rules '[[(rule ?p ?fn ?x)
+                               [?p :attr ?x]
+                               [(?fn ?x)]]]
+                     :args [{:?fn (constantly true)}]})))))))
+
+;; https://github.com/tonsky/datascript/issues/218
+#_(t/deftest datascript-test-rules-false-arguments
+    (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr true}
+                                     {:crux.db/id :2 :attr false}])
+    (let [db (q/db *kv*)
+          rules '[[(is ?id ?val)
+                   [?id :attr ?val]]]]
+      (t/is (= (q/q db
+                    {:find '[?id]
+                     :where '[(is ?id true)]
+                     :rules rules}
+                    db rules)
+               #{[:1]}))
+      (t/is (= (q/q db
+                    {:find '[?id]
+                     :where '[(is ?id false)]
+                     :rules rules}
+                    db rules)
+               #{[:2]}))))

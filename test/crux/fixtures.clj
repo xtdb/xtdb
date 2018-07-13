@@ -19,22 +19,27 @@
                         :age       (rand-int 100)
                         :salary    (rand-int 100000)})
 
-(defn people->tx-ops [people ts]
-  (vec (for [person people]
+(defn maps->tx-ops [maps ts]
+  (vec (for [m maps]
          [:crux.tx/put
-          (:crux.db/id person)
-          person
+          (:crux.db/id m)
+          m
           ts])))
 
-(defn transact-people!
-  ([db people-mixins]
-   (transact-people! db people-mixins (Date.)))
-  ([db people-mixins ts]
-   (let [tx-log (crux.tx/->DocTxLog db)
-         people (->> people-mixins (map merge (repeatedly random-person)))
-         tx-ops (people->tx-ops people ts)]
+(defn transact-entity-maps!
+  ([kv entities]
+   (transact-entity-maps! kv entities (Date.)))
+  ([kv entities ts]
+   (let [tx-log (crux.tx/->DocTxLog kv)
+         tx-ops (maps->tx-ops entities ts)]
      @(crux.db/submit-tx tx-log tx-ops)
-     people)))
+     entities)))
+
+(defn transact-people!
+  ([kv people-mixins]
+   (transact-people! kv people-mixins (Date.)))
+  ([kv people-mixins ts]
+   (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-backend* "rocksdb")
