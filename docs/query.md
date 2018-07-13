@@ -135,6 +135,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Rust](https://github.com/frankmcsherry/blog/blob/master/posts/2018-05-19.md)
 + [Differential
   datalog](https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md)
++ [A shallow dive into DataScript
+  internals](http://tonsky.me/blog/datascript-internals/)
 
 ### Retention
 
