@@ -95,15 +95,15 @@
                                           k
                                           min-v)))))
 
-(defrecord GreaterThanVirtualIndex [predicate-idx]
+(defrecord GreaterThanVirtualIndex [idx]
   db/Index
   (seek-values [this k]
-    (or (db/seek-values predicate-idx k)
-        (db/next-values predicate-idx)))
+    (or (db/seek-values idx k)
+        (db/next-values idx)))
 
   db/OrderedIndex
   (next-values [this]
-    (db/next-values predicate-idx)))
+    (db/next-values idx)))
 
 (defn new-greater-than-virtual-index [idx min-v]
   (let [pred (value-comparsion-predicate pos? min-v)
@@ -712,19 +712,20 @@
                     (wrap-with-range-constraints range-constraints))]
     (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
 
-(defn- build-nested-index [tuples]
-  (new-sorted-virtual-index
-   (for [prefix (partition-by first tuples)
-         :let [value (ffirst prefix)]]
-     [(idx/value->bytes value)
-      {:value value
-       :child-idx (when (seq (next (first prefix)))
-                    (build-nested-index (map next prefix)))}])))
+(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
+  (-> (new-sorted-virtual-index
+       (for [prefix (partition-by first tuples)
+             :let [value (ffirst prefix)]]
+         [(idx/value->bytes value)
+          {:value value
+           :child-idx (when (seq (next (first prefix)))
+                        (build-nested-index (map next prefix) next-range-constraints))}]))
+      (wrap-with-range-constraints range-constraints)))
 
 (defn- relation-virtual-index-depth ^long [iterators-state]
   (dec (count (:indexes @iterators-state))))
 
-(defrecord RelationVirtualIndex [relation-name max-depth iterators-state]
+(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
   db/OrderedIndex
   (seek-values [this k]
     (let [{:keys [indexes]} @iterators-state]
@@ -767,14 +768,18 @@
     nil))
 
 (defn update-relation-virtual-index! [relation tuples]
-  (reset! (:iterators-state relation) {:indexes [(build-nested-index (sort tuples))]
-                                       :child-idx nil
-                                       :needs-seek? true})
+  (reset! (:iterators-state relation)
+          {:indexes [(build-nested-index (sort tuples) (:layered-range-constraints relation))]
+           :child-idx nil
+           :needs-seek? true})
   relation)
 
-(defn new-relation-virtual-index [relation-name tuples max-depth]
-  (let [iterators-state (atom nil)]
-    (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth iterators-state) tuples)))
+(defn new-relation-virtual-index
+  ([relation-name tuples max-depth]
+   (new-relation-virtual-index relation-name tuples max-depth nil))
+  ([relation-name tuples max-depth layered-range-constraints]
+   (let [iterators-state (atom nil)]
+     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
 
 ;; Caching
 

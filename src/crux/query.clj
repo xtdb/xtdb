@@ -298,7 +298,7 @@
                                                  {v [(assoc idx :name v)]}))]))
         [nil var->joins])))
 
-(defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constrants var->joins business-time transact-time]
+(defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
        (reduce
         (fn [var->joins [[e-var v-var] clauses]]
@@ -306,14 +306,14 @@
                           (assoc (doc/new-entity-attribute-value-virtual-index
                                   snapshot
                                   a
-                                  (get v-var->range-constrants v-var)
+                                  (get v-var->range-constriants v-var)
                                   business-time
                                   transact-time)
                                  :name e-var))]
             (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
 
-(defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constrants var->joins business-time transact-time]
+(defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> v-var->literal-e-clauses
        (reduce
         (fn [var->joins [v-var clauses]]
@@ -323,7 +323,7 @@
                                   snapshot
                                   e
                                   a
-                                  (get v-var->range-constrants v-var)
+                                  (get v-var->range-constriants v-var)
                                   business-time
                                   transact-time)
                                  :name e))]
@@ -339,13 +339,15 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [snapshot args e-vars var->joins business-time transact-time]
+(defn- arg-joins [snapshot args e-vars v-var->range-constriants var->joins business-time transact-time]
   (let [arg-keys-in-join-order (sort (keys (first args)))
+        arg-vars (arg-vars args)
         relation (doc/new-relation-virtual-index (gensym "args")
                                                  (for [arg args]
                                                    (mapv arg arg-keys-in-join-order))
-                                                 (count arg-keys-in-join-order))]
-    (->> (arg-vars args)
+                                                 (count arg-keys-in-join-order)
+                                                 (mapv v-var->range-constriants arg-vars))]
+    (->> arg-vars
          (reduce
           (fn [var->joins arg-var]
             (->> {arg-var
@@ -362,14 +364,15 @@
                  (merge-with into var->joins)))
           var->joins))))
 
-(defn- pred-joins [pred-clauses var->joins]
+(defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
   (->> pred-clauses
        (reduce
         (fn [[pred-clause->relation var->joins] {:keys [return] :as pred-clause}]
           (if return
             (let [relation (doc/new-relation-virtual-index (gensym "preds")
                                                            []
-                                                           1)]
+                                                           1
+                                                           [(get v-var->range-constriants return)])]
               [(assoc pred-clause->relation pred-clause relation)
                (->> {return
                      [(assoc relation :name (symbol "crux.query.pred" (name return)))]}
@@ -761,27 +764,28 @@
                                                         (leaf-v-var? e v))]
                                          clause)
                                        (group-by :e))
-        v-var->range-constrants (build-v-var-range-constraints e-vars range-clauses)
+        v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         var->joins (e-var-v-var-joins snapshot
                                       e-var+v-var->join-clauses
-                                      v-var->range-constrants
+                                      v-var->range-constriants
                                       var->joins
                                       business-time
                                       transact-time)
         var->joins (v-var-literal-e-joins snapshot
                                           object-store
                                           v-var->literal-e-clauses
-                                          v-var->range-constrants
+                                          v-var->range-constriants
                                           var->joins
                                           business-time
                                           transact-time)
         var->joins (arg-joins snapshot
                               args
                               e-vars
+                              v-var->range-constriants
                               var->joins
                               business-time
                               transact-time)
-        [pred-clause->relation var->joins] (pred-joins pred-clauses var->joins)
+        [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]

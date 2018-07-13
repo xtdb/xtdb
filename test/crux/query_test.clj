@@ -167,7 +167,16 @@
       (t/is (= #{} (q/q (q/db *kv*) '{:find [name]
                                       :where [(not [(string? name)])]
                                       :args [{:name "Ivan"}
-                                             {:name "Petr"}]}))))))
+                                             {:name "Petr"}]})))
+
+      (t/testing "Can use range constraints on arguments"
+        (t/is (= #{} (q/q (q/db *kv*) '{:find [age]
+                                        :where [[(>= age 21)]]
+                                        :args [{:age 20}]})))
+
+        (t/is (= #{[22]} (q/q (q/db *kv*) '{:find [age]
+                                            :where [[(>= age 21)]]
+                                            :args [{:age 22}]})))))))
 
 (t/deftest test-multiple-results
   (f/transact-people! *kv* [{:name "Ivan" :last-name "1"}
@@ -635,7 +644,15 @@
                                     :where [[e :name name]
                                             [e :age real-age]
                                             [(quot real-age 2) half-age]
-                                            [(- real-age 15) half-age]]})))))))
+                                            [(- real-age 15) half-age]]}))))
+
+      (t/testing "Binding can use range predicates"
+        (t/is (= #{["Dominic" 25]}
+                 (q/q (q/db *kv*) '{:find [name half-age]
+                                    :where [[e :name name]
+                                            [e :age real-age]
+                                            [(quot real-age 2) half-age]
+                                            [(> half-age 20)]]})))))))
 
 (t/deftest test-attributes-with-multiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
@@ -951,6 +968,19 @@
                                                    (over-twenty-one? age)]
                                            :rules [[(over-twenty-one? age)
                                                     [(>= age 21)]]]}))))
+
+  (t/testing "rules directly on arguments"
+    (t/is (= #{[21]} (q/q (q/db *kv*) '{:find [age]
+                                        :where [(over-twenty-one? age)]
+                                        :args [{:age 21}]
+                                        :rules [[(over-twenty-one? age)
+                                                 [(>= age 21)]]]})))
+
+    (t/is (= #{} (q/q (q/db *kv*) '{:find [age]
+                                    :where [(over-twenty-one? age)]
+                                    :args [{:age 20}]
+                                    :rules [[(over-twenty-one? age)
+                                             [(>= age 21)]]]}))))
 
   (t/testing "rule using required bound args"
     (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
