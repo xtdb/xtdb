@@ -100,10 +100,17 @@
           bs (or (cartesian-product xs) [[]])]
       (cons a bs))))
 
-(defn- normalize-bgp-clause [clause]
-  (if (nil? (:v clause))
-    (assoc clause :v (gensym "_"))
-    clause))
+(defn- blank-var? [v]
+  (when (logic-var? v)
+    (re-find #"^_\d*$" (name v))))
+
+(defn- normalize-bgp-clause [{:keys [e v] :as clause}]
+  (cond-> clause
+    (or (blank-var? v)
+        (nil? v))
+    (assoc :v (gensym "_"))
+    (blank-var? e)
+    (assoc :e (gensym "_"))))
 
 (def ^:private pred->built-in-range-pred {< (comp neg? compare)
                                           <= (comp not pos? compare)
@@ -114,9 +121,6 @@
                                       <= >
                                       > <=
                                       >= <})
-
-(defn- blank-var? [v]
-  (re-find #"^_\d*$"(name v)))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
@@ -534,6 +538,7 @@
                                       :not-join [(:args not-clause)
                                                  (:body not-clause)])
               not-vars (remove blank-var? not-vars)]]
+
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
@@ -705,8 +710,7 @@
                                 clause)
                               (group-by :v))
         v-var->e (->> (for [[e clauses] e->v-var-clauses
-                            {:keys [e v]} clauses
-                            :when (not (contains? e-vars v))]
+                            {:keys [e v]} clauses]
                         [v e])
                       (into {}))
         e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
@@ -783,7 +787,7 @@
                            [v a])
                          (into {}))
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
-        var->attr (merge v-var->attr e-var->attr)
+        var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         vars-in-join-order (calculate-join-order pred-clauses var->joins)
         var->values-result-index (zipmap vars-in-join-order (range))

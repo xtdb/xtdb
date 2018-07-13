@@ -1257,23 +1257,15 @@
 
     ;; NOTE: Crux does not support vars in attribute position, so
     ;; :follow is explicit.
-
-    ;; TODO: Should work. Potentially the issue is that when filtering
-    ;; out ?x vars valid ?y vars which have this ?x as their e-var are
-    ;; lost. How predicates remove data needs thought. One way might
-    ;; be to realise the full binding for vars even outside the
-    ;; arguments, and filter them row by row, and merge the result
-    ;; back at the end. This query might have worked OK when there
-    ;; were still leaf predicates.
-    #_(t/testing "Joining regular clauses with rule"
-        (t/is (= (q/q db
-                      '{:find [?y ?x]
-                        :where [[_ :follow ?x]
-                                (rule ?x ?y)
-                                [(crux.query-test/even-kw? ?x)]]
-                        :rules [[(rule ?a ?b)
-                                 [?a :follow ?b]]]})
-                 #{[:3 :2] [:6 :4] [:4 :2]})))
+    (t/testing "Joining regular clauses with rule"
+      (t/is (= (q/q db
+                    '{:find [?y ?x]
+                      :where [[_ :follow ?x]
+                              (rule ?x ?y)
+                              [(crux.query-test/even-kw? ?x)]]
+                      :rules [[(rule ?a ?b)
+                               [?a :follow ?b]]]})
+               #{[:3 :2] [:6 :4] [:4 :2]})))
 
     ;; NOTE: Crux does not support vars in attribute position.
     #_(t/testing "Rule context is isolated from outer context"
