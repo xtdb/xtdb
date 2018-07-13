@@ -462,6 +462,15 @@
     (t/is (= true false) "Expected assertion error")
     (catch IllegalArgumentException e
       (t/is (re-find #"Or requires same logic variables"
+                     (.getMessage e)))))
+
+  (try
+    (q/q (q/db *kv*) '{:find [x]
+                       :where [(or-join [x]
+                                        [e1 :last-name "Ivanov"])]})
+    (t/is (= true false) "Expected assertion error")
+    (catch IllegalArgumentException e
+      (t/is (re-find #"Or join variable never used: x"
                      (.getMessage e))))))
 
 (t/deftest test-ors-can-introduce-new-bindings

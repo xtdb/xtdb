@@ -254,6 +254,10 @@
                                                                                  (vals)
                                                                                  (reduce into #{}))
                                                                   local-vars (set/difference body-vars or-join-args)]
+                                                              (doseq [arg or-join-args
+                                                                      :when (not (contains? body-vars arg))]
+                                                                (throw (IllegalArgumentException.
+                                                                        (str "Or join variable never used: " arg " " clause))))
                                                               (zipmap local-vars (map gensym local-vars))))]]
                               {:local-vars (vals local->hidden-var)
                                :where (if or-join?
