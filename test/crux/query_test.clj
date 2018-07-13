@@ -285,7 +285,15 @@
                                  [(+ 1 bar) foo]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))))
+        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) '{:find [foo]
+                         :where [[(inc 1) foo]
+                                 [(inc 1) foo]]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (re-find #"Predicate return variable can only be bound once: foo " (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]

@@ -482,7 +482,7 @@
               pred-join-depths (for [var pred-vars]
                                  (or (get-in var->bindings [var :result-index])
                                      (dec join-depth)))
-              pred-join-depth (inc (apply max pred-join-depths))]]
+              pred-join-depth (inc (apply max -1 pred-join-depths))]]
     (do (doseq [var pred-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -619,6 +619,11 @@
              (every? true?))
     join-results))
 
+;; TODO: could support multiple predicates with the same return, this
+;; requires grouping predicates with the same return and take the
+;; intersection of their results. By definition they would execute at
+;; the same join depth, and would have to be moved to the max
+;; dependent argument for any of the predicates.
 (defn- calculate-join-order [pred-clauses var->joins]
   (let [vars-in-join-order (vec (keys var->joins))
         var->index (zipmap vars-in-join-order (range))]
@@ -630,7 +635,11 @@
                     max-dependent-var-index (->> (map var->index pred-args)
                                                  (reduce max -1))
                     return-index (get var->index return)
+                    old-seen-returns seen-returns
                     seen-returns (conj seen-returns return)]
+                (when (contains? old-seen-returns return)
+                  (throw (IllegalArgumentException.
+                          (str "Predicate return variable can only be bound once: " return " " (pr-str pred-clause)))))
                 (when (some seen-returns pred-args)
                   (throw (IllegalArgumentException.
                           (str "Predicate has circular dependency: " (pr-str pred-clause)))))
