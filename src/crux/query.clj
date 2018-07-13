@@ -264,9 +264,10 @@
                                     (reduce into #{}))
                 sub-query-state (->> (for [{:keys [local-vars where sub-clauses]} or-branches
                                            :let [other-local-vars (set/difference all-local-vars local-vars)
-                                                 place-holder-args [(->> (for [var other-local-vars]
-                                                                            [var true])
-                                                                          (into {}))]
+                                                 place-holder-args (when (seq other-local-vars)
+                                                                     [(->> (for [var other-local-vars]
+                                                                             [var true])
+                                                                           (into {}))])
                                                  sub-query-state (build-sub-query snapshot
                                                                                   db
                                                                                   []
