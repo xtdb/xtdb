@@ -261,7 +261,31 @@
                                  [(+ 1 bah)]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))))
+        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) '{:find [x]
+                         :where [[x :foo]
+                                 [(+ 1 bah) bah]]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) '{:find [foo]
+                         :where [[(+ 1 bar) foo]
+                                 [(+ 1 foo) bar]]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
+
+    (try
+      (q/q (q/db *kv*) '{:find [foo]
+                         :where [[(+ 1 foo) bar]
+                                 [(+ 1 bar) foo]]})
+      (t/is (= true false) "Expected exception")
+      (catch IllegalArgumentException e
+        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
@@ -596,7 +620,14 @@
                (q/q (q/db *kv*) '{:find [name half-age]
                                   :where [[e :name name]
                                           [e :age age]
-                                          [(quot age 2) half-age]]}))))))
+                                          [(quot age 2) half-age]]})))
+
+      (t/testing "Order of joins is rearranged to ensure arguments are bound"
+        (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
+                 (q/q (q/db *kv*) '{:find [name half-age]
+                                    :where [[e :name name]
+                                            [e :age real-age]
+                                            [(quot real-age 2) half-age]]})))))))
 
 (t/deftest test-attributes-with-multiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}

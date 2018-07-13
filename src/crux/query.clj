@@ -220,10 +220,22 @@
 
 (declare build-sub-query)
 
-;; TODO: Needs cleanup.  How state is transferred and shared between
+;; TODO: Needs cleanup. How state is transferred and shared between
 ;; sub-query and parent query needs work. Cannot deal with predicates
 ;; or not expressions on their own as there's nothing to join on in
-;; that branch.
+;; that branch. Also needs to pass back vars in join order up, and
+;; parent needs to respect this relative order and merging it into its
+;; own. This also needs to happen across branches, which might require
+;; to have the exact same join order. One potential alternative is to
+;; always put all predicate (and rule) return vars at the end, though
+;; they still need to be reordered based on their dependencies.  Yet
+;; another alternative is to execute the or as a sub-query, and then
+;; directly bind only the or-join vars into a resulting relation.
+;; This would also work for recursive rules, if rule expansion is
+;; postponed, which it will be for recursive rules anyway. The
+;; resulting relations can still us an n-ary or to wrap them up for
+;; the parent query. As they would been realised, there should then be
+;; no dependency between parent and sub-query join order.
 (defn- or-joins [snapshot db rules or-type or-clauses var->joins]
   (->> or-clauses
        (reduce
@@ -338,20 +350,34 @@
     (->> (arg-vars args)
          (reduce
           (fn [var->joins arg-var]
-            (->> (merge
-                  {arg-var
-                   (cond-> [(assoc relation :name (symbol "crux.query.arg" (name arg-var)))]
-                     (and (not (contains? var->joins arg-var))
-                          (contains? e-vars arg-var))
-                     (conj (assoc (doc/new-entity-attribute-value-virtual-index
-                                   snapshot
-                                   :crux.db/id
-                                   nil
-                                   business-time
-                                   transact-time)
-                                  :name arg-var)))})
+            (->> {arg-var
+                  (cond-> [(assoc relation :name (symbol "crux.query.arg" (name arg-var)))]
+                    (and (not (contains? var->joins arg-var))
+                         (contains? e-vars arg-var))
+                    (conj (assoc (doc/new-entity-attribute-value-virtual-index
+                                  snapshot
+                                  :crux.db/id
+                                  nil
+                                  business-time
+                                  transact-time)
+                                 :name arg-var)))}
                  (merge-with into var->joins)))
           var->joins))))
+
+(defn- pred-joins [pred-clauses var->joins]
+  (->> (map :return pred-clauses)
+       (reduce
+        (fn [[pred-return->relations var->joins] return-var]
+          (if return-var
+            (let [relation (doc/new-relation-virtual-index (gensym "preds")
+                                                           []
+                                                           1)]
+              [(assoc pred-return->relations return-var relation)
+               (->> {return-var
+                     [(assoc relation :name (symbol "crux.query.pred" (name return-var)))]}
+                    (merge-with into var->joins))])
+            [pred-return->relations var->joins]))
+        [{} var->joins])))
 
 (defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
@@ -449,41 +475,42 @@
            :type type
            :value? (= :entity-leaf type)})))))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
+(defn- build-pred-constraints [object-store pred-clauses var->bindings join-depth pred-return->relations]
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? args)
               pred-join-depths (for [var pred-vars]
                                  (or (get-in var->bindings [var :result-index])
-                                     (dec (count var->joins))))
+                                     (dec join-depth)))
               pred-join-depth (inc (apply max pred-join-depths))]]
-    (do (doseq [var pred-vars
-                :when (not (contains? var->bindings var))]
-          (throw (IllegalArgumentException.
-                  (str "Predicate refers to unknown variable: "
-                       var " " (pr-str clause)))))
+    (do (doseq [var pred-vars]
+          (when (not (contains? var->bindings var))
+            (throw (IllegalArgumentException.
+                    (str "Predicate refers to unknown variable: "
+                         var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
-            (->> (for [args-to-apply (cartesian-product
-                                      (for [arg args]
-                                        (if (logic-var? arg)
-                                          (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                          [{:value arg
-                                            :literal-arg? true}])))
-                       :let [pred-result (apply pred-fn (map :value args-to-apply))]
-                       :when pred-result
-                       {:keys [result-name value entity value? literal-arg?] :as result} args-to-apply
-                       :when (not literal-arg?)]
-                   (cond-> {result-name #{(if value?
-                                            value
-                                            entity)}}
-                     ;; TODO: these should really be collected and
-                     ;; inserted into the right RelationVirtualIndex
-                     ;; atom, and not put directly into the results,
-                     ;; see comment above.
-                     return (assoc (symbol "crux.query.pred" (name return))
-                                   #{pred-result})))
-                 (apply merge-with into))
+            (let [pred-result+result-maps (for [args-to-apply (cartesian-product
+                                                               (for [arg args]
+                                                                 (if (logic-var? arg)
+                                                                   (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                                                   [{:value arg
+                                                                     :literal-arg? true}])))
+                                                :let [pred-result (apply pred-fn (map :value args-to-apply))]
+                                                :when pred-result
+                                                {:keys [result-name value entity value? literal-arg?] :as result} args-to-apply
+                                                :when (not literal-arg?)]
+                                            [pred-result {result-name #{(if value?
+                                                                          value
+                                                                          entity)}}])]
+              (when return
+                (doc/update-relation-virtual-index (get pred-return->relations return)
+                                                   (->> (for [[pred-result] pred-result+result-maps]
+                                                          [pred-result])
+                                                        (distinct)
+                                                        (vec))))
+              (->> (map second pred-result+result-maps)
+                   (apply merge-with into)))
             join-results)))))
 
 (defn- build-unification-preds [unify-clauses var->bindings]
@@ -565,8 +592,8 @@
              (every? true?))
     join-results))
 
-(defn- constrain-join-result-by-not [not-constraints var->joins join-keys join-results]
-  (if (= (count join-keys) (count var->joins))
+(defn- constrain-join-result-by-not [not-constraints join-depth join-keys join-results]
+  (if (= (count join-keys) join-depth)
     (reduce
      (fn [results not-constraint]
        (when results
@@ -591,6 +618,34 @@
                (bu/bytes=? eid-bytes (idx/id->bytes entity)))
              (every? true?))
     join-results))
+
+(defn- calculate-join-order [pred-clauses var->joins]
+  (let [vars-in-join-order (vec (keys var->joins))
+        var->index (zipmap vars-in-join-order (range))]
+    (->> pred-clauses
+         (reduce
+          (fn [[vars-in-join-order seen-returns var->index] {:keys [pred return] :as pred-clause}]
+            (if return
+              (let [pred-args (filter logic-var? (:args pred))
+                    max-dependent-var-index (->> (map var->index pred-args)
+                                                 (reduce max -1))
+                    return-index (get var->index return)
+                    seen-returns (conj seen-returns return)]
+                (when (some seen-returns pred-args)
+                  (throw (IllegalArgumentException.
+                          (str "Predicate has circular dependency: " (pr-str pred-clause)))))
+                (if (> max-dependent-var-index return-index)
+                  (let [dependent-var (get vars-in-join-order max-dependent-var-index)
+                        vars-in-join-order (-> vars-in-join-order
+                                               (assoc return-index dependent-var)
+                                               (assoc max-dependent-var-index return))]
+                    [vars-in-join-order
+                     seen-returns
+                     (zipmap vars-in-join-order (range))])
+                  [vars-in-join-order seen-returns var->index]))
+              [vars-in-join-order seen-returns var->index]))
+          [vars-in-join-order #{} var->index])
+         (first))))
 
 (defn- expand-rules [where rule-name->rules seen-rules]
   (->> (for [[type clause :as sub-clause] where]
@@ -733,6 +788,8 @@
                               var->joins
                               business-time
                               transact-time)
+        [pred-return->relations var->joins] (pred-joins pred-clauses
+                                                        var->joins)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -740,7 +797,9 @@
                          (into {}))
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge v-var->attr e-var->attr)
-        var->values-result-index (zipmap (keys var->joins) (range))
+        join-depth (count var->joins)
+        vars-in-join-order (calculate-join-order pred-clauses var->joins)
+        var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
                              or-var->bindings
@@ -752,19 +811,20 @@
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings var->joins))
+        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-return->relations))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
                                        (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
                                        (constrain-join-result-by-unification unification-preds max-ks)
-                                       (constrain-join-result-by-not not-constraints var->joins max-ks)
+                                       (constrain-join-result-by-not not-constraints join-depth max-ks)
                                        (constrain-join-result-by-preds pred-constraints max-ks)))]
-    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index (vals var->joins))
+    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index (map var->joins vars-in-join-order))
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings
-     :var->joins var->joins}))
+     :var->joins var->joins
+     :vars-in-join-order vars-in-join-order}))
 
 (defn q
   ([{:keys [kv] :as db} q]
