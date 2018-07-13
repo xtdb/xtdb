@@ -1264,8 +1264,8 @@
       [[?e  :name ?a]
        [?e2 :name ?a]
        (or-join [?e]
-                  (and [?e  :age ?a]
-                       [?e2 :age ?a]))]
+                (and [?e  :age ?a]
+                     [?e2 :age ?a]))]
       #{:1 :2 :3 :4 :5 :6})))
 
 (defn even-kw? [x]
@@ -1431,8 +1431,8 @@
 
 ;; https://github.com/tonsky/datascript/issues/218
 (t/deftest datascript-test-rules-false-arguments
-    (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr true}
-                                     {:crux.db/id :2 :attr false}])
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr true}
+                                   {:crux.db/id :2 :attr false}])
   (let [db (q/db *kv*)
         rules '[[(is ?id ?val)
                  [?id :attr ?val]]]]
@@ -1445,4 +1445,4 @@
                   {:find '[?id]
                    :where '[(is ?id false)]
                    :rules rules})
-               #{[:2]}))))
+             #{[:2]}))))
