@@ -14,7 +14,7 @@
   (symbol? x))
 
 (def ^:private literal? (complement logic-var?))
-(def ^:private entity-ident? keyword?)
+(def ^:private ident? keyword?)
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -24,14 +24,14 @@
 
 (def ^:private built-ins '#{and == !=})
 
-(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? entity-ident?)
-                                   :a keyword?
+(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? ident?)
+                                   :a ident?
                                    :v (s/? any?))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
                         (s/conformer #(or (some-> % resolve var-get) %))
-                        (some-fn logic-var? fn?)))
+                        (some-fn fn? logic-var?)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and list?
                                                  (s/cat :pred-fn ::pred-fn
                                                         :args (s/* any?)))
@@ -730,7 +730,7 @@
                                         clause)
                                       (group-by :e))
         v-var->literal-e-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                            :when (and (entity-ident? e)
+                                            :when (and (ident? e)
                                                        (logic-var? v))]
                                         clause)
                                       (group-by :v))
