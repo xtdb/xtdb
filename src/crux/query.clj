@@ -258,8 +258,6 @@
                                            :let [other-local-vars (set/difference all-local-vars local-vars)
                                                  place-holder-args (vec (for [var other-local-vars]
                                                                           {var true}))
-                                                 ;; TODO: Do we need to add these clauses to force
-                                                 ;; the hidden args into the join?
                                                  where (->> (for [var other-local-vars]
                                                               [(list 'true? var)])
                                                             (concat where)
@@ -801,9 +799,9 @@
                                        (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
                                        (constrain-join-result-by-unification unification-preds max-ks)
                                        (constrain-join-result-by-not not-constraints join-depth max-ks)
-                                       (constrain-join-result-by-preds pred-constraints max-ks)))]
-    {:n-ary-join (-> (map var->joins vars-in-join-order)
-                     (mapv doc/new-unary-join-virtual-index)
+                                       (constrain-join-result-by-preds pred-constraints max-ks)))
+        joins (map var->joins vars-in-join-order)]
+    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings
