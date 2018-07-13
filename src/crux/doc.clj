@@ -769,7 +769,8 @@
 
 (defn update-relation-virtual-index! [relation tuples]
   (reset! (:iterators-state relation)
-          {:indexes [(build-nested-index (sort tuples) (:layered-range-constraints relation))]
+          {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
+                       (build-nested-index (sort tuples) (:layered-range-constraints relation)))]
            :child-idx nil
            :needs-seek? true})
   relation)

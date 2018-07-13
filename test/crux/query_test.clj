@@ -1392,17 +1392,16 @@
                          [:3 :5]
                          [:4 :5]}))))))
 
-    ;; TODO: Crux does not currently support variables in predicate position.
-    #_(t/testing "Passing ins to rule"
-        (t/is (= (q/q db
-                      {:find '[?x ?y]
-                       :where '[(match ?even ?x ?y)]
-                       :rules '[[(match ?pred ?e ?e2)
-                                 [?e :follow ?e2]
-                                 [(?pred ?e)]
-                                 [(?pred ?e2)]]]
-                       :args [{:?even even-kw?}]})
-                 #{[:4 :6] [:2 :4]})))
+    (t/testing "Passing ins to rule"
+      (t/is (= (q/q db
+                    {:find '[?x ?y]
+                     :where '[(match ?even ?x ?y)]
+                     :rules '[[(match ?pred ?e ?e2)
+                               [?e :follow ?e2]
+                               [(?pred ?e)]
+                               [(?pred ?e2)]]]
+                     :args [{:?even even-kw?}]})
+               #{[:4 :6] [:2 :4]})))
 
     (t/testing "Using built-ins inside rule"
       (t/is (= (q/q db
@@ -1414,20 +1413,19 @@
                                [(crux.query-test/even-kw? ?e2)]]]})
                #{[:4 :6] [:2 :4]})))
 
-    ;; TODO: Crux does not currently support variables in predicate position.
-    #_(t/testing "Calling rule twice (#44)"
-        (f/with-kv-store
-          (fn []
-            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
-            (let [db (q/db *kv*)]
-              (q/q db
-                   {:find '[?p]
-                    :where '[(rule ?p ?fn "a")
-                             (rule ?p ?fn "b")]
-                    :rules '[[(rule ?p ?fn ?x)
-                              [?p :attr ?x]
-                              [(?fn ?x)]]]
-                    :args [{:?fn (constantly true)}]})))))))
+    (t/testing "Calling rule twice (#44)"
+      (f/with-kv-store
+        (fn []
+          (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
+          (let [db (q/db *kv*)]
+            (q/q db
+                 {:find '[?p]
+                  :where '[(rule ?p ?fn "a")
+                           (rule ?p ?fn "b")]
+                  :rules '[[(rule ?p ?fn ?x)
+                            [?p :attr ?x]
+                            [(?fn ?x)]]]
+                  :args [{:?fn (constantly true)}]})))))))
 
 ;; https://github.com/tonsky/datascript/issues/218
 (t/deftest datascript-test-rules-false-arguments

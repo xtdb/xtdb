@@ -30,8 +30,8 @@
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(some-> % resolve var-get))
-                        fn?))
+                        (s/conformer #(or (some-> % resolve var-get) %))
+                        (some-fn logic-var? fn?)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and list?
                                                  (s/cat :pred-fn ::pred-fn
                                                         :args (s/* any?)))
@@ -489,6 +489,9 @@
                                                                    (bound-results-for-var object-store var->bindings join-keys join-results arg)
                                                                    [{:value arg
                                                                      :literal-arg? true}])))
+                                                pred-fn (if (logic-var? pred-fn)
+                                                          (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
+                                                          [pred-fn])
                                                 :let [pred-result (apply pred-fn (map :value args-to-apply))]
                                                 :when pred-result
                                                 {:keys [result-name value entity value? literal-arg?] :as result} args-to-apply
