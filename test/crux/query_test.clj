@@ -1257,7 +1257,9 @@
 
     ;; NOTE: Crux does not support vars in attribute position, so
     ;; :follow is explicit.
-    ;; TODO: Should work.
+    ;; TODO: Should work. Potentially the issue is that when filtering
+    ;; out ?x vars valid ?y vars which have this ?x as their e-var are
+    ;; lost. How predicates remove data needs thought.
     #_(t/testing "Joining regular clauses with rule"
         (t/is (= (q/q db
                       '{:find [?y ?x]

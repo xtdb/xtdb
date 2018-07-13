@@ -494,8 +494,10 @@
                                                            [pred-result])
                                                          (distinct)
                                                          (vec))))
-              (->> (map second pred-result+result-maps)
-                   (apply merge-with into)))
+              (some->> (map second pred-result+result-maps)
+                       (apply merge-with into)
+                       (not-empty)
+                       (merge join-results)))
             join-results)))))
 
 (defn- build-unification-preds [unify-clauses var->bindings]
@@ -597,13 +599,13 @@
    pred-constraints))
 
 (defn- constrain-join-result-by-join-keys [var->bindings shared-e-v-vars join-keys join-results]
-  (when (->> (for [e-var shared-e-v-vars
-                   :let [eid-bytes (get join-keys (get-in var->bindings [e-var :result-index]))]
-                   :when eid-bytes
-                   entity (get join-results e-var)]
-               (bu/bytes=? eid-bytes (idx/id->bytes entity)))
-             (every? true?))
-    join-results))
+  (->> (for [e-var shared-e-v-vars
+             :let [eid-bytes (get join-keys (get-in var->bindings [e-var :result-index]))]
+             :when eid-bytes
+             entity (get join-results e-var)
+             :when (not (bu/bytes=? eid-bytes (idx/id->bytes entity)))]
+         {e-var #{entity}})
+       (apply merge-with set/difference join-results)))
 
 (defn- calculate-join-order [pred-clauses var->joins]
   (let [vars-in-join-order (vec (keys var->joins))
