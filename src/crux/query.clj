@@ -115,14 +115,6 @@
                                       > <=
                                       >= <})
 
-;; TODO: currently unused, turns a range clause to a normal predicate,
-;; might be used in or containing only predicates.
-(defn- range->pred [[type [[range-type {:keys [op sym val]}]]]]
-  (let [pred (get pred->built-in-range-pred (var-get (resolve op)))]
-    [:pred [(case range-type
-              :sym-val {:pred-fn pred :args [sym val]}
-              :val-sym {:pref-fn pred :args [val sym]})]]))
-
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          {type [(case type
@@ -365,18 +357,18 @@
           var->joins))))
 
 (defn- pred-joins [pred-clauses var->joins]
-  (->> (map :return pred-clauses)
+  (->> pred-clauses
        (reduce
-        (fn [[pred-return->relations var->joins] return-var]
-          (if return-var
+        (fn [[pred-clause->relation var->joins] {:keys [return] :as pred-clause}]
+          (if return
             (let [relation (doc/new-relation-virtual-index (gensym "preds")
                                                            []
                                                            1)]
-              [(assoc pred-return->relations return-var relation)
-               (->> {return-var
-                     [(assoc relation :name (symbol "crux.query.pred" (name return-var)))]}
+              [(assoc pred-clause->relation pred-clause relation)
+               (->> {return
+                     [(assoc relation :name (symbol "crux.query.pred" (name return)))]}
                     (merge-with into var->joins))])
-            [pred-return->relations var->joins]))
+            [pred-clause->relation var->joins]))
         [{} var->joins])))
 
 (defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
@@ -407,14 +399,6 @@
                :type :arg}])
        (into {})))
 
-;; TODO: These should really be dynamic relations participating in the
-;; join, similar to the arg-joins. can be done by modifyng the
-;; iterator-state internals of RelationVirtualIndex and build a new
-;; nested index for the pred results. This introduces dependencies on
-;; the join order, as these indexes will be modified during the tree
-;; walk, so the join on the return var must happen after any argument
-;; vars. Might be possible to still use alphabetic sort order with
-;; some renaming?  Recursive rules will work similarly.
 (defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
   (->> (for [{:keys [return]} pred-clauses
              :when return]
@@ -475,7 +459,7 @@
            :type type
            :value? (= :entity-leaf type)})))))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings join-depth pred-return->relations]
+(defn- build-pred-constraints [object-store pred-clauses var->bindings join-depth pred-clause->relation]
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? args)
@@ -504,7 +488,7 @@
                                                                           value
                                                                           entity)}}])]
               (when return
-                (doc/update-relation-virtual-index! (get pred-return->relations return)
+                (doc/update-relation-virtual-index! (get pred-clause->relation clause)
                                                     (->> (for [[pred-result] pred-result+result-maps]
                                                            [pred-result])
                                                          (distinct)
@@ -619,11 +603,6 @@
              (every? true?))
     join-results))
 
-;; TODO: could support multiple predicates with the same return, this
-;; requires grouping predicates with the same return and take the
-;; intersection of their results. By definition they would execute at
-;; the same join depth, and would have to be moved to the max
-;; dependent argument for any of the predicates.
 (defn- calculate-join-order [pred-clauses var->joins]
   (let [vars-in-join-order (vec (keys var->joins))
         var->index (zipmap vars-in-join-order (range))]
@@ -635,11 +614,7 @@
                     max-dependent-var-index (->> (map var->index pred-args)
                                                  (reduce max -1))
                     return-index (get var->index return)
-                    old-seen-returns seen-returns
                     seen-returns (conj seen-returns return)]
-                (when (contains? old-seen-returns return)
-                  (throw (IllegalArgumentException.
-                          (str "Predicate return variable can only be bound once: " return " " (pr-str pred-clause)))))
                 (when (some seen-returns pred-args)
                   (throw (IllegalArgumentException.
                           (str "Predicate has circular dependency: " (pr-str pred-clause)))))
@@ -797,8 +772,7 @@
                               var->joins
                               business-time
                               transact-time)
-        [pred-return->relations var->joins] (pred-joins pred-clauses
-                                                        var->joins)
+        [pred-clause->relation var->joins] (pred-joins pred-clauses var->joins)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -820,7 +794,7 @@
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-return->relations))
+        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-clause->relation))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)

@@ -285,15 +285,7 @@
                                  [(+ 1 bar) foo]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
-
-    (try
-      (q/q (q/db *kv*) '{:find [foo]
-                         :where [[(inc 1) foo]
-                                 [(inc 1) foo]]})
-      (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate return variable can only be bound once: foo " (.getMessage e)))))))
+        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
@@ -635,7 +627,15 @@
                  (q/q (q/db *kv*) '{:find [name half-age]
                                     :where [[e :name name]
                                             [e :age real-age]
-                                            [(quot real-age 2) half-age]]})))))))
+                                            [(quot real-age 2) half-age]]}))))
+
+      (t/testing "Binding more than once intersects result"
+        (t/is (= #{["Ivan" 15]}
+                 (q/q (q/db *kv*) '{:find [name half-age]
+                                    :where [[e :name name]
+                                            [e :age real-age]
+                                            [(quot real-age 2) half-age]
+                                            [(- real-age 15) half-age]]})))))))
 
 (t/deftest test-attributes-with-multiple-values
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
