@@ -340,7 +340,7 @@
           (fn [var->joins arg-var]
             (->> (merge
                   {arg-var
-                   (cond-> [(assoc relation :name (symbol "crux.query.args" (name arg-var)))]
+                   (cond-> [(assoc relation :name (symbol "crux.query.arg" (name arg-var)))]
                      (and (not (contains? var->joins arg-var))
                           (contains? e-vars arg-var))
                      (conj (assoc (doc/new-entity-attribute-value-virtual-index
@@ -364,7 +364,9 @@
                :result-name (if leaf-var?
                               var
                               e)
-               :leaf-var? leaf-var?
+               :type (if leaf-var?
+                       :entity-leaf
+                       :entity)
                :required-attrs (some->> (get e-var->leaf-v-var-clauses e)
                                         (not-empty)
                                         (map :a)
@@ -374,9 +376,9 @@
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
   (->> (for [var arg-vars]
          [var {:var var
-               :result-name (symbol "crux.query.args" (name var))
+               :result-name (symbol "crux.query.arg" (name var))
                :result-index (get var->values-result-index var)
-               :arg-var? true}])
+               :type :arg}])
        (into {})))
 
 ;; TODO: These should really be dynamic relations participating in the
@@ -393,38 +395,38 @@
          [return {:var return
                   :result-name (symbol "crux.query.pred" (name return))
                   :result-index (get var->values-result-index return)
-                  :pred-var? true}])
+                  :type :pred}])
        (into {})))
 
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name required-attrs arg-var? pred-var? leaf-var?]} (get var->bindings var)
-        bound-leaf-var? (and leaf-var?
-                             (not= e-var result-name)
-                             (contains? join-results result-name))]
+  (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)
+        bound-var? (and (= :entity-leaf type)
+                        (not= e-var result-name)
+                        (contains? join-results result-name))]
     (cond
-      arg-var?
+      (= :arg type)
       (let [results (get join-results result-name)]
         (for [value results]
           {:value value
-           :arg-var var
            :result-name result-name
-           :leaf-var? true}))
+           :type :arg
+           :value? true}))
 
-      pred-var?
+      (= :pred type)
       (let [results (get join-results result-name)]
         (for [value results]
           {:value value
-           :pred-var var
            :result-name result-name
-           :leaf-var? true}))
+           :type :pred
+           :value? true}))
 
-      bound-leaf-var?
+      bound-var?
       (let [results (get join-results result-name)]
         (for [value results]
           {:value value
-           :leaf-var var
            :result-name var
-           :leaf-var? true}))
+           :type :bound
+           :value? true}))
 
       :else
       (let [entities (get join-results e-var)
@@ -442,9 +444,10 @@
            :v-var var
            :attr attr
            :doc doc
+           :entity entity
            :result-name result-name
-           :leaf-var? leaf-var?
-           :entity entity})))))
+           :type type
+           :value? (= :entity-leaf type)})))))
 
 (defn- build-pred-constraints [object-store pred-clauses var->bindings var->joins]
   (for [{:keys [pred return] :as clause} pred-clauses
@@ -469,9 +472,9 @@
                                             :literal-arg? true}])))
                        :let [pred-result (apply pred-fn (map :value args-to-apply))]
                        :when pred-result
-                       {:keys [result-name value entity leaf-var? literal-arg?] :as result} args-to-apply
+                       {:keys [result-name value entity value? literal-arg?] :as result} args-to-apply
                        :when (not literal-arg?)]
-                   (cond-> {result-name #{(if leaf-var?
+                   (cond-> {result-name #{(if value?
                                             value
                                             entity)}}
                      ;; TODO: these should really be collected and
@@ -537,11 +540,10 @@
                   (fn [parent-join-results [join-keys join-results]]
                     (let [results (for [var not-vars]
                                     (bound-results-for-var object-store var->bindings join-keys join-results var))
-                          no-arg-matches? (empty? (for [result results
-                                                        {:keys [arg-var]} result
-                                                        :when arg-var]
-                                                    arg-var))]
-                      (when no-arg-matches?
+                          result-types (for [result results
+                                             {:keys [type]} result]
+                                         type)]
+                      (when (not-any? #{:arg} result-types)
                         (let [not-var->values (zipmap not-vars
                                                       (for [result results]
                                                         (->> result
