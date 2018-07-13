@@ -1071,7 +1071,7 @@
                                  {:crux.db/id :5 :name "Ivan" :age 10}
                                  {:crux.db/id :6 :name "Ivan" :age 20} ]))
 
-#_(t/deftest datascript-test-not
+(t/deftest datascript-test-not
   (populate-datascript-test-db)
   (let [db (q/db *kv*)]
     (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
@@ -1113,30 +1113,30 @@
             (not [?e :age 10]))]
       #{:1 :3 :4 :5})))
 
-#_(t/deftest datascript-test-not-join
+(t/deftest datascript-test-not-join
   (populate-datascript-test-db)
   (let [db (q/db *kv*)]
-    (t/is (= (q/q '{:find [?e ?a]
+    (t/is (= (q/q db
+                  '{:find [?e ?a]
                     :where [[?e :name]
                             [?e :age  ?a]
                             (not-join [?e]
                                       [?e :name "Oleg"]
-                                      [?e :age ?a])]}
-                  db)
+                                      [?e :age ?a])]})
              #{[:1 10] [:2 20] [:5 10] [:6 20]}))
 
-    (t/is (= (q/q '{:find [?e ?a]
+    (t/is (= (q/q db
+                  '{:find [?e ?a]
                     :where [[?e :name]
                             [?e :age  ?a]
                             [?e :age  10]
                             (not-join [?e]
                                       [?e :name "Oleg"]
                                       [?e :age  10]
-                                      [?e :age ?a])]}
-                  db)
+                                      [?e :age ?a])]})
              #{[:1 10] [:5 10]}))))
 
-#_(t/deftest datascript-test-not-impl-edge-cases
+(t/deftest datascript-test-not-impl-edge-cases
   (populate-datascript-test-db)
   (let [db (q/db *kv*)]
     (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
@@ -1185,7 +1185,7 @@
                                  [?e2 :age 20])]})
              #{[:4 :3] [:3 :3] [:4 :4]}))))
 
-#_(t/deftest datascript-test-or
+(t/deftest datascript-test-or
   (populate-datascript-test-db)
   (let [db (q/db *kv*)]
     (t/are [q res]  (= (q/q db {:find '[?e] :where (quote q)})
@@ -1220,7 +1220,7 @@
                 [:2  :age  ?a]))]
       #{:1 :5 :4})))
 
-#_(t/deftest datascript-test-or-join
+(t/deftest datascript-test-or-join
   (populate-datascript-test-db)
   (let [db (q/db *kv*)]
     (t/are [q res] (= (q/q db {:find '[?e] :where (quote q)})
@@ -1231,12 +1231,14 @@
                      [?e :name ?n]))]
       #{:1 :2 :3 :4 :5 :6}
 
-      [[?e  :name ?a]
-       [?e2 :name ?a]
-       (or-join [?e]
-                (and [?e  :age ?a]
-                     [?e2 :age ?a]))]
-      #{:1 :2 :3 :4 :5 :6})))
+      ;; TODO: should pass.
+      ;; [[?e  :name ?a]
+      ;;  [?e2 :name ?a]
+      ;;  (or-join [?e]
+      ;;           (and [?e  :age ?a]
+      ;;                [?e2 :age ?a]))]
+      ;; #{:1 :2 :3 :4 :5 :6}
+      )))
 
 (defn even-kw? [x]
   (even? (Long/parseLong (name x))))
@@ -1256,29 +1258,33 @@
                                [?x :follow ?y]]]})
                #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
 
+      ;; NOTE: Crux does not support vars in attribute position, so
+      ;; :follow is explicit.
       (t/testing "Joining regular clauses with rule"
         (t/is (= (q/q db
                       '{:find [?y ?x]
-                        :where [[_ _ ?x]
+                        :where [[_ :follow ?x]
                                 (rule ?x ?y)
                                 [(crux.query-test/even-kw? ?x)]]
                         :rules [[(rule ?a ?b)
                                  [?a :follow ?b]]]})
                  #{[:3 :2] [:6 :4] [:4 :2]})))
 
-      (t/testing "Rule context is isolated from outer context"
-        (t/is (= (q/q '{:find [?x]
-                        :where [[?e _ _]
-                                (rule ?x)]
-                        :rules [[(rule ?e)
-                                 [_ ?e _]]]})
-                 #{[:follow]})))
+      ;; NOTE: Crux does not support vars in attribute position.
+      #_(t/testing "Rule context is isolated from outer context"
+          (t/is (= (q/q db
+                        '{:find [?x]
+                          :where [[?e _ _]
+                                  (rule ?x)]
+                          :rules [[(rule ?e)
+                                   [_ ?e _]]]})
+                   #{[:follow]})))
 
       (t/testing "Rule with branches"
         (t/is (= (q/q db
-                      '{:find  ?e2
+                      '{:find [?e2]
                         :where [(follow ?e1 ?e2)]
-                        :args [{:?e1 1}]
+                        :args [{:?e1 :1}]
                         :rules [[(follow ?e2 ?e1)
                                  [?e2 :follow ?e1]]
                                 [(follow ?e2 ?e1)
@@ -1290,7 +1296,7 @@
         (t/is (= (q/q db
                       '{:find  [?e2]
                         :where [(follow ?e1 ?e2)]
-                        :args [{:?e2 1}]
+                        :args [{:?e1 1}]
                         :rules [[(follow ?e1 ?e2)
                                  [?e1 :follow ?e2]]
                                 [(follow ?e1 ?e2)
@@ -1305,11 +1311,11 @@
             (let [db (q/db *kv*)]
               (t/is (= (q/q db
                             '{:find [?e1 ?e2]
-                              :where [(follow ?e1 ?e2)]}
-                            '[[(follow ?e1 ?e2)
-                               [?e1 :follow ?e2]]
-                              [(follow ?e1 ?e2)
-                               (follow ?e2 ?e1)]])
+                              :where [(follow ?e1 ?e2)]
+                              :rules [[(follow ?e1 ?e2)
+                                       [?e1 :follow ?e2]]
+                                      [(follow ?e1 ?e2)
+                                       (follow ?e2 ?e1)]]})
                        #{[:1 :2] [:2 :3] [:2 :1] [:3 :2]})))))
 
         (f/with-kv-store
@@ -1356,16 +1362,17 @@
                          [:3 :5]
                          [:4 :5]}))))))
 
-      (t/testing "Passing ins to rule"
-        (t/is (= (q/q db
-                      {:find '[?x ?y]
-                       :where '[(match ?even ?x ?y)]
-                       :rules '[[(match ?pred ?e ?e2)
-                                 [?e :follow ?e2]
-                                 [(?pred ?e)]
-                                 [(?pred ?e2)]]]
-                       :args [{:?even even-kw?}]})
-                 #{[:4 :6] [:2 :4]})))
+      ;; TODO: Crux does not currently support variables in predicate position.
+      #_(t/testing "Passing ins to rule"
+          (t/is (= (q/q db
+                        {:find '[?x ?y]
+                         :where '[(match ?even ?x ?y)]
+                         :rules '[[(match ?pred ?e ?e2)
+                                   [?e :follow ?e2]
+                                   [(?pred ?e)]
+                                   [(?pred ?e2)]]]
+                         :args [{:?even even-kw?}]})
+                   #{[:4 :6] [:2 :4]})))
 
       (t/testing "Using built-ins inside rule"
         (t/is (= (q/q db
@@ -1377,36 +1384,35 @@
                                  [(crux.query-test/even-kw? ?e2)]]]})
                  #{[:4 :6] [:2 :4]})))
 
-      (t/testing "Calling rule twice (#44)"
-        (f/with-kv-store
-          (fn []
-            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
-            (let [db (q/db *kv*)]
-              (q/q db
-                   '{:find '[?p]
-                     :where '[(rule ?p ?fn "a")
-                              (rule ?p ?fn "b")]
-                     :rules '[[(rule ?p ?fn ?x)
-                               [?p :attr ?x]
-                               [(?fn ?x)]]]
-                     :args [{:?fn (constantly true)}]})))))))
+      ;; TODO: Crux does not currently support variables in predicate position.
+      #_(t/testing "Calling rule twice (#44)"
+          (f/with-kv-store
+            (fn []
+              (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr "a"}])
+              (let [db (q/db *kv*)]
+                (q/q db
+                     {:find '[?p]
+                      :where '[(rule ?p ?fn "a")
+                               (rule ?p ?fn "b")]
+                      :rules '[[(rule ?p ?fn ?x)
+                                [?p :attr ?x]
+                                [(?fn ?x)]]]
+                      :args [{:?fn (constantly true)}]})))))))
 
 ;; https://github.com/tonsky/datascript/issues/218
-#_(t/deftest datascript-test-rules-false-arguments
+(t/deftest datascript-test-rules-false-arguments
     (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :attr true}
                                      {:crux.db/id :2 :attr false}])
-    (let [db (q/db *kv*)
-          rules '[[(is ?id ?val)
-                   [?id :attr ?val]]]]
-      (t/is (= (q/q db
-                    {:find '[?id]
-                     :where '[(is ?id true)]
-                     :rules rules}
-                    db rules)
-               #{[:1]}))
-      (t/is (= (q/q db
-                    {:find '[?id]
-                     :where '[(is ?id false)]
-                     :rules rules}
-                    db rules)
+  (let [db (q/db *kv*)
+        rules '[[(is ?id ?val)
+                 [?id :attr ?val]]]]
+    (t/is (= (q/q db
+                  {:find '[?id]
+                   :where '[(is ?id true)]
+                   :rules rules})
+             #{[:1]}))
+    (t/is (= (q/q db
+                  {:find '[?id]
+                   :where '[(is ?id false)]
+                   :rules rules})
                #{[:2]}))))

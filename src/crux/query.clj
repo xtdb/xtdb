@@ -115,6 +115,9 @@
                                       > <=
                                       >= <})
 
+(defn- blank-var? [v]
+  (re-find #"^_\d*$"(name v)))
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          {type [(case type
@@ -167,7 +170,8 @@
                                        arg [x y]
                                        :when (logic-var? arg)]
                                    arg))
-          :not-vars (reduce into not-join-vars (vals not-vars))
+          :not-vars (->> (vals not-vars)
+                         (reduce into not-join-vars))
           :pred-vars (set (for [{:keys [pred return]} pred-clauses
                                 arg (cons return (:args pred))
                                 :when (logic-var? arg)]
@@ -527,7 +531,8 @@
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
                                             not-clause]
                                       :not-join [(:args not-clause)
-                                                 (:body not-clause)])]]
+                                                 (:body not-clause)])
+              not-vars (remove blank-var? not-vars)]]
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
