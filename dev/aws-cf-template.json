@@ -7,7 +7,7 @@ Metadata:
         height: 60
       position:
         x: 180
-        'y': 360
+        'y': 390
       z: 1
       embeds: []
       isassociatedwith:
@@ -19,7 +19,7 @@ Metadata:
         height: 60
       position:
         x: 180
-        'y': 450
+        'y': 590
       z: 1
       embeds: []
       isassociatedwith:
@@ -31,7 +31,7 @@ Metadata:
         height: 60
       position:
         x: 180
-        'y': 570
+        'y': 790
       z: 1
       embeds: []
       isassociatedwith:
@@ -42,8 +42,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 420
-        'y': 450
+        x: -80
+        'y': 690
       z: 1
       embeds: []
       iscontainedinside:
@@ -54,8 +54,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 60
-        'y': 360
+        x: 80
+        'y': 390
       z: 1
       embeds: []
     a2ca1df1-021c-4177-ad80-ad78e55f42bb:
@@ -63,8 +63,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 60
-        'y': 450
+        x: 80
+        'y': 590
       z: 1
       embeds: []
     3fff56ad-4d39-4bd4-b798-3ee82c509c3f:
@@ -72,8 +72,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 60
-        'y': 570
+        x: 80
+        'y': 790
       z: 1
       embeds: []
     ec200f74-21bc-42b4-9a17-81313e3a8b9f:
@@ -100,7 +100,7 @@ Metadata:
         height: 60
       position:
         x: 180
-        'y': 270
+        'y': 290
       z: 1
       embeds: []
       isassociatedwith:
@@ -116,8 +116,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 420
-        'y': 270
+        x: -80
+        'y': 360
       z: 1
       embeds: []
       iscontainedinside:
@@ -127,8 +127,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 270
-        'y': 360
+        x: 280
+        'y': 390
       z: 1
       embeds: []
       isassociatedwith:
@@ -140,8 +140,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 270
-        'y': 450
+        x: 280
+        'y': 590
       z: 1
       embeds: []
       isassociatedwith:
@@ -154,8 +154,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 270
-        'y': 570
+        x: 280
+        'y': 790
       z: 1
       embeds: []
       isassociatedwith:
@@ -165,27 +165,27 @@ Metadata:
         - 21bb524e-3312-4e27-82e8-1727ca71beca
     fdf5cc67-994d-460b-845f-3197a6011cc2:
       size:
-        width: 190
-        height: 450
+        width: 540
+        height: 990
       position:
-        x: 720
-        'y': 170
+        x: 690
+        'y': 150
       z: 1
-      embeds:
-        - 1eff8c3c-80ca-4582-82a2-a4cfce5f3a8b
-        - e016be63-cb5d-458b-93c0-345eb84ddfe1
-        - 21bb524e-3312-4e27-82e8-1727ca71beca
+      embeds: []
     e016be63-cb5d-458b-93c0-345eb84ddfe1:
       size:
         width: 80
         height: 80
       position:
-        x: 770
-        'y': 290
-      z: 2
-      parent: fdf5cc67-994d-460b-845f-3197a6011cc2
+        x: 380
+        'y': 340
+      z: 0
       embeds: []
       iscontainedinside:
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
     ff229ffa-f6c3-403b-b234-54c4f45a4920:
@@ -193,8 +193,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 270
-        'y': 270
+        x: 280
+        'y': 290
       z: 1
       embeds: []
       isassociatedwith:
@@ -208,8 +208,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 970
-        'y': 190
+        x: 840
+        'y': 500
       z: 1
       embeds: []
     972c0b04-11a7-4afa-ac97-1f9d9ce71610:
@@ -223,8 +223,8 @@ Metadata:
         width: 90
         height: 90
       position:
-        x: 970
-        'y': 470
+        x: 690
+        'y': 600
       z: 1
       embeds: []
       iscontainedinside:
@@ -234,14 +234,14 @@ Metadata:
         id: cafd7374-8fff-4f5e-ac4e-15d333c72587
       target:
         id: e016be63-cb5d-458b-93c0-345eb84ddfe1
-      z: 2
+      z: 1
     5834e7dc-b729-4ab8-9d3d-c651ec3ee7a4:
       size:
         width: 60
         height: 60
       position:
-        x: 970
-        'y': 300
+        x: 840
+        'y': 610
       z: 1
       embeds: []
       iscontainedinside:
@@ -253,8 +253,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: 540
-        'y': 460
+        x: 580
+        'y': 340
       z: 1
       embeds: []
       isassociatedwith:
@@ -265,15 +265,17 @@ Metadata:
         - 21bb524e-3312-4e27-82e8-1727ca71beca
     21bb524e-3312-4e27-82e8-1727ca71beca:
       size:
-        width: 90
+        width: 80
         height: 80
       position:
-        x: 770
-        'y': 530
-      z: 2
-      parent: fdf5cc67-994d-460b-845f-3197a6011cc2
+        x: 380
+        'y': 740
+      z: 0
       embeds: []
       iscontainedinside:
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
@@ -287,10 +289,9 @@ Metadata:
         width: 80
         height: 80
       position:
-        x: 770
-        'y': 420
-      z: 2
-      parent: fdf5cc67-994d-460b-845f-3197a6011cc2
+        x: 380
+        'y': 520
+      z: 0
       embeds: []
       iscontainedinside:
         - fdf5cc67-994d-460b-845f-3197a6011cc2
@@ -301,6 +302,95 @@ Metadata:
         - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
         - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+        - fdf5cc67-994d-460b-845f-3197a6011cc2
+    513d1d68-b7fe-46d8-9ef3-b4f00e6b7960:
+      source:
+        id: cafd7374-8fff-4f5e-ac4e-15d333c72587
+      target:
+        id: 21bb524e-3312-4e27-82e8-1727ca71beca
+      z: 1
+    e1680c80-4b02-408e-9cc8-c3e9e2a9764f:
+      source:
+        id: cafd7374-8fff-4f5e-ac4e-15d333c72587
+      target:
+        id: 1eff8c3c-80ca-4582-82a2-a4cfce5f3a8b
+      z: 1
+    ddc12d16-a83e-4f7f-a873-2fc1d0c55430:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 280
+        'y': 690
+      z: 0
+      embeds: []
+      isassociatedwith:
+        - 9e309c5a-6e48-4756-abc1-079468fe7233
+      iscontainedinside:
+        - 21bb524e-3312-4e27-82e8-1727ca71beca
+    e61c6ce1-56c3-4066-b790-614f8c3a251e:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 280
+        'y': 490
+      z: 0
+      embeds: []
+      isassociatedwith:
+        - 9e309c5a-6e48-4756-abc1-079468fe7233
+      iscontainedinside:
+        - 1eff8c3c-80ca-4582-82a2-a4cfce5f3a8b
+    d402fb47-e482-4eb2-ada2-3d30a41c8cdf:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 690
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - ddc12d16-a83e-4f7f-a873-2fc1d0c55430
+      dependson:
+        - 6e698076-8491-4e4a-a516-e3d6f0495467
+    7bb46c3c-a9d9-45bc-93d6-650b4eaf1c69:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 490
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - e61c6ce1-56c3-4066-b790-614f8c3a251e
+      dependson:
+        - 1fe48219-2eac-493a-a0d8-10e89173b158
+    6b4b588e-3212-47ba-ac94-58cfa1dc4fd1:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 580
+        'y': 440
+      z: 0
+      embeds: []
+      isassociatedwith:
+        - dab9da24-44c0-40d6-b630-a447199175b3
+    b9d74481-bb4e-4a3f-af21-1660b128b7ba:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 580
+        'y': 540
+      z: 0
+      embeds: []
+      iscontainedinside:
         - fdf5cc67-994d-460b-845f-3197a6011cc2
 Parameters:
   SSHKeyName:
@@ -548,7 +638,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 6e698076-8491-4e4a-a516-e3d6f0495467
-  InstCrux:
+  InstCrux1:
     Type: 'AWS::EC2::Instance'
     Properties:
       ImageId: ami-a36f8dc4
@@ -557,10 +647,10 @@ Resources:
       NetworkInterfaces:
         - DeleteOnTermination: false
           DeviceIndex: '0'
-          NetworkInterfaceId: !Ref ENICrux
+          NetworkInterfaceId: !Ref ENICrux1
       Tags:
         - Key: Name
-          Value: Crux-box
+          Value: Crux-box-1
       UserData: !Base64 
         'Fn::Join':
           - |+
@@ -649,6 +739,208 @@ Resources:
         id: 84dbcc5a-6478-4dac-96af-f7bcd6599b96
     DependsOn:
       - InstZK1
+  InstCrux2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyName
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ENICrux2
+      Tags:
+        - Key: Name
+          Value: Crux-box-2
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - 'PRIVATE_IP[1]=10.0.1.11'
+            - 'PRIVATE_IP[2]=10.0.2.12'
+            - 'PRIVATE_IP[3]=10.0.3.13'
+            - yum update -y
+            - mkdir -p /stack
+            - >-
+              yum remove -y
+              java-1.7.0-openjdk-1.7.0.181-2.6.14.8.80.amzn1.x86_64
+            - yum install -y java-1.8.0-openjdk-devel
+            - yum install -y git
+            - >-
+              wget
+              https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
+            - chmod a+x lein
+            - mv lein /bin/
+            - cat << EOF > ~/.ssh/id_rsa
+            - '-----BEGIN RSA PRIVATE KEY-----'
+            - MIIJKAIBAAKCAgEA4aRyjovbQ9QREc4hFDjd9hjL93gc9sDg8IrsTS3P+63cS18E
+            - frfuVxVe0n2nyWN/WtjPNLN+hlnA/Ve9G7Gl0yX9z+8exQftH7D+kEFKDnYCgB8f
+            - HNXogV5pI3HajeQbwBDdAsONwnXESStZXhKIbqHEvooZeByIRfRpAXRmcSHZ144+
+            - SjPjvlBWKlT1dLA8L1wto2WzZYWqYqQ3PR89nlPTOnBaVZDNgVQVHGV3pwoi5xfd
+            - pMfOS5AxKvcHwAgAPHSjYMfaZRkQTcoi/h+3H10iS/vih7bbrLa30ouLOQrlASAl
+            - G/kJhhrpQVBFa+YyYTsvBTt1hz+jWBXYLvpwcK0D6V3AGy7jw18DE0xXGR80s+27
+            - InGXD9ULY+gA+gYUiOD2zSA1XKn35bZ8mCsXPk43FvecfKFYxBEweb72FHjUP/C0
+            - K+mMsdZOH4UrZnKtOAWqDqNGpO4fAErPT56ltgguDurwCfeDqs2zVa454levy2Ot
+            - 9mbHEMpgMyqn3wcFbLegqIY8lrT89libFH3AKNunegVo6YnBWPKzJYYcVxlkxee9
+            - 4yEW086jMmVjVEcD9qatc6NyW769WUCi+hjq95qHSLFuTelhtvt64VBBWFin7lYR
+            - vzyorC8LSjrGpVchxcT4HKWjSttHlD91Qxk10K2KEidcO2CgM8es7xzbJW0CAwEA
+            - AQKCAgBjhrCM1X16dpCs5NnMXKTyxs84sX89C6hsESrXhAyH+5D+ocOOzTxQpvlz
+            - KL+YYc2r2ZPTsBRv2Cj61fdwvrPg5ZIFZHiS+cMKxnwSTuoGZOEHeDK1+lgar/T6
+            - EF8RVPs0hXumm3DsxBs3FurNRqls+ueYD7vaMeOdz4d9f8Urw32dyX0KJ8cdi7vl
+            - 4iF+PbnePe9XciVl80ZLShmfWSdJrbmuvh3qPfuXPuos40iaoirw+aLm6sbAp7I4
+            - PEvr1Nudzui9aImZLCv30+AJbR3NtLvK/ihWKj7M+K8uLCTVnUuTaoVTyE3+G+Kk
+            - z24/gILaRkugKDDX3icDVGdNmWN8S4hSJcNW/MHcKaE2Kl09iQzEM5ezhj+nO49X
+            - lGMFDZ9h4tETnZNjUKqk8XRThg3VlGwU0uMjnyIMGJIr4y0vM2HeWrZhiPKhliQA
+            - Ontm0om1OfZ7MusNz2IZJF+PQia9gwNF5Cv78SYlqOIEqDQlg4YCozh6HCx3YE/F
+            - sxmi5WXzpZ+VNeTrClKJvB+OUHgwkbpJpZkSChPAmWo1c3WjBgS1WNO+kLf5cY82
+            - zDTJUcT3R5O55YJ2y6/H8l4U9HC12GFfkrT2D/V5NIJwiyaFOEpZSQByIggoVe6p
+            - nL9wAvCQxtXwsNbLqHeKLXg29Zz/xHOBZdut5yB/AopsE0hw1QKCAQEA90eeMTFh
+            - gaXHnhOr2JGnCabQsJz2Wgu7wzWwjRQzlfBFqONcYaLwOcmc+gWv90GIMR4TNntP
+            - 7Z8Vewm9xA+VnCGbruYsfwWwEWs9f1qdUghe0+s8HBnZIRAQ/6QT4dPY8sn/mavL
+            - yJQYGVEQDM1vYrLeCjvMHHZ8AhnuIh7vWWMTFRP/2bEeF243HmwvTwg2ybxPot96
+            - fPZXg5I/gKRUy9m8kXH3PwxhfsgcKB82lG2VkkpiAvgs1Mw+5CSDhGNEQeb130Ra
+            - /zRnvG8ozIOFNQJRKrGrlYKPAy2mNWc9Lwqduv+own0IQtiROhABtK/vgoTaaY5H
+            - 9SNwxIMDoWOvhwKCAQEA6Zl+EZPvUQs2duncsQiMYANA+ebbUSRbB1FPrLIeOMUp
+            - mM9p62aj+4MsFhEkoeKOSTijIISLCt8ETFNPr51wbkETJYVgXllSsDGHlwfL3VMr
+            - 9xzM+Mb/uohNJ3AHqHf+/Ii07edMXpSLSHV1SFxXrvfKDCHWpgo7s7Ed9jxHYzyD
+            - xod/T/RPFCkkSTNK9IxGwG1WHeWHyI84wYa8FRTDuH/NyOIkXMMlQpey0XvJ99s+
+            - MOvBvmhGFGs68zR1sKISODYfeSXJ4ru0GTCI3TsN0hiRgwjDsCBT5oqIA8TxYHQl
+            - ksxKxVqGFafRNwVgcXrJ2ugeST3HC1NVDlzc5ir4awKCAQBM5IVJcLyMTxuqiR1n
+            - w6r4cln0gWqNh5aEVj6nL//2gPd4U/LXHY6ruYjJqlkUftk1xM9eoquxDUXls5rB
+            - y8LPARhjI4n0mbUtRXajEm9XIeky5rQTXOpKwK84fzH7iB+vJ6cGhwhgP8Taon1m
+            - Lb+UJmCrN/r5YtKe6KdHDu2IkylM5aIqdEwSJyCWojd30OsQgjEVSX7SOtvtut1q
+            - SC9iEDv10kV64oOyo9E1nLchIo5fJigiGj/+j+CCmuQWl7OS9pnAKoZNU2NqkfpS
+            - 1hbm6+iHaSYc4LNN3rUPaCH7bcasbnFwwOZ/us42CuIs6ISGxn8QUcEIdlPLl53a
+            - YqAjAoIBACjKeM0w+/U29AfHxpXTXE/XwZzhxyJgKtUYScVqRQS8yQq6DVDh13iv
+            - 6x7fV3o9SYNXtISVIIKBdwqs8ZlE8MEP8/v1UmKnTl0eCQNChULcpyy7hr9aYIV+
+            - D5r3YR719Ty70nxIi3lojvnUKOq91UHkWw/LSOQtnUc/gm/hDsYxZwFf38dibfyj
+            - QobVwhz58dDgRs1pq1BGUi7ZDDbSLWsmRhTyCE96dCMwwjT6XMY/Lpj0UhyhsLsY
+            - Dm8xleuGIZBXQx+wjZReGpDbfMrE6SDq0V4ERceXnY8AWcfuuAeTwIvlyJi1ufxG
+            - Fa557eFjA6SKK9+2Pe+oWY3sgVZf4okCggEBAIa4pj94cRvqChyI866b0FJi84og
+            - WKTKBIQM/VtK3/QweFWmWPDXdux2LsjMR2RbYK6WgSq9hcL6jMyFEc5+vQH8nAvS
+            - DXcY3/dC6Eb3N4PW4LdvnrlFNFx0TCZJ6+MN9eXgCglwlh35QrLIY+EGUmUNH50i
+            - pEzMplg8f0OGTt91guS8zVkQKmd9HiLXp0abanJNGYP6FScKV7r3O8MRGIyorgMu
+            - 8RfgUgGNp04VEfFxCd7Vi29zCO7/gUc4nzGRd90VmB0P3j0bu/K8BLAWqsXpvZ69
+            - 5E2Y5q+RU5cicJNE5MxI0M91NaopvskGDRk9XsXWj3WqM7aP+eOjHNal+yQ=
+            - '-----END RSA PRIVATE KEY-----'
+            - EOF
+            - chmod 700 ~/.ssh/id_rsa
+            - '#THIS IS NOT SECURE but it''ll go away by the time we go public.'
+            - ssh-keyscan github.com >> ~/.ssh/known_hosts
+            - 'git clone git@github.com:juxt/crux.git /stack/crux'
+            - mkdir -p /stack/crux/data
+            - cd /stack/crux
+            - >-
+              nohup lein run -b ${PRIVATE_IP[1]}:9093 >
+              /stack/crux/data/crux.out &
+            - chmod -R 777 /stack
+    DependsOn:
+      - InstZK2
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 7bb46c3c-a9d9-45bc-93d6-650b4eaf1c69
+  InstCrux3:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyName
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ENICrux3
+      Tags:
+        - Key: Name
+          Value: Crux-box-3
+      UserData: !Base64 
+        'Fn::Join':
+          - |+
+
+          - - '#!/bin/bash'
+            - 'PRIVATE_IP[1]=10.0.1.11'
+            - 'PRIVATE_IP[2]=10.0.2.12'
+            - 'PRIVATE_IP[3]=10.0.3.13'
+            - yum update -y
+            - mkdir -p /stack
+            - >-
+              yum remove -y
+              java-1.7.0-openjdk-1.7.0.181-2.6.14.8.80.amzn1.x86_64
+            - yum install -y java-1.8.0-openjdk-devel
+            - yum install -y git
+            - >-
+              wget
+              https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein
+            - chmod a+x lein
+            - mv lein /bin/
+            - cat << EOF > ~/.ssh/id_rsa
+            - '-----BEGIN RSA PRIVATE KEY-----'
+            - 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
+            - '-----END RSA PRIVATE KEY-----'
+            - EOF
+            - chmod 700 ~/.ssh/id_rsa
+            - '#THIS IS NOT SECURE but it''ll go away by the time we go public.'
+            - ssh-keyscan github.com >> ~/.ssh/known_hosts
+            - 'git clone git@github.com:juxt/crux.git /stack/crux'
+            - mkdir -p /stack/crux/data
+            - cd /stack/crux
+            - >-
+              nohup lein run -b ${PRIVATE_IP[1]}:9093 >
+              /stack/crux/data/crux.out &
+            - chmod -R 777 /stack
+    DependsOn:
+      - InstZK3
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d402fb47-e482-4eb2-ada2-3d30a41c8cdf
   SGZK:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -814,7 +1106,7 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 30b3b43a-2a32-47f2-8979-e2f8d22408e2
-  ENICrux:
+  ENICrux1:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
       GroupSet:
@@ -823,6 +1115,24 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: ff229ffa-f6c3-403b-b234-54c4f45a4920
+  ENICrux2:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref SGCrux
+      SubnetId: !Ref Subnet2
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e61c6ce1-56c3-4066-b790-614f8c3a251e
+  ENICrux3:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref SGCrux
+      SubnetId: !Ref Subnet3
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ddc12d16-a83e-4f7f-a873-2fc1d0c55430
   VPC:
     Type: 'AWS::EC2::VPC'
     Properties:
@@ -899,11 +1209,17 @@ Resources:
     Properties:
       SubnetId: !Ref Subnet2
       RouteTableId: !Ref RouteTable
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e1680c80-4b02-408e-9cc8-c3e9e2a9764f
   RTAssociation3:
     Type: 'AWS::EC2::SubnetRouteTableAssociation'
     Properties:
       SubnetId: !Ref Subnet3
       RouteTableId: !Ref RouteTable
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 513d1d68-b7fe-46d8-9ef3-b4f00e6b7960
   RouteToInternet:
     Type: 'AWS::EC2::Route'
     Properties:
@@ -929,3 +1245,35 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: dab9da24-44c0-40d6-b630-a447199175b3
+  ELBListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref ELBTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: '3000'
+      Protocol: HTTP
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6b4b588e-3212-47ba-ac94-58cfa1dc4fd1
+  ELBTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckPath: /
+      HealthCheckPort: '3000'
+      Matcher:
+        HttpCode: '200'
+      Port: '3000'
+      Protocol: HTTP
+      Targets:
+        - Id: !Ref InstCrux1
+          Port: '3000'
+        - Id: !Ref InstCrux2
+          Port: '3000'
+        - Id: !Ref InstCrux3
+          Port: '3000'
+      VpcId: !Ref VPC
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b9d74481-bb4e-4a3f-af21-1660b128b7ba

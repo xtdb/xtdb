@@ -65,7 +65,7 @@ if [ $verbose == true ]; then
 
         cruxbox_id=$(aws cloudformation describe-stack-resource \
                          --stack-name $stack_name \
-                         --logical-resource-id InstCrux \
+                         --logical-resource-id InstCrux1 \
                          | jsonValue PhysicalResourceId)
 
         cruxbox_ip=$(aws ec2 describe-instances \
