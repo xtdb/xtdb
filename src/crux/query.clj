@@ -524,19 +524,18 @@
                                                                       var->bindings
                                                                       var->joins]} (build-sub-query snapshot db [] where args rules)]
                                                         [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                    [(cartesian-product
-                                                      (for [var free-vars-in-join-order]
-                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                    [(for [result (cartesian-product
+                                                                   (for [var free-vars-in-join-order]
+                                                                     (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                                                       (mapv :value result))
                                                      bound-var-result]))
-                  free-results (->> (for [[free-result] free-results+bound-results
-                                          result free-result]
-                                      (mapv :value result))
+                  free-results (->> (for [[free-results] free-results+bound-results
+                                          free-result free-results]
+                                      free-result)
                                     (distinct))
-                  bound-results (some->> free-results+bound-results
-                                         (map second)
-                                         (remove nil?)
-                                         (not-empty)
-                                         (apply merge-with into))]
+                  bound-results (->> (for [[_ bound-result] free-results+bound-results]
+                                       bound-result)
+                                     (apply merge-with into))]
               (when (seq free-results)
                 (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
 
