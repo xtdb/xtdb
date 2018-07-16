@@ -148,6 +148,7 @@
                       or-clauses :or
                       or-join-clauses :or-join
                       pred-clauses :pred
+                      range-clauses :range
                       rule-clauses :rule}]
   (let [or-vars (->> (for [or-clause or-clauses
                            [type sub-clauses] or-clause]
@@ -164,28 +165,30 @@
         or-join-vars (set (for [or-join-clause or-join-clauses
                                 arg (:args or-join-clause)]
                             arg))]
-    (->> {:e-vars (set (for [{:keys [e]} bgp-clauses
-                             :when (logic-var? e)]
-                         e))
-          :v-vars (set (for [{:keys [v]} bgp-clauses
-                             :when (logic-var? v)]
-                         v))
-          :unification-vars (set (for [{:keys [x y]} unify-clauses
-                                       arg [x y]
-                                       :when (logic-var? arg)]
-                                   arg))
-          :not-vars (->> (vals not-vars)
-                         (reduce into not-join-vars))
-          :pred-vars (set (for [{:keys [pred return]} pred-clauses
-                                arg (cons return (:args pred))
-                                :when (logic-var? arg)]
-                            arg))
-          :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
-                                           arg args
-                                           :when (logic-var? arg)]
-                                       arg))
-                                or-join-vars)}
-         (merge-with set/union or-vars))))
+    {:e-vars (set (for [{:keys [e]} bgp-clauses
+                        :when (logic-var? e)]
+                    e))
+     :v-vars (set (for [{:keys [v]} bgp-clauses
+                        :when (logic-var? v)]
+                    v))
+     :unification-vars (set (for [{:keys [x y]} unify-clauses
+                                  arg [x y]
+                                  :when (logic-var? arg)]
+                              arg))
+     :not-vars (->> (vals not-vars)
+                    (reduce into not-join-vars))
+     :pred-vars (set (for [{:keys [pred return]} pred-clauses
+                           arg (cons return (:args pred))
+                           :when (logic-var? arg)]
+                       arg))
+     :range-vars (set (for [{:keys [sym]} range-clauses]
+                        sym))
+     :or-vars (apply set/union (vals or-vars))
+     :rule-vars (set/union (set (for [{:keys [args]} rule-clauses
+                                      arg args
+                                      :when (logic-var? arg)]
+                                  arg))
+                           or-join-vars)}))
 
 (defn- build-v-var-range-constraints [e-vars range-clauses]
   (let [v-var->range-clauses (->> (for [{:keys [sym] :as clause} range-clauses]
@@ -236,71 +239,44 @@
 ;; resulting relations can still us an n-ary or to wrap them up for
 ;; the parent query. As they would been realised, there should then be
 ;; no dependency between parent and sub-query join order.
-(defn- or-joins [snapshot db rules or-type or-clauses var->joins]
+(defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
-        (fn [[or-var->bindings var->joins] clause]
+        (fn [[or-clause->relation+or-branches var->joins] clause]
           (let [or-join? (= :or-join or-type)
-                or-join-args (when or-join?
-                               (set (:args clause)))
                 or-branches (for [[type sub-clauses] (case or-type
                                                        :or clause
                                                        :or-join (:body clause))
                                   :let [where (case type
                                                 :term [sub-clauses]
                                                 :and sub-clauses)
-                                        local->hidden-var (when or-join?
-                                                            (let [body-vars (->> (collect-vars (normalize-clauses where))
-                                                                                 (vals)
-                                                                                 (reduce into #{}))
-                                                                  local-vars (set/difference body-vars or-join-args)]
-                                                              (doseq [arg or-join-args
-                                                                      :when (not (contains? body-vars arg))]
-                                                                (throw (IllegalArgumentException.
-                                                                        (str "Or join variable never used: " arg " " clause))))
-                                                              (zipmap local-vars (map gensym local-vars))))]]
-                              {:local-vars (vals local->hidden-var)
-                               :where (if or-join?
-                                        (w/postwalk-replace local->hidden-var where)
-                                        where)
-                               :sub-clauses sub-clauses})
-                all-local-vars (->> (map :local-vars or-branches)
-                                    (reduce into #{}))
-                sub-query-state (->> (for [{:keys [local-vars where sub-clauses]} or-branches
-                                           :let [other-local-vars (set/difference all-local-vars local-vars)
-                                                 place-holder-args (when (seq other-local-vars)
-                                                                     [(->> (for [var other-local-vars]
-                                                                             [var true])
-                                                                           (into {}))])
-                                                 sub-query-state (build-sub-query snapshot
-                                                                                  db
-                                                                                  []
-                                                                                  where
-                                                                                  place-holder-args
-                                                                                  rules)]]
-                                       (assoc sub-query-state :sub-clauses sub-clauses))
-                                     (reduce
-                                      (fn [lhs rhs]
-                                        (let [lhs-vars (set (keys (:var->bindings lhs)))
-                                              rhs-vars (set (keys (:var->bindings rhs)))]
-                                          (when (and (= :or or-type)
-                                                     (not (= lhs-vars rhs-vars)))
-                                            (throw (IllegalArgumentException.
-                                                    (str "Or requires same logic variables: "
-                                                         (pr-str (:sub-clauses lhs)) " "
-                                                         (pr-str (:sub-clauses rhs)))))))
-                                        (-> (merge-with merge lhs (select-keys rhs [:var->joins :var->bindings]))
-                                            (update :local-hidden-vars set/union (:local-hidden-vars rhs))
-                                            (update :n-ary-join doc/new-n-ary-or-layered-virtual-index (:n-ary-join rhs))))))
-                idx (:n-ary-join sub-query-state)
-                sub-query-var->joins (:var->joins sub-query-state)]
-            [(merge or-var->bindings (:var->bindings sub-query-state))
-             (apply merge-with into var->joins (for [v (case or-type
-                                                         :or (keys (:var->bindings sub-query-state))
-                                                         :or-join (concat all-local-vars or-join-args))
-                                                     :when (contains? sub-query-var->joins v)]
-                                                 {v [(assoc idx :name v)]}))]))
-        [nil var->joins])))
+                                        body-vars (->> (collect-vars (normalize-clauses where))
+                                                       (vals)
+                                                       (reduce into #{}))
+                                        or-vars (if or-join?
+                                                  (set (:args clause))
+                                                  body-vars)
+                                        free-vars (set/difference or-vars known-vars)]]
+                              (do (when or-join?
+                                    (doseq [var or-vars
+                                            :when (not (contains? body-vars var))]
+                                      (throw (IllegalArgumentException.
+                                              (str "Or join variable never used: " var " " (pr-str clause))))))
+                                  {:or-vars or-vars
+                                   :free-vars free-vars
+                                   :bound-vars (set/difference or-vars free-vars)
+                                   :where where}))
+                free-vars (:free-vars (first or-branches))
+                relation (doc/new-relation-virtual-index (gensym "or-vars")
+                                                         []
+                                                         (count free-vars))]
+            (when (not (apply = (map :or-vars or-branches)))
+              (throw (IllegalArgumentException.
+                      (str "Or requires same logic variables: " (pr-str clause)))))
+            [(assoc or-clause->relation+or-branches clause [relation or-branches])
+             (apply merge-with into var->joins (for [v free-vars]
+                                                 {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
+        [{} var->joins])))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
@@ -421,26 +397,27 @@
                   :type :pred}])
        (into {})))
 
+(defn- build-or-var-bindings [var->values-result-index or-clause->relation+or-branches]
+  (->> (for [[_ [_ or-branches]] or-clause->relation+or-branches
+             var (:free-vars (first or-branches))]
+         [var {:var var
+               :result-name (symbol "crux.query.or" (name var))
+               :result-index (get var->values-result-index var)
+               :type :or}])
+       (into {})))
+
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
   (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)
         bound-var? (and (= :entity-leaf type)
                         (not= e-var result-name)
                         (contains? join-results result-name))]
     (cond
-      (= :arg type)
+      (contains? #{:arg :pred :or} type)
       (let [results (get join-results result-name)]
         (for [value results]
           {:value value
            :result-name result-name
-           :type :arg
-           :value? true}))
-
-      (= :pred type)
-      (let [results (get join-results result-name)]
-        (for [value results]
-          {:value value
-           :result-name result-name
-           :type :pred
+           :type type
            :value? true}))
 
       bound-var?
@@ -515,6 +492,60 @@
                        (merge join-results)))
             join-results)))))
 
+(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings join-depth vars-in-join-order v-var->range-constriants]
+  (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
+        :let [or-join-depths (for [var bound-vars]
+                               (or (get-in var->bindings [var :result-index])
+                                   (dec join-depth)))
+              or-join-depth (inc (apply max -1 or-join-depths))
+              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)]]
+    (do (doseq [var bound-vars]
+          (when (not (contains? var->bindings var))
+            (throw (IllegalArgumentException.
+                    (str "Or refers to unknown variable: "
+                         var " " (pr-str clause))))))
+        (fn [join-keys join-results]
+          (if (= (count join-keys) or-join-depth)
+            (let [tuples (cartesian-product
+                          (for [var bound-vars]
+                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                  free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
+                                                        tuple (or (seq tuples) [{}])
+                                                        :let [args (if (seq bound-vars)
+                                                                     [(zipmap bound-vars (map :value tuple))]
+                                                                     [])
+                                                              bound-var-result (->> (for [{:keys [var value entity type value? result-name] :as tup} tuple]
+                                                                                      {result-name
+                                                                                       #{(if (and value? (not= :entity-leaf type))
+                                                                                           value
+                                                                                           entity)}})
+                                                                                    (apply merge-with into))
+                                                              {:keys [n-ary-join
+                                                                      var->bindings
+                                                                      var->joins]} (build-sub-query snapshot db [] where args rules)]
+                                                        [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                                    [(cartesian-product
+                                                      (for [var free-vars-in-join-order]
+                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                     bound-var-result]))
+                  free-results (->> (for [[free-result] free-results+bound-results
+                                          result free-result]
+                                      (mapv :value result))
+                                    (distinct))
+                  bound-results (some->> free-results+bound-results
+                                         (map second)
+                                         (remove nil?)
+                                         (not-empty)
+                                         (apply merge-with into))]
+              (when (seq free-results)
+                (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
+
+              (if (empty? bound-vars)
+                join-results
+                (when (seq bound-results)
+                  (merge join-results bound-results))))
+            join-results)))))
+
 (defn- build-unification-preds [unify-clauses var->bindings]
   (for [{:keys [op x y]
          :as clause} unify-clauses]
@@ -549,7 +580,6 @@
                                       :not-join [(:args not-clause)
                                                  (:body not-clause)])
               not-vars (remove blank-var? not-vars)]]
-
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
@@ -571,23 +601,25 @@
                   (fn [parent-join-results [join-keys join-results]]
                     (let [results (for [var not-vars]
                                     (bound-results-for-var object-store var->bindings join-keys join-results var))
-                          result-types (for [result results
-                                             {:keys [type]} result]
-                                         type)]
-                      (when (not-any? #{:arg} result-types)
-                        (let [not-var->values (zipmap not-vars
-                                                      (for [result results]
-                                                        (->> result
-                                                             (map :value)
-                                                             (set))))
-                              entities-to-remove (->> (for [[var not-vs] not-var->values
-                                                            :let [parent-results (bound-results-for-var object-store parent-var->bindings
-                                                                                                        parent-join-keys parent-join-results var)]
-                                                            {:keys [e-var value entity]} parent-results
-                                                            :when (contains? not-vs value)]
-                                                        {e-var #{entity}})
-                                                      (apply merge-with into))]
-                          (merge-with set/difference parent-join-results entities-to-remove)))))
+                          not-var->values (zipmap not-vars
+                                                  (for [result results]
+                                                    (->> result
+                                                         (map :value)
+                                                         (set))))
+                          results-to-remove (->> (for [[var not-vs] not-var->values
+                                                       :let [parent-results (bound-results-for-var object-store parent-var->bindings
+                                                                                                   parent-join-keys parent-join-results var)]
+                                                       {:keys [result-name value value? type entity]} parent-results
+                                                       :when (contains? not-vs value)]
+                                                   {result-name
+                                                    #{(if (and value? (not= :entity-leaf type))
+                                                        value
+                                                        entity)}})
+                                                 (apply merge-with into))]
+                      (some->> (merge-with set/difference parent-join-results results-to-remove)
+                               (filter (comp seq val))
+                               (not-empty)
+                               (into {}))))
                   join-results)))))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
@@ -623,31 +655,39 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-(defn- calculate-join-order [pred-clauses var->joins]
+(defn- calculate-join-order [pred-clauses or-clause->relation+or-branches var->joins]
   (let [vars-in-join-order (vec (keys var->joins))
-        var->index (zipmap vars-in-join-order (range))]
-    (->> pred-clauses
+        var->index (zipmap vars-in-join-order (range))
+        preds (for [{:keys [pred return] :as pred-clause} pred-clauses
+                    :when return]
+                ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
+        ors (for [[or-clause [_ [{:keys [free-vars bound-vars]}]]] or-clause->relation+or-branches
+                  :when (not-empty free-vars)]
+              ["Or" or-clause free-vars bound-vars])]
+    (->> (concat preds ors)
          (reduce
-          (fn [[vars-in-join-order seen-returns var->index] {:keys [pred return] :as pred-clause}]
-            (if return
-              (let [pred-args (filter logic-var? (:args pred))
-                    max-dependent-var-index (->> (map var->index pred-args)
-                                                 (reduce max -1))
-                    return-index (get var->index return)
-                    seen-returns (conj seen-returns return)]
-                (when (some seen-returns pred-args)
-                  (throw (IllegalArgumentException.
-                          (str "Predicate has circular dependency: " (pr-str pred-clause)))))
-                (if (> max-dependent-var-index return-index)
-                  (let [dependent-var (get vars-in-join-order max-dependent-var-index)
-                        vars-in-join-order (-> vars-in-join-order
-                                               (assoc return-index dependent-var)
-                                               (assoc max-dependent-var-index return))]
-                    [vars-in-join-order
-                     seen-returns
-                     (zipmap vars-in-join-order (range))])
-                  [vars-in-join-order seen-returns var->index]))
-              [vars-in-join-order seen-returns var->index]))
+          (fn [[vars-in-join-order seen-returns var->index]
+               [msg clause args returns]]
+            (->> returns
+                 (reduce
+                  (fn [[vars-in-join-order seen-returns var->index] return]
+                    (let [max-dependent-var-index (->> (map var->index args)
+                                                       (reduce max -1))
+                          return-index (get var->index return)
+                          seen-returns (conj seen-returns return)]
+                      (when (some seen-returns args)
+                        (throw (IllegalArgumentException.
+                                (str msg " has circular dependency: " (pr-str clause)))))
+                      (if (> max-dependent-var-index return-index)
+                        (let [dependent-var (get vars-in-join-order max-dependent-var-index)
+                              vars-in-join-order (-> vars-in-join-order
+                                                     (assoc return-index dependent-var)
+                                                     (assoc max-dependent-var-index return))]
+                          [vars-in-join-order
+                           seen-returns
+                           (zipmap vars-in-join-order (range))])
+                        [vars-in-join-order seen-returns var->index])))
+                  [vars-in-join-order seen-returns var->index])))
           [vars-in-join-order #{} var->index])
          (first))))
 
@@ -676,16 +716,14 @@
                          (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
                (let [expanded-rules (for [[rule-args body] rule-args+body
                                           :let [rule-arg->query-arg (zipmap rule-args (:args clause))]]
-                                      (expand-rules (w/postwalk-replace rule-arg->query-arg body)
-                                                    rule-name->rules
-                                                    (conj seen-rules rule-name)))]
+                                      (w/postwalk-replace rule-arg->query-arg body))]
                  (if (= (count rules) 1)
                    (first expanded-rules)
-                   (do (doseq [expanded-rule expanded-rules
-                               :let [clause-types (set (map first expanded-rule))]
-                               :when (not (contains? clause-types :bgp))]
-                         (throw (UnsupportedOperationException.
-                                 (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
+                   (do #_(doseq [expanded-rule expanded-rules
+                                 :let [clause-types (set (map first expanded-rule))]
+                                 :when (not (contains? clause-types :bgp))]
+                           (throw (UnsupportedOperationException.
+                                   (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
                        [[:or-join
                          {:args (vec (filter logic-var? (:args clause)))
                           :body (vec (for [expanded-rule expanded-rules]
@@ -735,18 +773,6 @@
                                         clause)
                                       (group-by :v))
         var->joins (sorted-map)
-        [or-var->bindings var->joins] (or-joins snapshot
-                                                db
-                                                rules
-                                                :or
-                                                or-clauses
-                                                var->joins)
-        [or-var->bindings var->joins] (or-joins snapshot
-                                                db
-                                                rules
-                                                :or-join
-                                                or-join-clauses
-                                                var->joins)
         var->joins (e-var-literal-v-joins snapshot
                                           e-var->literal-v-clauses
                                           var->joins
@@ -793,6 +819,24 @@
                               business-time
                               transact-time)
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
+        or-joins-only? (empty? var->joins)
+        known-vars (set/union e-vars v-vars pred-vars arg-vars)
+        [or-clause->relation+or-branches var->joins] (or-joins snapshot
+                                                               db
+                                                               rules
+                                                               :or
+                                                               or-clauses
+                                                               var->joins
+                                                               known-vars)
+        [or-join-clause->relation+or-branches var->joins] (or-joins snapshot
+                                                                    db
+                                                                    rules
+                                                                    :or-join
+                                                                    or-join-clauses
+                                                                    var->joins
+                                                                    known-vars)
+        or-clause->relation+or-branches (merge or-clause->relation+or-branches
+                                               or-join-clause->relation+or-branches)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -801,28 +845,36 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses var->joins)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause->relation+or-branches var->joins)
         var->values-result-index (zipmap vars-in-join-order (range))
+        var->bindings (build-var-bindings var->attr
+                                          v-var->e
+                                          var->values-result-index
+                                          e-var->leaf-v-var-clauses
+                                          (keys var->attr))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
-                             or-var->bindings
-                             (build-var-bindings var->attr
-                                                 v-var->e
-                                                 var->values-result-index
-                                                 e-var->leaf-v-var-clauses
-                                                 (keys var->attr)))
+                             (if or-joins-only?
+                               (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
+                               (merge (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
+                                      var->bindings)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-clause->relation))
+        or-constraints (vec (build-or-constraints snapshot db object-store rules or-clause->relation+or-branches
+                                                  var->bindings join-depth vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
                                        (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
                                        (constrain-join-result-by-unification unification-preds max-ks)
                                        (constrain-join-result-by-not not-constraints join-depth max-ks)
-                                       (constrain-join-result-by-preds pred-constraints max-ks)))
+                                       (constrain-join-result-by-preds pred-constraints max-ks)
+                                       (constrain-join-result-by-preds or-constraints max-ks)))
         joins (map var->joins vars-in-join-order)]
+    (when or-joins-only?
+      (constrain-join-result-by-preds or-constraints [] []))
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))

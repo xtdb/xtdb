@@ -767,13 +767,16 @@
                               :needs-seek? false}))
     nil))
 
-(defn update-relation-virtual-index! [relation tuples]
-  (reset! (:iterators-state relation)
-          {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                       (build-nested-index (sort tuples) (:layered-range-constraints relation)))]
-           :child-idx nil
-           :needs-seek? true})
-  relation)
+(defn update-relation-virtual-index!
+  ([relation tuples]
+   (update-relation-virtual-index! relation tuples (:layered-range-constraints relation)))
+  ([relation tuples layered-range-constraints]
+   (reset! (:iterators-state relation)
+           {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
+                        (build-nested-index (sort tuples) layered-range-constraints))]
+            :child-idx nil
+            :needs-seek? true})
+   relation))
 
 (defn new-relation-virtual-index
   ([relation-name tuples max-depth]
