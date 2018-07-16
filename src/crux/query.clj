@@ -506,15 +506,21 @@
                          var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) or-join-depth)
-            (let [tuples (cartesian-product
-                          (for [var bound-vars]
-                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
+            (let [all-tuples (cartesian-product
+                              (for [var bound-vars]
+                                (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                  consistent-tuples (for [tuple all-tuples
+                                          :when (->> (for [[_ vs] (group-by :result-name tuple)
+                                                           :when (every? #{:entity :entity-leaf} (map :type vs))]
+                                                       (apply = (map :entity vs)))
+                                                     (every? true?))]
+                                      tuple)
                   free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
-                                                        tuple (or (seq tuples) [{}])
+                                                        tuple (or (seq consistent-tuples) [{}])
                                                         :let [args (if (seq bound-vars)
                                                                      [(zipmap bound-vars (map :value tuple))]
                                                                      [])
-                                                              bound-var-result (->> (for [{:keys [var value entity type value? result-name] :as tup} tuple]
+                                                              bound-var-result (->> (for [{:keys [var value entity type value? result-name]} tuple]
                                                                                       {result-name
                                                                                        #{(if (and value? (not= :entity-leaf type))
                                                                                            value

@@ -1227,15 +1227,13 @@
            [?e :age 10])]
       #{:1 :5}
 
-      ;; TODO: Should work, regression when turning or into sub-query.
       ;; join with 2 vars
-      ;; [[?e :age ?a]
-      ;;  (or (and [?e :name "Ivan"]
-      ;;           [:1  :age  ?a])
-      ;;      (and [?e :name "Oleg"]
-      ;;           [:2  :age  ?a]))]
-      ;; #{:1 :5 :4}
-      )))
+      [[?e :age ?a]
+       (or (and [?e :name "Ivan"]
+                [:1  :age  ?a])
+           (and [?e :name "Oleg"]
+                [:2  :age  ?a]))]
+      #{:1 :5 :4})))
 
 (t/deftest datascript-test-or-join
   (populate-datascript-test-db)
