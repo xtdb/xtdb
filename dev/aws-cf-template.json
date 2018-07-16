@@ -171,7 +171,8 @@ Metadata:
         x: 690
         'y': 150
       z: 1
-      embeds: []
+      embeds:
+        - 5834e7dc-b729-4ab8-9d3d-c651ec3ee7a4
     e016be63-cb5d-458b-93c0-345eb84ddfe1:
       size:
         width: 80
@@ -242,7 +243,8 @@ Metadata:
       position:
         x: 840
         'y': 610
-      z: 1
+      z: 2
+      parent: fdf5cc67-994d-460b-845f-3197a6011cc2
       embeds: []
       iscontainedinside:
         - cafd7374-8fff-4f5e-ac4e-15d333c72587
@@ -1234,6 +1236,7 @@ Resources:
   LoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
+      Name: CruxLB
       Scheme: internet-facing
       SecurityGroups:
         - !Ref SGCrux

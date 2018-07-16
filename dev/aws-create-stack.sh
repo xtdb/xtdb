@@ -61,26 +61,26 @@ if [ $verbose == true ]; then
 
     if [ $stack_status == "CREATE_COMPLETE" ]; then
         
-        echo "Stack creation successful."
+        echo "Stack creation successful"
 
-        cruxbox_id=$(aws cloudformation describe-stack-resource \
-                         --stack-name $stack_name \
-                         --logical-resource-id InstCrux1 \
-                         | jsonValue PhysicalResourceId)
-
-        cruxbox_ip=$(aws ec2 describe-instances \
-                         --instance-id $cruxbox_id \
-                         | jsonValue PublicIpAddress)
+        lb_dns=$(aws elbv2 describe-load-balancers \
+                     --names CruxLB \
+                     | jsonValue DNSName)
 
         echo "Setting up the Crux instance..."
         aws ec2 wait instance-status-ok \
             --instance-id $cruxbox_id \
             >/dev/null
-
-        echo "Crux setup finished."
-        echo "If all went well, Crux's HTTP server should be up at$cruxbox_ip:3000"
         
+        server_status=$(curl -s -o /dev/null -w "%{http_code}" $lb_dns:3000)
+        if [ $server_status == "200" ]; then
+            echo "Crux setup successful"
+            echo "Crux HTTP server running on$lb_dns:3000"
+        else
+            echo "Something went wrong with Zookeeper, Kafka, or Crux"
+            echo "Crux HTTP server is supposed to be running on$lb_dns:3000 but did not respond with HTTP status 200"
+        fi
     else
-        echo "Stack creation failed."
+        echo "Stack creation failed"
     fi
 fi
