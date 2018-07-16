@@ -178,7 +178,7 @@
      :not-vars (->> (vals not-vars)
                     (reduce into not-join-vars))
      :pred-vars (set (for [{:keys [pred return]} pred-clauses
-                           arg (cons return (:args pred))
+                           arg (cons return (cons (:pred-fn pred) (:args pred)))
                            :when (logic-var? arg)]
                        arg))
      :range-vars (set (for [{:keys [sym]} range-clauses]
@@ -722,17 +722,10 @@
                (let [expanded-rules (for [[rule-args body] rule-args+body
                                           :let [rule-arg->query-arg (zipmap rule-args (:args clause))]]
                                       (w/postwalk-replace rule-arg->query-arg body))]
-                 (if (= (count rules) 1)
-                   (first expanded-rules)
-                   (do #_(doseq [expanded-rule expanded-rules
-                                 :let [clause-types (set (map first expanded-rule))]
-                                 :when (not (contains? clause-types :bgp))]
-                           (throw (UnsupportedOperationException.
-                                   (str "Cannot do or between rules without basic graph patterns: " (pr-str sub-clause)))))
-                       [[:or-join
-                         {:args (vec (filter logic-var? (:args clause)))
-                          :body (vec (for [expanded-rule expanded-rules]
-                                       [:and expanded-rule]))}]])))))
+                 [[:or-join
+                   {:args (vec (filter logic-var? (:args clause)))
+                    :body (vec (for [expanded-rule expanded-rules]
+                                 [:and expanded-rule]))}]])))
            [sub-clause]))
        (reduce into [])))
 
