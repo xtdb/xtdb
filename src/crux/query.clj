@@ -525,15 +525,21 @@
                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
                               (filter consistent-tuple?))
                   cache-key (when rule-name
-                              [rule-name (vec (for [tuple tuples]
-                                                (mapv :value tuple)))])
+                              [rule-name (count free-vars) (vec (for [tuple tuples]
+                                                                  (mapv :value tuple)))])
                   free-results+bound-results
                   (or (when cache-key
                         (when-let [result (get @recursion-cache cache-key)]
-                          (vec (for [[free-results bound-results] result
-                                     :let [cache-var->parent-var (zipmap (:bound-vars (meta bound-results))
-                                                                         bound-vars)]]
-                                 [free-results (set/rename-keys bound-results cache-var->parent-var)]))))
+                          (vec (for [[free-results bound-results :as f+b] result
+                                     :let [free-parent-var->free-cache-var (zipmap free-vars-in-join-order
+                                                                                   (:free-vars-in-join-order (meta f+b)))
+                                           bound-cache-var->bound-parent-var (zipmap (:bound-vars (meta f+b))
+                                                                                     bound-vars)
+                                           free-cache-var->free-results (zipmap (:free-vars-in-join-order (meta f+b))
+                                                                                free-results)]]
+                                 [(vec (for [v (map free-parent-var->free-cache-var free-vars-in-join-order)]
+                                         (get free-cache-var->free-results v)))
+                                  (set/rename-keys bound-results bound-cache-var->bound-parent-var)]))))
                       (let [_ (when cache-key
                                 (swap! recursion-cache assoc cache-key []))
                             free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
@@ -548,13 +554,15 @@
                                                                                 var->bindings
                                                                                 var->joins]} (build-sub-query snapshot db [] where args rules recursion-cache)]
                                                                   [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                              [(for [tuple (cartesian-product
-                                                                            (for [var free-vars-in-join-order]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                                     :when (consistent-tuple? tuple)]
-                                                                 (mapv :value tuple))
-                                                               (when bound-results
-                                                                 (with-meta bound-results {:bound-vars bound-vars}))]))]
+                                                              (with-meta
+                                                                [(vec (for [tuple (cartesian-product
+                                                                                   (for [var free-vars-in-join-order]
+                                                                                     (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                            :when (consistent-tuple? tuple)]
+                                                                        (mapv :value tuple)))
+                                                                 bound-results]
+                                                                {:free-vars-in-join-order free-vars-in-join-order
+                                                                 :bound-vars bound-vars})))]
                         (when cache-key
                           (swap! recursion-cache assoc cache-key free-results+bound-results))
                         free-results+bound-results))
