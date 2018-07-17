@@ -701,9 +701,11 @@
                  (reduce
                   (fn [[vars-in-join-order seen-returns var->index] return]
                     ;; TODO: What is correct here if the argument
-                    ;; isn't in the join? Defaulting to -1 seems like
-                    ;; a patch, not a real fix.
-                    (let [max-dependent-var-index (->> (map #(get var->index % -1) args)
+                    ;; isn't in the join? Removing it seems like a
+                    ;; patch, and not a real fix. It might be as
+                    ;; simple as it's a leaf var.
+                    (let [max-dependent-var-index (->> (map #(get var->index %) args)
+                                                       (remove nil?)
                                                        (reduce max -1))
                           return-index (get var->index return)
                           seen-returns (conj seen-returns return)]
