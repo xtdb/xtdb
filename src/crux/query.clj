@@ -489,6 +489,9 @@
                        (merge join-results)))
             join-results)))))
 
+;; TODO: potentially the way to do this is to pass join results down
+;; (either via a variable, an atom or a binding), and if a sub query
+;; doesn't change it, terminate that branch.
 (defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache]
   (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
         :let [or-join-depths (for [var bound-vars]
