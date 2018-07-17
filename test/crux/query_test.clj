@@ -1303,7 +1303,7 @@
                                [?t  :follow ?e1]]]})
                #{[:2] [:3] [:4]})))
 
-    ;; TODO: Crux does not currently support recursive rules.
+
     (t/testing "Recursive rules"
       (t/is (= (q/q db
                     '{:find  [?e2]
@@ -1316,36 +1316,36 @@
                                (follow ?t ?e2)]]})
                #{[:2] [:3] [:4] [:6]}))
 
-      #_(f/with-kv-store
-          (fn []
-            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
-                                             {:crux.db/id :2 :follow :3}])
-            (let [db (q/db *kv*)]
-              (t/is (= (q/q db
-                            '{:find [?e1 ?e2]
-                              :where [(follow ?e1 ?e2)]
-                              :rules [[(follow ?e1 ?e2)
-                                       [?e1 :follow ?e2]]
-                                      [(follow ?e1 ?e2)
-                                       (follow ?e2 ?e1)]]})
-                       #{[:1 :2] [:2 :3] [:2 :1] [:3 :2]})))))
+      (f/with-kv-store
+        (fn []
+          (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
+                                           {:crux.db/id :2 :follow :3}])
+          (let [db (q/db *kv*)]
+            (t/is (= (q/q db
+                          '{:find [?e1 ?e2]
+                            :where [(follow ?e1 ?e2)]
+                            :rules [[(follow ?e1 ?e2)
+                                     [?e1 :follow ?e2]]
+                                    [(follow ?e1 ?e2)
+                                     (follow ?e2 ?e1)]]})
+                     #{[:1 :2] [:2 :3] [:2 :1] [:3 :2]})))))
 
-      #_(f/with-kv-store
-          (fn []
-            (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
-                                             {:crux.db/id :2 :follow :3}
-                                             {:crux.db/id :3 :follow :1}])
-            (let [db (q/db *kv*)]
-              (t/is (= (q/q db
-                            '{:find [?e1 ?e2]
-                              :where [(follow ?e1 ?e2)]
-                              :rules [[(follow ?e1 ?e2)
-                                       [?e1 :follow ?e2]]
-                                      [(follow ?e1 ?e2)
-                                       (follow ?e2 ?e1)]]})
-                       #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]}))))))
+      (f/with-kv-store
+        (fn []
+          (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
+                                           {:crux.db/id :2 :follow :3}
+                                           {:crux.db/id :3 :follow :1}])
+          (let [db (q/db *kv*)]
+            (t/is (= (q/q db
+                          '{:find [?e1 ?e2]
+                            :where [(follow ?e1 ?e2)]
+                            :rules [[(follow ?e1 ?e2)
+                                     [?e1 :follow ?e2]]
+                                    [(follow ?e1 ?e2)
+                                     (follow ?e2 ?e1)]]})
+                     #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]}))))))
 
-    ;; TODO: Crux does not currently support recursive rules.
+    ;; TODO: Crux does not currently fully support recursive rules.
     #_(t/testing "Mutually recursive rules"
         (f/with-kv-store
           (fn []

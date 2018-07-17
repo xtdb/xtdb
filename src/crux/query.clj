@@ -743,34 +743,48 @@
                (when-not (= arity (count (:args clause)))
                  (throw (IllegalArgumentException.
                          (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
-               ;; TODO: tries to avoid expanding branches that has
-               ;; been seen, does not seem to add anything. Revisit.
+               ;; TODO: the caches and expansion here needs
+               ;; revisiting.
                (let [seen-rule-branches+expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
-                                                             :when (not (get-in @recursion-cache [:seen-rule-branches [rule-name branch-index (:args clause) body]]))
+                                                             :let [cache-key [:seen-rule-branches rule-name branch-index (:args clause)]]
+                                                             :when (zero? (get-in recursion-cache cache-key 0))
                                                              :let [rule-arg->query-arg (zipmap rule-args (:args clause))
                                                                    body-vars (->> (collect-vars (normalize-clauses body))
                                                                                   (vals)
                                                                                   (reduce into #{}))
                                                                    body-var->hidden-var (zipmap body-vars
                                                                                                 (map gensym body-vars))]]
-                                                         [[rule-name (:args clause) body]
+                                                         [cache-key
                                                           (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body)])
                      seen-rule-branches (map first seen-rule-branches+expanded-rules)
-                     expanded-rules (map second seen-rule-branches+expanded-rules)]
-                 (swap! recursion-cache update :seen-rule-branches (fnil into #{}) seen-rule-branches)
-                 (when (seq expanded-rules)
-                   [[:or-join
-                     (with-meta
-                       {:args (vec (filter logic-var? (:args clause)))
-                        :body (vec (for [expanded-rule expanded-rules]
-                                     [:and expanded-rule]))}
-                       {:rule-name rule-name})]]))))
+                     expanded-rules (map second seen-rule-branches+expanded-rules)
+                     recursion-cache (reduce (fn [cache cache-key]
+                                               (update-in cache cache-key (fnil inc 0)))
+                                             recursion-cache
+                                             seen-rule-branches)
+                     cache-key [:seen-rules rule-name]
+                     expanded-rules (if (< (get-in recursion-cache cache-key 0) 2)
+                                      (for [expanded-rule expanded-rules
+                                            :let [expanded-rule (expand-rules expanded-rule rule-name->rules
+                                                                              (update-in recursion-cache cache-key (fnil inc 0)))]
+                                            :when (seq expanded-rule)]
+                                        expanded-rule)
+                                      expanded-rules)]
+                 (if (= 1 (count expanded-rules))
+                   (first expanded-rules)
+                   (when (seq expanded-rules)
+                     [[:or-join
+                       (with-meta
+                         {:args (vec (filter logic-var? (:args clause)))
+                          :body (vec (for [expanded-rule expanded-rules]
+                                       [:and expanded-rule]))}
+                         {:rule-name rule-name})]])))))
            [sub-clause]))
        (reduce into [])))
 
 (defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules recursion-cache]
   (let [rule-name->rules (group-by (comp :name :head) rules)
-        where (expand-rules where rule-name->rules recursion-cache)
+        where (expand-rules where rule-name->rules {})
         {bgp-clauses :bgp
          range-clauses :range
          pred-clauses :pred
