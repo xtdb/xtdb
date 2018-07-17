@@ -90,10 +90,12 @@
        (exception-response 400 e#)))) ;;Invalid edn
 
 (defn zk-active? [bootstrap-servers]
-  (with-open [^KafkaConsumer consumer
-              (k/create-consumer
-               {"bootstrap.servers" bootstrap-servers})]
-    (boolean (.listTopics consumer))))
+  (try
+    (with-open [^KafkaConsumer consumer
+                (k/create-consumer
+                 {"bootstrap.servers" bootstrap-servers})]
+      (boolean (.listTopics consumer)))
+    (catch Exception e false)))
 
 ;; ---------------------------------------------------
 ;; Services
