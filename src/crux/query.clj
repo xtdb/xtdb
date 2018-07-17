@@ -524,12 +524,17 @@
                                (for [var bound-vars]
                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
                               (filter consistent-tuple?))
-                  cache-key [rule-name (vec (for [tuple tuples]
-                                              (mapv :value tuple)))]
+                  cache-key (when rule-name
+                              [rule-name (vec (for [tuple tuples]
+                                                (mapv :value tuple)))])
                   free-results+bound-results
-                  (or (when rule-name
-                        (get @recursion-cache cache-key))
-                      (let [_ (when rule-name
+                  (or (when cache-key
+                        (when-let [result (get @recursion-cache cache-key)]
+                          (vec (for [[free-results bound-results] result
+                                     :let [cache-var->parent-var (zipmap (:bound-vars (meta bound-results))
+                                                                         bound-vars)]]
+                                 [free-results (set/rename-keys bound-results cache-var->parent-var)]))))
+                      (let [_ (when cache-key
                                 (swap! recursion-cache assoc cache-key []))
                             free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
                                                                   tuple (or (seq tuples) [{}])
@@ -548,9 +553,10 @@
                                                                               (bound-results-for-var object-store var->bindings join-keys join-results var)))
                                                                      :when (consistent-tuple? tuple)]
                                                                  (mapv :value tuple))
-                                                               bound-results]))]
-                        (when rule-name
-                          (swap! recursion-cache assoc [rule-name cache-key] free-results+bound-results))
+                                                               (when bound-results
+                                                                 (with-meta bound-results {:bound-vars bound-vars}))]))]
+                        (when cache-key
+                          (swap! recursion-cache assoc cache-key free-results+bound-results))
                         free-results+bound-results))
                   free-results (->> (for [[free-results] free-results+bound-results
                                           free-result free-results]
