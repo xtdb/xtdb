@@ -505,13 +505,14 @@
                        (merge join-results)))
             join-results)))))
 
-(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings join-depth vars-in-join-order v-var->range-constriants]
+(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings join-depth vars-in-join-order v-var->range-constriants recursion-cache]
   (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
         :let [or-join-depths (for [var bound-vars]
                                (or (get-in var->bindings [var :result-index])
                                    (dec join-depth)))
               or-join-depth (inc (apply max -1 or-join-depths))
-              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)]]
+              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
+              rule-name (:rule-name (meta clause))]]
     (do (doseq [var bound-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -523,24 +524,34 @@
                                (for [var bound-vars]
                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
                               (filter consistent-tuple?))
-                  free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
-                                                        tuple (or (seq tuples) [{}])
-                                                        :let [args (if (seq bound-vars)
-                                                                     [(zipmap bound-vars (map :value tuple))]
-                                                                     [])
-                                                              bound-results (->> (for [result tuple]
-                                                                                   (bound-result->join-result result))
-                                                                                 (apply merge-with into))
-                                                              {:keys [n-ary-join
-                                                                      var->bindings
-                                                                      var->joins]} (build-sub-query snapshot db [] where args rules)]
-                                                        [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                    [(for [tuple (cartesian-product
-                                                                  (for [var free-vars-in-join-order]
-                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                           :when (consistent-tuple? tuple)]
-                                                       (mapv :value tuple))
-                                                     bound-results]))
+                  cache-key [rule-name (vec (for [tuple tuples]
+                                              (mapv :value tuple)))]
+                  free-results+bound-results
+                  (or (when rule-name
+                        (get @recursion-cache cache-key))
+                      (let [_ (when rule-name
+                                (swap! recursion-cache assoc cache-key []))
+                            free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
+                                                                  tuple (or (seq tuples) [{}])
+                                                                  :let [args (if (seq bound-vars)
+                                                                               [(zipmap bound-vars (map :value tuple))]
+                                                                               [])
+                                                                        bound-results (->> (for [result tuple]
+                                                                                             (bound-result->join-result result))
+                                                                                           (apply merge-with into))
+                                                                        {:keys [n-ary-join
+                                                                                var->bindings
+                                                                                var->joins]} (build-sub-query snapshot db [] where args rules recursion-cache)]
+                                                                  [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                                              [(for [tuple (cartesian-product
+                                                                            (for [var free-vars-in-join-order]
+                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                     :when (consistent-tuple? tuple)]
+                                                                 (mapv :value tuple))
+                                                               bound-results]))]
+                        (when rule-name
+                          (swap! recursion-cache assoc [rule-name cache-key] free-results+bound-results))
+                        free-results+bound-results))
                   free-results (->> (for [[free-results] free-results+bound-results
                                           free-result free-results]
                                       free-result)
@@ -548,6 +559,7 @@
                   bound-results (->> (for [[_ bound-result] free-results+bound-results]
                                        bound-result)
                                      (apply merge-with into))]
+
               (when (seq free-results)
                 (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
 
@@ -583,7 +595,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings]
+(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings recursion-cache]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -607,7 +619,7 @@
                 parent-var->bindings var->bindings
                 {:keys [n-ary-join
                         var->bindings
-                        var->joins]} (build-sub-query snapshot db [] not-clause args rules)]
+                        var->joins]} (build-sub-query snapshot db [] not-clause args rules recursion-cache)]
             (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                  (reduce
                   (fn [parent-join-results [join-keys join-results]]
@@ -732,13 +744,15 @@
                                                                              (map gensym body-vars))]]
                                       (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))]
                  [[:or-join
-                   {:args (vec (filter logic-var? (:args clause)))
-                    :body (vec (for [expanded-rule expanded-rules]
-                                 [:and expanded-rule]))}]])))
+                   (with-meta
+                     {:args (vec (filter logic-var? (:args clause)))
+                      :body (vec (for [expanded-rule expanded-rules]
+                                   [:and expanded-rule]))}
+                     {:rule-name rule-name})]])))
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules]
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules recursion-cache]
   (let [rule-name->rules (group-by (comp :name :head) rules)
         where (expand-rules where rule-name->rules)
         {bgp-clauses :bgp
@@ -866,11 +880,11 @@
                                (merge (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
                                       var->bindings)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings)
-                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings)))
+        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings recursion-cache)
+                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings recursion-cache)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-clause->relation))
         or-constraints (vec (build-or-constraints snapshot db object-store rules or-clause->relation+or-branches
-                                                  var->bindings join-depth vars-in-join-order v-var->range-constriants))
+                                                  var->bindings join-depth vars-in-join-order v-var->range-constriants recursion-cache))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
@@ -898,9 +912,10 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
-     (let [{:keys [n-ary-join
+     (let [recursion-cache (atom {})
+           {:keys [n-ary-join
                    var->bindings
-                   var->joins]} (build-sub-query snapshot db find where args rules)]
+                   var->joins]} (build-sub-query snapshot db find where args rules recursion-cache)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
