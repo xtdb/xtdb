@@ -1,7 +1,7 @@
 #!/bin/bash
 
-ssh_key_name=juxt_keypair_london
 stack_name=CruxStack
+delete=false
 verbose=false
 
 function jsonValue() {
@@ -12,14 +12,18 @@ function jsonValue() {
 function usage() {
     printf "
 Options:\n\
+  -d            First, delete any existing stack with the same name
   -h            Help\n\
   -k <string>   Name of an AWS keypair to use when SSHing to an instance\n\
   -n <string>   Name of the stack\n\
   -v            Verbose: prints details of the stack launch\n"
 }
 
-while getopts ":hk:n:v" opt; do
+while getopts ":dhk:n:v" opt; do
     case "${opt}" in
+        d )
+            delete=true
+            ;;
         h )
             usage
             exit 0
@@ -40,6 +44,22 @@ while getopts ":hk:n:v" opt; do
             ;;
     esac
 done
+
+if [ $delete == true ]; then
+    if [ $verbose == true ]; then
+        echo "Deleting any existing stack called $stack_name..."
+    fi
+    aws cloudformation delete-stack \
+        --stack-name $stack_name \
+        >/dev/null
+    
+    if [ $verbose == true ]; then
+        aws cloudformation wait stack-delete-complete \
+            --stack-name $stack_name \
+            >/dev/null
+        echo "Stack deletion complete"
+    fi
+fi
 
 aws cloudformation create-stack \
     --stack-name $stack_name \
