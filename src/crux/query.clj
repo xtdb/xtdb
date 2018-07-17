@@ -508,48 +508,57 @@
                                (for [var bound-vars]
                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
                               (filter consistent-tuple?))
-                  cache-key (when rule-name
-                              [rule-name (count free-vars) (vec (for [tuple tuples]
-                                                                  (mapv :value tuple)))])
                   free-results+bound-results
-                  (or (when cache-key
-                        (when-let [result (get @recursion-cache cache-key)]
-                          (vec (for [[free-results bound-results :as f+b] result
-                                     :let [free-parent-var->free-cache-var (zipmap free-vars-in-join-order
-                                                                                   (:free-vars-in-join-order (meta f+b)))
-                                           bound-cache-var->bound-parent-var (zipmap (:bound-vars (meta f+b))
-                                                                                     bound-vars)
-                                           free-cache-var->free-results (zipmap (:free-vars-in-join-order (meta f+b))
-                                                                                free-results)]]
-                                 [(vec (for [v (map free-parent-var->free-cache-var free-vars-in-join-order)]
-                                         (get free-cache-var->free-results v)))
-                                  (set/rename-keys bound-results bound-cache-var->bound-parent-var)]))))
-                      (let [_ (when cache-key
-                                (swap! recursion-cache assoc cache-key []))
-                            free-results+bound-results (vec (for [{:keys [where] :as or-branch} or-branches
-                                                                  tuple (or (seq tuples) [{}])
-                                                                  :let [args (if (seq bound-vars)
-                                                                               [(zipmap bound-vars (map :value tuple))]
-                                                                               [])
-                                                                        bound-results (->> (for [result tuple]
-                                                                                             (bound-result->join-result result))
-                                                                                           (apply merge-with into))
-                                                                        {:keys [n-ary-join
-                                                                                var->bindings
-                                                                                var->joins]} (build-sub-query snapshot db [] where args rules recursion-cache)]
-                                                                  [join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                              (with-meta
-                                                                [(vec (for [tuple (cartesian-product
-                                                                                   (for [var free-vars-in-join-order]
-                                                                                     (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                                            :when (consistent-tuple? tuple)]
-                                                                        (mapv :value tuple)))
-                                                                 bound-results]
-                                                                {:free-vars-in-join-order free-vars-in-join-order
-                                                                 :bound-vars bound-vars})))]
-                        (when cache-key
-                          (swap! recursion-cache assoc cache-key free-results+bound-results))
-                        free-results+bound-results))
+                  (let [free-results+bound-results
+                        (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                                   tuple (or (seq tuples) [{}])
+                                   :let [args (if (seq bound-vars)
+                                                [(zipmap bound-vars (map :value tuple))]
+                                                [])
+                                         cache-key (when rule-name
+                                                     [:rule-results rule-name branch-index (count free-vars) (vec (for [tuple tuples]
+                                                                                                                    (mapv :value tuple)))])
+                                         bound-results (->> (for [result tuple]
+                                                              (bound-result->join-result result))
+                                                            (apply merge-with into))
+                                         result (or
+                                                 ;; TODO: unclear if renaming the vars is necessary,
+                                                 ;; as used vars will rename "downwards".
+                                                 (when-let [result (and cache-key (get @recursion-cache cache-key))]
+                                                   (vec (for [[free-results bound-results :as f+b] result
+                                                              :let [free-parent-var->free-cache-var (zipmap free-vars-in-join-order
+                                                                                                            (:free-vars-in-join-order (meta f+b)))
+                                                                    bound-cache-var->bound-parent-var (zipmap (:bound-vars (meta f+b))
+                                                                                                              bound-vars)
+                                                                    free-cache-var->free-results (zipmap (:free-vars-in-join-order (meta f+b))
+                                                                                                         free-results)
+                                                                    new-f+b [(vec (for [v (map free-parent-var->free-cache-var free-vars-in-join-order)
+                                                                                        :when (contains? free-cache-var->free-results v)]
+                                                                                    (get free-cache-var->free-results v)))
+                                                                             (set/rename-keys bound-results bound-cache-var->bound-parent-var)]]]
+
+                                                          new-f+b)))
+                                                 (let [_ (when cache-key
+                                                           (swap! recursion-cache assoc cache-key []))
+                                                       {:keys [n-ary-join
+                                                               var->bindings
+                                                               var->joins]} (build-sub-query snapshot db [] where args rules recursion-cache)
+                                                       result (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                                                     (with-meta
+                                                                       [(vec (for [tuple (cartesian-product
+                                                                                          (for [var free-vars-in-join-order]
+                                                                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                                   :when (consistent-tuple? tuple)]
+                                                                               (mapv :value tuple)))
+                                                                        bound-results]
+                                                                       {:free-vars-in-join-order free-vars-in-join-order
+                                                                        :bound-vars bound-vars})))]
+                                                   (when cache-key
+                                                     (swap! recursion-cache assoc cache-key result))
+                                                   result))]]
+                               result)
+                             (reduce into []))]
+                    free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results
                                           free-result free-results]
                                       free-result)
@@ -562,7 +571,8 @@
                 (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
 
               (if (empty? bound-vars)
-                join-results
+                (when (seq free-results)
+                  join-results)
                 (when (seq bound-results)
                   (merge join-results bound-results))))
             join-results)))))
@@ -713,7 +723,7 @@
           [vars-in-join-order #{} var->index])
          (first))))
 
-(defn- expand-rules [where rule-name->rules]
+(defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
          (if (= :rule type)
            (let [rule-name (:name clause)
@@ -733,26 +743,34 @@
                (when-not (= arity (count (:args clause)))
                  (throw (IllegalArgumentException.
                          (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
-               (let [expanded-rules (for [[rule-args body] rule-args+body
-                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))
-                                                body-vars (->> (collect-vars (normalize-clauses body))
-                                                               (vals)
-                                                               (reduce into #{}))
-                                                body-var->hidden-var (zipmap body-vars
-                                                                             (map gensym body-vars))]]
-                                      (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))]
-                 [[:or-join
-                   (with-meta
-                     {:args (vec (filter logic-var? (:args clause)))
-                      :body (vec (for [expanded-rule expanded-rules]
-                                   [:and expanded-rule]))}
-                     {:rule-name rule-name})]])))
+               ;; TODO: tries to avoid expanding branches that has
+               ;; been seen, does not seem to add anything. Revisit.
+               (let [seen-rule-branches+expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
+                                                             :when (not (get-in @recursion-cache [:seen-rule-branches [rule-name branch-index (:args clause) body]]))
+                                                             :let [rule-arg->query-arg (zipmap rule-args (:args clause))
+                                                                   body-vars (->> (collect-vars (normalize-clauses body))
+                                                                                  (vals)
+                                                                                  (reduce into #{}))
+                                                                   body-var->hidden-var (zipmap body-vars
+                                                                                                (map gensym body-vars))]]
+                                                         [[rule-name (:args clause) body]
+                                                          (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body)])
+                     seen-rule-branches (map first seen-rule-branches+expanded-rules)
+                     expanded-rules (map second seen-rule-branches+expanded-rules)]
+                 (swap! recursion-cache update :seen-rule-branches (fnil into #{}) seen-rule-branches)
+                 (when (seq expanded-rules)
+                   [[:or-join
+                     (with-meta
+                       {:args (vec (filter logic-var? (:args clause)))
+                        :body (vec (for [expanded-rule expanded-rules]
+                                     [:and expanded-rule]))}
+                       {:rule-name rule-name})]]))))
            [sub-clause]))
        (reduce into [])))
 
 (defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules recursion-cache]
   (let [rule-name->rules (group-by (comp :name :head) rules)
-        where (expand-rules where rule-name->rules)
+        where (expand-rules where rule-name->rules recursion-cache)
         {bgp-clauses :bgp
          range-clauses :range
          pred-clauses :pred
