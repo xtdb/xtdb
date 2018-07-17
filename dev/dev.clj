@@ -50,12 +50,15 @@
               kafka-producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
               kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                                  "group.id" group-id})
+              kafka-healthcheck-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
+                                                        "group.id" group-id})
               kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
                                                          "request.timeout.ms" "5000"})
               http-server (srv/create-server
                            kv-store
                            (k/->KafkaTxLog kafka-producer tx-topic doc-topic)
                            db-dir
+                           kafka-healthcheck-consumer
                            (Long/parseLong server-port))]
     (->> {:zookeeper @zookeeper
           :kafka @kafka
