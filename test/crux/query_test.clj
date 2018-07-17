@@ -1308,7 +1308,7 @@
         (t/is (= (q/q db
                       '{:find  [?e2]
                         :where [(follow ?e1 ?e2)]
-                        :args [{:?e1 1}]
+                        :args [{:?e1 :1}]
                         :rules [[(follow ?e1 ?e2)
                                  [?e1 :follow ?e2]]
                                 [(follow ?e1 ?e2)

@@ -680,7 +680,10 @@
             (->> returns
                  (reduce
                   (fn [[vars-in-join-order seen-returns var->index] return]
-                    (let [max-dependent-var-index (->> (map var->index args)
+                    ;; TODO: What is correct here if the argument
+                    ;; isn't in the join? Defaulting to -1 seems like
+                    ;; a patch, not a real fix.
+                    (let [max-dependent-var-index (->> (map #(get var->index % -1) args)
                                                        (reduce max -1))
                           return-index (get var->index return)
                           seen-returns (conj seen-returns return)]
@@ -700,7 +703,7 @@
           [vars-in-join-order #{} var->index])
          (first))))
 
-(defn- expand-rules [where rule-name->rules seen-rules]
+(defn- expand-rules [where rule-name->rules]
   (->> (for [[type clause :as sub-clause] where]
          (if (= :rule type)
            (let [rule-name (:name clause)
@@ -708,9 +711,6 @@
              (when-not rules
                (throw (IllegalArgumentException.
                        (str "Unknown rule: " (pr-str sub-clause)))))
-             (when (contains? seen-rules rule-name)
-               (throw (UnsupportedOperationException.
-                       (str "Cannot do recursive rules yet: " (pr-str sub-clause)))))
              (let [rule-args+body (for [{:keys [head body]} rules]
                                     [(vec (concat (:bound-args head)
                                                   (:args head)))
@@ -724,8 +724,13 @@
                  (throw (IllegalArgumentException.
                          (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
                (let [expanded-rules (for [[rule-args body] rule-args+body
-                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))]]
-                                      (w/postwalk-replace rule-arg->query-arg body))]
+                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))
+                                                body-vars (->> (collect-vars (normalize-clauses body))
+                                                               (vals)
+                                                               (reduce into #{}))
+                                                body-var->hidden-var (zipmap body-vars
+                                                                             (map gensym body-vars))]]
+                                      (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))]
                  [[:or-join
                    {:args (vec (filter logic-var? (:args clause)))
                     :body (vec (for [expanded-rule expanded-rules]
@@ -735,7 +740,7 @@
 
 (defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules]
   (let [rule-name->rules (group-by (comp :name :head) rules)
-        where (expand-rules where rule-name->rules #{})
+        where (expand-rules where rule-name->rules)
         {bgp-clauses :bgp
          range-clauses :range
          pred-clauses :pred
