@@ -223,22 +223,6 @@
 
 (declare build-sub-query)
 
-;; TODO: Needs cleanup. How state is transferred and shared between
-;; sub-query and parent query needs work. Cannot deal with predicates
-;; or not expressions on their own as there's nothing to join on in
-;; that branch. Also needs to pass back vars in join order up, and
-;; parent needs to respect this relative order and merging it into its
-;; own. This also needs to happen across branches, which might require
-;; to have the exact same join order. One potential alternative is to
-;; always put all predicate (and rule) return vars at the end, though
-;; they still need to be reordered based on their dependencies.  Yet
-;; another alternative is to execute the or as a sub-query, and then
-;; directly bind only the or-join vars into a resulting relation.
-;; This would also work for recursive rules, if rule expansion is
-;; postponed, which it will be for recursive rules anyway. The
-;; resulting relations can still us an n-ary or to wrap them up for
-;; the parent query. As they would been realised, there should then be
-;; no dependency between parent and sub-query join order.
 (defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
