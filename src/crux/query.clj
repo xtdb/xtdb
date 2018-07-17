@@ -668,7 +668,7 @@
                 ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
         ors (for [[or-clause [_ [{:keys [free-vars bound-vars]}]]] or-clause->relation+or-branches
                   :when (not-empty free-vars)]
-              ["Or" or-clause free-vars bound-vars])]
+              ["Or" or-clause bound-vars free-vars])]
     (->> (concat preds ors)
          (reduce
           (fn [[vars-in-join-order seen-returns var->index]

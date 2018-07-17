@@ -1269,18 +1269,17 @@
                              [?x :follow ?y]]]})
              #{[:1 :2] [:2 :3] [:3 :4] [:2 :4] [:5 :3] [:4 :6]}))
 
-    ;; TODO: Should work, regression when turning or into sub-query.
     ;; NOTE: Crux does not support vars in attribute position, so
     ;; :follow is explicit.
-    #_(t/testing "Joining regular clauses with rule"
-        (t/is (= (q/q db
-                      '{:find [?y ?x]
-                        :where [[_ :follow ?x]
-                                (rule ?x ?y)
-                                [(crux.query-test/even-kw? ?x)]]
-                        :rules [[(rule ?a ?b)
-                                 [?a :follow ?b]]]})
-                 #{[:3 :2] [:6 :4] [:4 :2]})))
+    (t/testing "Joining regular clauses with rule"
+      (t/is (= (q/q db
+                    '{:find [?y ?x]
+                      :where [[_ :follow ?x]
+                              (rule ?x ?y)
+                              [(crux.query-test/even-kw? ?x)]]
+                      :rules [[(rule ?a ?b)
+                               [?a :follow ?b]]]})
+               #{[:3 :2] [:6 :4] [:4 :2]})))
 
     ;; NOTE: Crux does not support vars in attribute position.
     #_(t/testing "Rule context is isolated from outer context"
@@ -1292,18 +1291,17 @@
                                  [_ ?e _]]]})
                  #{[:follow]})))
 
-    ;; TODO: Should work.
-    #_(t/testing "Rule with branches"
-        (t/is (= (q/q db
-                      '{:find [?e2]
-                        :where [(follow ?e1 ?e2)]
-                        :args [{:?e1 :1}]
-                        :rules [[(follow ?e2 ?e1)
-                                 [?e2 :follow ?e1]]
-                                [(follow ?e2 ?e1)
-                                 [?e2 :follow ?t]
-                                 [?t  :follow ?e1]]]})
-                 #{[:2] [:3] [:4]})))
+    (t/testing "Rule with branches"
+      (t/is (= (q/q db
+                    '{:find [?e2]
+                      :where [(follow ?e1 ?e2)]
+                      :args [{:?e1 :1}]
+                      :rules [[(follow ?e2 ?e1)
+                               [?e2 :follow ?e1]]
+                              [(follow ?e2 ?e1)
+                               [?e2 :follow ?t]
+                               [?t  :follow ?e1]]]})
+               #{[:2] [:3] [:4]})))
 
     ;; TODO: Crux does not currently support recursive rules.
     #_(t/testing "Recursive rules"
@@ -1377,17 +1375,16 @@
                          [:3 :5]
                          [:4 :5]}))))))
 
-    ;; TODO: Should work, regression when turning or into sub-query.
-    #_(t/testing "Passing ins to rule"
-        (t/is (= (q/q db
-                      {:find '[?x ?y]
-                       :where '[(match ?even ?x ?y)]
-                       :rules '[[(match ?pred ?e ?e2)
-                                 [?e :follow ?e2]
-                                 [(?pred ?e)]
-                                 [(?pred ?e2)]]]
-                       :args [{:?even even-kw?}]})
-                 #{[:4 :6] [:2 :4]})))
+    (t/testing "Passing ins to rule"
+      (t/is (= (q/q db
+                    {:find '[?x ?y]
+                     :where '[(match ?even ?x ?y)]
+                     :rules '[[(match ?pred ?e ?e2)
+                               [?e :follow ?e2]
+                               [(?pred ?e)]
+                               [(?pred ?e2)]]]
+                     :args [{:?even even-kw?}]})
+               #{[:4 :6] [:2 :4]})))
 
     (t/testing "Using built-ins inside rule"
       (t/is (= (q/q db
