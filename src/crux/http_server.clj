@@ -4,6 +4,7 @@
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.io :as cio]
+            [crux.kafka :as k]
             [crux.tx :as tx]
             [crux.query :as q]
             [crux.kv-store :as kvs]
@@ -88,14 +89,17 @@
      (catch Exception e#
        (exception-response 400 e#)))) ;;Invalid edn
 
-(defn zk-active? [^KafkaConsumer consumer]
-  (boolean (.listTopics consumer)))
+(defn zk-active? [bootstrap-servers]
+  (with-open [^KafkaConsumer consumer
+              (k/create-consumer
+               {"bootstrap.servers" bootstrap-servers})]
+    (boolean (.listTopics consumer))))
 
 ;; ---------------------------------------------------
 ;; Services
 
-(defn status [kvs db-dir consumer]
-  (let [zk-status (zk-active? consumer)
+(defn status [kvs db-dir bootstrap-servers]
+  (let [zk-status (zk-active? bootstrap-servers)
         status-map {:crux.zk/zk-active? zk-status
                     :crux.kv-store/kv-backend (.getName (class kvs))
                     :crux.kv-store/estimate-num-keys (kvs/count-keys kvs)
@@ -133,10 +137,10 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn handler [kvs tx-log db-dir consumer request]
+(defn handler [kvs tx-log db-dir bootstrap-servers request]
   (cond
     (check-path request ["/"] [:get])
-    (status kvs db-dir consumer)
+    (status kvs db-dir bootstrap-servers)
 
     (check-path request ["/d" "/document"] [:get :post])
     (document kvs request)
@@ -156,8 +160,8 @@
      :body "Unsupported method on this address."}))
 
 (defn ^Closeable create-server
-  ([kvs tx-log db-dir consumer port]
-   (let [server (j/run-jetty (p/wrap-params (partial handler kvs tx-log db-dir consumer))
+  ([kvs tx-log db-dir bootstrap-servers port]
+   (let [server (j/run-jetty (p/wrap-params (partial handler kvs tx-log db-dir bootstrap-servers))
                              {:port port
                               :join? false})]
      (println (str "HTTP server started on port " port))

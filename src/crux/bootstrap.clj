@@ -74,15 +74,13 @@
    (with-open [kv-store (start-kv-store options)
                consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
                                             "group.id" group-id})
-               healthcheck-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                   "group.id" group-id})
                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
                http-server (srv/create-server
                             kv-store
                             (k/->KafkaTxLog producer tx-topic doc-topic)
                             db-dir
-                            healthcheck-consumer
+                            bootstrap-servers
                             (Long/parseLong server-port))]
      (start-system kv-store consumer producer admin-client (delay true) options)))
   ([kv-store consumer producer admin-client running? options]
