@@ -42,58 +42,13 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: -80
-        'y': 690
+        x: 30
+        'y': 640
       z: 1
       embeds: []
       iscontainedinside:
         - e359a9b8-c42e-4ac2-8caf-504cc9187537
         - fdf5cc67-994d-460b-845f-3197a6011cc2
-    62f6ad80-e76a-4a8f-895c-639a8fbefc06:
-      size:
-        width: 60
-        height: 60
-      position:
-        x: 80
-        'y': 390
-      z: 1
-      embeds: []
-    a2ca1df1-021c-4177-ad80-ad78e55f42bb:
-      size:
-        width: 60
-        height: 60
-      position:
-        x: 80
-        'y': 590
-      z: 1
-      embeds: []
-    3fff56ad-4d39-4bd4-b798-3ee82c509c3f:
-      size:
-        width: 60
-        height: 60
-      position:
-        x: 80
-        'y': 790
-      z: 1
-      embeds: []
-    ec200f74-21bc-42b4-9a17-81313e3a8b9f:
-      source:
-        id: 62f6ad80-e76a-4a8f-895c-639a8fbefc06
-      target:
-        id: 39904f27-fd66-49f7-b1b2-e36cfafe0665
-      z: 1
-    5e250539-1d36-4ecc-952b-0a53661e0ebb:
-      source:
-        id: a2ca1df1-021c-4177-ad80-ad78e55f42bb
-      target:
-        id: 1fe48219-2eac-493a-a0d8-10e89173b158
-      z: 1
-    0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c:
-      source:
-        id: 3fff56ad-4d39-4bd4-b798-3ee82c509c3f
-      target:
-        id: 6e698076-8491-4e4a-a516-e3d6f0495467
-      z: 1
     84dbcc5a-6478-4dac-96af-f7bcd6599b96:
       size:
         width: 60
@@ -116,8 +71,8 @@ Metadata:
         width: 60
         height: 60
       position:
-        x: -80
-        'y': 360
+        x: 30
+        'y': 390
       z: 1
       embeds: []
       iscontainedinside:
@@ -165,14 +120,13 @@ Metadata:
         - 21bb524e-3312-4e27-82e8-1727ca71beca
     fdf5cc67-994d-460b-845f-3197a6011cc2:
       size:
-        width: 540
-        height: 990
+        width: 80
+        height: 80
       position:
-        x: 690
-        'y': 150
+        x: 700
+        'y': 450
       z: 1
-      embeds:
-        - 5834e7dc-b729-4ab8-9d3d-c651ec3ee7a4
+      embeds: []
     e016be63-cb5d-458b-93c0-345eb84ddfe1:
       size:
         width: 80
@@ -243,8 +197,7 @@ Metadata:
       position:
         x: 840
         'y': 610
-      z: 2
-      parent: fdf5cc67-994d-460b-845f-3197a6011cc2
+      z: 0
       embeds: []
       iscontainedinside:
         - cafd7374-8fff-4f5e-ac4e-15d333c72587
@@ -265,6 +218,8 @@ Metadata:
         - e016be63-cb5d-458b-93c0-345eb84ddfe1
         - 1eff8c3c-80ca-4582-82a2-a4cfce5f3a8b
         - 21bb524e-3312-4e27-82e8-1727ca71beca
+      dependson:
+        - 4291f6d1-5cd8-4bf1-a823-1101ed64bc8f
     21bb524e-3312-4e27-82e8-1727ca71beca:
       size:
         width: 80
@@ -658,6 +613,7 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - NB=1
             - 'PRIVATE_IP[1]=10.0.1.11'
             - 'PRIVATE_IP[2]=10.0.2.12'
             - 'PRIVATE_IP[3]=10.0.3.13'
@@ -733,7 +689,7 @@ Resources:
             - mkdir -p /stack/crux/data
             - cd /stack/crux
             - >-
-              nohup lein run -b ${PRIVATE_IP[1]}:9093 >
+              nohup lein run -b ${PRIVATE_IP[$NB]}:9093 >
               /stack/crux/data/crux.out &
             - chmod -R 777 /stack
     Metadata:
@@ -759,6 +715,7 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - NB=2
             - 'PRIVATE_IP[1]=10.0.1.11'
             - 'PRIVATE_IP[2]=10.0.2.12'
             - 'PRIVATE_IP[3]=10.0.3.13'
@@ -834,7 +791,7 @@ Resources:
             - mkdir -p /stack/crux/data
             - cd /stack/crux
             - >-
-              nohup lein run -b ${PRIVATE_IP[1]}:9093 >
+              nohup lein run -b ${PRIVATE_IP[$NB]}:9093 >
               /stack/crux/data/crux.out &
             - chmod -R 777 /stack
     DependsOn:
@@ -860,6 +817,7 @@ Resources:
           - |+
 
           - - '#!/bin/bash'
+            - NB=3
             - 'PRIVATE_IP[1]=10.0.1.11'
             - 'PRIVATE_IP[2]=10.0.2.12'
             - 'PRIVATE_IP[3]=10.0.3.13'
@@ -935,7 +893,7 @@ Resources:
             - mkdir -p /stack/crux/data
             - cd /stack/crux
             - >-
-              nohup lein run -b ${PRIVATE_IP[1]}:9093 >
+              nohup lein run -b ${PRIVATE_IP[$NB]}:9093 >
               /stack/crux/data/crux.out &
             - chmod -R 777 /stack
     DependsOn:
@@ -983,66 +941,6 @@ Resources:
     Metadata:
       'AWS::CloudFormation::Designer':
         id: 23f8a230-9990-4562-88f9-882240ba9167
-  VolZK1:
-    Type: 'AWS::EC2::Volume'
-    Properties:
-      AvailabilityZone: !GetAtt 
-        - InstZK1
-        - AvailabilityZone
-      Size: '8'
-      VolumeType: gp2
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 62f6ad80-e76a-4a8f-895c-639a8fbefc06
-  VolZK2:
-    Type: 'AWS::EC2::Volume'
-    Properties:
-      AvailabilityZone: !GetAtt 
-        - InstZK2
-        - AvailabilityZone
-      Size: '8'
-      VolumeType: gp2
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: a2ca1df1-021c-4177-ad80-ad78e55f42bb
-  VolZK3:
-    Type: 'AWS::EC2::Volume'
-    Properties:
-      AvailabilityZone: !GetAtt 
-        - InstZK3
-        - AvailabilityZone
-      Size: '8'
-      VolumeType: gp2
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 3fff56ad-4d39-4bd4-b798-3ee82c509c3f
-  VolAttZK1:
-    Type: 'AWS::EC2::VolumeAttachment'
-    Properties:
-      Device: /dev/sdh
-      InstanceId: !Ref InstZK1
-      VolumeId: !Ref VolZK1
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: ec200f74-21bc-42b4-9a17-81313e3a8b9f
-  VolAttZK2:
-    Type: 'AWS::EC2::VolumeAttachment'
-    Properties:
-      Device: /dev/sdh
-      InstanceId: !Ref InstZK2
-      VolumeId: !Ref VolZK2
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 5e250539-1d36-4ecc-952b-0a53661e0ebb
-  VolAttZK3:
-    Type: 'AWS::EC2::VolumeAttachment'
-    Properties:
-      Device: /dev/sdh
-      InstanceId: !Ref InstZK3
-      VolumeId: !Ref VolZK3
-    Metadata:
-      'AWS::CloudFormation::Designer':
-        id: 0b80e9e6-64dd-4f17-a10e-ec8cda60ca5c
   SGCrux:
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
@@ -1263,8 +1161,10 @@ Resources:
   ELBTargetGroup:
     Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
     Properties:
+      HealthCheckIntervalSeconds: 6
       HealthCheckPath: /
       HealthCheckPort: '3000'
+      HealthCheckTimeoutSeconds: 5
       Matcher:
         HttpCode: '200'
       Port: '3000'
@@ -1276,6 +1176,7 @@ Resources:
           Port: '3000'
         - Id: !Ref InstCrux3
           Port: '3000'
+      UnhealthyThresholdCount: 3
       VpcId: !Ref VPC
     Metadata:
       'AWS::CloudFormation::Designer':
