@@ -1656,20 +1656,12 @@
                [(crux.query-test/kw-less-than? ?e ?e2)]]}
       #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
 
-      ;; TODO: Should work. This is due to grouping of values in the
-      ;; same result, the above test can also be made fail by
-      ;; reordering the names as well. Would work at the leaf
-      ;; level. There's no way currently to constrain tuples, only
-      ;; parts of the result. Needs thought. This is due to all ?e
-      ;; entities for a specific value ?a being returned at the same
-      ;; time in the walk I think.
-
       ;; join with extra symbols
-      ;; {:find [?e ?e2]
-      ;;  :where [[?e  :age ?a]
-      ;;          [?e2 :age ?a2]
-      ;;          [(crux.query-test/kw-less-than? ?e ?e2)]]}
-      ;; #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
+      {:find [?e ?e2]
+       :where [[?e  :age ?a]
+               [?e2 :age ?a2]
+               [(crux.query-test/kw-less-than? ?e ?e2)]]}
+      #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
 
       ;; empty result
       {:find [?e ?e2]
