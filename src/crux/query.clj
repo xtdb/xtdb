@@ -446,14 +446,18 @@
            :type type
            :value? (= :entity-leaf type)})))))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings join-depth pred-clause->relation]
+(defn- calculate-constraint-join-depth [var->bindings e->v-var join-depth vars]
+  (let [join-depths (for [var vars]
+                      (or (get-in var->bindings [var :result-index])
+                          (get-in var->bindings [(get e->v-var var) :result-index])
+                          (dec join-depth)))]
+    (inc (apply max -1 join-depths))))
+
+(defn- build-pred-constraints [object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation]
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? args)
-              pred-join-depths (for [var pred-vars]
-                                 (or (get-in var->bindings [var :result-index])
-                                     (dec join-depth)))
-              pred-join-depth (inc (apply max -1 pred-join-depths))]]
+              pred-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth pred-vars)]]
     (do (doseq [var pred-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -493,12 +497,10 @@
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
-(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache]
+(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings e->v-var join-depth
+                             vars-in-join-order v-var->range-constriants sub-query-result-cache]
   (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
-        :let [or-join-depths (for [var bound-vars]
-                               (or (get-in var->bindings [var :result-index])
-                                   (dec join-depth)))
-              or-join-depth (inc (apply max -1 or-join-depths))
+        :let [or-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               rule-name (:rule-name (meta clause))]]
     (do (doseq [var bound-vars]
@@ -904,9 +906,9 @@
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings sub-query-result-cache)
                                      (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings sub-query-result-cache)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings join-depth pred-clause->relation))
+        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation))
         or-constraints (vec (build-or-constraints snapshot db object-store rules or-clause->relation+or-branches
-                                                  var->bindings join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache))
+                                                  var->bindings e->v-var join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)

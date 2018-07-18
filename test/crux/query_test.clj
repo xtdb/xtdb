@@ -1255,35 +1255,6 @@
 (defn even-kw? [x]
   (even? (Long/parseLong (name x))))
 
-;; TODO: duplicated test from below, for ease of running it on its own
-;; while iterating trying to make it pass.
-#_(t/deftest test-mutal-recursion
-    (f/transact-entity-maps! f/*kv* [{:crux.db/id :0 :f1 :1}
-                                     {:crux.db/id :1 :f2 :2}
-                                     {:crux.db/id :2 :f1 :3}
-                                     {:crux.db/id :3 :f2 :4}
-                                     {:crux.db/id :4 :f1 :5}
-                                     {:crux.db/id :5 :f2 :6}])
-    (let [db (q/db *kv*)]
-      (t/is (= (q/q db
-                    '{:find [?e1 ?e2]
-                      :where [(f1 ?e1 ?e2)]
-                      :rules [[(f1 ?e1 ?e2)
-                               [?e1 :f1 ?e2]]
-                              [(f1 ?e1 ?e2)
-                               [?t :f1 ?e2]
-                               (f2 ?e1 ?t)]
-                              [(f2 ?e1 ?e2)
-                               [?e1 :f2 ?e2]]
-                              [(f2 ?e1 ?e2)
-                               [?t :f2 ?e2]
-                               (f1 ?e1 ?t)]]})
-               #{[:0 :1] [:0 :3] [:0 :5]
-                 [:1 :3] [:1 :5]
-                 [:2 :3] [:2 :5]
-                 [:3 :5]
-                 [:4 :5]}))))
-
 (t/deftest test-rules
   (f/transact-entity-maps! f/*kv* [{:crux.db/id :5 :follow :3}
                                    {:crux.db/id :1 :follow :2}
@@ -1374,35 +1345,34 @@
                                      (follow ?e2 ?e1)]]})
                      #{[:1 :2] [:2 :3] [:3 :1] [:2 :1] [:3 :2] [:1 :3]}))))))
 
-    ;; TODO: Crux does not currently fully support recursive rules.
-    #_(t/testing "Mutually recursive rules"
-        (f/with-kv-store
-          (fn []
-            (f/transact-entity-maps! f/*kv* [{:crux.db/id :0 :f1 :1}
-                                             {:crux.db/id :1 :f2 :2}
-                                             {:crux.db/id :2 :f1 :3}
-                                             {:crux.db/id :3 :f2 :4}
-                                             {:crux.db/id :4 :f1 :5}
-                                             {:crux.db/id :5 :f2 :6}])
-            (let [db (q/db *kv*)]
-              (t/is (= (q/q db
-                            '{:find [?e1 ?e2]
-                              :where [(f1 ?e1 ?e2)]
-                              :rules [[(f1 ?e1 ?e2)
-                                       [?e1 :f1 ?e2]]
-                                      [(f1 ?e1 ?e2)
-                                       [?t :f1 ?e2]
-                                       (f2 ?e1 ?t)]
-                                      [(f2 ?e1 ?e2)
-                                       [?e1 :f2 ?e2]]
-                                      [(f2 ?e1 ?e2)
-                                       [?t :f2 ?e2]
-                                       (f1 ?e1 ?t)]]})
-                       #{[:0 :1] [:0 :3] [:0 :5]
-                         [:1 :3] [:1 :5]
-                         [:2 :3] [:2 :5]
-                         [:3 :5]
-                         [:4 :5]}))))))
+    (t/testing "Mutually recursive rules"
+      (f/with-kv-store
+        (fn []
+          (f/transact-entity-maps! f/*kv* [{:crux.db/id :0 :f1 :1}
+                                           {:crux.db/id :1 :f2 :2}
+                                           {:crux.db/id :2 :f1 :3}
+                                           {:crux.db/id :3 :f2 :4}
+                                           {:crux.db/id :4 :f1 :5}
+                                           {:crux.db/id :5 :f2 :6}])
+          (let [db (q/db *kv*)]
+            (t/is (= (q/q db
+                          '{:find [?e1 ?e2]
+                            :where [(f1 ?e1 ?e2)]
+                            :rules [[(f1 ?e1 ?e2)
+                                     [?e1 :f1 ?e2]]
+                                    [(f1 ?e1 ?e2)
+                                     [?t :f1 ?e2]
+                                     (f2 ?e1 ?t)]
+                                    [(f2 ?e1 ?e2)
+                                     [?e1 :f2 ?e2]]
+                                    [(f2 ?e1 ?e2)
+                                     [?t :f2 ?e2]
+                                     (f1 ?e1 ?t)]]})
+                     #{[:0 :1] [:0 :3] [:0 :5]
+                       [:1 :3] [:1 :5]
+                       [:2 :3] [:2 :5]
+                       [:3 :5]
+                       [:4 :5]}))))))
 
     (t/testing "Passing ins to rule"
       (t/is (= (q/q db
