@@ -345,7 +345,7 @@
             [pred-clause->relation var->joins]))
         [{} var->joins])))
 
-(defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
+(defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses e->v-var vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
                    leaf-var? (contains? e-var->leaf-v-var-clauses e)]]
@@ -553,7 +553,6 @@
                   bound-results (->> (for [[_ bound-result] free-results+bound-results]
                                        bound-result)
                                      (apply merge-with into))]
-
               (when (seq free-results)
                 (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
 
@@ -671,7 +670,7 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-(defn- calculate-join-order [pred-clauses or-clause->relation+or-branches var->joins]
+(defn- calculate-join-order [pred-clauses or-clause->relation+or-branches var->joins e->v-var]
   (let [vars-in-join-order (vec (keys var->joins))
         var->index (zipmap vars-in-join-order (range))
         preds (for [{:keys [pred return] :as pred-clause} pred-clauses
@@ -688,10 +687,12 @@
                  (reduce
                   (fn [[vars-in-join-order seen-returns var->index] return]
                     ;; TODO: What is correct here if the argument
-                    ;; isn't in the join? Removing it seems like a
-                    ;; patch, and not a real fix. It might be as
-                    ;; simple as it's a leaf var.
-                    (let [max-dependent-var-index (->> (map #(get var->index %) args)
+                    ;; isn't in the join? We attempt to fallback to
+                    ;; the v join of a an e, but unsure if this is
+                    ;; correct. Does not work if one sets result-index
+                    ;; to this.
+                    (let [max-dependent-var-index (->> (map #(or (get var->index %)
+                                                                 (get var->index (get e->v-var %))) args)
                                                        (remove nil?)
                                                        (reduce max -1))
                           return-index (get var->index return)
@@ -885,12 +886,14 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause->relation+or-branches var->joins)
+        e->v-var (set/map-invert v-var->e)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause->relation+or-branches var->joins e->v-var)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (build-var-bindings var->attr
                                           v-var->e
                                           var->values-result-index
                                           e-var->leaf-v-var-clauses
+                                          e->v-var
                                           (keys var->attr))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
