@@ -1546,33 +1546,31 @@
                       db)
                  #{})))
 
-    ;; TODO: Should work.
-    #_(t/testing "Rule bindings interacting with function binding. (fn, rule)"
-        (t/is (= (q/q db
-                      '{:find [?n]
-                        :where [[(identity 2) ?n]
-                                (my-vals ?n)]
-                        :rules [[(my-vals ?x)
-                                 [(identity 1) ?x]]
-                                [(my-vals ?x)
-                                 [(identity 2) ?x]]
-                                [(my-vals ?x)
-                                 [(identity 3) ?x]]]})
-                 #{[2]})))
+    (t/testing "Rule bindings interacting with function binding. (fn, rule)"
+      (t/is (= (q/q db
+                    '{:find [?n]
+                      :where [[(identity 2) ?n]
+                              (my-vals ?n)]
+                      :rules [[(my-vals ?x)
+                               [(identity 1) ?x]]
+                              [(my-vals ?x)
+                               [(identity 2) ?x]]
+                              [(my-vals ?x)
+                               [(identity 3) ?x]]]})
+               #{[2]})))
 
-    ;; TODO: Should work.
-    #_(t/testing "Rule bindings interacting with function binding. (rule, fn)"
-        (t/is (= (q/q db
-                      '{:find [?n]
-                        :where [(my-vals ?n)
-                                [(identity 2) ?n]]
-                        :rules [[(my-vals ?x)
-                                 [(identity 1) ?x]]
-                                [(my-vals ?x)
-                                 [(identity 2) ?x]]
-                                [(my-vals ?x)
-                                 [(identity 3) ?x]]]})
-                 #{[2]})))
+    (t/testing "Rule bindings interacting with function binding. (rule, fn)"
+      (t/is (= (q/q db
+                    '{:find [?n]
+                      :where [(my-vals ?n)
+                              [(identity 2) ?n]]
+                      :rules [[(my-vals ?x)
+                               [(identity 1) ?x]]
+                              [(my-vals ?x)
+                               [(identity 2) ?x]]
+                              [(my-vals ?x)
+                               [(identity 3) ?x]]]})
+               #{[2]})))
 
     (t/testing "Conflicting relational bindings with function binding. (rel, fn)"
       (t/is (= (q/q db
