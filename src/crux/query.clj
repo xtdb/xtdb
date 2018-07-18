@@ -456,7 +456,7 @@
 (defn- build-pred-constraints [object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation]
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
-              pred-vars (filter logic-var? args)
+              pred-vars (filter logic-var? (cons pred-fn args))
               pred-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth pred-vars)]]
     (do (doseq [var pred-vars]
           (when (not (contains? var->bindings var))

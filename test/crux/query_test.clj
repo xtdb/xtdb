@@ -1513,14 +1513,13 @@
                #{[{:db/id -1 :age 92 :name "Aaron"}]})))
 
 
-    ;; TODO: Should work.
-    #_(t/testing "Passing predicate as source"
-        (t/is (= (q/q db
-                      {:find '[?e]
-                       :where '[[?e :age ?a]
-                                [(?adult ?a)]]
-                       :args [{:?adult #(> % 18)}]})
-                 #{[:2] [:3]})))
+    (t/testing "Passing predicate as source"
+      (t/is (= (q/q db
+                    {:find '[?e]
+                     :where '[[?e :age ?a]
+                              [(?adult ?a)]]
+                     :args [{:?adult #(> % 18)}]})
+               #{[:2] [:3]})))
 
     (t/testing "Calling a function"
       (t/is (= (q/q db
