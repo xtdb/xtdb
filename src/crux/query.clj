@@ -465,14 +465,15 @@
                          var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
-            (let [pred-result+result-maps (for [args-tuple (if (empty? args)
-                                                             [{}]
-                                                             (cartesian-product
-                                                              (for [arg args]
-                                                                (if (logic-var? arg)
-                                                                  (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                                                  [{:value arg
-                                                                    :literal-arg? true}]))))
+            (let [arg-tuples (if (empty? args)
+                               [{}]
+                               (cartesian-product
+                                (for [arg args]
+                                  (if (logic-var? arg)
+                                    (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                    [{:value arg
+                                      :literal-arg? true}]))))
+                  pred-result+result-maps (for [args-tuple arg-tuples
                                                 :when (or (empty? args-tuple)
                                                           (consistent-tuple? args-tuple))
                                                 pred-fn (if (logic-var? pred-fn)
