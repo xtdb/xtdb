@@ -56,7 +56,7 @@ systems. Sometimes that might not be possible, which might inform the
 decision of feeding those systems in the first place.
 
 This meta-data would likely be part of the schema itself, and stored
-together with either triplets or documents. Not all data might
+together with either triples or documents. Not all data might
 necessarily need this fine grained level of provenance.
 
 + [Ground: A Data Context

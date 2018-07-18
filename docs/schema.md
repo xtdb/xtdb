@@ -2,35 +2,35 @@
 
 **Note: in
 [RDF](https://en.wikipedia.org/wiki/Resource_Description_Framework), a
-triplet is made up of Subject Predicate Object, in Datomic the same
+triple is made up of Subject Predicate Object, in Datomic the same
 thing is called Entity Attribute Value.**
 
-### Triplets, Documents and Property Graphs
+### Triples, Documents and Property Graphs
 
-Crux will deal with entities as either a triplets or documents. The
-identifier in the subject position in the triplet represents its
+Crux will deal with entities as either a triples or documents. The
+identifier in the subject position in the triple represents its
 entity. In a document store, each document would be represented as
-versions of this same entity. In a triplet store the document is
+versions of this same entity. In a triple store the document is
 implicit, being all predicates reachable from an entity.
 
-The triplets, or the properties of the documents, can be connected to
+The triples, or the properties of the documents, can be connected to
 other entities in a graph. For more about this, see
 [query](query.md).
 
-One reason to use documents and not triplets, is that triplets are
+One reason to use documents and not triples, is that triples are
 really an implementation detail, and users are likely to think about
 distinct versions of entities, like when using the map form in
-Datomic. When allowing access to the triplets themselves, the user can
+Datomic. When allowing access to the triples themselves, the user can
 create a new version of an entity "by mistake" without seeing the full
 state of the resulting entity.
 
-The triplets will further need at least bitemporal query support, see
+The triples will further need at least bitemporal query support, see
 [bitemp](bitemp.md) and the ability to build various forms of
 retention and provenance models on top of the raw data, see
 [retention](retention.md).
 
 This idea of documents above is close to the main other graph model,
-apart from triplets like in RDF, Property Graphs, see the relevant
+apart from triples like in RDF, Property Graphs, see the relevant
 documentation for
 [TinkerPop](http://tinkerpop.apache.org/docs/current/reference/#intro)
 and
@@ -56,12 +56,12 @@ data.
 
 As nodes are entities which can have any number of properties, they
 can be seen as documents, while relationships are similar to indexed
-properties linking documents together. When using triplets
+properties linking documents together. When using triples
 relationships are predicates (attributes in Datomic), which cannot
 have properties of their own (per instance). This must be modelled by
 introducing an indirect entity.
 
-**Triplets are the most expressive model, but documents easier to
+**Triples are the most expressive model, but documents easier to
 reason about for the user.**
 
 **Note: we're not talking about large binary documents here, just
@@ -84,7 +84,7 @@ attributes in a
 [Hexastore](https://redis.io/topics/indexes#representing-and-querying-graphs-using-an-hexastore)
 style. More likely the schema will know at least of the URI or
 references to other entities, as indexing all 6 permutations of each
-triplet takes up lot of space.
+triple takes up lot of space.
 
 The scalar data types can further be modelled closely on Datomic and
 the EDN data model, or say XML Schema to stay closer to RDF. Most
@@ -97,7 +97,7 @@ add their own types.
 ### Non-scalar Types
 
 In Datomic one can have an attribute with cardinality many, which
-effectively makes it behave like a set, allowing multiple triplets at
+effectively makes it behave like a set, allowing multiple triples at
 the same entity/attribute. This is problematic for various
 reasons. For example, you need to explicitly remove all elements of
 the set if you want to replace it. Another issue is that you cannot
@@ -108,7 +108,7 @@ In a document store, simple container data types, like lists, sets,
 maps, and even nested component types, can be more easier defined and
 reasoned about. A new version of a document always represent the
 entire state. The underlying implementation can then choose to use
-deltas or triplets to model this.
+deltas or triples to model this.
 
 Another issue with predicates that have multiple values, is that it
 complicates indexing (and hence queries) in a bitemporal setting, as

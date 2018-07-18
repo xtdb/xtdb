@@ -121,9 +121,9 @@ version as of a specific transaction time as well. Both these filters
 might end up returning nothing.
 
 The visibility of the event horizon gets further complicated in the
-case of using triplets, as in this case a single entity might been
+case of using triples, as in this case a single entity might been
 written and updated over time to compose the current version by many
-triplets, each written at different times, and potentially also
+triples, each written at different times, and potentially also
 corrected.
 
 What data that can be seen can be further limited by
