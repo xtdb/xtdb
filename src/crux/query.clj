@@ -504,9 +504,8 @@
                                                                  {result-name #{value}}
                                                                  (bound-result->join-result result)))
                                                              (apply merge-with into))
-                                                        (->> (for [[arg {:keys [value type]}] (map vector args args-tuple)
-                                                                   :when (and (logic-var? arg)
-                                                                              (not (= :entity-leaf type)))]
+                                                        (->> (for [[arg {:keys [value literal-arg?]}] (map vector args args-tuple)
+                                                                   :when (not literal-arg?)]
                                                                [arg value])
                                                              (into {}))])]
               (when return
@@ -518,9 +517,10 @@
               (when-let [join-results (some->> (mapv second pred-result+result-maps+args-tuple)
                                                (apply merge-with into)
                                                (merge join-results))]
-                (vary-meta join-results update :valid-sub-tuple-groups (fnil conj [])
-                           (set (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
-                                  args-tuple)))))
+                (->> (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
+                       args-tuple)
+                     (set)
+                     (vary-meta join-results update :valid-sub-tuple-groups conj))))
             join-results)))))
 
 ;; TODO: potentially the way to do this is to pass join results down
