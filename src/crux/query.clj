@@ -345,7 +345,7 @@
             [pred-clause->relation var->joins]))
         [{} var->joins])))
 
-(defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses e->v-var vars]
+(defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
                    leaf-var? (contains? e-var->leaf-v-var-clauses e)]]
@@ -689,8 +689,9 @@
                     ;; TODO: What is correct here if the argument
                     ;; isn't in the join? We attempt to fallback to
                     ;; the v join of a an e, but unsure if this is
-                    ;; correct. Does not work if one sets result-index
-                    ;; to this.
+                    ;; correct. Does not work to set result-index to
+                    ;; this, as this is used as an index into
+                    ;; join-keys which contains the real value.
                     (let [max-dependent-var-index (->> (map #(or (get var->index %)
                                                                  (get var->index (get e->v-var %))) args)
                                                        (remove nil?)
@@ -893,7 +894,6 @@
                                           v-var->e
                                           var->values-result-index
                                           e-var->leaf-v-var-clauses
-                                          e->v-var
                                           (keys var->attr))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
