@@ -623,7 +623,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings sub-query-result-cache]
+(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings join-depth sub-query-result-cache]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -638,39 +638,41 @@
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
-          (let [args (vec (for [tuple (cartesian-product
-                                       (for [var not-vars]
-                                         (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                :when (and (consistent-tuple? tuple)
-                                           (valid-sub-tuple? join-results tuple))]
-                            (zipmap not-vars (map :value tuple))))
-                parent-join-keys join-keys
-                parent-var->bindings var->bindings
-                {:keys [n-ary-join
-                        var->bindings
-                        var->joins]} (build-sub-query snapshot db [] not-clause args rules sub-query-result-cache)]
-            (->> (doc/layered-idx->seq n-ary-join (count var->joins))
-                 (reduce
-                  (fn [parent-join-results [join-keys join-results]]
-                    (let [results (for [var not-vars]
-                                    (bound-results-for-var object-store var->bindings join-keys join-results var))
-                          not-var->values (zipmap not-vars
-                                                  (for [result results]
-                                                    (->> result
-                                                         (map :value)
-                                                         (set))))
-                          results-to-remove (->> (for [[var not-vs] not-var->values
-                                                       :let [parent-results (bound-results-for-var object-store parent-var->bindings
-                                                                                                   parent-join-keys parent-join-results var)]
-                                                       {:keys [value] :as result} parent-results
-                                                       :when (contains? not-vs value)]
-                                                   (bound-result->join-result result))
-                                                 (apply merge-with into))]
-                      (some->> (merge-with set/difference parent-join-results results-to-remove)
-                               (filter (comp seq val))
-                               (not-empty)
-                               (into {}))))
-                  join-results)))))))
+          (if (= (count join-keys) join-depth)
+            (let [args (vec (for [tuple (cartesian-product
+                                         (for [var not-vars]
+                                           (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                  :when (and (consistent-tuple? tuple)
+                                             (valid-sub-tuple? join-results tuple))]
+                              (zipmap not-vars (map :value tuple))))
+                  parent-join-keys join-keys
+                  parent-var->bindings var->bindings
+                  {:keys [n-ary-join
+                          var->bindings
+                          var->joins]} (build-sub-query snapshot db [] not-clause args rules sub-query-result-cache)]
+              (->> (doc/layered-idx->seq n-ary-join (count var->joins))
+                   (reduce
+                    (fn [parent-join-results [join-keys join-results]]
+                      (let [results (for [var not-vars]
+                                      (bound-results-for-var object-store var->bindings join-keys join-results var))
+                            not-var->values (zipmap not-vars
+                                                    (for [result results]
+                                                      (->> result
+                                                           (map :value)
+                                                           (set))))
+                            results-to-remove (->> (for [[var not-vs] not-var->values
+                                                         :let [parent-results (bound-results-for-var object-store parent-var->bindings
+                                                                                                     parent-join-keys parent-join-results var)]
+                                                         {:keys [value] :as result} parent-results
+                                                         :when (contains? not-vs value)]
+                                                     (bound-result->join-result result))
+                                                   (apply merge-with into))]
+                        (some->> (merge-with set/difference parent-join-results results-to-remove)
+                                 (filter (comp seq val))
+                                 (not-empty)
+                                 (into {}))))
+                    join-results)))
+            join-results)))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
   (when (->> (for [pred unification-preds]
@@ -678,23 +680,13 @@
              (every? true?))
     join-results))
 
-(defn- constrain-join-result-by-not [not-constraints join-depth join-keys join-results]
-  (if (= (count join-keys) join-depth)
-    (reduce
-     (fn [results not-constraint]
-       (when results
-         (not-constraint join-keys results)))
-     join-results
-     not-constraints)
-    join-results))
-
-(defn- constrain-join-result-by-preds [pred-constraints join-keys join-results]
+(defn- constrain-join-result-by-constraints [constraints join-keys join-results]
   (reduce
-   (fn [results pred-constraint]
+   (fn [results constraint]
      (when results
-       (pred-constraint join-keys results)))
+       (constraint join-keys results)))
    join-results
-   pred-constraints))
+   constraints))
 
 (defn- constrain-join-result-by-join-keys [var->bindings shared-e-v-vars join-keys join-results]
   (->> (for [e-var shared-e-v-vars
@@ -941,8 +933,8 @@
                                (merge (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
                                       var->bindings)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings sub-query-result-cache)
-                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings sub-query-result-cache)))
+        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
+                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation))
         or-constraints (vec (build-or-constraints snapshot db object-store rules or-clause->relation+or-branches
                                                   var->bindings e->v-var join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache))
@@ -951,9 +943,9 @@
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
                                        (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
                                        (constrain-join-result-by-unification unification-preds max-ks)
-                                       (constrain-join-result-by-not not-constraints join-depth max-ks)
-                                       (constrain-join-result-by-preds pred-constraints max-ks)
-                                       (constrain-join-result-by-preds or-constraints max-ks)))
+                                       (constrain-join-result-by-constraints not-constraints max-ks)
+                                       (constrain-join-result-by-constraints pred-constraints max-ks)
+                                       (constrain-join-result-by-constraints or-constraints max-ks)))
         joins (map var->joins vars-in-join-order)]
     (when (or or-joins-only? pred-joins-only? (= 1 (count joins)))
       (constrain-result-fn [] []))
