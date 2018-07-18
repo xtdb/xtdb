@@ -1,9 +1,6 @@
 #!/bin/bash
 
-NB=1
-PRIVATE_IP[1]=172.31.0.11
-PRIVATE_IP[2]=172.31.0.12
-PRIVATE_IP[3]=172.31.0.13
+KAFKA_LB_DNS=????
 
 yum update -y
 
@@ -79,6 +76,6 @@ git clone git@github.com:juxt/crux.git /stack/crux
 
 mkdir -p /stack/crux/data
 cd /stack/crux
-nohup lein run -b ${PRIVATE_IP[$NB]}:9093 > /stack/crux/data/crux.out &
+lein run -b $KAFKA_LB_DNS:9093 > /stack/crux/data/crux.out &
 
 chmod -R 777 /stack

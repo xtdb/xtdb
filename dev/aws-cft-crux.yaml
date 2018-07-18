@@ -1,0 +1,127 @@
+Parameters:
+  SSHKeyPair:
+    Type: String
+  VPC:
+    Type: String
+  MinCruxBoxes:
+    Type: String
+    AllowedPattern: '[\d]+'
+  MaxCruxBoxes:
+    Type: String
+    AllowedPattern: '[\d]+'
+Resources:
+  CruxSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: CruxSG
+      GroupDescription: 'Accept requests for Crux, HTTP, SSH, and ping'
+      SecurityGroupIngress:
+        - Description: ping
+          IpProtocol: icmp
+          CidrIp: 0.0.0.0/0
+          FromPort: '8'
+          ToPort: '-1'
+        - Description: SSH
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '22'
+          ToPort: '22'
+        - Description: HTTP
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '80'
+          ToPort: '80'
+        - Description: HTTPS
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '443'
+          ToPort: '443'
+        - Description: Crux HTTP server
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '3000'
+          ToPort: '3000'
+      VpcId: !Ref VPC
+  CruxSN1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      CidrBlock: 10.2.1.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  CruxSN2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+      CidrBlock: 10.2.2.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  CruxSN3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+      CidrBlock: 10.2.3.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  CruxLB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: CruxLB
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref CruxSG
+      Subnets:
+        - !Ref CruxSN1
+        - !Ref CruxSN2
+        - !Ref CruxSN3
+      Type: application
+  CruxLBTG:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckPort: '3000'
+      HealthCheckTimeoutSeconds: 5
+      Matcher:
+        HttpCode: '200'
+      Port: '3000'
+      Protocol: HTTP
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+  CruxLBL:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref CruxLBTG
+          Type: forward
+      LoadBalancerArn: !Ref CruxLB
+      Port: '3000'
+      Protocol: HTTP
+  CruxLC:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      AssociatePublicIpAddress: false
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      SecurityGroups:
+        - !Ref CruxSG
+  CruxASG:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AutoScalingGroupName: CruxASG
+      LaunchConfigurationName: CruxLC
+      MaxSize: !Ref MaxCruxBoxes
+      MinSize: !Ref MinCruxBoxes
+      TargetGroupARNs:
+        - CruxLBTG
+      VPCZoneIdentifier:
+        - CruxSN1
+        - CruxSN2
+        - CruxSN3

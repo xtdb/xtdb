@@ -1,0 +1,81 @@
+Parameters:
+  SSHKeyPair:
+    Type: String
+  VPC:
+    Type: String
+  MinKafkaBoxes:
+    Type: String
+    AllowedPattern: '[\d]+'
+  MaxKafkaBoxes:
+    Type: String
+    AllowedPattern: '[\d]+'
+Resources:
+  KafkaSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: KafkaSG
+      GroupDescription: 'Accept requests for Kafka, SSH, and ping'
+      SecurityGroupIngress:
+        - Description: ping
+          IpProtocol: icmp
+          CidrIp: 0.0.0.0/0
+          FromPort: '8'
+          ToPort: '-1'
+        - Description: SSH
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '22'
+          ToPort: '22'
+        - Description: Kafka
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '9092'
+          ToPort: '9095'
+      VpcId: !Ref VPC
+  KafkaSN1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      CidrBlock: 10.1.1.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  KafkaSN2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+      CidrBlock: 10.1.2.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  KafkaSN3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+      CidrBlock: 10.1.3.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  KafkaLC:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      AssociatePublicIpAddress: false
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      SecurityGroups:
+        - !Ref KafkaSG
+  KafkaASG:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AutoScalingGroupName: KafkaASG
+      LaunchConfigurationName: KafkaLC
+      MaxSize: !Ref MaxKafkaBoxes
+      MinSize: !Ref MinKafkaBoxes
+      VPCZoneIdentifier:
+        - KafkaSN1
+        - KafkaSN2
+        - KafkaSN3

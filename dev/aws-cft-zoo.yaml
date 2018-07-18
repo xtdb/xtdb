@@ -1,0 +1,165 @@
+Parameters:
+  SSHKeyPair:
+    Type: String
+  VPC:
+    Type: String
+Resources:
+  ZooSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupName: ZooSG
+      GroupDescription: 'Accept requests for Zookeeper, SSH, and ping'
+      SecurityGroupIngress:
+        - Description: ping
+          IpProtocol: icmp
+          CidrIp: 0.0.0.0/0
+          FromPort: '8'
+          ToPort: '-1'
+        - Description: SSH
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '22'
+          ToPort: '22'
+        - Description: Zookeeper
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '2181'
+          ToPort: '2181'
+        - Description: Zookeeper (connect to leader)
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '2888'
+          ToPort: '2888'
+        - Description: Zookeeper (leader election)
+          IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: '3888'
+          ToPort: '3888'
+      VpcId: !Ref VPC
+  ZooSN1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  ZooSN2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  ZooSN3:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: !Select
+        - 2
+        - !GetAZs
+      CidrBlock: 10.0.3.0/24
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref VPC
+  ZooNI1:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref ZooSG
+      PrivateIpAddress: 10.0.1.11
+      SubnetId: !Ref ZooSN1
+  ZooNI2:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref ZooSG
+      PrivateIpAddress: 10.0.1.12
+      SubnetId: !Ref ZooSN1
+  ZooNI3:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref ZooSG
+      PrivateIpAddress: 10.0.2.11
+      SubnetId: !Ref ZooSN2
+  ZooNI4:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref ZooSG
+      PrivateIpAddress: 10.0.2.12
+      SubnetId: !Ref ZooSN2
+  ZooNI5:
+    Type: 'AWS::EC2::NetworkInterface'
+    Properties:
+      GroupSet:
+        - !Ref ZooSG
+      PrivateIpAddress: 10.0.3.11
+      SubnetId: !Ref ZooSN3
+  ZooBox1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ZooNI1
+      Tags:
+        - Key: Name
+          Value: ZooBox1
+  ZooBox2:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ZooNI2
+      Tags:
+        - Key: Name
+          Value: ZooBox2
+  ZooBox3:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ZooNI3
+      Tags:
+        - Key: Name
+          Value: ZooBox3
+  ZooBox4:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ZooNI4
+      Tags:
+        - Key: Name
+          Value: ZooBox4
+  ZooBox5:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      ImageId: ami-a36f8dc4
+      InstanceType: t2.small
+      KeyName: !Ref SSHKeyPair
+      NetworkInterfaces:
+        - DeleteOnTermination: false
+          DeviceIndex: '0'
+          NetworkInterfaceId: !Ref ZooNI5
+      Tags:
+        - Key: Name
+          Value: ZooBox5

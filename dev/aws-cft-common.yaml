@@ -1,0 +1,106 @@
+Parameters:
+  SSHKeyPair:
+    Description: Name of an existing EC2 KeyPair to use for instance SSH access.
+    Type: String
+  VPCID:
+    Description: ID of an existing VPC to use. If blank, one will be created.
+    Type: String
+  SetupBucketURL:
+    Description: URL of an S3 bucket folder containing other Crux setup files.
+    Type: String
+  MinKafkaBoxes:
+    Default: 2
+    Type: String
+    AllowedPattern: '[\d]*'
+    ConstraintDescription: Must be a positive integer.
+  MaxKafkaBoxes:
+    Default: 5
+    Type: String
+    AllowedPattern: '[\d]*'
+    ConstraintDescription: Must be a positive integer.
+  MinCruxBoxes:
+    Default: 2
+    Type: String
+    AllowedPattern: '[\d]*'
+    ConstraintDescription: Must be a positive integer.
+  MaxCruxBoxes:
+    Default: 5
+    Type: String
+    AllowedPattern: '[\d]*'
+    ConstraintDescription: Must be a positive integer.
+Conditions:
+  CreateVPC: !Equals [ !Ref VPCID, '' ]
+Resources:
+  CommonVPC:
+    Condition: CreateVPC
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: CruxCommonVPC
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties: {}
+  VPCGAttachment:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+      InternetGatewayId: !Ref InternetGateway
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+  RouteToInternet:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref RouteTable
+    DependsOn:
+      - InternetGateway
+  ZooStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        SSHKeyPair: !Ref SSHKeyPair
+        VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+      Tags:
+        - Key: Name
+          Value: ZooStack
+      TemplateURL: !Join
+        - '/'
+        - - !Ref SetupBucketURL
+          - 'aws-cft-zk.yaml'
+  KafkaStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        SSHKeyPair: !Ref SSHKeyPair
+        VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+        MinKafkaBoxes: !Ref MinKafkaBoxes
+        MaxKafkaBoxes: !Ref MaxKafkaBoxes
+      Tags:
+        - Key: Name
+          Value: KafkaStack
+      TemplateURL: !Join
+        - '/'
+        - - !Ref SetupBucketURL
+          - 'aws-cft-kafka.yaml'
+  CruxStack:
+    Type: 'AWS::CloudFormation::Stack'
+    Properties:
+      Parameters:
+        SSHKeyPair: !Ref SSHKeyPair
+        VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+        MinKafkaBoxes: !Ref MinCruxBoxes
+        MaxKafkaBoxes: !Ref MaxCruxBoxes
+      Tags:
+        - Key: Name
+          Value: CruxStack
+      TemplateURL: !Join
+        - '/'
+        - - !Ref SetupBucketURL
+          - 'aws-cft-crux.yaml'
