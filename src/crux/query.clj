@@ -465,19 +465,26 @@
                          var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
-            (let [pred-result+result-maps (for [args-tuple (cartesian-product
-                                                            (for [arg args]
-                                                              (if (logic-var? arg)
-                                                                (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                                                [{:value arg
-                                                                  :literal-arg? true}])))
-                                                :when (consistent-tuple? args-tuple)
+            (let [pred-result+result-maps (for [args-tuple (if (empty? args)
+                                                             [{}]
+                                                             (cartesian-product
+                                                              (for [arg args]
+                                                                (if (logic-var? arg)
+                                                                  (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                                                  [{:value arg
+                                                                    :literal-arg? true}]))))
+                                                :when (or (empty? args-tuple)
+                                                          (consistent-tuple? args-tuple))
                                                 pred-fn (if (logic-var? pred-fn)
                                                           (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
                                                           [pred-fn])
                                                 :let [pred-result (apply pred-fn (map :value args-tuple))]
                                                 :when pred-result
-                                                {:keys [result-name value type literal-arg?] :as result} args-tuple
+                                                {:keys [result-name value type literal-arg?] :as result} (if (empty? args-tuple)
+                                                                                                           {:value pred-result
+                                                                                                            :result-name (symbol "crux.query.pred" (name return))
+                                                                                                            :type :entity-leaf}
+                                                                                                           args-tuple)
                                                 :when (not literal-arg?)]
                                             [pred-result (if (= :entity-leaf type)
                                                            {result-name #{value}}
@@ -862,6 +869,7 @@
                               var->joins
                               business-time
                               transact-time)
+        pred-joins-only? (empty? var->joins)
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         or-joins-only? (empty? var->joins)
         known-vars (set/union e-vars v-vars pred-vars arg-vars)
@@ -918,8 +926,10 @@
                                        (constrain-join-result-by-preds pred-constraints max-ks)
                                        (constrain-join-result-by-preds or-constraints max-ks)))
         joins (map var->joins vars-in-join-order)]
-    (when or-joins-only?
+    (when (and or-joins-only? (not (seq pred-clauses)))
       (constrain-join-result-by-preds or-constraints [] []))
+    (when (and pred-joins-only? (not (seq or-join-clause->relation+or-branches)))
+      (constrain-join-result-by-preds pred-constraints [] []))
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))

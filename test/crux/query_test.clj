@@ -1426,3 +1426,294 @@
                    :where '[(is ?id false)]
                    :rules rules})
              #{[:2]}))))
+
+(defn- even-or-nil? [x]
+  (when (even? x)
+    x))
+
+(t/deftest data-script-test-query-fns
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :name "Ivan" :age 15}
+                                   {:crux.db/id :2 :name "Petr" :age 22 :height 240 :parent :1}
+                                   {:crux.db/id :3 :name "Slava" :age 37 :parent :2}])
+  (let [db (q/db *kv*)]
+    (t/testing "predicate without free variables"
+      (t/is (= (q/q db
+                    '{:find [?x]
+                      :args [{:?x :a}
+                             {:?x :b}
+                             {:?x :c}]
+                      :where [[(> 2 1)]]})
+               #{[:a] [:b] [:c]})))
+
+    ;; NOTE: Crux does not support these functions.
+    #_(t/testing "ground"
+        (t/is (= (d/q '[:find ?vowel
+                        :where [(ground [:a :e :i :o :u]) [?vowel ...]]])
+                 #{[:a] [:e] [:i] [:o] [:u]})))
+
+    #_(t/testing "get-else"
+        (t/is (= (d/q '[:find ?e ?age ?height
+                        :where [?e :age ?age]
+                        [(get-else $ ?e :height 300) ?height]] db)
+                 #{[1 15 300] [2 22 240] [3 37 300]}))
+
+        (t/is (thrown-with-msg? ExceptionInfo #"get-else: nil default value is not supported"
+                                (d/q '[:find ?e ?height
+                                       :where [?e :age]
+                                       [(get-else $ ?e :height nil) ?height]] db))))
+
+    #_(t/testing "get-some"
+        (t/is (= (d/q '[:find ?e ?a ?v
+                        :where [?e :name _]
+                        [(get-some $ ?e :height :age) [?a ?v]]] db)
+                 #{[1 :age 15]
+                   [2 :height 240]
+                   [3 :age 37]})))
+
+    #_(t/testing "missing?"
+        (t/is (= (q/q '[:find ?e ?age
+                        :in $
+                        :where [?e :age ?age]
+                        [(missing? $ ?e :height)]] db)
+                 #{[1 15] [3 37]})))
+
+    #_(t/testing "missing? back-ref"
+        (t/is (= (q/q '[:find ?e
+                        :in $
+                        :where [?e :age ?age]
+                        [(missing? $ ?e :_parent)]] db)
+                 #{[3]})))
+
+    (t/testing "Built-ins"
+      (t/is (= (q/q db
+                    '{:find [?e1 ?e2]
+                      :where [[?e1 :age ?a1]
+                              [?e2 :age ?a2]
+                              [(< ?a1 18 ?a2)]]})
+               #{[:1 :2] [:1 :3]}))
+
+      (t/is (= (q/q db
+                    '{:find [?x ?c]
+                      :args [{:?x "a"}
+                             {:?x "abc"}]
+                      :where [[(count ?x) ?c]]})
+               #{["a" 1] ["abc" 3]})))
+
+    ;; TODO: Should work.
+    #_(t/testing "Built-in vector, hashmap"
+        (t/is (= (q/q db
+                      '{:find [?tx-data]
+                        :where [[(identity :db/add) ?op]
+                                [(vector ?op -1 :attr 12) ?tx-data]]})
+                 #{[[:db/add -1 :attr 12]]}))
+
+        (t/is (= (q/q db
+                      '{:find [?tx-data]
+                        :where
+                        [[(hash-map :db/id -1 :age 92 :name "Aaron") ?tx-data]]})
+                 #{[{:db/id -1 :age 92 :name "Aaron"}]})))
+
+
+    ;; TODO: Should work.
+    #_(t/testing "Passing predicate as source"
+        (t/is (= (q/q db
+                      {:find '[?e]
+                       :where '[[?e :age ?a]
+                                [(?adult ?a)]]
+                       :args [{:?adult #(> % 18)}]})
+                 #{[:2] [:3]})))
+
+    (t/testing "Calling a function"
+      (t/is (= (q/q db
+                    '{:find [?e1 ?e2 ?e3]
+                      :where [[?e1 :age ?a1]
+                              [?e2 :age ?a2]
+                              [?e3 :age ?a3]
+                              [(+ ?a1 ?a2) ?a12]
+                              [(= ?a12 ?a3)]]})
+               #{[:1 :2 :3] [:2 :1 :3]})))
+
+    (t/testing "Two conflicting function values for one binding."
+      (t/is (= (q/q db
+                    '{:find [?n]
+                      :where [[(identity 1) ?n]
+                              [(identity 2) ?n]]})
+               #{})))
+
+    ;; NOTE: Crux does not currently support destructuring.
+    #_(t/testing "Destructured conflicting function values for two bindings."
+        (t/is (= (d/q '[:find  ?n ?x
+                        :where [(identity [3 4]) [?n ?x]]
+                        [(identity [1 2]) [?n ?x]]]
+                      db)
+                 #{})))
+
+    ;; TODO: Should work.
+    #_(t/testing "Rule bindings interacting with function binding. (fn, rule)"
+        (t/is (= (q/q db
+                      '{:find [?n]
+                        :where [[(identity 2) ?n]
+                                (my-vals ?n)]
+                        :rules [[(my-vals ?x)
+                                 [(identity 1) ?x]]
+                                [(my-vals ?x)
+                                 [(identity 2) ?x]]
+                                [(my-vals ?x)
+                                 [(identity 3) ?x]]]})
+                 #{[2]})))
+
+    ;; TODO: Should work.
+    #_(t/testing "Rule bindings interacting with function binding. (rule, fn)"
+        (t/is (= (q/q db
+                      '{:find [?n]
+                        :where [(my-vals ?n)
+                                [(identity 2) ?n]]
+                        :rules [[(my-vals ?x)
+                                 [(identity 1) ?x]]
+                                [(my-vals ?x)
+                                 [(identity 2) ?x]]
+                                [(my-vals ?x)
+                                 [(identity 3) ?x]]]})
+                 #{[2]})))
+
+    (t/testing "Conflicting relational bindings with function binding. (rel, fn)"
+      (t/is (= (q/q db
+                    '{:find [?age]
+                      :where [[_ :age ?age]
+                              [(identity 100) ?age]]})
+               #{})))
+
+    (t/testing "Conflicting relational bindings with function binding. (fn, rel)"
+      (t/is (= (q/q db
+                    '{:find [?age]
+                      :where [[(identity 100) ?age]
+                              [_ :age ?age]]})
+               #{})))
+
+    (t/testing "Function on empty rel"
+      (t/is (= (q/q db
+                    '{:find [?e ?y]
+                      :where [[?e :salary ?x]
+                              [(+ ?x 100) ?y]
+                              [:0 :age 15]
+                              [:1 :age 35]]})
+               #{})))
+
+    (t/testing "Returning nil from function filters out tuple from result"
+      (t/is (= (q/q db
+                    {:find '[?x]
+                     :where '[[(crux.query-test/even-or-nil? ?in) ?x]]
+                     :args [{:?in 1}
+                            {:?in 2}
+                            {:?in 3}
+                            {:?in 4}]})
+               #{[2] [4]})))
+
+    ;; NOTE: Crux does not currently support destructuring.
+    #_(t/testing "Result bindings"
+        (t/is (= (d/q '[:find ?a ?c
+                        :in ?in
+                        :where [(ground ?in) [?a _ ?c]]]
+                      [:a :b :c])
+                 #{[:a :c]}))
+
+        (t/is (= (d/q '[:find ?in
+                        :in ?in
+                        :where [(ground ?in) _]]
+                      :a)
+                 #{[:a]}))
+
+        (t/is (= (d/q '[:find ?x ?z
+                        :in ?in
+                        :where [(ground ?in) [[?x _ ?z]...]]]
+                      [[:a :b :c] [:d :e :f]])
+                 #{[:a :c] [:d :f]}))
+
+        (t/is (= (d/q '[:find ?in
+                        :in [?in ...]
+                        :where [(ground ?in) _]]
+                      [])
+                 #{})))))
+
+
+(defn kw-less-than? [x y]
+  (< (Long/parseLong (name x))
+     (Long/parseLong (name y))))
+
+(t/deftest datascript-test-predicates
+  (f/transact-entity-maps! f/*kv*[{:crux.db/id :1 :name "Ivan" :age 10}
+                                  {:crux.db/id :2 :name "Ivan" :age 20}
+                                  {:crux.db/id :3 :name "Oleg" :age 10}
+                                  {:crux.db/id :4 :name "Oleg" :age 20}])
+  (let [db (q/db *kv*)]
+    (t/are [q res] (= (q/q db (quote q)) res)
+      ;; plain predicate
+      {:find [?e ?a]
+       :where [[?e :age ?a]
+               [(> ?a 10)]]}
+      #{[:2 20] [:4 20]}
+
+      ;; join in predicate
+      {:find [?e ?e2]
+       :where [[?e  :name]
+               [?e2 :name]
+               [(crux.query-test/kw-less-than? ?e ?e2)]]}
+      #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
+
+      ;; TODO: Should work.
+      ;; join with extra symbols
+      ;; {:find [?e ?e2]
+      ;;  :where [[?e  :age ?a]
+      ;;          [?e2 :age ?a2]
+      ;;          [(crux.query-test/kw-less-than? ?e ?e2)]]}
+      ;; #{[:1 :2] [:1 :3] [:1 :4] [:2 :3] [:2 :4] [:3 :4]}
+
+      ;; empty result
+      {:find [?e ?e2]
+       :where [[?e  :name "Ivan"]
+               [?e2 :name "Oleg"]
+               [(= ?e ?e2)]]}
+      #{}
+
+      ;; pred over const, true
+      {:find [?e]
+       :where [[?e :name "Ivan"]
+               [?e :age 20]
+               [(= ?e :2)]]}
+      #{[:2]}
+
+      ;; pred over const, false
+      {:find [?e]
+       :where [[?e :name "Ivan"]
+               [?e :age 20]
+               [(= ?e :1)]]}
+      #{})
+
+    ;; NOTE: Crux does not support source vars.
+    #_(let [pred (fn [db e a]
+                   (= a (:age (d/entity db e))))]
+        (t/is (= (q/q '[:find ?e
+                        :in $ ?pred
+                        :where [?e :age ?a]
+                        [(?pred $ ?e 10)]]
+                      db pred)
+                 #{[1] [3]})))))
+
+
+(t/deftest datascript-test-issue-180
+  (f/transact-entity-maps! f/*kv*[{:crux.db/id :1 :age 20}])
+  (let [db (q/db *kv*)]
+    (t/is (= #{}
+             (q/q db
+                  '{:find [?e ?a]
+                    :where [[_ :pred ?pred]
+                            [?e :age ?a]
+                            [(?pred ?a)]]})))))
+
+(defn sample-query-fn [] 42)
+
+(t/deftest datascript-test-symbol-resolution
+  (let [db (q/db *kv*)]
+    (t/is (= #{[42]} (q/q db
+                          '{:find [?x]
+                            :where [[(crux.query-test/sample-query-fn) ?x]]})))))
