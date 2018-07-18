@@ -404,11 +404,13 @@
 ;; constrain across two variables. This used to work when there were
 ;; leaf predicates, which did fire on each actual row at the end.
 (defn- valid-sub-tuple? [join-results tuple]
-  (let [{:keys [valid-sub-tuples]} (meta join-results)]
-    (if (seq valid-sub-tuples)
-      (some #(let [submap (select-keys tuple (keys %))]
-               (or (empty? submap) (= % submap))) valid-sub-tuples)
-      true)))
+  (let [{:keys [valid-sub-tuple-groups]} (meta join-results)]
+    (->> (for [valid-sub-tuple-group valid-sub-tuple-groups]
+           (some #(let [ks (set/intersection (set (keys %))
+                                             (set (keys tuple)))]
+                    (= (select-keys % ks) (select-keys tuple ks)))
+                 valid-sub-tuple-group))
+         (every? true?))))
 
 (defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
   {result-name
@@ -516,9 +518,9 @@
               (when-let [join-results (some->> (mapv second pred-result+result-maps+args-tuple)
                                                (apply merge-with into)
                                                (merge join-results))]
-                (vary-meta join-results update :valid-sub-tuples (fnil into #{})
-                           (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
-                             args-tuple))))
+                (vary-meta join-results update :valid-sub-tuple-groups (fnil conj [])
+                           (set (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
+                                  args-tuple)))))
             join-results)))))
 
 ;; TODO: potentially the way to do this is to pass join results down
