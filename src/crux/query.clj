@@ -479,16 +479,13 @@
                                                           (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
                                                           [pred-fn])
                                                 :let [pred-result (apply pred-fn (map :value args-tuple))]
-                                                :when pred-result
-                                                {:keys [result-name value type literal-arg?] :as result} (if (empty? args-tuple)
-                                                                                                           {:value pred-result
-                                                                                                            :result-name (symbol "crux.query.pred" (name return))
-                                                                                                            :type :entity-leaf}
-                                                                                                           args-tuple)
-                                                :when (not literal-arg?)]
-                                            [pred-result (if (= :entity-leaf type)
-                                                           {result-name #{value}}
-                                                           (bound-result->join-result result))])]
+                                                :when pred-result]
+                                            [pred-result (->> (for [{:keys [result-name value type literal-arg?] :as result} args-tuple
+                                                                    :when (not literal-arg?)]
+                                                                (if (= :entity-leaf type)
+                                                                  {result-name #{value}}
+                                                                  (bound-result->join-result result)))
+                                                              (apply merge-with into))])]
               (when return
                 (doc/update-relation-virtual-index! (get pred-clause->relation clause)
                                                     (->> (for [[pred-result] pred-result+result-maps]
@@ -497,7 +494,6 @@
                                                          (vec))))
               (some->> (map second pred-result+result-maps)
                        (apply merge-with into)
-                       (not-empty)
                        (merge join-results)))
             join-results)))))
 
@@ -682,7 +678,10 @@
 (defn- calculate-join-order [pred-clauses or-clause->relation+or-branches var->joins e->v-var]
   (let [vars-in-join-order (vec (keys var->joins))
         var->index (zipmap vars-in-join-order (range))
-        preds (for [{:keys [pred return] :as pred-clause} pred-clauses
+        ;; TODO: This is simplistic, really has to calculate
+        ;; dependency graph between args and returns, also for the
+        ;; ors.
+        preds (for [{:keys [pred return] :as pred-clause} (reverse (sort-by :return pred-clauses))
                     :when return]
                 ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
         ors (for [[or-clause [_ [{:keys [free-vars bound-vars]}]]] or-clause->relation+or-branches

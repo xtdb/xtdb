@@ -1499,19 +1499,18 @@
                       :where [[(count ?x) ?c]]})
                #{["a" 1] ["abc" 3]})))
 
-    ;; TODO: Should work.
-    #_(t/testing "Built-in vector, hashmap"
-        (t/is (= (q/q db
-                      '{:find [?tx-data]
-                        :where [[(identity :db/add) ?op]
-                                [(vector ?op -1 :attr 12) ?tx-data]]})
-                 #{[[:db/add -1 :attr 12]]}))
+    (t/testing "Built-in vector, hashmap"
+      (t/is (= (q/q db
+                    '{:find [?tx-data]
+                      :where [[(identity :db/add) ?op]
+                              [(vector ?op -1 :attr 12) ?tx-data]]})
+               #{[[:db/add -1 :attr 12]]}))
 
-        (t/is (= (q/q db
-                      '{:find [?tx-data]
-                        :where
-                        [[(hash-map :db/id -1 :age 92 :name "Aaron") ?tx-data]]})
-                 #{[{:db/id -1 :age 92 :name "Aaron"}]})))
+      (t/is (= (q/q db
+                    '{:find [?tx-data]
+                      :where
+                      [[(hash-map :db/id -1 :age 92 :name "Aaron") ?tx-data]]})
+               #{[{:db/id -1 :age 92 :name "Aaron"}]})))
 
 
     ;; TODO: Should work.
