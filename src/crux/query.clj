@@ -397,6 +397,12 @@
          (apply = (map :entity vs)))
        (every? true?)))
 
+;; TODO: This should in theory not be necessary, it's an artefact of
+;; how there can be several entities with the same value returned, but
+;; only some of them might match a predicate. As the results currently
+;; is a map of variables to sets of values, there's no way to
+;; constrain across two variables. This used to work when there were
+;; leaf predicates, which did fire on each actual row at the end.
 (defn- valid-sub-tuple? [join-results tuple]
   (let [{:keys [valid-sub-tuples]} (meta join-results)]
     (if (seq valid-sub-tuples)
