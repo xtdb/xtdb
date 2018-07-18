@@ -226,7 +226,7 @@
 (defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
-        (fn [[or-clause->relation+or-branches var->joins] clause]
+        (fn [[or-clause->relation+or-branches known-vars var->joins] clause]
           (let [or-join? (= :or-join or-type)
                 or-branches (for [[type sub-clauses] (case or-type
                                                        :or clause
@@ -258,9 +258,10 @@
               (throw (IllegalArgumentException.
                       (str "Or requires same logic variables: " (pr-str clause)))))
             [(assoc or-clause->relation+or-branches clause [relation or-branches])
+             (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
                                                  {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
-        [{} var->joins])))
+        [{} known-vars var->joins])))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
@@ -860,20 +861,20 @@
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         or-joins-only? (empty? var->joins)
         known-vars (set/union e-vars v-vars pred-vars arg-vars)
-        [or-clause->relation+or-branches var->joins] (or-joins snapshot
-                                                               db
-                                                               rules
-                                                               :or
-                                                               or-clauses
-                                                               var->joins
-                                                               known-vars)
-        [or-join-clause->relation+or-branches var->joins] (or-joins snapshot
-                                                                    db
-                                                                    rules
-                                                                    :or-join
-                                                                    or-join-clauses
-                                                                    var->joins
-                                                                    known-vars)
+        [or-clause->relation+or-branches known-vars var->joins] (or-joins snapshot
+                                                                          db
+                                                                          rules
+                                                                          :or
+                                                                          or-clauses
+                                                                          var->joins
+                                                                          known-vars)
+        [or-join-clause->relation+or-branches known-vars var->joins] (or-joins snapshot
+                                                                               db
+                                                                               rules
+                                                                               :or-join
+                                                                               or-join-clauses
+                                                                               var->joins
+                                                                               known-vars)
         or-clause->relation+or-branches (merge or-clause->relation+or-branches
                                                or-join-clause->relation+or-branches)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
