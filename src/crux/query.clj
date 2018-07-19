@@ -181,6 +181,9 @@
                            arg (cons return (cons (:pred-fn pred) (:args pred)))
                            :when (logic-var? arg)]
                        arg))
+     :pred-return-vars (set (for [{:keys [pred return]} pred-clauses
+                                  :when (logic-var? return)]
+                              return))
      :range-vars (set (for [{:keys [sym]} range-clauses]
                         sym))
      :or-vars (apply set/union (vals or-vars))
@@ -855,6 +858,7 @@
                 unification-vars
                 not-vars
                 pred-vars
+                pred-return-vars
                 rule-vars]} (collect-vars type->clauses)
         e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
                                     :when (logic-var? v)]
@@ -927,7 +931,7 @@
         pred-joins-only? (empty? var->joins)
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         or-joins-only? (empty? var->joins)
-        known-vars (set/union e-vars v-vars pred-vars arg-vars)
+        known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause->relation+or-branches known-vars var->joins] (or-joins snapshot
                                                                           db
                                                                           rules
