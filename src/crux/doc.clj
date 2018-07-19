@@ -710,8 +710,8 @@
         content-hash->doc (db/get-objects object-store (map :content-hash entities))]
     (->> (for [{:keys [eid content-hash] :as entity} entities
                :let [doc (get content-hash->doc content-hash)]
-               :when (->> (for [[a v] attr+values]
-                            (contains? (set (normalize-value (get doc a))) v))
+               :when (->> (for [[attr value] attr+values]
+                            (contains? (set (normalize-value (get doc attr))) value))
                           (every? true?))]
            [(idx/value->bytes eid) [entity]])
          (new-sorted-virtual-index))))

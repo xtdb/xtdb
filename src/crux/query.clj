@@ -599,15 +599,10 @@
                                                                                                                     (mapv :value tuple)))])]]
                                (if (single-e-var-bgp? bound-vars where)
                                  (let [[[_ {:keys [e a v] :as clause}]] where
-                                       {:keys [result-name e-var entity doc value value?]} (first tuple)
-                                       use-result-entity? (and (= result-name e) (not value?) entity)
-                                       {:keys [content-hash]} (if use-result-entity?
-                                                                entity
-                                                                (first (doc/entities-at snapshot [value] business-time transact-time)))
-                                       doc (if (and doc use-result-entity?)
-                                             doc
-                                             (get (db/get-objects object-store [content-hash]) content-hash))]
-                                   (when (contains? (set (doc/normalize-value (get doc a))) v)
+                                       entities (mapv e args)
+                                       idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
+                                            object-store snapshot entities [[a v]] business-time transact-time)]
+                                   (when (seq (doc/idx->seq idx))
                                      [(with-meta
                                         [[]
                                          bound-results]
