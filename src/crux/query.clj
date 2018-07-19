@@ -536,6 +536,13 @@
                   join-results)))
             join-results)))))
 
+(defn- single-e-var-bgp? [vars where]
+  (and (= 1 (count where))
+       (let [[[type {:keys [e v]}]] where]
+         (and (= :bgp type)
+              (contains? vars e)
+              (literal? v)))))
+
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
@@ -570,13 +577,8 @@
                                                             (apply merge-with into))
                                          cache-key (when rule-name
                                                      [:rule-results rule-name branch-index (count free-vars) (vec (for [tuple tuples]
-                                                                                                                    (mapv :value tuple)))])
-                                         single-bound-e-bgp? (and (= 1 (count where))
-                                                                  (let [[[type {:keys [e v]}]] where]
-                                                                    (and (= :bgp type)
-                                                                         (contains? bound-results e)
-                                                                         (literal? v))))]]
-                               (or (when single-bound-e-bgp?
+                                                                                                                    (mapv :value tuple)))])]]
+                               (or (when (single-e-var-bgp? bound-results where)
                                      (let [[[type {:keys [e a v] :as clause}]] where
                                            entities (get bound-results e)
                                            content-hash->doc (db/get-objects object-store (map :content-hash entities))
