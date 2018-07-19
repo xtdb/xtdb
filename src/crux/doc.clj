@@ -357,11 +357,11 @@
       (when first
         first))))
 
-(defn new-sorted-virtual-index [idx]
+(defn new-sorted-virtual-index [idx-or-seq]
   (->SortedVirtualIndex
-   (->> (if (satisfies? db/OrderedIndex idx)
-          (idx->seq idx)
-          idx)
+   (->> (if (satisfies? db/OrderedIndex idx-or-seq)
+          (idx->seq idx-or-seq)
+          idx-or-seq)
         (sort-by first bu/bytes-comparator)
         (vec))
    (atom nil)))

@@ -107,7 +107,13 @@
                                                           :where [[e :name name]
                                                                   [e :last-name "Ivanov"]]
                                                           :args [{:name "Ivan"}
-                                                                 {:name "Petr"}]}))))
+                                                                 {:name "Petr"}]})))
+
+      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) {:find '[name]
+                                             :where '[[e :name name]
+                                                      [e :last-name "Ivanov"]]
+                                             :args [{:e (:crux.db/id ivan)}
+                                                    {:e (:crux.db/id petr)}]}))))
 
     (t/testing "Can query entity by non existent argument"
       (t/is (= #{} (q/q (q/db *kv*) '{:find [e]

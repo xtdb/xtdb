@@ -211,17 +211,31 @@
                        (apply comp))])
          (into {}))))
 
-(defn- e-var-literal-v-joins [snapshot e-var->literal-v-clauses var->joins business-time transact-time]
+(defn- e-var-literal-v-joins [snapshot object-store e-var->literal-v-clauses var->joins arg-vars args business-time transact-time]
   (->> e-var->literal-v-clauses
        (reduce
         (fn [var->joins [e-var clauses]]
-          (let [idx (doc/new-shared-literal-attribute-entities-virtual-index
-                     snapshot
-                     (vec (for [{:keys [a v]} clauses]
-                            [a v]))
-                     business-time
-                     transact-time)]
-            (merge-with into var->joins {e-var [(assoc idx :name e-var)]})))
+          (if (contains? arg-vars e-var)
+            (let [arg-es (for [arg args]
+                           (or (get arg (symbol (name e-var)))
+                               (get arg (keyword (name e-var)))))
+                  entities (doc/entities-at snapshot arg-es business-time transact-time)
+                  content-hash->doc (db/get-objects object-store (map :content-hash entities))
+                  idx (->> (for [{:keys [eid content-hash] :as entity} entities
+                                 :let [doc (get content-hash->doc content-hash)]
+                                 :when (->> (for [{:keys [a v]} clauses]
+                                              (contains? (set (doc/normalize-value (get doc a))) v))
+                                            (every? true?))]
+                             [(idx/value->bytes eid) [entity]])
+                           (doc/new-sorted-virtual-index))]
+              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))
+            (let [idx (doc/new-shared-literal-attribute-entities-virtual-index
+                       snapshot
+                       (vec (for [{:keys [a v]} clauses]
+                              [a v]))
+                       business-time
+                       transact-time)]
+              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
 (declare build-sub-query)
@@ -888,13 +902,16 @@
                                                        (logic-var? v))]
                                         clause)
                                       (group-by :v))
+        arg-vars (arg-vars args)
         var->joins (sorted-map)
         var->joins (e-var-literal-v-joins snapshot
+                                          object-store
                                           e-var->literal-v-clauses
                                           var->joins
+                                          arg-vars
+                                          args
                                           business-time
                                           transact-time)
-        arg-vars (arg-vars args)
         non-leaf-v-vars (set/union unification-vars not-vars e-vars arg-vars rule-vars)
         leaf-v-var? (fn [e v]
                       (and (= 1 (count (get v->v-var-clauses v)))
