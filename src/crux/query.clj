@@ -404,12 +404,12 @@
 ;; constrain across two variables. This used to work when there were
 ;; leaf predicates, which did fire on each actual row at the end.
 (defn- valid-sub-tuple? [join-results tuple]
-  (let [{:keys [valid-sub-tuple-groups]} (meta join-results)]
-    (->> (for [valid-sub-tuple-group valid-sub-tuple-groups]
+  (let [{:keys [valid-sub-value-groups]} (meta join-results)]
+    (->> (for [valid-sub-value-group valid-sub-value-groups]
            (some #(let [ks (set/intersection (set (keys %))
                                              (set (keys tuple)))]
                     (= (select-keys % ks) (select-keys tuple ks)))
-                 valid-sub-tuple-group))
+                 valid-sub-value-group))
          (every? true?))))
 
 (defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
@@ -472,6 +472,7 @@
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
+              needs-valid-sub-value-group? (> (count (distinct (filter logic-var? args))) 1)
               pred-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth pred-vars)]]
     (do (doseq [var pred-vars]
           (when (not (contains? var->bindings var))
@@ -504,10 +505,11 @@
                                                                  {result-name #{value}}
                                                                  (bound-result->join-result result)))
                                                              (apply merge-with into))
-                                                        (->> (for [[arg {:keys [value literal-arg?]}] (map vector args args-tuple)
-                                                                   :when (not literal-arg?)]
-                                                               [arg value])
-                                                             (into {}))])]
+                                                        (when needs-valid-sub-value-group?
+                                                          (->> (for [[arg {:keys [value literal-arg?]}] (map vector args args-tuple)
+                                                                     :when (not literal-arg?)]
+                                                                 [arg value])
+                                                               (into {})))])]
               (when return
                 (doc/update-relation-virtual-index! (get pred-clause->relation clause)
                                                     (->> (for [[pred-result] pred-result+result-maps+args-tuple]
@@ -517,10 +519,12 @@
               (when-let [join-results (some->> (mapv second pred-result+result-maps+args-tuple)
                                                (apply merge-with into)
                                                (merge join-results))]
-                (->> (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
-                       args-tuple)
-                     (set)
-                     (vary-meta join-results update :valid-sub-tuple-groups conj))))
+                (if needs-valid-sub-value-group?
+                  (->> (for [[_ _ args-tuple] pred-result+result-maps+args-tuple]
+                         args-tuple)
+                       (set)
+                       (vary-meta join-results update :valid-sub-value-groups conj))
+                  join-results)))
             join-results)))))
 
 ;; TODO: potentially the way to do this is to pass join results down
