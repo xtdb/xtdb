@@ -570,8 +570,27 @@
                                                             (apply merge-with into))
                                          cache-key (when rule-name
                                                      [:rule-results rule-name branch-index (count free-vars) (vec (for [tuple tuples]
-                                                                                                                    (mapv :value tuple)))])]]
-                               (or (get @sub-query-result-cache cache-key)
+                                                                                                                    (mapv :value tuple)))])
+                                         single-bound-e-bgp? (and (= 1 (count where))
+                                                                  (let [[[type {:keys [e v]}]] where]
+                                                                    (and (= :bgp type)
+                                                                         (contains? bound-results e)
+                                                                         (literal? v))))]]
+                               (or (when single-bound-e-bgp?
+                                     (let [[[type {:keys [e a v] :as clause}]] where
+                                           entities (get bound-results e)
+                                           content-hash->doc (db/get-objects object-store (map :content-hash entities))
+                                           bound-results (->> (for [{:keys [content-hash] :as entity} entities
+                                                                    :let [doc (get content-hash->doc content-hash)]
+                                                                    :when (contains? (set (doc/normalize-value (get doc a))) v)]
+                                                                {e #{entity}})
+                                                              (apply merge-with into))]
+                                       [(with-meta
+                                          [[]
+                                           bound-results]
+                                          {:free-vars-in-join-order free-vars-in-join-order
+                                           :bound-vars bound-vars})]))
+                                   (get @sub-query-result-cache cache-key)
                                    (let [_ (when cache-key
                                              (swap! sub-query-result-cache assoc cache-key []))
                                          {:keys [n-ary-join
