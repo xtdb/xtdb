@@ -705,6 +705,17 @@
           entity-as-of-idx)
          (new-sorted-virtual-index))))
 
+(defn new-shared-literal-attribute-for-known-entities-virtual-index [object-store snapshot entities attr+values business-time transact-time]
+  (let [entities (entities-at snapshot entities business-time transact-time)
+        content-hash->doc (db/get-objects object-store (map :content-hash entities))]
+    (->> (for [{:keys [eid content-hash] :as entity} entities
+               :let [doc (get content-hash->doc content-hash)]
+               :when (->> (for [[a v] attr+values]
+                            (contains? (set (normalize-value (get doc a))) v))
+                          (every? true?))]
+           [(idx/value->bytes eid) [entity]])
+         (new-sorted-virtual-index))))
+
 (defn new-entity-attribute-value-virtual-index [snapshot attr range-constraints business-time transact-time]
   (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
         content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))

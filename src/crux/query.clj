@@ -216,18 +216,17 @@
        (reduce
         (fn [var->joins [e-var clauses]]
           (if (contains? arg-vars e-var)
-            (let [arg-es (for [arg args]
-                           (or (get arg (symbol (name e-var)))
-                               (get arg (keyword (name e-var)))))
-                  entities (doc/entities-at snapshot arg-es business-time transact-time)
-                  content-hash->doc (db/get-objects object-store (map :content-hash entities))
-                  idx (->> (for [{:keys [eid content-hash] :as entity} entities
-                                 :let [doc (get content-hash->doc content-hash)]
-                                 :when (->> (for [{:keys [a v]} clauses]
-                                              (contains? (set (doc/normalize-value (get doc a))) v))
-                                            (every? true?))]
-                             [(idx/value->bytes eid) [entity]])
-                           (doc/new-sorted-virtual-index))]
+            (let [entities (for [arg args]
+                             (or (get arg (symbol (name e-var)))
+                                 (get arg (keyword (name e-var)))))
+                  idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
+                       object-store
+                       snapshot
+                       entities
+                       (vec (for [{:keys [a v]} clauses]
+                              [a v]))
+                       business-time
+                       transact-time)]
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))
             (let [idx (doc/new-shared-literal-attribute-entities-virtual-index
                        snapshot
