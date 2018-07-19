@@ -229,7 +229,7 @@
 (defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
-        (fn [[or-clause->relation+or-branches known-vars var->joins] clause]
+        (fn [[or-clause+relation+or-branches known-vars var->joins] clause]
           (let [or-join? (= :or-join or-type)
                 or-branches (for [[type sub-clauses] (case or-type
                                                        :or clause
@@ -260,11 +260,11 @@
             (when (not (apply = (map :or-vars or-branches)))
               (throw (IllegalArgumentException.
                       (str "Or requires same logic variables: " (pr-str clause)))))
-            [(assoc or-clause->relation+or-branches clause [relation or-branches])
+            [(conj or-clause+relation+or-branches [clause relation or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
                                                  {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
-        [{} known-vars var->joins])))
+        [[] known-vars var->joins])))
 
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
@@ -393,8 +393,8 @@
                   :type :pred}])
        (into {})))
 
-(defn- build-or-var-bindings [var->values-result-index or-clause->relation+or-branches]
-  (->> (for [[_ [_ or-branches]] or-clause->relation+or-branches
+(defn- build-or-var-bindings [var->values-result-index or-clause+relation+or-branches]
+  (->> (for [[_ _ or-branches] or-clause+relation+or-branches
              var (:free-vars (first or-branches))
              :let [result-index (get var->values-result-index var)]]
          [var {:var var
@@ -549,9 +549,9 @@
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
-(defn- build-or-constraints [db snapshot object-store rules or-clause->relation+or-branches var->bindings
+(defn- build-or-constraints [db snapshot object-store rules or-clause+relation+or-branches var->bindings
                              vars-in-join-order v-var->range-constriants sub-query-result-cache]
-  (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
+  (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               rule-name (:rule-name (meta clause))]]
@@ -734,7 +734,7 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-(defn- calculate-join-order [pred-clauses or-clause->relation+or-branches var->joins e->v-var]
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var]
   (let [vars-in-join-order (vec (keys var->joins))
         var->index (zipmap vars-in-join-order (range))
         ;; TODO: This is simplistic, really has to calculate
@@ -743,7 +743,7 @@
         preds (for [{:keys [pred return] :as pred-clause} (reverse (sort-by :return pred-clauses))
                     :when return]
                 ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
-        ors (for [[or-clause [_ [{:keys [free-vars bound-vars]}]]] or-clause->relation+or-branches
+        ors (for [[or-clause _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches
                   :when (not-empty free-vars)]
               ["Or" or-clause bound-vars free-vars])]
     (->> (concat preds ors)
@@ -932,22 +932,22 @@
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         or-joins-only? (empty? var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
-        [or-clause->relation+or-branches known-vars var->joins] (or-joins snapshot
-                                                                          db
-                                                                          rules
-                                                                          :or
-                                                                          or-clauses
-                                                                          var->joins
-                                                                          known-vars)
-        [or-join-clause->relation+or-branches known-vars var->joins] (or-joins snapshot
-                                                                               db
-                                                                               rules
-                                                                               :or-join
-                                                                               or-join-clauses
-                                                                               var->joins
-                                                                               known-vars)
-        or-clause->relation+or-branches (merge or-clause->relation+or-branches
-                                               or-join-clause->relation+or-branches)
+        [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
+                                                                         db
+                                                                         rules
+                                                                         :or
+                                                                         or-clauses
+                                                                         var->joins
+                                                                         known-vars)
+        [or-join-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
+                                                                              db
+                                                                              rules
+                                                                              :or-join
+                                                                              or-join-clauses
+                                                                              var->joins
+                                                                              known-vars)
+        or-clause+relation+or-branches (concat or-clause+relation+or-branches
+                                                or-join-clause+relation+or-branches)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -957,7 +957,7 @@
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         e->v-var (set/map-invert v-var->e)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause->relation+or-branches var->joins e->v-var)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins e->v-var)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (build-var-bindings var->attr
                                           v-var->e
@@ -969,14 +969,14 @@
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
                              (if or-joins-only?
-                               (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
-                               (merge (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
+                               (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
+                               (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
                                       var->bindings)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
                                      (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
-        or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause->relation+or-branches
+        or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants sub-query-result-cache))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
