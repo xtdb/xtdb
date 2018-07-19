@@ -38,7 +38,7 @@ Resources:
       AvailabilityZone: !Select
         - 0
         - !GetAZs
-      CidrBlock: 10.1.1.0/24
+      CidrBlock: 10.0.64.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   KafkaSN2:
@@ -47,7 +47,7 @@ Resources:
       AvailabilityZone: !Select
         - 1
         - !GetAZs
-      CidrBlock: 10.1.2.0/24
+      CidrBlock: 10.0.80.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   KafkaSN3:
@@ -56,7 +56,7 @@ Resources:
       AvailabilityZone: !Select
         - 2
         - !GetAZs
-      CidrBlock: 10.1.3.0/24
+      CidrBlock: 10.0.96.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   KafkaLC:
@@ -72,10 +72,10 @@ Resources:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       AutoScalingGroupName: KafkaASG
-      LaunchConfigurationName: KafkaLC
+      LaunchConfigurationName: !Ref KafkaLC
       MaxSize: !Ref MaxKafkaBoxes
       MinSize: !Ref MinKafkaBoxes
       VPCZoneIdentifier:
-        - KafkaSN1
-        - KafkaSN2
-        - KafkaSN3
+        - !Ref KafkaSN1
+        - !Ref KafkaSN2
+        - !Ref KafkaSN3

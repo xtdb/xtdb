@@ -42,7 +42,7 @@ Resources:
       AvailabilityZone: !Select
         - 0
         - !GetAZs
-      CidrBlock: 10.0.1.0/24
+      CidrBlock: 10.0.0.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   ZooSN2:
@@ -51,7 +51,7 @@ Resources:
       AvailabilityZone: !Select
         - 1
         - !GetAZs
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: 10.0.16.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   ZooSN3:
@@ -60,7 +60,7 @@ Resources:
       AvailabilityZone: !Select
         - 2
         - !GetAZs
-      CidrBlock: 10.0.3.0/24
+      CidrBlock: 10.0.32.0/20
       MapPublicIpOnLaunch: false
       VpcId: !Ref VPC
   ZooNI1:
@@ -68,35 +68,35 @@ Resources:
     Properties:
       GroupSet:
         - !Ref ZooSG
-      PrivateIpAddress: 10.0.1.11
+      PrivateIpAddress: 10.0.0.11
       SubnetId: !Ref ZooSN1
   ZooNI2:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
       GroupSet:
         - !Ref ZooSG
-      PrivateIpAddress: 10.0.1.12
+      PrivateIpAddress: 10.0.0.12
       SubnetId: !Ref ZooSN1
   ZooNI3:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
       GroupSet:
         - !Ref ZooSG
-      PrivateIpAddress: 10.0.2.11
+      PrivateIpAddress: 10.0.16.11
       SubnetId: !Ref ZooSN2
   ZooNI4:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
       GroupSet:
         - !Ref ZooSG
-      PrivateIpAddress: 10.0.2.12
+      PrivateIpAddress: 10.0.16.12
       SubnetId: !Ref ZooSN2
   ZooNI5:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
       GroupSet:
         - !Ref ZooSG
-      PrivateIpAddress: 10.0.3.11
+      PrivateIpAddress: 10.0.32.11
       SubnetId: !Ref ZooSN3
   ZooBox1:
     Type: 'AWS::EC2::Instance'

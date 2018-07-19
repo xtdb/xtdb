@@ -1,8 +1,10 @@
 Parameters:
   SSHKeyPair:
+    Default: ""
     Description: Name of an existing EC2 KeyPair to use for instance SSH access.
     Type: String
   VPCID:
+    Default: ""
     Description: ID of an existing VPC to use. If blank, one will be created.
     Type: String
   SetupBucketURL:
@@ -73,7 +75,7 @@ Resources:
       TemplateURL: !Join
         - '/'
         - - !Ref SetupBucketURL
-          - 'aws-cft-zk.yaml'
+          - 'aws-cft-zoo.yaml'
   KafkaStack:
     Type: 'AWS::CloudFormation::Stack'
     Properties:
@@ -95,8 +97,8 @@ Resources:
       Parameters:
         SSHKeyPair: !Ref SSHKeyPair
         VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
-        MinKafkaBoxes: !Ref MinCruxBoxes
-        MaxKafkaBoxes: !Ref MaxCruxBoxes
+        MinCruxBoxes: !Ref MinCruxBoxes
+        MaxCruxBoxes: !Ref MaxCruxBoxes
       Tags:
         - Key: Name
           Value: CruxStack
