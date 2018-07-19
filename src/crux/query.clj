@@ -544,12 +544,13 @@
        (let [[[type {:keys [e v]}]] where]
          (and (= :bgp type)
               (contains? vars e)
+              (logic-var? e)
               (literal? v)))))
 
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
-(defn- build-or-constraints [db snapshot object-store rules or-clause+relation+or-branches var->bindings
+(defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rules or-clause+relation+or-branches var->bindings
                              vars-in-join-order v-var->range-constriants sub-query-result-cache]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
@@ -571,7 +572,9 @@
                   free-results+bound-results
                   (let [free-results+bound-results
                         (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                                   tuple (or (seq tuples) [{}])
+                                   tuple (or (seq tuples)
+                                             (when (seq free-vars)
+                                               [{}]))
                                    :let [args (if (seq bound-vars)
                                                 [(zipmap bound-vars (map :value tuple))]
                                                 [])
@@ -581,40 +584,42 @@
                                          cache-key (when rule-name
                                                      [:rule-results rule-name branch-index (count free-vars) (vec (for [tuple tuples]
                                                                                                                     (mapv :value tuple)))])]]
-                               (or (when (single-e-var-bgp? bound-results where)
-                                     (let [[[type {:keys [e a v] :as clause}]] where
-                                           entities (get bound-results e)
-                                           content-hash->doc (db/get-objects object-store (map :content-hash entities))
-                                           bound-results (->> (for [{:keys [content-hash] :as entity} entities
-                                                                    :let [doc (get content-hash->doc content-hash)]
-                                                                    :when (contains? (set (doc/normalize-value (get doc a))) v)]
-                                                                {e #{entity}})
-                                                              (apply merge-with into))]
-                                       [(with-meta
-                                          [[]
-                                           bound-results]
-                                          {:free-vars-in-join-order free-vars-in-join-order
-                                           :bound-vars bound-vars})]))
-                                   (get @sub-query-result-cache cache-key)
-                                   (let [_ (when cache-key
-                                             (swap! sub-query-result-cache assoc cache-key []))
-                                         {:keys [n-ary-join
-                                                 var->bindings
-                                                 var->joins]} (build-sub-query snapshot db [] where args rules sub-query-result-cache)
-                                         result (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                       (with-meta
-                                                         [(vec (for [tuple (cartesian-product
-                                                                            (for [var free-vars-in-join-order]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                                     :when (and (consistent-tuple? tuple)
-                                                                                (valid-sub-tuple? join-results tuple))]
-                                                                 (mapv :value tuple)))
-                                                          bound-results]
-                                                         {:free-vars-in-join-order free-vars-in-join-order
-                                                          :bound-vars bound-vars})))]
-                                     (when cache-key
-                                       (swap! sub-query-result-cache assoc cache-key result))
-                                     result)))
+                               (if (single-e-var-bgp? bound-vars where)
+                                 (let [[[_ {:keys [e a v] :as clause}]] where
+                                       {:keys [result-name e-var entity doc value value?]} (first tuple)
+                                       use-result-entity? (and (= result-name e) (not value?) entity)
+                                       {:keys [content-hash]} (if use-result-entity?
+                                                                entity
+                                                                (first (doc/entities-at snapshot [value] business-time transact-time)))
+                                       doc (if (and doc use-result-entity?)
+                                             doc
+                                             (get (db/get-objects object-store [content-hash]) content-hash))]
+                                   (when (contains? (set (doc/normalize-value (get doc a))) v)
+                                     [(with-meta
+                                        [[]
+                                         bound-results]
+                                        {:free-vars-in-join-order free-vars-in-join-order
+                                         :bound-vars bound-vars})]))
+                                 (or (get @sub-query-result-cache cache-key)
+                                     (let [_ (when cache-key
+                                               (swap! sub-query-result-cache assoc cache-key []))
+                                           {:keys [n-ary-join
+                                                   var->bindings
+                                                   var->joins]} (build-sub-query snapshot db [] where args rules sub-query-result-cache)
+                                           result (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                                         (with-meta
+                                                           [(vec (for [tuple (cartesian-product
+                                                                              (for [var free-vars-in-join-order]
+                                                                                (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                       :when (and (consistent-tuple? tuple)
+                                                                                  (valid-sub-tuple? join-results tuple))]
+                                                                   (mapv :value tuple)))
+                                                            bound-results]
+                                                           {:free-vars-in-join-order free-vars-in-join-order
+                                                            :bound-vars bound-vars})))]
+                                       (when cache-key
+                                         (swap! sub-query-result-cache assoc cache-key result))
+                                       result))))
                              (reduce into []))]
                     free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results

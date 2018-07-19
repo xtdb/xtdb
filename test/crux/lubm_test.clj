@@ -45,9 +45,6 @@
 ;; Total time, without query 2:
 ;; "Elapsed time: 4222.081773 msecs"
 ;; "Elapsed time: 72691.917908 msecs"
-
-;; TODO: Query 5, 9 and 12 have gotten much slower with or sub
-;; queries.
 (t/deftest test-can-run-lubm-queries
   (let [tx-topic "test-can-run-lubm-queries"
         doc-topic "test-can-run-lubm-queries"
