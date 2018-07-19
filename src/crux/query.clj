@@ -620,7 +620,8 @@
                   free-results (->> (for [[free-results] free-results+bound-results
                                           free-result free-results]
                                       free-result)
-                                    (distinct))
+                                    (distinct)
+                                    (vec))
                   bound-results (->> (for [[_ bound-result] free-results+bound-results]
                                        bound-result)
                                      (apply merge-with into))]
