@@ -345,14 +345,18 @@
             [pred-clause->relation var->joins]))
         [{} var->joins])))
 
-(defn- build-var-bindings [var->attr v-var->e var->values-result-index e-var->leaf-v-var-clauses vars]
+(defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index e-var->leaf-v-var-clauses join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
-                   leaf-var? (contains? e-var->leaf-v-var-clauses e)]]
+                   leaf-var? (contains? e-var->leaf-v-var-clauses e)
+                   result-index (get var->values-result-index var)]]
          [var {:e-var e
                :var var
                :attr (get var->attr var)
-               :result-index (get var->values-result-index var)
+               :result-index result-index
+               :join-depth (or result-index
+                               (get var->values-result-index (get e->v-var e))
+                               (dec join-depth))
                :result-name (if leaf-var?
                               var
                               e)
@@ -366,28 +370,34 @@
        (into {})))
 
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
-  (->> (for [var arg-vars]
+  (->> (for [var arg-vars
+             :let [result-index (get var->values-result-index var)]]
          [var {:var var
                :result-name (symbol "crux.query.arg" (name var))
-               :result-index (get var->values-result-index var)
+               :result-index result-index
+               :join-depth result-index
                :type :arg}])
        (into {})))
 
 (defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
   (->> (for [{:keys [return]} pred-clauses
-             :when return]
+             :when return
+             :let [result-index (get var->values-result-index return)]]
          [return {:var return
                   :result-name (symbol "crux.query.pred" (name return))
-                  :result-index (get var->values-result-index return)
+                  :result-index result-index
+                  :join-depth result-index
                   :type :pred}])
        (into {})))
 
 (defn- build-or-var-bindings [var->values-result-index or-clause->relation+or-branches]
   (->> (for [[_ [_ or-branches]] or-clause->relation+or-branches
-             var (:free-vars (first or-branches))]
+             var (:free-vars (first or-branches))
+             :let [result-index (get var->values-result-index var)]]
          [var {:var var
                :result-name (symbol "crux.query.or" (name var))
-               :result-index (get var->values-result-index var)
+               :result-index result-index
+               :join-depth result-index
                :type :or}])
        (into {})))
 
@@ -461,19 +471,18 @@
            :type type
            :value? (= :entity-leaf type)})))))
 
-(defn- calculate-constraint-join-depth [var->bindings e->v-var join-depth vars]
-  (let [join-depths (for [var vars]
-                      (or (get-in var->bindings [var :result-index])
-                          (get-in var->bindings [(get e->v-var var) :result-index])
-                          (dec join-depth)))]
-    (inc (apply max -1 join-depths))))
+(defn- calculate-constraint-join-depth [var->bindings vars]
+  (->> (for [var vars]
+         (get-in var->bindings [var :join-depth] -1))
+       (apply max -1)
+       (inc)))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation]
+(defn- build-pred-constraints [object-store pred-clauses var->bindings pred-clause->relation]
   (for [{:keys [pred return] :as clause} pred-clauses
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
               needs-valid-sub-value-group? (> (count (distinct (filter logic-var? args))) 1)
-              pred-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth pred-vars)]]
+              pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)]]
     (do (doseq [var pred-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -530,10 +539,10 @@
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
-(defn- build-or-constraints [snapshot db object-store rules or-clause->relation+or-branches var->bindings e->v-var join-depth
+(defn- build-or-constraints [db snapshot object-store rules or-clause->relation+or-branches var->bindings
                              vars-in-join-order v-var->range-constriants sub-query-result-cache]
   (for [[clause [relation [{:keys [free-vars bound-vars]} :as or-branches]]] or-clause->relation+or-branches
-        :let [or-join-depth (calculate-constraint-join-depth var->bindings e->v-var join-depth bound-vars)
+        :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               rule-name (:rule-name (meta clause))]]
     (do (doseq [var bound-vars]
@@ -627,7 +636,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [snapshot db object-store rules not-type not-clauses var->bindings join-depth sub-query-result-cache]
+(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings join-depth sub-query-result-cache]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -927,8 +936,10 @@
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (build-var-bindings var->attr
                                           v-var->e
+                                          e->v-var
                                           var->values-result-index
                                           e-var->leaf-v-var-clauses
+                                          join-depth
                                           (keys var->attr))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
@@ -937,11 +948,11 @@
                                (merge (build-or-var-bindings var->values-result-index or-clause->relation+or-branches)
                                       var->bindings)))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints snapshot db object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
-                                     (build-not-constraints snapshot db object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings e->v-var join-depth pred-clause->relation))
-        or-constraints (vec (build-or-constraints snapshot db object-store rules or-clause->relation+or-branches
-                                                  var->bindings e->v-var join-depth vars-in-join-order v-var->range-constriants sub-query-result-cache))
+        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
+                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
+        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
+        or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause->relation+or-branches
+                                                  var->bindings vars-in-join-order v-var->range-constriants sub-query-result-cache))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
