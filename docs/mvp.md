@@ -277,3 +277,11 @@ sourced in its current form.
 
 **A:** It is CRUX. *"CRUX feels a throwback to the 60s/70s when computers
   were UPPERCASE ONLY. Retro."* - Malcolm.
+
+
+**Q:** Does CRUX support RDF/SPARQL?
+
+**A:** No. We have a simple ingestion mechanism for RDF data in
+`crux.rdf` but this is not a core feature. RDF and SPARQL support
+could eventually be written as a layer on top of CRUX as a module, but
+there are no plans for this by the core team.
