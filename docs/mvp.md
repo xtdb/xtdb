@@ -328,8 +328,9 @@ operation. The user needs to attempt to perform a CAS, then wait for
 the transaction time (as above), and check that the entity got
 updated. More advanced algorithms can be built on top of this. As
 mentioned above, all CAS operations in a transaction must pass their
-pre-condition check for the transaction to proceed and get
-indexed. There's currently no way to check for this, apart from
+pre-condition check for the transaction to proceed and get indexed,
+which enables one to enforce consistency across documents. There's
+currently no way to check if a transaction got aborted, apart from
 checking if the write succeeded.
 
 
