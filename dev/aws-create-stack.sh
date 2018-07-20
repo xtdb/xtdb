@@ -1,7 +1,8 @@
 #!/bin/bash
 
 region=eu-west-2
-stack_name=CruxStack
+stack_name=RootStack
+stack_status=nil
 delete=false
 verbose=false
 
@@ -17,11 +18,6 @@ Options:\n\
 
 ############################################
 # Utils
-function jsonValue() {
-    KEY=$1
-    awk -F"[,:}]" '{for(i=1;i<=NF;i++){if($i~/'$KEY'\042/){print $(i+1)}}}' | tr -d '"'
-}
-
 function vecho() {
     if [ $verbose == true ]; then
         echo $1
@@ -37,22 +33,25 @@ function createBucket() {
         --bucket $bucket \
         --create-bucket-configuration \
         LocationConstraint=$region \
-        --acl public-read \
         >/dev/null
-
     aws s3 cp aws-cft-crux.yaml s3://$bucket >/dev/null
     aws s3 cp aws-cft-kafka.yaml s3://$bucket >/dev/null
     aws s3 cp aws-cft-zoo.yaml s3://$bucket >/dev/null
-    aws s3 cp aws-userdata-cruxbox.sh s3://$bucket >/dev/null
-    aws s3 cp aws-userdata-kafkabox.sh s3://$bucket >/dev/null
-    vecho "Done"
+    aws s3 cp aws-userdata-cruxbox.sh s3://$bucket \
+        --acl public-read \
+        >/dev/null
+    aws s3 cp aws-userdata-kafkabox.sh s3://$bucket \
+        --acl public-read \
+        >/dev/null
+    aws s3 cp aws-userdata-zoobox.sh s3://$bucket \
+        --acl public-read \
+        >/dev/null
 }
 
 function deleteBucket() {
     vecho "Deleting setup bucket..."
     aws s3 rm s3://$bucket --recursive >/dev/null
     aws s3api delete-bucket --bucket $bucket >/dev/null
-    vecho "Done"
 }
 
 function deleteOldStack() {
@@ -64,14 +63,13 @@ function deleteOldStack() {
     aws cloudformation wait stack-delete-complete \
         --stack-name $stack_name \
         >/dev/null
-    vecho "Done"
 }
 
 function createStack() {
     vecho "Creating the stack..."
     aws cloudformation create-stack \
         --stack-name $stack_name \
-        --template-body file://aws-cft-common.yaml \
+        --template-body file://aws-cft-root.yaml \
         --parameters \
         ParameterKey=SSHKeyPair,ParameterValue=$ssh_key_name \
         ParameterKey=SetupBucketURL,ParameterValue=http://$bucket.s3.amazonaws.com \
@@ -84,36 +82,41 @@ function createStack() {
 
     stack_status=$(aws cloudformation describe-stacks \
                        --stack-name $stack_name \
-                       | jsonValue StackStatus)
-    if [ $stack_status == "CREATE_COMPLETE" ]; then
-        vecho "Done"
-    else
-        echo "Stack creation failed!"
-    fi
+                       --query 'Stacks[0].StackStatus' \
+                       --output text)
 }
 
 function waitForCrux() {
+    vecho "Setting up the CRUX cluster..."
+    cruxbox_ids=$(aws ec2 describe-instances \
+                       --filters Name=instance-state-name,Values=running,Name=tag:Name,Values=CruxBox \
+                       --query 'Reservations[*].Instances[0].InstanceId' \
+                       --output text)
+    aws ec2 wait instance-status-ok \
+        --instance-ids $cruxbox_ids \
+        >/dev/null
+    # crux_stack_physid=$(aws cloudformation describe-stack-resources \
+    #                       --stack-name $stack_name \
+    #                       --logical-resource-id CruxStack \
+    #                       --query 'StackResources[0].PhysicalResourceId' \
+    #                       --output text)
+    # crux_stack_name=$(aws cloudformation list-stacks \
+    #                       --stack-status-filter CREATE_COMPLETE \
+    #                       --query "StackSummaries[?StackId=='$crux_stack_physid'].StackName" \
+    #                       --output text)
+
+    vecho "Testing the CRUX HTTP server..."
     lb_dns=$(aws elbv2 describe-load-balancers \
                  --names CruxLB \
-                 | jsonValue DNSName)
-    cruxbox_id=$(aws cloudformation describe-stack-resource \
-                     --stack-name $stack_name \
-                     --logical-resource-id InstCrux1 \
-                     | jsonValue PhysicalResourceId)
-
-    vecho "Setting up the Crux cluster..."
-    aws ec2 wait instance-status-ok \
-        --instance-id $cruxbox_id \
-        >/dev/null
-    
+                 --query 'LoadBalancers[0].DNSName' \
+                 --output text)
     server_status=$(curl -s -o /dev/null -w "%{http_code}" $lb_dns:3000)
     if [ $server_status == "200" ]; then
-        vecho "Done"
-        echo "Crux HTTP server running on$lb_dns:3000"
+        echo "CRUX HTTP server running on$lb_dns:3000"
     else
-        echo "Crux setup failed!"
-        vecho "Something went wrong with Zookeeper, Kafka, or Crux"
-        vecho "Crux HTTP server is supposed to be running on$lb_dns:3000 but did not respond with HTTP status 200"
+        echo "CRUX setup failed!"
+        vecho "Something went wrong with Zookeeper, Kafka, or CRUX"
+        vecho "CRUX HTTP server is supposed to be running on $lb_dns:3000 but did not respond with HTTP status 200"
     fi
 }
 
@@ -153,8 +156,11 @@ fi
 
 createBucket
 createStack
-deleteBucket
 
 if [ $stack_status == "CREATE_COMPLETE" ]; then
     waitForCrux
+else
+    echo "Stack creation failed!"
 fi
+
+deleteBucket

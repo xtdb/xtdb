@@ -3,6 +3,10 @@ Parameters:
     Type: String
   VPC:
     Type: String
+  RouteTable:
+    Type: String
+  UserDataURL:
+    Type: String
 Resources:
   ZooSG:
     Type: 'AWS::EC2::SecurityGroup'
@@ -43,7 +47,7 @@ Resources:
         - 0
         - !GetAZs
       CidrBlock: 10.0.0.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   ZooSN2:
     Type: 'AWS::EC2::Subnet'
@@ -52,7 +56,7 @@ Resources:
         - 1
         - !GetAZs
       CidrBlock: 10.0.16.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   ZooSN3:
     Type: 'AWS::EC2::Subnet'
@@ -61,8 +65,23 @@ Resources:
         - 2
         - !GetAZs
       CidrBlock: 10.0.32.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
+  ZooRTA1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref ZooSN1
+      RouteTableId: !Ref RouteTable
+  ZooRTA2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref ZooSN2
+      RouteTableId: !Ref RouteTable
+  ZooRTA3:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref ZooSN3
+      RouteTableId: !Ref RouteTable
   ZooNI1:
     Type: 'AWS::EC2::NetworkInterface'
     Properties:
@@ -111,6 +130,13 @@ Resources:
       Tags:
         - Key: Name
           Value: ZooBox1
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-zoobox.sh
+          ./aws-userdata-zoobox.sh 1
+          rm aws-userdata-zoobox.sh
   ZooBox2:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -124,6 +150,13 @@ Resources:
       Tags:
         - Key: Name
           Value: ZooBox2
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-zoobox.sh
+          ./aws-userdata-zoobox.sh 2
+          rm aws-userdata-zoobox.sh
   ZooBox3:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -137,6 +170,13 @@ Resources:
       Tags:
         - Key: Name
           Value: ZooBox3
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-zoobox.sh
+          ./aws-userdata-zoobox.sh 3
+          rm aws-userdata-zoobox.sh
   ZooBox4:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -150,6 +190,13 @@ Resources:
       Tags:
         - Key: Name
           Value: ZooBox4
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-zoobox.sh
+          ./aws-userdata-zoobox.sh 4
+          rm aws-userdata-zoobox.sh
   ZooBox5:
     Type: 'AWS::EC2::Instance'
     Properties:
@@ -163,3 +210,10 @@ Resources:
       Tags:
         - Key: Name
           Value: ZooBox5
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-zoobox.sh
+          ./aws-userdata-zoobox.sh 5
+          rm aws-userdata-zoobox.sh

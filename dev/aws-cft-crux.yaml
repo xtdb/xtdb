@@ -3,12 +3,16 @@ Parameters:
     Type: String
   VPC:
     Type: String
-  MinCruxBoxes:
+  RouteTable:
+    Type: String
+  CruxMinBoxes:
     Type: String
     AllowedPattern: '[\d]+'
-  MaxCruxBoxes:
+  CruxMaxBoxes:
     Type: String
     AllowedPattern: '[\d]+'
+  UserDataURL:
+    Type: String
 Resources:
   CruxSG:
     Type: 'AWS::EC2::SecurityGroup'
@@ -49,7 +53,7 @@ Resources:
         - 0
         - !GetAZs
       CidrBlock: 10.0.128.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   CruxSN2:
     Type: 'AWS::EC2::Subnet'
@@ -58,7 +62,7 @@ Resources:
         - 1
         - !GetAZs
       CidrBlock: 10.0.144.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   CruxSN3:
     Type: 'AWS::EC2::Subnet'
@@ -67,8 +71,23 @@ Resources:
         - 2
         - !GetAZs
       CidrBlock: 10.0.160.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
+  CruxRTA1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CruxSN1
+      RouteTableId: !Ref RouteTable
+  CruxRTA2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CruxSN2
+      RouteTableId: !Ref RouteTable
+  CruxRTA3:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref CruxSN3
+      RouteTableId: !Ref RouteTable
   CruxLB:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
     Properties:
@@ -106,19 +125,30 @@ Resources:
   CruxLC:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Properties:
-      AssociatePublicIpAddress: false
+      AssociatePublicIpAddress: true
       ImageId: ami-a36f8dc4
       InstanceType: t2.small
       KeyName: !Ref SSHKeyPair
       SecurityGroups:
         - !Ref CruxSG
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-cruxbox.sh
+          ./aws-userdata-cruxbox.sh 1
+          rm aws-userdata-cruxbox.sh
   CruxASG:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       AutoScalingGroupName: CruxASG
       LaunchConfigurationName: !Ref CruxLC
-      MaxSize: !Ref MaxCruxBoxes
-      MinSize: !Ref MinCruxBoxes
+      MaxSize: !Ref CruxMaxBoxes
+      MinSize: !Ref CruxMinBoxes
+      Tags:
+        - Key: Name
+          Value: CruxBox
+          PropagateAtLaunch: true
       TargetGroupARNs:
         - !Ref CruxLBTG
       VPCZoneIdentifier:

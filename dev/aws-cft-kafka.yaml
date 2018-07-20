@@ -3,12 +3,16 @@ Parameters:
     Type: String
   VPC:
     Type: String
-  MinKafkaBoxes:
+  RouteTable:
+    Type: String
+  KafkaMinBoxes:
     Type: String
     AllowedPattern: '[\d]+'
-  MaxKafkaBoxes:
+  KafkaMaxBoxes:
     Type: String
     AllowedPattern: '[\d]+'
+  UserDataURL:
+    Type: String
 Resources:
   KafkaSG:
     Type: 'AWS::EC2::SecurityGroup'
@@ -39,7 +43,7 @@ Resources:
         - 0
         - !GetAZs
       CidrBlock: 10.0.64.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   KafkaSN2:
     Type: 'AWS::EC2::Subnet'
@@ -48,7 +52,7 @@ Resources:
         - 1
         - !GetAZs
       CidrBlock: 10.0.80.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
   KafkaSN3:
     Type: 'AWS::EC2::Subnet'
@@ -57,24 +61,86 @@ Resources:
         - 2
         - !GetAZs
       CidrBlock: 10.0.96.0/20
-      MapPublicIpOnLaunch: false
+      MapPublicIpOnLaunch: true
       VpcId: !Ref VPC
+  KafkaRTA1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref KafkaSN1
+      RouteTableId: !Ref RouteTable
+  KafkaRTA2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref KafkaSN2
+      RouteTableId: !Ref RouteTable
+  KafkaRTA3:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref KafkaSN3
+      RouteTableId: !Ref RouteTable
+  KafkaLB:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Name: KafkaLB
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref KafkaSG
+      Subnets:
+        - !Ref KafkaSN1
+        - !Ref KafkaSN2
+        - !Ref KafkaSN3
+      Type: application
+  KafkaLBTG:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckIntervalSeconds: 6
+      HealthCheckPath: /
+      HealthCheckPort: '3000'
+      HealthCheckTimeoutSeconds: 5
+      Matcher:
+        HttpCode: '200'
+      Port: '3000'
+      Protocol: HTTP
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VPC
+  KafkaLBL:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref KafkaLBTG
+          Type: forward
+      LoadBalancerArn: !Ref KafkaLB
+      Port: '3000'
+      Protocol: HTTP
   KafkaLC:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Properties:
-      AssociatePublicIpAddress: false
+      AssociatePublicIpAddress: true
       ImageId: ami-a36f8dc4
       InstanceType: t2.small
       KeyName: !Ref SSHKeyPair
       SecurityGroups:
         - !Ref KafkaSG
+      UserData:
+        Fn::Base64: !Sub |
+          #!bin/bash
+          wget ${UserDataURL}
+          chmod +x aws-userdata-kafkabox.sh
+          ./aws-userdata-kafkabox.sh 1
+          rm aws-userdata-kafkabox.sh
   KafkaASG:
     Type: 'AWS::AutoScaling::AutoScalingGroup'
     Properties:
       AutoScalingGroupName: KafkaASG
       LaunchConfigurationName: !Ref KafkaLC
-      MaxSize: !Ref MaxKafkaBoxes
-      MinSize: !Ref MinKafkaBoxes
+      MaxSize: !Ref KafkaMaxBoxes
+      MinSize: !Ref KafkaMinBoxes
+      Tags:
+        - Key: Name
+          Value: KafkaBox
+          PropagateAtLaunch: true
+      TargetGroupARNs:
+        - !Ref KafkaLBTG
       VPCZoneIdentifier:
         - !Ref KafkaSN1
         - !Ref KafkaSN2

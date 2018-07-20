@@ -1,8 +1,8 @@
 #!/bin/bash
 
-KAFKA_LB_DNS=????
-
 yum update -y
+
+kafka_lb_dns=???
 
 mkdir -p /stack
 
@@ -76,6 +76,6 @@ git clone git@github.com:juxt/crux.git /stack/crux
 
 mkdir -p /stack/crux/data
 cd /stack/crux
-lein run -b $KAFKA_LB_DNS:9093 > /stack/crux/data/crux.out &
+lein run -b $kafka_lb_dns:9093 > /stack/crux/data/crux.out &
 
 chmod -R 777 /stack

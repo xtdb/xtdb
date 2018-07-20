@@ -10,22 +10,22 @@ Parameters:
   SetupBucketURL:
     Description: URL of an S3 bucket folder containing other Crux setup files.
     Type: String
-  MinKafkaBoxes:
+  KafkaMinBoxes:
     Default: 2
     Type: String
     AllowedPattern: '[\d]*'
     ConstraintDescription: Must be a positive integer.
-  MaxKafkaBoxes:
+  KafkaMaxBoxes:
     Default: 5
     Type: String
     AllowedPattern: '[\d]*'
     ConstraintDescription: Must be a positive integer.
-  MinCruxBoxes:
+  CruxMinBoxes:
     Default: 2
     Type: String
     AllowedPattern: '[\d]*'
     ConstraintDescription: Must be a positive integer.
-  MaxCruxBoxes:
+  CruxMaxBoxes:
     Default: 5
     Type: String
     AllowedPattern: '[\d]*'
@@ -69,6 +69,11 @@ Resources:
       Parameters:
         SSHKeyPair: !Ref SSHKeyPair
         VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
+        RouteTable: !Ref RouteTable
+        UserDataURL: !Join
+          - '/'
+          - - !Ref SetupBucketURL
+            - 'aws-userdata-zoobox.sh'
       Tags:
         - Key: Name
           Value: ZooStack
@@ -82,8 +87,10 @@ Resources:
       Parameters:
         SSHKeyPair: !Ref SSHKeyPair
         VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
-        MinKafkaBoxes: !Ref MinKafkaBoxes
-        MaxKafkaBoxes: !Ref MaxKafkaBoxes
+        RouteTable: !Ref RouteTable
+        KafkaMinBoxes: !Ref KafkaMinBoxes
+        KafkaMaxBoxes: !Ref KafkaMaxBoxes
+        SetupBucketURL: !Ref SetupBucketURL
       Tags:
         - Key: Name
           Value: KafkaStack
@@ -97,8 +104,10 @@ Resources:
       Parameters:
         SSHKeyPair: !Ref SSHKeyPair
         VPC: !If [ CreateVPC, !Ref CommonVPC, !Ref VPCID ]
-        MinCruxBoxes: !Ref MinCruxBoxes
-        MaxCruxBoxes: !Ref MaxCruxBoxes
+        RouteTable: !Ref RouteTable
+        CruxMaxBoxes: !Ref CruxMaxBoxes
+        CruxMinBoxes: !Ref CruxMinBoxes
+        SetupBucketURL: !Ref SetupBucketURL
       Tags:
         - Key: Name
           Value: CruxStack
