@@ -6,6 +6,7 @@
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
+            [crux.io :as cio]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable File RandomAccessFile]
@@ -335,16 +336,13 @@
 
 (def ^:private ^:dynamic *external-sort-limit* (* 1024 1024))
 
-;;TODO: The file could be kept open for a while if necessary for
-;;performance.
-(defn- read-external-sort-value [^File file [k offset length]]
-  (with-open [raf (RandomAccessFile. file "r")]
-    (let [bs (byte-array length)]
-      (.seek raf offset)
-      (.readFully raf bs)
-      [k (nippy/fast-thaw bs)])))
+(defn- read-external-sort-value [^RandomAccessFile raf [k offset length]]
+  (let [bs (byte-array length)]
+    (.seek raf offset)
+    (.readFully raf bs)
+    [k (nippy/fast-thaw bs)]))
 
-(defrecord SortedVirtualIndex [values ^File file seq-state]
+(defrecord SortedVirtualIndex [values ^RandomAccessFile raf ^File file seq-state]
   db/Index
   (seek-values [this k]
     (let [idx (Collections/binarySearch values
@@ -359,7 +357,7 @@
           {:keys [fst]} (reset! seq-state {:fst x :rest xs})]
       (if fst
         (if file
-          (read-external-sort-value file fst)
+          (read-external-sort-value raf fst)
           fst)
         (reset! seq-state nil))))
 
@@ -370,16 +368,13 @@
                                              (assoc seq-state :fst x :rest xs)))]
       (when fst
         (if file
-          (read-external-sort-value file fst)
+          (read-external-sort-value raf fst)
           fst))))
 
   Closeable
   (close [this]
-    ;; TODO: would be good to do this before exit to avoid build
-    ;; up. Either by connecting this index to the snapshot and do it
-    ;; then, or using PhantomReferences on the SortedVirtualIndex or
-    ;; its File. The cleanup method would need to refer to the path,
-    ;; not the File.
+    (when raf
+      (.close raf))
     (when file
       (.delete file))))
 
@@ -389,6 +384,7 @@
                      idx-or-seq)
         file (doto (File/createTempFile "crux-external-sort" ".nippy")
                (.deleteOnExit))
+        path (.getAbsolutePath file)
         [acc] (with-open [raf (RandomAccessFile. file "rw")]
                 (->> idx-as-seq
                      (reduce
@@ -397,9 +393,14 @@
                           (.write raf bs)
                           [(conj acc [k offset (count bs)])
                            (+ offset (count bs))]))
-                      [[] 0])))]
+                      [[] 0])))
+        raf (RandomAccessFile. file "r")]
+    (cio/register-cleaner file (fn []
+                                 (.close raf)
+                                 (.delete (File. path))))
     (->SortedVirtualIndex
      (vec (sort-by first bu/bytes-comparator acc))
+     raf
      file
      (atom nil))))
 
@@ -411,6 +412,7 @@
      (->> idx-as-seq
           (sort-by first bu/bytes-comparator)
           (vec))
+     nil
      nil
      (atom nil))))
 

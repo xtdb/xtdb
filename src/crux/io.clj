@@ -1,8 +1,34 @@
 (ns crux.io
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
+           [java.lang.ref ReferenceQueue PhantomReference]
+           [java.util IdentityHashMap]
            [java.net ServerSocket]))
+
+;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
+;; We currently still support Java 8.
+(def ^:private ^ReferenceQueue reference-queue (ReferenceQueue.))
+(def ^:private ^IdentityHashMap ref->cleanup (IdentityHashMap.))
+
+(declare cleaner-future)
+(def ^:private cleaner-future
+  (do (when (and (bound? #'cleaner-future) cleaner-future)
+        (future-cancel cleaner-future))
+      (future
+        (try
+          (loop [ref (.remove reference-queue)]
+            (try
+              (when-let [cleanup (.remove ref->cleanup ref)]
+                (cleanup))
+              (catch Exception e
+                (log/error "Error while running cleaner:" e)))
+            (recur (.remove reference-queue)))
+          (catch InterruptedException _)))))
+
+(defn register-cleaner [object action]
+  (.put ref->cleanup (PhantomReference. object reference-queue) action))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
@@ -48,7 +74,7 @@
      (str bytes " B")
      (let [unit (last (filter #(>= bytes (% units)) (keys units)))]
        (->human-size bytes unit))))
-  
+
   ([bytes unit]
    (as-> bytes b
      (/ b (unit units))
