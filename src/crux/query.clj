@@ -237,48 +237,6 @@
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
-(declare build-sub-query)
-
-(defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
-  (->> or-clauses
-       (reduce
-        (fn [[or-clause+relation+or-branches known-vars var->joins] clause]
-          (let [or-join? (= :or-join or-type)
-                or-branches (for [[type sub-clauses] (case or-type
-                                                       :or clause
-                                                       :or-join (:body clause))
-                                  :let [where (case type
-                                                :term [sub-clauses]
-                                                :and sub-clauses)
-                                        body-vars (->> (collect-vars (normalize-clauses where))
-                                                       (vals)
-                                                       (reduce into #{}))
-                                        or-vars (if or-join?
-                                                  (set (:args clause))
-                                                  body-vars)
-                                        free-vars (set/difference or-vars known-vars)]]
-                              (do (when or-join?
-                                    (doseq [var or-vars
-                                            :when (not (contains? body-vars var))]
-                                      (throw (IllegalArgumentException.
-                                              (str "Or join variable never used: " var " " (pr-str clause))))))
-                                  {:or-vars or-vars
-                                   :free-vars free-vars
-                                   :bound-vars (set/difference or-vars free-vars)
-                                   :where where}))
-                free-vars (:free-vars (first or-branches))
-                relation (doc/new-relation-virtual-index (gensym "or-vars")
-                                                         []
-                                                         (count free-vars))]
-            (when (not (apply = (map :or-vars or-branches)))
-              (throw (IllegalArgumentException.
-                      (str "Or requires same logic variables: " (pr-str clause)))))
-            [(conj or-clause+relation+or-branches [clause relation or-branches])
-             (into known-vars free-vars)
-             (apply merge-with into var->joins (for [v free-vars]
-                                                 {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
-        [[] known-vars var->joins])))
-
 (defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
   (->> e-var+v-var->join-clauses
        (reduce
@@ -360,6 +318,48 @@
                     (merge-with into var->joins))])
             [pred-clause->relation var->joins]))
         [{} var->joins])))
+
+(declare build-sub-query)
+
+(defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
+  (->> or-clauses
+       (reduce
+        (fn [[or-clause+relation+or-branches known-vars var->joins] clause]
+          (let [or-join? (= :or-join or-type)
+                or-branches (for [[type sub-clauses] (case or-type
+                                                       :or clause
+                                                       :or-join (:body clause))
+                                  :let [where (case type
+                                                :term [sub-clauses]
+                                                :and sub-clauses)
+                                        body-vars (->> (collect-vars (normalize-clauses where))
+                                                       (vals)
+                                                       (reduce into #{}))
+                                        or-vars (if or-join?
+                                                  (set (:args clause))
+                                                  body-vars)
+                                        free-vars (set/difference or-vars known-vars)]]
+                              (do (when or-join?
+                                    (doseq [var or-vars
+                                            :when (not (contains? body-vars var))]
+                                      (throw (IllegalArgumentException.
+                                              (str "Or join variable never used: " var " " (pr-str clause))))))
+                                  {:or-vars or-vars
+                                   :free-vars free-vars
+                                   :bound-vars (set/difference or-vars free-vars)
+                                   :where where}))
+                free-vars (:free-vars (first or-branches))
+                relation (doc/new-relation-virtual-index (gensym "or-vars")
+                                                         []
+                                                         (count free-vars))]
+            (when (not (apply = (map :or-vars or-branches)))
+              (throw (IllegalArgumentException.
+                      (str "Or requires same logic variables: " (pr-str clause)))))
+            [(conj or-clause+relation+or-branches [clause relation or-branches])
+             (into known-vars free-vars)
+             (apply merge-with into var->joins (for [v free-vars]
+                                                 {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
+        [[] known-vars var->joins])))
 
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index e-var->leaf-v-var-clauses join-depth vars]
   (->> (for [var vars
