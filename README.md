@@ -4,6 +4,8 @@
 
 A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
+[MVP Notes](docs/mvp.md)
+
 Motivation: a database with the following characteristics:
 
 + [Graph Query](docs/query.md)
