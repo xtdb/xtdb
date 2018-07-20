@@ -175,17 +175,95 @@ currently some read consistency issues that can arise here.
 
 ### How does CRUX do it?
 
-### Implementation Details
+CRUX mainly consists of two parts, the transaction and ingestion
+piece, built around Kafka, and the query piece, built on top of a
+local KV store such as RocksDB. The ingestion engine populates the
+indexes.
+
+#### Ingestion
+
+On the ingestion side, the main design is to split the data into two
+separate topics, the `tx-topic` and the `doc-topic`. The users don't
+write directly to these topics, but use a `crux.db.TxLog` instance to
+do so. Each transaction operation will be split into several messages,
+where documents go into the `doc-topic` and the hashed versions of the
+transactions go into the `tx-topic`.
+
+The `tx-topic` is immutable, but the `doc-topic` is compacted, and
+keyed by the documents content hashes, enabling eviction of the
+data. As data can be purged for good using this mechanism, CRUX does
+not lend itself to naively be used as an event sourcing mechanism, as
+while the `tx-topic` will stay intact, it might refer to documents
+which have since been evicted.
+
+The ingestion side indexes both the `doc-topic` and the `tx-topic`,
+into a bunch of local indexes in the KV store, which are used by the
+query engine. The indexes are:
+
++ `content-hash->doc-index` Main document store.
++ `attribute+value+content-hash-index` Secondary index of attributes.
++ `content-hash+entity-index` Used to find entities for a content
+  hash, currently this mapping is 1-1 but this was not the original
+  intention.
++ `entity+bt+tt+tx-id->content-hash-index` Main temporal index, used
+  to find the content hash of a specific entity version.
++ `meta-key->value-index` Used to store Kafka offsets and transaction
+  times.
+
+#### Query
+
+The query engine is built using the concept of "virtual indexes",
+which bottom out to a combination of the above physical indexes or
+disk or data directly in-memory. The actual queries are represented as
+a composition and combination of these indexes. Things like range
+constraints are applied directly as decorators on the lower level
+indexes. The query engine itself never concerns itself with time, as
+this is hidden by the lower indexes.
+
+The query is itself ultimately represented as a single n-ary join
+across variables, each potentially represented by several indexes. As
+the resulting tree is walked the query engine further has a concept of
+constraints, which are applied to the results as the joins between the
+indexes are performed. Things like predicates and sub queries are
+implemented as such constraints. Nested expressions, such as `not`,
+`or` and rules are executed several times as separate sub queries on
+the partial results as the tree is walked. All indexes participating
+in a unary join must be sorted in the same order. All n-ary indexes
+participating in the parent query must have the same variable order.
+
+Conceptually the execution model is a combination of an n-ary worst
+case optimal join and Query-Subquery (QSQ) evaluation of Datalog. The
+worst case optimal join algorithm provides binds free variables which
+then are used as arguments in QSQ. Rules are evaluated via a
+combination of eager expansion of the rule bodies into the parent
+query and QSQ using caches to avoid recusion. `or` and `or-join` are
+anonymous rules. `not` is a sub query which executes when all
+required variables are bound, and its result is removed from the
+parent result.
 
 ### Known Issues
 
-+ Rules are not well tested.
++ Rules in queries are not well tested.
++ Nested expressions in queries are not well tested.
 + Point in time semantics when writing in the past.
 + Documents requires `:crux.db/id` which removes ability to share
-  document versions across entities. Area needs analysis.
+  versions across entities. Needs analysis.
++ Potential of inconsistent reads across different nodes when using
+  REST API.
++ Queries likely to slow down with increased history size.
++ Architecture not tested in real application use.
++ Query engine is brittle to extend. Lacks internal abstractions.
++ Single attribute index complicates the query engine.
++ Lazy results requires consistent sorting across indexes, which will
+  need to be able to spill over to disk.
 
 ### AWS Deployment
 
 ### Future
+
+Phase 2, which is still to be decided, will be discussed during a few
+CRUX sessions in Stockholm August 6 to 10, 2018. The minimum outcome
+of the MVP if there is no phase 2 is likely that CRUX gets open
+sourced in its current form.
 
 ### FAQs
