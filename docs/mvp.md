@@ -221,25 +221,30 @@ indexes. The query engine itself never concerns itself with time, as
 this is hidden by the lower indexes.
 
 The query is itself ultimately represented as a single n-ary join
-across variables, each potentially represented by several indexes. As
-the resulting tree is walked the query engine further has a concept of
-constraints, which are applied to the results as the joins between the
-indexes are performed. Things like predicates and sub queries are
-implemented as such constraints. Nested expressions, such as `not`,
-`or` and rules are executed several times as separate sub queries on
-the partial results as the tree is walked. All indexes participating
-in a unary join must be sorted in the same order. All n-ary indexes
-participating in the parent query must have the same variable order.
+across variables, each potentially represented by several indexes,
+each combined via an unary join across them. As the resulting tree is
+walked the query engine further has a concept of constraints, which
+are applied to the results as the joins between the indexes are
+performed. Things like predicates and sub queries are implemented
+using such constraints. Nested expressions, such as `not`, `or` and
+rules are executed several times as separate sub queries on the
+partial results as the tree is walked. All indexes participating in a
+unary join must be sorted in the same order. All n-ary indexes
+(relations) participating in the parent n-ary join must have the same
+variable order.
 
 Conceptually the execution model is a combination of an n-ary worst
 case optimal join and Query-Subquery (QSQ) evaluation of Datalog. The
-worst case optimal join algorithm provides binds free variables which
-then are used as arguments in QSQ. Rules are evaluated via a
-combination of eager expansion of the rule bodies into the parent
-query and QSQ using caches to avoid recusion. `or` and `or-join` are
-anonymous rules. `not` is a sub query which executes when all
-required variables are bound, and its result is removed from the
-parent result.
+worst case optimal join algorithm binds free variables which then are
+used as arguments in QSQ. The results of the sub query are then
+injected an n-ary index (relation) into the parent query, binding
+further variables in the parent query ("sideways information
+passing"). Rules are evaluated via a combination of eager expansion of
+the rule bodies into the parent query and QSQ using caches to avoid
+recusion. `or` and `or-join` are anonymous rules. `not` is a sub query
+which executes when all required variables are bound, and arguments
+which return results are removed from the corresponding parent result
+variables.
 
 ### Known Issues
 
