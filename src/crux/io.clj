@@ -10,25 +10,27 @@
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
 ;; We currently still support Java 8.
 (def ^:private ^ReferenceQueue reference-queue (ReferenceQueue.))
-(def ^:private ^IdentityHashMap ref->cleanup (IdentityHashMap.))
+(def ^:private ^IdentityHashMap ref->cleanup-action (IdentityHashMap.))
 
-(declare cleaner-future)
-(def ^:private cleaner-future
-  (do (when (and (bound? #'cleaner-future) cleaner-future)
-        (future-cancel cleaner-future))
-      (future
-        (try
-          (loop [ref (.remove reference-queue)]
-            (try
-              (when-let [cleanup (.remove ref->cleanup ref)]
-                (cleanup))
-              (catch Exception e
-                (log/error "Error while running cleaner:" e)))
-            (recur (.remove reference-queue)))
-          (catch InterruptedException _)))))
+(defn- cleanup-loop []
+  (try
+    (loop [ref (.remove reference-queue)]
+      (try
+        (when-let [cleanup-action (.remove ref->cleanup-action ref)]
+          (cleanup-action))
+        (catch Exception e
+          (log/error "Error while running cleaner:" e)))
+      (recur (.remove reference-queue)))
+    (catch InterruptedException _)))
+
+(defonce ^:private ^Thread cleaner-thread
+  (doto (Thread. ^Runnable cleanup-loop "crux.io.cleaner-thread")
+    (.setDaemon true)))
 
 (defn register-cleaner [object action]
-  (.put ref->cleanup (PhantomReference. object reference-queue) action))
+  (when-not (.isAlive cleaner-thread)
+    (.start cleaner-thread))
+  (.put ref->cleanup-action (PhantomReference. object reference-queue) action))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]
