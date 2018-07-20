@@ -21,11 +21,11 @@
     :default "localhost:9092"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
     :default (.getHostName (InetAddress/getLocalHost))]
-   ["-t" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
+   ["-t" "--tx-topic TOPIC" "Kafka topic for the CRUX transaction log"
     :default "crux-transaction-log"]
-   ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
+   ["-o" "--doc-topic TOPIC" "Kafka topic for the CRUX documents"
     :default "crux-docs"]
-   ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
+   ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the CRUX documents topic"
     :default "1"]
    ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
     :default "1"]
@@ -119,7 +119,7 @@
         (System/exit 1))
 
       :else
-      (do (log/infof "Crux version: %s revision: %s" version revision)
+      (do (log/infof "CRUX version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
           (start-system options)))))
 
