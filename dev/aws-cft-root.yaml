@@ -90,7 +90,10 @@ Resources:
         RouteTable: !Ref RouteTable
         KafkaMinBoxes: !Ref KafkaMinBoxes
         KafkaMaxBoxes: !Ref KafkaMaxBoxes
-        SetupBucketURL: !Ref SetupBucketURL
+        UserDataURL: !Join
+          - '/'
+          - - !Ref SetupBucketURL
+            - 'aws-userdata-kafkabox.sh'
       Tags:
         - Key: Name
           Value: KafkaStack
@@ -107,7 +110,10 @@ Resources:
         RouteTable: !Ref RouteTable
         CruxMaxBoxes: !Ref CruxMaxBoxes
         CruxMinBoxes: !Ref CruxMinBoxes
-        SetupBucketURL: !Ref SetupBucketURL
+        UserDataURL: !Join
+          - '/'
+          - - !Ref SetupBucketURL
+            - 'aws-userdata-cruxbox.sh'
       Tags:
         - Key: Name
           Value: CruxStack
