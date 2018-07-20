@@ -211,14 +211,17 @@
                        (apply comp))])
          (into {}))))
 
+(defn- all-args-for-var [args var]
+  (for [arg args]
+    (or (get arg (symbol (name var)))
+        (get arg (keyword (name var))))))
+
 (defn- e-var-literal-v-joins [snapshot object-store e-var->literal-v-clauses var->joins arg-vars args business-time transact-time]
   (->> e-var->literal-v-clauses
        (reduce
         (fn [var->joins [e-var clauses]]
           (if (contains? arg-vars e-var)
-            (let [entities (for [arg args]
-                             (or (get arg (symbol (name e-var)))
-                                 (get arg (keyword (name e-var)))))
+            (let [entities (all-args-for-var args e-var)
                   idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
                        object-store
                        snapshot
@@ -237,18 +240,29 @@
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
-(defn- e-var-v-var-joins [snapshot e-var+v-var->join-clauses v-var->range-constriants var->joins business-time transact-time]
+(defn- e-var-v-var-joins [snapshot object-store e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args business-time transact-time]
   (->> e-var+v-var->join-clauses
        (reduce
         (fn [var->joins [[e-var v-var] clauses]]
           (let [indexes (for [{:keys [a]} clauses]
-                          (assoc (doc/new-entity-attribute-value-virtual-index
-                                  snapshot
-                                  a
-                                  (get v-var->range-constriants v-var)
-                                  business-time
-                                  transact-time)
-                                 :name e-var))]
+                          (if (contains? arg-vars e-var)
+                            (let [entities (all-args-for-var args e-var)]
+                              (assoc (doc/new-entity-attribute-value-known-entities-virtual-index
+                                      object-store
+                                      snapshot
+                                      entities
+                                      a
+                                      (get v-var->range-constriants v-var)
+                                      business-time
+                                      transact-time)
+                                     :name e-var))
+                            (assoc (doc/new-entity-attribute-value-virtual-index
+                                    snapshot
+                                    a
+                                    (get v-var->range-constriants v-var)
+                                    business-time
+                                    transact-time)
+                                   :name e-var)))]
             (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
 
@@ -926,9 +940,12 @@
                                        (group-by :e))
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         var->joins (e-var-v-var-joins snapshot
+                                      object-store
                                       e-var+v-var->join-clauses
                                       v-var->range-constriants
                                       var->joins
+                                      arg-vars
+                                      args
                                       business-time
                                       transact-time)
         var->joins (v-var-literal-e-joins snapshot

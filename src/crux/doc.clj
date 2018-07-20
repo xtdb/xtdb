@@ -723,6 +723,19 @@
                     (wrap-with-range-constraints range-constraints))]
     (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
 
+(defn new-entity-attribute-value-known-entities-virtual-index [object-store snapshot entities attr range-constraints business-time transact-time]
+  (let [entities (entities-at snapshot entities business-time transact-time)
+        content-hash->doc (db/get-objects object-store (map :content-hash entities))
+        value->entities (->> (for [{:keys [eid content-hash] :as entity} entities
+                                   :let [doc (get content-hash->doc content-hash)]
+                                   value (normalize-value (get doc attr))]
+                               {value #{entity}})
+                             (apply merge-with into))]
+    (-> (for [[value entities] value->entities]
+          [(idx/value->bytes value) (vec entities)])
+        (new-sorted-virtual-index)
+        (wrap-with-range-constraints range-constraints))))
+
 (defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
   (-> (new-sorted-virtual-index
        (for [prefix (partition-by first tuples)
