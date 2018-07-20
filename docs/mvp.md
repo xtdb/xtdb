@@ -90,9 +90,7 @@ are evicted.
 
 The hashes are the SHA-1 content hash of the documents. CRUX uses an
 attribute `:crux.db/id` on the documents that is assumed to line up
-with the id it is submitted under. Having this id embedded in the
-document isn't strictly necessary, but some queries will require it to
-exist to work. Hence, a document looks like this:
+with the id it is submitted under. Hence, a document looks like this:
 
 ```clj
 {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
@@ -180,6 +178,11 @@ currently some read consistency issues that can arise here.
 ### Implementation Details
 
 ### Known Issues
+
++ Rules are not well tested.
++ Point in time semantics when writing in the past.
++ Documents requires `:crux.db/id` which removes ability to share
+  document versions across entities. Area needs analysis.
 
 ### AWS Deployment
 

@@ -110,6 +110,9 @@
 (defrecord DocIndexer [kv tx-log object-store]
   db/Indexer
   (index-doc [_ content-hash doc]
+    (when (and doc (not (contains? doc :crux.db/id)))
+      (throw (IllegalArgumentException.
+              (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (idx/new-id content-hash)
           existing-doc (get (db/get-objects object-store [content-hash]) content-hash)]
       (cond
