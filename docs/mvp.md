@@ -318,3 +318,28 @@ updated. More advanced algorithms can be built on top of this.
 **A:** Not in the MVP. But As the log is ingested in the same order at
 all nodes, functional transformations of the tx-ops are possible in
 theory.
+
+**Q:** Does CRUX support the full Datomic/Datascript dialect of
+Datalog?
+
+**A:** No. The `:where` part is similar, but only the map form of
+queries are supported. There's no support for Datomic's built-in
+functions, or accessing the log and history directly. There's also no
+support for variable bindings or multiple source vars.
+
+Differences include that `:rules` and `:args`, which is a relation
+represented as a list of maps which is joined with the query, are
+being provided in the same query map as the `:find` and `:where`
+clause. CRUX additionally supports the built-in `==` for unification
+as well as the `!=`. Both these unification operators can also take
+sets of literals as arguments, requiring at least one to match, which
+is basically a form of or.
+
+Many of these things can be expected to change after the MVP, but
+compatibility is not a goal for CRUX.
+
+**Q:** Any plans for Datalog, Cypher, Gremlin or SPARQL support?
+
+**A:** The goal is to support different languages, and decouple the
+query engine from its syntax, but this is not currently the case in
+the MVP.
