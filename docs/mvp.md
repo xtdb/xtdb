@@ -273,6 +273,7 @@ sourced in its current form.
 
 ### FAQs
 
-+ **Q:** Crux or CRUX?
-  **A:** It is CRUX. "CRUX feels a throwback to the 60s/70s when computers
+**Q:** Crux or CRUX?
+
+**A:** It is CRUX. "CRUX feels a throwback to the 60s/70s when computers
   were UPPERCASE ONLY. Retro." -- Malcolm.
