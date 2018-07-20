@@ -285,3 +285,36 @@ sourced in its current form.
 `crux.rdf` but this is not a core feature. RDF and SPARQL support
 could eventually be written as a layer on top of CRUX as a module, but
 there are no plans for this by the core team.
+
+
+**Q:** Does CRUX require Kafka?
+
+**A:** Not strictly. There is a local implementation called
+`crux.tx.DocTxLog` that writes transactions directly into the local KV
+store. One can also implement the `crux.db.TxLog` protocol to replace
+the `crux.db.KafkaTxLog` implementation. That said, Kafka is assumed
+at the moment.
+
+
+**Q:** What consistency does CRUX provide?
+
+**A:** CRUX does not try to enforce consistency among nodes, which all
+consume the log in the same order, but may be at different points. A
+client using the same node will have a consistent view. Reading your
+own writes can be achieved by providing the transaction time Kafka
+assigned to the submitted transaction, which is returned in a promise
+from `crux.tx/submit-tx`, in the call to `crux.query/db`. This will
+block until this transaction time has been seen by the local
+node.
+
+Write consistency across nodes is provided via the `:crux.db/cas`
+operation. The user needs to attempt to perform a CAS, then wait for
+the transaction time (as above), and check that the entity got
+updated. More advanced algorithms can be built on top of this.
+
+
+**Q:** Does CRUX provide transaction functions?
+
+**A:** Not in the MVP. But As the log is ingested in the same order at
+all nodes, functional transformations of the tx-ops are possible in
+theory.
