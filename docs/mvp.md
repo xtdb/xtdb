@@ -336,9 +336,14 @@ checking if the write succeeded.
 
 **Q:** Does CRUX provide transaction functions?
 
-**A:** Not in the MVP. But As the log is ingested in the same order at
-all nodes, functional transformations of the tx-ops are possible in
-theory.
+**A:** Not directly in the MVP. But As the log is ingested in the same
+order at all nodes, purely functional transformations of the tx-ops
+are possible. The current transaction operations are implemented via a
+multi-method, `crux.tx/tx-command` which is possible to extend with
+further implementations. To make this work the spec `:crux.tx/tx-op`
+also needs to be extended to accept the new operation. A transaction
+command returns a map containing the keys `:kvs` `:pre-condition-fn` and
+`:post-condition-fn` (the functions are optional).
 
 **Q:** Does CRUX support the full Datomic/Datascript dialect of
 Datalog?
