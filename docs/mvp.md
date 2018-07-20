@@ -62,7 +62,7 @@ over HTTP. CRUX supports 4 write operations and a Datalog query
 interface for reads. There's additionally a way to get the history of
 an entity, or a document as of a specific version.
 
-The four write operations are as follows:
+The four transaction (write) operations are as follows:
 
 ```clj
 [:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
@@ -99,7 +99,7 @@ with the id it is submitted under. Hence, a document looks like this:
 ```
 
 In practice when using CRUX, one calls `crux.db/submit-tx` with a set
-of write operations as above, where the hashes are replaced with
+of transaction operations as above, where the hashes are replaced with
 actual documents:
 
 ```clj
@@ -115,17 +115,33 @@ version is submitted to the `tx-topic` in Kafka. The document itself
 is submitted to the `doc-topic`, using its content hash as key. This
 latter topic is compacted, which enables later deletion of documents.
 
+If the transaction contains CAS operations, all CAS operations must
+pass their pre-condition check or the entire transaction is
+aborted. This happens at the query node during indexing, and not when
+submitting the transaction.
+
 CRUX stores "entities", each having a stable id, and a set of EDN
 documents making up its history. Apart from EDN, there's no schema of
 the documents, and no enforced concept of references. References are
 simply fields where the value of an attribute is the `:crux.db/id` of
 another document.
 
+A CRUX id is a type which satisfies the `crux.index.IdToBytes`
+protocol. Keywords, UUIDs, URIs and SHA-1 hex strings do this out of
+the box. Note that normal strings are not considered valid ids.
+
 All attributes will be indexed locally to enable queries. Attributes
 which have vectors or sets as the values will have all their elements
 indexed. CRUX does not enforce any schema. A document can change the
 type of its fields at will between versions, though this isn't
 recommended, as it leads to confusion at query time.
+
+Indexing is done via the `crux.index.ValueToBytes` protocol. The
+default is to take the SHA-1 of the value serialised by Nippy. Ids
+index via `IdToBytes`. `Long`, `Double`, `Date` and `String` have
+implementations which respect ordering while serialised to unsigned
+bytes, which is what most underlying KV stores will use to order the
+keys.
 
 CRUX also supports a few lower-level read operations, like
 `crux.doc/entities-at`, `crux.doc/entity-history` for entities from
@@ -310,7 +326,11 @@ node.
 Write consistency across nodes is provided via the `:crux.db/cas`
 operation. The user needs to attempt to perform a CAS, then wait for
 the transaction time (as above), and check that the entity got
-updated. More advanced algorithms can be built on top of this.
+updated. More advanced algorithms can be built on top of this. As
+mentioned above, all CAS operations in a transaction must pass their
+pre-condition check for the transaction to proceed and get
+indexed. There's currently no way to check for this, apart from
+checking if the write succeeded.
 
 
 **Q:** Does CRUX provide transaction functions?

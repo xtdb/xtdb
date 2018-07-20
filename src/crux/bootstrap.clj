@@ -99,7 +99,10 @@
      (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
      (while @running?
-       (k/consume-and-index-entities indexer consumer 100)))))
+       (try
+         (k/consume-and-index-entities indexer consumer 100)
+         (catch Exception e
+           (log/error e "Error while consuming and indexing from Kafka:")))))))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options

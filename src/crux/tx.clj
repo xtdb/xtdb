@@ -1,5 +1,6 @@
 (ns crux.tx
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.index :as idx]
@@ -48,64 +49,67 @@
   (let [eid (idx/new-id k)
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
-    (concat
-     [[(idx/encode-entity+bt+tt+tx-id-key
-        eid
-        business-time
-        transact-time
-        tx-id)
-       (idx/id->bytes content-hash)]]
-     (when-not (= content-hash (idx/new-id nil))
-       [[(idx/encode-content-hash+entity-key content-hash eid)
-         idx/empty-byte-array]]))))
+    {:kvs (concat
+           [[(idx/encode-entity+bt+tt+tx-id-key
+              eid
+              business-time
+              transact-time
+              tx-id)
+             (idx/id->bytes content-hash)]]
+           (when-not (= content-hash (idx/new-id nil))
+             [[(idx/encode-content-hash+entity-key content-hash eid)
+               idx/empty-byte-array]]))}))
 
 (defmethod tx-command :crux.tx/delete [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
-    [[(idx/encode-entity+bt+tt+tx-id-key
-       eid
-       business-time
-       transact-time
-       tx-id)
-      idx/nil-id-bytes]]))
+    {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
+             eid
+             business-time
+             transact-time
+             tx-id)
+            idx/nil-id-bytes]]}))
 
-(defmethod tx-command :crux.tx/cas [kv object-store tx-log [op k old-v new-v business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [kv object-store tx-log [op k old-v new-v business-time :as cas-op] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)
         {:keys [content-hash]
          :as entity} (with-open [snapshot (ks/new-snapshot kv)]
                        (first (doc/entities-at snapshot [eid] business-time transact-time)))
         old-doc (get (db/get-objects object-store [content-hash]) content-hash)
-        old-v (idx/id->bytes old-v)
-        new-v (idx/new-id new-v)]
-    (when (bu/bytes=? (idx/id->bytes old-doc) old-v)
-      (concat
-       [[(idx/encode-entity+bt+tt+tx-id-key
-          eid
-          business-time
-          transact-time
-          tx-id)
-         (idx/id->bytes new-v)]]
-       (when-not (= new-v (idx/new-id nil))
-         [[(idx/encode-content-hash+entity-key new-v eid)
-            idx/empty-byte-array]])))))
+        old-v-bytes (idx/id->bytes old-v)
+        new-v-id (idx/new-id new-v)]
+    {:pre-commit-fn #(if (bu/bytes=? (idx/id->bytes old-doc) old-v-bytes)
+                       true
+                       (log/warn "CAS failure:" (pr-str cas-op)))
+     :kvs (concat
+           [[(idx/encode-entity+bt+tt+tx-id-key
+              eid
+              business-time
+              transact-time
+              tx-id)
+             (idx/id->bytes new-v-id)]]
+           (when-not (= new-v-id (idx/new-id nil))
+             [[(idx/encode-content-hash+entity-key new-v-id eid)
+               idx/empty-byte-array]]))}))
 
 (defmethod tx-command :crux.tx/evict [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
-    (when tx-log
-      (doseq [{:keys [content-hash]
-               :as entity} (with-open [snapshot (ks/new-snapshot kv)]
-                             (doc/entity-history snapshot eid))
-              :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
-              :when (and doc (<= (compare (.bt ^EntityTx entity) business-time) 0))]
-        (db/submit-doc tx-log (idx/new-id doc) nil)))
-    [[(idx/encode-entity+bt+tt+tx-id-key
-       eid
-       business-time
-       transact-time
-       tx-id)
-      idx/nil-id-bytes]]))
+
+    {:post-commit-fn #(when tx-log
+                        (doseq [{:keys [content-hash]
+                                 :as entity} (with-open [snapshot (ks/new-snapshot kv)]
+                                               (doc/entity-history snapshot eid))
+                                :let [doc (get (db/get-objects object-store [content-hash]) content-hash)]
+                                :when (and doc (<= (compare (.bt ^EntityTx entity) business-time) 0))]
+                          (db/submit-doc tx-log (idx/new-id doc) nil)))
+     :kvs [[(idx/encode-entity+bt+tt+tx-id-key
+             eid
+             business-time
+             transact-time
+             tx-id)
+            idx/nil-id-bytes]]}))
 
 (defrecord DocIndexer [kv tx-log object-store]
   db/Indexer
@@ -125,10 +129,20 @@
             (doc/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (->> (for [tx-op tx-ops]
-           (tx-command kv object-store tx-log tx-op tx-time tx-id))
-         (reduce into (sorted-map-by bu/bytes-comparator))
-         (ks/store kv)))
+    (let [tx-command-results (for [tx-op tx-ops]
+                               (tx-command kv object-store tx-log tx-op tx-time tx-id))]
+      (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
+                     :when pre-commit-fn]
+                 (pre-commit-fn))
+               (doall)
+               (every? true?))
+        (do (->> (map :kvs tx-command-results)
+                 (reduce into (sorted-map-by bu/bytes-comparator))
+                 (ks/store kv))
+            (doseq [{:keys [post-commit-fn]} tx-command-results
+                    :when post-commit-fn]
+              (post-commit-fn)))
+        (log/warn "Transaction aborted:" (pr-str tx-ops)))))
 
   (store-index-meta [_ k v]
     (doc/store-meta kv k v))
