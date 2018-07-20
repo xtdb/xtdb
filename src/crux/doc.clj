@@ -8,7 +8,7 @@
             [crux.db :as db]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable]
+  (:import [java.io Closeable File RandomAccessFile]
            [java.util Collections Comparator Date]
            [crux.index EntityTx]))
 
@@ -333,10 +333,22 @@
     (-> (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil))
         (wrap-with-range-constraints range-constraints))))
 
-(defrecord SortedVirtualIndex [values seq-state]
+(def ^:private ^:dynamic *external-sort-limit* (* 1024 1024))
+
+;;TODO: The file could be kept open for a while if necessary for
+;;performance.
+(defn- read-external-sort-value [^File file [k offset length]]
+  (with-open [raf (RandomAccessFile. file "r")]
+    (let [bs (byte-array length)]
+      (.seek raf offset)
+      (.readFully raf bs)
+      [k (nippy/fast-thaw bs)])))
+
+(defrecord SortedVirtualIndex [values ^File file seq-state]
   db/Index
   (seek-values [this k]
-    (let [idx (Collections/binarySearch values [(idx/value->bytes k)]
+    (let [idx (Collections/binarySearch values
+                                        [(idx/value->bytes k)]
                                         (reify Comparator
                                           (compare [_ [a] [b]]
                                             (bu/compare-bytes (or a idx/nil-id-bytes)
@@ -344,27 +356,71 @@
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
                                     idx))
-          {:keys [first]} (reset! seq-state {:first x :rest xs})]
-      (if first
-        first
+          {:keys [fst]} (reset! seq-state {:fst x :rest xs})]
+      (if fst
+        (if file
+          (read-external-sort-value file fst)
+          fst)
         (reset! seq-state nil))))
 
   db/OrderedIndex
   (next-values [this]
-    (let [{:keys [first]} (swap! seq-state (fn [{[x & xs] :rest
-                                                 :as seq-state}]
-                                             (assoc seq-state :first x :rest xs)))]
-      (when first
-        first))))
+    (let [{:keys [fst]} (swap! seq-state (fn [{[x & xs] :rest
+                                               :as seq-state}]
+                                             (assoc seq-state :fst x :rest xs)))]
+      (when fst
+        (if file
+          (read-external-sort-value file fst)
+          fst))))
+
+  Closeable
+  (close [this]
+    ;; TODO: would be good to do this before exit to avoid build
+    ;; up. Either by connecting this index to the snapshot and do it
+    ;; then, or using PhantomReferences on the SortedVirtualIndex or
+    ;; its File. The cleanup method would need to refer to the path,
+    ;; not the File.
+    (when file
+      (.delete file))))
+
+(defn new-sorted-external-virtual-index [idx-or-seq]
+  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
+                     (idx->seq idx-or-seq)
+                     idx-or-seq)
+        file (doto (File/createTempFile "crux-external-sort" ".nippy")
+               (.deleteOnExit))
+        [acc] (with-open [raf (RandomAccessFile. file "rw")]
+                (->> idx-as-seq
+                     (reduce
+                      (fn [[acc ^long offset] [k v]]
+                        (let [bs ^bytes (nippy/fast-freeze v)]
+                          (.write raf bs)
+                          [(conj acc [k offset (count bs)])
+                           (+ offset (count bs))]))
+                      [[] 0])))]
+    (->SortedVirtualIndex
+     (vec (sort-by first bu/bytes-comparator acc))
+     file
+     (atom nil))))
+
+(defn new-sorted-in-memory-virtual-index [idx-or-seq]
+  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
+                     (idx->seq idx-or-seq)
+                     idx-or-seq)]
+    (->SortedVirtualIndex
+     (->> idx-as-seq
+          (sort-by first bu/bytes-comparator)
+          (vec))
+     nil
+     (atom nil))))
 
 (defn new-sorted-virtual-index [idx-or-seq]
-  (->SortedVirtualIndex
-   (->> (if (satisfies? db/OrderedIndex idx-or-seq)
-          (idx->seq idx-or-seq)
-          idx-or-seq)
-        (sort-by first bu/bytes-comparator)
-        (vec))
-   (atom nil)))
+  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
+                     (idx->seq idx-or-seq)
+                     idx-or-seq)]
+    (if (and *external-sort-limit* (seq (drop *external-sort-limit* idx-as-seq)))
+      (new-sorted-external-virtual-index idx-as-seq)
+      (new-sorted-in-memory-virtual-index idx-as-seq))))
 
 (defrecord OrVirtualIndex [indexes peek-state]
   db/Index
@@ -737,7 +793,7 @@
         (wrap-with-range-constraints range-constraints))))
 
 (defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
-  (-> (new-sorted-virtual-index
+  (-> (new-sorted-in-memory-virtual-index
        (for [prefix (partition-by first tuples)
              :let [value (ffirst prefix)]]
          [(idx/value->bytes value)

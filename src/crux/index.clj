@@ -150,6 +150,17 @@
 (defn ^Id new-id [id]
   (->Id (id->bytes id) 0))
 
+(nippy/extend-freeze
+ Id
+ :crux.index/id
+ [x data-output]
+ (.writeUTF data-output (str x)))
+
+(nippy/extend-thaw
+ :crux.index/id
+ [data-input]
+ (new-id (.readUTF data-input)))
+
 (defn encode-doc-key ^bytes [content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
       (.putShort content-hash->doc-index-id)
@@ -250,6 +261,19 @@
   IdToBytes
   (id->bytes [this]
     (id->bytes eid)))
+
+;; TODO: Not sure why these are needed, external sorting thaws
+;; incompatible records without it.
+(nippy/extend-freeze
+ EntityTx
+ :crux.index/entity-tx
+ [x data-output]
+ (nippy/-freeze-without-meta! (into {} x) data-output))
+
+(nippy/extend-thaw
+ :crux.index/entity-tx
+ [data-input]
+ (map->EntityTx (nippy/thaw-from-in! data-input)))
 
 (defn ^crux.index.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
   (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
