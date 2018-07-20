@@ -168,7 +168,12 @@ CRUX does not support variables in the attribute position. The entity
 position is hard coded to mean the `:crux.db/id` field.
 
 The REST API provides the following paths: `/document`, `/history`,
-`/query` and `/tx-log` for writes.
+`/query` for reads and `/tx-log` for writes. When using the REST API
+the user doesn't interact directly with Kafka, but calls one of the
+query nodes (potentially behind a load balancer) over HTTP to interact
+with CRUX. As the query nodes might be at different points in the
+index, and different queries might go to differnet nodes, there are
+currently some read consistency issues that can arise here.
 
 ### How does CRUX do it?
 
