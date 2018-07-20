@@ -141,10 +141,10 @@ CRUX query capability is easiest summarized via an example:
       :where [(follow ?e1 ?e2)]
       :args [{:?e1 :1}]
       :rules [[(follow ?e1 ?e2)
-               [?e1 :follow ?e2]]
-               [(follow ?e1 ?e2)
+              [?e1 :follow ?e2]]
+             [(follow ?e1 ?e2)
               [?e1 :follow ?t]
-               (follow ?t ?e2)]]})
+              (follow ?t ?e2)]]})
 ```
 
 The `db` is retrieved via a call to `crux.query/db` which optionally
