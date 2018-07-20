@@ -157,9 +157,13 @@
       conformed-ops)))
 
 (defn tx-ops->docs [tx-ops]
-  (for [tx-op tx-ops
-        doc (filter map? tx-op)]
-    doc))
+  (vec (for [[op id :as tx-op] tx-ops
+             doc (filter map? tx-op)]
+         (if (and (satisfies? idx/IdToBytes id)
+                  (= (idx/new-id id) (idx/new-id (get doc :crux.db/id))))
+           doc
+           (throw (IllegalArgumentException.
+                   (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
 (defrecord DocTxLog [kv]
   db/TxLog

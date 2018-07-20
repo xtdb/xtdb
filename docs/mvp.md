@@ -58,7 +58,7 @@ Supported KV stores are RocksDB, LMDB and an in-memory store.
 ### What can CRUX currently do?
 
 CRUX can be used either as a library, usually together with Kafka, or
-over HTTP. CRUX supports 4 write operations and a Datalog query
+over HTTP. CRUX supports four write operations and a Datalog query
 interface for reads. There's additionally a way to get the history of
 an entity, or a document as of a specific version.
 
@@ -84,13 +84,13 @@ The four transaction (write) operations are as follows:
 The business time is optional and defaults to transaction time, which
 is taken from the Kafka log. CRUX currently writes into the past at a
 single point, so to overwrite several versions or a range in time,
-submitting several operations are needed. Eviction works a bit
-differently, and all versions at or before the provided business time
-are evicted.
+submitting a transaction containing several operations is
+needed. Eviction works a bit differently, and all versions at or
+before the provided business time are evicted.
 
 The hashes are the SHA-1 content hash of the documents. CRUX uses an
-attribute `:crux.db/id` on the documents that is assumed to line up
-with the id it is submitted under. Hence, a document looks like this:
+attribute `:crux.db/id` on the documents that has to line up with the
+id it is submitted under. Hence, a document looks like this:
 
 ```clj
 {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
