@@ -57,6 +57,112 @@ Supported KV stores are RocksDB, LMDB and an in-memory store.
 
 ### What can CRUX currently do?
 
+CRUX can be used either as a library, usually together with Kafka, or
+over HTTP. CRUX supports 4 write operations and a Datalog query
+interface for reads. There's additionally a way to get the history of
+an entity, or a document as of a specific version.
+
+The four write operations are as follows:
+
+```clj
+[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+"090622a35d4b579d2fcfebf823821298711d3867"
+#inst "2018-05-18T09:20:27.966-00:00"]
+
+[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
+"090622a35d4b579d2fcfebf823821298711d3867"
+"048ebba27e1da223ce97dded59d46e069ddf921b"
+#inst "2018-05-18T09:21:31.846-00:00"]
+
+[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
+#inst "2018-05-18T09:21:52.151-00:00"]
+
+[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
+#inst "2018-05-18T09:21:52.151-00:00"]
+```
+
+The business time is optional and defaults to transaction time, which
+is taken from the Kafka log. CRUX currently writes into the past at a
+single point, so to overwrite several versions or a range in time,
+submitting several operations are needed. Eviction works a bit
+differently, and all versions before the provided business time are
+evicted.
+
+The hashes are the SHA-1 content hash of the documents. CRUX uses an
+attribute `:crux.db/id` on the documents that is assumed to line up
+with the id it is submitted under. Having this id embedded in the
+document isn't strictly necessary, but some queries will require it to
+exist to work. Hence, a document looks like this:
+
+```clj
+{:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+ :name "Pablo"
+ :last-name "Picasso"}
+```
+
+In practice when using CRUX, one calls `crux.db/submit-tx` with a set
+of write operations as above, where the hashes are replaced with
+actual documents:
+
+```clj
+[[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+ {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+  :name "Pablo"
+  :last-name "Picasso"}
+ #inst "2018-05-18T09:20:27.966-00:00"]]
+```
+
+For each operation the id and the document are hashed, and this
+version is submitted to the tx-topic in Kafka. The document itself is
+submitted to the doc-topic, using its content hash as key. This latter
+topic is compacted, which enables later deletion of documents.
+
+CRUX stores "entities", each having a stable id, and a set of EDN
+documents making up its history. Apart from EDN, there's no schema of
+the documents, and no enforced concept of references. References are
+simply fields where the value of an attribute is the id of another
+document.
+
+All attributes will be indexed locally to enable queries. Attributes
+which have vectors or sets as the values will have all their elements
+indexed. CRUX does not enforce any schema. A document can change the
+type of its fields at will between versions, though this isn't
+recommended, as it leads to confusion at query time.
+
+CRUX also supports a few lower-level read operations, like
+`crux.doc/entities-at`, `crux.doc/entity-history` for entities and
+`crux.db/get-objects` to get documents, but these internals should not
+be assumed to be stable APIs, but similar functionality will be
+preserved.
+
+CRUX query capability is easiest summarized via an example:
+
+```clj
+(q/q db
+    '{:find  [?e2]
+      :where [(follow ?e1 ?e2)]
+      :args [{:?e1 :1}]
+      :rules [[(follow ?e1 ?e2)
+               [?e1 :follow ?e2]]
+               [(follow ?e1 ?e2)
+              [?e1 :follow ?t]
+               (follow ?t ?e2)]]})
+```
+
+The `db` is retrieved via a call to `crux.query/db` which optionally
+takes business and transaction time. The call will block until the
+local index has the transaction time, if provided. The `crux.query/q`
+takes 2 or 3 arguments, `db` and `q` but also optionally a `snapshot`
+which is already opened and managed by the caller (using `with-open`
+for example). This version of the call returns a lazy sequence of
+results, while the other verision provides a set. A snapshot can be
+retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
+
+The `:args` key contains a relation where each map is expected to have
+the same keys. These keys are turned into symbols and the relation is
+joined with the rest of the query. The elements must implement
+`Comparable`.
+
 ### How does CRUX do it?
 
 ### Implementation Details
