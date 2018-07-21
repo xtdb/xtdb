@@ -39,11 +39,10 @@ if one relies on the internals).
 CRUX is also a bi-temporal database, storing both business and
 transaction time. This enables corrections at past business time at a
 later transaction time. Queries can use both times to get consistent
-reads, as long as the data hasn't been evicted. Different source
+reads, as long as the data hasn't been evicted. Like the schema, CRUX
+isn't assumed to own a single business time line, and different source
 systems might have their own definition of business time which does
-not align with the CRUX transaction time, and this also allows to deal
-with integration concerns like when a message queue is down and data
-arrives later than it should.
+not align with the CRUX transaction time.
 
 CRUX also supports eviction of past data, to play nicely with GDRP and
 similar concerns. The main transaction log topic contains only hashes,
@@ -90,9 +89,9 @@ The four transaction (write) operations are as follows:
 
 The business time is optional and defaults to transaction time, which
 is taken from the Kafka log. CRUX currently writes into the past at a
-single point, so to overwrite several versions or a range in time,
-submitting a transaction containing several operations is
-needed. Eviction works a bit differently, and all versions at or
+single point, so to overwrite several versions or a range in time, one
+is required to submit a transaction containing several
+operations. Eviction works a bit differently, and all versions at or
 before the provided business time are evicted.
 
 The hashes are the SHA-1 content hash of the documents. CRUX uses an
@@ -136,9 +135,9 @@ another document.
 A CRUX id is a type which satisfies the `crux.index.IdToBytes`
 protocol. Keywords, UUIDs, URIs and SHA-1 hex strings do this out of
 the box. Note that normal strings are not considered valid ids. CRUX
-will not automatically assigns ids.
+will not automatically assigns ids. The id is always a SHA-1 hash.
 
-All attributes will be indexed locally to enable queries. Attributes
+The attributes will be indexed locally to enable queries. Attributes
 which have vectors or sets as the values will have all their elements
 indexed. CRUX does not enforce any schema. A document can change the
 type of its fields at will between versions, though this isn't
@@ -162,8 +161,8 @@ operations like any other entity.
 CRUX also supports a few lower-level read operations, like
 `crux.doc/entities-at`, `crux.doc/entity-history` for entities from
 the kv and `crux.db/get-objects` to get documents from an object
-store, but these internals should not be assumed to be stable APIs,
-but similar functionality will be preserved.
+store. These internals should not be assumed to be stable APIs, but
+similar functionality will be preserved.
 
 CRUX query capability is easiest summarized via an example:
 
@@ -219,7 +218,7 @@ separate topics, the `tx-topic` and the `doc-topic`. The users don't
 write directly to these topics, but use a `crux.db.TxLog` instance to
 do so. Each transaction operation will be split into several messages,
 where documents go into the `doc-topic` and the hashed versions of the
-transactions go into the `tx-topic`.
+transaction operations go into the `tx-topic` as a single message.
 
 The `tx-topic` is immutable, but the `doc-topic` is compacted, and
 keyed by the documents content hashes, enabling eviction of the
@@ -248,9 +247,9 @@ The query engine is built using the concept of "virtual indexes",
 which bottom out to a combination of the above physical indexes or
 disk or data directly in-memory. The actual queries are represented as
 a composition and combination of these indexes. Things like range
-constraints are applied directly as decorators on the lower level
-indexes. The query engine itself never concerns itself with time, as
-this is hidden by the lower indexes.
+constraints are applied as decorators on the lower level indexes. The
+query engine itself never concerns itself with time, as this is hidden
+by the lower indexes.
 
 The query is itself ultimately represented as a single n-ary join
 across variables, each potentially represented by several indexes,
@@ -270,13 +269,13 @@ case optimal join and Query-Subquery (QSQ) evaluation of Datalog. The
 worst case optimal join algorithm binds free variables which then are
 used as arguments in QSQ. The results of the sub query are then
 injected an n-ary index (relation) into the parent query, binding
-further variables in the parent query ("sideways information
-passing"). Rules are evaluated via a combination of eager expansion of
-the rule bodies into the parent query and QSQ using caches to avoid
-recusion. `or` and `or-join` are anonymous rules. `not` is a sub query
-which executes when all required variables are bound, and arguments
-which return results are removed from the corresponding parent result
-variables.
+further variables in the current parent query sub tree ("sideways
+information passing"). Rules are evaluated via a combination of eager
+expansion of the rule bodies into the parent query and QSQ using
+caches to avoid recusion. `or` and `or-join` are anonymous
+rules. `not` is a sub query which executes when all required variables
+are bound, and arguments which return results are removed from the
+corresponding parent result variables.
 
 ### Known Issues
 
@@ -291,8 +290,8 @@ variables.
 + Architecture not tested in real application use.
 + Query engine is brittle to extend. Lacks internal abstractions.
 + Single attribute index complicates the query engine.
-+ Lazy results requires consistent sorting across indexes, which will
-  need to be able to spill over to disk.
++ Lazy results requires consistent sorting across indexes. which has
+  to be performed during the query.
 
 ### AWS Deployment
 
@@ -361,6 +360,7 @@ also needs to be extended to accept the new operation. A transaction
 command returns a map containing the keys `:kvs` `:pre-condition-fn` and
 `:post-condition-fn` (the functions are optional).
 
+
 **Q:** Does CRUX support the full Datomic/Datascript dialect of
 Datalog?
 
@@ -380,11 +380,13 @@ is basically a form of or.
 Many of these things can be expected to change after the MVP, but
 compatibility is not a goal for CRUX.
 
+
 **Q:** Any plans for Datalog, Cypher, Gremlin or SPARQL support?
 
 **A:** The goal is to support different languages, and decouple the
 query engine from its syntax, but this is not currently the case in
 the MVP.
+
 
 **Q:** Does not a lack of schema lead to confusion?
 
@@ -404,24 +406,31 @@ be done with `crux.index.ValueToBytes`. CRUX does this internally via
 `crux.index.ValueToBytes` for strings for example, only indexing the
 full string with range query support up to 128 characters, and as an
 opaque hash above that limit. Returning an empty byte array does not
-index a value. We are aiming to extend this.
+index a value. We are aiming to extend this to give further control
+over what to index. This is useful both to increase throughput and to
+save disk space. A smaller index also leads to more efficient queries.
+
 
 **Q:** How does CRUX deal with time?
 
 **A:** The business time can be set manually per transaction
 operation, and might already be defined by an upstream system before
-reaching CRUX. If not set, CRUX defaults business time to the
-transaction time, which is the `LogAppendTime` assigned by the Kafka
-broker to the transaction record. This time is taken from the local
-clock of the Kafka broker, which acts as the master wall clock time.
+reaching CRUX. This also allows to deal with integration concerns like
+when a message queue is down and data arrives later than it should.
+
+If not set, CRUX defaults business time to the transaction time, which
+is the `LogAppendTime` assigned by the Kafka broker to the transaction
+record. This time is taken from the local clock of the Kafka broker,
+which acts as the master wall clock time.
 
 CRUX does not rely on clock synchronisation or try to make any
 guarantees about business time. Assigning business time manually needs
 to be done with care, as there has to be either a clear owner of the
 clock, or that the exact business time ordering between different
 nodes doesn't strictly matter for the data where it's used. NTP can
-mitigate this, potentially to an acceptable degree, but not guarantee
-the ordering between nodes.
+mitigate this, potentially to an acceptable degree, but it cannot
+fully guarantee ordering between nodes.
+
 
 **Q:** Does CRUX support sharding?
 
@@ -431,3 +440,23 @@ support for sharding this topic via partitioning or by adding more
 transaction topics. Each partition / topic would have its own
 independent time line, but CRUX would still support for cross shard
 queries. Sharding is mainly useful to increase throughput.
+
+
+**Q:** Does CRUX support aggregates?
+
+**A:** Not directly. The goal is that aggregates can be implemented on
+top of the lazy query results as normal functions and not embedded
+into the query engine directly.
+
+
+**Q:** Does CRUX support pull expressions?
+
+**A:** No. As each CRUX query node is its own document store, the
+documents are local to the query node and can easily be accessed
+directly via the lower level read operations. We aim to make this
+more convenient later on.
+
+We are also considering to support remote document stores via the
+`crux.db.ObjectStore` interface, mainly to support larger data sets,
+but there would still be a local cache. The indexes would stay local
+as this is key to efficient queries.
