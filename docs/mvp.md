@@ -24,7 +24,10 @@ living in Kafka.
 
 CRUX is ultimately a store of versioned EDN documents. The attributes
 of these documents are also indexed in the local KV stores, allowing
-for queries.
+for queries. CRUX does not use a schema for the documents. One reason
+for this as the document data might come from many different places,
+and not ultimately be owned by the system using CRUX to query the
+data.
 
 On the query side, CRUX uses a Datalog dialect that's a subset of
 Datomic/Datascript's with some extensions. The results of CRUX queries
@@ -36,7 +39,11 @@ if one relies on the internals).
 CRUX is also a bi-temporal database, storing both business and
 transaction time. This enables corrections at past business time at a
 later transaction time. Queries can use both times to get consistent
-reads, as long as the data hasn't been evicted.
+reads, as long as the data hasn't been evicted. Different source
+systems might have their own definition of business time which does
+not align with the CRUX transaction time, and this also allows to deal
+with integration concerns like when a message queue is down and data
+arrives later than it should.
 
 CRUX also supports eviction of past data, to play nicely with GDRP and
 similar concerns. The main transaction log topic contains only hashes,
@@ -142,7 +149,8 @@ default is to take the SHA-1 of the value serialised by Nippy. Ids
 index via `IdToBytes`. `Long`, `Double`, `Date` and `String` have
 implementations which respect ordering while serialised to unsigned
 bytes, which is what most underlying KV stores will use to order the
-keys.
+keys. If the implementation returns an empty byte array the value
+isn't indexed.
 
 The above implies that values which are maps are simply indexed as
 their hash. They can be used as a value in a query to find entities
@@ -377,3 +385,49 @@ compatibility is not a goal for CRUX.
 **A:** The goal is to support different languages, and decouple the
 query engine from its syntax, but this is not currently the case in
 the MVP.
+
+**Q:** Does not a lack of schema lead to confusion?
+
+**A:** It of course depends.
+
+While CRUX does not enforce a schema, but the user can. CRUX only
+requires that the data can be represented as valid EDN documents. Data
+ingested from different systems can still be assigned qualified keys,
+which does not require a shared schema to be defined while still
+avoiding collision. Defining such a common schema up front might be
+prohibitive and CRUX instead aims to enable exploration of the data
+from different sources early. This exploration can also help discover
+and define the common schema of interest.
+
+Enforcing constraints on the data to avoid indexing all attributes can
+be done with `crux.index.ValueToBytes`. CRUX does this internally via
+`crux.index.ValueToBytes` for strings for example, only indexing the
+full string with range query support up to 128 characters, and as an
+opaque hash above that limit. Returning an empty byte array does not
+index a value. We are aiming to extend this.
+
+**Q:** How does CRUX deal with time?
+
+**A:** The business time can be set manually per transaction
+operation, and might already be defined by an upstream system before
+reaching CRUX. If not set, CRUX defaults business time to the
+transaction time, which is the `LogAppendTime` assigned by the Kafka
+broker to the transaction record. This time is taken from the local
+clock of the Kafka broker, which acts as the master wall clock time.
+
+CRUX does not rely on clock synchronisation or try to make any
+guarantees about business time. Assigning business time manually needs
+to be done with care, as there has to be either a clear owner of the
+clock, or that the exact business time ordering between different
+nodes doesn't strictly matter for the data where it's used. NTP can
+mitigate this, potentially to an acceptable degree, but not guarantee
+the ordering between nodes.
+
+**Q:** Does CRUX support sharding?
+
+**A:** Not in the MVP. At the moment the `tx-topic` must use a single
+partition to guarantee transaction ordering. We are considering
+support for sharding this topic via partitioning or by adding more
+transaction topics. Each partition / topic would have its own
+independent time line, but CRUX would still support for cross shard
+queries. Sharding is mainly useful to increase throughput.

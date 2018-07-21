@@ -137,13 +137,15 @@
 
 (defn index-doc [kv content-hash doc]
   (ks/store kv (for [[k v] doc
-                     v (normalize-value v)]
+                     v (normalize-value v)
+                     :when (seq (idx/value->bytes v))]
                  [(idx/encode-attribute+value+content-hash-key k v content-hash)
                   idx/empty-byte-array])))
 
 (defn delete-doc-from-index [kv content-hash doc]
   (ks/delete kv (for [[k v] doc
-                      v (normalize-value v)]
+                      v (normalize-value v)
+                      :when (seq (idx/value->bytes v))]
                   (idx/encode-attribute+value+content-hash-key k v content-hash))))
 
 (defrecord DocObjectStore [kv]
