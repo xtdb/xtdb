@@ -272,7 +272,7 @@ injected an n-ary index (relation) into the parent query, binding
 further variables in the current parent query sub tree ("sideways
 information passing"). Rules are evaluated via a combination of eager
 expansion of the rule bodies into the parent query and QSQ using
-caches to avoid recusion. `or` and `or-join` are anonymous
+caches to avoid recursion. `or` and `or-join` are anonymous
 rules. `not` is a sub query which executes when all required variables
 are bound, and arguments which return results are removed from the
 corresponding parent result variables.
