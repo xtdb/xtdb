@@ -764,7 +764,16 @@
       (t/testing "Other direction"
         (t/is (= #{} (q/q (q/db *kv*) '{:find [n]
                                         :where [[x :name n]
-                                                [:ivan :mentor x]]})))))))
+                                                [:ivan :mentor x]]})))))
+
+    (t/testing "Literal entity and literal value"
+      (t/is (= #{[true]} (q/q (q/db *kv*) '{:find [found?]
+                                            :where [[:ivan :name "Ivan"]
+                                                    [(identity true) found?]]})))
+
+      (t/is (= #{} (q/q (q/db *kv*) '{:find [found?]
+                                      :where [[:ivan :name "Bob"]
+                                              [(identity true) found?]]}))))))
 
 (t/deftest test-join-and-seek-bugs
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}

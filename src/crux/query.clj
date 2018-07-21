@@ -122,23 +122,32 @@
                                       > <=
                                       >= <})
 
+(defn- rewrite-literal-e-literal-v-bgp-clause [{:keys [e v] :as bgp}]
+  (let [v-var (gensym v)]
+    {:bgp [(assoc bgp :v v-var)]
+     :unify [{:op '== :x v-var :y (set (doc/normalize-value v))}]}))
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
-         {type [(case type
-                  :bgp (normalize-bgp-clause clause)
-                  :pred (let [{:keys [pred]} clause
-                              {:keys [pred-fn args]} pred]
-                          (if-let [range-pred (and (= 2 (count args))
-                                                   (every? logic-var? args)
-                                                   (get pred->built-in-range-pred pred-fn))]
-                            (assoc-in clause [:pred :pred-fn] range-pred)
-                            clause))
-                  :range (let [[type clause] (first clause)]
-                           (if (= :val-sym type)
-                             (update clause :op range->inverse-range)
-                             clause))
-                  :unify (first clause)
-                  clause)]})
+         (if (= :bgp type)
+           (let [{:keys [e v] :as bgp} (normalize-bgp-clause clause)]
+             (if (and (literal? e) (literal? v))
+               (rewrite-literal-e-literal-v-bgp-clause bgp)
+               {type [bgp]}))
+           {type [(case type
+                     :pred (let [{:keys [pred]} clause
+                                 {:keys [pred-fn args]} pred]
+                             (if-let [range-pred (and (= 2 (count args))
+                                                      (every? logic-var? args)
+                                                      (get pred->built-in-range-pred pred-fn))]
+                               (assoc-in clause [:pred :pred-fn] range-pred)
+                               clause))
+                     :range (let [[type clause] (first clause)]
+                              (if (= :val-sym type)
+                                (update clause :op range->inverse-range)
+                                clause))
+                     :unify (first clause)
+                     clause)]}))
        (apply merge-with into)))
 
 (defn- collect-vars [{bgp-clauses :bgp
@@ -962,9 +971,7 @@
                               var->joins
                               business-time
                               transact-time)
-        pred-joins-only? (empty? var->joins)
         [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
-        or-joins-only? (empty? var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
                                                                          db
@@ -1002,10 +1009,8 @@
                                           (keys var->attr))
         var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
-                             (if or-joins-only?
-                               (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
-                               (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
-                                      var->bindings)))
+                             (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
+                                    var->bindings))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
                                      (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
@@ -1021,8 +1026,7 @@
                                        (constrain-join-result-by-constraints pred-constraints max-ks)
                                        (constrain-join-result-by-constraints or-constraints max-ks)))
         joins (map var->joins vars-in-join-order)]
-    (when (or or-joins-only? pred-joins-only? (= 1 (count joins)))
-      (constrain-result-fn [] []))
+    (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
