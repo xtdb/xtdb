@@ -618,8 +618,7 @@
                                                               (bound-result->join-result result))
                                                             (apply merge-with into))
                                          cache-key (when rule-name
-                                                     [:rule-results rule-name branch-index (count free-vars) (vec (for [tuple tuples]
-                                                                                                                    (mapv :value tuple)))])]]
+                                                     [:rule-results rule-name branch-index (count free-vars) args])]]
                                (if (single-e-var-bgp? bound-vars where)
                                  (let [[[_ {:keys [e a v] :as clause}]] where
                                        entities (mapv e args)
