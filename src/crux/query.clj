@@ -608,26 +608,24 @@
                   free-results+bound-results
                   (let [free-results+bound-results
                         (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                                   tuple (or (seq tuples)
-                                             (when (seq free-vars)
-                                               [{}]))
                                    :let [args (if (seq bound-vars)
-                                                [(zipmap bound-vars (map :value tuple))]
+                                                (vec (for [tuple tuples]
+                                                       (zipmap bound-vars (map :value tuple))))
                                                 [])
-                                         bound-results (->> (for [result tuple]
-                                                              (bound-result->join-result result))
-                                                            (apply merge-with into))
                                          cache-key (when rule-name
                                                      [:rule-results rule-name branch-index (count free-vars) args])]]
                                (if (single-e-var-bgp? bound-vars where)
                                  (let [[[_ {:keys [e a v] :as clause}]] where
                                        entities (mapv e args)
                                        idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
-                                            object-store snapshot entities [[a v]] business-time transact-time)]
-                                   (when (seq (doc/idx->seq idx))
+                                            object-store snapshot entities [[a v]] business-time transact-time)
+                                       idx-as-seq (doc/idx->seq idx)]
+                                   (when (seq idx-as-seq)
                                      [(with-meta
                                         [[]
-                                         bound-results]
+                                         {e (set (for [[_ entities] idx-as-seq
+                                                       entity entities]
+                                                   entity))}]
                                         {:free-vars-in-join-order free-vars-in-join-order
                                          :bound-vars bound-vars})]))
                                  (or (get @sub-query-result-cache cache-key)
@@ -644,7 +642,14 @@
                                                                        :when (and (consistent-tuple? tuple)
                                                                                   (valid-sub-tuple? join-results tuple))]
                                                                    (mapv :value tuple)))
-                                                            bound-results]
+                                                            (->> (for [tuple (cartesian-product
+                                                                              (for [var bound-vars]
+                                                                                (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                       :when (and (consistent-tuple? tuple)
+                                                                                  (valid-sub-tuple? join-results tuple))
+                                                                       result tuple]
+                                                                   (bound-result->join-result result))
+                                                                 (apply merge-with into))]
                                                            {:free-vars-in-join-order free-vars-in-join-order
                                                             :bound-vars bound-vars})))]
                                        (when cache-key
