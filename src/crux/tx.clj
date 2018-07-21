@@ -76,10 +76,9 @@
         {:keys [content-hash]
          :as entity} (with-open [snapshot (ks/new-snapshot kv)]
                        (first (doc/entities-at snapshot [eid] business-time transact-time)))
-        old-doc (get (db/get-objects object-store [content-hash]) content-hash)
         old-v-bytes (idx/id->bytes old-v)
         new-v-id (idx/new-id new-v)]
-    {:pre-commit-fn #(if (bu/bytes=? (idx/id->bytes old-doc) old-v-bytes)
+    {:pre-commit-fn #(if (bu/bytes=? (idx/id->bytes content-hash) old-v-bytes)
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
      :kvs (concat
