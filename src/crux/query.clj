@@ -697,14 +697,15 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings join-depth sub-query-result-cache]
+(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings sub-query-result-cache]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
                                             not-clause]
                                       :not-join [(:args not-clause)
                                                  (:body not-clause)])
-              not-vars (remove blank-var? not-vars)]]
+              not-vars (remove blank-var? not-vars)
+              not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
     (do (doseq [arg not-vars
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
@@ -712,7 +713,7 @@
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
-          (if (= (count join-keys) join-depth)
+          (if (= (count join-keys) not-join-depth)
             (let [args (vec (for [tuple (cartesian-product
                                          (for [var not-vars]
                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
@@ -1012,8 +1013,8 @@
                              (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
                                     var->bindings))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings join-depth sub-query-result-cache)
-                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings join-depth sub-query-result-cache)))
+        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings sub-query-result-cache)
+                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings sub-query-result-cache)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
         or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants sub-query-result-cache))
