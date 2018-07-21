@@ -587,11 +587,10 @@
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
 (defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rules or-clause+relation+or-branches var->bindings
-                             vars-in-join-order v-var->range-constriants sub-query-result-cache]
+                             vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
-              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
-              rule-name (:rule-name (meta clause))]]
+              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)]]
     (do (doseq [var bound-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -608,12 +607,8 @@
                   free-results+bound-results
                   (let [free-results+bound-results
                         (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                                   :let [args (if (seq bound-vars)
-                                                (vec (for [tuple tuples]
-                                                       (zipmap bound-vars (map :value tuple))))
-                                                [])
-                                         cache-key (when rule-name
-                                                     [:rule-results rule-name branch-index (count free-vars) args])]]
+                                   :let [args (vec (for [tuple tuples]
+                                                     (zipmap bound-vars (map :value tuple))))]]
                                (if (single-e-var-bgp? bound-vars where)
                                  (let [[[_ {:keys [e a v] :as clause}]] where
                                        entities (mapv e args)
@@ -628,33 +623,27 @@
                                                    entity))}]
                                         {:free-vars-in-join-order free-vars-in-join-order
                                          :bound-vars bound-vars})]))
-                                 (or (get @sub-query-result-cache cache-key)
-                                     (let [_ (when cache-key
-                                               (swap! sub-query-result-cache assoc cache-key []))
-                                           {:keys [n-ary-join
-                                                   var->bindings
-                                                   var->joins]} (build-sub-query snapshot db [] where args rules sub-query-result-cache)
-                                           result (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
-                                                         (with-meta
-                                                           [(vec (for [tuple (cartesian-product
-                                                                              (for [var free-vars-in-join-order]
-                                                                                (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                                       :when (and (consistent-tuple? tuple)
-                                                                                  (valid-sub-tuple? join-results tuple))]
-                                                                   (mapv :value tuple)))
-                                                            (->> (for [tuple (cartesian-product
-                                                                              (for [var bound-vars]
-                                                                                (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                                       :when (and (consistent-tuple? tuple)
-                                                                                  (valid-sub-tuple? join-results tuple))
-                                                                       result tuple]
-                                                                   (bound-result->join-result result))
-                                                                 (apply merge-with into))]
-                                                           {:free-vars-in-join-order free-vars-in-join-order
-                                                            :bound-vars bound-vars})))]
-                                       (when cache-key
-                                         (swap! sub-query-result-cache assoc cache-key result))
-                                       result))))
+                                 (let [{:keys [n-ary-join
+                                               var->bindings
+                                               var->joins]} (build-sub-query snapshot db [] where args rules)]
+                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                          (with-meta
+                                            [(vec (for [tuple (cartesian-product
+                                                               (for [var free-vars-in-join-order]
+                                                                 (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :when (and (consistent-tuple? tuple)
+                                                                   (valid-sub-tuple? join-results tuple))]
+                                                    (mapv :value tuple)))
+                                             (->> (for [tuple (cartesian-product
+                                                               (for [var bound-vars]
+                                                                 (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :when (and (consistent-tuple? tuple)
+                                                                   (valid-sub-tuple? join-results tuple))
+                                                        result tuple]
+                                                    (bound-result->join-result result))
+                                                  (apply merge-with into))]
+                                            {:free-vars-in-join-order free-vars-in-join-order
+                                             :bound-vars bound-vars}))))))
                              (reduce into []))]
                     free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results
@@ -701,7 +690,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings sub-query-result-cache]
+(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -728,7 +717,7 @@
                   parent-var->bindings var->bindings
                   {:keys [n-ary-join
                           var->bindings
-                          var->joins]} (build-sub-query snapshot db [] not-clause args rules sub-query-result-cache)]
+                          var->joins]} (build-sub-query snapshot db [] not-clause args rules)]
               (->> (doc/layered-idx->seq n-ary-join (count var->joins))
                    (reduce
                     (fn [parent-join-results [join-keys join-results]]
@@ -882,7 +871,7 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules sub-query-result-cache]
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules]
   (let [rule-name->rules (group-by (comp :name :head) rules)
         where (expand-rules where rule-name->rules {})
         {bgp-clauses :bgp
@@ -1017,11 +1006,11 @@
                              (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
                                     var->bindings))
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings sub-query-result-cache)
-                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings sub-query-result-cache)))
+        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings)
+                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
         or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause+relation+or-branches
-                                                  var->bindings vars-in-join-order v-var->range-constriants sub-query-result-cache))
+                                                  var->bindings vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
                               (some->> (doc/constrain-join-result-by-empty-names max-ks result)
@@ -1048,10 +1037,9 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
-     (let [sub-query-result-cache (atom {})
-           {:keys [n-ary-join
+     (let [{:keys [n-ary-join
                    var->bindings
-                   var->joins]} (build-sub-query snapshot db find where args rules sub-query-result-cache)]
+                   var->joins]} (build-sub-query snapshot db find where args rules)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
