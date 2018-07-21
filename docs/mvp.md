@@ -128,7 +128,8 @@ another document.
 
 A CRUX id is a type which satisfies the `crux.index.IdToBytes`
 protocol. Keywords, UUIDs, URIs and SHA-1 hex strings do this out of
-the box. Note that normal strings are not considered valid ids.
+the box. Note that normal strings are not considered valid ids. CRUX
+will not automatically assigns ids.
 
 All attributes will be indexed locally to enable queries. Attributes
 which have vectors or sets as the values will have all their elements
@@ -142,6 +143,13 @@ index via `IdToBytes`. `Long`, `Double`, `Date` and `String` have
 implementations which respect ordering while serialised to unsigned
 bytes, which is what most underlying KV stores will use to order the
 keys.
+
+The above implies that values which are maps are simply indexed as
+their hash. They can be used as a value in a query to find entities
+like any other literal, but the contents of the map itself are opaque
+to the index. "Component entities", or RDF blank nodes, must be their
+own actual entities with "anonymous" ids and have explicit transaction
+operations like any other entity.
 
 CRUX also supports a few lower-level read operations, like
 `crux.doc/entities-at`, `crux.doc/entity-history` for entities from
