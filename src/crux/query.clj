@@ -709,29 +709,31 @@
                        arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
           (if (= (count join-keys) not-join-depth)
-            (let [result-maps+args-tuple (for [args-tuple (cartesian-product
-                                                           (for [var not-vars]
-                                                             (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                               :when (and (consistent-tuple? args-tuple)
-                                                          (valid-sub-tuple? join-results args-tuple))
-                                               :let [args [(zipmap not-vars (map :value args-tuple))]
-                                                     {:keys [n-ary-join
-                                                             var->joins]} (build-sub-query snapshot db [] not-clause args rules)]
-                                               :when (empty? (doc/layered-idx->seq n-ary-join (count var->joins)))]
-                                           [(->> (map bound-result->join-result args-tuple)
-                                                 (apply merge-with into))
-                                            (when needs-valid-sub-value-group?
-                                              (->> (for [[arg {:keys [value]}] (map vector not-vars args-tuple)]
-                                                     [arg value])
-                                                   (into {})))])]
-              (when-let [join-results (some->> (map first result-maps+args-tuple)
+            (let [args (vec (for [tuple (cartesian-product
+                                         (for [var not-vars]
+                                           (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                  :when (and (consistent-tuple? tuple)
+                                             (valid-sub-tuple? join-results tuple))]
+                              (with-meta (zipmap not-vars (map :value tuple)) {:tuple tuple})))
+                  {:keys [n-ary-join
+                          var->bindings
+                          var->joins]} (build-sub-query snapshot db args not-clause args rules)
+                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))
+                                            tuple (cartesian-product
+                                                   (for [var not-vars]
+                                                     (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                            :when (and (consistent-tuple? tuple)
+                                                       (valid-sub-tuple? join-results tuple))]
+                                        (zipmap not-vars (map :value tuple))))
+                  args-to-keep (remove args-to-remove args)]
+              (when-let [join-results (some->> (for [args args-to-keep
+                                                     :let [{:keys [tuple]} (meta args)]
+                                                     result tuple]
+                                                 (bound-result->join-result result))
                                                (apply merge-with into)
                                                (merge join-results))]
                 (if needs-valid-sub-value-group?
-                  (->> (for [[_ args-tuple] result-maps+args-tuple]
-                         args-tuple)
-                       (set)
-                       (vary-meta join-results update :valid-sub-value-groups conj))
+                  (vary-meta join-results update :valid-sub-value-groups conj (set args-to-keep))
                   join-results)))
             join-results)))))
 
