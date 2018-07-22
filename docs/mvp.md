@@ -291,6 +291,11 @@ results are removed from the corresponding parent result variables.
 + Single attribute index complicates the query engine.
 + Lazy results requires consistent sorting across indexes. which has
   to be performed during the query.
++ The query engine is not optimised and constructs a lot of
+  intermediate structures.
++ Queries are not compiled, but are parsed and interpreted from
+  scratch at every invocation. This is especially an issue for
+  sub-queries which will be issued many times by a parent query.
 
 ### AWS Deployment
 
