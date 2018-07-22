@@ -696,7 +696,13 @@
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        [(= f :bob)]]}))))
+                                        [(= f :bob)]]})))
+
+    (t/is (= #{[:dominic]}
+             (q/q (q/db *kv*) '{:find [f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        [(not= f :bob)]]}))))
 
   (t/testing "unification filters values"
     (t/is (= #{[:bob]}
@@ -715,7 +721,14 @@
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]
-                                        [(!= f :bob)]]})))))
+                                        [(!= f :bob)]]}))))
+
+  (t/testing "not filters values"
+    (t/is (= #{[:ivan :dominic]}
+             (q/q (q/db *kv*) '{:find [i f]
+                                :where [[i :name "Ivan"]
+                                        [i :friends f]
+                                        (not [(= f :bob)])]})))))
 
 (t/deftest test-can-use-idents-as-entities
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
