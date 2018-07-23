@@ -584,7 +584,7 @@
 ;; TODO: potentially the way to do this is to pass join results down
 ;; (either via a variable, an atom or a binding), and if a sub query
 ;; doesn't change it, terminate that branch.
-(defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rules or-clause+relation+or-branches var->bindings
+(defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rule-name->rules or-clause+relation+or-branches var->bindings
                              vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
@@ -623,8 +623,8 @@
                                          :bound-vars bound-vars})]))
                                  (let [{:keys [n-ary-join
                                                var->bindings
-                                               var->joins]} (build-sub-query snapshot db [] where args rules)]
-                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))]
+                                               join-depth]} (build-sub-query snapshot db where args rule-name->rules)]
+                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)]
                                           (with-meta
                                             [(vec (for [tuple (cartesian-product
                                                                (for [var free-vars-in-join-order]
@@ -688,7 +688,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [db snapshot object-store rules not-type not-clauses var->bindings]
+(defn- build-not-constraints [db snapshot object-store rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -714,8 +714,8 @@
                               (with-meta (zipmap not-vars (map :value tuple)) {:tuple tuple})))
                   {:keys [n-ary-join
                           var->bindings
-                          var->joins]} (build-sub-query snapshot db args not-clause args rules)
-                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))
+                          join-depth]} (build-sub-query snapshot db not-clause args rule-name->rules)
+                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)
                                             tuple (cartesian-product
                                                    (for [var not-vars]
                                                      (bound-results-for-var object-store var->bindings join-keys join-results var)))
@@ -863,9 +863,8 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} find where args rules]
-  (let [rule-name->rules (group-by (comp :name :head) rules)
-        where (expand-rules where rule-name->rules {})
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} where args rule-name->rules]
+  (let [where (expand-rules where rule-name->rules {})
         {bgp-clauses :bgp
          range-clauses :range
          pred-clauses :pred
@@ -874,15 +873,11 @@
          not-join-clauses :not-join
          or-clauses :or
          or-join-clauses :or-join
-         rule-clauses :rule
          :as type->clauses} (normalize-clauses where)
         {:keys [e-vars
                 v-vars
                 unification-vars
-                not-vars
-                pred-vars
-                pred-return-vars
-                rule-vars]} (collect-vars type->clauses)
+                pred-return-vars]} (collect-vars type->clauses)
         e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
                                     :when (logic-var? v)]
                                 clause)
@@ -961,14 +956,14 @@
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
                                                                          db
-                                                                         rules
+                                                                         rule-name->rules
                                                                          :or
                                                                          or-clauses
                                                                          var->joins
                                                                          known-vars)
         [or-join-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
                                                                               db
-                                                                              rules
+                                                                              rule-name->rules
                                                                               :or-join
                                                                               or-join-clauses
                                                                               var->joins
@@ -998,10 +993,10 @@
                               (build-arg-var-bindings var->values-result-index arg-vars)
                               var->bindings)
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings)
-                                     (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings)))
+        not-constraints (vec (concat (build-not-constraints db snapshot object-store rule-name->rules :not not-clauses var->bindings)
+                                     (build-not-constraints db snapshot object-store rule-name->rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
-        or-constraints (vec (build-or-constraints db snapshot object-store rules or-clause+relation+or-branches
+        or-constraints (vec (build-or-constraints db snapshot object-store rule-name->rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
@@ -1017,8 +1012,7 @@
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings
-     :var->joins var->joins
-     :vars-in-join-order vars-in-join-order}))
+     :join-depth (count var->joins)}))
 
 (defn q
   ([{:keys [kv] :as db} q]
@@ -1029,14 +1023,15 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
-     (let [{:keys [n-ary-join
+     (let [rule-name->rules (group-by (comp :name :head) rules)
+           {:keys [n-ary-join
                    var->bindings
-                   var->joins]} (build-sub-query snapshot db find where args rules)]
+                   join-depth]} (build-sub-query snapshot db where args rule-name->rules)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join (count var->joins))
+       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)
              tuple (cartesian-product
                     (for [var find]
                       (bound-results-for-var object-store var->bindings join-keys join-results var)))
