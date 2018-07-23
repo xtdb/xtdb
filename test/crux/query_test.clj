@@ -717,6 +717,7 @@
                                         [i :friends f]
                                         [(== f #{:bob :dominic})]]})))
 
+    ;; TODO: Has alphabetic variable order dependency.
     (t/is (= #{[:dominic]}
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
@@ -829,6 +830,7 @@
                             {:crux.db/id :petr :name "Petr" :mentor :oleg}
                             {:crux.db/id :oleg :name "Oleg" :mentor :ivan}])
 
+  ;; TODO: Has alphabetic variable order dependency.
   (t/is (= #{[:oleg "Oleg" :petr "Petr"]
              [:ivan "Ivan" :oleg "Oleg"]
              [:petr "Petr" :ivan "Ivan"]} (q/q (q/db *kv*) '{:find [e1 n1 e2 n2]

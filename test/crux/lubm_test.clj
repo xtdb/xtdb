@@ -281,6 +281,7 @@
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
     ;; properties in the query set and there is a triangular pattern of relationships.
     (t/testing "LUBM query 9"
+      ;; TODO: Has alphabetic variable order dependency.
       (t/is (= 13 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                 '{:find [x y z]

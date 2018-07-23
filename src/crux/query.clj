@@ -769,7 +769,8 @@
 ;; TODO: This is simplistic, really has to calculate dependency graph
 ;; between args and returns, also for the ors. Why does
 ;; vars-in-join-order still need to be sorted?  A few tests fail if it
-;; isn't which are likely due to bugs.
+;; isn't which are likely due to bugs. Should replace sort with
+;; shuffle to ensure this cannot be relied on.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var]
   (let [vars-in-join-order (vec (sort (keys var->joins)))
         var->index (zipmap vars-in-join-order (range))
