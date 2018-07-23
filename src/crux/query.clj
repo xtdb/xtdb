@@ -452,14 +452,17 @@
 ;; Note that the sub value groups use variable names as keys, not
 ;; result names.
 (defn- valid-sub-tuple? [join-results bound-result-tuple]
-  (let [tuple (zipmap (map :var bound-result-tuple) (map :value bound-result-tuple))
-        {:keys [valid-sub-value-groups]} (meta join-results)]
-    (->> (for [valid-sub-value-group valid-sub-value-groups]
-           (some #(let [ks (set/intersection (set (keys %))
-                                             (set (keys tuple)))]
-                    (= (select-keys % ks) (select-keys tuple ks)))
-                 valid-sub-value-group))
-         (every? true?))))
+  (let [{:keys [valid-sub-value-groups]} (meta join-results)]
+    (if (empty? valid-sub-value-groups)
+      true
+      (let [tuple (zipmap (map :var bound-result-tuple)
+                          (map :value bound-result-tuple))]
+        (->> (for [valid-sub-value-group valid-sub-value-groups]
+               (some #(let [ks (set/intersection (set (keys %))
+                                                 (set (keys tuple)))]
+                        (= (select-keys % ks) (select-keys tuple ks)))
+                     valid-sub-value-group))
+             (every? true?))))))
 
 (defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
   (cond (= :entity-leaf type)
