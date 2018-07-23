@@ -441,12 +441,6 @@
                :type :or}])
        (into {})))
 
-(defn- consistent-tuple? [tuple]
-  (->> (for [[_ vs] (group-by :result-name tuple)
-             :when (every? #{:entity :entity-leaf} (map :type vs))]
-         (apply = (map :entity vs)))
-       (every? true?)))
-
 ;; TODO: This should in theory not be necessary, it's an artefact of
 ;; how there can be several entities with the same value returned, but
 ;; only some of them might match a predicate. As the results currently
@@ -529,33 +523,35 @@
                          var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
-            (let [arg-tuples (if (empty? args)
-                               [{}]
-                               (cartesian-product
-                                (for [arg args]
-                                  (if (logic-var? arg)
-                                    (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                    [{:value arg
-                                      :literal-arg? true}]))))
-                  pred-result+result-maps+args-tuple (for [args-tuple arg-tuples
-                                                           :when (or (empty? args-tuple)
-                                                                     (consistent-tuple? args-tuple)
-                                                                     (valid-sub-tuple? join-results args-tuple))
-                                                           pred-fn (if (logic-var? pred-fn)
-                                                                     (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
-                                                                     [pred-fn])
-                                                           :let [pred-result (apply pred-fn (map :value args-tuple))]
-                                                           :when pred-result]
-                                                       [pred-result
-                                                        (->> (for [{:keys [literal-arg?] :as result} args-tuple
-                                                                   :when (not literal-arg?)]
-                                                               (bound-result->join-result result))
-                                                             (apply merge-with into))
-                                                        (when needs-valid-sub-value-group?
-                                                          (->> (for [[arg {:keys [value literal-arg?]}] (map vector args args-tuple)
-                                                                     :when (not literal-arg?)]
-                                                                 [arg value])
-                                                               (into {})))])]
+            (let [bound-result-args-tuples (if (empty? args)
+                                             [{}]
+                                             (cartesian-product
+                                              (for [arg args]
+                                                (if (logic-var? arg)
+                                                  (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                                  [{:value arg
+                                                    :literal-arg? true}]))))
+                  pred-result+result-maps+args-tuple
+                  (for [bound-result-args-tuple bound-result-args-tuples
+                        :let [arg-values (map :value bound-result-args-tuple)
+                              args-tuple (zipmap args arg-values)]
+                        :when (or (empty? bound-result-args-tuple)
+                                  (valid-sub-tuple? join-results args-tuple))
+                        pred-fn (if (logic-var? pred-fn)
+                                  (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
+                                  [pred-fn])
+                        :let [pred-result (apply pred-fn arg-values)]
+                        :when pred-result]
+                    [pred-result
+                     (->> (for [{:keys [literal-arg?] :as result} bound-result-args-tuple
+                                :when (not literal-arg?)]
+                            (bound-result->join-result result))
+                          (apply merge-with into))
+                     (when needs-valid-sub-value-group?
+                       (->> (for [[arg {:keys [value literal-arg?]}] (map vector args bound-result-args-tuple)
+                                  :when (not literal-arg?)]
+                              [arg value])
+                            (into {})))])]
               (when return
                 (doc/update-relation-virtual-index! (get pred-clause->relation clause)
                                                     (->> (for [[pred-result] pred-result+result-maps+args-tuple]
@@ -596,17 +592,15 @@
                          var " " (pr-str clause))))))
         (fn [join-keys join-results]
           (if (= (count join-keys) or-join-depth)
-            (let [tuples (for [tuple (cartesian-product
-                                      (for [var bound-vars]
-                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                               :when (and (consistent-tuple? tuple)
-                                          (valid-sub-tuple? join-results tuple))]
-                           tuple)
+            (let [args (vec (for [bound-result-tuple (cartesian-product
+                                                      (for [var bound-vars]
+                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                  :let [args-tuple (zipmap bound-vars (map :value bound-result-tuple))]
+                                  :when (valid-sub-tuple? join-results args-tuple)]
+                              args-tuple))
                   free-results+bound-results
                   (let [free-results+bound-results
-                        (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                                   :let [args (vec (for [tuple tuples]
-                                                     (zipmap bound-vars (map :value tuple))))]]
+                        (->> (for [{:keys [where] :as or-branch} or-branches]
                                (if (single-e-var-bgp? bound-vars where)
                                  (let [[[_ {:keys [e a v] :as clause}]] where
                                        entities (mapv e args)
@@ -625,18 +619,17 @@
                                                var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
                                    (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
                                           (with-meta
-                                            [(vec (for [tuple (cartesian-product
-                                                               (for [var free-vars-in-join-order]
-                                                                 (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :when (and (consistent-tuple? tuple)
-                                                                   (valid-sub-tuple? join-results tuple))]
-                                                    (mapv :value tuple)))
-                                             (->> (for [tuple (cartesian-product
-                                                               (for [var bound-vars]
-                                                                 (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :when (and (consistent-tuple? tuple)
-                                                                   (valid-sub-tuple? join-results tuple))
-                                                        result tuple]
+                                            [(vec (for [bound-result-tuple (cartesian-product
+                                                                            (for [var free-vars-in-join-order]
+                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :let [values (mapv :value bound-result-tuple)]
+                                                        :when (valid-sub-tuple? join-results (zipmap free-vars-in-join-order values))]
+                                                    values))
+                                             (->> (for [bound-result-tuple (cartesian-product
+                                                                            (for [var bound-vars]
+                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :when (valid-sub-tuple? join-results (zipmap bound-vars (map :value bound-result-tuple)))
+                                                        result bound-result-tuple]
                                                     (bound-result->join-result result))
                                                   (apply merge-with into))]
                                             {:free-vars-in-join-order free-vars-in-join-order
@@ -705,25 +698,25 @@
                        arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
           (if (= (count join-keys) not-join-depth)
-            (let [args (vec (for [tuple (cartesian-product
-                                         (for [var not-vars]
-                                           (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                  :when (and (consistent-tuple? tuple)
-                                             (valid-sub-tuple? join-results tuple))]
-                              (with-meta (zipmap not-vars (map :value tuple)) {:tuple tuple})))
+            (let [args (vec (for [bound-result-tuple (cartesian-product
+                                                      (for [var not-vars]
+                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                  :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]
+                                  :when (valid-sub-tuple? join-results args-tuple)]
+                              (with-meta args-tuple {:bound-result-tuple bound-result-tuple})))
                   {:keys [n-ary-join
                           var->bindings]} (build-sub-query snapshot db not-clause args rule-name->rules)
                   args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
-                                            tuple (cartesian-product
-                                                   (for [var not-vars]
-                                                     (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                            :when (and (consistent-tuple? tuple)
-                                                       (valid-sub-tuple? join-results tuple))]
-                                        (zipmap not-vars (map :value tuple))))
+                                            bound-result-tuple (cartesian-product
+                                                                (for [var not-vars]
+                                                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                            :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]
+                                            :when (valid-sub-tuple? join-results args-tuple)]
+                                        args-tuple))
                   args-to-keep (remove args-to-remove args)]
               (when-let [join-results (some->> (for [args args-to-keep
-                                                     :let [{:keys [tuple]} (meta args)]
-                                                     result tuple]
+                                                     :let [{:keys [bound-result-tuple]} (meta args)]
+                                                     result bound-result-tuple]
                                                  (bound-result->join-result result))
                                                (apply merge-with into)
                                                (merge join-results))]
@@ -1032,8 +1025,7 @@
                     (for [var find]
                       (bound-results-for-var object-store var->bindings join-keys join-results var)))
              :let [values (mapv :value tuple)]
-             :when (and (consistent-tuple? tuple)
-                        (valid-sub-tuple? join-results (zipmap find values)))]
+             :when (valid-sub-tuple? join-results (zipmap find values))]
          (with-meta
            values
            (zipmap (map :e-var tuple) tuple)))))))
