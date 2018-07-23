@@ -8,7 +8,7 @@
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db])
-  (:import [java.util Date]))
+  (:import [java.util Comparator Date]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -220,10 +220,12 @@
                        (apply comp))])
          (into {}))))
 
+(defn- arg-for-var [arg var]
+  (or (get arg (symbol (name var)))
+      (get arg (keyword (name var)))))
+
 (defn- all-args-for-var [args var]
-  (for [arg args]
-    (or (get arg (symbol (name var)))
-        (get arg (keyword (name var))))))
+  (map #(arg-for-var % var) args))
 
 (defn- e-var-literal-v-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var->literal-v-clauses var->joins arg-vars args]
   (->> e-var->literal-v-clauses
@@ -302,29 +304,27 @@
            (symbol (name k))))))
 
 (defn- arg-joins [snapshot {:keys [business-time transact-time] :as db} args e-vars v-var->range-constriants var->joins]
-  (let [arg-keys-in-join-order (sort (keys (first args)))
-        arg-vars (arg-vars args)
+  (let [arg-vars (arg-vars args)
         relation (doc/new-relation-virtual-index (gensym "args")
-                                                 (for [arg args]
-                                                   (mapv arg arg-keys-in-join-order))
-                                                 (count arg-keys-in-join-order)
-                                                 (mapv v-var->range-constriants arg-vars))]
-    (->> arg-vars
-         (reduce
-          (fn [var->joins arg-var]
-            (->> {arg-var
-                  (cond-> [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]
-                    (and (not (contains? var->joins arg-var))
-                         (contains? e-vars arg-var))
-                    (conj (assoc (doc/new-entity-attribute-value-virtual-index
-                                  snapshot
-                                  :crux.db/id
-                                  nil
-                                  business-time
-                                  transact-time)
-                                 :name arg-var)))}
-                 (merge-with into var->joins)))
-          var->joins))))
+                                                 []
+                                                 (count arg-vars))]
+    [(->> arg-vars
+          (reduce
+           (fn [var->joins arg-var]
+             (->> {arg-var
+                   (cond-> [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]
+                     (and (not (contains? var->joins arg-var))
+                          (contains? e-vars arg-var))
+                     (conj (assoc (doc/new-entity-attribute-value-virtual-index
+                                   snapshot
+                                   :crux.db/id
+                                   nil
+                                   business-time
+                                   transact-time)
+                                  :name arg-var)))}
+                  (merge-with into var->joins)))
+           var->joins))
+     relation]))
 
 (defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
   (->> pred-clauses
@@ -649,7 +649,7 @@
                                        bound-result)
                                      (apply merge-with into))]
               (when (seq free-results)
-                (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars)))
+                (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars-in-join-order)))
 
               (if (empty? bound-vars)
                 (when (seq free-results)
@@ -658,7 +658,7 @@
                   (merge join-results bound-results))))
             join-results)))))
 
-(defn- build-unification-preds [object-store unify-clauses var->bindings]
+(defn- build-unification-preds [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
   (for [{:keys [op x y]
          :as clause} unify-clauses]
     (do (doseq [arg [x y]
@@ -752,13 +752,28 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
+(def ^:private pred-return-comparator (reify Comparator
+                                        (compare [_ x y]
+                                          (cond
+                                            (contains? (set (get-in x [:pred :args]))
+                                                       (:return y))
+                                            -1
+
+                                            (contains? (set (get-in y [:pred :args]))
+                                                       (:return x))
+                                            1
+
+                                            :else
+                                            0))))
+
+;; TODO: This is simplistic, really has to calculate dependency graph
+;; between args and returns, also for the ors. Why does
+;; vars-in-join-order still need to be sorted?  A few tests fail if it
+;; isn't which are likely due to bugs.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var]
-  (let [vars-in-join-order (vec (keys var->joins))
+  (let [vars-in-join-order (vec (sort (keys var->joins)))
         var->index (zipmap vars-in-join-order (range))
-        ;; TODO: This is simplistic, really has to calculate
-        ;; dependency graph between args and returns, also for the
-        ;; ors.
-        preds (for [{:keys [pred return] :as pred-clause} (reverse (sort-by :return pred-clauses))
+        preds (for [{:keys [pred return] :as pred-clause} (sort pred-return-comparator pred-clauses)
                     :when return]
                 ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
         ors (for [[or-clause _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches
@@ -839,7 +854,10 @@
                                              recursion-cache
                                              seen-rule-branches)
                      cache-key [:seen-rules rule-name]
-                     expanded-rules (if (< (get-in recursion-cache cache-key 0) 2)
+                     ;; TODO: Understand this, does this really work
+                     ;; in the general case? Why less than equal one?
+                     ;; This implies the rule can be expanded twice.
+                     expanded-rules (if (<= (get-in recursion-cache cache-key 0) 1)
                                       (for [expanded-rule expanded-rules
                                             :let [expanded-rule (expand-rules expanded-rule rule-name->rules
                                                                               (update-in recursion-cache cache-key (fnil inc 0)))]
@@ -896,7 +914,7 @@
                                         clause)
                                       (group-by :v))
         arg-vars (arg-vars args)
-        var->joins (sorted-map)
+        var->joins {}
         var->joins (e-var-literal-v-joins snapshot
                                           db
                                           e-var->literal-v-clauses
@@ -934,12 +952,12 @@
                                           v-var->literal-e-clauses
                                           v-var->range-constriants
                                           var->joins)
-        var->joins (arg-joins snapshot
-                              db
-                              args
-                              e-vars
-                              v-var->range-constriants
-                              var->joins)
+        [var->joins args-relation] (arg-joins snapshot
+                                              db
+                                              args
+                                              e-vars
+                                              v-var->range-constriants
+                                              var->joins)
         [pred-clause+relations var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
@@ -957,7 +975,7 @@
                                                                               var->joins
                                                                               known-vars)
         or-clause+relation+or-branches (concat or-clause+relation+or-branches
-                                                or-join-clause+relation+or-branches)
+                                               or-join-clause+relation+or-branches)
         v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -969,18 +987,17 @@
         e->v-var (set/map-invert v-var->e)
         vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins e->v-var)
         var->values-result-index (zipmap vars-in-join-order (range))
-        var->bindings (build-var-bindings var->attr
-                                          v-var->e
-                                          e->v-var
-                                          var->values-result-index
-                                          e-var->leaf-v-var-clauses
-                                          join-depth
-                                          (keys var->attr))
-        var->bindings (merge  (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
-                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                              (build-arg-var-bindings var->values-result-index arg-vars)
-                              var->bindings)
-        unification-preds (vec (build-unification-preds object-store unify-clauses var->bindings))
+        var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
+                             (build-pred-return-var-bindings var->values-result-index pred-clauses)
+                             (build-arg-var-bindings var->values-result-index arg-vars)
+                             (build-var-bindings var->attr
+                                                 v-var->e
+                                                 e->v-var
+                                                 var->values-result-index
+                                                 e-var->leaf-v-var-clauses
+                                                 join-depth
+                                                 (keys var->attr)))
+        unification-preds (vec (build-unification-preds snapshot db unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
@@ -994,7 +1011,13 @@
                                        (constrain-join-result-by-constraints pred-constraints max-ks)
                                        (constrain-join-result-by-constraints not-constraints max-ks)
                                        (constrain-join-result-by-constraints or-constraints max-ks)))
-        joins (map var->joins vars-in-join-order)]
+        joins (map var->joins vars-in-join-order)
+        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)]
+    (when (seq args)
+      (doc/update-relation-virtual-index! args-relation
+                                          (vec (for [arg args]
+                                                 (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
+                                          (mapv v-var->range-constriants arg-vars-in-join-order)))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
