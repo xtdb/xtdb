@@ -767,12 +767,32 @@
                                             0))))
 
 ;; TODO: This is simplistic, really has to calculate dependency graph
-;; between args and returns, also for the ors. Why does
-;; vars-in-join-order still need to be sorted?  A few tests fail if it
-;; isn't which are likely due to bugs. Should replace sort with
-;; shuffle to ensure this cannot be relied on.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var]
-  (let [vars-in-join-order (vec (sort (keys var->joins)))
+;; between args and returns, also for the ors and normal join vars as
+;; e-vars and v-vars have implicit dependencies. Below an attempt at
+;; defining a default join order that does not depend on alphabetic
+;; sort. Can potentially break by subsequent movements of vars.
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var e-vars v-var->e]
+  (let [vars-in-join-order (vec (shuffle (keys var->joins)))
+        var-comparator (reify Comparator
+                         (compare [_ x y]
+                           (cond
+                             (nil? x)
+                             1
+                             (nil? y)
+                             -1
+                             (and (contains? e-vars x)
+                                  (contains? v-var->e x))
+                             -1
+                             (and (contains? e-vars y)
+                                  (contains? v-var->e y))
+                             1
+                             (contains? e-vars x)
+                             1
+                             (contains? e-vars y)
+                             -1
+                             :else
+                             (recur (get v-var->e x) (get v-var->e y)))))
+        vars-in-join-order (vec (sort var-comparator vars-in-join-order))
         var->index (zipmap vars-in-join-order (range))
         preds (for [{:keys [pred return] :as pred-clause} (sort pred-return-comparator pred-clauses)
                     :when return]
@@ -986,7 +1006,7 @@
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         e->v-var (set/map-invert v-var->e)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins e->v-var)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins e->v-var e-vars v-var->e)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
