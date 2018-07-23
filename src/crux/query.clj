@@ -451,8 +451,9 @@
 ;; leaf predicates, which did fire on each actual row at the end.
 ;; Note that the sub value groups use variable names as keys, not
 ;; result names.
-(defn- valid-sub-tuple? [join-results tuple]
-  (let [{:keys [valid-sub-value-groups]} (meta join-results)]
+(defn- valid-sub-tuple? [join-results bound-result-tuple]
+  (let [tuple (zipmap (map :var bound-result-tuple) (map :value bound-result-tuple))
+        {:keys [valid-sub-value-groups]} (meta join-results)]
     (->> (for [valid-sub-value-group valid-sub-value-groups]
            (some #(let [ks (set/intersection (set (keys %))
                                              (set (keys tuple)))]
@@ -541,12 +542,10 @@
                              [pred-fn])
                   pred-result+result-maps+args-tuple
                   (for [bound-result-args-tuple bound-result-args-tuples
-                        :let [arg-values (map :value bound-result-args-tuple)
-                              args-tuple (zipmap args arg-values)]
                         :when (or (empty? bound-result-args-tuple)
-                                  (valid-sub-tuple? join-results args-tuple))
+                                  (valid-sub-tuple? join-results bound-result-args-tuple))
                         pred-fn pred-fns
-                        :let [pred-result (apply pred-fn arg-values)]
+                        :let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
                         :when pred-result]
                     [pred-result
                      (->> (for [{:keys [literal-arg?] :as result} bound-result-args-tuple
@@ -613,9 +612,8 @@
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var bound-vars]
                                                         (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                  :let [args-tuple (zipmap bound-vars (map :value bound-result-tuple))]
-                                  :when (valid-sub-tuple? join-results args-tuple)]
-                              args-tuple))
+                                  :when (valid-sub-tuple? join-results bound-result-tuple)]
+                              (zipmap bound-vars (map :value bound-result-tuple))))
                   free-results+bound-results
                   (let [free-results+bound-results
                         (->> (for [{:keys [where] :as or-branch} or-branches]
@@ -627,13 +625,12 @@
                                           [(vec (for [bound-result-tuple (cartesian-product
                                                                           (for [var free-vars-in-join-order]
                                                                             (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                      :let [values (mapv :value bound-result-tuple)]
-                                                      :when (valid-sub-tuple? join-results (zipmap free-vars-in-join-order values))]
-                                                  values))
+                                                      :when (valid-sub-tuple? join-results bound-result-tuple)]
+                                                  (mapv :value bound-result-tuple)))
                                            (->> (for [bound-result-tuple (cartesian-product
                                                                           (for [var bound-vars]
                                                                             (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                      :when (valid-sub-tuple? join-results (zipmap bound-vars (map :value bound-result-tuple)))
+                                                      :when (valid-sub-tuple? join-results bound-result-tuple)
                                                       result bound-result-tuple]
                                                   (bound-result->join-result result))
                                                 (apply merge-with into))])))))
@@ -704,8 +701,8 @@
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var not-vars]
                                                         (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                  :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]
-                                  :when (valid-sub-tuple? join-results args-tuple)]
+                                  :when (valid-sub-tuple? join-results bound-result-tuple)
+                                  :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]]
                               (with-meta args-tuple {:bound-result-tuple bound-result-tuple})))
                   {:keys [n-ary-join
                           var->bindings]} (build-sub-query snapshot db not-clause args rule-name->rules)
@@ -713,9 +710,8 @@
                                             bound-result-tuple (cartesian-product
                                                                 (for [var not-vars]
                                                                   (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                            :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]
-                                            :when (valid-sub-tuple? join-results args-tuple)]
-                                        args-tuple))
+                                            :when (valid-sub-tuple? join-results bound-result-tuple)]
+                                        (zipmap not-vars (map :value bound-result-tuple))))
                   args-to-keep (remove args-to-remove args)]
               (when-let [join-results (some->> (for [args args-to-keep
                                                      :let [{:keys [bound-result-tuple]} (meta args)]
@@ -1024,14 +1020,13 @@
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
        (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
-             tuple (cartesian-product
-                    (for [var find]
-                      (bound-results-for-var object-store var->bindings join-keys join-results var)))
-             :let [values (mapv :value tuple)]
-             :when (valid-sub-tuple? join-results (zipmap find values))]
+             bound-result-tuple (cartesian-product
+                                 (for [var find]
+                                   (bound-results-for-var object-store var->bindings join-keys join-results var)))
+             :when (valid-sub-tuple? join-results bound-result-tuple)]
          (with-meta
-           values
-           (zipmap (map :e-var tuple) tuple)))))))
+           (mapv :value bound-result-tuple)
+           (zipmap (map :var bound-result-tuple) bound-result-tuple)))))))
 
 (defrecord QueryDatasource [kv object-store business-time transact-time])
 
