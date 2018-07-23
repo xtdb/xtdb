@@ -313,7 +313,7 @@
          (reduce
           (fn [var->joins arg-var]
             (->> {arg-var
-                  (cond-> [(assoc relation :name (symbol "crux.query.arg" (name arg-var)))]
+                  (cond-> [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]
                     (and (not (contains? var->joins arg-var))
                          (contains? e-vars arg-var))
                     (conj (assoc (doc/new-entity-attribute-value-virtual-index
@@ -337,7 +337,7 @@
                                                            [(get v-var->range-constriants return)])]
               [(assoc pred-clause->relation pred-clause relation)
                (->> {return
-                     [(assoc relation :name (symbol "crux.query.pred" (name return)))]}
+                     [(assoc relation :name (symbol "crux.query.value" (name return)))]}
                     (merge-with into var->joins))])
             [pred-clause->relation var->joins]))
         [{} var->joins])))
@@ -381,7 +381,7 @@
             [(conj or-clause+relation+or-branches [clause relation or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
-                                                 {v [(assoc relation :name (symbol "crux.query.or" (name v)))]}))]))
+                                                 {v [(assoc relation :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index e-var->leaf-v-var-clauses join-depth vars]
@@ -413,7 +413,7 @@
   (->> (for [var arg-vars
              :let [result-index (get var->values-result-index var)]]
          [var {:var var
-               :result-name (symbol "crux.query.arg" (name var))
+               :result-name (symbol "crux.query.value" (name var))
                :result-index result-index
                :join-depth result-index
                :type :arg}])
@@ -424,18 +424,18 @@
              :when return
              :let [result-index (get var->values-result-index return)]]
          [return {:var return
-                  :result-name (symbol "crux.query.pred" (name return))
+                  :result-name (symbol "crux.query.value" (name return))
                   :result-index result-index
                   :join-depth result-index
                   :type :pred}])
        (into {})))
 
-(defn- build-or-var-bindings [var->values-result-index or-clause+relation+or-branches]
+(defn- build-or-free-var-bindings [var->values-result-index or-clause+relation+or-branches]
   (->> (for [[_ _ or-branches] or-clause+relation+or-branches
              var (:free-vars (first or-branches))
              :let [result-index (get var->values-result-index var)]]
          [var {:var var
-               :result-name (symbol "crux.query.or" (name var))
+               :result-name (symbol "crux.query.value" (name var))
                :result-index result-index
                :join-depth result-index
                :type :or}])
@@ -463,34 +463,31 @@
          (every? true?))))
 
 (defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
-  {result-name
-   #{(if value?
-       value
-       entity)}})
+  (cond (= :entity-leaf type)
+        {(symbol "crux.query.value" (name result-name)) #{value}}
+
+        value?
+        {result-name #{value}}
+
+        :else
+        {result-name #{entity}}))
 
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
   (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)
-        bound-var? (and (= :entity-leaf type)
-                        (not= e-var result-name)
-                        (contains? join-results result-name))]
-    (cond
-      (contains? #{:arg :pred :or} type)
-      (let [results (get join-results result-name)]
+        maybe-value-result-name (if (= :entity-leaf type)
+                                  (symbol "crux.query.value" (name result-name))
+                                  result-name)]
+    (if (and (= "crux.query.value" (namespace maybe-value-result-name))
+             (contains? join-results maybe-value-result-name))
+      (let [value-result-name maybe-value-result-name
+            results (get join-results value-result-name)]
         (for [value results]
           {:value value
-           :result-name result-name
-           :type type
+           :result-name value-result-name
+           :type (if (= :entity-leaf type)
+                   :bound
+                   type)
            :value? true}))
-
-      bound-var?
-      (let [results (get join-results result-name)]
-        (for [value results]
-          {:value value
-           :result-name var
-           :type :bound
-           :value? true}))
-
-      :else
       (let [entities (get join-results e-var)
             content-hashes (map :content-hash entities)
             content-hash->doc (db/get-objects object-store content-hashes)
@@ -511,7 +508,7 @@
            :entity entity
            :result-name result-name
            :type type
-           :value? (= :entity-leaf type)})))))
+           :value? false})))))
 
 (defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
@@ -996,10 +993,10 @@
                                           e-var->leaf-v-var-clauses
                                           join-depth
                                           (keys var->attr))
-        var->bindings (merge (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                             (build-arg-var-bindings var->values-result-index arg-vars)
-                             (merge (build-or-var-bindings var->values-result-index or-clause+relation+or-branches)
-                                    var->bindings))
+        var->bindings (merge  (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
+                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
+                              (build-arg-var-bindings var->values-result-index arg-vars)
+                              var->bindings)
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints db snapshot object-store rules :not not-clauses var->bindings)
                                      (build-not-constraints db snapshot object-store rules :not-join not-join-clauses var->bindings)))
