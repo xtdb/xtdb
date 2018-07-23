@@ -329,18 +329,19 @@
 (defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
   (->> pred-clauses
        (reduce
-        (fn [[pred-clause->relation var->joins] {:keys [return] :as pred-clause}]
+        (fn [[pred-clause+relations var->joins] {:keys [return] :as pred-clause}]
           (if return
             (let [relation (doc/new-relation-virtual-index (gensym "pred-return")
                                                            []
                                                            1
                                                            [(get v-var->range-constriants return)])]
-              [(assoc pred-clause->relation pred-clause relation)
+              [(conj pred-clause+relations [pred-clause relation])
                (->> {return
                      [(assoc relation :name (symbol "crux.query.value" (name return)))]}
                     (merge-with into var->joins))])
-            [pred-clause->relation var->joins]))
-        [{} var->joins])))
+            [(conj pred-clause+relations [pred-clause])
+             var->joins]))
+        [[] var->joins])))
 
 (declare build-sub-query)
 
@@ -372,9 +373,10 @@
                                    :bound-vars (set/difference or-vars free-vars)
                                    :where where}))
                 free-vars (:free-vars (first or-branches))
-                relation (doc/new-relation-virtual-index (gensym "or-free-vars")
-                                                         []
-                                                         (count free-vars))]
+                relation (when (seq free-vars)
+                           (doc/new-relation-virtual-index (gensym "or-free-vars")
+                                                           []
+                                                           (count free-vars)))]
             (when (not (apply = (map :or-vars or-branches)))
               (throw (IllegalArgumentException.
                       (str "Or requires same logic variables: " (pr-str clause)))))
@@ -508,8 +510,8 @@
        (apply max -1)
        (inc)))
 
-(defn- build-pred-constraints [object-store pred-clauses var->bindings pred-clause->relation]
-  (for [{:keys [pred return] :as clause} pred-clauses
+(defn- build-pred-constraints [object-store pred-clause+relations var->bindings]
+  (for [[{:keys [pred return] :as clause} relation] pred-clause+relations
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
               needs-valid-sub-value-group? (> (count (distinct (filter logic-var? args))) 1)
@@ -551,7 +553,7 @@
                               [arg value])
                             (into {})))])]
               (when return
-                (doc/update-relation-virtual-index! (get pred-clause->relation clause)
+                (doc/update-relation-virtual-index! relation
                                                     (->> (for [[pred-result] pred-result+result-maps+args-tuple]
                                                            [pred-result])
                                                          (distinct)
@@ -941,7 +943,7 @@
                               var->joins
                               business-time
                               transact-time)
-        [pred-clause->relation var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
+        [pred-clause+relations var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
                                                                          db
@@ -984,7 +986,7 @@
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints db snapshot object-store rule-name->rules :not not-clauses var->bindings)
                                      (build-not-constraints db snapshot object-store rule-name->rules :not-join not-join-clauses var->bindings)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clauses var->bindings pred-clause->relation))
+        pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
         or-constraints (vec (build-or-constraints db snapshot object-store rule-name->rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
