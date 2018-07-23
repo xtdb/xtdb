@@ -280,6 +280,8 @@ results are removed from the corresponding parent result variables.
 
 + Rules in queries are not well tested.
 + Nested expressions in queries are not well tested.
++ Join order is not necessarily calculated correctly for all queries,
+  which can lead to wrong or no results.
 + Point in time semantics when writing in the past.
 + Documents requires `:crux.db/id` which removes ability to share
   versions across entities. Needs analysis.
