@@ -449,6 +449,8 @@
 ;; is a map of variables to sets of values, there's no way to
 ;; constrain across two variables. This used to work when there were
 ;; leaf predicates, which did fire on each actual row at the end.
+;; Note that the sub value groups use variable names as keys, not
+;; result names.
 (defn- valid-sub-tuple? [join-results tuple]
   (let [{:keys [valid-sub-value-groups]} (meta join-results)]
     (->> (for [valid-sub-value-group valid-sub-value-groups]
@@ -476,6 +478,7 @@
         {:value value
          :result-name result-name
          :type type
+         :var var
          :value? true})
       (when-let [entities (not-empty (get join-results e-var))]
         (let [content-hashes (map :content-hash entities)
@@ -493,6 +496,7 @@
               {:value value
                :result-name result-name
                :type type
+               :var var
                :value? true}
               {:value value
                :e-var e-var
@@ -502,6 +506,7 @@
                :entity entity
                :result-name result-name
                :type type
+               :var var
                :value? false})))))))
 
 (defn- calculate-constraint-join-depth [var->bindings vars]
@@ -578,9 +583,21 @@
               (logic-var? e)
               (literal? v)))))
 
-;; TODO: potentially the way to do this is to pass join results down
-;; (either via a variable, an atom or a binding), and if a sub query
-;; doesn't change it, terminate that branch.
+(defn- or-single-var-bgp-fast-path [{:keys [business-time transact-time] :as db} snapshot object-store where args]
+  (let [[[_ {:keys [e a v] :as clause}]] where
+        entities (mapv e args)
+        idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
+             object-store snapshot entities [[a v]] business-time transact-time)
+        idx-as-seq (doc/idx->seq idx)]
+    (when (seq idx-as-seq)
+      [[[]
+        {e (set (for [[_ entities] idx-as-seq
+                      entity entities]
+                  entity))}]])))
+
+;; TODO: potentially the way to do avoid infinite loops is to pass
+;; join results down (either via a variable, an atom or a binding),
+;; and if a sub query doesn't change it, terminate that branch.
 (defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rule-name->rules or-clause+relation+or-branches var->bindings
                              vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
@@ -603,38 +620,23 @@
                   (let [free-results+bound-results
                         (->> (for [{:keys [where] :as or-branch} or-branches]
                                (if (single-e-var-bgp? bound-vars where)
-                                 (let [[[_ {:keys [e a v] :as clause}]] where
-                                       entities (mapv e args)
-                                       idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
-                                            object-store snapshot entities [[a v]] business-time transact-time)
-                                       idx-as-seq (doc/idx->seq idx)]
-                                   (when (seq idx-as-seq)
-                                     [(with-meta
-                                        [[]
-                                         {e (set (for [[_ entities] idx-as-seq
-                                                       entity entities]
-                                                   entity))}]
-                                        {:free-vars-in-join-order free-vars-in-join-order
-                                         :bound-vars bound-vars})]))
+                                 (or-single-var-bgp-fast-path db snapshot object-store where args)
                                  (let [{:keys [n-ary-join
                                                var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
                                    (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
-                                          (with-meta
-                                            [(vec (for [bound-result-tuple (cartesian-product
-                                                                            (for [var free-vars-in-join-order]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :let [values (mapv :value bound-result-tuple)]
-                                                        :when (valid-sub-tuple? join-results (zipmap free-vars-in-join-order values))]
-                                                    values))
-                                             (->> (for [bound-result-tuple (cartesian-product
-                                                                            (for [var bound-vars]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :when (valid-sub-tuple? join-results (zipmap bound-vars (map :value bound-result-tuple)))
-                                                        result bound-result-tuple]
-                                                    (bound-result->join-result result))
-                                                  (apply merge-with into))]
-                                            {:free-vars-in-join-order free-vars-in-join-order
-                                             :bound-vars bound-vars}))))))
+                                          [(vec (for [bound-result-tuple (cartesian-product
+                                                                          (for [var free-vars-in-join-order]
+                                                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                      :let [values (mapv :value bound-result-tuple)]
+                                                      :when (valid-sub-tuple? join-results (zipmap free-vars-in-join-order values))]
+                                                  values))
+                                           (->> (for [bound-result-tuple (cartesian-product
+                                                                          (for [var bound-vars]
+                                                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                      :when (valid-sub-tuple? join-results (zipmap bound-vars (map :value bound-result-tuple)))
+                                                      result bound-result-tuple]
+                                                  (bound-result->join-result result))
+                                                (apply merge-with into))])))))
                              (reduce into []))]
                     free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results
