@@ -915,7 +915,7 @@
                                           args
                                           business-time
                                           transact-time)
-        non-leaf-v-vars (set/union unification-vars not-vars e-vars arg-vars rule-vars)
+        non-leaf-v-vars (set/union unification-vars e-vars)
         leaf-v-var? (fn [e v]
                       (and (= 1 (count (get v->v-var-clauses v)))
                            (or (contains? e-var->literal-v-clauses e)
