@@ -331,7 +331,7 @@
        (reduce
         (fn [[pred-clause->relation var->joins] {:keys [return] :as pred-clause}]
           (if return
-            (let [relation (doc/new-relation-virtual-index (gensym "preds")
+            (let [relation (doc/new-relation-virtual-index (gensym "pred-return")
                                                            []
                                                            1
                                                            [(get v-var->range-constriants return)])]
@@ -372,7 +372,7 @@
                                    :bound-vars (set/difference or-vars free-vars)
                                    :where where}))
                 free-vars (:free-vars (first or-branches))
-                relation (doc/new-relation-virtual-index (gensym "or-vars")
+                relation (doc/new-relation-virtual-index (gensym "or-free-vars")
                                                          []
                                                          (count free-vars))]
             (when (not (apply = (map :or-vars or-branches)))
@@ -398,7 +398,7 @@
                                (get var->values-result-index (get e->v-var e))
                                (dec join-depth))
                :result-name (if leaf-var?
-                              var
+                              (symbol "crux.query.value" (name var))
                               e)
                :type (if leaf-var?
                        :entity-leaf
@@ -467,42 +467,40 @@
         {result-name #{entity}}))
 
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)
-        maybe-value-result-name (if (= :entity-leaf type)
-                                  (symbol "crux.query.value" (name result-name))
-                                  result-name)]
-    (if (and (= "crux.query.value" (namespace maybe-value-result-name))
-             (contains? join-results maybe-value-result-name))
-      (let [value-result-name maybe-value-result-name
-            results (get join-results value-result-name)]
-        (for [value results]
-          {:value value
-           :result-name value-result-name
-           :type (if (= :entity-leaf type)
-                   :bound
-                   type)
-           :value? true}))
-      (let [entities (get join-results e-var)
-            content-hashes (map :content-hash entities)
-            content-hash->doc (db/get-objects object-store content-hashes)
-            value-bytes (get join-keys result-index)]
-        (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-              :when (or (empty? required-attrs)
-                        (set/subset? required-attrs (set (keys doc))))
-              :let [values (doc/normalize-value (get doc attr))]
-              value values
-              :when (or (nil? value-bytes)
-                        (= (count values) 1)
-                        (bu/bytes=? value-bytes (idx/value->bytes value)))]
-          {:value value
-           :e-var e-var
-           :v-var var
-           :attr attr
-           :doc doc
-           :entity entity
-           :result-name result-name
-           :type type
-           :value? false})))))
+  (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)]
+    (if (and (= "crux.query.value" (namespace result-name))
+             (contains? join-results result-name))
+      (for [value (get join-results result-name)]
+        {:value value
+         :result-name result-name
+         :type type
+         :value? true})
+      (when-let [entities (not-empty (get join-results e-var))]
+        (let [content-hashes (map :content-hash entities)
+              content-hash->doc (db/get-objects object-store content-hashes)
+              value-bytes (get join-keys result-index)]
+          (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
+                :when (or (empty? required-attrs)
+                          (set/subset? required-attrs (set (keys doc))))
+                :let [values (doc/normalize-value (get doc attr))]
+                value values
+                :when (or (nil? value-bytes)
+                          (= (count values) 1)
+                          (bu/bytes=? value-bytes (idx/value->bytes value)))]
+            (if (= :entity-leaf type)
+              {:value value
+               :result-name result-name
+               :type type
+               :value? true}
+              {:value value
+               :e-var e-var
+               :v-var var
+               :attr attr
+               :doc doc
+               :entity entity
+               :result-name result-name
+               :type type
+               :value? false})))))))
 
 (defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
