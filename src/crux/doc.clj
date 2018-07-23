@@ -303,7 +303,8 @@
 (extend-protocol db/LayeredIndex
   Object
   (open-level [_])
-  (close-level [_]))
+  (close-level [_])
+  (max-depth [_] 1))
 
 (defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
   db/Index
@@ -479,6 +480,9 @@
     (doseq [idx indexes]
       (db/close-level idx)))
 
+  (max-depth [this]
+    1)
+
   db/OrderedIndex
   (next-values [this]
     (when-let [iterators-thunk @iterators-thunk-state]
@@ -534,6 +538,9 @@
     (db/close-level (get unary-join-indexes (dec (long @depth-state))))
     (swap! depth-state dec)
     nil)
+
+  (max-depth [this]
+    (count unary-join-indexes))
 
   db/OrderedIndex
   (next-values [this]
@@ -620,6 +627,9 @@
         (db/close-level rhs)))
     nil)
 
+  (max-depth [this]
+    (db/max-depth lhs))
+
   db/OrderedIndex
   (next-values [this]
     (let [lhs-depth (long (get-in @or-state [:lhs :depth]))
@@ -692,6 +702,9 @@
     (swap! walk-state update :result-stack pop)
     nil)
 
+  (max-depth [this]
+    (db/max-depth n-ary-index))
+
   db/OrderedIndex
   (next-values [this]
     (when-let [values (db/next-values n-ary-index)]
@@ -703,8 +716,9 @@
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
   (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
 
-(defn layered-idx->seq [idx ^long max-depth]
-  (let [build-result (fn [max-ks [max-k new-values]]
+(defn layered-idx->seq [idx]
+  (let [max-depth (long (db/max-depth idx))
+        build-result (fn [max-ks [max-k new-values]]
                        (when new-values
                          (conj max-ks max-k)))
         build-leaf-results (fn [max-ks idx]
@@ -849,7 +863,10 @@
                              {:indexes (pop indexes)
                               :child-idx nil
                               :needs-seek? false}))
-    nil))
+    nil)
+
+  (max-depth [this]
+    max-depth))
 
 (defn update-relation-virtual-index!
   ([relation tuples]

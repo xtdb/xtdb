@@ -421,7 +421,7 @@
                 result (-> (mapv doc/new-unary-join-virtual-index index-groups)
                            (doc/new-n-ary-join-layered-virtual-index)
                            (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                           (doc/layered-idx->seq (count index-groups)))]
+                           (doc/layered-idx->seq))]
             (t/testing "order of results"
               (t/is (= (vec (for [[a b c] [[1 3 4]
                                            [1 3 5]
@@ -491,7 +491,7 @@
                    (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                                    (doc/new-n-ary-join-layered-virtual-index)
                                                    (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                   (doc/layered-idx->seq (count index-groups)))
+                                                   (doc/layered-idx->seq))
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
@@ -717,7 +717,7 @@
              (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                              (doc/new-n-ary-join-layered-virtual-index)
                                              (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                             (doc/layered-idx->seq (count index-groups)))
+                                             (doc/layered-idx->seq))
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
                                   (get join-results var)))]
@@ -763,7 +763,7 @@
                        (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                                        (doc/new-n-ary-join-layered-virtual-index)
                                                        (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                       (doc/layered-idx->seq (count index-groups)))
+                                                       (doc/layered-idx->seq))
                                   [k entities] join-results
                                   {:keys [eid]} entities]
                               eid)))))))))))
@@ -791,7 +791,7 @@
         (t/is (= #{[3]}
                  (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-and-idx])
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq 1))
+                                                 (doc/layered-idx->seq))
                             result (#'crux.query/cartesian-product
                                     (for [var [:x]]
                                       (get join-results var)))]
@@ -808,7 +808,7 @@
                    [4]}
                  (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-or-idx])
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq 1))
+                                                 (doc/layered-idx->seq))
                             result (#'crux.query/cartesian-product
                                     (for [var [:x]]
                                       (get join-results var)))]
@@ -836,7 +836,7 @@
                (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                                (doc/new-n-ary-join-layered-virtual-index)
                                                (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                               (doc/layered-idx->seq (count index-groups)))
+                                               (doc/layered-idx->seq))
                           result (#'crux.query/cartesian-product
                                   (for [var [:x :y :z]]
                                     (get join-results var)))]
@@ -855,7 +855,7 @@
                    [2 20 0]}
                  (set (for [[_ join-results] (-> lhs-index
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq 3))
+                                                 (doc/layered-idx->seq))
                             result (#'crux.query/cartesian-product
                                     (for [var [:x :y :z]]
                                       (get join-results var)))]
@@ -869,7 +869,7 @@
                      [3 0 30]}
                    (set (for [[_ join-results] (-> rhs-index
                                                    (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                   (doc/layered-idx->seq 3))
+                                                   (doc/layered-idx->seq))
                               result (#'crux.query/cartesian-product
                                       (for [var [:x :y :z]]
                                         (get join-results var)))]
@@ -885,7 +885,7 @@
                        [3 0 30]}
                      (set (for [[_ join-results] (-> n-ary-or
                                                      (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                     (doc/layered-idx->seq 3))
+                                                     (doc/layered-idx->seq))
                                 result (#'crux.query/cartesian-product
                                         (for [var [:x :y :z]]
                                           (get join-results var)))]

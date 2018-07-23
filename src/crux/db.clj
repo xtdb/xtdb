@@ -8,7 +8,8 @@
 
 (defprotocol LayeredIndex
   (open-level [this])
-  (close-level [this]))
+  (close-level [this])
+  (max-depth [this]))
 
 (defprotocol Indexer
   (index-doc [this content-hash doc])

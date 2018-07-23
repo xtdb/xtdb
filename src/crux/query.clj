@@ -622,9 +622,8 @@
                                         {:free-vars-in-join-order free-vars-in-join-order
                                          :bound-vars bound-vars})]))
                                  (let [{:keys [n-ary-join
-                                               var->bindings
-                                               join-depth]} (build-sub-query snapshot db where args rule-name->rules)]
-                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)]
+                                               var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
                                           (with-meta
                                             [(vec (for [tuple (cartesian-product
                                                                (for [var free-vars-in-join-order]
@@ -713,9 +712,8 @@
                                              (valid-sub-tuple? join-results tuple))]
                               (with-meta (zipmap not-vars (map :value tuple)) {:tuple tuple})))
                   {:keys [n-ary-join
-                          var->bindings
-                          join-depth]} (build-sub-query snapshot db not-clause args rule-name->rules)
-                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)
+                          var->bindings]} (build-sub-query snapshot db not-clause args rule-name->rules)
+                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
                                             tuple (cartesian-product
                                                    (for [var not-vars]
                                                      (bound-results-for-var object-store var->bindings join-keys join-results var)))
@@ -1011,8 +1009,7 @@
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
-     :var->bindings var->bindings
-     :join-depth (count var->joins)}))
+     :var->bindings var->bindings}))
 
 (defn q
   ([{:keys [kv] :as db} q]
@@ -1025,13 +1022,12 @@
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join
-                   var->bindings
-                   join-depth]} (build-sub-query snapshot db where args rule-name->rules)]
+                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join join-depth)
+       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
              tuple (cartesian-product
                     (for [var find]
                       (bound-results-for-var object-store var->bindings join-keys join-results var)))
