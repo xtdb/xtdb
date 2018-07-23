@@ -531,15 +531,16 @@
                                                   (bound-results-for-var object-store var->bindings join-keys join-results arg)
                                                   [{:value arg
                                                     :literal-arg? true}]))))
+                  pred-fns (if (logic-var? pred-fn)
+                             (mapv :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
+                             [pred-fn])
                   pred-result+result-maps+args-tuple
                   (for [bound-result-args-tuple bound-result-args-tuples
                         :let [arg-values (map :value bound-result-args-tuple)
                               args-tuple (zipmap args arg-values)]
                         :when (or (empty? bound-result-args-tuple)
                                   (valid-sub-tuple? join-results args-tuple))
-                        pred-fn (if (logic-var? pred-fn)
-                                  (map :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
-                                  [pred-fn])
+                        pred-fn pred-fns
                         :let [pred-result (apply pred-fn arg-values)]
                         :when pred-result]
                     [pred-result
