@@ -561,11 +561,11 @@
                               [arg value])
                             (into {})))])]
               (when return
-                (doc/update-relation-virtual-index! relation
-                                                    (->> (for [[pred-result] pred-result+result-maps+args-tuple]
-                                                           [pred-result])
-                                                         (distinct)
-                                                         (vec))))
+                (->> (for [[pred-result] pred-result+result-maps+args-tuple]
+                       [pred-result])
+                     (distinct)
+                     (vec)
+                     (doc/update-relation-virtual-index! relation)))
               (when-let [join-results (some->> (map second pred-result+result-maps+args-tuple)
                                                (apply merge-with into)
                                                (merge join-results))]
@@ -585,7 +585,7 @@
               (logic-var? e)
               (literal? v)))))
 
-(defn- or-single-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
+(defn- or-single-e-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (mapv e args)
         idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
@@ -622,7 +622,7 @@
                         (->> (for [{:keys [where] :as or-branch} or-branches]
                                (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
                                  (if (single-e-var-bgp? bound-vars where)
-                                   (or-single-var-bgp-fast-path snapshot db where args)
+                                   (or-single-e-var-bgp-fast-path snapshot db where args)
                                    (let [{:keys [n-ary-join
                                                  var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
                                      (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
@@ -658,7 +658,7 @@
                   (merge join-results bound-results))))
             join-results)))))
 
-(defn- build-unification-preds [unify-clauses var->bindings]
+(defn- build-unification-preds [object-store unify-clauses var->bindings]
   (for [{:keys [op x y]
          :as clause} unify-clauses]
     (do (doseq [arg [x y]
@@ -670,11 +670,11 @@
         (fn [join-keys join-results]
           (let [[x y] (for [arg [x y]]
                         (if (logic-var? arg)
-                          (let [{:keys [e-var result-index]} (get var->bindings arg)]
+                          (let [{:keys [result-index]} (get var->bindings arg)]
                             (or (some->> (get join-keys result-index)
                                          (sorted-set-by bu/bytes-comparator))
-                                (some->> (get join-results e-var)
-                                         (map (comp idx/id->bytes :eid))
+                                (some->> (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                         (map (comp idx/value->bytes :value))
                                          (into (sorted-set-by bu/bytes-comparator)))))
                           (->> (map idx/value->bytes (doc/normalize-value arg))
                                (into (sorted-set-by bu/bytes-comparator)))))]
@@ -980,7 +980,7 @@
                               (build-pred-return-var-bindings var->values-result-index pred-clauses)
                               (build-arg-var-bindings var->values-result-index arg-vars)
                               var->bindings)
-        unification-preds (vec (build-unification-preds unify-clauses var->bindings))
+        unification-preds (vec (build-unification-preds object-store unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
