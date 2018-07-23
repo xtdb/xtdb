@@ -753,10 +753,11 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-;; TODO: This is potentially simplistic. Does generate worse times for
-;; LUBM query 8. Needs investigation, but with this model it's easier
-;; to change the graph.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var e-vars v-var->e]
+;; TODO: This is potentially simplistic. The attempt to split the vars
+;; into two groups via non-leaf-v-vars needs thought, as this might
+;; wreck dependency order. The intent is to push these joins to the
+;; end, its done for performance reasons.
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e]
   (let [joins (for [var (keys var->joins)]
                 (if (contains? v-var->e var)
                   [[var]
@@ -769,11 +770,12 @@
                    [])])
         ors (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
               [bound-vars free-vars])
-        g (->> (concat e-vars (keys var->joins))
-               (distinct)
+        g (->> (keys var->joins)
                (reduce
                 (fn [g v]
-                  (dep/depend g v :root))
+                  (if (contains? non-leaf-v-vars v)
+                    (dep/depend g v ::leaf)
+                    (dep/depend g ::leaf v)))
                 (dep/graph)))
         g (->> (concat preds
                        ors
@@ -789,8 +791,19 @@
                                   (dep/depend g dependent dependency))
                                 g)))
                         g)))
-                g))]
-    (vec (filter var->joins (dep/topo-sort g)))))
+                g))
+        join-order (dep/topo-sort g)
+        [leaves non-leaves] (->> join-order
+                                 (partition-by #{::leaf})
+                                 (remove #{[::leaf]}))
+        can-reorder? (->> (for [leaf leaves]
+                            (->> (dep/immediate-dependents g leaf)
+                                 (filter v-var->e)
+                                 (empty?)))
+                          (every? true?))]
+    (vec (filter var->joins (if can-reorder?
+                              (concat non-leaves leaves)
+                              join-order)))))
 
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
@@ -963,7 +976,7 @@
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         e->v-var (set/map-invert v-var->e)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins e->v-var e-vars v-var->e)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
