@@ -225,7 +225,7 @@
     (or (get arg (symbol (name var)))
         (get arg (keyword (name var))))))
 
-(defn- e-var-literal-v-joins [snapshot object-store e-var->literal-v-clauses var->joins arg-vars args business-time transact-time]
+(defn- e-var-literal-v-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var->literal-v-clauses var->joins arg-vars args]
   (->> e-var->literal-v-clauses
        (reduce
         (fn [var->joins [e-var clauses]]
@@ -249,7 +249,7 @@
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
-(defn- e-var-v-var-joins [snapshot object-store e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args business-time transact-time]
+(defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args]
   (->> e-var+v-var->join-clauses
        (reduce
         (fn [var->joins [[e-var v-var] clauses]]
@@ -275,7 +275,7 @@
             (merge-with into var->joins {v-var (vec indexes)})))
         var->joins)))
 
-(defn- v-var-literal-e-joins [snapshot object-store v-var->literal-e-clauses v-var->range-constriants var->joins business-time transact-time]
+(defn- v-var-literal-e-joins [snapshot {:keys [object-store business-time transact-time] :as db} v-var->literal-e-clauses v-var->range-constriants var->joins]
   (->> v-var->literal-e-clauses
        (reduce
         (fn [var->joins [v-var clauses]]
@@ -301,7 +301,7 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [snapshot args e-vars v-var->range-constriants var->joins business-time transact-time]
+(defn- arg-joins [snapshot {:keys [business-time transact-time] :as db} args e-vars v-var->range-constriants var->joins]
   (let [arg-keys-in-join-order (sort (keys (first args)))
         arg-vars (arg-vars args)
         relation (doc/new-relation-virtual-index (gensym "args")
@@ -585,7 +585,7 @@
               (logic-var? e)
               (literal? v)))))
 
-(defn- or-single-var-bgp-fast-path [{:keys [business-time transact-time] :as db} snapshot object-store where args]
+(defn- or-single-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (mapv e args)
         idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
@@ -600,8 +600,8 @@
 ;; TODO: potentially the way to do avoid infinite loops is to pass
 ;; join results down (either via a variable, an atom or a binding),
 ;; and if a sub query doesn't change it, terminate that branch.
-(defn- build-or-constraints [{:keys [business-time transact-time] :as db} snapshot object-store rule-name->rules or-clause+relation+or-branches var->bindings
-                             vars-in-join-order v-var->range-constriants]
+(defn- build-or-constraints [snapshot {:keys [object-store] :as db} rule-name->rules or-clause+relation+or-branches
+                             var->bindings vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)]]
@@ -620,23 +620,24 @@
                   free-results+bound-results
                   (let [free-results+bound-results
                         (->> (for [{:keys [where] :as or-branch} or-branches]
-                               (if (single-e-var-bgp? bound-vars where)
-                                 (or-single-var-bgp-fast-path db snapshot object-store where args)
-                                 (let [{:keys [n-ary-join
-                                               var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                   (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
-                                          [(vec (for [bound-result-tuple (cartesian-product
-                                                                          (for [var free-vars-in-join-order]
-                                                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                      :when (valid-sub-tuple? join-results bound-result-tuple)]
-                                                  (mapv :value bound-result-tuple)))
-                                           (->> (for [bound-result-tuple (cartesian-product
-                                                                          (for [var bound-vars]
-                                                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                      :when (valid-sub-tuple? join-results bound-result-tuple)
-                                                      result bound-result-tuple]
-                                                  (bound-result->join-result result))
-                                                (apply merge-with into))])))))
+                               (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+                                 (if (single-e-var-bgp? bound-vars where)
+                                   (or-single-var-bgp-fast-path snapshot db where args)
+                                   (let [{:keys [n-ary-join
+                                                 var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                     (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
+                                            [(vec (for [bound-result-tuple (cartesian-product
+                                                                            (for [var free-vars-in-join-order]
+                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :when (valid-sub-tuple? join-results bound-result-tuple)]
+                                                    (mapv :value bound-result-tuple)))
+                                             (->> (for [bound-result-tuple (cartesian-product
+                                                                            (for [var bound-vars]
+                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                        :when (valid-sub-tuple? join-results bound-result-tuple)
+                                                        result bound-result-tuple]
+                                                    (bound-result->join-result result))
+                                                  (apply merge-with into))]))))))
                              (reduce into []))]
                     free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results
@@ -683,7 +684,7 @@
                 != (empty? (set/intersection x y)))
               true))))))
 
-(defn- build-not-constraints [db snapshot object-store rule-name->rules not-type not-clauses var->bindings]
+(defn- build-not-constraints [snapshot {:keys [object-store] :as db} rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -701,30 +702,31 @@
                        arg " " (pr-str not-clause)))))
         (fn [join-keys join-results]
           (if (= (count join-keys) not-join-depth)
-            (let [args (vec (for [bound-result-tuple (cartesian-product
-                                                      (for [var not-vars]
-                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                  :when (valid-sub-tuple? join-results bound-result-tuple)
-                                  :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]]
-                              (with-meta args-tuple {:bound-result-tuple bound-result-tuple})))
-                  {:keys [n-ary-join
-                          var->bindings]} (build-sub-query snapshot db not-clause args rule-name->rules)
-                  args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
-                                            bound-result-tuple (cartesian-product
-                                                                (for [var not-vars]
-                                                                  (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                            :when (valid-sub-tuple? join-results bound-result-tuple)]
-                                        (zipmap not-vars (map :value bound-result-tuple))))
-                  args-to-keep (remove args-to-remove args)]
-              (when-let [join-results (some->> (for [args args-to-keep
-                                                     :let [{:keys [bound-result-tuple]} (meta args)]
-                                                     result bound-result-tuple]
-                                                 (bound-result->join-result result))
-                                               (apply merge-with into)
-                                               (merge join-results))]
-                (if needs-valid-sub-value-group?
-                  (vary-meta join-results update :valid-sub-value-groups conj (set args-to-keep))
-                  join-results)))
+            (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+              (let [args (vec (for [bound-result-tuple (cartesian-product
+                                                        (for [var not-vars]
+                                                          (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                    :when (valid-sub-tuple? join-results bound-result-tuple)
+                                    :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]]
+                                (with-meta args-tuple {:bound-result-tuple bound-result-tuple})))
+                    {:keys [n-ary-join
+                            var->bindings]} (build-sub-query snapshot db not-clause args rule-name->rules)
+                    args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
+                                              bound-result-tuple (cartesian-product
+                                                                  (for [var not-vars]
+                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                              :when (valid-sub-tuple? join-results bound-result-tuple)]
+                                          (zipmap not-vars (map :value bound-result-tuple))))
+                    args-to-keep (remove args-to-remove args)]
+                (when-let [join-results (some->> (for [args args-to-keep
+                                                       :let [{:keys [bound-result-tuple]} (meta args)]
+                                                       result bound-result-tuple]
+                                                   (bound-result->join-result result))
+                                                 (apply merge-with into)
+                                                 (merge join-results))]
+                  (if needs-valid-sub-value-group?
+                    (vary-meta join-results update :valid-sub-value-groups conj (set args-to-keep))
+                    join-results))))
             join-results)))))
 
 (defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
@@ -896,13 +898,11 @@
         arg-vars (arg-vars args)
         var->joins (sorted-map)
         var->joins (e-var-literal-v-joins snapshot
-                                          object-store
+                                          db
                                           e-var->literal-v-clauses
                                           var->joins
                                           arg-vars
-                                          args
-                                          business-time
-                                          transact-time)
+                                          args)
         non-leaf-v-vars (set/union unification-vars e-vars)
         leaf-v-var? (fn [e v]
                       (and (= 1 (count (get v->v-var-clauses v)))
@@ -923,28 +923,23 @@
                                        (group-by :e))
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         var->joins (e-var-v-var-joins snapshot
-                                      object-store
+                                      db
                                       e-var+v-var->join-clauses
                                       v-var->range-constriants
                                       var->joins
                                       arg-vars
-                                      args
-                                      business-time
-                                      transact-time)
+                                      args)
         var->joins (v-var-literal-e-joins snapshot
-                                          object-store
+                                          db
                                           v-var->literal-e-clauses
                                           v-var->range-constriants
-                                          var->joins
-                                          business-time
-                                          transact-time)
+                                          var->joins)
         var->joins (arg-joins snapshot
+                              db
                               args
                               e-vars
                               v-var->range-constriants
-                              var->joins
-                              business-time
-                              transact-time)
+                              var->joins)
         [pred-clause+relations var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
         [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
@@ -986,10 +981,10 @@
                               (build-arg-var-bindings var->values-result-index arg-vars)
                               var->bindings)
         unification-preds (vec (build-unification-preds unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints db snapshot object-store rule-name->rules :not not-clauses var->bindings)
-                                     (build-not-constraints db snapshot object-store rule-name->rules :not-join not-join-clauses var->bindings)))
+        not-constraints (vec (concat (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
+                                     (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
-        or-constraints (vec (build-or-constraints db snapshot object-store rule-name->rules or-clause+relation+or-branches
+        or-constraints (vec (build-or-constraints snapshot db rule-name->rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
@@ -1010,7 +1005,7 @@
   ([{:keys [kv] :as db} q]
    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
      (set (crux.query/q snapshot db q))))
-  ([snapshot {:keys [kv object-store business-time transact-time] :as db} q]
+  ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
