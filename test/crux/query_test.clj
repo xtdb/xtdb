@@ -283,24 +283,24 @@
                          :where [[x :foo]
                                  [(+ 1 bah) bah]]})
       (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
+      (catch RuntimeException e
+        (t/is (re-find #"Circular dependency between bah and bah" (.getMessage e)))))
 
     (try
       (q/q (q/db *kv*) '{:find [foo]
                          :where [[(+ 1 bar) foo]
                                  [(+ 1 foo) bar]]})
       (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))
+      (catch RuntimeException e
+        (t/is (re-find #"Circular dependency between bar and foo" (.getMessage e)))))
 
     (try
       (q/q (q/db *kv*) '{:find [foo]
                          :where [[(+ 1 foo) bar]
                                  [(+ 1 bar) foo]]})
       (t/is (= true false) "Expected exception")
-      (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate has circular dependency: " (.getMessage e)))))))
+      (catch RuntimeException e
+        (t/is (re-find #"Circular dependency between foo and bar" (.getMessage e)))))))
 
 (t/deftest test-not-query
   (t/is (= '[[:bgp {:e e :a :name :v name}]
@@ -717,7 +717,6 @@
                                         [i :friends f]
                                         [(== f #{:bob :dominic})]]})))
 
-    ;; TODO: Has alphabetic variable order dependency.
     (t/is (= #{[:dominic]}
              (q/q (q/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
@@ -830,7 +829,6 @@
                             {:crux.db/id :petr :name "Petr" :mentor :oleg}
                             {:crux.db/id :oleg :name "Oleg" :mentor :ivan}])
 
-  ;; TODO: Has alphabetic variable order dependency.
   (t/is (= #{[:oleg "Oleg" :petr "Petr"]
              [:ivan "Ivan" :oleg "Oleg"]
              [:petr "Petr" :ivan "Ivan"]} (q/q (q/db *kv*) '{:find [e1 n1 e2 n2]

@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.walk :as w]
+            [com.stuartsierra.dependency :as dep]
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.index :as idx]
@@ -752,88 +753,44 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-(def ^:private pred-return-comparator (reify Comparator
-                                        (compare [_ x y]
-                                          (cond
-                                            (contains? (set (get-in x [:pred :args]))
-                                                       (:return y))
-                                            -1
-
-                                            (contains? (set (get-in y [:pred :args]))
-                                                       (:return x))
-                                            1
-
-                                            :else
-                                            0))))
-
-;; TODO: This is simplistic, really has to calculate dependency graph
-;; between args and returns, also for the ors and normal join vars as
-;; e-vars and v-vars have implicit dependencies. Below an attempt at
-;; defining a default join order that does not depend on alphabetic
-;; sort. Can potentially break by subsequent movements of vars.
+;; TODO: This is potentially simplistic. Does generate worse times for
+;; LUBM query 8. Needs investigation, but with this model it's easier
+;; to change the graph.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins e->v-var e-vars v-var->e]
-  (let [vars-in-join-order (vec (shuffle (keys var->joins)))
-        var-comparator (reify Comparator
-                         (compare [_ x y]
-                           (cond
-                             (nil? x)
-                             1
-                             (nil? y)
-                             -1
-                             (and (contains? e-vars x)
-                                  (contains? v-var->e x))
-                             -1
-                             (and (contains? e-vars y)
-                                  (contains? v-var->e y))
-                             1
-                             (contains? e-vars x)
-                             1
-                             (contains? e-vars y)
-                             -1
-                             :else
-                             (recur (get v-var->e x) (get v-var->e y)))))
-        vars-in-join-order (vec (sort var-comparator vars-in-join-order))
-        var->index (zipmap vars-in-join-order (range))
-        preds (for [{:keys [pred return] :as pred-clause} (sort pred-return-comparator pred-clauses)
-                    :when return]
-                ["Predicate" pred-clause (filter logic-var? (:args pred)) [return]])
-        ors (for [[or-clause _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches
-                  :when (not-empty free-vars)]
-              ["Or" or-clause bound-vars free-vars])]
-    (->> (concat preds ors)
-         (reduce
-          (fn [[vars-in-join-order seen-returns var->index]
-               [msg clause args returns]]
-            (->> returns
-                 (reduce
-                  (fn [[vars-in-join-order seen-returns var->index] return]
-                    ;; TODO: What is correct here if the argument
-                    ;; isn't in the join? We attempt to fallback to
-                    ;; the v join of a an e, but unsure if this is
-                    ;; correct. Does not work to set result-index to
-                    ;; this, as this is used as an index into
-                    ;; join-keys which contains the real value.
-                    (let [max-dependent-var-index (->> (map #(or (get var->index %)
-                                                                 (get var->index (get e->v-var %))) args)
-                                                       (remove nil?)
-                                                       (reduce max -1))
-                          return-index (get var->index return)
-                          seen-returns (conj seen-returns return)]
-                      (when (some seen-returns args)
-                        (throw (IllegalArgumentException.
-                                (str msg " has circular dependency: " (pr-str clause)))))
-                      (if (> max-dependent-var-index return-index)
-                        (let [dependent-var (get vars-in-join-order max-dependent-var-index)
-                              vars-in-join-order (-> vars-in-join-order
-                                                     (assoc return-index dependent-var)
-                                                     (assoc max-dependent-var-index return))]
-                          [vars-in-join-order
-                           seen-returns
-                           (zipmap vars-in-join-order (range))])
-                        [vars-in-join-order seen-returns var->index])))
-                  [vars-in-join-order seen-returns var->index])))
-          [vars-in-join-order #{} var->index])
-         (first))))
+  (let [joins (for [var (keys var->joins)]
+                (if (contains? v-var->e var)
+                  [[var]
+                   [(get v-var->e var)]]
+                  []))
+        preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
+                [(filter logic-var? (:args pred))
+                 (if return
+                   [return]
+                   [])])
+        ors (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
+              [bound-vars free-vars])
+        g (->> (concat e-vars (keys var->joins))
+               (distinct)
+               (reduce
+                (fn [g v]
+                  (dep/depend g v :root))
+                (dep/graph)))
+        g (->> (concat preds
+                       ors
+                       joins)
+               (reduce
+                (fn [g [dependencies dependents]]
+                  (->> dependencies
+                       (reduce
+                        (fn [g dependency]
+                          (->> dependents
+                               (reduce
+                                (fn [g dependent]
+                                  (dep/depend g dependent dependency))
+                                g)))
+                        g)))
+                g))]
+    (vec (filter var->joins (dep/topo-sort g)))))
 
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
@@ -1026,8 +983,8 @@
                                                   var->bindings vars-in-join-order v-var->range-constriants))
         shared-e-v-vars (set/intersection e-vars v-vars)
         constrain-result-fn (fn [max-ks result]
-                              (some->> (doc/constrain-join-result-by-empty-names max-ks result)
-                                       (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks)
+                              (some->> (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks result)
+                                       (doc/constrain-join-result-by-empty-names max-ks)
                                        (constrain-join-result-by-unification unification-preds max-ks)
                                        (constrain-join-result-by-constraints pred-constraints max-ks)
                                        (constrain-join-result-by-constraints not-constraints max-ks)

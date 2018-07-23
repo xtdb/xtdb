@@ -6,6 +6,7 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/tools.logging "0.4.1"]
                  [org.clojure/tools.cli "0.3.7"]
+                 [com.stuartsierra/dependency "0.2.0"]
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.13.2"]
