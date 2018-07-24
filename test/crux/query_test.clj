@@ -1985,3 +1985,43 @@
                            [x :crux.db/id]
                            [y :crux.db/id]
                            [(!= x y)]]]}))))
+
+;; From
+;; https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf
+(t/deftest test-datalog-paper-sgc
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :ann :parent #{:dorothy :hilary}}
+                                   {:crux.db/id :bertrand :parent :dorothy}
+                                   {:crux.db/id :charles :parent :evelyn}
+                                   {:crux.db/id :dorothy :parent :george}
+                                   {:crux.db/id :evelyn :parent :george}
+                                   {:crux.db/id :fred}
+                                   {:crux.db/id :george}
+                                   {:crux.db/id :hilary}])
+
+  ;; rl: sgc(X, X) :- person(X).
+  ;; r2: sgc(X, Y) :- par(X, X1), sgc(X1, Y1), par(Y, Y1).
+  (t/is (= #{[:ann :ann]
+             [:bertrand :bertrand]
+             [:charles :charles]
+             [:dorothy :dorothy]
+             [:evelyn :evelyn]
+             [:fred :fred]
+             [:george :george]
+             [:hilary :hilary]
+             [:dorothy :evelyn]
+             [:evelyn :dorothy]
+             [:charles :ann]
+             [:ann :charles]
+             [:ann :bertrand]
+             [:bertrand :ann]
+             [:charles :bertrand]
+             [:bertrand :charles]}
+           (q/q (q/db *kv*)
+                '{:find [x y]
+                  :where [(sgc x y)]
+                  :rules [[(sgc x y)
+                           [x :crux.db/id y]]
+                          [(sgc x y)
+                           [x :parent x1]
+                           (sgc x1 y1)
+                           [y :parent y1]]]}))))
