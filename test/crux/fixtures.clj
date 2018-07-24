@@ -35,6 +35,19 @@
      @(crux.db/submit-tx tx-log tx-ops)
      entities)))
 
+(defn entities->delete-tx-ops [entities ts]
+  (vec (for [e entities]
+         [:crux.tx/delete e ts])))
+
+(defn delete-entities!
+  ([kv entities]
+   (delete-entities! kv entities (Date.)))
+  ([kv entities ts]
+   (let [tx-log (crux.tx/->DocTxLog kv)
+         tx-ops (entities->delete-tx-ops entities ts)]
+     @(crux.db/submit-tx tx-log tx-ops)
+     entities)))
+
 (defn transact-people!
   ([kv people-mixins]
    (transact-people! kv people-mixins (Date.)))

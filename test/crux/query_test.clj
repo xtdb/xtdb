@@ -1665,10 +1665,10 @@
      (Long/parseLong (name y))))
 
 (t/deftest datascript-test-predicates
-  (f/transact-entity-maps! f/*kv*[{:crux.db/id :1 :name "Ivan" :age 10}
-                                  {:crux.db/id :2 :name "Ivan" :age 20}
-                                  {:crux.db/id :3 :name "Oleg" :age 10}
-                                  {:crux.db/id :4 :name "Oleg" :age 20}])
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :name "Ivan" :age 10}
+                                   {:crux.db/id :2 :name "Ivan" :age 20}
+                                   {:crux.db/id :3 :name "Oleg" :age 10}
+                                   {:crux.db/id :4 :name "Oleg" :age 20}])
   (let [db (q/db *kv*)]
     (t/are [q res] (= (q/q db (quote q)) res)
       ;; plain predicate
@@ -1724,7 +1724,7 @@
 
 
 (t/deftest datascript-test-issue-180
-  (f/transact-entity-maps! f/*kv*[{:crux.db/id :1 :age 20}])
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :age 20}])
   (let [db (q/db *kv*)]
     (t/is (= #{}
              (q/q db
@@ -1740,3 +1740,98 @@
     (t/is (= #{[42]} (q/q db
                           '{:find [?x]
                             :where [[(crux.query-test/sample-query-fn) ?x]]})))))
+
+;; https://github.com/racket/datalog/tree/master/tests/examples
+
+(t/deftest test-racket-datalog-tutorial
+  ;; parent(john,douglas).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :john :parent :douglas}])
+  ;; parent(john,douglas)?
+  (t/is (= #{[true]}
+           (q/q (q/db *kv*)
+                '{:find [found]
+                  :where [[:john :parent :douglas]
+                          [(identity true) found]]})))
+
+  ;; parent(john,ebbon)?
+  (t/is (= #{}
+           (q/q (q/db *kv*)
+                '{:find [found]
+                  :where [[:john :parent :ebbon]
+                          [(identity true) found]]})))
+
+  ;; parent(bob,john).
+  ;; parent(ebbon,bob).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :bob :parent :john}
+                                   {:crux.db/id :ebbon :parent :bob}])
+
+  ;; parent(A,B)?
+  (t/is (= #{[:john :douglas]
+             [:bob :john]
+             [:ebbon :bob]}
+           (q/q (q/db *kv*)
+                '{:find [a b]
+                  :where [[a :parent b]]})))
+
+  ;; parent(john,B)?
+  (t/is (= #{[:douglas]}
+           (q/q (q/db *kv*)
+                '{:find [ b]
+                  :where [[:john :parent b]]})))
+
+  ;; parent(A,A)?
+  (t/is (= #{}
+           (q/q (q/db *kv*)
+                '{:find [a]
+                  :where [[a :parent a]]})))
+
+  ;; ancestor(A,B) :- parent(A,B).
+  ;; ancestor(A,B) :- parent(A,C), ancestor(C, B).
+  ;; ancestor(A, B)?
+  (t/is (= #{[:ebbon :bob]
+             [:bob :john]
+             [:john :douglas]
+             [:bob :douglas]
+             [:ebbon :john]
+             [:ebbon :douglas]}
+           (q/q (q/db *kv*)
+                '{:find [a b]
+                  :where [(ancestor a b)]
+                  :rules [[(ancestor a b)
+                           [a :parent b]]
+                          [(ancestor a b)
+                           [a :parent c]
+                           (ancestor c b)]]})))
+
+  ;; ancestor(X,john)?
+  (t/is (= #{[:bob]
+             [:ebbon]}
+           (q/q (q/db *kv*)
+                '{:find [x]
+                  :where [(ancestor x :john)]
+                  :rules [[(ancestor a b)
+                           [a :parent b]]
+                          [(ancestor a b)
+                           [a :parent c]
+                           (ancestor c b)]]})))
+
+  ;; parent(bob, john)-
+  (f/delete-entities! f/*kv* [:bob])
+  ;; parent(A,B)?
+  (t/is (= #{[:john :douglas]
+             [:ebbon :bob]}
+           (q/q (q/db *kv*)
+                '{:find [a b]
+                  :where [[a :parent b]]})))
+
+  ;; ancestor(A,B)?
+  (t/is (= #{[:ebbon :bob]
+             [:john :douglas]}
+           (q/q (q/db *kv*)
+                '{:find [a b]
+                  :where [(ancestor a b)]
+                  :rules [[(ancestor a b)
+                           [a :parent b]]
+                          [(ancestor a b)
+                           [a :parent c]
+                           (ancestor c b)]]}))))

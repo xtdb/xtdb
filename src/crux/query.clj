@@ -757,10 +757,11 @@
 ;; wreck dependency order. The intent is to push these joins to the
 ;; end, its done for performance reasons.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e]
-  (let [joins (for [var (keys var->joins)]
-                (if (contains? v-var->e var)
+  (let [joins (for [var (keys var->joins)
+                    :let [e (get v-var->e var)]]
+                (if (and e (not= var e))
                   [[var]
-                   [(get v-var->e var)]]
+                   [e]]
                   []))
         preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
                 [(filter logic-var? (:args pred))

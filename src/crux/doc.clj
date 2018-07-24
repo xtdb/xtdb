@@ -255,7 +255,7 @@
                                      :let [[_ entities] (db/seek-values content-hash-entity-idx content-hash)]
                                      entity entities
                                      :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
-                                     :when (= content-hash (.content-hash ^EntityTx entity-tx))]
+                                     :when (and entity-tx (= content-hash (.content-hash ^EntityTx entity-tx)))]
                                  entity-tx)
                                (seq))]
       [v (vec entity-txs)])))
@@ -263,13 +263,17 @@
 (defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (seek-values [this k]
-    (->> (db/seek-values doc-idx k)
-         (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx)))
+    (when-let [values (db/seek-values doc-idx k)]
+      (if-let [result (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values)]
+        result
+        (db/next-values this))))
 
   db/OrderedIndex
   (next-values [this]
-    (->> (db/next-values doc-idx)
-         (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx))))
+    (when-let [values (db/next-values doc-idx)]
+      (if-let [result (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values)]
+        result
+        (recur)))))
 
 (defn entities-by-attribute-value-at [snapshot attr range-constraints business-time transact-time]
   (with-open [di (ks/new-iterator snapshot)
