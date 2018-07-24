@@ -69,6 +69,9 @@
       (k/consume-and-index-entities indexer ek/*consumer*)
       (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 100)))
 
+      ;; "Elapsed time: 29.674093 msecs"
+      ;; "Elapsed time: 17.23216 msecs"
+
       ;; "Elapsed time: 13.993752 msecs"
       ;; "Elapsed time: 0.602848 msecs"
       (t/testing "querying transacted data"
@@ -86,6 +89,10 @@
 
     ;; This query bears large input and high selectivity. It queries about just one class and
     ;; one property and does not assume any hierarchy information or inference.
+
+    ;; "Elapsed time: 2.452465 msecs"
+    ;; "Elapsed time: 1.121578 msecs"
+
     ;; "Elapsed time: 7.174778 msecs"
     ;; "Elapsed time: 60.638423 msecs"
     (t/testing "LUBM query 1"
@@ -103,6 +110,10 @@
 
     ;; This query increases in complexity: 3 classes and 3 properties are involved. Additionally,
     ;; there is a triangular pattern of relationships between the objects involved.
+
+    ;; "Elapsed time: 19.222141 msecs"
+    ;; "Elapsed time: 75.009574 msecs"
+
     ;; "Elapsed time: 1833.664714 msecs"
     ;; DNF
     (t/testing "LUBM query 2"
@@ -119,6 +130,10 @@
     ;; TODO: Publication has subClassOf children, should use rules.
 
     ;; This query is similar to Query 1 but class Publication has a wide hierarchy.
+
+    ;; "Elapsed time: 26.063767 msecs"
+    ;; "Elapsed time: 15.582845 msecs"
+
     ;; "Elapsed time: 18.763819 msecs"
     ;; "Elapsed time: 149.333853 msecs"
     (t/testing "LUBM query 3"
@@ -150,6 +165,10 @@
     ;; This query has small input and high selectivity. It assumes subClassOf relationship
     ;; between Professor and its subclasses. Class Professor has a wide hierarchy. Another
     ;; feature is that it queries about multiple properties of a single class.
+
+    ;; "Elapsed time: 57.801558 msecs"
+    ;; "Elapsed time: 64.957083 msecs"
+
     ;; "Elapsed time: 3.680617 msecs"
     ;; "Elapsed time: 8.05811 msecs"
     (t/testing "LUBM query 4"
@@ -180,6 +199,9 @@
     ;; This query assumes subClassOf relationship between Person and its subclasses
     ;; and subPropertyOf relationship between memberOf and its subproperties.
     ;; Moreover, class Person features a deep and wide hierarchy.
+
+    ;; "Elapsed time: 310.051248 msecs"
+    ;; "Elapsed time: 2117.437676 msecs"
     (t/testing "LUBM query 5"
       (t/is (= 719 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -214,6 +236,9 @@
     ;; subClassOf relationship between UndergraduateStudent and Student and the
     ;; implicit one between GraduateStudent and Student. In addition, it has large
     ;; input and low selectivity.
+
+    ;; "Elapsed time: 76.197529 msecs"
+    ;; "Elapsed time: 489.975981 msecs"
     (t/testing "LUBM query 6"
       (t/is (= 678 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -229,6 +254,10 @@
 
     ;; This query is similar to Query 6 in terms of class Student but it increases in the
     ;; number of classes and properties and its selectivity is high.
+
+    ;; "Elapsed time: 19.21016 msecs"
+    ;; "Elapsed time: 18.612964 msecs"
+
     ;; "Elapsed time: 480.39002 msecs"
     ;; "Elapsed time: 65851.740685 msecs"
     (t/testing "LUBM query 7"
@@ -247,6 +276,8 @@
                                            :ub/teacherOf
                                            y]]})))))
 
+      ;; "Elapsed time: 1.540424 msecs"
+      ;; "Elapsed time: 1.566253 msecs"
       (t/testing "literal entity on its own"
         (t/is (= 4 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -256,15 +287,16 @@
                                             y]]})))))))
 
     ;; TODO: Should use rules. Cannot use or for memberOf/worksFor here.
-    ;; Should return 7791 with lubm10.ntriples (is this for UndergraduateStudent?).
+    ;; Should return 7790 with lubm10.ntriples (is this for UndergraduateStudent?).
     ;; EmptyHeaded returns 5916 for this with UndergraduateStudent.
 
     ;; This query is further more complex than Query 7 by including one more property.
+
+    ;; "Elapsed time: 313.496321 msecs"
+    ;; "Elapsed time: 5219.168318 msecs"
+
     ;; "Elapsed time: 40.463253 msecs"
     ;; "Elapsed time: 1465.576616 msecs"
-
-    ;; TODO: Slower with [z y] join order using dependency, should
-    ;; figure out how to make y move forward.
     (t/testing "LUBM query 8"
       (t/is (= 678 (count (q/q (q/db f/*kv*)
                                (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -279,10 +311,14 @@
                                            [x :ub/emailAddress z]]}))))))
 
     ;; TODO: Should use rules.
+    ;; Should return 208 with lubm10.ntriples.
 
     ;; Besides the aforementioned features of class Student and the wide hierarchy of
     ;; class Faculty, like Query 2, this query is characterized by the most classes and
     ;; properties in the query set and there is a triangular pattern of relationships.
+
+    ;; "Elapsed time: 603.341952 msecs"
+    ;; "Elapsed time: 64145.993978 msecs"
     (t/testing "LUBM query 9"
       (t/is (= 13 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -315,6 +351,9 @@
     ;; (implicit) subClassOf relationship between GraduateStudent and Student, i.e.,
     ;; subClassOf rela-tionship between UndergraduateStudent and Student does not add
     ;; to the results.
+
+    ;; "Elapsed time: 3.843893 msecs"
+    ;; "Elapsed time: 2.907764 msecs"
     (t/testing "LUBM query 10"
       (t/is (= 4 (count (q/q (q/db f/*kv*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -326,6 +365,7 @@
                                          [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]}))))))
 
     ;; TODO: should use transitive rule.
+    ;; Should return 224 with lubm10.ntriples.
 
     ;; Query 11, 12 and 13 are intended to verify the presence of certain OWL reasoning
     ;; capabilities in the system. In this query, property subOrganizationOf is defined
@@ -334,6 +374,9 @@
     ;; a University individual, inference about the subOrgnizationOf relationship between
     ;; instances of ResearchGroup and University is required to answer this query.
     ;; Additionally, its input is small.
+
+    ;; "Elapsed time: 7.069938 msecs"
+    ;; "Elapsed time: 39.106019 msecs"
     (t/testing "LUBM query 11"
       (t/is (= 10 (count (q/q (q/db f/*kv*)
                               (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -353,6 +396,10 @@
     ;; property headOf. Hence this query requires realization, i.e., inference that
     ;; that professor is an instance of class Chair because he or she is the head of a
     ;; department. Input of this query is small as well.
+
+    ;; "Elapsed time: 3.505682 msecs"
+    ;; "Elapsed time: 30.706469 msecs"
+
     ;; "Elapsed time: 1.375493 msecs"
     ;; "Elapsed time: 37.883395 msecs"
     (t/testing "LUBM query 12"
@@ -365,6 +412,8 @@
                                           [y :ub/subOrganizationOf :http://www.University0.edu]]})))))
 
       ;; TODO: actual result, should use rules.
+      ;; "Elapsed time: 1.742245 msecs"
+      ;; "Elapsed time: 2.694322 msecs"
       (t/is (= 1 (count (q/q (q/db f/*kv*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x y]
@@ -380,6 +429,9 @@
     ;; an alumnus of a university using one of these three subproperties instead of
     ;; hasAlumnus. Therefore, this query assumes subPropertyOf relationships between
     ;; degreeFrom and its subproperties, and also requires inference about inverseOf.
+
+    ;; "Elapsed time: 263.51335 msecs"
+    ;; "Elapsed time: 1971.622134 msecs"
     (t/testing "LUBM query 13"
       (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor2]}
                (q/q (q/db f/*kv*)
@@ -416,6 +468,10 @@
     ;; This query is the simplest in the test set. This query
     ;; represents those with large input and low selectivity and does
     ;; not assume any hierarchy information or inference.
+
+    ;; "Elapsed time: 35.034935 msecs"
+    ;; "Elapsed time: 227.269163 msecs"
+
     ;; "Elapsed time: 7.821926 msecs"
     ;; "Elapsed time: 83.661817 msecs"
     (t/testing "LUBM query 14"
