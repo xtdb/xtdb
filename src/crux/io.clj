@@ -4,7 +4,7 @@
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
            [java.lang.ref ReferenceQueue PhantomReference]
-           [java.util IdentityHashMap]
+           [java.util Date IdentityHashMap]
            [java.net ServerSocket]))
 
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
@@ -31,6 +31,17 @@
   (when-not (.isAlive cleaner-thread)
     (.start cleaner-thread))
   (.put ref->cleanup-action (PhantomReference. object reference-queue) action))
+
+(def ^:private last-monotonic-date (atom (Date.)))
+
+(defn next-monotonic-date ^java.util.Date []
+  (let [date (Date.)
+        old-date @last-monotonic-date]
+    (if (and (not= date old-date)
+             (compare-and-set! last-monotonic-date old-date date))
+      date
+      (do (Thread/sleep 1)
+          (recur)))))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]

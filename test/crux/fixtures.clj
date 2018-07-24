@@ -28,7 +28,7 @@
 
 (defn transact-entity-maps!
   ([kv entities]
-   (transact-entity-maps! kv entities (Date.)))
+   (transact-entity-maps! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
    (let [tx-log (crux.tx/->DocTxLog kv)
          tx-ops (maps->tx-ops entities ts)]
@@ -41,7 +41,7 @@
 
 (defn delete-entities!
   ([kv entities]
-   (delete-entities! kv entities (Date.)))
+   (delete-entities! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
    (let [tx-log (crux.tx/->DocTxLog kv)
          tx-ops (entities->delete-tx-ops entities ts)]
@@ -50,7 +50,7 @@
 
 (defn transact-people!
   ([kv people-mixins]
-   (transact-people! kv people-mixins (Date.)))
+   (transact-people! kv people-mixins (cio/next-monotonic-date)))
   ([kv people-mixins ts]
    (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
 

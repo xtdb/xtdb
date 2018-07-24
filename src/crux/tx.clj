@@ -4,6 +4,7 @@
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv-store :as ks]
             [crux.db :as db])
   (:import [java.util Date]
@@ -170,7 +171,7 @@
     (db/index-doc (->DocIndexer kv this (doc/->DocObjectStore kv)) content-hash doc))
 
   (submit-tx [this tx-ops]
-    (let [transact-time (Date.)
+    (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
           indexer (->DocIndexer kv this (doc/->DocObjectStore kv))]

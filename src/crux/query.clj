@@ -7,9 +7,9 @@
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv-store :as ks]
-            [crux.db :as db])
-  (:import [java.util Comparator Date]))
+            [crux.db :as db]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -1070,12 +1070,16 @@
 
 (defn db
   ([kv]
-   (db kv (Date.)))
+   (let [business-time (cio/next-monotonic-date)]
+     (->QueryDatasource kv
+                        (doc/new-cached-object-store kv)
+                        business-time
+                        business-time)))
   ([kv business-time]
    (->QueryDatasource kv
                       (doc/new-cached-object-store kv)
                       business-time
-                      (Date.)))
+                      (cio/next-monotonic-date)))
   ([kv business-time transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout)
    (->QueryDatasource kv

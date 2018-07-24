@@ -1815,26 +1815,43 @@
                            [a :parent c]
                            (ancestor c b)]]})))
 
-  ;; parent(bob, john)-
-  (f/delete-entities! f/*kv* [:bob])
-  ;; parent(A,B)?
-  (t/is (= #{[:john :douglas]
-             [:ebbon :bob]}
-           (q/q (q/db *kv*)
-                '{:find [a b]
-                  :where [[a :parent b]]})))
+  (let [db-before (q/db *kv*)]
+    ;; parent(bob, john)-
+    (f/delete-entities! f/*kv* [:bob])
+    ;; parent(A,B)?
+    (t/is (= #{[:john :douglas]
+               [:ebbon :bob]}
+             (q/q (q/db *kv*)
+                  '{:find [a b]
+                    :where [[a :parent b]]})))
 
-  ;; ancestor(A,B)?
-  (t/is (= #{[:ebbon :bob]
-             [:john :douglas]}
-           (q/q (q/db *kv*)
-                '{:find [a b]
-                  :where [(ancestor a b)]
-                  :rules [[(ancestor a b)
-                           [a :parent b]]
-                          [(ancestor a b)
-                           [a :parent c]
-                           (ancestor c b)]]}))))
+    ;; ancestor(A,B)?
+    (t/is (= #{[:ebbon :bob]
+               [:john :douglas]}
+             (q/q (q/db *kv*)
+                  '{:find [a b]
+                    :where [(ancestor a b)]
+                    :rules [[(ancestor a b)
+                             [a :parent b]]
+                            [(ancestor a b)
+                             [a :parent c]
+                             (ancestor c b)]]})))
+
+    (t/testing "can query previous state"
+      (t/is (= #{[:ebbon :bob]
+                 [:bob :john]
+                 [:john :douglas]
+                 [:bob :douglas]
+                 [:ebbon :john]
+                 [:ebbon :douglas]}
+               (q/q db-before
+                    '{:find [a b]
+                      :where [(ancestor a b)]
+                      :rules [[(ancestor a b)
+                               [a :parent b]]
+                              [(ancestor a b)
+                               [a :parent c]
+                               (ancestor c b)]]}))))))
 
 (t/deftest test-racket-datalog-path
   ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
