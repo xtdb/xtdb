@@ -1741,6 +1741,7 @@
                           '{:find [?x]
                             :where [[(crux.query-test/sample-query-fn) ?x]]})))))
 
+;; Tests from Racket Datalog
 ;; https://github.com/racket/datalog/tree/master/tests/examples
 
 (t/deftest test-racket-datalog-tutorial
@@ -1986,8 +1987,9 @@
                            [y :crux.db/id]
                            [(!= x y)]]]}))))
 
-;; From
+;; Tests from
 ;; https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf
+
 (t/deftest test-datalog-paper-sgc
   (f/transact-entity-maps! f/*kv* [{:crux.db/id :ann :parent #{:dorothy :hilary}}
                                    {:crux.db/id :bertrand :parent :dorothy}
@@ -2025,3 +2027,57 @@
                            [x :parent x1]
                            (sgc x1 y1)
                            [y :parent y1]]]}))))
+
+(t/deftest test-datalog-paper-stratified-datalog
+  ;; d(a, b), d(b, c) d(e, e)
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :a :d :b}
+                                   {:crux.db/id :b :d :c}
+                                   {:crux.db/id :e :d :e}])
+
+  ;; rl: p(X, Y) :- not q(X, Y), s(X, Y).
+  ;; r2: q(K, Y) :- q(X, Z), q(Z, Y).
+  ;; r3: q(X, Y) :- d(X, Y), not r(X, Y).
+  ;; r4: r(X, Y) :- d(Y, X).
+  ;; r5: s(X, Y) :- q(X, Z), q(Y, T), X != Y
+  (let [rules '[[(p x y)
+                 (not (q x y))
+                 (s x y)]
+                [(q x y)
+                 (q x z)
+                 (q z y)]
+                [(q x y)
+                 [x :d y]
+                 (not (r x y))]
+                [(r x y)
+                 [y :d x]]
+                [(s x y)
+                 (q x z)
+                 (q y t)
+                 [(!= x y)]]]]
+
+    (t/testing "stratum 1"
+      (t/is (= #{[:b :a]
+                 [:c :b]
+                 [:e :e]}
+               (q/q (q/db *kv*)
+                    {:find '[x y]
+                     :where '[(r x y)]
+                     :rules rules}))))
+
+    (t/testing "stratum 2"
+      (t/is (= #{[:a :b]
+                 [:b :c]
+                 [:a :c]
+                 [:b :a]}
+               (q/q (q/db *kv*)
+                    {:find '[x y]
+                     :where '[(or (q x y)
+                                  (s x y))]
+                     :rules rules}))))
+
+    (t/testing "stratum 3"
+      (t/is (= #{[:b :a]}
+               (q/q (q/db *kv*)
+                    {:find '[x y]
+                     :where '[(p x y)]
+                     :rules rules}))))))
