@@ -546,8 +546,7 @@
                              [pred-fn])
                   pred-result+result-maps+args-tuple
                   (for [bound-result-args-tuple bound-result-args-tuples
-                        :when (or (empty? bound-result-args-tuple)
-                                  (valid-sub-tuple? join-results bound-result-args-tuple))
+                        :when (valid-sub-tuple? join-results bound-result-args-tuple)
                         pred-fn pred-fns
                         :let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
                         :when pred-result]
@@ -798,7 +797,7 @@
                                  (remove #{[::leaf]}))
         can-reorder? (->> (for [leaf leaves]
                             (->> (dep/immediate-dependents g leaf)
-                                 (filter v-var->e)
+                                 (filter var->joins)
                                  (empty?)))
                           (every? true?))]
     (vec (filter var->joins (if can-reorder?
@@ -1001,7 +1000,8 @@
                                        (constrain-join-result-by-unification unification-preds max-ks)
                                        (constrain-join-result-by-constraints pred-constraints max-ks)
                                        (constrain-join-result-by-constraints not-constraints max-ks)
-                                       (constrain-join-result-by-constraints or-constraints max-ks)))
+                                       (constrain-join-result-by-constraints or-constraints max-ks)
+                                       (doc/constrain-join-result-by-empty-names max-ks)))
         joins (map var->joins vars-in-join-order)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)]
     (when (seq args)
