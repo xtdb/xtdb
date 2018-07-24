@@ -597,14 +597,20 @@
                       entity entities]
                   entity))}]])))
 
-;; TODO: potentially the way to do avoid infinite loops is to pass
-;; join results down (either via a variable, an atom or a binding),
-;; and if a sub query doesn't change it, terminate that branch.
+(def ^:private ^:dynamic *recursion-table* {})
+
+;; TODO: This tabling mechanism attempts at avoiding infinite
+;; recursion, but does not actually cache anything. Short-circuits
+;; identical sub trees. Passes tests, unsure if this really works in
+;; the general case. Depends on the eager expansion of rules for some
+;; cases to pass. One alternative is maybe to try to cache the
+;; sequence and reuse it, somehow detecting if it loops.
 (defn- build-or-constraints [snapshot {:keys [object-store] :as db} rule-name->rules or-clause+relation+or-branches
                              var->bindings vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
-              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)]]
+              free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
+              {:keys [rule-name]} (meta clause)]]
     (do (doseq [var bound-vars]
           (when (not (contains? var->bindings var))
             (throw (IllegalArgumentException.
@@ -619,25 +625,31 @@
                               (zipmap bound-vars (map :value bound-result-tuple))))
                   free-results+bound-results
                   (let [free-results+bound-results
-                        (->> (for [{:keys [where] :as or-branch} or-branches]
+                        (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                                   :let [cache-key (when rule-name
+                                                     [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
                                (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
                                  (if (single-e-var-bgp? bound-vars where)
                                    (or-single-e-var-bgp-fast-path snapshot db where args)
-                                   (let [{:keys [n-ary-join
-                                                 var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                     (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
-                                            [(vec (for [bound-result-tuple (cartesian-product
-                                                                            (for [var free-vars-in-join-order]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :when (valid-sub-tuple? join-results bound-result-tuple)]
-                                                    (mapv :value bound-result-tuple)))
-                                             (->> (for [bound-result-tuple (cartesian-product
-                                                                            (for [var bound-vars]
-                                                                              (bound-results-for-var object-store var->bindings join-keys join-results var)))
-                                                        :when (valid-sub-tuple? join-results bound-result-tuple)
-                                                        result bound-result-tuple]
-                                                    (bound-result->join-result result))
-                                                  (apply merge-with into))]))))))
+                                   (or (get *recursion-table* cache-key)
+                                       (binding [*recursion-table* (if cache-key
+                                                                     (assoc *recursion-table* cache-key [])
+                                                                     *recursion-table*)]
+                                         (let [{:keys [n-ary-join
+                                                       var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                           (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
+                                                  [(vec (for [bound-result-tuple (cartesian-product
+                                                                                  (for [var free-vars-in-join-order]
+                                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                              :when (valid-sub-tuple? join-results bound-result-tuple)]
+                                                          (mapv :value bound-result-tuple)))
+                                                   (->> (for [bound-result-tuple (cartesian-product
+                                                                                  (for [var bound-vars]
+                                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                              :when (valid-sub-tuple? join-results bound-result-tuple)
+                                                              result bound-result-tuple]
+                                                          (bound-result->join-result result))
+                                                        (apply merge-with into))]))))))))
                              (reduce into []))]
                     free-results+bound-results)
                   free-results (->> (for [[free-results] free-results+bound-results

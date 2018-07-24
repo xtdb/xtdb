@@ -1835,3 +1835,136 @@
                           [(ancestor a b)
                            [a :parent c]
                            (ancestor c b)]]}))))
+
+(t/deftest test-racket-datalog-path
+  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :a :edge :b}
+                                   {:crux.db/id :b :edge :c}
+                                   {:crux.db/id :c :edge :d}
+                                   {:crux.db/id :d :edge :a}])
+
+  ;; path(X, Y) :- edge(X, Y).
+  ;; path(X, Y) :- edge(X, Z), path(Z, Y).
+  ;; path(X, Y)?
+  (t/is (= #{[:a :a]
+             [:a :d]
+             [:a :c]
+             [:a :b]
+             [:b :a]
+             [:b :d]
+             [:b :c]
+             [:b :b]
+             [:c :a]
+             [:c :d]
+             [:c :c]
+             [:c :b]
+             [:d :b]
+             [:d :c]
+             [:d :d]
+             [:d :a]}
+           (q/q (q/db *kv*)
+                '{:find [x y]
+                  :where [(path x y)]
+                  :rules [[(path x y)
+                           [x :edge y]]
+                          [(path x y)
+                           [x :edge z]
+                           (path z y)]]}))))
+
+(t/deftest test-racket-datalog-revpath
+  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :a :edge :b}
+                                   {:crux.db/id :b :edge :c}
+                                   {:crux.db/id :c :edge :d}
+                                   {:crux.db/id :d :edge :a}])
+  ;; path(X, Y) :- edge(X, Y).
+  ;; path(X, Y) :- path(X, Z), edge(Z, Y).
+  ;; path(X, Y)?
+  (t/is (= #{[:a :a]
+             [:a :d]
+             [:a :c]
+             [:a :b]
+             [:b :a]
+             [:b :d]
+             [:b :c]
+             [:b :b]
+             [:c :a]
+             [:c :d]
+             [:c :c]
+             [:c :b]
+             [:d :b]
+             [:d :c]
+             [:d :d]
+             [:d :a]}
+           (q/q (q/db *kv*)
+                '{:find [x y]
+                  :where [(path x y)]
+                  :rules [[(path x y)
+                           [x :edge y]]
+                          [(path x y)
+                           (path x z)
+                           [z :edge y]]]}))))
+
+(t/deftest test-racket-datalog-bidipath
+  ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :a :edge :b}
+                                   {:crux.db/id :b :edge :c}
+                                   {:crux.db/id :c :edge :d}
+                                   {:crux.db/id :d :edge :a}])
+
+  ;; path(X, Y) :- edge(X, Y).
+  ;; path(X, Y) :- edge(X, Z), path(Z, Y).
+  ;; path(X, Y) :- path(X, Z), edge(Z, Y).
+  ;; path(X, Y)?
+  (t/is (= #{[:a :a]
+             [:a :d]
+             [:a :c]
+             [:a :b]
+             [:b :a]
+             [:b :d]
+             [:b :c]
+             [:b :b]
+             [:c :a]
+             [:c :d]
+             [:c :c]
+             [:c :b]
+             [:d :b]
+             [:d :c]
+             [:d :d]
+             [:d :a]}
+           (q/q (q/db *kv*)
+                '{:find [x y]
+                  :where [(path x y)]
+                  :rules [[(path x y)
+                           [x :edge y]]
+                          [(path x y)
+                           (path x z)
+                           [z :edge y]]
+                          [(path x y)
+                           (path x z)
+                           [z :edge y]]]}))))
+
+
+(t/deftest test-racket-datalog-sym
+  ;; sym(a).
+  ;; sym(b).
+  ;; sym(c).
+  (f/transact-entity-maps! f/*kv* [{:crux.db/id :a}
+                                   {:crux.db/id :b}
+                                   {:crux.db/id :c}])
+
+  ;; perm(X,Y) :- sym(X), sym(Y), X != Y.
+  ;; perm(X, Y)?
+  (t/is (= #{[:a :c]
+             [:a :b]
+             [:c :a]
+             [:b :a]
+             [:b :c]
+             [:c :b]}
+           (q/q (q/db *kv*)
+                '{:find [x y]
+                  :where [(perm x y)]
+                  :rules [[(perm x y)
+                           [x :crux.db/id x]
+                           [y :crux.db/id y]
+                           [(!= x y)]]]}))))
