@@ -1965,6 +1965,6 @@
                 '{:find [x y]
                   :where [(perm x y)]
                   :rules [[(perm x y)
-                           [x :crux.db/id x]
-                           [y :crux.db/id y]
+                           [x :crux.db/id]
+                           [y :crux.db/id]
                            [(!= x y)]]]}))))

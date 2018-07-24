@@ -105,13 +105,15 @@
   (when (logic-var? v)
     (re-find #"^_\d*$" (name v))))
 
-(defn- normalize-bgp-clause [{:keys [e v] :as clause}]
+(defn- normalize-bgp-clause [{:keys [e a v] :as clause}]
   (cond-> clause
     (or (blank-var? v)
         (nil? v))
     (assoc :v (gensym "_"))
     (blank-var? e)
-    (assoc :e (gensym "_"))))
+    (assoc :e (gensym "_"))
+    (nil? a)
+    (assoc :a :crux.db/id)))
 
 (def ^:private pred->built-in-range-pred {< (comp neg? compare)
                                           <= (comp not pos? compare)
