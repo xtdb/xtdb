@@ -95,6 +95,10 @@
 
 (s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules]))
 
+;; NOTE: :min-count generates boxed math warnings, so this goes below
+;; the spec.
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- cartesian-product [[x & xs]]
   (when (seq x)
     (for [a x
@@ -401,7 +405,7 @@
                :result-index result-index
                :join-depth (or result-index
                                (get var->values-result-index (get e->v-var e))
-                               (dec join-depth))
+                               (dec (long join-depth)))
                :result-name (if leaf-var?
                               (symbol "crux.query.value" (name var))
                               e)
@@ -520,6 +524,7 @@
   (->> (for [var vars]
          (get-in var->bindings [var :join-depth] -1))
        (apply max -1)
+       (long)
        (inc)))
 
 (defn- build-pred-constraints [object-store pred-clause+relations var->bindings]
@@ -843,7 +848,7 @@
                ;; revisiting.
                (let [seen-rule-branches+expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
                                                              :let [cache-key [:seen-rule-branches rule-name branch-index (:args clause)]]
-                                                             :when (zero? (get-in recursion-cache cache-key 0))
+                                                             :when (zero? (long (get-in recursion-cache cache-key 0)))
                                                              :let [rule-arg->query-arg (zipmap rule-args (:args clause))
                                                                    body-vars (->> (collect-vars (normalize-clauses body))
                                                                                   (vals)
@@ -862,7 +867,7 @@
                      ;; TODO: Understand this, does this really work
                      ;; in the general case? Why less than equal one?
                      ;; This implies the rule can be expanded twice.
-                     expanded-rules (if (<= (get-in recursion-cache cache-key 0) 1)
+                     expanded-rules (if (<= (long (get-in recursion-cache cache-key 0)) 1)
                                       (for [expanded-rule expanded-rules
                                             :let [expanded-rule (expand-rules expanded-rule rule-name->rules
                                                                               (update-in recursion-cache cache-key (fnil inc 0)))]

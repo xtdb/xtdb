@@ -5,6 +5,8 @@
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
     (.key i)))

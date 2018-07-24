@@ -2,6 +2,8 @@
   (:import [java.util LinkedHashMap]
            [java.util.function Function]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defprotocol LRUCache
   (compute-if-absent [this k f])
   (evict [this k]))
