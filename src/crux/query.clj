@@ -246,6 +246,7 @@
                    nil
                    business-time
                    transact-time)]
+        ;; (prn :ave v e)
         (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
             v-idx (doc/new-entity-attribute-value-virtual-index
@@ -255,21 +256,22 @@
                    nil
                    business-time
                    transact-time)]
+        ;; (prn :aev e v)
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins]
+(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins]
   (->> bgp-clauses
        (reduce
-        (fn [var->joins {:keys [e a v] :as clause}]
-          (let [binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})
-                e-var (if (logic-var? e)
+        (fn [[deps var->joins] {:keys [e a v] :as clause}]
+          (let [e-var (if (logic-var? e)
                         e
                         (gensym "literal-entity"))
                 v-var (if (logic-var? v)
                         v
                         (gensym "literal-value"))
+                binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})
                 indexes (if (= e v)
-                          (throw (UnsupportedOperationException. "Self join not supported: " (pr-str clause)))
+                          (throw (UnsupportedOperationException. "Self join not currently supported: " (pr-str clause)))
                           {v-var [(assoc binary-idx :name e-var)]
                            e-var [(assoc binary-idx :name e-var)]})
                 indexes (if (literal? e)
@@ -278,8 +280,14 @@
                 indexes (if (literal? v)
                           (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
                           indexes)]
-            (merge-with into var->joins indexes)))
-        var->joins)))
+            [(cond-> deps
+               (literal? e)
+               (assoc v-var e-var)
+               (and (literal? v)
+                    (not (literal? e)))
+               (assoc e-var v-var))
+             (merge-with into var->joins indexes)]))
+        [{} var->joins])))
 
 (defn- arg-vars [args]
   (let [ks (keys (first args))]
@@ -376,14 +384,13 @@
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
-                   result-index (get var->values-result-index e)]]
+                   result-index (max (long (get var->values-result-index e -1))
+                                     (long (get var->values-result-index (get e->v-var e) -1)))]]
          [var {:e-var e
                :var var
                :attr (get var->attr var)
                :result-index result-index
-               :join-depth (or result-index
-                               (get var->values-result-index (get e->v-var e))
-                               (dec (long join-depth)))
+               :join-depth (or result-index (dec (long join-depth)))
                :result-name e
                :type :entity}])
        (into {})))
@@ -732,14 +739,8 @@
 ;; into two groups via non-leaf-v-vars needs thought, as this might
 ;; wreck dependency order. The intent is to push these joins to the
 ;; end, its done for performance reasons.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars]
-  (let [joins (for [var (keys var->joins)
-                    :let [e (get v-var->e var)]]
-                (if (and e (not= var e))
-                  [[var]
-                   [e]]
-                  []))
-        preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps]
+  (let [preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
                 [(filter logic-var? (:args pred))
                  (if return
                    [return]
@@ -753,9 +754,12 @@
                     (dep/depend g v ::leaf)
                     (dep/depend g ::leaf v)))
                 (dep/graph)))
-        g (->> (concat preds
-                       ors
-                       joins)
+        g (->> deps
+               (reduce-kv
+                (fn [g k v]
+                  (dep/depend g k v))
+                g))
+        g (->> (concat preds ors)
                (reduce
                 (fn [g [dependencies dependents]]
                   (->> dependencies
@@ -858,22 +862,18 @@
                 v-vars
                 unification-vars
                 pred-return-vars]} (collect-vars type->clauses)
-        e->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
-                                    :when (logic-var? v)]
-                                clause)
-                              (group-by :e))
-        v-var->e (->> (for [[e clauses] e->v-var-clauses
-                            {:keys [e v]} clauses]
+        v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
+                            :when (logic-var? v)]
                         [v e])
                       (into {}))
+        e->v-var (set/map-invert v-var->e)
         arg-vars (arg-vars args)
         var->joins {}
-        non-leaf-v-vars (set/union unification-vars e-vars)
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
-        var->joins (e-var-v-var-joins snapshot
-                                      db
-                                      bgp-clauses
-                                      var->joins)
+        [deps var->joins] (bgp-joins snapshot
+                                     db
+                                     bgp-clauses
+                                     var->joins)
         [var->joins args-relation] (arg-joins snapshot
                                               db
                                               args
@@ -906,8 +906,8 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        e->v-var (set/map-invert v-var->e)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars)
+        non-leaf-v-vars (set/union unification-vars e-vars)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
@@ -939,6 +939,8 @@
                                        idx join
                                        :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
                                    (dissoc idx :name)))]
+    ;; (prn vars-in-join-order)
+    ;; (prn var->bindings)
     (doseq [idx binary-join-indexes]
       (update-binary-index snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
