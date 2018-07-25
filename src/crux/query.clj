@@ -235,9 +235,10 @@
   (map #(arg-for-var % var) args))
 
 (defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
-  (let [{:keys [e a v]} (:clause (meta binary-idx))
-        order (filter (hash-set e v) vars-in-join-order)]
-    (if (= v (first order))
+  (let [{:keys [clause names]} (meta binary-idx)
+        {:keys [e a v]} clause
+        order (filter (set (vals names)) vars-in-join-order)]
+    (if (= (:v names) (first order))
       (let [v-doc-idx (-> (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
                           (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
             e-idx (doc/new-entity-attribute-value-virtual-index
@@ -263,13 +264,13 @@
   (->> bgp-clauses
        (reduce
         (fn [[deps var->joins] {:keys [e a v] :as clause}]
-          (let [e-var (if (logic-var? e)
-                        e
-                        (gensym "literal-entity"))
+          (let [e-var e
                 v-var (if (logic-var? v)
                         v
                         (gensym "literal-value"))
-                binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})
+                binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
+                                                                           :names {:e e-var
+                                                                                   :v v-var}})
                 indexes (if (= e v)
                           (throw (UnsupportedOperationException. "Self join not currently supported: " (pr-str clause)))
                           {v-var [(assoc binary-idx :name e-var)]
@@ -939,8 +940,6 @@
                                        idx join
                                        :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
                                    (dissoc idx :name)))]
-    ;; (prn vars-in-join-order)
-    ;; (prn var->bindings)
     (doseq [idx binary-join-indexes]
       (update-binary-index snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
@@ -948,6 +947,9 @@
                                           (vec (for [arg args]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constriants arg-vars-in-join-order)))
+    ;; (prn vars-in-join-order)
+    ;; (prn var->bindings)
+    ;; (prn var->joins)
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)

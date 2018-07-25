@@ -21,10 +21,10 @@
 
 (defn- attribute-value+placeholder [k attr peek-state]
   (let [seek-k (idx/encode-attribute+value-entity-prefix-key attr idx/empty-byte-array)]
-    (when (bu/bytes=? k seek-k (alength seek-k))
+    (if (bu/bytes=? k seek-k (alength seek-k))
       (let [[v] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)]
         (reset! peek-state {:last k})
-        [(idx/value->bytes v) {:crux.doc.binary-placeholder/value #{true}}]))))
+        [v {:crux.doc.binary-placeholder/value #{true}}]))))
 
 (defrecord DocAttributeValueEntityValueIndex [i attr peek-state]
   db/Index
@@ -39,9 +39,11 @@
     (when-let [k (ks/next i)]
       (let [prefix-size (- (alength ^bytes k) idx/id-size idx/id-size)
             k (if (bu/bytes=? k (:last @peek-state) prefix-size)
-                (ks/seek i (bu/inc-unsigned-bytes k prefix-size))
+                (some->> (bu/inc-unsigned-bytes k prefix-size)
+                         (ks/seek i))
                 k)]
-        (attribute-value+placeholder k attr peek-state)))))
+        (when k
+          (attribute-value+placeholder k attr peek-state))))))
 
 (defn- attribute-value+entity+content-hashes-for-current-key [i ^bytes current-k attr v peek-state]
   (let [prefix-size (- (alength current-k) idx/id-size)
@@ -103,9 +105,9 @@
 (defn- attribute-entity+placeholder [k attr peek-state]
   (let [seek-k (idx/encode-attribute+entity-value-prefix-key attr idx/empty-byte-array)]
     (when (bu/bytes=? k seek-k (alength seek-k))
-      (let [[_ e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
+      (let [[e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
         (reset! peek-state {:last k})
-        [(idx/value->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]))))
+        [(idx/id->bytes e) [{:crux.doc.binary-placeholder/entity #{true}}]]))))
 
 (defrecord DocAttributeEntityValueEntityIndex [i attr peek-state]
   db/Index
@@ -121,9 +123,11 @@
     (when-let [k (ks/next i)]
       (let [prefix-size (+ Short/SIZE idx/id-size idx/id-size)
             k (if (bu/bytes=? k (:last @peek-state) prefix-size)
-                (ks/seek i (bu/inc-unsigned-bytes k prefix-size))
+                (some->> (bu/inc-unsigned-bytes k prefix-size)
+                         (ks/seek i))
                 k)]
-        (attribute-entity+placeholder k attr peek-state)))))
+        (when k
+          (attribute-entity+placeholder k attr peek-state))))))
 
 (defn- attribute-entity+value+content-hashes-for-current-key [i ^bytes current-k attr entity peek-state]
   (let [prefix-size (- (alength current-k) idx/id-size)
@@ -137,7 +141,7 @@
                  (ks/next i))
           (do (reset! peek-state {:peek k :last current-k})
               (when (seq acc)
-                [(idx/value->bytes (second (first acc))) (mapv #(nth % 2) acc)])))))))
+                [(second (first acc)) (mapv #(nth % 2) acc)])))))))
 
 (defrecord DocAttributeEntityValueValueIndex [i entity-value-entity-idx peek-state]
   db/Index
@@ -510,7 +514,7 @@
   (next-values [this]
     (let [{:keys [fst]} (swap! seq-state (fn [{[x & xs] :rest
                                                :as seq-state}]
-                                             (assoc seq-state :fst x :rest xs)))]
+                                           (assoc seq-state :fst x :rest xs)))]
       (when fst
         (if file
           (read-external-sort-value raf fst)
