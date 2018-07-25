@@ -28,3 +28,14 @@
   (t/is (pos? (.compare bu/bytes-comparator
                (bu/hex->bytes "00007f32a1601522d913918ae3e61ac5d0d029b5f016")
                (bu/hex->bytes "00003e25db88c4ecae5e979af0b2e6d30fcb3a0da1ef")))))
+
+(t/deftest test-inc-unsigned-bytes
+  (t/is (bu/bytes=? (byte-array [1])
+                    (bu/inc-unsigned-bytes (byte-array [0]))))
+  (t/is (nil? (bu/inc-unsigned-bytes (byte-array [0xff]))))
+  (t/is (bu/bytes=? (byte-array [1 0])
+                    (bu/inc-unsigned-bytes (byte-array [0 0xff]))))
+  (t/is (bu/bytes=? (byte-array [3 0 0])
+                    (bu/inc-unsigned-bytes (byte-array [2 0xff 0xff]))))
+  (t/is (bu/bytes=? (byte-array [2 0 0xff])
+                    (bu/inc-unsigned-bytes (byte-array [1 0xff 0xff]) 2))))

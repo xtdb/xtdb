@@ -1,7 +1,7 @@
 (ns crux.byte-utils
   (:import [java.nio ByteBuffer]
            [java.security MessageDigest]
-           [java.util Comparator]
+           [java.util Arrays Comparator]
            [crux ByteUtils]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -46,3 +46,17 @@
    (ByteUtils/equalBytes k1 k2))
   ([^bytes k1 ^bytes k2 ^long max-length]
    (ByteUtils/equalBytes k1 k2 max-length)))
+
+(defn inc-unsigned-bytes
+  ([^bytes bs]
+   (inc-unsigned-bytes bs (alength bs)))
+  ([^bytes bs ^long prefix-length]
+   (let [bs (Arrays/copyOf bs (alength bs))]
+     (loop [idx (dec prefix-length)]
+       (when-not (neg? idx)
+         (let [b (aget bs idx)]
+           (if (= (unchecked-byte 0xff) b)
+             (do (aset bs idx (byte 0))
+                 (recur (dec idx)))
+             (doto bs
+               (aset idx (unchecked-byte (inc b)))))))))))
