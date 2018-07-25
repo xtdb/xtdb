@@ -50,22 +50,22 @@
 (defrecord DocAttributeValueEntityEntityIndex [i value-entity-value-idx peek-state]
   db/Index
   (seek-values [this k]
-    (let [[v e] (some->> (:peek-state value-entity-value-idx)
-                         (deref)
-                         :last
-                         (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash))
-          v (reify
-              idx/ValueToBytes
-              (value->bytes [_]
-                v))]
-      (when-let [k (->> (idx/encode-attribute+value+entity+content-hash-key
-                         (:attr value-entity-value-idx)
-                         v
-                         (or k e)
-                         idx/empty-byte-array)
-                        (ks/seek i))]
-        (attribute-value+entity+content-hashes-for-current-key i k (:attr value-entity-value-idx) v peek-state second
-                                                               (- (alength ^bytes k) idx/id-size)))))
+    (when-let [[v e] (some->> (:peek-state value-entity-value-idx)
+                              (deref)
+                              :last
+                              (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash))]
+      (let [v (reify
+                idx/ValueToBytes
+                (value->bytes [_]
+                  v))]
+        (when-let [k (->> (idx/encode-attribute+value+entity+content-hash-key
+                           (:attr value-entity-value-idx)
+                           v
+                           (or k e)
+                           idx/empty-byte-array)
+                          (ks/seek i))]
+          (attribute-value+entity+content-hashes-for-current-key i k (:attr value-entity-value-idx) v peek-state second
+                                                                 (- (alength ^bytes k) idx/id-size))))))
 
   db/OrderedIndex
   (next-values [this]
@@ -134,10 +134,7 @@
         (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
                            (:attr entity-value-entity-idx)
                            e
-                           (or k idx/empty-byte-array #_(reify
-                                   idx/ValueToBytes
-                                   (value->bytes [_]
-                                     v)))
+                           (or k idx/empty-byte-array)
                            idx/empty-byte-array)
                           (ks/seek i))]
           (attribute-entity+value+content-hashes-for-current-key i k (:attr entity-value-entity-idx) e peek-state second
