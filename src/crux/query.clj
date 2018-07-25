@@ -258,30 +258,52 @@
               (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
         var->joins)))
 
+(defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
+  (let [{:keys [e a v]} (:clause (meta binary-idx))
+        order (filter (hash-set e v) vars-in-join-order)]
+    (if (= v (first order))
+      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
+            v-idx (doc/new-entity-attribute-value-virtual-index
+                   snapshot
+                   (doc/wrap-with-range-constraints v-doc-idx (get v-var->range-constriants v))
+                   nil
+                   business-time
+                   transact-time)
+            e-idx (doc/new-entity-attribute-value-virtual-index
+                   snapshot
+                   (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
+                   nil
+                   business-time
+                   transact-time)]
+        (doc/update-binary-join-order! binary-idx v-idx e-idx))
+      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
+            e-idx (doc/new-entity-attribute-value-virtual-index
+                   snapshot
+                   e-doc-idx
+                   nil
+                   business-time
+                   transact-time)
+            v-idx (doc/new-entity-attribute-value-virtual-index
+                   snapshot
+                   (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx)
+                       (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
+                   nil
+                   business-time
+                   transact-time)]
+        (doc/update-binary-join-order! binary-idx e-idx v-idx)))))
+
 (defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args]
   (->> e-var+v-var->join-clauses
        (reduce
         (fn [var->joins [[e-var v-var] clauses]]
-          (let [indexes (for [{:keys [a]} clauses]
-                          (if (contains? arg-vars e-var)
-                            (let [entities (all-args-for-var args e-var)]
-                              (assoc (doc/new-entity-attribute-value-known-entities-virtual-index
-                                      object-store
-                                      snapshot
-                                      entities
-                                      a
-                                      (get v-var->range-constriants v-var)
-                                      business-time
-                                      transact-time)
-                                     :name e-var))
-                            (assoc (doc/new-entity-attribute-value-virtual-index
-                                    snapshot
-                                    a
-                                    (get v-var->range-constriants v-var)
-                                    business-time
-                                    transact-time)
-                                   :name e-var)))]
-            (merge-with into var->joins {v-var (vec indexes)})))
+          (let [indexes (for [clause clauses]
+                          (let [binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})]
+                            (if (= e-var v-var)
+                              {e-var [(assoc binary-idx :name e-var)
+                                      (assoc binary-idx :name e-var)]}
+                              {v-var [(assoc binary-idx :name e-var)]
+                               e-var [(assoc binary-idx :name e-var)]})))]
+            (apply merge-with into var->joins indexes)))
         var->joins)))
 
 (defn- v-var-literal-e-joins [snapshot {:keys [object-store business-time transact-time] :as db} v-var->literal-e-clauses v-var->range-constriants var->joins]
@@ -398,7 +420,7 @@
              :let [e (get v-var->e var var)
                    leaf-var? (and (contains? e-var->leaf-v-var-clauses e)
                                   (contains? v-var->e var))
-                   result-index (get var->values-result-index var)]]
+                   result-index (get var->values-result-index e)]]
          [var {:e-var e
                :var var
                :attr (get var->attr var)
@@ -775,7 +797,7 @@
 ;; into two groups via non-leaf-v-vars needs thought, as this might
 ;; wreck dependency order. The intent is to push these joins to the
 ;; end, its done for performance reasons.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e]
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars]
   (let [joins (for [var (keys var->joins)
                     :let [e (get v-var->e var)]]
                 (if (and e (not= var e))
@@ -932,23 +954,12 @@
                                           arg-vars
                                           args)
         non-leaf-v-vars (set/union unification-vars e-vars)
-        leaf-v-var? (fn [e v]
-                      (and (= 1 (count (get v->v-var-clauses v)))
-                           (or (contains? e-var->literal-v-clauses e)
-                               (contains? v-var->literal-e-clauses v))
-                           (not (contains? non-leaf-v-vars v))))
         e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
                                              :when (and (logic-var? e)
-                                                        (logic-var? v)
-                                                        (not (leaf-v-var? e v)))]
+                                                        (logic-var? v))]
                                          clause)
                                        (group-by (juxt :e :v)))
-        e-var->leaf-v-var-clauses (->> (for [{:keys [e a v] :as clause} bgp-clauses
-                                             :when (and (logic-var? e)
-                                                        (logic-var? v)
-                                                        (leaf-v-var? e v))]
-                                         clause)
-                                       (group-by :e))
+        e-var->leaf-v-var-clauses {}
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         var->joins (e-var-v-var-joins snapshot
                                       db
@@ -995,7 +1006,7 @@
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         e->v-var (set/map-invert v-var->e)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
@@ -1023,7 +1034,13 @@
                                        (constrain-join-result-by-constraints or-constraints max-ks)
                                        (doc/constrain-join-result-by-empty-names max-ks)))
         joins (map var->joins vars-in-join-order)
-        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)]
+        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
+        binary-join-indexes (set (for [join joins
+                                       idx join
+                                       :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
+                                   (dissoc idx :name)))]
+    (doseq [idx binary-join-indexes]
+      (update-binary-index snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
       (doc/update-relation-virtual-index! args-relation
                                           (vec (for [arg args]

@@ -17,32 +17,151 @@
 
 ;; Docs
 
-(defn- attribute-value+content-hashes-for-current-key [i ^bytes current-k attr peek-state]
-  (let [seek-k (idx/encode-attribute+value-prefix-key attr idx/empty-byte-array)
-        prefix-size (- (alength current-k) idx/id-size)]
+;; AVE
+
+(defn- attribute-value+entity+content-hashes-for-current-key [i ^bytes current-k attr v-bytes peek-state key-fn prefix-size]
+  (let [seek-k (idx/encode-attribute+value-entity-prefix-key attr v-bytes)]
     (when (bu/bytes=? seek-k current-k (alength seek-k))
       (loop [acc []
              k current-k]
-        (if-let [value+content-hash (when (and k (bu/bytes=? current-k k prefix-size))
-                                      (idx/decode-attribute+value+content-hash-key->value+content-hash k))]
-          (recur (conj acc value+content-hash)
+        (if-let [value+entity+content-hash (when (and k (bu/bytes=? current-k k prefix-size))
+                                             (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k))]
+          (recur (conj acc value+entity+content-hash)
                  (ks/next i))
-          (do (reset! peek-state k)
+          (do (reset! peek-state {:peek k :last current-k})
               (when (seq acc)
-                [(ffirst acc) (mapv second acc)])))))))
+                [(idx/value->bytes (key-fn (first acc))) (mapv #(nth % 2) acc)])))))))
 
-(defrecord DocAttributeValueIndex [i attr peek-state]
+(defrecord DocAttributeValueEntityValueIndex [i attr peek-state]
   db/Index
   (seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
-                      (idx/encode-attribute+value-prefix-key attr)
+                      (idx/encode-attribute+value-entity-prefix-key attr)
                       (ks/seek i))]
-      (attribute-value+content-hashes-for-current-key i k attr peek-state)))
+      (attribute-value+entity+content-hashes-for-current-key i k attr idx/empty-byte-array peek-state first
+                                                             (- (alength ^bytes k) idx/id-size idx/id-size))))
 
   db/OrderedIndex
   (next-values [this]
-    (when-let [k (or @peek-state (ks/next i))]
-      (attribute-value+content-hashes-for-current-key i k attr peek-state))))
+    (when-let [k (or (:peek @peek-state) (ks/next i))]
+      (attribute-value+entity+content-hashes-for-current-key i k attr idx/empty-byte-array peek-state first
+                                                             (- (alength ^bytes k) idx/id-size idx/id-size)))))
+
+(defrecord DocAttributeValueEntityEntityIndex [i value-entity-value-idx peek-state]
+  db/Index
+  (seek-values [this k]
+    (let [[v e] (some->> (:peek-state value-entity-value-idx)
+                         (deref)
+                         :last
+                         (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash))
+          v (reify
+              idx/ValueToBytes
+              (value->bytes [_]
+                v))]
+      (when-let [k (->> (idx/encode-attribute+value+entity+content-hash-key
+                         (:attr value-entity-value-idx)
+                         v
+                         (or k e)
+                         idx/empty-byte-array)
+                        (ks/seek i))]
+        (attribute-value+entity+content-hashes-for-current-key i k (:attr value-entity-value-idx) v peek-state second
+                                                               (- (alength ^bytes k) idx/id-size)))))
+
+  db/OrderedIndex
+  (next-values [this]
+    (when-let [v (try
+                   (some->> (:peek-state value-entity-value-idx)
+                            (deref)
+                            :last
+                            (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash)
+                            (first))
+                   (catch AssertionError ignore))]
+      (let [v (reify
+                idx/ValueToBytes
+                (value->bytes [_]
+                  v))]
+        (when-let [k (or (:peek @peek-state) (ks/next i))]
+          (attribute-value+entity+content-hashes-for-current-key i k (:attr value-entity-value-idx) v peek-state second
+                                                                 (- (alength ^bytes k) idx/id-size)))))))
+
+(defn new-doc-attribute-value-entity-value-index [i attr]
+  (->DocAttributeValueEntityValueIndex i attr (atom nil)))
+
+(defn new-doc-attribute-value-entity-entity-index [i value-entity-value-idx]
+  (->DocAttributeValueEntityEntityIndex i value-entity-value-idx (atom nil)))
+
+;; AEV
+
+(defn- attribute-entity+value+content-hashes-for-current-key [i ^bytes current-k attr entity-bytes peek-state key-fn prefix-size]
+  (let [seek-k (idx/encode-attribute+entity-value-prefix-key attr entity-bytes)]
+    (when (bu/bytes=? seek-k current-k (alength seek-k))
+      (loop [acc []
+             k current-k]
+        (if-let [entity+value+content-hash (when (and k (bu/bytes=? current-k k prefix-size))
+                                             (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k))]
+          (recur (conj acc entity+value+content-hash)
+                 (ks/next i))
+          (do (reset! peek-state {:peek k :last current-k})
+              (when (seq acc)
+                [(idx/value->bytes (key-fn (first acc))) (mapv #(nth % 2) acc)])))))))
+
+(defrecord DocAttributeEntityValueEntityIndex [i attr peek-state]
+  db/Index
+  (seek-values [this k]
+    (when-let [k (->> (or k idx/empty-byte-array)
+                      (idx/id->bytes)
+                      (idx/encode-attribute+entity-value-prefix-key attr)
+                      (ks/seek i))]
+      (attribute-entity+value+content-hashes-for-current-key i k attr idx/empty-byte-array peek-state first
+                                                             (+ Short/SIZE idx/id-size idx/id-size))))
+
+  db/OrderedIndex
+  (next-values [this]
+    (when-let [k (or (:peek @peek-state) (ks/next i))]
+      (attribute-entity+value+content-hashes-for-current-key i k attr idx/empty-byte-array peek-state first
+                                                             (+ Short/SIZE idx/id-size idx/id-size)))))
+
+(defrecord DocAttributeEntityValueValueIndex [i entity-value-entity-idx peek-state]
+  db/Index
+  (seek-values [this k]
+    (when-let [[e v] (try
+                       (some->> (:peek-state entity-value-entity-idx)
+                                (deref)
+                                :last
+                                (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash))
+                       (catch AssertionError ignore))]
+      (let [e (idx/id->bytes e)]
+        (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
+                           (:attr entity-value-entity-idx)
+                           e
+                           (or k idx/empty-byte-array #_(reify
+                                   idx/ValueToBytes
+                                   (value->bytes [_]
+                                     v)))
+                           idx/empty-byte-array)
+                          (ks/seek i))]
+          (attribute-entity+value+content-hashes-for-current-key i k (:attr entity-value-entity-idx) e peek-state second
+                                                                 (- (alength ^bytes k) idx/id-size))))))
+
+  db/OrderedIndex
+  (next-values [this]
+    (when-let [e (some->> (:peek-state entity-value-entity-idx)
+                          (deref)
+                          :last
+                          (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash)
+                          (first))]
+      (let [e (idx/id->bytes e)]
+        (when-let [k (or (:peek @peek-state) (ks/next i))]
+          (attribute-entity+value+content-hashes-for-current-key i k (:attr entity-value-entity-idx) e peek-state second
+                                                                 (- (alength ^bytes k) idx/id-size)))))))
+
+(defn new-doc-attribute-entity-value-entity-index [i attr]
+  (->DocAttributeEntityValueEntityIndex i attr (atom nil)))
+
+(defn new-doc-attribute-entity-value-value-index [i entity-value-entity-idx]
+  (->DocAttributeEntityValueValueIndex i entity-value-entity-idx (atom nil)))
+
+;; Regular Indexes
 
 (defrecord DocLiteralAttributeValueIndex [i attr value]
   db/Index
@@ -122,10 +241,7 @@
                                           k
                                           v)))))
 
-(defn- new-doc-attribute-value-index [i attr]
-  (->DocAttributeValueIndex i attr (atom nil)))
-
-(defn- wrap-with-range-constraints [idx range-constraints]
+(defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
     (range-constraints idx)
     idx))
@@ -136,17 +252,27 @@
              (set? v))) (vector)))
 
 (defn index-doc [kv content-hash doc]
-  (ks/store kv (for [[k v] doc
-                     v (normalize-value v)
-                     :when (seq (idx/value->bytes v))]
-                 [(idx/encode-attribute+value+content-hash-key k v content-hash)
-                  idx/empty-byte-array])))
+  (let [id (:crux.db/id doc)]
+    (ks/store kv (->> (for [[k v] doc
+                            v (normalize-value v)
+                            :when (seq (idx/value->bytes v))]
+                        [[(idx/encode-attribute+value+content-hash-key k v content-hash)
+                          idx/empty-byte-array]
+                         [(idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
+                          idx/empty-byte-array]
+                         [(idx/encode-attribute+entity+value+content-hash-key k id v content-hash)
+                          idx/empty-byte-array]])
+                      (reduce into [])))))
 
 (defn delete-doc-from-index [kv content-hash doc]
-  (ks/delete kv (for [[k v] doc
-                      v (normalize-value v)
-                      :when (seq (idx/value->bytes v))]
-                  (idx/encode-attribute+value+content-hash-key k v content-hash))))
+  (let [id (:crux.db/id doc)]
+    (ks/delete kv (->> (for [[k v] doc
+                             v (normalize-value v)
+                             :when (seq (idx/value->bytes v))]
+                         [(idx/encode-attribute+value+content-hash-key k v content-hash)
+                          (idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
+                          (idx/encode-attribute+entity+value+content-hash-key k id v content-hash)])
+                       (reduce into [])))))
 
 (defrecord DocObjectStore [kv]
   db/ObjectStore
@@ -279,7 +405,7 @@
   (with-open [di (ks/new-iterator snapshot)
               ci (ks/new-iterator snapshot)
               ei (ks/new-iterator snapshot)]
-    (let [doc-idx (-> (new-doc-attribute-value-index di attr)
+    (let [doc-idx (-> (new-doc-attribute-value-entity-value-index di attr)
                       (wrap-with-range-constraints range-constraints))
           content-hash-entity-idx (->ContentHashEntityIndex ci)
           entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
@@ -553,6 +679,44 @@
 (defn new-n-ary-join-layered-virtual-index [indexes]
   (->NAryJoinLayeredVirtualIndex indexes (atom 0)))
 
+(defrecord BinaryJoinLayeredVirtualIndex [index-and-depth-state]
+  db/Index
+  (seek-values [this k]
+    (let [{:keys [indexes depth]} @index-and-depth-state]
+      (db/seek-values (get indexes depth) k)))
+
+  db/LayeredIndex
+  (open-level [this]
+    (let [{:keys [indexes depth]} @index-and-depth-state]
+      (db/open-level (get indexes depth)))
+    (swap! index-and-depth-state update :depth inc)
+    nil)
+
+  (close-level [this]
+    (let [{:keys [indexes depth]} @index-and-depth-state]
+      (db/close-level (get indexes (dec (long depth)))))
+    (swap! index-and-depth-state update :depth dec)
+    nil)
+
+  (max-depth [this]
+    (count (:indexes @index-and-depth-state)))
+
+  db/OrderedIndex
+  (next-values [this]
+    (let [{:keys [indexes depth]} @index-and-depth-state]
+      (db/next-values (get indexes depth)))))
+
+(defn new-binary-join-virtual-index
+  ([]
+   (new-binary-join-virtual-index nil nil))
+  ([lhs-index rhs-index]
+   (->BinaryJoinLayeredVirtualIndex (atom {:depth 0
+                                           :indexes [lhs-index rhs-index]}))))
+
+(defn update-binary-join-order! [binary-join-index lhs-index rhs-index]
+  (swap! (:index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
+  binary-join-index)
+
 (defrecord NAryOrLayeredVirtualIndex [lhs rhs or-state]
   db/Index
   (seek-values [this k]
@@ -794,11 +958,13 @@
            [(idx/value->bytes eid) [entity]])
          (new-sorted-virtual-index))))
 
-(defn new-entity-attribute-value-virtual-index [snapshot attr range-constraints business-time transact-time]
+(defn new-entity-attribute-value-virtual-index [snapshot attr-or-idx range-constraints business-time transact-time]
   (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
         content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-        doc-idx (-> (new-doc-attribute-value-index (ks/new-iterator snapshot) attr)
-                    (wrap-with-range-constraints range-constraints))]
+        doc-idx (if (satisfies? db/OrderedIndex attr-or-idx)
+                  attr-or-idx
+                  (-> (new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) attr-or-idx)
+                      (wrap-with-range-constraints range-constraints)))]
     (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
 
 (defn new-entity-attribute-value-known-entities-virtual-index [object-store snapshot entities attr range-constraints business-time transact-time]
