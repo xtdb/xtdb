@@ -43,9 +43,9 @@
                 k)]
         (attribute-value+placeholder k attr peek-state)))))
 
-(defn- attribute-value+entity+content-hashes-for-current-key [i ^bytes current-k attr v-bytes peek-state]
+(defn- attribute-value+entity+content-hashes-for-current-key [i ^bytes current-k attr v peek-state]
   (let [prefix-size (- (alength current-k) idx/id-size)
-        seek-k (idx/encode-attribute+value-entity-prefix-key attr v-bytes)]
+        seek-k (idx/encode-attribute+value-entity-prefix-key attr v)]
     (when (bu/bytes=? seek-k current-k (alength seek-k))
       (loop [acc []
              k current-k]
@@ -125,9 +125,9 @@
                 k)]
         (attribute-entity+placeholder k attr peek-state)))))
 
-(defn- attribute-entity+value+content-hashes-for-current-key [i ^bytes current-k attr entity-bytes peek-state]
+(defn- attribute-entity+value+content-hashes-for-current-key [i ^bytes current-k attr entity peek-state]
   (let [prefix-size (- (alength current-k) idx/id-size)
-        seek-k (idx/encode-attribute+entity-value-prefix-key attr entity-bytes)]
+        seek-k (idx/encode-attribute+entity-value-prefix-key attr entity)]
     (when (bu/bytes=? seek-k current-k (alength seek-k))
       (loop [acc []
              k current-k]
@@ -148,14 +148,13 @@
                                 :last
                                 (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash))
                        (catch AssertionError ignore))]
-      (let [e (idx/id->bytes e)]
-        (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
-                           (:attr entity-value-entity-idx)
-                           e
-                           (or k idx/empty-byte-array)
-                           idx/empty-byte-array)
-                          (ks/seek i))]
-          (attribute-entity+value+content-hashes-for-current-key i k (:attr entity-value-entity-idx) e peek-state)))))
+      (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
+                         (:attr entity-value-entity-idx)
+                         e
+                         (or k idx/empty-byte-array)
+                         idx/empty-byte-array)
+                        (ks/seek i))]
+        (attribute-entity+value+content-hashes-for-current-key i k (:attr entity-value-entity-idx) e peek-state))))
 
   db/OrderedIndex
   (next-values [this]
