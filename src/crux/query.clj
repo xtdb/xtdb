@@ -234,30 +234,6 @@
 (defn- all-args-for-var [args var]
   (map #(arg-for-var % var) args))
 
-(defn- e-var-literal-v-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var->literal-v-clauses var->joins arg-vars args]
-  (->> e-var->literal-v-clauses
-       (reduce
-        (fn [var->joins [e-var clauses]]
-          (if (contains? arg-vars e-var)
-            (let [entities (all-args-for-var args e-var)
-                  idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
-                       object-store
-                       snapshot
-                       entities
-                       (vec (for [{:keys [a v]} clauses]
-                              [a v]))
-                       business-time
-                       transact-time)]
-              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))
-            (let [idx (doc/new-shared-literal-attribute-entities-virtual-index
-                       snapshot
-                       (vec (for [{:keys [a v]} clauses]
-                              [a v]))
-                       business-time
-                       transact-time)]
-              (merge-with into var->joins {e-var [(assoc idx :name e-var)]}))))
-        var->joins)))
-
 (defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
   (let [{:keys [e a v]} (:clause (meta binary-idx))
         order (filter (hash-set e v) vars-in-join-order)]
@@ -281,35 +257,28 @@
                    transact-time)]
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args]
-  (->> e-var+v-var->join-clauses
+(defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins]
+  (->> bgp-clauses
        (reduce
-        (fn [var->joins [[e-var v-var] clauses]]
-          (let [indexes (for [clause clauses]
-                          (let [binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})]
-                            (if (= e-var v-var)
-                              {e-var [(assoc binary-idx :name e-var)
-                                      (assoc binary-idx :name e-var)]}
-                              {v-var [(assoc binary-idx :name e-var)]
-                               e-var [(assoc binary-idx :name e-var)]})))]
-            (apply merge-with into var->joins indexes)))
-        var->joins)))
-
-(defn- v-var-literal-e-joins [snapshot {:keys [object-store business-time transact-time] :as db} v-var->literal-e-clauses v-var->range-constriants var->joins]
-  (->> v-var->literal-e-clauses
-       (reduce
-        (fn [var->joins [v-var clauses]]
-          (let [indexes (for [{:keys [e a]} clauses]
-                          (assoc (doc/new-literal-entity-attribute-values-virtual-index
-                                  object-store
-                                  snapshot
-                                  e
-                                  a
-                                  (get v-var->range-constriants v-var)
-                                  business-time
-                                  transact-time)
-                                 :name e))]
-            (merge-with into var->joins {v-var (vec indexes)})))
+        (fn [var->joins {:keys [e a v] :as clause}]
+          (let [binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause})
+                e-var (if (logic-var? e)
+                        e
+                        (gensym "literal-entity"))
+                v-var (if (logic-var? v)
+                        v
+                        (gensym "literal-value"))
+                indexes (if (= e v)
+                          (throw (UnsupportedOperationException. "Self join not supported: " (pr-str clause)))
+                          {v-var [(assoc binary-idx :name e-var)]
+                           e-var [(assoc binary-idx :name e-var)]})
+                indexes (if (literal? e)
+                          (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
+                          indexes)
+                indexes (if (literal? v)
+                          (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
+                          indexes)]
+            (merge-with into var->joins indexes)))
         var->joins)))
 
 (defn- arg-vars [args]
@@ -404,11 +373,9 @@
                                                  {v [(assoc relation :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
-(defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index e-var->leaf-v-var-clauses join-depth vars]
+(defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
-                   leaf-var? (and (contains? e-var->leaf-v-var-clauses e)
-                                  (contains? v-var->e var))
                    result-index (get var->values-result-index e)]]
          [var {:e-var e
                :var var
@@ -417,16 +384,8 @@
                :join-depth (or result-index
                                (get var->values-result-index (get e->v-var e))
                                (dec (long join-depth)))
-               :result-name (if leaf-var?
-                              (symbol "crux.query.value" (name var))
-                              e)
-               :type (if leaf-var?
-                       :entity-leaf
-                       :entity)
-               :required-attrs (some->> (get e-var->leaf-v-var-clauses e)
-                                        (not-empty)
-                                        (map :a)
-                                        (set))}])
+               :result-name e
+               :type :entity}])
        (into {})))
 
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
@@ -483,17 +442,12 @@
              (every? true?))))))
 
 (defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
-  (cond (= :entity-leaf type)
-        {(symbol "crux.query.value" (name result-name)) #{value}}
-
-        value?
-        {result-name #{value}}
-
-        :else
-        {result-name #{entity}}))
+  (if value?
+    {result-name #{value}}
+    {result-name #{entity}}))
 
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name required-attrs type]} (get var->bindings var)]
+  (let [{:keys [e-var var attr result-index result-name type]} (get var->bindings var)]
     (if (and (= "crux.query.value" (namespace result-name))
              (contains? join-results result-name))
       (for [value (get join-results result-name)]
@@ -507,29 +461,21 @@
               content-hash->doc (db/get-objects object-store content-hashes)
               value-bytes (get join-keys result-index)]
           (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-                :when (or (empty? required-attrs)
-                          (set/subset? required-attrs (set (keys doc))))
                 :let [values (doc/normalize-value (get doc attr))]
                 value values
                 :when (or (nil? value-bytes)
                           (= (count values) 1)
                           (bu/bytes=? value-bytes (idx/value->bytes value)))]
-            (if (= :entity-leaf type)
-              {:value value
-               :result-name result-name
-               :type type
-               :var var
-               :value? true}
-              {:value value
-               :e-var e-var
-               :v-var var
-               :attr attr
-               :doc doc
-               :entity entity
-               :result-name result-name
-               :type type
-               :var var
-               :value? false})))))))
+            {:value value
+             :e-var e-var
+             :v-var var
+             :attr attr
+             :doc doc
+             :entity entity
+             :result-name result-name
+             :type type
+             :var var
+             :value? false}))))))
 
 (defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
@@ -916,52 +862,18 @@
                                     :when (logic-var? v)]
                                 clause)
                               (group-by :e))
-        v->v-var-clauses (->> (for [{:keys [v] :as clause} bgp-clauses
-                                    :when (logic-var? v)]
-                                clause)
-                              (group-by :v))
         v-var->e (->> (for [[e clauses] e->v-var-clauses
                             {:keys [e v]} clauses]
                         [v e])
                       (into {}))
-        e-var->literal-v-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                            :when (and (logic-var? e)
-                                                       (literal? v))]
-                                        clause)
-                                      (group-by :e))
-        v-var->literal-e-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                            :when (and (db-ident? e)
-                                                       (logic-var? v))]
-                                        clause)
-                                      (group-by :v))
         arg-vars (arg-vars args)
         var->joins {}
-        var->joins (e-var-literal-v-joins snapshot
-                                          db
-                                          e-var->literal-v-clauses
-                                          var->joins
-                                          arg-vars
-                                          args)
         non-leaf-v-vars (set/union unification-vars e-vars)
-        e-var+v-var->join-clauses (->> (for [{:keys [e v] :as clause} bgp-clauses
-                                             :when (and (logic-var? e)
-                                                        (logic-var? v))]
-                                         clause)
-                                       (group-by (juxt :e :v)))
-        e-var->leaf-v-var-clauses {}
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         var->joins (e-var-v-var-joins snapshot
                                       db
-                                      e-var+v-var->join-clauses
-                                      v-var->range-constriants
-                                      var->joins
-                                      arg-vars
-                                      args)
-        var->joins (v-var-literal-e-joins snapshot
-                                          db
-                                          v-var->literal-e-clauses
-                                          v-var->range-constriants
-                                          var->joins)
+                                      bgp-clauses
+                                      var->joins)
         [var->joins args-relation] (arg-joins snapshot
                                               db
                                               args
@@ -1004,7 +916,6 @@
                                                  v-var->e
                                                  e->v-var
                                                  var->values-result-index
-                                                 e-var->leaf-v-var-clauses
                                                  join-depth
                                                  (keys var->attr)))
         unification-preds (vec (build-unification-preds snapshot db unify-clauses var->bindings))

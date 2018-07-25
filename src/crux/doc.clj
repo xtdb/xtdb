@@ -103,7 +103,7 @@
 (defn- attribute-entity+placeholder [k attr peek-state]
   (let [seek-k (idx/encode-attribute+entity-value-prefix-key attr idx/empty-byte-array)]
     (when (bu/bytes=? k seek-k (alength seek-k))
-      (let [[_ e] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)]
+      (let [[_ e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
         (reset! peek-state {:last k})
         [(idx/value->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]))))
 
@@ -127,7 +127,7 @@
 
 (defn- attribute-entity+value+content-hashes-for-current-key [i ^bytes current-k attr entity peek-state]
   (let [prefix-size (- (alength current-k) idx/id-size)
-        seek-k (idx/encode-attribute+entity-value-prefix-key attr entity)]
+        seek-k (idx/encode-attribute+entity-value-prefix-key attr (idx/id->bytes entity))]
     (when (bu/bytes=? seek-k current-k (alength seek-k))
       (loop [acc []
              k current-k]
