@@ -262,27 +262,16 @@
   (let [{:keys [e a v]} (:clause (meta binary-idx))
         order (filter (hash-set e v) vars-in-join-order)]
     (if (= v (first order))
-      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
-            v-idx (doc/new-entity-attribute-value-virtual-index
-                   snapshot
-                   (doc/wrap-with-range-constraints v-doc-idx (get v-var->range-constriants v))
-                   nil
-                   business-time
-                   transact-time)
+      (let [v-doc-idx (-> (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
+                          (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
             e-idx (doc/new-entity-attribute-value-virtual-index
                    snapshot
                    (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
                    nil
                    business-time
                    transact-time)]
-        (doc/update-binary-join-order! binary-idx v-idx e-idx))
+        (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
-            e-idx (doc/new-entity-attribute-value-virtual-index
-                   snapshot
-                   e-doc-idx
-                   nil
-                   business-time
-                   transact-time)
             v-idx (doc/new-entity-attribute-value-virtual-index
                    snapshot
                    (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx)
@@ -290,7 +279,7 @@
                    nil
                    business-time
                    transact-time)]
-        (doc/update-binary-join-order! binary-idx e-idx v-idx)))))
+        (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- e-var-v-var-joins [snapshot {:keys [object-store business-time transact-time] :as db} e-var+v-var->join-clauses v-var->range-constriants var->joins arg-vars args]
   (->> e-var+v-var->join-clauses
