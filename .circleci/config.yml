@@ -18,6 +18,10 @@ jobs:
       # Customize the JVM maximum heap limit
       JVM_OPTS: -Xmx3200m
 
+    branches:
+      only:
+        - master
+
     steps:
       - checkout
 
