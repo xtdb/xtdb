@@ -524,11 +524,11 @@
                             {:name "Fred" :last-name "Ivannotov"}])
 
   (t/testing "Or can use not expression"
-      (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
-               (q/q (q/db *kv*) '{:find [name]
-                                  :where [[e :name name]
-                                          (or [e :last-name "Ivanov"]
-                                              (not [e :name "Bob"]))]}))))
+    (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
+             (q/q (q/db *kv*) '{:find [name]
+                                :where [[e :name name]
+                                        (or [e :last-name "Ivanov"]
+                                            (not [e :name "Bob"]))]}))))
 
   (t/testing "Not can use Or expression"
     (t/is (= #{["Fred"]} (q/q (q/db *kv*) '{:find [name]
