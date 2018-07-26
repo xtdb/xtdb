@@ -68,104 +68,104 @@
         (t/is (= expected-entities
                  (doc/all-entities snapshot transact-time transact-time))))
 
-      (t/testing "can find entity by secondary index"
-        (t/testing "single value attribute")
-        (t/is (= expected-entities
-                 (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
-                                                     #(doc/new-equal-virtual-index % "Pablo")
-                                                     transact-time transact-time)))
+      #_(t/testing "can find entity by secondary index"
+          (t/testing "single value attribute")
+          (t/is (= expected-entities
+                   (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
+                                                       #(doc/new-equal-virtual-index % "Pablo")
+                                                       transact-time transact-time)))
 
-        (t/testing "find multi valued attribute"
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://purl.org/dc/terms/subject
-                    #(doc/new-equal-virtual-index % :http://dbpedia.org/resource/Category:Cubist_artists)
-                    transact-time transact-time))))
+          (t/testing "find multi valued attribute"
+            (t/is (= expected-entities
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://purl.org/dc/terms/subject
+                      #(doc/new-equal-virtual-index % :http://dbpedia.org/resource/Category:Cubist_artists)
+                      transact-time transact-time))))
 
-        (t/testing "find attribute by range"
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(doc/new-equal-virtual-index % 230)
-                    transact-time transact-time)))
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 229)
-                         (doc/new-less-than-equal-virtual-index 230))
-                    transact-time transact-time)))
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 229)
-                         (doc/new-less-than-equal-virtual-index 231))
-                    transact-time transact-time)))
-          (t/is (= expected-entities
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 230)
-                         (doc/new-less-than-equal-virtual-index 231))
-                    transact-time transact-time)))
+          (t/testing "find attribute by range"
+            (t/is (= expected-entities
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(doc/new-equal-virtual-index % 230)
+                      transact-time transact-time)))
+            (t/is (= expected-entities
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 229)
+                           (doc/new-less-than-equal-virtual-index 230))
+                      transact-time transact-time)))
+            (t/is (= expected-entities
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 229)
+                           (doc/new-less-than-equal-virtual-index 231))
+                      transact-time transact-time)))
+            (t/is (= expected-entities
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 230)
+                           (doc/new-less-than-equal-virtual-index 231))
+                      transact-time transact-time)))
 
-          (t/testing "not inclusive operator"
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-virtual-index 230)
-                         (doc/new-less-than-equal-virtual-index 231))
-                    transact-time transact-time)))
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 229)
-                         (doc/new-less-than-virtual-index 230))
-                    transact-time transact-time)))
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-virtual-index 230)
-                         (doc/new-less-than-virtual-index 230))
-                    transact-time transact-time))))
+            (t/testing "not inclusive operator"
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-virtual-index 230)
+                           (doc/new-less-than-equal-virtual-index 231))
+                      transact-time transact-time)))
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 229)
+                           (doc/new-less-than-virtual-index 230))
+                      transact-time transact-time)))
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-virtual-index 230)
+                           (doc/new-less-than-virtual-index 230))
+                      transact-time transact-time))))
 
-          (t/testing "not within range"
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 231)
-                         (doc/new-less-than-equal-virtual-index 255))
-                    transact-time transact-time)))
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index 1)
-                         (doc/new-less-than-equal-virtual-index 229))
-                    transact-time transact-time)))
-            (t/is (empty?
-                   (doc/entities-by-attribute-value-at
-                    snapshot
-                    :http://dbpedia.org/property/imageSize
-                    #(-> %
-                         (doc/new-greater-than-equal-virtual-index -255)
-                         (doc/new-less-than-equal-virtual-index 229))
-                    transact-time transact-time))))))
+            (t/testing "not within range"
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 231)
+                           (doc/new-less-than-equal-virtual-index 255))
+                      transact-time transact-time)))
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index 1)
+                           (doc/new-less-than-equal-virtual-index 229))
+                      transact-time transact-time)))
+              (t/is (empty?
+                     (doc/entities-by-attribute-value-at
+                      snapshot
+                      :http://dbpedia.org/property/imageSize
+                      #(-> %
+                           (doc/new-greater-than-equal-virtual-index -255)
+                           (doc/new-less-than-equal-virtual-index 229))
+                      transact-time transact-time))))))
 
       (t/testing "cannot see entity before business or transact time"
         (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" transact-time)))
@@ -322,12 +322,17 @@
               (t/testing "eviction removes docs"
                 (t/is (empty? (db/get-objects object-store (keep :content-hash picasso-history)))))))
 
-          (t/testing "eviction removes secondary indexes"
-            (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
-                                                              #(doc/new-equal-virtual-index % "Pablo")
-                                                              new-transact-time new-transact-time)))))))))
+          ;; TODO: this functionality not exposed anymore. Could check
+          ;; index directly.
+          #_(t/testing "eviction removes secondary indexes"
+              (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
+                                                                #(doc/new-equal-virtual-index % "Pablo")
+                                                                new-transact-time new-transact-time)))))))))
 
-(t/deftest test-can-perform-unary-join
+;; TODO: These commented out tests don't work with the binary index,
+;; are indirectly covered by query tests. Are possible to rewrite to
+;; work in the new world, or to port to normal query-level testsl
+#_(t/deftest test-can-perform-unary-join
   (let [tx-log (tx/->DocTxLog f/*kv*)
         tx-ops (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 8 9 11 12]
                                                  :b [0 2 6 7 8 9 12 12]
@@ -374,7 +379,8 @@
 ;; (1, 4, 9)
 ;; (1, 5, 2)
 ;; (3, 5, 2)
-(t/deftest test-can-perform-n-ary-join
+;; TODO: Same as above.
+#_(t/deftest test-can-perform-n-ary-join
   (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
               {:crux.db/id :r14 :ra 1 :rb 4}
               {:crux.db/id :r15 :ra 1 :rb 5}
@@ -443,7 +449,8 @@
                                 {:keys [eid]} entities]
                             eid))))))))))
 
-(t/deftest test-n-ary-join-prunes-values-based-on-later-joins
+;; TODO: Same as above.
+#_(t/deftest test-n-ary-join-prunes-values-based-on-later-joins
   (let [data [ ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
               {:crux.db/id :r13 :ra 1 :rb 3}
               ;; Unifies with :ta, but not with :sb
@@ -495,125 +502,6 @@
                               [k entities] join-results
                               {:keys [eid]} entities]
                           eid)))))))))
-
-(t/deftest test-literal-entity-attribute-values-virtual-index
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (doc/->DocObjectStore f/*kv*)
-        doc {:crux.db/id :x :y 1 :z #{1 2 3}}
-        eid (idx/new-id (:crux.db/id doc))
-        content-hash (idx/new-id doc)
-        {:keys [transact-time tx-id]}
-        @(db/submit-tx tx-log [[:crux.tx/put eid doc]])
-        expected-entity-tx (idx/map->EntityTx {:eid eid
-                                               :content-hash content-hash
-                                               :bt transact-time
-                                               :tt transact-time
-                                               :tx-id tx-id})]
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/testing "single value"
-        (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                   expected-entity-tx]]
-                 (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y nil transact-time transact-time)
-                                         (doc/idx->seq))
-                       entity entities]
-                   [(bu/bytes->hex v) entity])))
-
-        (t/testing "within range"
-          (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                     expected-entity-tx]]
-                   (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
-                                                                                                  #(-> %
-                                                                                                       (doc/new-greater-than-equal-virtual-index 0)
-                                                                                                       (doc/new-less-than-equal-virtual-index 2))
-                                                                                                  transact-time transact-time)
-                                           (doc/idx->seq))
-                         entity entities]
-                     [(bu/bytes->hex v) entity]))))
-
-        (t/testing "out of range"
-          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
-                                                                                    #(-> %
-                                                                                         (doc/new-greater-than-equal-virtual-index 2)
-                                                                                         (doc/new-less-than-equal-virtual-index 5))
-                                                                                    transact-time transact-time)
-                             (doc/idx->seq))))
-          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :y
-                                                                                    #(-> %
-                                                                                         (doc/new-greater-than-equal-virtual-index 0)
-                                                                                         (doc/new-less-than-equal-virtual-index 0))
-                                                                                    transact-time transact-time)
-                             (doc/idx->seq))))))
-
-      (t/testing "multiple values"
-        (t/is (= [[(bu/bytes->hex (idx/value->bytes 1))
-                   expected-entity-tx]
-                  [(bu/bytes->hex (idx/value->bytes 2))
-                   expected-entity-tx]
-                  [(bu/bytes->hex (idx/value->bytes 3))
-                   expected-entity-tx]]
-                 (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
-                                                                                                #(-> %
-                                                                                                     (doc/new-greater-than-equal-virtual-index 0)
-                                                                                                     (doc/new-less-than-equal-virtual-index 3))
-                                                                                                transact-time transact-time)
-                                         (doc/idx->seq))
-                       entity entities]
-                   [(bu/bytes->hex v) entity])))
-
-        (t/testing "sub range"
-          (t/is (= [[(bu/bytes->hex (idx/value->bytes 2))
-                     expected-entity-tx]]
-                   (for [[v entities] (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
-                                                                                                  #(-> %
-                                                                                                       (doc/new-greater-than-equal-virtual-index 2)
-                                                                                                       (doc/new-less-than-equal-virtual-index 2))
-                                                                                                  transact-time transact-time)
-                                           (doc/idx->seq))
-                         entity entities]
-                     [(bu/bytes->hex v) entity]))))
-
-        (t/testing "out of range"
-          (t/is (empty? (->> (doc/new-literal-entity-attribute-values-virtual-index object-store snapshot eid :z
-                                                                                    #(-> %
-                                                                                         (doc/new-greater-than-equal-virtual-index 4)
-                                                                                         (doc/new-less-than-equal-virtual-index 10))
-                                                                                    transact-time transact-time)
-                             (doc/idx->seq)))))))))
-
-(t/deftest test-shared-literal-attribute-entities-join
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        data [{:crux.db/id :x12 :y 1 :z 2}
-              {:crux.db/id :x22 :y 2 :z 2}
-              {:crux.db/id :y22 :y 2 :z 2}
-              {:crux.db/id :y32 :y 3 :z 3}]
-        tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                              [:crux.tx/put id doc])))
-        {:keys [transact-time tx-id]}
-        @(db/submit-tx tx-log tx-ops)]
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
-      (t/testing "single entity"
-        (t/is (= [(idx/new-id :x12)]
-                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 1]
-                                                                                                            [:z 2]] transact-time transact-time)
-                                         (doc/idx->seq))]
-                   (idx/new-id v))))
-        (t/is (= [(idx/new-id :x12)]
-                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 1]] transact-time transact-time)
-                                         (doc/idx->seq))]
-                   (idx/new-id v)))))
-
-      (t/testing "multiple entities, ordered by eid"
-        (t/is (= (sort [(idx/new-id :y22)
-                        (idx/new-id :x22)])
-                 (for [[v entities] (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 2]
-                                                                                                            [:z 2]] transact-time transact-time)
-                                         (doc/idx->seq))]
-                   (idx/new-id v)))))
-
-      (t/testing "no entities"
-        (t/is (empty? (->> (doc/new-shared-literal-attribute-entities-virtual-index snapshot [[:y 3]
-                                                                                              [:z 2]] transact-time transact-time)
-                           (doc/idx->seq))))))))
 
 (t/deftest test-sorted-virtual-index
   (let [idx (doc/new-sorted-virtual-index
@@ -723,50 +611,51 @@
                                   (get join-results var)))]
                     (vec result)))))
 
-    (t/testing "same join with kv indexes"
-      (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
-                  {:crux.db/id :s40 :sb 4 :sc 0}
-                  {:crux.db/id :s41 :sb 4 :sc 1}
-                  {:crux.db/id :s42 :sb 4 :sc 2}
-                  {:crux.db/id :s43 :sb 4 :sc 3}
-                  {:crux.db/id :t70 :ta 7 :tc 0}
-                  {:crux.db/id :t71 :ta 7 :tc 1}
-                  {:crux.db/id :t72 :ta 7 :tc 2}]]
-        (let [tx-log (tx/->DocTxLog f/*kv*)
-              tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                    [:crux.tx/put id doc])))
-              {:keys [transact-time tx-id]}
-              @(db/submit-tx tx-log tx-ops)]
-          (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-            (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                             (assoc :name :r))
-                  ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                             (assoc :name :t))
-                  rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                             (assoc :name :r))
-                  sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                             (assoc :name :s))
-                  sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                             (assoc :name :s))
-                  tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                             (assoc :name :t))
-                  index-groups [[ra-idx ta-idx]
-                                [rb-idx sb-idx]
-                                [sc-idx tc-idx]]]
-              (t/is (= #{(idx/new-id :r74)
-                         (idx/new-id :s40)
-                         (idx/new-id :s41)
-                         (idx/new-id :s42)
-                         (idx/new-id :t70)
-                         (idx/new-id :t71)
-                         (idx/new-id :t72)}
-                       (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                                                       (doc/new-n-ary-join-layered-virtual-index)
-                                                       (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                       (doc/layered-idx->seq))
-                                  [k entities] join-results
-                                  {:keys [eid]} entities]
-                              eid)))))))))))
+    ;; TODO: Same as above.
+    #_(t/testing "same join with kv indexes"
+        (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
+                    {:crux.db/id :s40 :sb 4 :sc 0}
+                    {:crux.db/id :s41 :sb 4 :sc 1}
+                    {:crux.db/id :s42 :sb 4 :sc 2}
+                    {:crux.db/id :s43 :sb 4 :sc 3}
+                    {:crux.db/id :t70 :ta 7 :tc 0}
+                    {:crux.db/id :t71 :ta 7 :tc 1}
+                    {:crux.db/id :t72 :ta 7 :tc 2}]]
+          (let [tx-log (tx/->DocTxLog f/*kv*)
+                tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
+                                      [:crux.tx/put id doc])))
+                {:keys [transact-time tx-id]}
+                @(db/submit-tx tx-log tx-ops)]
+            (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
+              (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
+                               (assoc :name :r))
+                    ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
+                               (assoc :name :t))
+                    rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
+                               (assoc :name :r))
+                    sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
+                               (assoc :name :s))
+                    sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
+                               (assoc :name :s))
+                    tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
+                               (assoc :name :t))
+                    index-groups [[ra-idx ta-idx]
+                                  [rb-idx sb-idx]
+                                  [sc-idx tc-idx]]]
+                (t/is (= #{(idx/new-id :r74)
+                           (idx/new-id :s40)
+                           (idx/new-id :s41)
+                           (idx/new-id :s42)
+                           (idx/new-id :t70)
+                           (idx/new-id :t71)
+                           (idx/new-id :t72)}
+                         (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                                                         (doc/new-n-ary-join-layered-virtual-index)
+                                                         (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
+                                                         (doc/layered-idx->seq))
+                                    [k entities] join-results
+                                    {:keys [eid]} entities]
+                                eid)))))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
   (let [p-idx (doc/new-relation-virtual-index :p
