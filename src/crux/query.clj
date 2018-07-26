@@ -926,9 +926,8 @@
 
 (defn q
   ([{:keys [kv] :as db} q]
-   (time
-    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-      (set (crux.query/q snapshot db q)))))
+   (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+     (set (crux.query/q snapshot db q))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
