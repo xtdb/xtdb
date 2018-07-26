@@ -610,7 +610,7 @@
                   (merge join-results bound-results))))
             join-results)))))
 
-(defn- build-unification-preds [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
+(defn- build-unification-constraints [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unify-vars (filter logic-var? args)
@@ -683,15 +683,6 @@
        (constraint join-keys results)))
    join-results
    constraints))
-
-(defn- constrain-join-result-by-join-keys [var->bindings shared-e-v-vars join-keys join-results]
-  (->> (for [e-var shared-e-v-vars
-             :let [eid-bytes (get join-keys (get-in var->bindings [e-var :result-index]))]
-             :when eid-bytes
-             entity (get join-results e-var)
-             :when (not (bu/bytes=? eid-bytes (idx/id->bytes entity)))]
-         {e-var #{entity}})
-       (apply merge-with set/difference join-results)))
 
 ;; TODO: This is potentially simplistic. Needs revisiting, should be
 ;; possible to clean up. Does not fully pass tests yet on this branch.
@@ -859,21 +850,19 @@
                                                  var->values-result-index
                                                  join-depth
                                                  (keys var->attr)))
-        unification-preds (vec (build-unification-preds snapshot db unify-clauses var->bindings))
+        unification-constraints (vec (build-unification-constraints snapshot db unify-clauses var->bindings))
         not-constraints (vec (concat (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
                                      (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)))
         pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
         or-constraints (vec (build-or-constraints snapshot db rule-name->rules or-clause+relation+or-branches
                                                   var->bindings vars-in-join-order v-var->range-constriants))
-        shared-e-v-vars (set/intersection e-vars v-vars)
-        constrain-result-fn (fn [max-ks result]
-                              (some->> (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks result)
-                                       (doc/constrain-join-result-by-empty-names max-ks)
-                                       (constrain-join-result-by-constraints unification-preds max-ks)
-                                       (constrain-join-result-by-constraints pred-constraints max-ks)
-                                       (constrain-join-result-by-constraints not-constraints max-ks)
-                                       (constrain-join-result-by-constraints or-constraints max-ks)
-                                       (doc/constrain-join-result-by-empty-names max-ks)))
+        all-constraints (concat unification-constraints
+                                pred-constraints
+                                not-constraints
+                                or-constraints
+                                [doc/constrain-join-result-by-empty-names])
+        constrain-result-fn (fn [join-keys join-results]
+                              (constrain-join-result-by-constraints all-constraints join-keys join-results))
         joins (map var->joins vars-in-join-order)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         binary-join-indexes (set (for [join joins
