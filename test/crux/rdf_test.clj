@@ -49,3 +49,88 @@
              (select-keys (rdf/use-default-language picasso :en)
                           [:http://xmlns.com/foaf/0.1/givenName
                            :http://xmlns.com/foaf/0.1/surname])))))
+
+(t/deftest test-can-parse-sparql-to-datalog
+  ;; http://docs.rdf4j.org/rdf-tutorial/#_databases_and_sparql_querying
+  (t/testing "RDF4J Example"
+    (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+               '{:find [?s ?n]
+                 :where
+                 [[?s :rdf/type
+                   :http://example.org/Artist]
+                  [?s :foaf/firstName ?n]]})
+             (crux.rdf/parse-sparql
+              "
+PREFIX ex: <http://example.org/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT ?s ?n
+WHERE {
+   ?s a ex:Artist;
+      foaf:firstName ?n .
+}"))))
+
+  ;; https://jena.apache.org/tutorials/sparql.html
+  (t/testing "Apacha Jena Tutorial"
+    (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+               '{:find [?x]
+                 :where [[?x :vcard/FN "John Smith"]]})
+             (crux.rdf/parse-sparql
+              "
+SELECT ?x
+WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
+
+    (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+               '{:find [?y ?givenName]
+                 :where [[?y :vcard/Family "Smith"]
+                         [?y :vcard/Given ?givenName]]})
+             (crux.rdf/parse-sparql
+              "
+SELECT ?y ?givenName
+WHERE
+  { ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Family>  \"Smith\" .
+    ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Given>  ?givenName .
+  }")))
+
+    (t/is (= (pr-str (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+                       '{:find [?g]
+                         :where [[(re-find #"(?i)r" ?g)]
+                                 [?y :vcard/Given ?g]]}))
+             (pr-str (crux.rdf/parse-sparql
+                      "
+PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?g
+WHERE
+{ ?y vcard:Given ?g .
+  FILTER regex(?g, \"r\", \"i\") }"))))
+
+    (t/is (= (rdf/with-prefix {:info "http://somewhere/peopleInfo#"}
+               '{:find [?resource]
+                 :where [[(>= ?age 24)]
+                         [?resource :info/age ?age]]})
+             (crux.rdf/parse-sparql
+              "
+PREFIX info: <http://somewhere/peopleInfo#>
+
+SELECT ?resource
+WHERE
+  {
+    ?resource info:age ?age .
+    FILTER (?age >= 24)
+  }")))
+
+    (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
+                               :vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+               '{:find [?name]
+                 :where [(or [_ :foaf/name ?name]
+                             [_ :vcard/FN ?name])]})
+             (crux.rdf/parse-sparql
+              "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX vCard: <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?name
+WHERE
+{
+   { [] foaf:name ?name } UNION { [] vCard:FN ?name }
+}")))))

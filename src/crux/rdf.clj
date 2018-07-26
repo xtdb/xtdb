@@ -17,7 +17,12 @@
            [org.eclipse.rdf4j.rio Rio RDFFormat]
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
-           [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]))
+           [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
+           [org.eclipse.rdf4j.query QueryLanguage]
+           [org.eclipse.rdf4j.query.parser QueryParserUtil]
+           [org.eclipse.rdf4j.query.algebra
+            Compare Filter Join Projection ProjectionElem ProjectionElemList
+            Regex QueryModelVisitor StatementPattern Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -215,3 +220,75 @@
          (keyword (str ns (name %)))
          %)
       x))))
+
+;; SPARQL Spike
+
+;; TODO: This is a spike transforming a small subset of SPARQL into
+;; CRUX's Datalog dialect. Experimental.
+
+(def ^:private ^:dynamic *find* nil)
+(def ^:private ^:dynamic *where* nil)
+
+(defn- str->sparql-var [s]
+  (symbol (str "?" s)))
+
+(defn- sparql->clj [v]
+  (cond
+    (instance? Var v)
+    (if (.hasValue ^Var v)
+      (rdf->clj (.getValue ^Var v))
+      (if (.isAnonymous ^Var v)
+        '_
+        (str->sparql-var (.getName ^Var v))))
+    (instance? ValueConstant v)
+    (rdf->clj (.getValue ^ValueConstant v))))
+
+(defn parse-sparql [sparql]
+  (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
+    (binding [*where* (atom [])
+              *find* (atom [])]
+      (.visitChildren
+       tuple-expr
+       (reify QueryModelVisitor
+         (^void meet [this ^Compare c]
+          (swap! *where* conj
+                 [(list (symbol (.getSymbol (.getOperator c)))
+                        (sparql->clj (.getLeftArg c))
+                        (sparql->clj (.getRightArg c)))]))
+
+         (^void meet [this ^Filter f]
+          (.visitChildren f this))
+
+         (^void meet [this ^ProjectionElemList pel]
+          (.visitChildren pel this))
+
+         (^void meet [_ ^ProjectionElem pe]
+          (swap! *find* conj (str->sparql-var (.getSourceName pe))))
+
+         (^void meet [this ^Join j]
+          (.visit (.getLeftArg j) this)
+          (.visit (.getRightArg j) this))
+
+         (^void meet [this ^Regex r]
+          (swap! *where* conj
+                 [(list 're-find
+                        (let [flags (sparql->clj (.getFlagsArg r))]
+                          (re-pattern (str (when (seq flags)
+                                             (str "(?" flags ")"))
+                                           (sparql->clj (.getPatternArg r)))))
+                        (sparql->clj (.getArg r)))]))
+
+         (^void meet [_ ^StatementPattern sp]
+          (let [s (.getSubjectVar sp)
+                p (.getPredicateVar sp)
+                o (.getObjectVar sp)]
+            (swap! *where* conj (mapv sparql->clj [s p o]))))
+
+         (^void meet [this ^Union u]
+          (let [or (atom [])]
+            (binding [*where* or]
+              (.visit (.getLeftArg u) this)
+              (.visit (.getRightArg u) this))
+            (swap! *where* conj (apply list (cons 'or @or)))))))
+      {:find @*find*
+       :where @*where*})))

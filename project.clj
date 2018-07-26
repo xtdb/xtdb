@@ -16,6 +16,7 @@
                  [org.apache.kafka/kafka-clients "1.1.0"]
                  [commons-io "2.5"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2"]
+                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.3.2"]
                  [ring/ring-core "1.6.3"]
                  [ring/ring-jetty-adapter "1.6.3"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
