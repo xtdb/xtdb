@@ -684,20 +684,20 @@
 ;; TODO: This is potentially simplistic. Needs revisiting, should be
 ;; possible to clean up. Does not fully pass tests yet on this branch.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps]
-  (let [preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
-                [(filter logic-var? (:args pred))
-                 (if return
-                   [return]
-                   [])])
-        ors (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
-              [bound-vars free-vars])
+  (let [pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses]
+                    [(filter logic-var? (:args pred))
+                     (if return
+                       [return]
+                       [])])
+        or-deps (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
+                  [bound-vars free-vars])
         g (dep/graph)
         g (->> (keys var->joins)
                (reduce
                 (fn [g v]
                   (dep/depend g v ::root))
                 g))
-        g (->> (concat preds ors join-deps)
+        g (->> (concat pred-deps or-deps join-deps)
                (reduce
                 (fn [g [dependencies dependents]]
                   (->> dependencies
