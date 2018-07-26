@@ -52,8 +52,7 @@
 
 (s/def ::unify (s/tuple (s/and list?
                                (s/cat :op '#{== !=}
-                                      :x any?
-                                      :y any?))))
+                                      :args (s/+ any?)))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
@@ -132,7 +131,7 @@
 (defn- rewrite-self-join-bgp-clause [{:keys [e v] :as bgp}]
   (let [v-var (gensym v)]
     {:bgp [(assoc bgp :v v-var)]
-     :unify [{:op '== :x v-var :y e}]}))
+     :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
@@ -187,8 +186,8 @@
      :v-vars (set (for [{:keys [v]} bgp-clauses
                         :when (logic-var? v)]
                     v))
-     :unification-vars (set (for [{:keys [x y]} unify-clauses
-                                  arg [x y]
+     :unification-vars (set (for [{:keys [args]} unify-clauses
+                                  arg args
                                   :when (logic-var? arg)]
                               arg))
      :not-vars (->> (vals not-vars)
@@ -636,30 +635,30 @@
             join-results)))))
 
 (defn- build-unification-preds [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
-  (for [{:keys [op x y]
-         :as clause} unify-clauses]
-    (do (doseq [arg [x y]
+  (for [{:keys [op args]
+         :as clause} unify-clauses
+        :let [unify-vars (filter logic-var? args)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unify-vars)]]
+    (do (doseq [arg args
                 :when (and (logic-var? arg)
                            (not (contains? var->bindings arg)))]
           (throw (IllegalArgumentException.
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
         (fn [join-keys join-results]
-          (let [[x y] (for [arg [x y]]
-                        (if (logic-var? arg)
-                          (let [{:keys [result-index]} (get var->bindings arg)]
-                            (or (some->> (get join-keys result-index)
-                                         (sorted-set-by bu/bytes-comparator))
-                                (some->> (bound-results-for-var object-store var->bindings join-keys join-results arg)
-                                         (map (comp idx/value->bytes :value))
-                                         (into (sorted-set-by bu/bytes-comparator)))))
-                          (->> (map idx/value->bytes (doc/normalize-value arg))
-                               (into (sorted-set-by bu/bytes-comparator)))))]
-            (if (and x y)
-              (case op
-                == (boolean (not-empty (set/intersection x y)))
-                != (empty? (set/intersection x y)))
-              true))))))
+          (if (= (count join-keys) unification-join-depth)
+            (let [values (for [arg args]
+                           (if (logic-var? arg)
+                             (let [{:keys [result-index]} (get var->bindings arg)]
+                               (->> (get join-keys result-index)
+                                    (sorted-set-by bu/bytes-comparator)))
+                             (->> (map idx/value->bytes (doc/normalize-value arg))
+                                  (into (sorted-set-by bu/bytes-comparator)))))]
+              (when (case op
+                      == (boolean (not-empty (apply set/intersection values)))
+                      != (empty? (apply set/intersection values)))
+                join-results))
+            join-results)))))
 
 (defn- build-not-constraints [snapshot {:keys [object-store] :as db} rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
@@ -705,12 +704,6 @@
                     (vary-meta join-results update :valid-sub-value-groups conj (set args-to-keep))
                     join-results))))
             join-results)))))
-
-(defn- constrain-join-result-by-unification [unification-preds join-keys join-results]
-  (when (->> (for [pred unification-preds]
-               (pred join-keys join-results))
-             (every? true?))
-    join-results))
 
 (defn- constrain-join-result-by-constraints [constraints join-keys join-results]
   (reduce
@@ -905,7 +898,7 @@
         constrain-result-fn (fn [max-ks result]
                               (some->> (constrain-join-result-by-join-keys var->bindings shared-e-v-vars max-ks result)
                                        (doc/constrain-join-result-by-empty-names max-ks)
-                                       (constrain-join-result-by-unification unification-preds max-ks)
+                                       (constrain-join-result-by-constraints unification-preds max-ks)
                                        (constrain-join-result-by-constraints pred-constraints max-ks)
                                        (constrain-join-result-by-constraints not-constraints max-ks)
                                        (constrain-join-result-by-constraints or-constraints max-ks)
