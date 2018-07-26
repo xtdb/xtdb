@@ -847,8 +847,7 @@
                                 pred-constraints
                                 not-constraints
                                 not-join-constraints
-                                or-constraints
-                                [doc/constrain-join-result-by-empty-names])
+                                or-constraints)
         constrain-result-fn (fn [join-keys join-results]
                               (constrain-join-result-by-constraints all-constraints join-keys join-results))
         joins (map var->joins vars-in-join-order)

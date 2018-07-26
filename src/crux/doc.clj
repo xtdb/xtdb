@@ -584,8 +584,7 @@
             (let [names (map :result-name iterators)]
               (log/debug :match names (bu/bytes->hex max-k))
               (when-let [result (->> (map :results iterators)
-                                     (apply merge-with set/intersection)
-                                     (not-empty))]
+                                     (apply merge))]
                 [max-k result]))
             (recur)))))))
 
@@ -663,7 +662,7 @@
 (defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
   (let [[max-ks parent-result] (last result-stack)
         join-keys (conj (or max-ks []) max-k)]
-    (when-let [join-results (->> (merge-with set/intersection parent-result new-values)
+    (when-let [join-results (->> (merge parent-result new-values)
                                  (constrain-result-fn join-keys)
                                  (not-empty))]
       (conj result-stack [join-keys join-results]))))
