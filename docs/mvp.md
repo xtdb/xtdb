@@ -232,10 +232,10 @@ into a bunch of local indexes in the KV store, which are used by the
 query engine. The indexes are:
 
 + `content-hash->doc-index` Main document store.
-+ `attribute+value+content-hash-index` Secondary index of attributes.
-+ `content-hash+entity-index` Used to find entities for a content
-  hash, currently this mapping is 1-1 but this was not the original
-  intention.
++ `attribute+value+entity+content-hash-index` Secondary index of
+  attribute values, mapped to their entities and versions (content
+  hashes).
++ `attribute+entity+value+content-hash-index` Reverse of the above.
 + `entity+bt+tt+tx-id->content-hash-index` Main temporal index, used
   to find the content hash of a specific entity version.
 + `meta-key->value-index` Used to store Kafka offsets and transaction
