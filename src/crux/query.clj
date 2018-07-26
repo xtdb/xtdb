@@ -257,7 +257,7 @@
         ;; (prn :aev e v)
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars]
+(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars arg-vars]
   (let [v->clauses (group-by :v bgp-clauses)]
     (->> bgp-clauses
          (reduce
@@ -277,16 +277,20 @@
                   indexes (if (literal? v)
                             (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
                             indexes)]
-              [(cond-> deps
-                 (literal? e)
-                 (conj [[e-var] [v-var]])
-                 (and (literal? v)
-                      (not (literal? e)))
-                 (conj [[v-var] [e-var]])
-                 (and (logic-var? v)
-                      (not (contains? e-vars v))
-                      (= 1 (count (get v->clauses v))))
-                 (conj [[e-var] [v-var]]))
+              [(if (= e v)
+                 deps
+                 (cond-> deps
+                   (and (logic-var? v)
+                        (literal? e))
+                   (conj [[e-var] [v-var]])
+                   (and (literal? v)
+                        (logic-var? e))
+                   (conj [[v-var] [e-var]])
+                   (and (logic-var? v)
+                        (= 1 (count (get v->clauses v)))
+                        (not (or (contains? e-vars v)
+                                 (contains? arg-vars v))))
+                   (conj [[e-var] [v-var]])))
                (merge-with into var->joins indexes)]))
           [[] var->joins]))))
 
@@ -801,7 +805,8 @@
                                           db
                                           bgp-clauses
                                           var->joins
-                                          e-vars)
+                                          e-vars
+                                          arg-vars)
         [args-relation var->joins] (arg-joins snapshot
                                               db
                                               args
