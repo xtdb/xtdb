@@ -553,13 +553,14 @@
 (defn- or-single-e-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
-        content-hash->doc (db/get-objects object-store (map :content-hash entities))]
-    (when (seq entities)
+        content-hash->doc (db/get-objects object-store (map :content-hash entities))
+        result (set (for [{:keys [content-hash] :as entity} entities
+                          :let [doc (get content-hash->doc content-hash)]
+                          :when (contains? (set (doc/normalize-value (get doc a))) v)]
+                      entity))]
+    (when (seq result)
       [[[]
-        {e (set (for [{:keys [content-hash] :as entity} entities
-                      :let [doc (get content-hash->doc content-hash)]
-                      :when (contains? (set (doc/normalize-value (get doc a))) v)]
-                  entity))}]])))
+        {e result}]])))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -829,8 +830,6 @@
          :as type->clauses} (normalize-clauses where)
         {:keys [e-vars
                 v-vars
-                unification-vars
-                rule-vars
                 pred-return-vars]} (collect-vars type->clauses)
         v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
                             :when (logic-var? v)]
