@@ -899,12 +899,11 @@
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
-     (try
-       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-         (let [result (set (crux.query/q snapshot db q))]
-           (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-           (log/debug :query-result-size (count result))
-           result)))))
+     (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+       (let [result (set (crux.query/q snapshot db q))]
+         (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+         (log/debug :query-result-size (count result))
+         result))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
