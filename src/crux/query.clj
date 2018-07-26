@@ -685,7 +685,7 @@
    constraints))
 
 ;; TODO: This is potentially simplistic. Needs revisiting, should be
-;; possible to clean up. Does not fully pass tests yet on this branch.
+;; possible to clean up.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps]
   (let [pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses]
                     [(filter logic-var? (:args pred))
