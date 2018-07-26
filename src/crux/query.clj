@@ -280,16 +280,16 @@
                             indexes)]
               [(cond-> deps
                  (literal? e)
-                 (assoc v-var e-var)
+                 (conj [[e-var] [v-var]])
                  (and (literal? v)
                       (not (literal? e)))
-                 (assoc e-var v-var)
+                 (conj [[v-var] [e-var]])
                  (and (logic-var? v)
                       (not (contains? e-vars v))
                       (= 1 (count (get v->clauses v))))
-                 (assoc v-var e-var))
+                 (conj [[e-var] [v-var]]))
                (merge-with into var->joins indexes)]))
-          [{} var->joins]))))
+          [[] var->joins]))))
 
 (defn- arg-vars [args]
   (let [ks (keys (first args))]
@@ -745,7 +745,7 @@
                 (fn [g v]
                   (dep/depend g v ::root))
                 g))
-        g (->> (concat preds ors)
+        g (->> (concat preds ors join-deps)
                (reduce
                 (fn [g [dependencies dependents]]
                   (->> dependencies
@@ -757,13 +757,6 @@
                                   (dep/depend g dependent dependency))
                                 g)))
                         g)))
-                g))
-        g (->> join-deps
-               (reduce-kv
-                (fn [g k v]
-                  (if (not (dep/depends? g k v))
-                    (dep/depend g k v)
-                    g))
                 g))
         join-order (dep/topo-sort g)]
     (vec (filter var->joins join-order))))
