@@ -245,7 +245,7 @@
                    (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
                    business-time
                    transact-time)]
-        (log/debug :join-order :ave v e clause)
+        (log/debug :join-order :ave (pr-str v) e (pr-str clause))
         (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
             v-idx (doc/new-entity-for-doc-virtual-index
@@ -254,7 +254,7 @@
                        (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
                    business-time
                    transact-time)]
-        (log/debug :join-order :aev e v clause)
+        (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars arg-vars]
@@ -265,7 +265,7 @@
             (let [e-var e
                   v-var (if (logic-var? v)
                           v
-                          (gensym "literal-value"))
+                          (gensym (str "literal_" v "_")))
                   binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
                                                                              :names {:e e-var
                                                                                      :v v-var}})
@@ -887,9 +887,9 @@
                                           (vec (for [arg args]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constriants arg-vars-in-join-order)))
-    (log/debug :where where)
+    (log/debug :where (pr-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
-    (log/debug :var->bindings var->bindings)
+    (log/debug :var->bindings (pr-str var->bindings))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
@@ -910,7 +910,7 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
-     (log/debug :query q)
+     (log/debug :query (pr-str q))
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
