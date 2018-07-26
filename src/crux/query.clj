@@ -129,32 +129,23 @@
                                       > <=
                                       >= <})
 
-(defn- rewrite-literal-e-literal-v-bgp-clause [{:keys [e v] :as bgp}]
-  (let [v-var (gensym v)]
-    {:bgp [(assoc bgp :v v-var)]
-     :unify [{:op '== :x v-var :y (set (doc/normalize-value v))}]}))
-
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
-         (if (= :bgp type)
-           (let [{:keys [e v] :as bgp} (normalize-bgp-clause clause)]
-             (if (and (literal? e) (literal? v))
-               (rewrite-literal-e-literal-v-bgp-clause bgp)
-               {type [bgp]}))
-           {type [(case type
-                     :pred (let [{:keys [pred]} clause
-                                 {:keys [pred-fn args]} pred]
-                             (if-let [range-pred (and (= 2 (count args))
-                                                      (every? logic-var? args)
-                                                      (get pred->built-in-range-pred pred-fn))]
-                               (assoc-in clause [:pred :pred-fn] range-pred)
-                               clause))
-                     :range (let [[type clause] (first clause)]
-                              (if (= :val-sym type)
-                                (update clause :op range->inverse-range)
-                                clause))
-                     :unify (first clause)
-                     clause)]}))
+         {type [(case type
+                  :bgp (normalize-bgp-clause clause)
+                  :pred (let [{:keys [pred]} clause
+                              {:keys [pred-fn args]} pred]
+                          (if-let [range-pred (and (= 2 (count args))
+                                                   (every? logic-var? args)
+                                                   (get pred->built-in-range-pred pred-fn))]
+                            (assoc-in clause [:pred :pred-fn] range-pred)
+                            clause))
+                  :range (let [[type clause] (first clause)]
+                           (if (= :val-sym type)
+                             (update clause :op range->inverse-range)
+                             clause))
+                  :unify (first clause)
+                  clause)]})
        (apply merge-with into)))
 
 (defn- collect-vars [{bgp-clauses :bgp
@@ -385,13 +376,15 @@
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
-                   result-index (max (long (get var->values-result-index e -1))
-                                     (long (get var->values-result-index (get e->v-var e) -1)))]]
+                   join-depth (or (max (long (get var->values-result-index e -1))
+                                       (long (get var->values-result-index (get e->v-var e) -1)))
+                                  (dec (long join-depth)))
+                   result-index (get var->values-result-index var)]]
          [var {:e-var e
                :var var
                :attr (get var->attr var)
                :result-index result-index
-               :join-depth (or result-index (dec (long join-depth)))
+               :join-depth join-depth
                :result-name e
                :type :entity}])
        (into {})))
@@ -949,7 +942,7 @@
                                           (mapv v-var->range-constriants arg-vars-in-join-order)))
     ;; (prn vars-in-join-order)
     ;; (prn var->bindings)
-    ;; (prn var->joins)
+    ;; (prn (zipmap (keys var->joins) (map #(map type %) (vals var->joins))))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)

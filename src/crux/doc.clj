@@ -107,7 +107,7 @@
     (when (bu/bytes=? k seek-k (alength seek-k))
       (let [[e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
         (reset! peek-state {:last k})
-        [(idx/id->bytes e) [{:crux.doc.binary-placeholder/entity #{true}}]]))))
+        [(idx/id->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]))))
 
 (defrecord DocAttributeEntityValueEntityIndex [i attr peek-state]
   db/Index
