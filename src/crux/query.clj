@@ -245,7 +245,7 @@
                    (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
                    business-time
                    transact-time)]
-        ;; (prn :ave v e)
+        (log/debug :join-order :ave v e clause)
         (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
             v-idx (doc/new-entity-for-doc-virtual-index
@@ -254,7 +254,7 @@
                        (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
                    business-time
                    transact-time)]
-        ;; (prn :aev e v)
+        (log/debug :join-order :aev e v clause)
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars arg-vars]
@@ -276,7 +276,11 @@
                             indexes)
                   indexes (if (literal? v)
                             (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
-                            indexes)]
+                            indexes)
+                  v-is-leaf? (and (logic-var? v)
+                                  (= 1 (count (get v->clauses v)))
+                                  (not (or (contains? e-vars v)
+                                           (contains? arg-vars v))))]
               [(if (= e v)
                  deps
                  (cond-> deps
@@ -286,10 +290,15 @@
                    (and (literal? v)
                         (logic-var? e))
                    (conj [[v-var] [e-var]])
+                   ;; TODO: This is to default join order to ave as it
+                   ;; used to be as some things break without
+                   ;; it. Those breakages likely have other root
+                   ;; causes that should be fixed eventually.
                    (and (logic-var? v)
-                        (= 1 (count (get v->clauses v)))
-                        (not (or (contains? e-vars v)
-                                 (contains? arg-vars v))))
+                        (logic-var? e)
+                        (not v-is-leaf?))
+                   (conj [[v-var] [e-var]])
+                   v-is-leaf?
                    (conj [[e-var] [v-var]])))
                (merge-with into var->joins indexes)]))
           [[] var->joins]))))
@@ -878,9 +887,10 @@
                                           (vec (for [arg args]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constriants arg-vars-in-join-order)))
-    ;; (prn vars-in-join-order)
-    ;; (prn var->bindings)
-    ;; (prn (zipmap (keys var->joins) (map #(map type %) (vals var->joins))))
+    (log/debug :where where)
+    (log/debug :vars-in-join-order vars-in-join-order)
+    (log/debug :var->bindings var->bindings)
+    (log/debug :var->joins (zipmap (keys var->joins) (map #(map type %) (vals var->joins))))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
@@ -896,6 +906,7 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
+     (log/debug :query q)
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
