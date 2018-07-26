@@ -272,7 +272,7 @@
                                                                            :names {:e e-var
                                                                                    :v v-var}})
                 indexes (if (= e v)
-                          (throw (UnsupportedOperationException. "Self join not currently supported: " (pr-str clause)))
+                          (throw (UnsupportedOperationException. (str "Self join not currently supported: " (pr-str clause))))
                           {v-var [(assoc binary-idx :name e-var)]
                            e-var [(assoc binary-idx :name e-var)]})
                 indexes (if (literal? e)
