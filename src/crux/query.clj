@@ -137,7 +137,7 @@
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
          (if (= :bgp type)
-           (let [{:keys [e v]} (normalize-bgp-clause clause)]
+           (let [{:keys [e v] :as clause} (normalize-bgp-clause clause)]
              (if (and (logic-var? e) (= e v))
                (rewrite-self-join-bgp-clause clause)
                {:bgp [clause]}))
