@@ -16,10 +16,9 @@
 (def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
 (def ^:const ^:private attribute+entity+value+content-hash-index-id 2)
 
-(def ^:const ^:private content-hash+entity-index-id 3)
-(def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 4)
+(def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 3)
 
-(def ^:const ^:private meta-key->value-index-id 5)
+(def ^:const ^:private meta-key->value-index-id 4)
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
@@ -238,26 +237,6 @@
     [(new-id (doto (byte-array id-size)
                (->> (.get buffer))))
      (doto (byte-array (- (.remaining buffer) id-size))
-       (->> (.get buffer)))
-     (new-id (doto (byte-array id-size)
-               (->> (.get buffer))))]))
-
-(defn encode-content-hash+entity-key ^bytes [content-hash eid]
-  (let [eid (id->bytes eid)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength eid)))
-        (.putShort content-hash+entity-index-id)
-        (.put (id->bytes content-hash))
-        (.put eid)
-        (.array))))
-
-(defn encode-content-hash-prefix-key ^bytes [content-hash]
-  (encode-content-hash+entity-key content-hash empty-byte-array))
-
-(defn ^Id decode-content-hash+entity-key->entity [^bytes key]
-  (assert (= (+ Short/BYTES id-size id-size) (alength key)))
-  (let [buffer (ByteBuffer/wrap key)]
-    (assert (= content-hash+entity-index-id (.getShort buffer)))
-    [(doto (byte-array id-size)
        (->> (.get buffer)))
      (new-id (doto (byte-array id-size)
                (->> (.get buffer))))]))

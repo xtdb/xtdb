@@ -50,16 +50,12 @@
   (let [eid (idx/new-id k)
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
-    {:kvs (concat
-           [[(idx/encode-entity+bt+tt+tx-id-key
-              eid
-              business-time
-              transact-time
-              tx-id)
-             (idx/id->bytes content-hash)]]
-           (when-not (= content-hash (idx/new-id nil))
-             [[(idx/encode-content-hash+entity-key content-hash eid)
-               idx/empty-byte-array]]))}))
+    {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
+             eid
+             business-time
+             transact-time
+             tx-id)
+            (idx/id->bytes content-hash)]]}))
 
 (defmethod tx-command :crux.tx/delete [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
@@ -82,16 +78,12 @@
     {:pre-commit-fn #(if (bu/bytes=? (idx/id->bytes content-hash) old-v-bytes)
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
-     :kvs (concat
-           [[(idx/encode-entity+bt+tt+tx-id-key
-              eid
-              business-time
-              transact-time
-              tx-id)
-             (idx/id->bytes new-v-id)]]
-           (when-not (= new-v-id (idx/new-id nil))
-             [[(idx/encode-content-hash+entity-key new-v-id eid)
-               idx/empty-byte-array]]))}))
+     :kvs [[(idx/encode-entity+bt+tt+tx-id-key
+             eid
+             business-time
+             transact-time
+             tx-id)
+            (idx/id->bytes new-v-id)]]}))
 
 (defmethod tx-command :crux.tx/evict [kv object-store tx-log [op k business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
