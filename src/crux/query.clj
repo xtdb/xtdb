@@ -840,15 +840,16 @@
                                                  var->values-result-index
                                                  join-depth
                                                  (keys var->attr)))
-        unification-constraints (vec (build-unification-constraints snapshot db unify-clauses var->bindings))
-        not-constraints (vec (concat (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
-                                     (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)))
-        pred-constraints (vec (build-pred-constraints object-store pred-clause+relations var->bindings))
-        or-constraints (vec (build-or-constraints snapshot db rule-name->rules or-clause+relation+or-branches
-                                                  var->bindings vars-in-join-order v-var->range-constriants))
+        unification-constraints (build-unification-constraints snapshot db unify-clauses var->bindings)
+        not-constraints (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
+        not-join-constraints (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)
+        pred-constraints (build-pred-constraints object-store pred-clause+relations var->bindings)
+        or-constraints (build-or-constraints snapshot db rule-name->rules or-clause+relation+or-branches
+                                             var->bindings vars-in-join-order v-var->range-constriants)
         all-constraints (concat unification-constraints
                                 pred-constraints
                                 not-constraints
+                                not-join-constraints
                                 or-constraints
                                 [doc/constrain-join-result-by-empty-names])
         constrain-result-fn (fn [join-keys join-results]
