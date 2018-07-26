@@ -738,28 +738,18 @@
                          (str "Rule invocation has wrong arity, expected: " arity " " (pr-str sub-clause)))))
                ;; TODO: the caches and expansion here needs
                ;; revisiting.
-               (let [seen-rule-branches+expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
-                                                             :let [cache-key [:seen-rule-branches rule-name branch-index (:args clause)]]
-                                                             :when (zero? (long (get-in recursion-cache cache-key 0)))
-                                                             :let [rule-arg->query-arg (zipmap rule-args (:args clause))
-                                                                   body-vars (->> (collect-vars (normalize-clauses body))
-                                                                                  (vals)
-                                                                                  (reduce into #{}))
-                                                                   body-var->hidden-var (zipmap body-vars
-                                                                                                (map gensym body-vars))]]
-                                                         [cache-key
-                                                          (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body)])
-                     seen-rule-branches (map first seen-rule-branches+expanded-rules)
-                     expanded-rules (map second seen-rule-branches+expanded-rules)
-                     recursion-cache (reduce (fn [cache cache-key]
-                                               (update-in cache cache-key (fnil inc 0)))
-                                             recursion-cache
-                                             seen-rule-branches)
+               (let [expanded-rules (for [[branch-index [rule-args body]] (map-indexed vector rule-args+body)
+                                          :let [rule-arg->query-arg (zipmap rule-args (:args clause))
+                                                body-vars (->> (collect-vars (normalize-clauses body))
+                                                               (vals)
+                                                               (reduce into #{}))
+                                                body-var->hidden-var (zipmap body-vars
+                                                                             (map gensym body-vars))]]
+                                      (w/postwalk-replace (merge body-var->hidden-var rule-arg->query-arg) body))
                      cache-key [:seen-rules rule-name]
                      ;; TODO: Understand this, does this really work
-                     ;; in the general case? Why less than equal one?
-                     ;; This implies the rule can be expanded twice.
-                     expanded-rules (if (<= (long (get-in recursion-cache cache-key 0)) 1)
+                     ;; in the general case?
+                     expanded-rules (if (zero? (long (get-in recursion-cache cache-key 0)))
                                       (for [expanded-rule expanded-rules
                                             :let [expanded-rule (expand-rules expanded-rule rule-name->rules
                                                                               (update-in recursion-cache cache-key (fnil inc 0)))]
