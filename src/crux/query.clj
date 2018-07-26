@@ -251,35 +251,40 @@
         ;; (prn :aev e v)
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins]
-  (->> bgp-clauses
-       (reduce
-        (fn [[deps var->joins] {:keys [e a v] :as clause}]
-          (let [e-var e
-                v-var (if (logic-var? v)
-                        v
-                        (gensym "literal-value"))
-                binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
-                                                                           :names {:e e-var
-                                                                                   :v v-var}})
-                indexes (if (= e v)
-                          (throw (UnsupportedOperationException. (str "Self join not currently supported: " (pr-str clause))))
-                          {v-var [(assoc binary-idx :name e-var)]
-                           e-var [(assoc binary-idx :name e-var)]})
-                indexes (if (literal? e)
-                          (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
-                          indexes)
-                indexes (if (literal? v)
-                          (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
-                          indexes)]
-            [(cond-> deps
-               (literal? e)
-               (assoc v-var e-var)
-               (and (literal? v)
-                    (not (literal? e)))
-               (assoc e-var v-var))
-             (merge-with into var->joins indexes)]))
-        [{} var->joins])))
+(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars]
+  (let [v->clauses (group-by :v bgp-clauses)]
+    (->> bgp-clauses
+         (reduce
+          (fn [[deps var->joins] {:keys [e a v] :as clause}]
+            (let [e-var e
+                  v-var (if (logic-var? v)
+                          v
+                          (gensym "literal-value"))
+                  binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
+                                                                             :names {:e e-var
+                                                                                     :v v-var}})
+                  indexes (if (= e v)
+                            (throw (UnsupportedOperationException. (str "Self join not currently supported: " (pr-str clause))))
+                            {v-var [(assoc binary-idx :name e-var)]
+                             e-var [(assoc binary-idx :name e-var)]})
+                  indexes (if (literal? e)
+                            (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
+                            indexes)
+                  indexes (if (literal? v)
+                            (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
+                            indexes)]
+              [(cond-> deps
+                 (literal? e)
+                 (assoc v-var e-var)
+                 (and (literal? v)
+                      (not (literal? e)))
+                 (assoc e-var v-var)
+                 (and (logic-var? v)
+                      (not (contains? e-vars v))
+                      (= 1 (count (get v->clauses v))))
+                 (assoc v-var e-var))
+               (merge-with into var->joins indexes)]))
+          [{} var->joins]))))
 
 (defn- arg-vars [args]
   (let [ks (keys (first args))]
@@ -732,7 +737,9 @@
 ;; TODO: This is potentially simplistic. The attempt to split the vars
 ;; into two groups via non-leaf-v-vars needs thought, as this might
 ;; wreck dependency order. The intent is to push these joins to the
-;; end, its done for performance reasons.
+;; end, its done for performance reasons. The leaf handling and deps
+;; needs revisiting, should be possible to clean up, might not need
+;; ::leaf.
 (defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps]
   (let [preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
                 [(filter logic-var? (:args pred))
@@ -741,17 +748,18 @@
                    [])])
         ors (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
               [bound-vars free-vars])
-        g (->> (keys var->joins)
-               (reduce
-                (fn [g v]
-                  (if (contains? non-leaf-v-vars v)
-                    (dep/depend g v ::leaf)
-                    (dep/depend g ::leaf v)))
-                (dep/graph)))
         g (->> deps
                (reduce-kv
                 (fn [g k v]
                   (dep/depend g k v))
+                (dep/graph)))
+        g (->> (keys var->joins)
+               (reduce
+                (fn [g v]
+                  (if (or (contains? non-leaf-v-vars v)
+                          (contains? deps v))
+                    (dep/depend g v ::leaf)
+                    (dep/depend g ::leaf v)))
                 g))
         g (->> (concat preds ors)
                (reduce
@@ -766,18 +774,8 @@
                                 g)))
                         g)))
                 g))
-        join-order (dep/topo-sort g)
-        [leaves non-leaves] (->> join-order
-                                 (partition-by #{::leaf})
-                                 (remove #{[::leaf]}))
-        can-reorder? (->> (for [leaf leaves]
-                            (->> (dep/immediate-dependents g leaf)
-                                 (filter var->joins)
-                                 (empty?)))
-                          (every? true?))]
-    (vec (filter var->joins (if can-reorder?
-                              (concat non-leaves leaves)
-                              join-order)))))
+        join-order (dep/topo-sort g)]
+    (vec (filter var->joins join-order))))
 
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
@@ -867,7 +865,8 @@
         [deps var->joins] (bgp-joins snapshot
                                      db
                                      bgp-clauses
-                                     var->joins)
+                                     var->joins
+                                     e-vars)
         [var->joins args-relation] (arg-joins snapshot
                                               db
                                               args
