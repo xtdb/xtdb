@@ -428,8 +428,7 @@
 
 (defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
   (let [{:keys [e-var var attr result-index result-name type]} (get var->bindings var)]
-    (if (and (= "crux.query.value" (namespace result-name))
-             (contains? join-results result-name))
+    (if (= "crux.query.value" (namespace result-name))
       (for [value (get join-results result-name)]
         {:value value
          :result-name result-name
