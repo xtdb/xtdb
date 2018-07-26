@@ -128,6 +128,13 @@
                                       > <=
                                       >= <})
 
+;; NOTE: This could be optimised if the binary join had a mechanism to
+;; propagate the value the first occurrence to the second. This would
+;; avoid having to scan the entire second var to find the value we
+;; already know we're looking for. This could be implemented as a
+;; relation that gets updated once we know the first value. In the
+;; more generic case, unification constraints could propagate
+;; knowledge of the first bound value from one join to another.
 (defn- rewrite-self-join-bgp-clause [{:keys [e v] :as bgp}]
   (let [v-var (gensym v)]
     {:bgp [(assoc bgp :v v-var)]
@@ -607,6 +614,11 @@
                   (merge join-results bound-results))))
             join-results)))))
 
+;; TODO: Unification could be improved by using dynamic relations
+;; propagating knowledge from the first var to the next. See comment
+;; about about rewrite-self-join-bgp-clause. Currently unification has
+;; to scan the values and check them as they get bound and doesn't
+;; fully carry its weight compared to normal predicates.
 (defn- build-unification-constraints [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
   (for [{:keys [op args]
          :as clause} unify-clauses
