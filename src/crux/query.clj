@@ -129,23 +129,32 @@
                                       > <=
                                       >= <})
 
+(defn- rewrite-self-join-bgp-clause [{:keys [e v] :as bgp}]
+  (let [v-var (gensym v)]
+    {:bgp [(assoc bgp :v v-var)]
+     :unify [{:op '== :x v-var :y e}]}))
+
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
-         {type [(case type
-                  :bgp (normalize-bgp-clause clause)
-                  :pred (let [{:keys [pred]} clause
-                              {:keys [pred-fn args]} pred]
-                          (if-let [range-pred (and (= 2 (count args))
-                                                   (every? logic-var? args)
-                                                   (get pred->built-in-range-pred pred-fn))]
-                            (assoc-in clause [:pred :pred-fn] range-pred)
-                            clause))
-                  :range (let [[type clause] (first clause)]
-                           (if (= :val-sym type)
-                             (update clause :op range->inverse-range)
-                             clause))
-                  :unify (first clause)
-                  clause)]})
+         (if (= :bgp type)
+           (let [{:keys [e v]} (normalize-bgp-clause clause)]
+             (if (and (logic-var? e) (= e v))
+               (rewrite-self-join-bgp-clause clause)
+               {:bgp [clause]}))
+           {type [(case type
+                    :pred (let [{:keys [pred]} clause
+                                {:keys [pred-fn args]} pred]
+                            (if-let [range-pred (and (= 2 (count args))
+                                                     (every? logic-var? args)
+                                                     (get pred->built-in-range-pred pred-fn))]
+                              (assoc-in clause [:pred :pred-fn] range-pred)
+                              clause))
+                    :range (let [[type clause] (first clause)]
+                             (if (= :val-sym type)
+                               (update clause :op range->inverse-range)
+                               clause))
+                    :unify (first clause)
+                    clause)]}))
        (apply merge-with into)))
 
 (defn- collect-vars [{bgp-clauses :bgp
@@ -232,20 +241,18 @@
     (if (= (:v names) (first order))
       (let [v-doc-idx (-> (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
                           (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
-            e-idx (doc/new-entity-attribute-value-virtual-index
+            e-idx (doc/new-entity-for-doc-virtual-index
                    snapshot
                    (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
-                   nil
                    business-time
                    transact-time)]
         ;; (prn :ave v e)
         (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
-            v-idx (doc/new-entity-attribute-value-virtual-index
+            v-idx (doc/new-entity-for-doc-virtual-index
                    snapshot
                    (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx)
                        (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
-                   nil
                    business-time
                    transact-time)]
         ;; (prn :aev e v)
@@ -263,10 +270,8 @@
                   binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
                                                                              :names {:e e-var
                                                                                      :v v-var}})
-                  indexes (if (= e v)
-                            (throw (UnsupportedOperationException. (str "Self join not currently supported: " (pr-str clause))))
-                            {v-var [(assoc binary-idx :name e-var)]
-                             e-var [(assoc binary-idx :name e-var)]})
+                  indexes {v-var [(assoc binary-idx :name e-var)]
+                           e-var [(assoc binary-idx :name e-var)]}
                   indexes (if (literal? e)
                             (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
                             indexes)
@@ -300,23 +305,14 @@
         relation (doc/new-relation-virtual-index (gensym "args")
                                                  []
                                                  (count arg-vars))]
-    [(->> arg-vars
+    [relation
+     (->> arg-vars
           (reduce
            (fn [var->joins arg-var]
              (->> {arg-var
-                   (cond-> [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]
-                     (and (not (contains? var->joins arg-var))
-                          (contains? e-vars arg-var))
-                     (conj (assoc (doc/new-entity-attribute-value-virtual-index
-                                   snapshot
-                                   :crux.db/id
-                                   nil
-                                   business-time
-                                   transact-time)
-                                  :name arg-var)))}
+                   [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]}
                   (merge-with into var->joins)))
-           var->joins))
-     relation]))
+           var->joins))]))
 
 (defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
   (->> pred-clauses
@@ -557,14 +553,13 @@
 
 (defn- or-single-e-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
-        entities (mapv e args)
-        idx (doc/new-shared-literal-attribute-for-known-entities-virtual-index
-             object-store snapshot entities [[a v]] business-time transact-time)
-        idx-as-seq (doc/idx->seq idx)]
-    (when (seq idx-as-seq)
+        entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
+        content-hash->doc (db/get-objects object-store (map :content-hash entities))]
+    (when (seq entities)
       [[[]
-        {e (set (for [[_ entities] idx-as-seq
-                      entity entities]
+        {e (set (for [{:keys [content-hash] :as entity} entities
+                      :let [doc (get content-hash->doc content-hash)]
+                      :when (contains? (set (doc/normalize-value (get doc a))) v)]
                   entity))}]])))
 
 (def ^:private ^:dynamic *recursion-table* {})
@@ -853,6 +848,7 @@
         {:keys [e-vars
                 v-vars
                 unification-vars
+                rule-vars
                 pred-return-vars]} (collect-vars type->clauses)
         v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
                             :when (logic-var? v)]
@@ -867,7 +863,7 @@
                                      bgp-clauses
                                      var->joins
                                      e-vars)
-        [var->joins args-relation] (arg-joins snapshot
+        [args-relation var->joins] (arg-joins snapshot
                                               db
                                               args
                                               e-vars
@@ -899,7 +895,8 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        non-leaf-v-vars (set/union unification-vars e-vars)
+        ;; TODO: this should not work like this.
+        non-leaf-v-vars (set/union e-vars unification-vars pred-return-vars rule-vars)
         vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
@@ -950,8 +947,9 @@
 
 (defn q
   ([{:keys [kv] :as db} q]
-   (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-     (set (crux.query/q snapshot db q))))
+   (time
+    (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+      (set (crux.query/q snapshot db q)))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)

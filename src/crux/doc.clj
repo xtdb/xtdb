@@ -402,7 +402,7 @@
                                (seq))]
       [v (vec entity-txs)])))
 
-(defrecord EntityAttributeValueVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
+(defrecord EntityForDocVirtualIndex [doc-idx content-hash-entity-idx entity-as-of-idx]
   db/Index
   (seek-values [this k]
     (when-let [values (db/seek-values doc-idx k)]
@@ -416,19 +416,6 @@
       (if-let [result (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx values)]
         result
         (recur)))))
-
-(defn entities-by-attribute-value-at [snapshot attr range-constraints business-time transact-time]
-  (with-open [di (ks/new-iterator snapshot)
-              ci (ks/new-iterator snapshot)
-              ei (ks/new-iterator snapshot)]
-    (let [doc-idx (-> (new-doc-attribute-value-entity-value-index di attr)
-                      (wrap-with-range-constraints range-constraints))
-          content-hash-entity-idx (->ContentHashEntityIndex ci)
-          entity-as-of-idx (->EntityAsOfIndex ei business-time transact-time)
-          entity-attribute-idx (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)]
-      (->> (idx->seq entity-attribute-idx)
-           (mapcat second)
-           (vec)))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -451,37 +438,6 @@
   (open-level [_])
   (close-level [_])
   (max-depth [_] 1))
-
-(defrecord LiteralEntityAttributeValuesVirtualIndex [object-store entity-as-of-idx entity attr attr-state]
-  db/Index
-  (seek-values [this k]
-    (if-let [entity-tx (get @attr-state :entity-tx (let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
-                                                     entity-tx))]
-      (let [content-hash (.content-hash ^EntityTx entity-tx)
-            values (get @attr-state :values
-                        (->> (get-in (db/get-objects object-store [content-hash])
-                                     [content-hash attr])
-                             (normalize-value)
-                             (map idx/value->bytes)
-                             (into (sorted-set-by bu/bytes-comparator))))
-            [x & xs] (subseq values >= (idx/value->bytes k))
-            {:keys [first]} (reset! attr-state {:first x :rest xs :entity-tx entity-tx :values values})]
-        (when first
-          [first [entity-tx]]))
-      (reset! attr-state nil)))
-
-  db/OrderedIndex
-  (next-values [this]
-    (let [{:keys [first entity-tx]} (swap! attr-state (fn [{[x & xs] :rest
-                                                            :as attr-state}]
-                                                        (assoc attr-state :first x :rest xs)))]
-      (when first
-        [first [entity-tx]]))))
-
-(defn new-literal-entity-attribute-values-virtual-index [object-store snapshot entity attr range-constraints business-time transact-time]
-  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
-    (-> (->LiteralEntityAttributeValuesVirtualIndex object-store entity-as-of-idx entity attr (atom nil))
-        (wrap-with-range-constraints range-constraints))))
 
 (def ^:private ^:dynamic *external-sort-limit* (* 1024 1024))
 
@@ -733,6 +689,164 @@
   (swap! (:index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
   binary-join-index)
 
+(defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
+  (let [[max-ks parent-result] (last result-stack)
+        join-keys (conj (or max-ks []) max-k)]
+    (when-let [join-results (->> (merge-with set/intersection parent-result new-values)
+                                 (constrain-result-fn join-keys)
+                                 (not-empty))]
+      (conj result-stack [join-keys join-results]))))
+
+(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn walk-state]
+  db/Index
+  (seek-values [this k]
+    (when-let [values (db/seek-values n-ary-index k)]
+      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+        (do (swap! walk-state assoc :last result)
+            [(first values) (second (last result))])
+        (db/next-values this))))
+
+  db/LayeredIndex
+  (open-level [this]
+    (db/open-level n-ary-index)
+    (swap! walk-state #(assoc % :result-stack (:last %)))
+    nil)
+
+  (close-level [this]
+    (db/close-level n-ary-index)
+    (swap! walk-state update :result-stack pop)
+    nil)
+
+  (max-depth [this]
+    (db/max-depth n-ary-index))
+
+  db/OrderedIndex
+  (next-values [this]
+    (when-let [values (db/next-values n-ary-index)]
+      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+        (do (swap! walk-state assoc :last result)
+            [(first values) (second (last result))])
+        (recur)))))
+
+(defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
+
+(defn layered-idx->seq [idx]
+  (let [max-depth (long (db/max-depth idx))
+        build-result (fn [max-ks [max-k new-values]]
+                       (when new-values
+                         (conj max-ks max-k)))
+        build-leaf-results (fn [max-ks idx]
+                             (vec (for [result (idx->seq idx)
+                                        :let [leaf-key (build-result max-ks result)]
+                                        :when leaf-key]
+                                    [leaf-key (last result)])))
+        step (fn step [max-ks ^long depth needs-seek?]
+               (let [close-level (fn []
+                                   (when (pos? depth)
+                                     (db/close-level idx)
+                                     (step (pop max-ks) (dec depth) false)))
+                     open-level (fn [result]
+                                  (db/open-level idx)
+                                  (if-let [max-ks (build-result max-ks result)]
+                                    (step max-ks (inc depth) true)
+                                    (do (db/close-level idx)
+                                        (step max-ks depth false))))]
+                 (lazy-seq
+                  (if (= depth (dec max-depth))
+                    (concat (build-leaf-results max-ks idx)
+                            (close-level))
+                    (if-let [result (if needs-seek?
+                                      (db/seek-values idx nil)
+                                      (db/next-values idx))]
+                      (open-level result)
+                      (close-level))))))]
+    (when (pos? max-depth)
+      (step [] 0 true))))
+
+(defn new-entity-for-doc-virtual-index [snapshot doc-idx business-time transact-time]
+  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
+        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))]
+    (->EntityForDocVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
+
+(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
+  (-> (new-sorted-in-memory-virtual-index
+       (for [prefix (partition-by first tuples)
+             :let [value (ffirst prefix)]]
+         [(idx/value->bytes value)
+          {:value value
+           :child-idx (when (seq (next (first prefix)))
+                        (build-nested-index (map next prefix) next-range-constraints))}]))
+      (wrap-with-range-constraints range-constraints)))
+
+(defn- relation-virtual-index-depth ^long [iterators-state]
+  (dec (count (:indexes @iterators-state))))
+
+(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
+  db/OrderedIndex
+  (seek-values [this k]
+    (let [{:keys [indexes]} @iterators-state]
+      (when-let [idx (last indexes)]
+        (let [[k {:keys [value child-idx]}] (db/seek-values idx k)]
+          (swap! iterators-state merge {:child-idx child-idx
+                                        :needs-seek? false})
+          (when k
+            [k [value]])))))
+
+  db/Index
+  (next-values [this]
+    (let [{:keys [needs-seek? indexes]} @iterators-state]
+      (if needs-seek?
+        (db/seek-values this nil)
+        (when-let [idx (last indexes)]
+          (let [[k {:keys [value child-idx]}] (db/next-values idx)]
+            (swap! iterators-state assoc :child-idx child-idx)
+            (when k
+              [k [value]]))))))
+
+  db/LayeredIndex
+  (open-level [this]
+    (when (= max-depth (relation-virtual-index-depth iterators-state))
+      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
+    (swap! iterators-state
+           (fn [{:keys [indexes child-idx]}]
+             {:indexes (conj indexes child-idx)
+              :child-idx nil
+              :needs-seek? true}))
+    nil)
+
+  (close-level [this]
+    (when (zero? (relation-virtual-index-depth iterators-state))
+      (throw (IllegalStateException. "Cannot close level at root.")))
+    (swap! iterators-state (fn [{:keys [indexes]}]
+                             {:indexes (pop indexes)
+                              :child-idx nil
+                              :needs-seek? false}))
+    nil)
+
+  (max-depth [this]
+    max-depth))
+
+(defn update-relation-virtual-index!
+  ([relation tuples]
+   (update-relation-virtual-index! relation tuples (:layered-range-constraints relation)))
+  ([relation tuples layered-range-constraints]
+   (reset! (:iterators-state relation)
+           {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
+                        (build-nested-index (sort tuples) layered-range-constraints))]
+            :child-idx nil
+            :needs-seek? true})
+   relation))
+
+(defn new-relation-virtual-index
+  ([relation-name tuples max-depth]
+   (new-relation-virtual-index relation-name tuples max-depth nil))
+  ([relation-name tuples max-depth layered-range-constraints]
+   (let [iterators-state (atom nil)]
+     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
+
+;; TODO: this is quite complicated and not currently used, could be
+;; deleted.
 (defrecord NAryOrLayeredVirtualIndex [lhs rhs or-state]
   db/Index
   (seek-values [this k]
@@ -856,221 +970,6 @@
 (defn new-n-ary-or-layered-virtual-index [lhs rhs]
   (->NAryOrLayeredVirtualIndex lhs rhs (atom {:lhs {:depth 0 :last nil :peek nil :parent-peek []}
                                               :rhs {:depth 0 :last nil :peek nil :parent-peek []}})))
-
-
-(defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
-  (let [[max-ks parent-result] (last result-stack)
-        join-keys (conj (or max-ks []) max-k)]
-    (when-let [join-results (->> (merge-with set/intersection parent-result new-values)
-                                 (constrain-result-fn join-keys)
-                                 (not-empty))]
-      (conj result-stack [join-keys join-results]))))
-
-(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn walk-state]
-  db/Index
-  (seek-values [this k]
-    (when-let [values (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
-        (do (swap! walk-state assoc :last result)
-            [(first values) (second (last result))])
-        (db/next-values this))))
-
-  db/LayeredIndex
-  (open-level [this]
-    (db/open-level n-ary-index)
-    (swap! walk-state #(assoc % :result-stack (:last %)))
-    nil)
-
-  (close-level [this]
-    (db/close-level n-ary-index)
-    (swap! walk-state update :result-stack pop)
-    nil)
-
-  (max-depth [this]
-    (db/max-depth n-ary-index))
-
-  db/OrderedIndex
-  (next-values [this]
-    (when-let [values (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
-        (do (swap! walk-state assoc :last result)
-            [(first values) (second (last result))])
-        (recur)))))
-
-(defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
-
-(defn layered-idx->seq [idx]
-  (let [max-depth (long (db/max-depth idx))
-        build-result (fn [max-ks [max-k new-values]]
-                       (when new-values
-                         (conj max-ks max-k)))
-        build-leaf-results (fn [max-ks idx]
-                             (vec (for [result (idx->seq idx)
-                                        :let [leaf-key (build-result max-ks result)]
-                                        :when leaf-key]
-                                    [leaf-key (last result)])))
-        step (fn step [max-ks ^long depth needs-seek?]
-               (let [close-level (fn []
-                                   (when (pos? depth)
-                                     (db/close-level idx)
-                                     (step (pop max-ks) (dec depth) false)))
-                     open-level (fn [result]
-                                  (db/open-level idx)
-                                  (if-let [max-ks (build-result max-ks result)]
-                                    (step max-ks (inc depth) true)
-                                    (do (db/close-level idx)
-                                        (step max-ks depth false))))]
-                 (lazy-seq
-                  (if (= depth (dec max-depth))
-                    (concat (build-leaf-results max-ks idx)
-                            (close-level))
-                    (if-let [result (if needs-seek?
-                                      (db/seek-values idx nil)
-                                      (db/next-values idx))]
-                      (open-level result)
-                      (close-level))))))]
-    (when (pos? max-depth)
-      (step [] 0 true))))
-
-(defn- values+unary-join-results->value+entities [content-hash-entity-idx entity-as-of-idx content-hash+unary-join-results]
-  (when-let [[content-hash] content-hash+unary-join-results]
-    (let [value+content-hashes [content-hash [(idx/new-id content-hash)]]]
-      (when-let [[_ [entity-tx]] (value+content-hashes->value+entities content-hash-entity-idx entity-as-of-idx value+content-hashes)]
-        [(idx/value->bytes (:eid entity-tx)) [entity-tx]]))))
-
-(defrecord SharedEntityLiteralAttributeValuesVirtualIndex [unary-join-literal-doc-idx content-hash-entity-idx entity-as-of-idx]
-  db/Index
-  (seek-values [this k]
-    (->> (db/seek-values unary-join-literal-doc-idx k)
-         (values+unary-join-results->value+entities content-hash-entity-idx entity-as-of-idx)))
-
-  db/OrderedIndex
-  (next-values [this]
-    (when-let [values+unary-join-results (seq (db/next-values unary-join-literal-doc-idx))]
-      (or (values+unary-join-results->value+entities content-hash-entity-idx entity-as-of-idx values+unary-join-results)
-          (recur)))))
-
-(defn new-shared-literal-attribute-entities-virtual-index [snapshot attr+values business-time transact-time]
-  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
-        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-        unary-join-literal-doc-idx (->> (for [[attr value] attr+values]
-                                          (->DocLiteralAttributeValueIndex (ks/new-iterator snapshot) attr value))
-                                        (new-unary-join-virtual-index))]
-    (->> (->SharedEntityLiteralAttributeValuesVirtualIndex
-          unary-join-literal-doc-idx
-          content-hash-entity-idx
-          entity-as-of-idx)
-         (new-sorted-virtual-index))))
-
-(defn new-shared-literal-attribute-for-known-entities-virtual-index [object-store snapshot entities attr+values business-time transact-time]
-  (let [entities (entities-at snapshot entities business-time transact-time)
-        content-hash->doc (db/get-objects object-store (map :content-hash entities))]
-    (->> (for [{:keys [eid content-hash] :as entity} entities
-               :let [doc (get content-hash->doc content-hash)]
-               :when (->> (for [[attr value] attr+values]
-                            (contains? (set (normalize-value (get doc attr))) value))
-                          (every? true?))]
-           [(idx/value->bytes eid) [entity]])
-         (new-sorted-virtual-index))))
-
-(defn new-entity-attribute-value-virtual-index [snapshot attr-or-idx range-constraints business-time transact-time]
-  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)
-        content-hash-entity-idx (->ContentHashEntityIndex (ks/new-iterator snapshot))
-        doc-idx (if (satisfies? db/OrderedIndex attr-or-idx)
-                  attr-or-idx
-                  (-> (new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) attr-or-idx)
-                      (wrap-with-range-constraints range-constraints)))]
-    (->EntityAttributeValueVirtualIndex doc-idx content-hash-entity-idx entity-as-of-idx)))
-
-(defn new-entity-attribute-value-known-entities-virtual-index [object-store snapshot entities attr range-constraints business-time transact-time]
-  (let [entities (entities-at snapshot entities business-time transact-time)
-        content-hash->doc (db/get-objects object-store (map :content-hash entities))
-        value->entities (->> (for [{:keys [eid content-hash] :as entity} entities
-                                   :let [doc (get content-hash->doc content-hash)]
-                                   value (normalize-value (get doc attr))]
-                               {value #{entity}})
-                             (apply merge-with into))]
-    (-> (for [[value entities] value->entities]
-          [(idx/value->bytes value) (vec entities)])
-        (new-sorted-virtual-index)
-        (wrap-with-range-constraints range-constraints))))
-
-(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
-  (-> (new-sorted-in-memory-virtual-index
-       (for [prefix (partition-by first tuples)
-             :let [value (ffirst prefix)]]
-         [(idx/value->bytes value)
-          {:value value
-           :child-idx (when (seq (next (first prefix)))
-                        (build-nested-index (map next prefix) next-range-constraints))}]))
-      (wrap-with-range-constraints range-constraints)))
-
-(defn- relation-virtual-index-depth ^long [iterators-state]
-  (dec (count (:indexes @iterators-state))))
-
-(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
-  db/OrderedIndex
-  (seek-values [this k]
-    (let [{:keys [indexes]} @iterators-state]
-      (when-let [idx (last indexes)]
-        (let [[k {:keys [value child-idx]}] (db/seek-values idx k)]
-          (swap! iterators-state merge {:child-idx child-idx
-                                        :needs-seek? false})
-          (when k
-            [k [value]])))))
-
-  db/Index
-  (next-values [this]
-    (let [{:keys [needs-seek? indexes]} @iterators-state]
-      (if needs-seek?
-        (db/seek-values this nil)
-        (when-let [idx (last indexes)]
-          (let [[k {:keys [value child-idx]}] (db/next-values idx)]
-            (swap! iterators-state assoc :child-idx child-idx)
-            (when k
-              [k [value]]))))))
-
-  db/LayeredIndex
-  (open-level [this]
-    (when (= max-depth (relation-virtual-index-depth iterators-state))
-      (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (swap! iterators-state
-           (fn [{:keys [indexes child-idx]}]
-             {:indexes (conj indexes child-idx)
-              :child-idx nil
-              :needs-seek? true}))
-    nil)
-
-  (close-level [this]
-    (when (zero? (relation-virtual-index-depth iterators-state))
-      (throw (IllegalStateException. "Cannot close level at root.")))
-    (swap! iterators-state (fn [{:keys [indexes]}]
-                             {:indexes (pop indexes)
-                              :child-idx nil
-                              :needs-seek? false}))
-    nil)
-
-  (max-depth [this]
-    max-depth))
-
-(defn update-relation-virtual-index!
-  ([relation tuples]
-   (update-relation-virtual-index! relation tuples (:layered-range-constraints relation)))
-  ([relation tuples layered-range-constraints]
-   (reset! (:iterators-state relation)
-           {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                        (build-nested-index (sort tuples) layered-range-constraints))]
-            :child-idx nil
-            :needs-seek? true})
-   relation))
-
-(defn new-relation-virtual-index
-  ([relation-name tuples max-depth]
-   (new-relation-virtual-index relation-name tuples max-depth nil))
-  ([relation-name tuples max-depth layered-range-constraints]
-   (let [iterators-state (atom nil)]
-     (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
 
 ;; Caching
 
