@@ -485,7 +485,7 @@
             (throw (IllegalArgumentException.
                     (str "Predicate refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn [join-keys join-results]
+        (fn pred-constraint [join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
             (let [bound-result-args-tuples (if (empty? args)
                                              [{}]
@@ -559,7 +559,7 @@
             (throw (IllegalArgumentException.
                     (str "Or refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn [join-keys join-results]
+        (fn or-constraint [join-keys join-results]
           (if (= (count join-keys) or-join-depth)
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var bound-vars]
@@ -621,7 +621,7 @@
           (throw (IllegalArgumentException.
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
-        (fn [join-keys join-results]
+        (fn unification-constraint [join-keys join-results]
           (if (= (count join-keys) unification-join-depth)
             (let [values (for [arg args]
                            (if (logic-var? arg)
@@ -651,7 +651,7 @@
           (throw (IllegalArgumentException.
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str not-clause)))))
-        (fn [join-keys join-results]
+        (fn not-constraint [join-keys join-results]
           (if (= (count join-keys) not-join-depth)
             (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
               (let [args (vec (for [bound-result-tuple (cartesian-product
