@@ -890,7 +890,6 @@
     (log/debug :where where)
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :var->bindings var->bindings)
-    (log/debug :var->joins (zipmap (keys var->joins) (map #(map type %) (vals var->joins))))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
                      (doc/new-n-ary-join-layered-virtual-index)
@@ -899,8 +898,13 @@
 
 (defn q
   ([{:keys [kv] :as db} q]
-   (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-     (set (crux.query/q snapshot db q))))
+   (let [start-time (System/currentTimeMillis)]
+     (try
+       (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+         (let [result (set (crux.query/q snapshot db q))]
+           (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+           (log/debug :query-result-size (count result))
+           result)))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
