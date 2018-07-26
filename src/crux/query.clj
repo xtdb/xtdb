@@ -729,13 +729,9 @@
          {e-var #{entity}})
        (apply merge-with set/difference join-results)))
 
-;; TODO: This is potentially simplistic. The attempt to split the vars
-;; into two groups via non-leaf-v-vars needs thought, as this might
-;; wreck dependency order. The intent is to push these joins to the
-;; end, its done for performance reasons. The leaf handling and deps
-;; needs revisiting, should be possible to clean up, might not need
-;; ::leaf.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps]
+;; TODO: This is potentially simplistic. Needs revisiting, should be
+;; possible to clean up. Does not fully pass tests yet on this branch.
+(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps]
   (let [preds (for [{:keys [pred return] :as pred-clause} pred-clauses]
                 [(filter logic-var? (:args pred))
                  (if return
@@ -743,18 +739,11 @@
                    [])])
         ors (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
               [bound-vars free-vars])
-        g (->> deps
-               (reduce-kv
-                (fn [g k v]
-                  (dep/depend g k v))
-                (dep/graph)))
+        g (dep/graph)
         g (->> (keys var->joins)
                (reduce
                 (fn [g v]
-                  (if (or (contains? non-leaf-v-vars v)
-                          (contains? deps v))
-                    (dep/depend g v ::leaf)
-                    (dep/depend g ::leaf v)))
+                  (dep/depend g v ::root))
                 g))
         g (->> (concat preds ors)
                (reduce
@@ -768,6 +757,13 @@
                                   (dep/depend g dependent dependency))
                                 g)))
                         g)))
+                g))
+        g (->> join-deps
+               (reduce-kv
+                (fn [g k v]
+                  (if (not (dep/depends? g k v))
+                    (dep/depend g k v)
+                    g))
                 g))
         join-order (dep/topo-sort g)]
     (vec (filter var->joins join-order))))
@@ -858,11 +854,11 @@
         arg-vars (arg-vars args)
         var->joins {}
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
-        [deps var->joins] (bgp-joins snapshot
-                                     db
-                                     bgp-clauses
-                                     var->joins
-                                     e-vars)
+        [join-deps var->joins] (bgp-joins snapshot
+                                          db
+                                          bgp-clauses
+                                          var->joins
+                                          e-vars)
         [args-relation var->joins] (arg-joins snapshot
                                               db
                                               args
@@ -895,9 +891,7 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        ;; TODO: this should not work like this.
-        non-leaf-v-vars (set/union e-vars unification-vars pred-return-vars rule-vars)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins non-leaf-v-vars v-var->e arg-vars deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
