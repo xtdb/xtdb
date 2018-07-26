@@ -12,15 +12,14 @@
 ;; Indexes
 
 (def ^:const ^:private content-hash->doc-index-id 0)
-(def ^:const ^:private attribute+value+content-hash-index-id 1)
 
-(def ^:const ^:private attribute+value+entity+content-hash-index-id 2)
-(def ^:const ^:private attribute+entity+value+content-hash-index-id 3)
+(def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
+(def ^:const ^:private attribute+entity+value+content-hash-index-id 2)
 
-(def ^:const ^:private content-hash+entity-index-id 4)
-(def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 5)
+(def ^:const ^:private content-hash+entity-index-id 3)
+(def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 4)
 
-(def ^:const ^:private meta-key->value-index-id 6)
+(def ^:const ^:private meta-key->value-index-id 5)
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
@@ -181,29 +180,6 @@
     (assert (= content-hash->doc-index-id (.getShort buffer)))
     (new-id (doto (byte-array id-size)
               (->> (.get buffer))))))
-
-(defn encode-attribute+value+content-hash-key ^bytes [attr v content-hash]
-  (let [content-hash (id->bytes content-hash)
-        v (value->bytes v)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) (alength content-hash)))
-        (.putShort attribute+value+content-hash-index-id)
-        (.put (id->bytes attr))
-        (.put v)
-        (.put content-hash)
-        (.array))))
-
-(defn encode-attribute+value-prefix-key ^bytes [attr v]
-  (encode-attribute+value+content-hash-key attr v empty-byte-array))
-
-(defn ^Id decode-attribute+value+content-hash-key->value+content-hash [^bytes k]
-  (assert (<= (+ Short/BYTES id-size id-size) (alength k)))
-  (let [buffer (ByteBuffer/wrap k)]
-    (assert (= attribute+value+content-hash-index-id (.getShort buffer)))
-    (.position buffer (+ Short/BYTES id-size))
-    [(doto (byte-array (- (.remaining buffer) id-size))
-       (->> (.get buffer)))
-     (new-id (doto (byte-array id-size)
-               (->> (.get buffer))))]))
 
 (defn encode-attribute+value+entity+content-hash-key ^bytes [attr v entity content-hash]
   (let [content-hash (id->bytes content-hash)

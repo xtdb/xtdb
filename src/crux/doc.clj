@@ -255,9 +255,7 @@
     (ks/store kv (->> (for [[k v] doc
                             v (normalize-value v)
                             :when (seq (idx/value->bytes v))]
-                        [[(idx/encode-attribute+value+content-hash-key k v content-hash)
-                          idx/empty-byte-array]
-                         [(idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
+                        [[(idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           idx/empty-byte-array]
                          [(idx/encode-attribute+entity+value+content-hash-key k id v content-hash)
                           idx/empty-byte-array]])
@@ -268,8 +266,7 @@
     (ks/delete kv (->> (for [[k v] doc
                              v (normalize-value v)
                              :when (seq (idx/value->bytes v))]
-                         [(idx/encode-attribute+value+content-hash-key k v content-hash)
-                          (idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
+                         [(idx/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           (idx/encode-attribute+entity+value+content-hash-key k id v content-hash)])
                        (reduce into [])))))
 
