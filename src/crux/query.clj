@@ -230,9 +230,6 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- all-args-for-var [args var]
-  (map #(arg-for-var % var) args))
-
 (defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
