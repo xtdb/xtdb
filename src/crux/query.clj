@@ -236,28 +236,28 @@
 (defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
-        order (filter (set (vals names)) vars-in-join-order)]
+        order (filter (set (vals names)) vars-in-join-order)
+        v-range-constraints (get v-var->range-constriants v)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (-> (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
-                          (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
+      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
             e-idx (doc/new-entity-for-doc-virtual-index
                    snapshot
                    (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx)
                    business-time
                    transact-time)]
         (log/debug :join-order :ave (pr-str v) e (pr-str clause))
-        (doc/update-binary-join-order! binary-idx v-doc-idx e-idx))
+        (doc/update-binary-join-order! binary-idx (doc/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
       (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
             v-idx (doc/new-entity-for-doc-virtual-index
                    snapshot
                    (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx)
-                       (doc/wrap-with-range-constraints (get v-var->range-constriants v)))
+                       (doc/wrap-with-range-constraints v-range-constraints))
                    business-time
                    transact-time)]
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins e-vars arg-vars]
+(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins non-leaf-vars]
   (let [v->clauses (group-by :v bgp-clauses)]
     (->> bgp-clauses
          (reduce
@@ -279,8 +279,7 @@
                             indexes)
                   v-is-leaf? (and (logic-var? v)
                                   (= 1 (count (get v->clauses v)))
-                                  (not (or (contains? e-vars v)
-                                           (contains? arg-vars v))))]
+                                  (not (contains? non-leaf-vars v)))]
               [(if (= e v)
                  deps
                  (cond-> deps
@@ -810,12 +809,13 @@
         arg-vars (arg-vars args)
         var->joins {}
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
+        v-range-vars (set (keys v-var->range-constriants))
+        non-leaf-vars (set/union e-vars arg-vars v-range-vars)
         [join-deps var->joins] (bgp-joins snapshot
                                           db
                                           bgp-clauses
                                           var->joins
-                                          e-vars
-                                          arg-vars)
+                                          non-leaf-vars)
         [args-relation var->joins] (arg-joins snapshot
                                               db
                                               args

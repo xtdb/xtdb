@@ -179,23 +179,6 @@
 
 ;; Regular Indexes
 
-(defrecord DocLiteralAttributeValueIndex [i attr value]
-  db/Index
-  (seek-values [this k]
-    (let [seek-k (idx/encode-attribute+value+content-hash-key attr value (or k idx/empty-byte-array))]
-      (when-let [^bytes k (ks/seek i seek-k)]
-        (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
-          (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
-            [(idx/value->bytes content-hash) [content-hash]])))))
-
-  db/OrderedIndex
-  (next-values [this]
-    (when-let [^bytes k (ks/next i)]
-      (let [seek-k (idx/encode-attribute+value-prefix-key attr value)]
-        (when (bu/bytes=? k seek-k (- (alength k) idx/id-size))
-          (let [[_ content-hash] (idx/decode-attribute+value+content-hash-key->value+content-hash k)]
-            [(idx/value->bytes content-hash) [content-hash]]))))))
-
 (defrecord PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
   (seek-values [this k]
