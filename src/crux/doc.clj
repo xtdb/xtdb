@@ -418,15 +418,18 @@
     (.readFully raf bs)
     [k (nippy/fast-thaw bs)]))
 
+(def ^:private sorted-virtual-index-key-comparator
+  (reify Comparator
+    (compare [_ [a] [b]]
+      (bu/compare-bytes (or a idx/nil-id-bytes)
+                        (or b idx/nil-id-bytes)))))
+
 (defrecord SortedVirtualIndex [values ^RandomAccessFile raf ^File file seq-state]
   db/Index
   (seek-values [this k]
     (let [idx (Collections/binarySearch values
                                         [(idx/value->bytes k)]
-                                        (reify Comparator
-                                          (compare [_ [a] [b]]
-                                            (bu/compare-bytes (or a idx/nil-id-bytes)
-                                                              (or b idx/nil-id-bytes)))))
+                                        sorted-virtual-index-key-comparator)
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
                                     idx))
