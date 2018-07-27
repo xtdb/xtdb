@@ -81,13 +81,11 @@
 
   db/OrderedIndex
   (next-values [this]
-    (when-let [v (try
-                   (some->> (:peek-state value-entity-value-idx)
-                            (deref)
-                            :last
-                            (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash)
-                            (first))
-                   (catch AssertionError ignore))]
+    (when-let [v (some->> (:peek-state value-entity-value-idx)
+                          (deref)
+                          :last
+                          (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash)
+                          (first))]
       (let [v (reify
                 idx/ValueToBytes
                 (value->bytes [_]
@@ -148,12 +146,10 @@
 (defrecord DocAttributeEntityValueValueIndex [i entity-value-entity-idx peek-state]
   db/Index
   (seek-values [this k]
-    (when-let [[e v] (try
-                       (some->> (:peek-state entity-value-entity-idx)
-                                (deref)
-                                :last
-                                (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash))
-                       (catch AssertionError ignore))]
+    (when-let [[e v] (some->> (:peek-state entity-value-entity-idx)
+                              (deref)
+                              :last
+                              (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash))]
       (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
                          (:attr entity-value-entity-idx)
                          e
@@ -390,6 +386,10 @@
       (if-let [result (value+eids+content-hashes->value+entities entity-as-of-idx values)]
         result
         (recur)))))
+
+(defn new-entity-for-doc-virtual-index [snapshot doc-idx business-time transact-time]
+  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
+    (->EntityForDocVirtualIndex doc-idx entity-as-of-idx)))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -739,10 +739,6 @@
                       (close-level))))))]
     (when (pos? max-depth)
       (step [] 0 true))))
-
-(defn new-entity-for-doc-virtual-index [snapshot doc-idx business-time transact-time]
-  (let [entity-as-of-idx (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time)]
-    (->EntityForDocVirtualIndex doc-idx entity-as-of-idx)))
 
 (defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
   (-> (new-sorted-in-memory-virtual-index
