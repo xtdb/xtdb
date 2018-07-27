@@ -4,8 +4,12 @@
 
 A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
+## MVP
+
 + [MVP Summary](docs/mvp.md)
 + [CRUX Implementation Notes](docs/implementation.md)
+
+## Background
 
 Motivation: a database with the following characteristics:
 
@@ -17,24 +21,9 @@ Motivation: a database with the following characteristics:
 + Rapid data ingestion (using Kafka)
 + Scalable Query Engine using RocksDB
 
+The documents above contain many references.
+
 ## Business Model
 
 + [Business Model](docs/business_model.md)
 + [Competitors](docs/competitors.md)
-
-## Design Notes
-
-Abstraction levels:
-
-+ Db: high level db as a value (as-of)
-+ Kv: Db implementation, exposes get and put, uses timestamps passed in as fn args
-+ RocksDb: specific KV implementation
-
-## References
-
-+ https://www.datomic.com
-+ https://github.com/fyrz/rocksdb-counter-microservice-sample
-+ https://clojure.github.io/clojure-contrib/doc/datalog.html
-+ https://github.com/tonsky/datascript
-+ https://en.wikipedia.org/wiki/Jena_(framework)
-+ https://arxiv.org/abs/1402.2237
