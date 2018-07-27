@@ -366,12 +366,15 @@
 
 (defn- value+eids+content-hashes->value+entities [entity-as-of-idx value+eids+content-hashes]
   (when-let [[v entity+content-hashes] value+eids+content-hashes]
-    (when-let [entity-txs (->> (for [[entity content-hash] entity+content-hashes
-                                     :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
-                                     :when (and entity-tx (= content-hash (.content-hash ^EntityTx entity-tx)))]
-                                 entity-tx)
-                               (seq))]
-      [v (vec entity-txs)])))
+    (let [entity->entity+content-hashes (group-by first entity+content-hashes)]
+      (when-let [entity-txs (->> (for [[entity entity+content-hashes] entity->entity+content-hashes
+                                       :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
+                                       :when entity-tx
+                                       :let [content-hashes (set (map second entity+content-hashes))]
+                                       :when (contains? content-hashes (.content-hash ^EntityTx entity-tx))]
+                                   entity-tx)
+                                 (seq))]
+        [v (vec entity-txs)]))))
 
 (defrecord EntityForDocVirtualIndex [doc-idx entity-as-of-idx]
   db/Index
