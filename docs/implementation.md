@@ -129,9 +129,9 @@ become available, constraints can fire. For example, a predicate will
 fire when the arguments have been bound, and potentially short circuit
 the walk by returning `nil`. `not` is a special kind of predicate that
 issues a sub query and removes all results from that query in the
-parent result. Note that all this happens many times during the query,
-as the tree will be traversed up and down, each time binding new
-values to the variables.
+parent result. Note that all this happens many times during the parent
+query, as the tree will be traversed up and down, each time binding
+new values to the variables.
 
 Predicates that return values, and invocations to `or` and `or-join`
 (which is also how rules are represented) will potentially bind new
