@@ -532,6 +532,19 @@
               (logic-var? e)
               (literal? v)))))
 
+;; TODO: For or (but not or-join) it might be possible to embed the
+;; entire or expression into the parent join via either OrVirtualIndex
+;; (though as all joins now are binary they have variable order
+;; dependency so this might work easily) or NAryOrVirtualIndex for the
+;; generic case. As constants are represented by relations, which
+;; introduce new vars which would have to be lifted up to the parent
+;; join as all or branches need to have the same variables. Another
+;; problem when embedding joins are the sub joins constraints which
+;; need to fire at the right level, but they won't currently know how
+;; to translate their local join depth to the join depth in the
+;; parent, which is what will be used when walking the tree. Due to
+;; the way or-join (and rules) work, they likely have to stay as sub
+;; queries. Recursive rules always have to be sub queries.
 (defn- or-single-e-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
