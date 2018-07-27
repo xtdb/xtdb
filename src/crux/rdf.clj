@@ -232,63 +232,80 @@
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
-(defn- sparql->clj [v]
-  (cond
-    (instance? Var v)
-    (if (.hasValue ^Var v)
-      (rdf->clj (.getValue ^Var v))
-      (if (.isAnonymous ^Var v)
+(def ^:private sparql->datalog-visitor
+  (reify QueryModelVisitor
+    (^void meet [this ^Compare c]
+     (swap! *where* conj (rdf->clj c)))
+
+    (^void meet [this ^Filter f]
+     (.visitChildren f this))
+
+    (^void meet [this ^ProjectionElemList pel]
+     (.visitChildren pel this))
+
+    (^void meet [_ ^ProjectionElem pe]
+     (swap! *find* conj (str->sparql-var (.getSourceName pe))))
+
+    (^void meet [this ^Join j]
+     (.visit (.getLeftArg j) this)
+     (.visit (.getRightArg j) this))
+
+    (^void meet [this ^Regex r]
+     (swap! *where* conj (rdf->clj r)))
+
+    (^void meet [_ ^StatementPattern sp]
+     (swap! *where* conj (rdf->clj sp)))
+
+    (^void meet [this ^Union u]
+     (swap! *where* conj (rdf->clj u)))))
+
+(extend-protocol RDFToClojure
+  Compare
+  (rdf->clj [this]
+    [(list (symbol (.getSymbol (.getOperator this)))
+            (rdf->clj (.getLeftArg this))
+            (rdf->clj (.getRightArg this)))])
+
+  Regex
+  (rdf->clj [this]
+    [(list 're-find
+            (let [flags (rdf->clj (.getFlagsArg this))]
+              (re-pattern (str (when (seq flags)
+                                 (str "(?" flags ")"))
+                               (rdf->clj (.getPatternArg this)))))
+            (rdf->clj (.getArg this)))])
+
+  StatementPattern
+  (rdf->clj [this]
+    (let [s (.getSubjectVar this)
+          p (.getPredicateVar this)
+          o (.getObjectVar this)]
+      (mapv rdf->clj [s p o])))
+
+  Union
+  (rdf->clj [this]
+    (let [or (atom [])]
+      (binding [*where* or]
+        (.visit (.getLeftArg this) sparql->datalog-visitor)
+        (.visit (.getRightArg this) sparql->datalog-visitor))
+      (apply list (cons 'or @or))))
+
+  Var
+  (rdf->clj [this]
+    (if (.hasValue this)
+      (rdf->clj (.getValue this))
+      (if (.isAnonymous this)
         '_
-        (str->sparql-var (.getName ^Var v))))
-    (instance? ValueConstant v)
-    (rdf->clj (.getValue ^ValueConstant v))))
+        (str->sparql-var (.getName this)))))
+
+  ValueConstant
+  (rdf->clj [this]
+    (rdf->clj (.getValue this))))
 
 (defn parse-sparql [sparql]
   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
     (binding [*where* (atom [])
               *find* (atom [])]
-      (.visitChildren
-       tuple-expr
-       (reify QueryModelVisitor
-         (^void meet [this ^Compare c]
-          (swap! *where* conj
-                 [(list (symbol (.getSymbol (.getOperator c)))
-                        (sparql->clj (.getLeftArg c))
-                        (sparql->clj (.getRightArg c)))]))
-
-         (^void meet [this ^Filter f]
-          (.visitChildren f this))
-
-         (^void meet [this ^ProjectionElemList pel]
-          (.visitChildren pel this))
-
-         (^void meet [_ ^ProjectionElem pe]
-          (swap! *find* conj (str->sparql-var (.getSourceName pe))))
-
-         (^void meet [this ^Join j]
-          (.visit (.getLeftArg j) this)
-          (.visit (.getRightArg j) this))
-
-         (^void meet [this ^Regex r]
-          (swap! *where* conj
-                 [(list 're-find
-                        (let [flags (sparql->clj (.getFlagsArg r))]
-                          (re-pattern (str (when (seq flags)
-                                             (str "(?" flags ")"))
-                                           (sparql->clj (.getPatternArg r)))))
-                        (sparql->clj (.getArg r)))]))
-
-         (^void meet [_ ^StatementPattern sp]
-          (let [s (.getSubjectVar sp)
-                p (.getPredicateVar sp)
-                o (.getObjectVar sp)]
-            (swap! *where* conj (mapv sparql->clj [s p o]))))
-
-         (^void meet [this ^Union u]
-          (let [or (atom [])]
-            (binding [*where* or]
-              (.visit (.getLeftArg u) this)
-              (.visit (.getRightArg u) this))
-            (swap! *where* conj (apply list (cons 'or @or)))))))
+      (.visitChildren tuple-expr sparql->datalog-visitor)
       {:find @*find*
        :where @*where*})))
