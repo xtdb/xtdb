@@ -51,7 +51,8 @@ key, and returns a tuple, where the first element is the byte array
 representation (as via `crux.index.ValueToBytes) of the key, and the
 second element a value, which can be anything. This byte array key is
 what is used as the join key. If no value is found, `nil` is
-returned.
+returned. Identifiers, like entity ids and attributes, implement
+`crux.index.IdToBytes` and are always represented as a SHA-1 hash.
 
 Note that while at the lowest level. indexes are backed by the KV
 store directly, but at the higher levels they are composed and
