@@ -138,12 +138,22 @@ actual values.
 
 The elements in the result map will either be literal values, like for
 arguments or constants, or sets of entities owning the value for a
-variable. As each variable will have an attribute (with the entity
-position defaulting to `:crux.db/id`), resolving the actual value for
-an entity in the result set is done by looking up its document and
-then the attribute in it. As an attribute might be many valued, the
-value is filtered against the actual key as byte arrays to find the
-value that we're actually looking for at this point in the join.
+variable. Variables in v position will have an indirection to the
+owning e variable (constants will have been replaced by generated
+variables) to tell which entities to use to find it. As each variable
+will have an attribute (with the entity position defaulting to
+`:crux.db/id`), resolving the actual value for an entity in the result
+set is done by looking up its document and then the attribute in
+it. As an attribute might be many valued, the value is filtered
+against the actual key as byte arrays to find the value that we're
+actually looking for at this point in the join.
+
+Binary joins (used for AVE and AEV, see above) bind both their
+variables on reaching the second variable, using a placeholder result
+to ensure the join is still valid for the first variable. As mentioned
+above, both variables are really redirected to the same entity, but
+using different attributes, `:crux.db/id` for the e position, and the
+attribute used in the query for the v position.
 
 Once the n-ary join is setup, the layered index is simply walked as a
 tree, and the cartesian product of the results is presented as the
