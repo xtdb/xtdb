@@ -77,14 +77,17 @@ directly. An ordered index must return all values for a key in a
 single call, that is, duplicate keys are not allowed, as this breaks
 the underlying unary join algorithm, see Query below.
 
-Finally, the transaction operations are indexed into:
+Finally, the transaction operations arriving on the `tx-topic` are
+indexed into:
 
 + `entity+bt+tt+tx-id->content-hash-index` Main temporal index, used
   to find the content hash of a specific entity version.
 
 The latter used to filter the values from the attribute indexes to
 only include versions valid at the business and transaction time used
-during a query.
+during a query. Note that the index is not a straight replica of the
+data on the topic, and cannot currently be used to recreate the
+transaction log.
 
 As indexes can be composed, they can also be decorated. This is how
 range queries work, which simply constrain and skip part of the key
