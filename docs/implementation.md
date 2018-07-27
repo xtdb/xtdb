@@ -48,7 +48,7 @@ return to.
 
 `crux.db.Index` provides a single function, `seek-values` that takes a
 key, and returns a tuple, where the first element is the byte array
-representation (as via `crux.index.ValueToBytes) of the key, and the
+representation (as via `crux.index.ValueToBytes`) of the key, and the
 second element a value, which can be anything. This byte array key is
 what is used as the join key. If no value is found, `nil` is
 returned. Identifiers, like entity ids and attributes, implement
