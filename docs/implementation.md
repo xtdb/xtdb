@@ -164,9 +164,10 @@ using different attributes, `:crux.db/id` for the e position, and the
 attribute used in the query for the v position.
 
 Once the n-ary join is setup, the layered index is simply walked as a
-tree, and the cartesian product of the results is presented as the
-result to the query. This is also true for sub queries, in which case
-the results are used in the constraint in different ways.
+tree. If the walk reaches a leaf with an intact result map, this map
+represents a result to the query, and the cartesian product is used to
+generate the resulting tuples. This is also true for sub queries, in
+which case the results are used in the constraint in different ways.
 
 ### Rules
 
