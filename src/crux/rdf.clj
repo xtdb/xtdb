@@ -234,7 +234,7 @@
 
 (def ^:private sparql->datalog-visitor
   (reify QueryModelVisitor
-    (^void meet [this ^Compare c]
+    (^void meet [_ ^Compare c]
      (swap! *where* conj (rdf->clj c)))
 
     (^void meet [this ^Filter f]
@@ -244,19 +244,19 @@
      (.visitChildren pel this))
 
     (^void meet [_ ^ProjectionElem pe]
-     (swap! *find* conj (str->sparql-var (.getSourceName pe))))
+     (swap! *find* conj (rdf->clj pe)))
 
     (^void meet [this ^Join j]
      (.visit (.getLeftArg j) this)
      (.visit (.getRightArg j) this))
 
-    (^void meet [this ^Regex r]
+    (^void meet [_ ^Regex r]
      (swap! *where* conj (rdf->clj r)))
 
     (^void meet [_ ^StatementPattern sp]
      (swap! *where* conj (rdf->clj sp)))
 
-    (^void meet [this ^Union u]
+    (^void meet [_ ^Union u]
      (swap! *where* conj (rdf->clj u)))))
 
 (extend-protocol RDFToClojure
@@ -265,6 +265,10 @@
     [(list (symbol (.getSymbol (.getOperator this)))
             (rdf->clj (.getLeftArg this))
             (rdf->clj (.getRightArg this)))])
+
+  ProjectionElem
+  (rdf->clj [this]
+    (str->sparql-var (.getSourceName this)))
 
   Regex
   (rdf->clj [this]
