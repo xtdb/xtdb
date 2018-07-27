@@ -45,7 +45,8 @@ binary indexes, each key contain two variables VE or EV, and there are
 separate `crux.db.Index` implementations, one for each element in VE
 or EV, a total of 4. These two (for either VE or EV) are combined via
 a binary index implementing `crux.db.LayeredIndex`. This is important
-for joins, which we'll return to.
+for joins, which we'll return to and this should hopefully become
+clearer later on.
 
 `crux.db.Index` provides a single function, `seek-values` that takes a
 key, and returns a tuple, where the first element is the byte array
