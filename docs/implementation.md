@@ -1,12 +1,12 @@
 ## CRUX Implementation Notes
 
-See the [MVP Notes](mvp.md) for the background and motivation behind
+See the [MVP Summary](mvp.md) for the background and motivation behind
 CRUX.
 
-The document [Internals](internals.md) discusses our ideas *before* we
-wrote the MVP, while this document aims to explain how it actually
-works *after* we wrote the MVP. As can be expected, some early ideas
-live on.
+The document [Internals](internals.md) (and the other docs in this
+folder) discusses our ideas *before* we wrote the MVP, while this
+document aims to explain how it actually works *after* we wrote the
+MVP. As can be expected, some early ideas live on.
 
 ### Introduction
 

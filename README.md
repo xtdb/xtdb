@@ -4,8 +4,8 @@
 
 A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
-[MVP Summary](docs/mvp.md)
-[CRUX Implementation Notes](docs/implementation.md)
++ [MVP Summary](docs/mvp.md)
++ [CRUX Implementation Notes](docs/implementation.md)
 
 Motivation: a database with the following characteristics:
 
