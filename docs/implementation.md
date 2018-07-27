@@ -58,11 +58,12 @@ returned. Identifiers, like entity ids and attributes, implement
 
 Note that while at the lowest level. indexes are backed by the KV
 store directly, but at the higher levels they are composed and
-delegate to each other, this is referred to virtual indexes. Even at
-the low levels the key and values returned aren't a one-to-one mapping
-to what is actually stored on disk. And even at the high levels the
-keys are always a byte array. This allows indexes at different levels
-of abstraction to be joined with each other.
+delegate to each other, this is referred to as "virtual indexes". That
+is, they are non-materialised views. Even at the low levels the key
+and values returned aren't a one-to-one mapping to what is actually
+stored on disk. And even at the high levels the keys are always a byte
+array. This allows indexes at different levels of abstraction to be
+joined with each other.
 
 A layered index is used in the main join in in place of its child
 indexes, presenting each of the child indexes in total join order. As
@@ -72,7 +73,7 @@ depth. The use of the AVE or AEV index depends on which is applicable
 in the total join order. More about this in the Query section below.
 
 These indexes (as do most) also implement `crux.db.OrderedIndex` that
-allow next operations. Both `seek-values and `next-values` return
+allow next operations. Both `seek-values` and `next-values` return
 `nil` if nothing. In an ordered index, `seek-values` will potentially
 return the next value after the key if the key is not found
 directly. An ordered index must return all values for a key in a
