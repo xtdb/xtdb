@@ -110,10 +110,12 @@ representing a new variable at a new level. The important thing is
 that all variables across all indexes participating in the join share
 the same total variable order.
 
-Arguments and constants are represented by a special in-memory
-relation index, and participate in the join like any other index. Each
-constant has its own single element index, while the arguments
-potentially have several elements.
+Arguments and constants are represented by a special, sorted,
+in-memory relation index, and participate in the join like any other
+index. This index will spill over to disk at a certain threshold, but
+currently the keys must still fit in memory. Each constant has its own
+single element index, while the arguments potentially have several
+elements.
 
 Apart from range constraints affecting a single index, there's also a
 constraining decorator that allows the walk of the tree to be
