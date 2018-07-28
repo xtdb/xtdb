@@ -53,14 +53,15 @@
         (reset! peek-state (bu/inc-unsigned-bytes (Arrays/copyOf k (- (alength k) idx/id-size))))
         (or (let [[_ entity] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)
                   [_ [{:keys [content-hash] :as entity-tx}]] (db/seek-values entity-as-of-idx entity)]
-              (let [version-k (idx/encode-attribute+value+entity+content-hash-key
-                               attr
-                               value
-                               entity
-                               content-hash)]
-                (when-let [found-k (ks/seek i version-k)]
-                  (when (bu/bytes=? version-k found-k)
-                    [(idx/id->bytes entity) [entity-tx]]))))
+              (when entity-tx
+                (let [version-k (idx/encode-attribute+value+entity+content-hash-key
+                                 attr
+                                 value
+                                 entity
+                                 content-hash)]
+                  (when-let [found-k (ks/seek i version-k)]
+                    (when (bu/bytes=? version-k found-k)
+                      [(idx/id->bytes entity) [entity-tx]])))))
             (when-let [k (some->> @peek-state (ks/seek i))]
               (recur k)))))))
 
