@@ -22,6 +22,7 @@
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
+(def id-function bu/sha1)
 
 (def empty-byte-array (byte-array 0))
 (def nil-id-bytes (byte-array id-size))
@@ -40,7 +41,7 @@
   (value->bytes [this]
     (if (empty? this)
       this
-      (bu/sha1 this)))
+      (id-function this)))
 
   Long
   (value->bytes [this]
@@ -95,15 +96,15 @@
 
   Keyword
   (id->bytes [this]
-    (bu/sha1 (.getBytes (subs (str this) 1))))
+    (id-function (.getBytes (subs (str this) 1))))
 
   UUID
   (id->bytes [this]
-    (bu/sha1 (.getBytes (str this))))
+    (id-function (.getBytes (str this))))
 
   URI
   (id->bytes [this]
-    (bu/sha1 (.getBytes (str (.normalize this)))))
+    (id-function (.getBytes (str (.normalize this)))))
 
   String
   (id->bytes [this]
