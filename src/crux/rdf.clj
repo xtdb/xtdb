@@ -312,4 +312,4 @@
               *find* (atom [])]
       (.visitChildren tuple-expr sparql->datalog-visitor)
       {:find @*find*
-       :where @*where*})))
+       :where (use-default-language @*where* *default-language*)})))
