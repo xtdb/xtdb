@@ -56,8 +56,7 @@
     (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                '{:find [?s ?n]
                  :where
-                 [[?s :rdf/type
-                   :http://example.org/Artist]
+                 [[?s :rdf/type :http://example.org/Artist]
                   [?s :foaf/firstName ?n]]})
              (crux.rdf/sparql->datalog
               "
@@ -139,8 +138,8 @@ WHERE
 
   (t/testing "SPARQL 1.1"
     (t/is (thrown-with-msg? UnsupportedOperationException #"Does not support variables in predicate position: \?p"
-                   (rdf/sparql->datalog
-                    "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
+                            (rdf/sparql->datalog
+                             "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
 
     (t/is
      (= '{:find [?v],
@@ -217,8 +216,8 @@ WHERE   { ?x ns:price ?price .
           ?x dc:title ?title . }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"OPTIONAL not supported."
-                   (rdf/sparql->datalog
-                    "
+                            (rdf/sparql->datalog
+                             "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
 WHERE  { ?x foaf:name  ?name .
@@ -306,8 +305,8 @@ WHERE
 
     ;; NOTE: original has DISTINCT in select and ?p as predicate.
     (t/is (thrown-with-msg? UnsupportedOperationException #"MINUS not supported, use NOT EXISTS."
-                   (rdf/sparql->datalog
-                    "              PREFIX :       <http://example/>
+                            (rdf/sparql->datalog
+                             "              PREFIX :       <http://example/>
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 
 SELECT ?s
@@ -319,7 +318,7 @@ WHERE {
 }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"Nested mathematical expressions are not supported."
-             (rdf/sparql->datalog "
+                            (rdf/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
 
