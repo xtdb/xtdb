@@ -316,11 +316,24 @@
 
   Union
   (rdf->clj [this]
-    (let [or (atom [])]
-      (binding [*where* or]
-        (.visit (.getLeftArg this) sparql->datalog-visitor)
-        (.visit (.getRightArg this) sparql->datalog-visitor))
-      (apply list (cons 'or @or))))
+    (let [is-or? (= (set (.getAssuredBindingNames this))
+                    (set (remove #(str/starts-with? % "_") (.getBindingNames this))))
+          or-vars (mapv str->sparql-var (.getAssuredBindingNames this))
+          or-left (binding [*where* (atom [])]
+                    (.visit (.getLeftArg this) sparql->datalog-visitor)
+                    @*where*)
+          or-left (if (> (count or-left) 1)
+                    (list (cons 'and or-left))
+                    or-left)
+          or-right (binding [*where* (atom [])]
+                     (.visit (.getRightArg this) sparql->datalog-visitor)
+                     @*where*)
+          or-right (if (> (count or-right) 1)
+                     (list (cons 'and or-right))
+                     or-right)]
+      (apply list (if is-or?
+                    (cons 'or (concat or-left or-right))
+                    (cons 'or-join (cons or-vars (concat or-left or-right)))))))
 
   Var
   (rdf->clj [this]

@@ -223,4 +223,47 @@ PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
 WHERE  { ?x foaf:name  ?name .
          OPTIONAL { ?x  foaf:mbox  ?mbox }
+       }")))
+
+    (t/is (= '{:find [?title],
+               :where
+               [(or
+                 [?book :http://purl.org/dc/elements/1.0/title ?title]
+                 [?book :http://purl.org/dc/elements/1.1/title ?title])]}
+             (rdf/parse-sparql "
+PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
+PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
+
+SELECT ?title
+WHERE  { { ?book dc10:title  ?title } UNION { ?book dc11:title  ?title } }")))
+
+    ;; TODO: this should really be working like optional and select
+    ;; both ?x and ?y and not ?book
+    (t/is (= '{:find [?book],
+               :where
+               [(or-join [?book]
+                         [?book :http://purl.org/dc/elements/1.0/title ?x]
+                         [?book :http://purl.org/dc/elements/1.1/title ?y])]}
+             (rdf/parse-sparql "
+PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
+PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
+
+SELECT ?book
+WHERE  { { ?book dc10:title ?x } UNION { ?book dc11:title  ?y } }")))
+
+
+    (t/is (= '{:find [?title ?author],
+               :where
+               [(or (and [?book :http://purl.org/dc/elements/1.0/title ?title]
+                         [?book :http://purl.org/dc/elements/1.0/creator ?author])
+                    (and [?book :http://purl.org/dc/elements/1.1/title ?title]
+                         [?book :http://purl.org/dc/elements/1.1/creator ?author]))]}
+             (rdf/parse-sparql "
+PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
+PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
+
+SELECT ?title ?author
+WHERE  { { ?book dc10:title ?title .  ?book dc10:creator ?author }
+         UNION
+         { ?book dc11:title ?title .  ?book dc11:creator ?author }
        }")))))
