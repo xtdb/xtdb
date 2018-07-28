@@ -224,9 +224,13 @@
       x))))
 
 ;; SPARQL Spike
+;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321/
 
 ;; TODO: This is a spike transforming a small subset of SPARQL into
 ;; CRUX's Datalog dialect. Experimental.
+
+;; Could be fronted by this protocol in the REST API:
+;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
 
 (def ^:private ^:dynamic *find* nil)
 (def ^:private ^:dynamic *where* nil)
@@ -235,7 +239,8 @@
   (symbol (str "?" s)))
 
 ;; TODO: There's some confusion about the responsibility between
-;; QueryModelVisitor and RDFToClojure.
+;; QueryModelVisitor and RDFToClojure. Might be possible to remove the
+;; visitor and only use the protocol.
 (def ^:private sparql->datalog-visitor
   (reify QueryModelVisitor
     (^void meet [_ ^Compare c]
