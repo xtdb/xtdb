@@ -92,8 +92,8 @@ WHERE
 
     (t/is (= (pr-str (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                        '{:find [?g]
-                         :where [[(re-find #"(?i)r" ?g)]
-                                 [?y :vcard/Given ?g]]}))
+                         :where [[?y :vcard/Given ?g]
+                                 [(re-find #"(?i)r" ?g)]]}))
              (pr-str (crux.rdf/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -105,8 +105,8 @@ WHERE
 
     (t/is (= (rdf/with-prefix {:info "http://somewhere/peopleInfo#"}
                '{:find [?resource]
-                 :where [[(>= ?age 24)]
-                         [?resource :info/age ?age]]})
+                 :where [[?resource :info/age ?age]
+                         [(>= ?age 24)]]})
              (crux.rdf/sparql->datalog
               "
 PREFIX info: <http://somewhere/peopleInfo#>
@@ -151,9 +151,9 @@ WHERE
     (t/is
      (= '{:find [?name],
           :where
-          [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
-           [?P :http://xmlns.com/foaf/0.1/givenName ?G]
-           [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
+          [[?P :http://xmlns.com/foaf/0.1/givenName ?G]
+           [?P :http://xmlns.com/foaf/0.1/surname ?S]
+           [(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]]}
         (rdf/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
@@ -167,9 +167,9 @@ WHERE  {
     (t/is
      (= '{:find [?name],
           :where
-          [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
-           [?P :http://xmlns.com/foaf/0.1/givenName ?G]
-           [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
+          [[?P :http://xmlns.com/foaf/0.1/givenName ?G]
+           [?P :http://xmlns.com/foaf/0.1/surname ?S]
+           [(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]]}
         (rdf/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
@@ -179,8 +179,8 @@ WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
 
     (t/is (= (pr-str '{:find [?title],
                        :where
-                       [[(re-find #"^SPARQL" ?title)]
-                        [?x :http://purl.org/dc/elements/1.1/title ?title]]})
+                       [[?x :http://purl.org/dc/elements/1.1/title ?title]
+                        [(re-find #"^SPARQL" ?title)]]})
              (pr-str (rdf/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
@@ -191,8 +191,8 @@ WHERE   { ?x dc:title ?title
 
     (t/is (= (pr-str '{:find [?title],
                        :where
-                       [[(re-find #"(?i)web" ?title)]
-                        [?x :http://purl.org/dc/elements/1.1/title ?title]]})
+                       [[?x :http://purl.org/dc/elements/1.1/title ?title]
+                        [(re-find #"(?i)web" ?title)]]})
              (pr-str (rdf/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
@@ -203,9 +203,9 @@ WHERE   { ?x dc:title ?title
 
     (t/is (= '{:find [?title ?price],
                :where
-               [[(< ?price 30.5M)]
-                [?x :http://example.org/ns#price ?price]
-                [?x :http://purl.org/dc/elements/1.1/title ?title]]}
+               [[?x :http://example.org/ns#price ?price]
+                [?x :http://purl.org/dc/elements/1.1/title ?title]
+                [(< ?price 30.5M)]]}
              (rdf/sparql->datalog
               "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
@@ -270,10 +270,10 @@ WHERE  { { ?book dc10:title ?title .  ?book dc10:creator ?author }
     (t/is (= (rdf/with-prefix
                '{:find [?person],
                  :where
-                 [(not-join [?person] [?person :http://xmlns.com/foaf/0.1/name ?name])
-                  [?person
+                 [[?person
                    :rdf/type
-                   :http://xmlns.com/foaf/0.1/Person]]})
+                   :http://xmlns.com/foaf/0.1/Person]
+                  (not-join [?person] [?person :http://xmlns.com/foaf/0.1/name ?name])]})
              (rdf/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
@@ -288,10 +288,10 @@ WHERE
     (t/is (= (rdf/with-prefix
                '{:find [?person],
                  :where
-                 [[?person :http://xmlns.com/foaf/0.1/name ?name]
-                  [?person
+                 [[?person
                    :rdf/type
-                   :http://xmlns.com/foaf/0.1/Person]]})
+                   :http://xmlns.com/foaf/0.1/Person]
+                  [?person :http://xmlns.com/foaf/0.1/name ?name]]})
              (rdf/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>

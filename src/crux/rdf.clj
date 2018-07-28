@@ -232,98 +232,69 @@
 ;; Could be fronted by this protocol in the REST API:
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
 
-(def ^:private ^:dynamic *where* nil)
-
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
-;; TODO: There's some confusion about the responsibility between
-;; QueryModelVisitor and RDFToClojure. Might be possible to remove the
-;; visitor and only use the protocol.
-(def ^:private sparql->datalog-visitor
-  (reify QueryModelVisitor
-    (^void meet [_ ^Compare c]
-     (swap! *where* conj (rdf->clj c)))
-
-    (^void meet [_ ^Difference c]
-     (throw (UnsupportedOperationException. "MINUS not supported, use NOT EXISTS.")))
-
-    (^void meet [this ^Extension e]
-     (.visitChildren e this))
-
-    (^void meet [this ^ExtensionElem ee]
-     (when-not (instance? Var (.getExpr ee))
-       (swap! *where* conj (rdf->clj ee))))
-
-    (^void meet [this ^Exists e]
-     (.visitChildren e this))
-
-    (^void meet [this ^Filter f]
-     (.visitChildren f this))
-
-    (^void meet [this ^FunctionCall f]
-     (swap! *where* conj (rdf->clj f)))
-
-    (^void meet [this ^LeftJoin lj]
-     (throw (UnsupportedOperationException. "OPTIONAL not supported.")))
-
-    (^void meet [this ^Not n]
-     (swap! *where* conj (rdf->clj n)))
-
-    (^void meet [this ^ProjectionElemList pel])
-
-    (^void meet [this ^Join j]
-     (.visit (.getLeftArg j) this)
-     (.visit (.getRightArg j) this))
-
-    (^void meet [_ ^Regex r]
-     (swap! *where* conj (rdf->clj r)))
-
-    (^void meet [_ ^StatementPattern sp]
-     (swap! *where* conj (rdf->clj sp)))
-
-    (^void meet [_ ^Union u]
-     (swap! *where* conj (rdf->clj u)))))
-
-;; TODO: the returns are not consistent, Join returns a vector of
-;; vector for example.
+;; TODO: the returns are not consistent, needs revisiting.
 (extend-protocol RDFToClojure
   Compare
   (rdf->clj [this]
-    [(list (symbol (.getSymbol (.getOperator this)))
-           (rdf->clj (.getLeftArg this))
-           (rdf->clj (.getRightArg this)))])
+    [[(list (symbol (.getSymbol (.getOperator this)))
+            (rdf->clj (.getLeftArg this))
+            (rdf->clj (.getRightArg this)))]])
+
+
+  Difference
+  (rdf->clj [this]
+    (throw (UnsupportedOperationException. "MINUS not supported, use NOT EXISTS.")))
+
+  Extension
+  (rdf->clj [this]
+    (vec (apply concat
+                (rdf->clj (.getArg this))
+                 (for [arg (.getElements this)]
+                   (rdf->clj arg)))))
 
   ExtensionElem
   (rdf->clj [this]
-    (conj (rdf->clj (.getExpr this))
-          (str->sparql-var (.getName this))))
+    (when-not (instance? Var (.getExpr this))
+      [[(rdf->clj (.getExpr this))
+        (str->sparql-var (.getName this))]]))
 
   Exists
   (rdf->clj [this]
     (rdf->clj (.getSubQuery this)))
 
+  Filter
+  (rdf->clj [this]
+    (vec (concat (rdf->clj (.getArg this))
+                 (rdf->clj (.getCondition this)))))
+
   FunctionCall
   (rdf->clj [this]
-    [(apply
-      list
-      (cons (symbol (.getURI this))
-            (for [arg (.getArgs this)]
-              (rdf->clj arg))))])
+    (apply
+     list
+     (cons (symbol (.getURI this))
+           (for [arg (.getArgs this)]
+             (rdf->clj arg)))))
 
   Join
   (rdf->clj [this]
-    [(rdf->clj (.getLeftArg this))
-     (rdf->clj (.getRightArg this))])
+    (vec (concat (rdf->clj (.getLeftArg this))
+                 (rdf->clj (.getRightArg this)))))
 
   MathExpr
   (rdf->clj [this]
     (when (or (instance? MathExpr (.getLeftArg this))
               (instance? MathExpr (.getRightArg this)))
       (throw (UnsupportedOperationException. "Nested mathematical expressions are not supported.")))
-    [(list (symbol (.getSymbol (.getOperator this)))
-           (rdf->clj (.getLeftArg this))
-           (rdf->clj (.getRightArg this)))])
+    (list (symbol (.getSymbol (.getOperator this)))
+          (rdf->clj (.getLeftArg this))
+          (rdf->clj (.getRightArg this))))
+
+  LeftJoin
+  (rdf->clj [this]
+    (throw (UnsupportedOperationException. "OPTIONAL not supported.")))
 
   Not
   (rdf->clj [this]
@@ -337,22 +308,22 @@
           is-not? (set/subset? not-vars parent-vars)
           not-join-vars (set/intersection not-vars parent-vars)
           not (rdf->clj (.getArg this))]
-      (if is-not?
-        (list 'not not)
-        (list 'not-join (mapv str->sparql-var not-join-vars) not))))
+      [(if is-not?
+         (cons 'not not)
+         (cons 'not-join (cons (mapv str->sparql-var not-join-vars) not)))]))
 
-  ProjectionElem
+  Projection
   (rdf->clj [this]
-    (str->sparql-var (.getSourceName this)))
+    (rdf->clj (.getArg this)))
 
   Regex
   (rdf->clj [this]
-    [(list 're-find
-           (let [flags (some-> (.getFlagsArg this) (rdf->clj))]
-             (re-pattern (str (when (seq flags)
-                                (str "(?" flags ")"))
-                              (rdf->clj (.getPatternArg this)))))
-           (rdf->clj (.getArg this)))])
+    [[(list 're-find
+            (let [flags (some-> (.getFlagsArg this) (rdf->clj))]
+              (re-pattern (str (when (seq flags)
+                                 (str "(?" flags ")"))
+                               (rdf->clj (.getPatternArg this)))))
+            (rdf->clj (.getArg this)))]])
 
   StatementPattern
   (rdf->clj [this]
@@ -361,7 +332,7 @@
           o (.getObjectVar this)]
       (when-not (.hasValue p)
         (throw (UnsupportedOperationException. (str "Does not support variables in predicate position: " (rdf->clj p)))))
-      (mapv rdf->clj [s p o])))
+      [(mapv rdf->clj [s p o])]))
 
   Union
   (rdf->clj [this]
@@ -369,16 +340,16 @@
                     (set (remove #(re-find #"\??_" %) (.getBindingNames this))))
           or-join-vars (mapv str->sparql-var (.getAssuredBindingNames this))
           or-left (rdf->clj (.getLeftArg this))
-          or-left (if (every? vector? or-left)
-                    (cons 'and or-left)
+          or-left (if (> (count or-left) 1)
+                    [(cons 'and or-left)]
                     or-left)
           or-right (rdf->clj (.getRightArg this))
-          or-right (if (every? vector? or-right)
-                     (cons 'and or-right)
+          or-right (if (> (count or-right) 1)
+                     [(cons 'and or-right)]
                      or-right)]
-      (if is-or?
-        (list 'or or-left or-right)
-        (list 'or-join or-join-vars or-left or-right))))
+      [(if is-or?
+         (cons 'or (concat or-left or-right))
+         (cons 'or-join (cons or-join-vars (concat or-left or-right))))]))
 
   Var
   (rdf->clj [this]
@@ -394,7 +365,5 @@
 
 (defn sparql->datalog [sparql]
   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
-    (binding [*where* (atom [])]
-      (.visitChildren tuple-expr sparql->datalog-visitor)
-      {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
-       :where (use-default-language @*where* *default-language*)})))
+    {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
+     :where (use-default-language (rdf->clj tuple-expr) *default-language*)}))
