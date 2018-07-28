@@ -138,7 +138,7 @@ WHERE
   ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321
 
   (t/testing "SPARQL 1.1"
-    (t/is (thrown? UnsupportedOperationException
+    (t/is (thrown-with-msg? UnsupportedOperationException #"Does not support variables in predicate position: \?p"
                    (rdf/parse-sparql
                     "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
 
@@ -216,7 +216,7 @@ WHERE   { ?x ns:price ?price .
           FILTER (?price < 30.5)
           ?x dc:title ?title . }")))
 
-    (t/is (thrown? UnsupportedOperationException
+    (t/is (thrown-with-msg? UnsupportedOperationException #"OPTIONAL not supported."
                    (rdf/parse-sparql
                     "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -266,4 +266,69 @@ SELECT ?title ?author
 WHERE  { { ?book dc10:title ?title .  ?book dc10:creator ?author }
          UNION
          { ?book dc11:title ?title .  ?book dc11:creator ?author }
-       }")))))
+       }")))
+
+    (t/is (= (rdf/with-prefix
+               '{:find [?person],
+                 :where
+                 [(not-join [?person] [?person :http://xmlns.com/foaf/0.1/name ?name])
+                  [?person
+                   :rdf/type
+                   :http://xmlns.com/foaf/0.1/Person]]})
+             (rdf/parse-sparql "
+PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
+
+SELECT ?person
+WHERE
+{
+    ?person rdf:type  foaf:Person .
+    FILTER NOT EXISTS { ?person foaf:name ?name }
+}")))
+
+    (t/is (= (rdf/with-prefix
+               '{:find [?person],
+                 :where
+                 [[?person :http://xmlns.com/foaf/0.1/name ?name]
+                  [?person
+                   :rdf/type
+                   :http://xmlns.com/foaf/0.1/Person]]})
+             (rdf/parse-sparql "
+PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
+
+SELECT ?person
+WHERE
+{
+    ?person rdf:type  foaf:Person .
+    FILTER EXISTS { ?person foaf:name ?name }
+}")))
+
+    ;; NOTE: original has DISTINCT in select and ?p as predicate.
+    (t/is (thrown-with-msg? UnsupportedOperationException #"MINUS not supported, use NOT EXISTS."
+                   (rdf/parse-sparql
+                    "              PREFIX :       <http://example/>
+PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+
+SELECT ?s
+WHERE {
+   ?s foaf:givenName ?o .
+   MINUS {
+      ?s foaf:givenName \"Bob\" .
+   }
+}")))
+
+    (t/is (thrown-with-msg? UnsupportedOperationException #"Nested mathematical expressions are not supported."
+             (rdf/parse-sparql "
+PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
+PREFIX  ns:  <http://example.org/ns#>
+
+SELECT  ?title ?price
+{  { ?x ns:price ?p .
+     ?x ns:discount ?discount
+     BIND (?p*(1-?discount) AS ?price)
+   }
+   {?x dc:title ?title . }
+   FILTER(?price < 20)
+}
+")))))
