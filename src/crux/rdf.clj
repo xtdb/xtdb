@@ -23,8 +23,7 @@
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra
             Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
-            MathExpr Not Projection ProjectionElem ProjectionElemList
-            Regex QueryModelVisitor StatementPattern Union ValueConstant Var]))
+            MathExpr Not Projection Regex StatementPattern Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
