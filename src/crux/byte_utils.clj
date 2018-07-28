@@ -7,13 +7,13 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn long->bytes [l]
-  (-> (ByteBuffer/allocate 8)
+  (-> (ByteBuffer/allocate Long/BYTES)
       (.putLong l)
       (.array)))
 
 (defn bytes->long ^long [data]
-  (-> (ByteBuffer/allocate 8)
-      (.put data 0 8)
+  (-> (ByteBuffer/allocate Long/BYTES)
+      (.put data 0 Long/BYTES)
       ^ByteBuffer (.flip)
       (.getLong)))
 
