@@ -287,10 +287,7 @@ results are removed from the corresponding parent result variables.
   versions across entities. Needs analysis.
 + Potential of inconsistent reads across different nodes when using
   REST API.
-+ Queries likely to slow down with increased history size.
 + Architecture not tested in real application use.
-+ Query engine is brittle to extend. Lacks internal abstractions.
-+ Single attribute index complicates the query engine.
 + Lazy results requires consistent sorting across indexes. which has
   to be performed during the query.
 + The query engine is not optimised and constructs a lot of
