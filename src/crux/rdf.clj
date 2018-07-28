@@ -232,7 +232,6 @@
 ;; Could be fronted by this protocol in the REST API:
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
 
-(def ^:private ^:dynamic *find* nil)
 (def ^:private ^:dynamic *where* nil)
 
 (defn- str->sparql-var [s]
@@ -271,11 +270,7 @@
     (^void meet [this ^Not n]
      (swap! *where* conj (rdf->clj n)))
 
-    (^void meet [this ^ProjectionElemList pel]
-     (.visitChildren pel this))
-
-    (^void meet [_ ^ProjectionElem pe]
-     (swap! *find* conj (rdf->clj pe)))
+    (^void meet [this ^ProjectionElemList pel])
 
     (^void meet [this ^Join j]
      (.visit (.getLeftArg j) this)
@@ -399,8 +394,7 @@
 
 (defn sparql->datalog [sparql]
   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
-    (binding [*where* (atom [])
-              *find* (atom [])]
+    (binding [*where* (atom [])]
       (.visitChildren tuple-expr sparql->datalog-visitor)
-      {:find @*find*
+      {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
        :where (use-default-language @*where* *default-language*)})))
