@@ -37,10 +37,9 @@
   db/OrderedIndex
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
-          prefix-size (- (alength last-k) idx/id-size idx/id-size)
-          k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
-                     (ks/seek i))]
-      (when k
+          prefix-size (- (alength last-k) idx/id-size idx/id-size)]
+      (when-let [k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
+                            (ks/seek i))]
         (attribute-value+placeholder k attr peek-state)))))
 
 (defn new-doc-attribute-value-entity-value-index [i attr]
@@ -68,32 +67,28 @@
 (defrecord DocAttributeValueEntityEntityIndex [i value-entity-value-idx entity-as-of-idx peek-state]
   db/Index
   (seek-values [this k]
-    (when-let [v (some->> (:peek-state value-entity-value-idx)
-                          (deref)
-                          :value)]
-      (let [v (reify
-                idx/ValueToBytes
-                (value->bytes [_]
-                  v))]
+    (when-let [{:keys [value]} @(:peek-state value-entity-value-idx)]
+      (let [value (reify
+                    idx/ValueToBytes
+                    (value->bytes [_]
+                      value))]
         (when-let [k (->> (idx/encode-attribute+value+entity+content-hash-key
                            (:attr value-entity-value-idx)
-                           v
+                           value
                            (or k idx/empty-byte-array)
                            idx/empty-byte-array)
                           (ks/seek i))]
-          (attribute-value-entity-entity+value i k (:attr value-entity-value-idx) v entity-as-of-idx peek-state)))))
+          (attribute-value-entity-entity+value i k (:attr value-entity-value-idx) value entity-as-of-idx peek-state)))))
 
   db/OrderedIndex
   (next-values [this]
-    (when-let [v (some->> (:peek-state value-entity-value-idx)
-                          (deref)
-                          :value)]
-      (let [v (reify
-                idx/ValueToBytes
-                (value->bytes [_]
-                  v))]
+    (when-let [{:keys [value]} @(:peek-state value-entity-value-idx)]
+      (let [value (reify
+                    idx/ValueToBytes
+                    (value->bytes [_]
+                      value))]
         (when-let [k (some->> @peek-state (ks/seek i))]
-          (attribute-value-entity-entity+value i k (:attr value-entity-value-idx) v entity-as-of-idx peek-state))))))
+          (attribute-value-entity-entity+value i k (:attr value-entity-value-idx) value entity-as-of-idx peek-state))))))
 
 (defn new-doc-attribute-value-entity-entity-index [i value-entity-value-idx entity-as-of-idx]
   (->DocAttributeValueEntityEntityIndex i value-entity-value-idx entity-as-of-idx (atom nil)))
@@ -106,7 +101,9 @@
       (let [[e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)
             [_ [entity-tx]] (db/seek-values entity-as-of-idx e)]
         (reset! peek-state {:last-k k :entity-tx entity-tx})
-        [(idx/id->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]))))
+        (if entity-tx
+          [(idx/id->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]
+          ::deleted-entity)))))
 
 (defrecord DocAttributeEntityValueEntityIndex [i attr entity-as-of-idx peek-state]
   db/Index
@@ -115,16 +112,21 @@
                       (idx/id->bytes)
                       (idx/encode-attribute+entity-value-prefix-key attr)
                       (ks/seek i))]
-      (attribute-entity+placeholder k attr entity-as-of-idx peek-state)))
+      (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+        (if (= ::deleted-entity placeholder)
+          (db/next-values this)
+          placeholder))))
 
   db/OrderedIndex
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
-          prefix-size (+ Short/SIZE idx/id-size idx/id-size)
-          k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
-                     (ks/seek i))]
-      (when k
-        (attribute-entity+placeholder k attr entity-as-of-idx peek-state)))))
+          prefix-size (+ Short/SIZE idx/id-size idx/id-size)]
+      (when-let [k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
+                            (ks/seek i))]
+        (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+          (if (= ::deleted-entity placeholder)
+            (db/next-values this)
+            placeholder))))))
 
 (defn new-doc-attribute-entity-value-entity-index [i attr entity-as-of-idx]
   (->DocAttributeEntityValueEntityIndex i attr entity-as-of-idx (atom nil)))
