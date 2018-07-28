@@ -248,8 +248,8 @@
             e-idx (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) v-doc-idx entity-as-of-idx)]
         (log/debug :join-order :ave (pr-str v) e (pr-str clause))
         (doc/update-binary-join-order! binary-idx (doc/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a)
-            v-idx (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx entity-as-of-idx)
+      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a entity-as-of-idx)
+            v-idx (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) e-doc-idx)
                       (doc/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
