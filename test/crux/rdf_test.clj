@@ -59,7 +59,7 @@
                  [[?s :rdf/type
                    :http://example.org/Artist]
                   [?s :foaf/firstName ?n]]})
-             (crux.rdf/parse-sparql
+             (crux.rdf/sparql->datalog
               "
 PREFIX ex: <http://example.org/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -74,7 +74,7 @@ WHERE {
     (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                '{:find [?x]
                  :where [[?x :vcard/FN "John Smith"]]})
-             (crux.rdf/parse-sparql
+             (crux.rdf/sparql->datalog
               "
 SELECT ?x
 WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
@@ -83,7 +83,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
                '{:find [?y ?givenName]
                  :where [[?y :vcard/Family "Smith"]
                          [?y :vcard/Given ?givenName]]})
-             (crux.rdf/parse-sparql
+             (crux.rdf/sparql->datalog
               "
 SELECT ?y ?givenName
 WHERE
@@ -95,7 +95,7 @@ WHERE
                        '{:find [?g]
                          :where [[(re-find #"(?i)r" ?g)]
                                  [?y :vcard/Given ?g]]}))
-             (pr-str (crux.rdf/parse-sparql
+             (pr-str (crux.rdf/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -108,7 +108,7 @@ WHERE
                '{:find [?resource]
                  :where [[(>= ?age 24)]
                          [?resource :info/age ?age]]})
-             (crux.rdf/parse-sparql
+             (crux.rdf/sparql->datalog
               "
 PREFIX info: <http://somewhere/peopleInfo#>
 
@@ -124,7 +124,7 @@ WHERE
                '{:find [?name]
                  :where [(or [_ :foaf/name ?name]
                              [_ :vcard/FN ?name])]})
-             (crux.rdf/parse-sparql
+             (crux.rdf/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX vCard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -139,14 +139,14 @@ WHERE
 
   (t/testing "SPARQL 1.1"
     (t/is (thrown-with-msg? UnsupportedOperationException #"Does not support variables in predicate position: \?p"
-                   (rdf/parse-sparql
+                   (rdf/sparql->datalog
                     "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
 
     (t/is
      (= '{:find [?v],
           :where
           [[?v :http://xmlns.com/foaf/0.1/givenName "cat"]]}
-        (rdf/parse-sparql
+        (rdf/sparql->datalog
          "SELECT ?v WHERE { ?v <http://xmlns.com/foaf/0.1/givenName> \"cat\"@en }")))
 
     (t/is
@@ -155,7 +155,7 @@ WHERE
           [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
            [?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
-        (rdf/parse-sparql
+        (rdf/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -171,7 +171,7 @@ WHERE  {
           [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
            [?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
-        (rdf/parse-sparql
+        (rdf/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
@@ -182,7 +182,7 @@ WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
                        :where
                        [[(re-find #"^SPARQL" ?title)]
                         [?x :http://purl.org/dc/elements/1.1/title ?title]]})
-             (pr-str (rdf/parse-sparql
+             (pr-str (rdf/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -194,7 +194,7 @@ WHERE   { ?x dc:title ?title
                        :where
                        [[(re-find #"(?i)web" ?title)]
                         [?x :http://purl.org/dc/elements/1.1/title ?title]]})
-             (pr-str (rdf/parse-sparql
+             (pr-str (rdf/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -207,7 +207,7 @@ WHERE   { ?x dc:title ?title
                [[(< ?price 30.5M)]
                 [?x :http://example.org/ns#price ?price]
                 [?x :http://purl.org/dc/elements/1.1/title ?title]]}
-             (rdf/parse-sparql
+             (rdf/sparql->datalog
               "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
@@ -217,7 +217,7 @@ WHERE   { ?x ns:price ?price .
           ?x dc:title ?title . }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"OPTIONAL not supported."
-                   (rdf/parse-sparql
+                   (rdf/sparql->datalog
                     "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
@@ -230,7 +230,7 @@ WHERE  { ?x foaf:name  ?name .
                [(or
                  [?book :http://purl.org/dc/elements/1.0/title ?title]
                  [?book :http://purl.org/dc/elements/1.1/title ?title])]}
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -244,7 +244,7 @@ WHERE  { { ?book dc10:title  ?title } UNION { ?book dc11:title  ?title } }")))
                [(or-join [?book]
                          [?book :http://purl.org/dc/elements/1.0/title ?x]
                          [?book :http://purl.org/dc/elements/1.1/title ?y])]}
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -258,7 +258,7 @@ WHERE  { { ?book dc10:title ?x } UNION { ?book dc11:title  ?y } }")))
                          [?book :http://purl.org/dc/elements/1.0/creator ?author])
                     (and [?book :http://purl.org/dc/elements/1.1/title ?title]
                          [?book :http://purl.org/dc/elements/1.1/creator ?author]))]}
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -275,7 +275,7 @@ WHERE  { { ?book dc10:title ?title .  ?book dc10:creator ?author }
                   [?person
                    :rdf/type
                    :http://xmlns.com/foaf/0.1/Person]]})
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -293,7 +293,7 @@ WHERE
                   [?person
                    :rdf/type
                    :http://xmlns.com/foaf/0.1/Person]]})
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -306,7 +306,7 @@ WHERE
 
     ;; NOTE: original has DISTINCT in select and ?p as predicate.
     (t/is (thrown-with-msg? UnsupportedOperationException #"MINUS not supported, use NOT EXISTS."
-                   (rdf/parse-sparql
+                   (rdf/sparql->datalog
                     "              PREFIX :       <http://example/>
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -319,7 +319,7 @@ WHERE {
 }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"Nested mathematical expressions are not supported."
-             (rdf/parse-sparql "
+             (rdf/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
 

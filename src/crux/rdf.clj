@@ -392,7 +392,7 @@
   (rdf->clj [this]
     (rdf->clj (.getValue this))))
 
-(defn parse-sparql [sparql]
+(defn sparql->datalog [sparql]
   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
     (binding [*where* (atom [])
               *find* (atom [])]
