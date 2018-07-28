@@ -622,8 +622,8 @@
 
 ;; TODO: Unification could be improved by using dynamic relations
 ;; propagating knowledge from the first var to the next. See comment
-;; about about rewrite-self-join-bgp-clause. Currently unification has
-;; to scan the values and check them as they get bound and doesn't
+;; about this at rewrite-self-join-bgp-clause. Currently unification
+;; has to scan the values and check them as they get bound and doesn't
 ;; fully carry its weight compared to normal predicates.
 (defn- build-unification-constraints [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
   (for [{:keys [op args]
