@@ -156,7 +156,8 @@ WHERE
            [?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
         (rdf/parse-sparql
-         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+         "
+PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ?name
 WHERE  {
    ?P foaf:givenName ?G ;
@@ -171,7 +172,55 @@ WHERE  {
            [?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
         (rdf/parse-sparql
-         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+         "
+PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
 WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
-")))))
+")))
+
+    (t/is (= (pr-str '{:find [?title],
+                       :where
+                       [[(re-find #"^SPARQL" ?title)]
+                        [?x :http://purl.org/dc/elements/1.1/title ?title]]})
+             (pr-str (rdf/parse-sparql
+                      "
+PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
+SELECT  ?title
+WHERE   { ?x dc:title ?title
+          FILTER regex(?title, \"^SPARQL\")
+        }"))))
+
+    (t/is (= (pr-str '{:find [?title],
+                       :where
+                       [[(re-find #"(?i)web" ?title)]
+                        [?x :http://purl.org/dc/elements/1.1/title ?title]]})
+             (pr-str (rdf/parse-sparql
+                      "
+PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
+SELECT  ?title
+WHERE   { ?x dc:title ?title
+          FILTER regex(?title, \"web\", \"i\" )
+        }"))))
+
+    (t/is (= '{:find [?title ?price],
+               :where
+               [[(< ?price 30.5M)]
+                [?x :http://example.org/ns#price ?price]
+                [?x :http://purl.org/dc/elements/1.1/title ?title]]}
+             (rdf/parse-sparql
+              "
+PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
+PREFIX  ns:  <http://example.org/ns#>
+SELECT  ?title ?price
+WHERE   { ?x ns:price ?price .
+          FILTER (?price < 30.5)
+          ?x dc:title ?title . }")))
+
+    (t/is (thrown? UnsupportedOperationException
+                   (rdf/parse-sparql
+                    "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT ?name ?mbox
+WHERE  { ?x foaf:name  ?name .
+         OPTIONAL { ?x  foaf:mbox  ?mbox }
+       }")))))

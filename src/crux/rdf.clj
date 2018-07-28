@@ -21,7 +21,7 @@
            [org.eclipse.rdf4j.query QueryLanguage]
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra
-            Compare Extension ExtensionElem Filter FunctionCall Join Projection ProjectionElem ProjectionElemList
+            Compare Extension ExtensionElem Filter FunctionCall Join LeftJoin Projection ProjectionElem ProjectionElemList
             Regex QueryModelVisitor StatementPattern Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
@@ -250,6 +250,9 @@
     (^void meet [this ^FunctionCall f]
      (swap! *where* conj (rdf->clj f)))
 
+    (^void meet [this ^LeftJoin lj]
+     (throw (UnsupportedOperationException. "OPTIONAL not supported.")))
+
     (^void meet [this ^ProjectionElemList pel]
      (.visitChildren pel this))
 
@@ -296,7 +299,7 @@
   Regex
   (rdf->clj [this]
     [(list 're-find
-            (let [flags (rdf->clj (.getFlagsArg this))]
+            (let [flags (some-> (.getFlagsArg this) (rdf->clj))]
               (re-pattern (str (when (seq flags)
                                  (str "(?" flags ")"))
                                (rdf->clj (.getPatternArg this)))))
