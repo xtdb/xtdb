@@ -133,4 +133,34 @@ SELECT ?name
 WHERE
 {
    { [] foaf:name ?name } UNION { [] vCard:FN ?name }
-}")))))
+}"))))
+
+  ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321
+
+  (t/testing "SPARQL 1.1"
+    (t/is
+     (= '{:find [?name],
+          :where
+          [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
+           [?P :http://xmlns.com/foaf/0.1/givenName ?G]
+           [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
+        (crux.rdf/parse-sparql
+         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+SELECT ?name
+WHERE  {
+   ?P foaf:givenName ?G ;
+      foaf:surname ?S
+   BIND(CONCAT(?G, \" \", ?S) AS ?name)
+}")))
+
+    (t/is
+     (= '{:find [?name],
+          :where
+          [[(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]
+           [?P :http://xmlns.com/foaf/0.1/givenName ?G]
+           [?P :http://xmlns.com/foaf/0.1/surname ?S]]}
+        (crux.rdf/parse-sparql
+         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
+WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
+")))))

@@ -21,7 +21,7 @@
            [org.eclipse.rdf4j.query QueryLanguage]
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra
-            Compare Filter Join Projection ProjectionElem ProjectionElemList
+            Compare Extension ExtensionElem Filter FunctionCall Join Projection ProjectionElem ProjectionElemList
             Regex QueryModelVisitor StatementPattern Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
@@ -237,8 +237,18 @@
     (^void meet [_ ^Compare c]
      (swap! *where* conj (rdf->clj c)))
 
+    (^void meet [this ^Extension e]
+     (.visitChildren e this))
+
+    (^void meet [this ^ExtensionElem ee]
+     (when-not (instance? Var (.getExpr ee))
+       (swap! *where* conj (rdf->clj ee))))
+
     (^void meet [this ^Filter f]
      (.visitChildren f this))
+
+    (^void meet [this ^FunctionCall f]
+     (swap! *where* conj (rdf->clj f)))
 
     (^void meet [this ^ProjectionElemList pel]
      (.visitChildren pel this))
@@ -266,6 +276,19 @@
             (rdf->clj (.getLeftArg this))
             (rdf->clj (.getRightArg this)))])
 
+  ExtensionElem
+  (rdf->clj [this]
+    (conj (rdf->clj (.getExpr this))
+          (str->sparql-var (.getName this))))
+
+  FunctionCall
+  (rdf->clj [this]
+    [(apply
+       list
+       (cons (symbol (.getURI this))
+             (for [arg (.getArgs this)]
+               (rdf->clj arg))))])
+
   ProjectionElem
   (rdf->clj [this]
     (str->sparql-var (.getSourceName this)))
@@ -284,6 +307,8 @@
     (let [s (.getSubjectVar this)
           p (.getPredicateVar this)
           o (.getObjectVar this)]
+      (when-not (.hasValue p)
+        (throw (UnsupportedOperationException. (str "Does not support variables in predicate position: " (rdf->clj p)))))
       (mapv rdf->clj [s p o])))
 
   Union
