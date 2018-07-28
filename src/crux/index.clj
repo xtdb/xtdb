@@ -22,7 +22,9 @@
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
-(def id-function bu/sha1)
+
+(defn id-function ^bytes [^bytes bytes]
+  (.digest (MessageDigest/getInstance id-hash-algorithm) bytes))
 
 (def empty-byte-array (byte-array 0))
 (def nil-id-bytes (byte-array id-size))
