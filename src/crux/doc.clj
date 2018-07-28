@@ -54,7 +54,7 @@
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
           prefix-size (- (alength last-k) idx/id-size idx/id-size)]
-      (when-let [k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
+      (when-let [k (some->> (bu/inc-unsigned-bytes! (Arrays/copyOf last-k prefix-size))
                             (ks/seek i))]
         (attribute-value+placeholder k peek-state)))))
 
@@ -64,7 +64,7 @@
 
 (defn- attribute-value-entity-entity+value [i ^bytes current-k attr value entity-as-of-idx peek-state]
   (loop [k current-k]
-    (reset! peek-state (bu/inc-unsigned-bytes (Arrays/copyOf k (- (alength k) idx/id-size))))
+    (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) idx/id-size))))
     (or (let [[_ entity] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)
               [_ [^EntityTx entity-tx]] (db/seek-values entity-as-of-idx entity)]
           (when entity-tx
@@ -135,7 +135,7 @@
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
           prefix-size (+ Short/SIZE idx/id-size idx/id-size)]
-      (when-let [k (some->> (bu/inc-unsigned-bytes (Arrays/copyOf last-k prefix-size))
+      (when-let [k (some->> (bu/inc-unsigned-bytes! (Arrays/copyOf last-k prefix-size))
                             (ks/seek i))]
         (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
           (if (= ::deleted-entity placeholder)
@@ -149,7 +149,7 @@
 (defn- attribute-entity-value-value+entity [i ^bytes current-k attr ^EntityTx entity-tx peek-state]
   (when entity-tx
     (loop [k current-k]
-      (reset! peek-state (bu/inc-unsigned-bytes (Arrays/copyOf k (- (alength k) idx/id-size))))
+      (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) idx/id-size))))
       (or (let [[_ value] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
             (let [version-k (idx/encode-attribute+entity+value+content-hash-key
                              attr

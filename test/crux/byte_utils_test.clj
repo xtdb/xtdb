@@ -31,11 +31,12 @@
 
 (t/deftest test-inc-unsigned-bytes
   (t/is (bu/bytes=? (byte-array [1])
-                    (bu/inc-unsigned-bytes (byte-array [0]))))
-  (t/is (nil? (bu/inc-unsigned-bytes (byte-array [0xff]))))
+                    (bu/inc-unsigned-bytes! (byte-array [0]))))
   (t/is (bu/bytes=? (byte-array [1 0])
-                    (bu/inc-unsigned-bytes (byte-array [0 0xff]))))
+                    (bu/inc-unsigned-bytes! (byte-array [0 0xff]))))
   (t/is (bu/bytes=? (byte-array [3 0 0])
-                    (bu/inc-unsigned-bytes (byte-array [2 0xff 0xff]))))
+                    (bu/inc-unsigned-bytes! (byte-array [2 0xff 0xff]))))
   (t/is (bu/bytes=? (byte-array [2 0 0xff])
-                    (bu/inc-unsigned-bytes (byte-array [1 0xff 0xff]) 2))))
+                    (bu/inc-unsigned-bytes! (byte-array [1 0xff 0xff]) 2)))
+  (t/testing "increasing max value returns nil"
+    (t/is (nil? (bu/inc-unsigned-bytes! (byte-array [0xff]))))))
