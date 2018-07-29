@@ -281,25 +281,23 @@
                   v-is-leaf? (and (logic-var? v)
                                   (= 1 (count (get v->clauses v)))
                                   (not (contains? non-leaf-vars v)))]
-              [(if (= e v)
-                 deps
-                 (cond-> deps
-                   (and (logic-var? v)
-                        (literal? e))
-                   (conj [[e-var] [v-var]])
-                   (and (literal? v)
-                        (logic-var? e))
-                   (conj [[v-var] [e-var]])
-                   ;; TODO: This is to default join order to ave as it
-                   ;; used to be as some things break without
-                   ;; it. Those breakages likely have other root
-                   ;; causes that should be fixed eventually.
-                   (and (logic-var? v)
-                        (logic-var? e)
-                        (not v-is-leaf?))
-                   (conj [[v-var] [e-var]])
-                   v-is-leaf?
-                   (conj [[e-var] [v-var]])))
+              [(cond-> deps
+                 (and (logic-var? v)
+                      (literal? e))
+                 (conj [[e-var] [v-var]])
+                 (and (literal? v)
+                      (logic-var? e))
+                 (conj [[v-var] [e-var]])
+                 ;; TODO: This is to default join order to ave as it
+                 ;; used to be as some things break without
+                 ;; it. Those breakages likely have other root
+                 ;; causes that should be fixed eventually.
+                 (and (logic-var? v)
+                      (logic-var? e)
+                      (not v-is-leaf?))
+                 (conj [[v-var] [e-var]])
+                 v-is-leaf?
+                 (conj [[e-var] [v-var]]))
                var->joins]))
           [[] var->joins]))))
 
