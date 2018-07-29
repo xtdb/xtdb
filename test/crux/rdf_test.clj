@@ -137,6 +137,31 @@ WHERE
   ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321
 
   (t/testing "SPARQL 1.1"
+    (t/is
+     (= '{:find [?title],
+          :where
+          [[:http://example.org/book/book1
+            :http://purl.org/dc/elements/1.1/title
+            ?title]]}
+        (rdf/sparql->datalog
+         "SELECT ?title
+WHERE
+{
+  <http://example.org/book/book1> <http://purl.org/dc/elements/1.1/title> ?title .
+}")))
+
+    (t/is
+     (= '{:find [?name ?mbox],
+          :where
+          [[?x :http://xmlns.com/foaf/0.1/name ?name]
+           [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]]}
+        (rdf/sparql->datalog
+         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+SELECT ?name ?mbox
+WHERE
+  { ?x foaf:name ?name .
+    ?x foaf:mbox ?mbox }")))
+
     (t/is (thrown-with-msg? UnsupportedOperationException #"Does not support variables in predicate position: \?p"
                             (rdf/sparql->datalog
                              "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
