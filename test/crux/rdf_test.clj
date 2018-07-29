@@ -215,14 +215,35 @@ WHERE   { ?x ns:price ?price .
           FILTER (?price < 30.5)
           ?x dc:title ?title . }")))
 
-    (t/is (thrown-with-msg? UnsupportedOperationException #"OPTIONAL not supported."
-                            (rdf/sparql->datalog
-                             "
+    (t/is (= '{:find [?name ?mbox],
+               :where
+               [[?x :http://xmlns.com/foaf/0.1/name ?name]
+                (or-join
+                 [?mbox ?x]
+                 [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]
+                 (and [(identity :crux.rdf/optional) ?mbox] [(identity ?x) ?x]))]}
+             (rdf/sparql->datalog
+              "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
 WHERE  { ?x foaf:name  ?name .
          OPTIONAL { ?x  foaf:mbox  ?mbox }
        }")))
+
+    (t/is (= '{:find [?title ?price],
+               :where
+               [[?x :http://purl.org/dc/elements/1.1/title ?title]
+                (or-join
+                 [?x ?price]
+                 (and [[?x :http://example.org/ns#price ?price]] [(< ?price 30)])
+                 (and [(identity ?x) ?x] [(identity :crux.rdf/optional) ?price]))]}
+             (rdf/sparql->datalog "
+PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
+PREFIX  ns:  <http://example.org/ns#>
+SELECT  ?title ?price
+WHERE   { ?x dc:title ?title .
+          OPTIONAL { ?x ns:price ?price . FILTER (?price < 30) }
+        }")))
 
     (t/is (= '{:find [?title],
                :where

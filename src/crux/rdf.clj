@@ -251,8 +251,8 @@
   (rdf->clj [this]
     (vec (apply concat
                 (rdf->clj (.getArg this))
-                 (for [arg (.getElements this)]
-                   (rdf->clj arg)))))
+                (for [arg (.getElements this)]
+                  (rdf->clj arg)))))
 
   ExtensionElem
   (rdf->clj [this]
@@ -293,7 +293,30 @@
 
   LeftJoin
   (rdf->clj [this]
-    (throw (UnsupportedOperationException. "OPTIONAL not supported.")))
+    (let [or-join-vars (->> (.getBindingNames this)
+                            (remove #(re-find #"\??_" %))
+                            (set))
+          or-join-vars (set/intersection or-join-vars (set (.getBindingNames (.getRightArg this))))
+          or-join-vars (mapv str->sparql-var or-join-vars)
+          common-vars (set (mapv str->sparql-var (.getBindingNames (.getLeftArg this))))
+          condition (some-> (.getCondition this) (rdf->clj))
+          optional (rdf->clj (.getRightArg this))
+          optional (cond-> optional
+                     condition (cons condition))
+          optional (if (> (count optional) 1)
+                     [(cons 'and optional)]
+                     optional)
+          build-optional-clause (fn [var]
+                                  [(list 'identity (if (contains? common-vars var)
+                                                     var
+                                                     ::optional)) var])]
+      (conj (rdf->clj (.getLeftArg this))
+            (cons 'or-join (cons or-join-vars
+                                 (concat
+                                  optional
+                                  (if (> (count or-join-vars) 1)
+                                    [(apply list 'and (map build-optional-clause or-join-vars))]
+                                    [(build-optional-clause (first or-join-vars))])))))))
 
   Not
   (rdf->clj [this]
