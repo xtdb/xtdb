@@ -254,7 +254,7 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- bgp-joins [snapshot {:keys [object-store business-time transact-time] :as db} bgp-clauses var->joins non-leaf-vars]
+(defn- bgp-joins [bgp-clauses var->joins non-leaf-vars]
   (let [v->clauses (group-by :v bgp-clauses)]
     (->> bgp-clauses
          (reduce
@@ -308,7 +308,7 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [snapshot {:keys [business-time transact-time] :as db} args e-vars v-var->range-constriants var->joins]
+(defn- arg-joins [args e-vars v-var->range-constriants var->joins]
   (let [arg-vars (arg-vars args)
         relation (doc/new-relation-virtual-index (gensym "args")
                                                  []
@@ -341,7 +341,7 @@
 
 (declare build-sub-query)
 
-(defn- or-joins [snapshot db rules or-type or-clauses var->joins known-vars]
+(defn- or-joins [rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
         (fn [[or-clause+relation+or-branches known-vars var->joins] clause]
@@ -472,7 +472,7 @@
        (long)
        (inc)))
 
-(defn- build-pred-constraints [object-store pred-clause+relations var->bindings]
+(defn- build-pred-constraints [pred-clause+relations var->bindings]
   (for [[{:keys [pred return] :as clause} relation] pred-clause+relations
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
@@ -482,7 +482,7 @@
             (throw (IllegalArgumentException.
                     (str "Predicate refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn pred-constraint [join-keys join-results]
+        (fn pred-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
             (let [bound-result-args-tuples (if (empty? args)
                                              [{}]
@@ -558,7 +558,7 @@
 ;; the general case. Depends on the eager expansion of rules for some
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
-(defn- build-or-constraints [snapshot {:keys [object-store] :as db} rule-name->rules or-clause+relation+or-branches
+(defn- build-or-constraints [rule-name->rules or-clause+relation+or-branches
                              var->bindings vars-in-join-order v-var->range-constriants]
   (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
@@ -569,7 +569,7 @@
             (throw (IllegalArgumentException.
                     (str "Or refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn or-constraint [join-keys join-results]
+        (fn or-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
           (if (= (count join-keys) or-join-depth)
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var bound-vars]
@@ -625,7 +625,7 @@
 ;; about this at rewrite-self-join-bgp-clause. Currently unification
 ;; has to scan the values and check them as they get bound and doesn't
 ;; fully carry its weight compared to normal predicates.
-(defn- build-unification-constraints [snapshot {:keys [object-store] :as db} unify-clauses var->bindings]
+(defn- build-unification-constraints [unify-clauses var->bindings]
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unify-vars (filter logic-var? args)
@@ -636,7 +636,7 @@
           (throw (IllegalArgumentException.
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
-        (fn unification-constraint [join-keys join-results]
+        (fn unification-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
           (if (= (count join-keys) unification-join-depth)
             (let [values (for [arg args]
                            (if (logic-var? arg)
@@ -651,7 +651,7 @@
                 join-results))
             join-results)))))
 
-(defn- build-not-constraints [snapshot {:keys [object-store] :as db} rule-name->rules not-type not-clauses var->bindings]
+(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -666,7 +666,7 @@
           (throw (IllegalArgumentException.
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str not-clause)))))
-        (fn not-constraint [join-keys join-results]
+        (fn not-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
           (if (= (count join-keys) not-join-depth)
             (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
               (let [args (vec (for [bound-result-tuple (cartesian-product
@@ -691,11 +691,11 @@
                   join-results)))
             join-results)))))
 
-(defn- constrain-join-result-by-constraints [constraints join-keys join-results]
+(defn- constrain-join-result-by-constraints [snapshot db constraints join-keys join-results]
   (reduce
    (fn [results constraint]
      (when results
-       (constraint join-keys results)))
+       (constraint snapshot db join-keys results)))
    join-results
    constraints))
 
@@ -807,29 +807,21 @@
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constriants))
         non-leaf-vars (set/union e-vars arg-vars v-range-vars)
-        [join-deps var->joins] (bgp-joins snapshot
-                                          db
-                                          bgp-clauses
+        [join-deps var->joins] (bgp-joins bgp-clauses
                                           var->joins
                                           non-leaf-vars)
-        [args-relation var->joins] (arg-joins snapshot
-                                              db
-                                              args
+        [args-relation var->joins] (arg-joins args
                                               e-vars
                                               v-var->range-constriants
                                               var->joins)
         [pred-clause+relations var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
         known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
-        [or-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
-                                                                         db
-                                                                         rule-name->rules
+        [or-clause+relation+or-branches known-vars var->joins] (or-joins rule-name->rules
                                                                          :or
                                                                          or-clauses
                                                                          var->joins
                                                                          known-vars)
-        [or-join-clause+relation+or-branches known-vars var->joins] (or-joins snapshot
-                                                                              db
-                                                                              rule-name->rules
+        [or-join-clause+relation+or-branches known-vars var->joins] (or-joins rule-name->rules
                                                                               :or-join
                                                                               or-join-clauses
                                                                               var->joins
@@ -855,11 +847,11 @@
                                                  var->values-result-index
                                                  join-depth
                                                  (keys var->attr)))
-        unification-constraints (build-unification-constraints snapshot db unify-clauses var->bindings)
-        not-constraints (build-not-constraints snapshot db rule-name->rules :not not-clauses var->bindings)
-        not-join-constraints (build-not-constraints snapshot db rule-name->rules :not-join not-join-clauses var->bindings)
-        pred-constraints (build-pred-constraints object-store pred-clause+relations var->bindings)
-        or-constraints (build-or-constraints snapshot db rule-name->rules or-clause+relation+or-branches
+        unification-constraints (build-unification-constraints unify-clauses var->bindings)
+        not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
+        not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
+        pred-constraints (build-pred-constraints pred-clause+relations var->bindings)
+        or-constraints (build-or-constraints rule-name->rules or-clause+relation+or-branches
                                              var->bindings vars-in-join-order v-var->range-constriants)
         all-constraints (concat unification-constraints
                                 pred-constraints
@@ -867,7 +859,7 @@
                                 not-join-constraints
                                 or-constraints)
         constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints all-constraints join-keys join-results))
+                              (constrain-join-result-by-constraints snapshot db all-constraints join-keys join-results))
         joins (map var->joins vars-in-join-order)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         binary-join-indexes (set (for [join joins
