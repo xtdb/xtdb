@@ -363,7 +363,7 @@ WHERE {
    }
 }")))
 
-    (t/is (thrown-with-msg? UnsupportedOperationException #"Nested mathematical expressions are not supported."
+    (t/is (thrown-with-msg? UnsupportedOperationException #"Nested expressions are not supported."
                             (rdf/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>

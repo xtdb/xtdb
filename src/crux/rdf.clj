@@ -271,11 +271,12 @@
 
   FunctionCall
   (rdf->clj [this]
-    (apply
-     list
-     (cons (symbol (.getURI this))
-           (for [arg (.getArgs this)]
-             (rdf->clj arg)))))
+    (let [args (for [arg (.getArgs this)]
+                 (rdf->clj arg))]
+      (when (some list? args)
+        (throw (UnsupportedOperationException. "Nested expressions are not supported.")))
+      (->> (cons (symbol (.getURI this)) args)
+           (apply list))))
 
   Join
   (rdf->clj [this]
@@ -284,12 +285,12 @@
 
   MathExpr
   (rdf->clj [this]
-    (when (or (instance? MathExpr (.getLeftArg this))
-              (instance? MathExpr (.getRightArg this)))
-      (throw (UnsupportedOperationException. "Nested mathematical expressions are not supported.")))
-    (list (symbol (.getSymbol (.getOperator this)))
-          (rdf->clj (.getLeftArg this))
-          (rdf->clj (.getRightArg this))))
+    (let [left (rdf->clj (.getLeftArg this))
+          right (rdf->clj (.getRightArg this))]
+      (when (some list? [left right])
+        (throw (UnsupportedOperationException. "Nested expressions are not supported.")))
+      (list (symbol (.getSymbol (.getOperator this)))
+            left right)))
 
   LeftJoin
   (rdf->clj [this]
