@@ -263,11 +263,13 @@
                   v-var (if (logic-var? v)
                           v
                           (gensym (str "literal_" v "_")))
-                  binary-idx (with-meta (doc/new-binary-join-virtual-index) {:clause clause
-                                                                             :names {:e e-var
-                                                                                     :v v-var}})
-                  indexes {v-var [(assoc binary-idx :name e-var)]
-                           e-var [(assoc binary-idx :name e-var)]}
+                  binary-idx (-> (doc/new-binary-join-virtual-index)
+                                 (with-meta {:clause clause
+                                             :names {:e e-var
+                                                     :v v-var}})
+                                 (assoc :name e-var))
+                  indexes {v-var [binary-idx]
+                           e-var [binary-idx]}
                   indexes (if (literal? e)
                             (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
                             indexes)
@@ -837,6 +839,7 @@
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
         vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps)
+        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
@@ -858,10 +861,15 @@
                                 not-constraints
                                 not-join-constraints
                                 or-constraints)
+        ;; TODO: Dynamic Part, needs joins and relations to be built
+        ;; below here somehow, that is, the values in var->joins
+        ;; should be functions creating these instead of actual
+        ;; instances. Will need to send a context into the constraints
+        ;; where they can look up their relation index to update, if
+        ;; any.
         constrain-result-fn (fn [join-keys join-results]
                               (constrain-join-result-by-constraints snapshot db all-constraints join-keys join-results))
         joins (map var->joins vars-in-join-order)
-        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         binary-join-indexes (set (for [join joins
                                        idx join
                                        :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
