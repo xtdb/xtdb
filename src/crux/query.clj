@@ -255,7 +255,7 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- triple-joins [triple-clauses var->joins non-leaf-vars]
+(defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars]
   (let [v->clauses (group-by :v triple-clauses)]
     (->> triple-clauses
          (reduce
@@ -283,9 +283,11 @@
                                   (not (contains? non-leaf-vars v)))]
               [(cond
                  (and (logic-var? v)
-                      (literal? e))
+                      (or (literal? e)
+                          (contains? arg-vars e)))
                  (conj deps [[e-var] [v-var]])
-                 (and (literal? v)
+                 (and (or (literal? v)
+                          (contains? arg-vars v))
                       (logic-var? e))
                  (conj deps [[v-var] [e-var]])
                  v-is-leaf?
@@ -824,7 +826,8 @@
         non-leaf-vars (set/union e-vars arg-vars v-range-vars)
         [join-deps var->joins] (triple-joins triple-clauses
                                              var->joins
-                                             non-leaf-vars)
+                                             non-leaf-vars
+                                             arg-vars)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
                                             v-var->range-constriants
