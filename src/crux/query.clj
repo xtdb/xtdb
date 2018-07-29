@@ -715,7 +715,7 @@
 (defn- potential-bpg-pair-vars [e->v-var v-var->e vars]
   (for [var vars
         :let [pair-var (or (get e->v-var var)
-                          (get v-var->e var))]
+                           (get v-var->e var))]
         :when (logic-var? pair-var)]
     pair-var))
 
