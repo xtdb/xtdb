@@ -237,7 +237,7 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
+(defn- update-binary-index! [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
@@ -342,8 +342,6 @@
             [(conj pred-clause+relations [pred-clause])
              var->joins]))
         [[] var->joins])))
-
-(declare build-sub-query)
 
 (defn- or-joins [rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
@@ -468,6 +466,8 @@
              :type type
              :var var
              :value? false}))))))
+
+(declare build-sub-query)
 
 (defn- calculate-constraint-join-depth [var->bindings vars]
   (->> (for [var vars]
@@ -898,7 +898,7 @@
                                        :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
                                    (dissoc idx :name)))]
     (doseq [idx binary-join-indexes]
-      (update-binary-index snapshot db idx vars-in-join-order v-var->range-constriants))
+      (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
       (doc/update-relation-virtual-index! args-relation
                                           (vec (for [arg args]
