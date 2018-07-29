@@ -710,16 +710,27 @@
    join-results
    constraints))
 
+;; TODO: Needed as a bgp var is only bound when both are. Might be a
+;; better way? This information is in join-deps.
+(defn- potential-bpg-pair-vars [e->v-var v-var->e vars]
+  (for [var vars
+        :let [pair-var (or (get e->v-var var)
+                          (get v-var->e var))]
+        :when (logic-var? pair-var)]
+    pair-var))
+
 ;; TODO: This is potentially simplistic. Needs revisiting, should be
 ;; possible to clean up.
-(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps]
-  (let [pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses]
-                    [(filter logic-var? (:args pred))
+(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins v-var->e e->v-var arg-vars join-deps]
+  (let [pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses
+                        :let [pred-vars (filter logic-var? (:args pred))]]
+                    [(into pred-vars (potential-bpg-pair-vars e->v-var v-var->e pred-vars))
                      (if return
                        [return]
                        [])])
         or-deps (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+idx-id+or-branches]
-                  [bound-vars free-vars])
+                  [(into bound-vars (potential-bpg-pair-vars e->v-var v-var->e bound-vars))
+                   free-vars])
         g (dep/graph)
         g (->> (keys var->joins)
                (reduce
@@ -846,7 +857,7 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins v-var->e e->v-var arg-vars join-deps)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)

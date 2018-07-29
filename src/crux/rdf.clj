@@ -307,9 +307,9 @@
                      [(cons 'and optional)]
                      optional)
           build-optional-clause (fn [var]
-                                  [(list 'identity (if (contains? common-vars var)
-                                                     var
-                                                     ::optional)) var])]
+                                  (if (contains? common-vars var)
+                                    [(list 'identity var)]
+                                    [(list 'identity ::optional) var]))]
       (conj (rdf->clj (.getLeftArg this))
             (cons 'or-join (cons or-join-vars
                                  (concat

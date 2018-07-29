@@ -434,7 +434,17 @@
     (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
                                          :where [[e :name name]
                                                  [e :name "Ivan"]
-                                                 (or [e :last-name "Ivanov"])]}))))))
+                                                 (or [e :last-name "Ivanov"])]})))))
+
+  ;; TODO: Doesn't work across types due to sort.
+  (t/is (= #{["Ivan" "Ivanov"]
+             ["Ivan" "<optional>"]} (q/q (q/db *kv*) '{:find [name l]
+                                              :where [[e :name name]
+                                                      [e :name "Ivan"]
+                                                      (or (and [e :last-name "Ivanov"]
+                                                               [e :last-name l])
+                                                          (and [(identity e)]
+                                                               [(identity "<optional>") l]))]}))))
 
 (t/deftest test-or-query-can-use-and
   (let [[ivan] (f/transact-people! *kv* [{:name "Ivan" :sex :male}
