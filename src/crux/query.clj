@@ -263,19 +263,20 @@
                   v-var (if (logic-var? v)
                           v
                           (gensym (str "literal_" v "_")))
-                  binary-idx (-> (doc/new-binary-join-virtual-index)
-                                 (with-meta {:clause clause
-                                             :names {:e e-var
-                                                     :v v-var}})
-                                 (assoc :name e-var))
-                  indexes {v-var [binary-idx]
-                           e-var [binary-idx]}
-                  indexes (if (literal? e)
-                            (merge-with into indexes {e-var [(doc/new-relation-virtual-index e-var [[e]] 1)]})
-                            indexes)
-                  indexes (if (literal? v)
-                            (merge-with into indexes {v-var [(doc/new-relation-virtual-index v-var [[v]] 1)]})
-                            indexes)
+                  join {:id (gensym "bgp")
+                        :name e-var
+                        :idx-fn #(-> (doc/new-binary-join-virtual-index)
+                                     (with-meta {:clause clause
+                                                 :names {:e e-var
+                                                         :v v-var}}))}
+                  var->joins (merge-with into var->joins {v-var [join]
+                                                          e-var [join]})
+                  var->joins (if (literal? e)
+                               (merge-with into var->joins {e-var [{:idx-fn #(doc/new-relation-virtual-index e-var [[e]] 1)}]})
+                               var->joins)
+                  var->joins (if (literal? v)
+                               (merge-with into var->joins {v-var [{:idx-fn #(doc/new-relation-virtual-index v-var [[v]] 1)}]})
+                               var->joins)
                   v-is-leaf? (and (logic-var? v)
                                   (= 1 (count (get v->clauses v)))
                                   (not (contains? non-leaf-vars v)))]
@@ -298,7 +299,7 @@
                    (conj [[v-var] [e-var]])
                    v-is-leaf?
                    (conj [[e-var] [v-var]])))
-               (merge-with into var->joins indexes)]))
+               var->joins]))
           [[] var->joins]))))
 
 (defn- validate-args [args]
@@ -314,39 +315,42 @@
            (symbol (name k))))))
 
 (defn- arg-joins [arg-vars e-vars v-var->range-constriants var->joins]
-  (let [relation (doc/new-relation-virtual-index (gensym "args")
-                                                 []
-                                                 (count arg-vars))]
-    [relation
+  (let [idx-id (gensym "args")
+        join {:id idx-id
+              :idx-fn #(doc/new-relation-virtual-index idx-id
+                                                       []
+                                                       (count arg-vars))}]
+    [idx-id
      (->> arg-vars
           (reduce
            (fn [var->joins arg-var]
              (->> {arg-var
-                   [(assoc relation :name (symbol "crux.query.value" (name arg-var)))]}
+                   [(assoc join :name (symbol "crux.query.value" (name arg-var)))]}
                   (merge-with into var->joins)))
            var->joins))]))
 
 (defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
   (->> pred-clauses
        (reduce
-        (fn [[pred-clause+relations var->joins] {:keys [return] :as pred-clause}]
+        (fn [[pred-clause+idx-ids var->joins] {:keys [return] :as pred-clause}]
           (if return
-            (let [relation (doc/new-relation-virtual-index (gensym "pred-return")
-                                                           []
-                                                           1
-                                                           [(get v-var->range-constriants return)])]
-              [(conj pred-clause+relations [pred-clause relation])
-               (->> {return
-                     [(assoc relation :name (symbol "crux.query.value" (name return)))]}
-                    (merge-with into var->joins))])
-            [(conj pred-clause+relations [pred-clause])
+            (let [idx-id (gensym "pred-return")
+                  join {:id idx-id
+                        :idx-fn #(doc/new-relation-virtual-index idx-id
+                                                                 []
+                                                                 1
+                                                                 [(get v-var->range-constriants return)])
+                        :name (symbol "crux.query.value" (name return))}]
+              [(conj pred-clause+idx-ids [pred-clause idx-id])
+               (merge-with into var->joins {return [join]})])
+            [(conj pred-clause+idx-ids [pred-clause])
              var->joins]))
         [[] var->joins])))
 
 (defn- or-joins [rules or-type or-clauses var->joins known-vars]
   (->> or-clauses
        (reduce
-        (fn [[or-clause+relation+or-branches known-vars var->joins] clause]
+        (fn [[or-clause+idx-id+or-branches known-vars var->joins] clause]
           (let [or-join? (= :or-join or-type)
                 or-branches (for [[type sub-clauses] (case or-type
                                                        :or clause
@@ -371,17 +375,19 @@
                                    :bound-vars (set/difference or-vars free-vars)
                                    :where where}))
                 free-vars (:free-vars (first or-branches))
-                relation (when (seq free-vars)
-                           (doc/new-relation-virtual-index (gensym "or-free-vars")
-                                                           []
-                                                           (count free-vars)))]
+                idx-id (gensym "or-free-vars")
+                join (when (seq free-vars)
+                       {:id idx-id
+                        :idx-fn #(doc/new-relation-virtual-index idx-id
+                                                                 []
+                                                                 (count free-vars))})]
             (when (not (apply = (map :or-vars or-branches)))
               (throw (IllegalArgumentException.
                       (str "Or requires same logic variables: " (pr-str clause)))))
-            [(conj or-clause+relation+or-branches [clause relation or-branches])
+            [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
-                                                 {v [(assoc relation :name (symbol "crux.query.value" (name v)))]}))]))
+                                                 {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
@@ -476,8 +482,8 @@
        (long)
        (inc)))
 
-(defn- build-pred-constraints [pred-clause+relations var->bindings]
-  (for [[{:keys [pred return] :as clause} relation] pred-clause+relations
+(defn- build-pred-constraints [pred-clause+idx-ids var->bindings]
+  (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
               pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)]]
@@ -486,7 +492,7 @@
             (throw (IllegalArgumentException.
                     (str "Predicate refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn pred-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
+        (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
           (if (= (count join-keys) pred-join-depth)
             (let [bound-result-args-tuples (if (empty? args)
                                              [{}]
@@ -514,7 +520,7 @@
                        [pred-result])
                      (distinct)
                      (vec)
-                     (doc/update-relation-virtual-index! relation)))
+                     (doc/update-relation-virtual-index! (get idx-id->idx idx-id))))
               (when-let [join-results (some->> (map second pred-result+result-maps)
                                                (apply merge-with into)
                                                (merge join-results))]
@@ -562,9 +568,9 @@
 ;; the general case. Depends on the eager expansion of rules for some
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
-(defn- build-or-constraints [rule-name->rules or-clause+relation+or-branches
+(defn- build-or-constraints [rule-name->rules or-clause+idx-id+or-branches
                              var->bindings vars-in-join-order v-var->range-constriants]
-  (for [[clause relation [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+relation+or-branches
+  (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               {:keys [rule-name]} (meta clause)]]
@@ -573,7 +579,7 @@
             (throw (IllegalArgumentException.
                     (str "Or refers to unknown variable: "
                          var " " (pr-str clause))))))
-        (fn or-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
+        (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
           (if (= (count join-keys) or-join-depth)
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var bound-vars]
@@ -615,7 +621,7 @@
                                        bound-result)
                                      (apply merge-with into))]
               (when (seq free-results)
-                (doc/update-relation-virtual-index! relation free-results (map v-var->range-constriants free-vars-in-join-order)))
+                (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
 
               (if (empty? bound-vars)
                 (when (seq free-results)
@@ -640,7 +646,7 @@
           (throw (IllegalArgumentException.
                   (str "Unification refers to unknown variable: "
                        arg " " (pr-str clause)))))
-        (fn unification-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
+        (fn unification-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
           (if (= (count join-keys) unification-join-depth)
             (let [values (for [arg args]
                            (if (logic-var? arg)
@@ -670,7 +676,7 @@
           (throw (IllegalArgumentException.
                   (str "Not refers to unknown variable: "
                        arg " " (pr-str not-clause)))))
-        (fn not-constraint [snapshot {:keys [object-store] :as db} join-keys join-results]
+        (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
           (if (= (count join-keys) not-join-depth)
             (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
               (let [args (vec (for [bound-result-tuple (cartesian-product
@@ -695,23 +701,23 @@
                   join-results)))
             join-results)))))
 
-(defn- constrain-join-result-by-constraints [snapshot db constraints join-keys join-results]
+(defn- constrain-join-result-by-constraints [snapshot db idx-id->idx constraints join-keys join-results]
   (reduce
    (fn [results constraint]
      (when results
-       (constraint snapshot db join-keys results)))
+       (constraint snapshot db idx-id->idx join-keys results)))
    join-results
    constraints))
 
 ;; TODO: This is potentially simplistic. Needs revisiting, should be
 ;; possible to clean up.
-(defn- calculate-join-order [pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps]
+(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps]
   (let [pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses]
                     [(filter logic-var? (:args pred))
                      (if return
                        [return]
                        [])])
-        or-deps (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+relation+or-branches]
+        or-deps (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+idx-id+or-branches]
                   [bound-vars free-vars])
         g (dep/graph)
         g (->> (keys var->joins)
@@ -787,91 +793,102 @@
            [sub-clause]))
        (reduce into [])))
 
-;; TODO: Static Part, cannot return actual indexes, but ways of
-;; building them. Will then get memoized.
-(defn- compile-sub-query [where arg-vars rule-name->rules]
-  (let [where (expand-rules where rule-name->rules {})
-        {bgp-clauses :bgp
-         range-clauses :range
-         pred-clauses :pred
-         unify-clauses :unify
-         not-clauses :not
-         not-join-clauses :not-join
-         or-clauses :or
-         or-join-clauses :or-join
-         :as type->clauses} (normalize-clauses where)
-        {:keys [e-vars
-                v-vars
-                pred-return-vars]} (collect-vars type->clauses)
-        v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
-                            :when (logic-var? v)]
-                        [v e])
-                      (into {}))
-        e->v-var (set/map-invert v-var->e)
-        var->joins {}
-        v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
-        v-range-vars (set (keys v-var->range-constriants))
-        non-leaf-vars (set/union e-vars arg-vars v-range-vars)
-        [join-deps var->joins] (bgp-joins bgp-clauses
-                                          var->joins
-                                          non-leaf-vars)
-        [args-relation var->joins] (arg-joins arg-vars
-                                              e-vars
-                                              v-var->range-constriants
-                                              var->joins)
-        [pred-clause+relations var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
-        known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
-        [or-clause+relation+or-branches known-vars var->joins] (or-joins rule-name->rules
-                                                                         :or
-                                                                         or-clauses
-                                                                         var->joins
-                                                                         known-vars)
-        [or-join-clause+relation+or-branches known-vars var->joins] (or-joins rule-name->rules
-                                                                              :or-join
-                                                                              or-join-clauses
-                                                                              var->joins
-                                                                              known-vars)
-        or-clause+relation+or-branches (concat or-clause+relation+or-branches
-                                               or-join-clause+relation+or-branches)
-        v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
-                               :when (and (logic-var? v)
-                                          (= e (get v-var->e v)))]
-                           [v a])
+;; TODO: Should probably use a real LRU cache.
+(def ^:private compile-sub-query
+  (memoize
+   (fn compile-sub-query [where arg-vars rule-name->rules]
+     (let [where (expand-rules where rule-name->rules {})
+           {bgp-clauses :bgp
+            range-clauses :range
+            pred-clauses :pred
+            unify-clauses :unify
+            not-clauses :not
+            not-join-clauses :not-join
+            or-clauses :or
+            or-join-clauses :or-join
+            :as type->clauses} (normalize-clauses where)
+           {:keys [e-vars
+                   v-vars
+                   pred-return-vars]} (collect-vars type->clauses)
+           v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
+                               :when (logic-var? v)]
+                           [v e])
                          (into {}))
-        e-var->attr (zipmap e-vars (repeat :crux.db/id))
-        var->attr (merge e-var->attr v-var->attr)
-        join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+relation+or-branches var->joins arg-vars join-deps)
-        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
-        var->values-result-index (zipmap vars-in-join-order (range))
-        var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+relation+or-branches)
-                             (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                             (build-arg-var-bindings var->values-result-index arg-vars)
-                             (build-var-bindings var->attr
-                                                 v-var->e
-                                                 e->v-var
-                                                 var->values-result-index
-                                                 join-depth
-                                                 (keys var->attr)))
-        unification-constraints (build-unification-constraints unify-clauses var->bindings)
-        not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
-        not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
-        pred-constraints (build-pred-constraints pred-clause+relations var->bindings)
-        or-constraints (build-or-constraints rule-name->rules or-clause+relation+or-branches
-                                             var->bindings vars-in-join-order v-var->range-constriants)]
-    {:constraints (concat unification-constraints
-                          pred-constraints
-                          not-constraints
-                          not-join-constraints
-                          or-constraints)
-     :v-var->range-constriants v-var->range-constriants
-     :vars-in-join-order vars-in-join-order
-     :var->joins var->joins
-     :var->bindings var->bindings
-     :arg-vars-in-join-order arg-vars-in-join-order
-     ;; TODO: this should come from var->joins when building the
-     ;; indexes for each invocation.
-     :args-relation args-relation}))
+           e->v-var (set/map-invert v-var->e)
+           var->joins {}
+           v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
+           v-range-vars (set (keys v-var->range-constriants))
+           non-leaf-vars (set/union e-vars arg-vars v-range-vars)
+           [join-deps var->joins] (bgp-joins bgp-clauses
+                                             var->joins
+                                             non-leaf-vars)
+           [args-idx-id var->joins] (arg-joins arg-vars
+                                               e-vars
+                                               v-var->range-constriants
+                                               var->joins)
+           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
+           known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
+           [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
+                                                                          :or
+                                                                          or-clauses
+                                                                          var->joins
+                                                                          known-vars)
+           [or-join-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
+                                                                               :or-join
+                                                                               or-join-clauses
+                                                                               var->joins
+                                                                               known-vars)
+           or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
+                                                or-join-clause+idx-id+or-branches)
+           v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
+                                  :when (and (logic-var? v)
+                                             (= e (get v-var->e v)))]
+                              [v a])
+                            (into {}))
+           e-var->attr (zipmap e-vars (repeat :crux.db/id))
+           var->attr (merge e-var->attr v-var->attr)
+           join-depth (count var->joins)
+           vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps)
+           arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
+           var->values-result-index (zipmap vars-in-join-order (range))
+           var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
+                                (build-pred-return-var-bindings var->values-result-index pred-clauses)
+                                (build-arg-var-bindings var->values-result-index arg-vars)
+                                (build-var-bindings var->attr
+                                                    v-var->e
+                                                    e->v-var
+                                                    var->values-result-index
+                                                    join-depth
+                                                    (keys var->attr)))
+           unification-constraints (build-unification-constraints unify-clauses var->bindings)
+           not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
+           not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
+           pred-constraints (build-pred-constraints pred-clause+idx-ids var->bindings)
+           or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
+                                                var->bindings vars-in-join-order v-var->range-constriants)]
+       {:constraints (concat unification-constraints
+                             pred-constraints
+                             not-constraints
+                             not-join-constraints
+                             or-constraints)
+        :v-var->range-constriants v-var->range-constriants
+        :vars-in-join-order vars-in-join-order
+        :var->joins var->joins
+        :var->bindings var->bindings
+        :arg-vars-in-join-order arg-vars-in-join-order
+        :args-idx-id args-idx-id}))))
+
+(defn- build-idx-id->idx [var->joins]
+  (->> (for [[_ joins] var->joins
+             {:keys [id idx-fn] :as join} joins
+             :when id]
+         [id idx-fn])
+       (reduce
+        (fn [acc [id idx-fn]]
+          (if (contains? acc id)
+            acc
+            (assoc acc id (idx-fn))))
+        {})))
 
 (defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} where args rule-name->rules]
   ;; NOTE: this implies argument sets with different vars get compiled
@@ -883,24 +900,18 @@
                 var->joins
                 var->bindings
                 arg-vars-in-join-order
-                args-relation]} (compile-sub-query where arg-vars rule-name->rules)
-        ;; TODO: Dynamic Part, needs joins and relations to be built
-        ;; below here somehow, that is, the values in var->joins
-        ;; should be functions creating these instead of actual
-        ;; instances. Will need to send a context into the constraints
-        ;; where they can look up their relation index to update, if
-        ;; any.
+                args-idx-id]} (compile-sub-query where arg-vars rule-name->rules)
+        idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints snapshot db constraints join-keys join-results))
-        joins (map var->joins vars-in-join-order)
-        binary-join-indexes (set (for [join joins
-                                       idx join
-                                       :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
-                                   (dissoc idx :name)))]
-    (doseq [idx binary-join-indexes]
+                              (constrain-join-result-by-constraints snapshot db idx-id->idx constraints join-keys join-results))
+        unary-join-index-groups (for [v vars-in-join-order]
+                                  (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
+                                    (assoc (or (get idx-id->idx id) (idx-fn)) :name name)))]
+    (doseq [[_ idx] idx-id->idx
+            :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
       (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
-      (doc/update-relation-virtual-index! args-relation
+      (doc/update-relation-virtual-index! (get idx-id->idx args-idx-id)
                                           (vec (for [arg args]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constriants arg-vars-in-join-order)))
@@ -908,7 +919,7 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :var->bindings (pr-str var->bindings))
     (constrain-result-fn [] [])
-    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index joins)
+    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index unary-join-index-groups)
                      (doc/new-n-ary-join-layered-virtual-index)
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings}))
