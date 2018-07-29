@@ -303,9 +303,9 @@
         (t/is (re-find #"Circular dependency between foo and bar" (.getMessage e)))))))
 
 (t/deftest test-not-query
-  (t/is (= '[[:bgp {:e e :a :name :v name}]
-             [:bgp {:e e :a :name :v "Ivan"}]
-             [:not [[:bgp {:e e :a :last-name :v "Ivannotov"}]]]]
+  (t/is (= '[[:triple {:e e :a :name :v name}]
+             [:triple {:e e :a :name :v "Ivan"}]
+             [:not [[:triple {:e e :a :last-name :v "Ivannotov"}]]]]
 
            (s/conform :crux.query/where '[[e :name name]
                                           [e :name "Ivan"]
@@ -390,9 +390,9 @@
                             {:name "Bob" :last-name "Controlguy"}])
 
   ;; Here for dev reasons, delete when appropiate
-  (t/is (= '[[:bgp {:e e :a :name :v name}]
-             [:bgp {:e e :a :name :v "Ivan"}]
-             [:or [[:term [:bgp {:e e :a :last-name :v "Ivanov"}]]]]]
+  (t/is (= '[[:triple {:e e :a :name :v name}]
+             [:triple {:e e :a :name :v "Ivan"}]
+             [:or [[:term [:triple {:e e :a :last-name :v "Ivanov"}]]]]]
            (s/conform :crux.query/where '[[e :name name]
                                           [e :name "Ivan"]
                                           (or [e :last-name "Ivanov"])])))
@@ -917,7 +917,7 @@
                                                            [(!= n #{})]]})))))
 
 (t/deftest test-simple-numeric-range-search
-  (t/is (= '[[:bgp {:e i, :a :age, :v age}]
+  (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:range [[:sym-val {:op <, :sym age, :val 20}]]]]
            (s/conform :crux.query/where '[[i :age age]
                                           [(< age 20)]])))
@@ -984,7 +984,7 @@
                                                    [e2 :last-name name1]]})))))
 
 (t/deftest test-basic-rules
-  (t/is (= '[[:bgp {:e i, :a :age, :v age}]
+  (t/is (= '[[:triple {:e i, :a :age, :v age}]
              [:rule {:name over-twenty-one?, :args [age]}]]
            (s/conform :crux.query/where '[[i :age age]
                                           (over-twenty-one? age)])))

@@ -26,9 +26,9 @@
 
 (def ^:private built-ins '#{and == !=})
 
-(s/def ::bgp (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
-                                   :a db-ident?
-                                   :v (s/? any?))))
+(s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
+                                      :a db-ident?
+                                      :v (s/? any?))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
@@ -68,7 +68,7 @@
 (s/def ::or-join (expression-spec 'or-join (s/cat :args ::args-list
                                                   :body ::or-body)))
 
-(s/def ::term (s/or :bgp ::bgp
+(s/def ::term (s/or :triple ::triple
                     :not ::not
                     :not-join ::not-join
                     :or ::or
@@ -109,7 +109,7 @@
   (when (logic-var? v)
     (re-find #"^_\d*$" (name v))))
 
-(defn- normalize-bgp-clause [{:keys [e a v] :as clause}]
+(defn- normalize-triple-clause [{:keys [e a v] :as clause}]
   (cond-> clause
     (or (blank-var? v)
         (nil? v))
@@ -136,18 +136,18 @@
 ;; relation that gets updated once we know the first value. In the
 ;; more generic case, unification constraints could propagate
 ;; knowledge of the first bound value from one join to another.
-(defn- rewrite-self-join-bgp-clause [{:keys [e v] :as bgp}]
+(defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym v)]
-    {:bgp [(assoc bgp :v v-var)]
+    {:triple [(assoc triple :v v-var)]
      :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
-         (if (= :bgp type)
-           (let [{:keys [e v] :as clause} (normalize-bgp-clause clause)]
+         (if (= :triple type)
+           (let [{:keys [e v] :as clause} (normalize-triple-clause clause)]
              (if (and (logic-var? e) (= e v))
-               (rewrite-self-join-bgp-clause clause)
-               {:bgp [clause]}))
+               (rewrite-self-join-triple-clause clause)
+               {:triple [clause]}))
            {type [(case type
                     :pred (let [{:keys [pred]} clause
                                 {:keys [pred-fn args]} pred]
@@ -164,7 +164,7 @@
                     clause)]}))
        (apply merge-with into)))
 
-(defn- collect-vars [{bgp-clauses :bgp
+(defn- collect-vars [{triple-clauses :triple
                       unify-clauses :unify
                       not-clauses :not
                       not-join-clauses :not-join
@@ -188,10 +188,10 @@
         or-join-vars (set (for [or-join-clause or-join-clauses
                                 arg (:args or-join-clause)]
                             arg))]
-    {:e-vars (set (for [{:keys [e]} bgp-clauses
+    {:e-vars (set (for [{:keys [e]} triple-clauses
                         :when (logic-var? e)]
                     e))
-     :v-vars (set (for [{:keys [v]} bgp-clauses
+     :v-vars (set (for [{:keys [v]} triple-clauses
                         :when (logic-var? v)]
                     v))
      :unification-vars (set (for [{:keys [args]} unify-clauses
@@ -255,16 +255,16 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- bgp-joins [bgp-clauses var->joins non-leaf-vars]
-  (let [v->clauses (group-by :v bgp-clauses)]
-    (->> bgp-clauses
+(defn- triple-joins [triple-clauses var->joins non-leaf-vars]
+  (let [v->clauses (group-by :v triple-clauses)]
+    (->> triple-clauses
          (reduce
           (fn [[deps var->joins] {:keys [e a v] :as clause}]
             (let [e-var e
                   v-var (if (logic-var? v)
                           v
                           (gensym (str "literal_" v "_")))
-                  join {:id (gensym "bgp")
+                  join {:id (gensym "triple")
                         :name e-var
                         :idx-fn #(-> (doc/new-binary-join-virtual-index)
                                      (with-meta {:clause clause
@@ -524,10 +524,10 @@
                 join-results))
             join-results)))))
 
-(defn- single-e-var-bgp? [vars where]
+(defn- single-e-var-triple? [vars where]
   (and (= 1 (count where))
        (let [[[type {:keys [e v]}]] where]
-         (and (= :bgp type)
+         (and (= :triple type)
               (contains? vars e)
               (logic-var? e)
               (literal? v)))))
@@ -545,7 +545,7 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-bgp-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
         content-hash->doc (db/get-objects object-store (map :content-hash entities))
@@ -588,8 +588,8 @@
                                    :let [cache-key (when rule-name
                                                      [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
                                (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-                                 (if (single-e-var-bgp? bound-vars where)
-                                   (or-single-e-var-bgp-fast-path snapshot db where args)
+                                 (if (single-e-var-triple? bound-vars where)
+                                   (or-single-e-var-triple-fast-path snapshot db where args)
                                    (or (get *recursion-table* cache-key)
                                        (binding [*recursion-table* (if cache-key
                                                                      (assoc *recursion-table* cache-key [])
@@ -629,7 +629,7 @@
 
 ;; TODO: Unification could be improved by using dynamic relations
 ;; propagating knowledge from the first var to the next. See comment
-;; about this at rewrite-self-join-bgp-clause. Currently unification
+;; about this at rewrite-self-join-triple-clause. Currently unification
 ;; has to scan the values and check them as they get bound and doesn't
 ;; fully carry its weight compared to normal predicates.
 (defn- build-unification-constraints [unify-clauses var->bindings]
@@ -801,7 +801,7 @@
 
 (defn- compile-sub-query [where arg-vars rule-name->rules]
   (let [where (expand-rules where rule-name->rules {})
-        {bgp-clauses :bgp
+        {triple-clauses :triple
          range-clauses :range
          pred-clauses :pred
          unify-clauses :unify
@@ -813,7 +813,7 @@
         {:keys [e-vars
                 v-vars
                 pred-return-vars]} (collect-vars type->clauses)
-        v-var->e (->> (for [{:keys [e v] :as clause} bgp-clauses
+        v-var->e (->> (for [{:keys [e v] :as clause} triple-clauses
                             :when (logic-var? v)]
                         [v e])
                       (into {}))
@@ -822,9 +822,9 @@
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constriants))
         non-leaf-vars (set/union e-vars arg-vars v-range-vars)
-        [join-deps var->joins] (bgp-joins bgp-clauses
-                                          var->joins
-                                          non-leaf-vars)
+        [join-deps var->joins] (triple-joins triple-clauses
+                                             var->joins
+                                             non-leaf-vars)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
                                             v-var->range-constriants
@@ -843,7 +843,7 @@
                                                                             known-vars)
         or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                              or-join-clause+idx-id+or-branches)
-        v-var->attr (->> (for [{:keys [e a v]} bgp-clauses
+        v-var->attr (->> (for [{:keys [e a v]} triple-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
                            [v a])
