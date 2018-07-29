@@ -310,9 +310,8 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [args e-vars v-var->range-constriants var->joins]
-  (let [arg-vars (arg-vars args)
-        relation (doc/new-relation-virtual-index (gensym "args")
+(defn- arg-joins [arg-vars e-vars v-var->range-constriants var->joins]
+  (let [relation (doc/new-relation-virtual-index (gensym "args")
                                                  []
                                                  (count arg-vars))]
     [relation
@@ -785,7 +784,9 @@
            [sub-clause]))
        (reduce into [])))
 
-(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} where args rule-name->rules]
+;; TODO: Static Part, cannot return actual indexes, but ways of
+;; building them. Will then get memoized.
+(defn- compile-sub-query [where arg-vars rule-name->rules]
   (let [where (expand-rules where rule-name->rules {})
         {bgp-clauses :bgp
          range-clauses :range
@@ -804,7 +805,6 @@
                         [v e])
                       (into {}))
         e->v-var (set/map-invert v-var->e)
-        arg-vars (arg-vars args)
         var->joins {}
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constriants))
@@ -812,7 +812,7 @@
         [join-deps var->joins] (bgp-joins bgp-clauses
                                           var->joins
                                           non-leaf-vars)
-        [args-relation var->joins] (arg-joins args
+        [args-relation var->joins] (arg-joins arg-vars
                                               e-vars
                                               v-var->range-constriants
                                               var->joins)
@@ -855,12 +855,32 @@
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
         pred-constraints (build-pred-constraints pred-clause+relations var->bindings)
         or-constraints (build-or-constraints rule-name->rules or-clause+relation+or-branches
-                                             var->bindings vars-in-join-order v-var->range-constriants)
-        all-constraints (concat unification-constraints
-                                pred-constraints
-                                not-constraints
-                                not-join-constraints
-                                or-constraints)
+                                             var->bindings vars-in-join-order v-var->range-constriants)]
+    {:constraints (concat unification-constraints
+                          pred-constraints
+                          not-constraints
+                          not-join-constraints
+                          or-constraints)
+     :v-var->range-constriants v-var->range-constriants
+     :vars-in-join-order vars-in-join-order
+     :var->joins var->joins
+     :var->bindings var->bindings
+     :arg-vars-in-join-order arg-vars-in-join-order
+     ;; TODO: this should come from var->joins when building the
+     ;; indexes for each invocation.
+     :args-relation args-relation}))
+
+(defn- build-sub-query [snapshot {:keys [kv object-store business-time transact-time] :as db} where args rule-name->rules]
+  ;; NOTE: this implies argument sets with different vars get compiled
+  ;; differently.
+  (let [arg-vars (arg-vars args)
+        {:keys [constraints
+                vars-in-join-order
+                v-var->range-constriants
+                var->joins
+                var->bindings
+                arg-vars-in-join-order
+                args-relation]} (compile-sub-query where arg-vars rule-name->rules)
         ;; TODO: Dynamic Part, needs joins and relations to be built
         ;; below here somehow, that is, the values in var->joins
         ;; should be functions creating these instead of actual
@@ -868,7 +888,7 @@
         ;; where they can look up their relation index to update, if
         ;; any.
         constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints snapshot db all-constraints join-keys join-results))
+                              (constrain-join-result-by-constraints snapshot db constraints join-keys join-results))
         joins (map var->joins vars-in-join-order)
         binary-join-indexes (set (for [join joins
                                        idx join
