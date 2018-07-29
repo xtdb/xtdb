@@ -281,23 +281,21 @@
                   v-is-leaf? (and (logic-var? v)
                                   (= 1 (count (get v->clauses v)))
                                   (not (contains? non-leaf-vars v)))]
-              [(cond-> deps
+              [(cond
                  (and (logic-var? v)
                       (literal? e))
-                 (conj [[e-var] [v-var]])
+                 (conj deps [[e-var] [v-var]])
                  (and (literal? v)
                       (logic-var? e))
-                 (conj [[v-var] [e-var]])
-                 ;; TODO: This is to default join order to ave as it
-                 ;; used to be as some things break without
-                 ;; it. Those breakages likely have other root
-                 ;; causes that should be fixed eventually.
-                 (and (logic-var? v)
-                      (logic-var? e)
-                      (not v-is-leaf?))
-                 (conj [[v-var] [e-var]])
+                 (conj deps [[v-var] [e-var]])
                  v-is-leaf?
-                 (conj [[e-var] [v-var]]))
+                 (conj deps [[e-var] [v-var]])
+                 ;; NOTE: This is to default join order to ave as it
+                 ;; used to be. The vars have to depend on each other
+                 ;; as they're a pair, calculate-join-order needs this
+                 ;; for or and predicates, so we pick this order.
+                 :else
+                 (conj deps [[v-var] [e-var]]))
                var->joins]))
           [[] var->joins]))))
 
