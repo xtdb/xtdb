@@ -235,7 +235,7 @@ WHERE  { ?x foaf:name  ?name .
                [[?x :http://purl.org/dc/elements/1.1/title ?title]
                 (or-join
                  [?x ?price]
-                 (and [[?x :http://example.org/ns#price ?price]] [(< ?price 30)])
+                 (and [?x :http://example.org/ns#price ?price] [(< ?price 30)])
                  (and [(identity ?x) ?x] [(identity :crux.rdf/optional) ?price]))]}
              (rdf/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>

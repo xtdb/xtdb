@@ -302,7 +302,7 @@
           condition (some-> (.getCondition this) (rdf->clj))
           optional (rdf->clj (.getRightArg this))
           optional (cond-> optional
-                     condition (cons condition))
+                     condition (concat condition))
           optional (if (> (count optional) 1)
                      [(cons 'and optional)]
                      optional)
