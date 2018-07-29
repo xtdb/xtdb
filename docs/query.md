@@ -197,3 +197,5 @@ language. GraphQL requires extensions to do ad-hoc queries.**
   layer)](https://github.com/neo4j-graphql/neo4j-graphql-js)
 + [Ogre is a Clojure Gremlin Language
   Variant](https://github.com/clojurewerkz/ogre)
++ [The Ubiquity of Large Graphs and Surprising Challenges of Graph
+Processing](http://www.vldb.org/pvldb/vol11/p420-sahu.pdf)
