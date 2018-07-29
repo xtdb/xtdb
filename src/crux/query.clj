@@ -301,12 +301,15 @@
                (merge-with into var->joins indexes)]))
           [[] var->joins]))))
 
-(defn- arg-vars [args]
+(defn- validate-args [args]
   (let [ks (keys (first args))]
     (doseq [m args]
       (when-not (every? #(contains? m %) ks)
         (throw (IllegalArgumentException.
-                (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))
+                (str "Argument maps need to contain the same keys as first map: " ks " " (keys m))))))))
+
+(defn- arg-vars [args]
+  (let [ks (keys (first args))]
     (set (for [k ks]
            (symbol (name k))))))
 
@@ -923,6 +926,7 @@
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
+     (validate-args args)
      (log/debug :query (pr-str q))
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join
