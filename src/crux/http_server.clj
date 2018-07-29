@@ -1,6 +1,7 @@
 (ns crux.http-server
   (:require [clojure.edn :as edn]
             [clojure.string :as st]
+            [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.io :as cio]
@@ -28,14 +29,14 @@
   (cond
     (uuid-str? s)
     (java.util.UUID/fromString s)
-    
+
     (sha1-20-str? s)
     s
-    
+
     (try (edn/read-string s)
          (catch Exception e false))
     (edn/read-string s)
-    
+
     :default
     (keyword s)))
 
@@ -166,5 +167,5 @@
    (let [server (j/run-jetty (p/wrap-params (partial handler kvs tx-log db-dir bootstrap-servers))
                              {:port port
                               :join? false})]
-     (println (str "HTTP server started on port " port))
+     (log/info (str "HTTP server started on port: " port))
      (reify Closeable (close [_] (.stop server))))))
