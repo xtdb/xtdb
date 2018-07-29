@@ -728,8 +728,6 @@
                 g)))
         g)))
 
-;; TODO: This is potentially simplistic. Needs revisiting, should be
-;; possible to clean up.
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps]
   (let [g (dep/graph)
         g (->> (keys var->joins)
@@ -749,7 +747,7 @@
                    free-vars])
         g (add-all-dependencies g (concat pred-deps or-deps))
         join-order (dep/topo-sort g)]
-    (vec (filter var->joins join-order))))
+    (vec (remove #{::root} join-order))))
 
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
