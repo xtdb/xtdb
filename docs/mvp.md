@@ -145,12 +145,13 @@ recommended, as it leads to confusion at query time.
 
 Indexing is done via the `crux.index.ValueToBytes` protocol. The
 default is to take the SHA-1 of the value serialised by Nippy. Ids
-index via `IdToBytes`. `Long`, `Double`, `Date` and `String` have
-implementations which respect ordering while serialised to unsigned
-bytes, which is what most underlying KV stores will use to order the
-keys. If the implementation returns an empty byte array the value
-isn't indexed. The value byte arrays have a prefix tag of one byte to
-ensure different types don't overlap.
+index via `IdToBytes`. `Byte`, `Short`, `Integer, `Long`, `Float`,
+`Double`, `Date`, `Character` and `String` have implementations which
+respect ordering while serialised to unsigned bytes, which is what
+most underlying KV stores will use to order the keys. If the
+implementation returns an empty byte array the value isn't
+indexed. The value byte arrays have a prefix tag of one byte to ensure
+different types don't overlap.
 
 The above implies that values which are maps are simply indexed as
 their hash. They can be used as a value in a query to find entities
