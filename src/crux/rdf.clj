@@ -227,10 +227,6 @@
 
 ;; TODO: This is a spike transforming a small subset of SPARQL into
 ;; CRUX's Datalog dialect. Experimental.
-
-;; Could be fronted by this protocol in the REST API:
-;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
-
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
@@ -386,7 +382,10 @@
   (rdf->clj [this]
     (rdf->clj (.getValue this))))
 
-(defn sparql->datalog [sparql]
-  (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql nil))]
-    {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
-     :where (use-default-language (rdf->clj tuple-expr) *default-language*)}))
+(defn sparql->datalog
+  ([sparql]
+   (sparql->datalog sparql nil))
+  ([sparql base-uri]
+   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))]
+     {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
+      :where (use-default-language (rdf->clj tuple-expr) *default-language*)})))
