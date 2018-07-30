@@ -41,12 +41,12 @@ indexes:
 + `attribute+entity+value+content-hash-index` Reverse of the above.
 
 These are the main disk indexes used by the query engine. They are
-binary indexes, each key contain two variables VE or EV, and there are
-separate `crux.db.Index` implementations, one for each element in VE
-or EV, a total of 4. These two (for either VE or EV) are combined via
-a binary index implementing `crux.db.LayeredIndex`. This is important
-for joins, which we'll return to and this should hopefully become
-clearer later on.
+binary indexes, where each key contain two values, VE or EV, and there
+are separate `crux.db.Index` implementations, one for each element in
+VE or EV, a total of 4: VE-V, VE-E and EV-E, EV-V. These two (for
+either VE or EV) are combined via a binary index implementing
+`crux.db.LayeredIndex`. This is important for joins, which we'll
+return to and this should hopefully become clearer later on.
 
 `crux.db.Index` provides a single function, `seek-values` that takes a
 key, and returns a tuple, where the first element is the byte array
