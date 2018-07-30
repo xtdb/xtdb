@@ -244,9 +244,13 @@
 
   Compare
   (rdf->clj [this]
-    [[(list (symbol (.getSymbol (.getOperator this)))
-            (rdf->clj (.getLeftArg this))
-            (rdf->clj (.getRightArg this)))]])
+    (let [left (rdf->clj (.getLeftArg this))
+          right (rdf->clj (.getRightArg this))]
+      (when (some list? [left right])
+        (throw (UnsupportedOperationException. "Nested expressions are not supported.")))
+      [[(list (symbol (.getSymbol (.getOperator this)))
+              left
+              right)]]))
 
   Difference
   (rdf->clj [this]
