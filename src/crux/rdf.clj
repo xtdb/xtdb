@@ -230,6 +230,8 @@
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
+(def ^:private blank-or-anonymous-var-pattern #"\??_")
+
 ;; TODO: the returns are not consistent, needs revisiting.
 (extend-protocol RDFToClojure
   Compare
@@ -237,7 +239,6 @@
     [[(list (symbol (.getSymbol (.getOperator this)))
             (rdf->clj (.getLeftArg this))
             (rdf->clj (.getRightArg this)))]])
-
 
   Difference
   (rdf->clj [this]
@@ -291,7 +292,7 @@
   LeftJoin
   (rdf->clj [this]
     (let [or-join-vars (->> (.getBindingNames this)
-                            (remove #(re-find #"\??_" %))
+                            (remove #(re-find blank-or-anonymous-var-pattern %))
                             (set))
           or-join-vars (set/intersection or-join-vars (set (.getBindingNames (.getRightArg this))))
           or-join-vars (mapv str->sparql-var or-join-vars)
@@ -321,7 +322,7 @@
                    (instance? Filter (.getParentNode this)))
       (throw (UnsupportedOperationException. "NOT only supported in FILTER NOT EXISTS.")))
     (let [not-vars (->> (.getAssuredBindingNames (.getSubQuery ^Exists (.getArg this)))
-                        (remove #(re-find #"\??_" %))
+                        (remove #(re-find blank-or-anonymous-var-pattern %))
                         (set))
           parent-vars (set (.getAssuredBindingNames ^Filter (.getParentNode this)))
           is-not? (set/subset? not-vars parent-vars)
@@ -356,7 +357,9 @@
   Union
   (rdf->clj [this]
     (let [is-or? (= (set (.getAssuredBindingNames this))
-                    (set (remove #(re-find #"\??_" %) (.getBindingNames this))))
+                    (->> (.getBindingNames this)
+                         (remove #(re-find blank-or-anonymous-var-pattern %))
+                         (set)))
           or-join-vars (mapv str->sparql-var (.getAssuredBindingNames this))
           or-left (rdf->clj (.getLeftArg this))
           or-left (if (> (count or-left) 1)
