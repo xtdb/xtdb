@@ -115,6 +115,9 @@
       (doto (id-function (nippy/fast-freeze this))
         (aset 0 (byte object-value-type-id))))))
 
+(defn value-bytes-type-id ^bytes [^bytes bs]
+  (Arrays/copyOfRange bs 0 value-type-id-size))
+
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
 

@@ -205,12 +205,15 @@
       (when (pred (first value+results))
         value+results))))
 
-(defn- value-comparsion-predicate [compare-pred v]
-  (if v
-    (let [seek-k (idx/value->bytes v)]
-      (fn [value]
-        (compare-pred (bu/compare-bytes value seek-k))))
-    (constantly true)))
+(defn- value-comparsion-predicate
+  ([compare-pred v]
+   (value-comparsion-predicate compare-pred v Integer/MAX_VALUE))
+  ([compare-pred v max-length]
+   (if v
+     (let [seek-k (idx/value->bytes v)]
+       (fn [value]
+         (compare-pred (bu/compare-bytes value seek-k))))
+     (constantly true))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
   (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
@@ -226,6 +229,10 @@
                                         (if (pred (idx/value->bytes k))
                                           k
                                           min-v)))))
+
+(defn new-prefix-equal-virtual-index [idx ^bytes prefix-v]
+  (let [pred (value-comparsion-predicate (comp not pos?) prefix-v (alength prefix-v))]
+    (->PredicateVirtualIndex idx pred identity)))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index

@@ -225,12 +225,17 @@
                                       clause))
                                   (group-by :sym))]
     (->> (for [[v-var clauses] v-var->range-clauses]
-           [v-var (->> (for [{:keys [op val]} clauses]
+           [v-var (->> (for [{:keys [op val]} clauses
+                             :let [type-prefix (idx/value-bytes-type-id (idx/value->bytes val))]]
                          (case op
-                           < #(doc/new-less-than-virtual-index % val)
-                           <= #(doc/new-less-than-equal-virtual-index % val)
-                           > #(doc/new-greater-than-virtual-index % val)
-                           >= #(doc/new-greater-than-equal-virtual-index % val)))
+                           < #(-> (doc/new-less-than-virtual-index % val)
+                                  (doc/new-prefix-equal-virtual-index type-prefix))
+                           <= #(-> (doc/new-less-than-equal-virtual-index % val)
+                                   (doc/new-prefix-equal-virtual-index type-prefix))
+                           > #(-> (doc/new-greater-than-virtual-index % val)
+                                  (doc/new-prefix-equal-virtual-index type-prefix))
+                           >= #(-> (doc/new-greater-than-equal-virtual-index % val)
+                                   (doc/new-prefix-equal-virtual-index type-prefix))))
                        (apply comp))])
          (into {}))))
 
