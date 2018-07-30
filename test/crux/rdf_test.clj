@@ -51,24 +51,6 @@
                            :http://xmlns.com/foaf/0.1/surname])))))
 
 (t/deftest test-can-parse-sparql-to-datalog
-  ;; http://docs.rdf4j.org/rdf-tutorial/#_databases_and_sparql_querying
-  (t/testing "RDF4J Example"
-    (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-               '{:find [?s ?n]
-                 :where
-                 [[?s :rdf/type :http://example.org/Artist]
-                  [?s :foaf/firstName ?n]]})
-             (crux.rdf/sparql->datalog
-              "
-PREFIX ex: <http://example.org/>
-PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-SELECT ?s ?n
-WHERE {
-   ?s a ex:Artist;
-      foaf:firstName ?n .
-}"))))
-
-  ;; https://jena.apache.org/tutorials/sparql.html
   (t/testing "Apacha Jena Tutorial"
     (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                '{:find [?x]

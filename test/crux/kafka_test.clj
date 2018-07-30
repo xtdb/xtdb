@@ -195,3 +195,128 @@
                           '{:find [e]
                             :where [[e :foaf/name "Aristotle"]]})))))
       (t/is true "skipping"))))
+
+;; https://jena.apache.org/tutorials/sparql.html
+(t/deftest test-can-transact-and-query-using-sparql
+  (let [tx-topic "test-can-transact-and-query-using-sparql-tx"
+        doc-topic "test-can-transact-and-query-using-sparql-doc"
+        tx-ops (->> (load-ntriples-example "crux/vc-db-1.nt")
+                    (map #(rdf/use-default-language % :en))
+                    (vec))
+        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
+
+    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+
+    (t/testing "transacting and indexing"
+      (db/submit-tx tx-log tx-ops)
+      (t/is (= {:txs 1 :docs 8} (k/consume-and-index-entities indexer ek/*consumer*))))
+
+    (t/testing "querying transacted data"
+      (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+SELECT ?x
+WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
+
+      (t/is (= #{[(keyword "http://somewhere/RebeccaSmith/") "Becky Smith"]
+                 [(keyword "http://somewhere/SarahJones/") "Sarah Jones"]
+                 [(keyword "http://somewhere/JohnSmith/") "John Smith"]
+                 [(keyword "http://somewhere/MattJones/") "Matt Jones"]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+SELECT ?x ?fname
+WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
+
+      (t/is (= #{["John"]
+                 ["Rebecca"]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+SELECT ?givenName
+WHERE
+  { ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Family>  \"Smith\" .
+    ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Given>  ?givenName .
+  }"))))
+
+      (t/is (= #{["Rebecca"]
+                 ["Sarah"]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?g
+WHERE
+{ ?y vcard:Given ?g .
+  FILTER regex(?g, \"r\", \"i\") }"))))
+
+      (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+PREFIX info: <http://somewhere/peopleInfo#>
+
+SELECT ?resource
+WHERE
+  {
+    ?resource info:age ?age .
+    FILTER (?age >= 24)
+  }"))))
+
+      ;; NOTE: Without post processing the extra optional is correct.
+      (t/is (= #{["Becky Smith" 23]
+                 ["Becky Smith" :crux.rdf/optional]
+                 ["Sarah Jones" :crux.rdf/optional]
+                 ["John Smith" 25]
+                 ["John Smith" :crux.rdf/optional]
+                 ["Matt Jones" :crux.rdf/optional]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+PREFIX info:    <http://somewhere/peopleInfo#>
+PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?name ?age
+WHERE
+{
+    ?person vcard:FN  ?name .
+    OPTIONAL { ?person info:age ?age }
+}"))))
+
+      (t/is (= #{["Becky Smith" 23]
+                 ["John Smith" 25]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+PREFIX info:   <http://somewhere/peopleInfo#>
+PREFIX vcard:  <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?name ?age
+WHERE
+{
+    ?person vcard:FN  ?name .
+    ?person info:age ?age .
+}"))))
+
+      (t/is (= #{["Becky Smith" :crux.rdf/optional]
+                 ["Sarah Jones" :crux.rdf/optional]
+                 ["John Smith" 25]
+                 ["John Smith" :crux.rdf/optional]
+                 ["Matt Jones" :crux.rdf/optional]}
+               (q/q (q/db f/*kv*)
+                    (crux.rdf/sparql->datalog
+              "
+PREFIX info:        <http://somewhere/peopleInfo#>
+PREFIX vcard:      <http://www.w3.org/2001/vcard-rdf/3.0#>
+
+SELECT ?name ?age
+WHERE
+{
+    ?person vcard:FN  ?name .
+    OPTIONAL { ?person info:age ?age . FILTER ( ?age > 24 ) }
+}")))))))

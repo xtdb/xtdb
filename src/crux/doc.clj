@@ -184,7 +184,7 @@
   db/OrderedIndex
   (next-values [this]
     (let [[entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr)]
-      (when-let [k (ks/seek i @peek-state)]
+      (when-let [k (some->> @peek-state (ks/seek i))]
         (attribute-entity-value-value+entity i k (:attr entity-value-entity-idx) entity-tx peek-state)))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
