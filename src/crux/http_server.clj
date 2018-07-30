@@ -138,8 +138,8 @@
   (str "<?xml version=\"1.0\"?>\n"
        "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
        "<head>"
-       (apply str (for [var vars]
-                    (format "<variable name=\"%s\"/>" var)))
+       (st/join (for [var vars]
+                  (format "<variable name=\"%s\"/>" var)))
        "</head>"
        "<results>"
        (st/join (for [result results]
@@ -149,10 +149,7 @@
                                                    "uri"
                                                    "literal")]]
                                   (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
-                                          var
-                                          type
-                                          value
-                                          type)))
+                                          var type value type)))
                        "</result>")))
        "</results>"
        "</sparql>"))
@@ -160,17 +157,19 @@
 (defn- sparql-json-response [vars results]
   (str "{\"head\": {\"vars\": [" (st/join ", " (map (comp pr-str str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
-       (st/join ", " (for [result results]
-                       (str "{"
-                            (st/join ", " (for [[var value] (zipmap vars result)
-                                                :let [type (if (satisfies? idx/IdToBytes value)
-                                                             "uri"
-                                                             "literal")]]
-                                            (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
-                                                    var
-                                                    type
-                                                    value)))
-                            "}")))
+       (->> (for [result results]
+              (str "{"
+                   (->> (for [[var value] (zipmap vars result)
+                              :let [type (if (satisfies? idx/IdToBytes value)
+                                           "uri"
+                                           "literal")]]
+                          (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
+                                  var
+                                  type
+                                  value))
+                        (st/join ", "))
+                   "}"))
+            (st/join ", " ))
        "]}}"))
 
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
