@@ -58,9 +58,9 @@
                             (ks/seek i))]
         (attribute-value+placeholder k peek-state)))))
 
-(defn new-doc-attribute-value-entity-value-index [i attr]
+(defn new-doc-attribute-value-entity-value-index [snapshot attr]
   (let [prefix (idx/encode-attribute+value-entity-prefix-key attr idx/empty-byte-array)]
-    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator i prefix) attr (atom nil))))
+    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix) attr (atom nil))))
 
 (defn- attribute-value-entity-entity+value [i ^bytes current-k attr value entity-as-of-idx peek-state]
   (loop [k current-k]
@@ -106,8 +106,8 @@
       (when-let [k (some->> @peek-state (ks/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-state)))))
 
-(defn new-doc-attribute-value-entity-entity-index [i attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex i attr value-entity-value-idx entity-as-of-idx (atom nil)))
+(defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
+  (->DocAttributeValueEntityEntityIndex (ks/new-iterator snapshot) attr value-entity-value-idx entity-as-of-idx (atom nil)))
 
 ;; AEV
 
@@ -142,9 +142,9 @@
             (db/next-values this)
             placeholder))))))
 
-(defn new-doc-attribute-entity-value-entity-index [i attr entity-as-of-idx]
+(defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
   (let [prefix (idx/encode-attribute+entity-value-prefix-key attr idx/empty-byte-array)]
-    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator i prefix) attr entity-as-of-idx (atom nil))))
+    (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix) attr entity-as-of-idx (atom nil))))
 
 (defn- attribute-entity-value-value+entity [i ^bytes current-k attr ^EntityTx entity-tx peek-state]
   (when entity-tx
@@ -187,10 +187,10 @@
       (when-let [k (ks/seek i @peek-state)]
         (attribute-entity-value-value+entity i k (:attr entity-value-entity-idx) entity-tx peek-state)))))
 
-(defn new-doc-attribute-entity-value-value-index [i attr entity-value-entity-idx]
-  (->DocAttributeEntityValueValueIndex i attr entity-value-entity-idx (atom nil)))
+(defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
+  (->DocAttributeEntityValueValueIndex (ks/new-iterator snapshot) attr entity-value-entity-idx (atom nil)))
 
-;; Regular Indexes
+;; Range Constraints
 
 (defrecord PredicateVirtualIndex [idx pred seek-k-fn]
   db/Index
@@ -271,6 +271,8 @@
   (if range-constraints
     (range-constraints idx)
     idx))
+
+;; Doc Store
 
 (defn normalize-value [v]
   (cond-> v

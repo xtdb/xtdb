@@ -250,12 +250,12 @@
         v-range-constraints (get v-var->range-constriants v)
         entity-as-of-idx (doc/new-entity-as-of-index snapshot business-time transact-time)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index (ks/new-iterator snapshot) a)
-            e-idx (doc/new-doc-attribute-value-entity-entity-index (ks/new-iterator snapshot) a v-doc-idx entity-as-of-idx)]
+      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index snapshot a)
+            e-idx (doc/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
         (log/debug :join-order :ave (pr-str v) e (pr-str clause))
         (doc/update-binary-join-order! binary-idx (doc/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index (ks/new-iterator snapshot) a entity-as-of-idx)
-            v-idx (-> (doc/new-doc-attribute-entity-value-value-index (ks/new-iterator snapshot) a e-doc-idx)
+      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
+            v-idx (-> (doc/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
                       (doc/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
@@ -442,7 +442,7 @@
                :type :or}])
        (into {})))
 
-(defn- bound-result->join-result [{:keys [result-name value? type entity value] :as result}]
+(defn- bound-result->join-result [{:keys [result-name value? entity value] :as result}]
   (if value?
     {result-name #{value}}
     {result-name #{entity}}))
