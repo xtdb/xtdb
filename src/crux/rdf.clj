@@ -22,8 +22,8 @@
            [org.eclipse.rdf4j.query QueryLanguage]
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra
-            Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
-            MathExpr Not Projection Regex StatementPattern Union ValueConstant Var]))
+            And Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
+            MathExpr Not Or Projection Regex StatementPattern Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -232,8 +232,12 @@
 
 (def ^:private blank-or-anonymous-var-pattern #"\??_")
 
-;; TODO: the returns are not consistent, needs revisiting.
 (extend-protocol RDFToClojure
+  And
+  (rdf->clj [this]
+    (vec (concat (rdf->clj (.getLeftArg this))
+                 (rdf->clj (.getRightArg this)))))
+
   Compare
   (rdf->clj [this]
     [[(list (symbol (.getSymbol (.getOperator this)))
@@ -316,6 +320,8 @@
                                     [(apply list 'and (map build-optional-clause or-join-vars))]
                                     [(build-optional-clause (first or-join-vars))])))))))
 
+  ;; TODO: Should be possible to make this work in other cases as
+  ;; well.
   Not
   (rdf->clj [this]
     (when-not (and (instance? Exists (.getArg this))
@@ -331,6 +337,19 @@
       [(if is-not?
          (cons 'not not)
          (cons 'not-join (cons (mapv str->sparql-var not-join-vars) not)))]))
+
+  ;; TODO: To simplistic.
+  Or
+  (rdf->clj [this]
+    (let [or-left (rdf->clj (.getLeftArg this))
+          or-left (if (> (count or-left) 1)
+                    [(cons 'and or-left)]
+                    or-left)
+          or-right (rdf->clj (.getRightArg this))
+          or-right (if (> (count or-right) 1)
+                     [(cons 'and or-right)]
+                     or-right)]
+      [(cons 'or (concat or-left or-right))]))
 
   Projection
   (rdf->clj [this]
