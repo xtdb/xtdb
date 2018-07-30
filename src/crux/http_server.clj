@@ -135,49 +135,43 @@
      (q/q (q/db kvs) query-map))))
 
 (defn- sparql-xml-response [vars results]
-  (response
-   200
-   {"Content-Type" "application/sparql-results+xml"}
-   (str "<?xml version=\"1.0\"?>
-<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
-        "<head>"
-        (apply str (for [var vars]
-                     (format "<variable name=\"%s\"/>" var)))
-        "</head>"
-        "<results>"
-        (st/join (for [result results]
-                   (str "<result>"
-                        (st/join (for [[var value] (zipmap vars result)
-                                       :let [type (if (satisfies? idx/IdToBytes value)
-                                                    "uri"
-                                                    "literal")]]
-                                   (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
-                                           var
-                                           type
-                                           value
-                                           type)))
-                        "</result>")))
-        "</results>"
-        "</sparql>")))
+  (str "<?xml version=\"1.0\"?>\n"
+       "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
+       "<head>"
+       (apply str (for [var vars]
+                    (format "<variable name=\"%s\"/>" var)))
+       "</head>"
+       "<results>"
+       (st/join (for [result results]
+                  (str "<result>"
+                       (st/join (for [[var value] (zipmap vars result)
+                                      :let [type (if (satisfies? idx/IdToBytes value)
+                                                   "uri"
+                                                   "literal")]]
+                                  (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
+                                          var
+                                          type
+                                          value
+                                          type)))
+                       "</result>")))
+       "</results>"
+       "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (response
-   200
-   {"Content-Type" "application/sparql-results+json"}
-   (str "{\"head\": {\"vars\": [" (st/join ", " (map (comp pr-str str) vars)) "]}, "
-        "\"results\": { \"bindings\": ["
-        (st/join ", " (for [result results]
-                        (str "{"
-                             (st/join ", " (for [[var value] (zipmap vars result)
-                                                 :let [type (if (satisfies? idx/IdToBytes value)
-                                                              "uri"
-                                                              "literal")]]
-                                             (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
-                                                     var
-                                                     type
-                                                     value)))
-                             "}")))
-        "]}}")))
+  (str "{\"head\": {\"vars\": [" (st/join ", " (map (comp pr-str str) vars)) "]}, "
+       "\"results\": { \"bindings\": ["
+       (st/join ", " (for [result results]
+                       (str "{"
+                            (st/join ", " (for [[var value] (zipmap vars result)
+                                                :let [type (if (satisfies? idx/IdToBytes value)
+                                                             "uri"
+                                                             "literal")]]
+                                            (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
+                                                    var
+                                                    type
+                                                    value)))
+                            "}")))
+       "]}}"))
 
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
 (defn sparql-query [kvs request]
@@ -191,16 +185,24 @@
                                 (get-in request [:headers "content-type"]))
                          (slurp (:body request) (or (req/character-encoding request) "UTF-8")))))]
     (let [accept (get-in request [:headers "accept"])
+          accept (if (= "*/*" accept)
+                   "application/sparql-results+xml"
+                   accept)
           {:keys [find] :as query-map} (rdf/sparql->datalog query)
           results (q/q (q/db kvs) query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
-      (cond (contains? #{"application/sparql-results+xml"
-                         "*/*"} accept)
-            (sparql-xml-response find results)
+      (cond (= "application/sparql-results+xml" accept)
+            (response
+             200
+             {"Content-Type" accept}
+             (sparql-xml-response find results))
 
             (= "application/sparql-results+json" accept)
-            (sparql-json-response find results)
+            (response
+             200
+             {"Content-Type" accept}
+             (sparql-json-response find results))
 
             :else
             (response 406 {"Content-Type" "text/plain"} nil)))
