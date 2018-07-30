@@ -103,8 +103,8 @@ WHERE
     (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
                                :vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                '{:find [?name]
-                 :where [(or [_ :foaf/name ?name]
-                             [_ :vcard/FN ?name])]})
+                 :where [(or [?_anon_1 :foaf/name ?name]
+                             [?_anon_2 :vcard/FN ?name])]})
              (crux.rdf/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>

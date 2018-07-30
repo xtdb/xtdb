@@ -23,8 +23,9 @@
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
            [org.eclipse.rdf4j.query.algebra
-            And BindingSetAssignment Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin ListMemberOperator
-            MathExpr Not Or Projection QueryModelNode Regex StatementPattern TupleExpr Union ValueConstant Var]))
+            And ArbitraryLengthPath BindingSetAssignment Compare Difference Extension ExtensionElem Exists
+            Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Projection QueryModelNode
+            Regex StatementPattern TupleExpr Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -239,6 +240,10 @@
     (vec (concat (rdf->clj (.getLeftArg this))
                  (rdf->clj (.getRightArg this)))))
 
+  ArbitraryLengthPath
+  (rdf->clj [this]
+    (throw (UnsupportedOperationException. "Arbitrary lengths paths are not supported.")))
+
   BindingSetAssignment
   (rdf->clj [this])
 
@@ -393,7 +398,9 @@
                     (->> (.getBindingNames this)
                          (remove #(re-find blank-or-anonymous-var-pattern %))
                          (set)))
-          or-join-vars (mapv str->sparql-var (.getAssuredBindingNames this))
+          or-join-vars (->> (.getAssuredBindingNames this)
+                            (remove #(re-find blank-or-anonymous-var-pattern %))
+                            (mapv str->sparql-var))
           or-left (rdf->clj (.getLeftArg this))
           or-left (if (> (count or-left) 1)
                     [(cons 'and or-left)]
@@ -410,9 +417,7 @@
   (rdf->clj [this]
     (if (.hasValue this)
       (rdf->clj (.getValue this))
-      (if (.isAnonymous this)
-        '_
-        (str->sparql-var (.getName this)))))
+      (str->sparql-var (.getName this))))
 
   ValueConstant
   (rdf->clj [this]
