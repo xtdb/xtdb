@@ -116,7 +116,7 @@
 
   IPersistentMap
   (id->bytes [this]
-    (value->bytes (nippy/fast-freeze this)))
+    (id-function (nippy/fast-freeze this)))
 
   nil
   (id->bytes [this]
