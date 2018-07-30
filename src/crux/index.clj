@@ -20,14 +20,13 @@
 
 (def ^:const ^:private meta-key->value-index-id 4)
 
-(def ^:const ^:private id-hash-algorithm "SHA-1")
-(def ^:const id-size (.getDigestLength (MessageDigest/getInstance id-hash-algorithm)))
+(def ^:pvivate ^{:tag 'long} value-type-id-size Byte/BYTES)
 
-(defn id-function ^bytes [^bytes bytes]
-  (.digest (MessageDigest/getInstance id-hash-algorithm) bytes))
+(def ^:const ^:private id-hash-algorithm "SHA-1")
+(def ^:const id-size (+ (.getDigestLength (MessageDigest/getInstance id-hash-algorithm))
+                        value-type-id-size))
 
 (def empty-byte-array (byte-array 0))
-(def nil-id-bytes (byte-array id-size))
 
 (def ^:const ^:private max-string-index-length 128)
 
@@ -37,42 +36,73 @@
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
 
+(def ^:private id-value-type-id 0)
+(def ^:private long-value-type-id 1)
+(def ^:private double-value-type-id 2)
+(def ^:private date-value-type-id 3)
+(def ^:private string-value-type-id 4)
+(def ^:private bytes-value-type-id 5)
+(def ^:private object-value-type-id 6)
+
+(def nil-id-bytes (doto (byte-array id-size)
+                    (aset 0 (byte id-value-type-id))))
+
+(defn- prepend-value-type-id [^bytes bs type-id]
+  (let [bs-with-type-id (doto (byte-array (+ (alength bs) value-type-id-size))
+                          (aset 0 (byte type-id)))]
+    (System/arraycopy bs 0 bs-with-type-id value-type-id-size (alength bs))
+    bs-with-type-id))
+
+(defn id-function ^bytes [^bytes bytes]
+  (-> (.digest (MessageDigest/getInstance id-hash-algorithm) bytes)
+      (prepend-value-type-id id-value-type-id)))
+
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBytes
   (class (byte-array 0))
   (value->bytes [this]
     (if (empty? this)
       this
-      (id-function this)))
+      (doto (id-function this)
+        (aset 0 (byte bytes-value-type-id)))))
 
   Long
   (value->bytes [this]
-    (bu/long->bytes (bit-xor ^long this Long/MIN_VALUE)))
+    (-> (ByteBuffer/allocate (+ Long/BYTES value-type-id-size))
+        (.put (byte long-value-type-id))
+        (.putLong (bit-xor ^long this Long/MIN_VALUE))
+        (.array)))
 
   Double
   (value->bytes [this]
     (let [l (Double/doubleToLongBits this)
           l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (bu/long->bytes l)))
+      (-> (ByteBuffer/allocate (+ Long/BYTES value-type-id-size))
+          (.put (byte double-value-type-id))
+          (.putLong l)
+          (.array))))
 
   Date
   (value->bytes [this]
-    (value->bytes (.getTime this)))
+    (doto (value->bytes (.getTime this))
+      (aset 0 (byte date-value-type-id))))
 
   String
   (value->bytes [this]
-    (let [terminate-mark (byte 1)
-          offset (byte 2)]
-      (let [s (if (< max-string-index-length (count this))
-                (subs this 0 max-string-index-length)
-                this)
-            bs (.getBytes s "UTF-8")
-            buffer (ByteBuffer/allocate (inc (alength bs)))]
-        (doseq [^byte b bs]
-          (.put buffer (unchecked-byte (+ offset b))))
-        (-> buffer
-            (.put terminate-mark)
-            (.array)))))
+    (if (< max-string-index-length (count this))
+      (doto (id-function (nippy/fast-freeze this))
+        (aset 0 (byte object-value-type-id)))
+      (let [terminate-mark (byte 1)
+            offset (byte 2)]
+        (let [s this
+              bs (.getBytes s "UTF-8")
+              buffer (ByteBuffer/allocate (+ (inc (alength bs)) value-type-id-size))]
+          (.put buffer (byte string-value-type-id))
+          (doseq [^byte b bs]
+            (.put buffer (byte (+ offset b))))
+          (-> buffer
+              (.put terminate-mark)
+              (.array))))))
 
   nil
   (value->bytes [this]
@@ -82,10 +112,11 @@
   (value->bytes [this]
     (if (satisfies? IdToBytes this)
       (id->bytes this)
-      (value->bytes (nippy/fast-freeze this)))))
+      (doto (id-function (nippy/fast-freeze this))
+        (aset 0 (byte object-value-type-id))))))
 
 (def ^:private hex-id-pattern
-  (re-pattern (format "\\p{XDigit}{%d}" (* 2 id-size))))
+  (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
 
 (extend-protocol IdToBytes
   (class (byte-array 0))
@@ -111,7 +142,7 @@
   String
   (id->bytes [this]
     (if (re-find hex-id-pattern this)
-      (bu/hex->bytes this)
+      (prepend-value-type-id (bu/hex->bytes this) id-value-type-id)
       (throw (IllegalArgumentException. (format "Not a %s hex string: %s" id-hash-algorithm this)))))
 
   IPersistentMap
@@ -125,11 +156,11 @@
 (deftype Id [^bytes bytes ^:unsynchronized-mutable ^int hash-code]
   IdToBytes
   (id->bytes [this]
-    (id->bytes bytes))
+    bytes)
 
   Object
   (toString [this]
-    (bu/bytes->hex bytes))
+    (bu/bytes->hex (Arrays/copyOfRange bytes value-type-id-size id-size)))
 
   (equals [this that]
     (or (identical? this that)
@@ -152,7 +183,9 @@
       (bu/compare-bytes bytes (id->bytes that)))))
 
 (defn ^Id new-id [id]
-  (->Id (id->bytes id) 0))
+  (let [bs (id->bytes id)]
+    (assert (= id-size (alength bs)))
+    (->Id bs 0)))
 
 (nippy/extend-freeze
  Id

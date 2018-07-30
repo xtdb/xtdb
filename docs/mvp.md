@@ -149,7 +149,8 @@ index via `IdToBytes`. `Long`, `Double`, `Date` and `String` have
 implementations which respect ordering while serialised to unsigned
 bytes, which is what most underlying KV stores will use to order the
 keys. If the implementation returns an empty byte array the value
-isn't indexed.
+isn't indexed. The value byte arrays have a prefix tag of one byte to
+ensure different types don't overlap.
 
 The above implies that values which are maps are simply indexed as
 their hash. They can be used as a value in a query to find entities
