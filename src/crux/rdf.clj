@@ -19,11 +19,12 @@
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
-           [org.eclipse.rdf4j.query QueryLanguage]
+           [org.eclipse.rdf4j.query BindingSet QueryLanguage]
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
+           [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
            [org.eclipse.rdf4j.query.algebra
-            And Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
-            MathExpr Not Or Projection Regex StatementPattern Union ValueConstant Var]))
+            And BindingSetAssignment Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
+            MathExpr Not Or Projection QueryModelNode Regex StatementPattern TupleExpr Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -238,6 +239,9 @@
     (vec (concat (rdf->clj (.getLeftArg this))
                  (rdf->clj (.getRightArg this)))))
 
+  BindingSetAssignment
+  (rdf->clj [this])
+
   Compare
   (rdf->clj [this]
     [[(list (symbol (.getSymbol (.getOperator this)))
@@ -404,10 +408,32 @@
   (rdf->clj [this]
     (rdf->clj (.getValue this))))
 
+(defn- collect-args [^TupleExpr tuple-expr]
+  (let [args (atom nil)]
+    (->> (proxy [AbstractQueryModelVisitor] []
+           (meetNode [node]
+             (when (instance? BindingSetAssignment node)
+               (when @args
+                 (throw (IllegalStateException. "Only one VALUES block supported.")))
+               (let [bsa ^BindingSetAssignment node]
+                 (->> (for [^BindingSet bs (.getBindingSets bsa)]
+                        (->> (for [bn (.getBindingNames bs)]
+                               [(str->sparql-var bn) (if (.hasBinding bs bn)
+                                                       (rdf->clj (.getValue bs bn))
+                                                       ::undefined)])
+                             (into {})))
+                      (vec)
+                      (reset! args))))
+             (.visitChildren ^QueryModelNode node this)))
+         (.visit tuple-expr))
+    @args))
+
 (defn sparql->datalog
   ([sparql]
    (sparql->datalog sparql nil))
   ([sparql base-uri]
-   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))]
-     {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
-      :where (use-default-language (rdf->clj tuple-expr) *default-language*)})))
+   (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))
+         args (collect-args tuple-expr)]
+     (cond-> {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
+              :where (use-default-language (rdf->clj tuple-expr) *default-language*)}
+       args (assoc :args args)))))

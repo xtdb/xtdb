@@ -358,4 +358,65 @@ SELECT  ?title ?price
    {?x dc:title ?title . }
    FILTER(?price < 20)
 }
-")))))
+")))
+
+    (t/is (= '{:find [?book ?title ?price],
+               :where
+               [[?book :http://purl.org/dc/elements/1.1/title ?title]
+                [?book :http://example.org/ns#price ?price]],
+               :args
+               [{?book :http://example.org/book/book1}
+                {?book :http://example.org/book/book3}]}
+             (crux.rdf/sparql->datalog "
+PREFIX dc:   <http://purl.org/dc/elements/1.1/>
+PREFIX :     <http://example.org/book/>
+PREFIX ns:   <http://example.org/ns#>
+
+SELECT ?book ?title ?price
+{
+   VALUES ?book { :book1 :book3 }
+   ?book dc:title ?title ;
+         ns:price ?price .
+}")))
+
+    (t/is (= '{:find [?book ?title ?price],
+               :where
+               [[?book :http://purl.org/dc/elements/1.1/title ?title]
+                [?book :http://example.org/ns#price ?price]],
+               :args
+               [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
+             (crux.rdf/sparql->datalog "
+PREFIX dc:   <http://purl.org/dc/elements/1.1/>
+PREFIX :     <http://example.org/book/>
+PREFIX ns:   <http://example.org/ns#>
+
+SELECT ?book ?title ?price
+{
+   ?book dc:title ?title ;
+         ns:price ?price .
+   VALUES (?book ?title)
+   { (UNDEF \"SPARQL Tutorial\")
+     (:book2 UNDEF) } }")))
+
+    (t/is (= '{:find [?book ?title ?price],
+               :where
+               [[?book :http://purl.org/dc/elements/1.1/title ?title]
+                [?book :http://example.org/ns#price ?price]],
+               :args
+               [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
+             (crux.rdf/sparql->datalog "
+PREFIX dc:   <http://purl.org/dc/elements/1.1/>
+PREFIX :     <http://example.org/book/>
+PREFIX ns:   <http://example.org/ns#>
+
+SELECT ?book ?title ?price
+{
+   ?book dc:title ?title ;
+         ns:price ?price .
+}
+VALUES (?book ?title)
+{ (UNDEF \"SPARQL Tutorial\")
+  (:book2 UNDEF)
+}")))))
