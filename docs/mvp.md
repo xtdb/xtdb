@@ -206,6 +206,11 @@ with CRUX. As the query nodes might be at different points in the
 index, and different queries might go to differnet nodes, there are
 currently some read consistency issues that can arise here.
 
+The REST API also provides an experimental end point for SPARQL 1.1
+Protocol queries under `/sparql/`. Only a small subset of SPARQL is
+supported, and is working by rewriting the query into the CRUX datalog
+dialect and there are no further RDF features by using this.
+
 ### How does CRUX do it?
 
 CRUX mainly consists of two parts, the transaction and ingestion
