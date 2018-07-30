@@ -158,12 +158,13 @@
  Id
  :crux.index/id
  [x data-output]
- (.writeUTF data-output (str x)))
+ (.write data-output (id->bytes x)))
 
 (nippy/extend-thaw
  :crux.index/id
  [data-input]
- (new-id (.readUTF data-input)))
+ (new-id (doto (byte-array id-size)
+           (->> (.readFully data-input)))))
 
 (defn encode-doc-key ^bytes [content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
