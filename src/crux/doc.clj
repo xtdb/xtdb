@@ -447,6 +447,8 @@
     (when file
       (.delete file))))
 
+;; NOTE: This isn't used anymore, but could be used for the or free
+;; vars. Complicated by the need to sorting across the tuples.
 (defn new-sorted-external-virtual-index [idx-or-seq]
   (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
                      (idx->seq idx-or-seq)
@@ -791,7 +793,7 @@
   ([relation tuples layered-range-constraints]
    (reset! (:iterators-state relation)
            {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                        (build-nested-index (sort tuples) layered-range-constraints))]
+                        (build-nested-index tuples layered-range-constraints))]
             :child-idx nil
             :needs-seek? true})
    relation))
