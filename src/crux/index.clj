@@ -66,12 +66,28 @@
       (doto (id-function this)
         (aset 0 (byte bytes-value-type-id)))))
 
+  Byte
+  (value->bytes [this]
+    (value->bytes (long this)))
+
+  Short
+  (value->bytes [this]
+    (value->bytes (long this)))
+
+  Integer
+  (value->bytes [this]
+    (value->bytes (long this)))
+
   Long
   (value->bytes [this]
     (-> (ByteBuffer/allocate (+ Long/BYTES value-type-id-size))
         (.put (byte long-value-type-id))
         (.putLong (bit-xor ^long this Long/MIN_VALUE))
         (.array)))
+
+  Float
+  (value->bytes [this]
+    (value->bytes (double this)))
 
   Double
   (value->bytes [this]
@@ -86,6 +102,10 @@
   (value->bytes [this]
     (doto (value->bytes (.getTime this))
       (aset 0 (byte date-value-type-id))))
+
+  Character
+  (value->bytes [this]
+    (value->bytes (str this)))
 
   String
   (value->bytes [this]

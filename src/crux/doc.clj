@@ -212,7 +212,7 @@
    (if v
      (let [seek-k (idx/value->bytes v)]
        (fn [value]
-         (compare-pred (bu/compare-bytes value seek-k))))
+         (compare-pred (bu/compare-bytes value seek-k max-length))))
      (constantly true))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
@@ -229,10 +229,6 @@
                                         (if (pred (idx/value->bytes k))
                                           k
                                           min-v)))))
-
-(defn new-prefix-equal-virtual-index [idx ^bytes prefix-v]
-  (let [pred (value-comparsion-predicate (comp not pos?) prefix-v (alength prefix-v))]
-    (->PredicateVirtualIndex idx pred identity)))
 
 (defrecord GreaterThanVirtualIndex [idx]
   db/Index
@@ -259,6 +255,17 @@
                                         (if (seek-k-pred (idx/value->bytes k))
                                           k
                                           v)))))
+
+(defn new-prefix-equal-virtual-index [idx ^bytes prefix-v]
+  (let [prefix (reify idx/ValueToBytes
+                 (value->bytes [_]
+                   prefix-v))
+        seek-k-pred (value-comparsion-predicate (comp not neg?) prefix (alength prefix-v))
+        pred (value-comparsion-predicate zero? prefix (alength prefix-v))]
+    (->PredicateVirtualIndex idx pred (fn [k]
+                                        (if (seek-k-pred (idx/value->bytes k))
+                                          k
+                                          prefix)))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
