@@ -114,6 +114,39 @@ SELECT ?name
 WHERE
 {
    { [] foaf:name ?name } UNION { [] vCard:FN ?name }
+}")))
+
+    (t/is (= '{:find [?name],
+               :where
+               [[?x :http://xmlns.com/foaf/0.1/givenName ?name]
+                [?x :http://xmlns.com/foaf/0.1/knows ?y]
+                [(== ?y #{:http://example.org/A :http://example.org/B})]]}
+             (crux.rdf/sparql->datalog
+              "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT ?name
+WHERE
+{
+  ?x foaf:givenName ?name .
+  ?x foaf:knows ?y .
+  FILTER(?y IN (<http://example.org/A>, <http://example.org/B>))
+}")))
+
+    (t/is (= '{:find [?name],
+               :where
+               [[?x :http://xmlns.com/foaf/0.1/givenName ?name]
+                [?x :http://xmlns.com/foaf/0.1/knows ?y]
+                [(!= ?y :http://example.org/A)]
+                [(!= ?y :http://example.org/B)]]}
+             (crux.rdf/sparql->datalog
+              "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+SELECT ?name
+WHERE
+{
+  ?x foaf:givenName ?name .
+  ?x foaf:knows ?y .
+  FILTER(?y NOT IN (<http://example.org/A>, <http://example.org/B>))
 }"))))
 
   ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321

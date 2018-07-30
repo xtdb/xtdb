@@ -23,7 +23,7 @@
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
            [org.eclipse.rdf4j.query.algebra
-            And BindingSetAssignment Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin
+            And BindingSetAssignment Compare Difference Extension ExtensionElem Exists Filter FunctionCall Join LeftJoin ListMemberOperator
             MathExpr Not Or Projection QueryModelNode Regex StatementPattern TupleExpr Union ValueConstant Var]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
@@ -327,6 +327,12 @@
                                   (if (> (count or-join-vars) 1)
                                     [(apply list 'and (map build-optional-clause or-join-vars))]
                                     [(build-optional-clause (first or-join-vars))])))))))
+
+  ListMemberOperator
+  (rdf->clj [this]
+    [[(list '==
+            (rdf->clj (first (.getArguments this)))
+            (set (map rdf->clj (rest (.getArguments this)))))]])
 
   ;; TODO: Should be possible to make this work in other cases as
   ;; well.
