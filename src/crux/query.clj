@@ -965,7 +965,9 @@
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-       (let [result (set (crux.query/q snapshot db q))]
+       (let [result ((if (:order-by q)
+                       (comp vec distinct)
+                       set) (crux.query/q snapshot db q))]
          (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
          (log/debug :query-result-size (count result))
          result))))
