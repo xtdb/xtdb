@@ -992,6 +992,11 @@
                   (with-meta
                     (mapv :value bound-result-tuple)
                     (zipmap (map :var bound-result-tuple) bound-result-tuple)))
+         ;; NOTE: For ascending sort, it might be possible to pick the
+         ;; right join order so the resulting seq is already sorted,
+         ;; by ensuring the first vars of the join order overlap with
+         ;; the ones in order by. Depending on the query this might
+         ;; not be possible.
          order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit))))))
