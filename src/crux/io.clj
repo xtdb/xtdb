@@ -128,12 +128,14 @@
    (->> (new-merge-sort-priority-queue comp sorted-seqs)
         (merge-sort-pirority-queue->seq))))
 
-(def ^:const external-sort-part-size (* 1024 1024))
+(def ^:const default-external-sort-part-size (* 1024 1024))
 
 (defn external-sort
   ([seq]
    (external-sort compare seq))
   ([comp seq]
+   (external-sort compare seq default-external-sort-part-size))
+  ([comp seq external-sort-part-size]
    (let [parts (partition-all external-sort-part-size seq)]
      (if (nil? (second parts))
        (sort (first parts))
