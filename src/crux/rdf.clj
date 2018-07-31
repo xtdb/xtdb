@@ -511,15 +511,15 @@
              (not-empty)
              (vec))))
 
-(defn- collect-slice-and-order [^TupleExpr tuple-expr]
+(defn- collect-slice [^TupleExpr tuple-expr]
   (let [slice (atom nil)]
     (->> (proxy [AbstractQueryModelVisitor] []
            (meetNode [node]
              (when (instance? Slice node)
-               reset! slice (merge (when (.hasOffset ^Slice node)
-                                     {:offset (.getOffset ^Slice node)})
-                                   (when (.hasLimit ^Slice node)
-                                     {:limit (.getLimit ^Slice node)})))
+               (reset! slice (merge (when (.hasOffset ^Slice node)
+                                      {:offset (.getOffset ^Slice node)})
+                                    (when (.hasLimit ^Slice node)
+                                      {:limit (.getLimit ^Slice node)}))))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))
     @slice))
