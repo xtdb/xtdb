@@ -24,7 +24,7 @@
            [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
            [org.eclipse.rdf4j.query.algebra
             And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
-            Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Projection QueryModelNode
+            Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Order OrderElem Projection QueryModelNode
             Regex Slice StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
@@ -390,6 +390,18 @@
                      or-right)]
       [(cons 'or (concat or-left or-right))]))
 
+  Order
+  (rdf->clj [this]
+    (rdf->clj (.getArg this)))
+
+  OrderElem
+  (rdf->clj [this]
+    [(rdf->clj (.getExpr this))
+     (if (.isAscending this)
+       :asc
+       :desc)])
+
+
   Projection
   (rdf->clj [this]
     (rdf->clj (.getArg this)))
@@ -495,18 +507,28 @@
          (.visit tuple-expr))
     @rule-name->rules))
 
-(defn- collect-slice [^TupleExpr tuple-expr]
+(defn- collect-slice-and-order [^TupleExpr tuple-expr]
   (let [slice (atom nil)]
     (->> (proxy [AbstractQueryModelVisitor] []
            (meetNode [node]
              (when (instance? Slice node)
-               (reset! slice (merge (when (.hasOffset ^Slice node)
-                                      {:offset (.getOffset ^Slice node)})
-                                    (when (.hasLimit ^Slice node)
-                                      {:limit (.getLimit ^Slice node)}))))
+               reset! slice (merge (when (.hasOffset ^Slice node)
+                                     {:offset (.getOffset ^Slice node)})
+                                   (when (.hasLimit ^Slice node)
+                                     {:limit (.getLimit ^Slice node)})))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))
     @slice))
+
+(defn- collect-order-by [^TupleExpr tuple-expr]
+  (let [order-by (atom nil)]
+    (->> (proxy [AbstractQueryModelVisitor] []
+           (meetNode [node]
+             (when (instance? Order node)
+               (reset! order-by (mapv rdf->clj (.getElements ^Order node))))
+             (.visitChildren ^QueryModelNode node this)))
+         (.visit tuple-expr))
+    @order-by))
 
 (defn sparql->datalog
   ([sparql]
@@ -518,9 +540,11 @@
          rules (vec (for [[_ rules] rule-name->rules
                           rule rules]
                       rule))
-         slice (collect-slice tuple-expr)]
+         slice (collect-slice tuple-expr)
+         order-by (collect-order-by tuple-expr)]
      (cond-> {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
               :where (use-default-language (rdf->clj tuple-expr) *default-language*)}
        args (assoc :args args)
        slice (merge slice)
+       order-by (assoc :order-by order-by)
        (seq rules) (assoc :rules rules)))))

@@ -10,7 +10,8 @@
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.kv-store :as ks]
-            [crux.db :as db]))
+            [crux.db :as db])
+  (:import [java.util Comparator]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -95,7 +96,11 @@
 (s/def ::offset pos-int?)
 (s/def ::limit pos-int?)
 
-(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit]))
+(s/def ::order-element (s/and vector?
+                              (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
+(s/def ::order-by (s/coll-of ::order-element :kind vector?))
+
+(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by]))
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -941,6 +946,21 @@
                      (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings}))
 
+(defn- order-by-comparator [vars order-by]
+  (let [var->index (zipmap vars (range))]
+    (reify Comparator
+      (compare [_ a b]
+        (loop [diff 0
+               [{:keys [var direction]} & order-by] order-by]
+          (if (or (not (zero? diff))
+                  (nil? var))
+            diff
+            (let [index (get var->index var)]
+              (recur (long (cond-> (compare (get a index)
+                                            (get b index))
+                             (= :desc direction) -))
+                     order-by))))))))
+
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
@@ -950,7 +970,7 @@
          (log/debug :query-result-size (count result))
          result))))
   ([snapshot {:keys [object-store] :as db} q]
-   (let [{:keys [find where args rules offset limit] :as q} (s/conform :crux.query/query q)]
+   (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
@@ -963,15 +983,17 @@
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (cond->> (doc/layered-idx->seq n-ary-join)
-                                        offset (drop offset)
-                                        limit (take limit))
-             bound-result-tuple (cartesian-product
-                                 (for [var find]
-                                   (bound-results-for-var object-store var->bindings join-keys join-results var)))]
-         (with-meta
-           (mapv :value bound-result-tuple)
-           (zipmap (map :var bound-result-tuple) bound-result-tuple)))))))
+       (cond->> (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
+                      bound-result-tuple (cartesian-product
+                                          (for [var find]
+                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                  (with-meta
+                    (mapv :value bound-result-tuple)
+                    (zipmap (map :var bound-result-tuple) bound-result-tuple)))
+         ;; TODO: It would be best if this could spill over to disk.
+         order-by (sort (order-by-comparator find order-by))
+         offset (drop offset)
+         limit (take limit))))))
 
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time])
 

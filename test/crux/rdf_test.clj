@@ -507,12 +507,14 @@ VALUES (?book ?title)
 
     (t/is (= '{:find [?name],
                :where [[?x :http://xmlns.com/foaf/0.1/name ?name]]
-               :limit 20}
+               :limit 20
+               :order-by [[?name :asc]]}
              (rdf/sparql->datalog
               "
 PREFIX foaf:    <http://xmlns.com/foaf/0.1/>
 
 SELECT ?name
 WHERE { ?x foaf:name ?name }
+ORDER BY ?name
 LIMIT 20
 ")))))
