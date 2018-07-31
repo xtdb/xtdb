@@ -92,8 +92,10 @@
                                 (s/cat :head ::rule-head
                                        :body (s/+ ::term))))
 (s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
+(s/def ::offset pos-int?)
+(s/def ::limit pos-int?)
 
-(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules]))
+(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit]))
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -948,7 +950,7 @@
          (log/debug :query-result-size (count result))
          result))))
   ([snapshot {:keys [object-store] :as db} q]
-   (let [{:keys [find where args rules] :as q} (s/conform :crux.query/query q)]
+   (let [{:keys [find where args rules offset limit] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
@@ -961,7 +963,9 @@
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
-       (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
+       (for [[join-keys join-results] (cond->> (doc/layered-idx->seq n-ary-join)
+                                        offset (drop offset)
+                                        limit (take limit))
              bound-result-tuple (cartesian-product
                                  (for [var find]
                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))]

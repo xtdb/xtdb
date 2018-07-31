@@ -55,7 +55,7 @@
     (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                '{:find [?x]
                  :where [[?x :vcard/FN "John Smith"]]})
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 SELECT ?x
 WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
@@ -64,7 +64,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
                '{:find [?y ?givenName]
                  :where [[?y :vcard/Family "Smith"]
                          [?y :vcard/Given ?givenName]]})
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 SELECT ?y ?givenName
 WHERE
@@ -76,7 +76,7 @@ WHERE
                        '{:find [?g]
                          :where [[?y :vcard/Given ?g]
                                  [(re-find #"(?i)r" ?g)]]}))
-             (pr-str (crux.rdf/sparql->datalog
+             (pr-str (rdf/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -89,7 +89,7 @@ WHERE
                '{:find [?resource]
                  :where [[?resource :info/age ?age]
                          [(>= ?age 24)]]})
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 PREFIX info: <http://somewhere/peopleInfo#>
 
@@ -105,7 +105,7 @@ WHERE
                '{:find [?name]
                  :where [(or [?_anon_1 :foaf/name ?name]
                              [?_anon_2 :vcard/FN ?name])]})
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX vCard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -121,7 +121,7 @@ WHERE
                [[?x :http://xmlns.com/foaf/0.1/givenName ?name]
                 [?x :http://xmlns.com/foaf/0.1/knows ?y]
                 [(== ?y #{:http://example.org/A :http://example.org/B})]]}
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -138,7 +138,7 @@ WHERE
                 [?x :http://xmlns.com/foaf/0.1/knows ?y]
                 [(!= ?y :http://example.org/A)]
                 [(!= ?y :http://example.org/B)]]}
-             (crux.rdf/sparql->datalog
+             (rdf/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -451,7 +451,7 @@ SELECT  ?title ?price
                :args
                [{?book :http://example.org/book/book1}
                 {?book :http://example.org/book/book3}]}
-             (crux.rdf/sparql->datalog "
+             (rdf/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -470,7 +470,7 @@ SELECT ?book ?title ?price
                :args
                [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
                 {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
-             (crux.rdf/sparql->datalog "
+             (rdf/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -490,7 +490,7 @@ SELECT ?book ?title ?price
                :args
                [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
                 {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
-             (crux.rdf/sparql->datalog "
+             (rdf/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -503,4 +503,16 @@ SELECT ?book ?title ?price
 VALUES (?book ?title)
 { (UNDEF \"SPARQL Tutorial\")
   (:book2 UNDEF)
-}")))))
+}")))
+
+    (t/is (= '{:find [?name],
+               :where [[?x :http://xmlns.com/foaf/0.1/name ?name]]
+               :limit 20}
+             (rdf/sparql->datalog
+              "
+PREFIX foaf:    <http://xmlns.com/foaf/0.1/>
+
+SELECT ?name
+WHERE { ?x foaf:name ?name }
+LIMIT 20
+")))))

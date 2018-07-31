@@ -25,7 +25,7 @@
            [org.eclipse.rdf4j.query.algebra
             And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
             Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Projection QueryModelNode
-            Regex StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
+            Regex Slice StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -274,6 +274,8 @@
   (rdf->clj [this]
     (throw (UnsupportedOperationException. "MINUS not supported, use NOT EXISTS.")))
 
+  ;; NOTE: Distinct is the default due to the set semantics of
+  ;; Datalog.
   Distinct
   (rdf->clj [this]
     (rdf->clj (.getArg this)))
@@ -401,6 +403,10 @@
                                (rdf->clj (.getPatternArg this)))))
             (rdf->clj (.getArg this)))]])
 
+  Slice
+  (rdf->clj [this]
+    (rdf->clj (.getArg this)))
+
   StatementPattern
   (rdf->clj [this]
     (let [s (.getSubjectVar this)
@@ -489,16 +495,32 @@
          (.visit tuple-expr))
     @rule-name->rules))
 
+(defn- collect-slice [^TupleExpr tuple-expr]
+  (let [slice (atom nil)]
+    (->> (proxy [AbstractQueryModelVisitor] []
+           (meetNode [node]
+             (when (instance? Slice node)
+               (reset! slice (merge (when (.hasOffset ^Slice node)
+                                      {:offset (.getOffset ^Slice node)})
+                                    (when (.hasLimit ^Slice node)
+                                      {:limit (.getLimit ^Slice node)}))))
+             (.visitChildren ^QueryModelNode node this)))
+         (.visit tuple-expr))
+    @slice))
+
 (defn sparql->datalog
   ([sparql]
    (sparql->datalog sparql nil))
   ([sparql base-uri]
    (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))
          args (collect-args tuple-expr)
-         rule-name->rules (collect-arbritrary-path-rules tuple-expr)]
+         rule-name->rules (collect-arbritrary-path-rules tuple-expr)
+         rules (vec (for [[_ rules] rule-name->rules
+                          rule rules]
+                      rule))
+         slice (collect-slice tuple-expr)]
      (cond-> {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
               :where (use-default-language (rdf->clj tuple-expr) *default-language*)}
        args (assoc :args args)
-       (seq rule-name->rules) (assoc :rules (vec (for [[_ rules] rule-name->rules
-                                                       rule rules]
-                                                   rule)))))))
+       slice (merge slice)
+       (seq rules) (assoc :rules rules)))))
