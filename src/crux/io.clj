@@ -4,7 +4,7 @@
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
            [java.lang.ref ReferenceQueue PhantomReference]
-           [java.util Date IdentityHashMap]
+           [java.util Comparator Date IdentityHashMap PriorityQueue]
            [java.net ServerSocket]))
 
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
@@ -97,3 +97,22 @@
 
 (defn folder-human-size [f]
   (->human-size (folder-size f)))
+
+;; TODO: Intended to be used for external sorting, where each sorted
+;; seq will come from disk.
+(defn merge-sort
+  ([sorted-seqs]
+   (merge-sort compare sorted-seqs))
+  ([comp sorted-seqs]
+   (let [sorted-seqs (remove empty? sorted-seqs)
+         pq-comp (reify Comparator
+                   (compare [_ [a] [b]]
+                     (comp a b)))
+         pq (doto (PriorityQueue. (count sorted-seqs) pq-comp)
+              (.addAll sorted-seqs))]
+     (->> (repeatedly (fn []
+                        (let [[x & xs] (.poll pq)]
+                          (when xs
+                            (.add pq xs))
+                          x)))
+          (take-while identity)))))
