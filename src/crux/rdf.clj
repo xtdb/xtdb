@@ -485,7 +485,7 @@
     @args))
 
 (defn- collect-arbritrary-path-rules [^TupleExpr tuple-expr]
-  (let [rule-name->rules (atom {})]
+  (let [rule-name->rules (atom nil)]
     (->> (proxy [AbstractQueryModelVisitor] []
            (meetNode [node]
              (when (instance? ArbitraryLengthPath node)
@@ -505,7 +505,11 @@
                                                     [(identity ::zero-matches) o]])))))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))
-    @rule-name->rules))
+    (some->> (for [[_ rules]  @rule-name->rules
+                   rule rules]
+               rule)
+             (not-empty)
+             (vec))))
 
 (defn- collect-slice-and-order [^TupleExpr tuple-expr]
   (let [slice (atom nil)]
@@ -536,10 +540,7 @@
   ([sparql base-uri]
    (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))
          args (collect-args tuple-expr)
-         rule-name->rules (collect-arbritrary-path-rules tuple-expr)
-         rules (vec (for [[_ rules] rule-name->rules
-                          rule rules]
-                      rule))
+         rules (collect-arbritrary-path-rules tuple-expr)
          slice (collect-slice tuple-expr)
          order-by (collect-order-by tuple-expr)]
      (cond-> {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
@@ -547,4 +548,4 @@
        args (assoc :args args)
        slice (merge slice)
        order-by (assoc :order-by order-by)
-       (seq rules) (assoc :rules rules)))))
+       rules (assoc :rules rules)))))
