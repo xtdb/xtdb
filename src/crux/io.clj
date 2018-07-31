@@ -114,11 +114,13 @@
       (.addAll sorted-seqs))))
 
 (defn- merge-sort-pirority-queue->seq [^PriorityQueue pq]
-  (->> (repeatedly #(let [[x & xs] (.poll pq)]
-                      (when xs
-                        (.add pq xs))
-                      x))
-       (take-while identity)))
+  ((fn step []
+     (lazy-seq
+      (let [[x & xs] (.poll pq)]
+        (when x
+          (when xs
+            (.add pq xs))
+          (cons x (step))))))))
 
 (defn merge-sort
   ([sorted-seqs]
@@ -133,34 +135,33 @@
   ([seq]
    (external-sort compare seq))
   ([comp seq]
-   (let [chunks (->> (partition-all external-sort-chunk-size seq)
-                     (map sort))]
+   (let [chunks (partition-all external-sort-chunk-size seq)]
      (if (nil? (second chunks))
-       (first chunks)
+       (sort (first chunks))
        (let [files (->> chunks
-                        (reduce
-                         (fn [acc chunk]
-                           (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
-                                        (.deleteOnExit))]
-                             (with-open [out (DataOutputStream. (io/output-stream file))]
-                               (doseq [x chunk]
-                                 (nippy/freeze-to-out! out x)))
-                             (conj acc file)))
-                         []))
+                        (pmap (fn [chunk]
+                                (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
+                                             (.deleteOnExit))]
+                                  (with-open [out (DataOutputStream. (io/output-stream file))]
+                                    (doseq [x (sort chunk)]
+                                      (nippy/freeze-to-out! out x)))
+                                  file))))
              seq+cleaner-actions (for [^File file files]
                                    (let [in (DataInputStream. (io/input-stream file))
                                          cleaner-action (fn []
                                                           (.close in)
                                                           (.delete file))
-                                         seq (->> (repeatedly #(try
-                                                                 (nippy/thaw-from-in! in)
-                                                                 (catch Exception e
-                                                                   (cleaner-action)
-                                                                   (if (or (instance? IOException e)
-                                                                           (instance? IOException (.getCause e)))
-                                                                     nil
-                                                                     (throw e)))))
-                                                  (take-while identity))]
+                                         seq ((fn step []
+                                                (lazy-seq
+                                                 (try
+                                                   (when-let [x (nippy/thaw-from-in! in)]
+                                                     (cons x (step)))
+                                                   (catch Exception e
+                                                     (cleaner-action)
+                                                     (if (or (instance? IOException e)
+                                                             (instance? IOException (.getCause e)))
+                                                       nil
+                                                       (throw e)))))))]
                                      [seq cleaner-action]))
              pq (->> (map first seq+cleaner-actions)
                      (new-merge-sort-priority-queue comp))]
