@@ -233,6 +233,8 @@
   (symbol (str "?" s)))
 
 (defn- arbitrary-length-path-rule-head [s p o min-length]
+  (when (coll? p)
+    (throw (UnsupportedOperationException. "Only single predicate arbitrary length paths supported.")))
   (let [path-type (case (long min-length)
                     1 "PLUS"
                     0 "STAR")]
