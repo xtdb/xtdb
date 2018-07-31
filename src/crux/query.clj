@@ -992,8 +992,7 @@
                   (with-meta
                     (mapv :value bound-result-tuple)
                     (zipmap (map :var bound-result-tuple) bound-result-tuple)))
-         ;; TODO: It would be best if this could spill over to disk.
-         order-by (sort (order-by-comparator find order-by))
+         order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit))))))
 

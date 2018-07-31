@@ -1,8 +1,10 @@
 (ns crux.io
   (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [taoensso.nippy :as nippy])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
+           [java.io DataInputStream DataOutputStream File IOException]
            [java.lang.ref ReferenceQueue PhantomReference]
            [java.util Comparator Date IdentityHashMap PriorityQueue]
            [java.net ServerSocket]))
@@ -23,9 +25,11 @@
       (recur (.remove reference-queue)))
     (catch InterruptedException _)))
 
-(defonce ^:private ^Thread cleaner-thread
-  (doto (Thread. ^Runnable cleanup-loop "crux.io.cleaner-thread")
-    (.setDaemon true)))
+(def ^:private ^Thread cleaner-thread
+  (do (when (and (bound? #'cleaner-thread) cleaner-thread)
+        (.interrupt ^Thread cleaner-thread))
+      (doto (Thread. ^Runnable cleanup-loop "crux.io.cleaner-thread")
+        (.setDaemon true))))
 
 (defn register-cleaner [object action]
   (when-not (.isAlive cleaner-thread)
@@ -100,19 +104,66 @@
 
 ;; TODO: Intended to be used for external sorting, where each sorted
 ;; seq will come from disk.
+
+(defn- new-merge-sort-priority-queue ^PriorityQueue [comp sorted-seqs]
+  (let [sorted-seqs (remove empty? sorted-seqs)
+        pq-comp (reify Comparator
+                  (compare [_ [a] [b]]
+                    (comp a b)))]
+    (doto (PriorityQueue. (count sorted-seqs) pq-comp)
+      (.addAll sorted-seqs))))
+
+(defn- merge-sort-pirority-queue->seq [^PriorityQueue pq]
+  (->> (repeatedly #(let [[x & xs] (.poll pq)]
+                      (when xs
+                        (.add pq xs))
+                      x))
+       (take-while identity)))
+
 (defn merge-sort
   ([sorted-seqs]
    (merge-sort compare sorted-seqs))
   ([comp sorted-seqs]
-   (let [sorted-seqs (remove empty? sorted-seqs)
-         pq-comp (reify Comparator
-                   (compare [_ [a] [b]]
-                     (comp a b)))
-         pq (doto (PriorityQueue. (count sorted-seqs) pq-comp)
-              (.addAll sorted-seqs))]
-     (->> (repeatedly (fn []
-                        (let [[x & xs] (.poll pq)]
-                          (when xs
-                            (.add pq xs))
-                          x)))
-          (take-while identity)))))
+   (->> (new-merge-sort-priority-queue comp sorted-seqs)
+        (merge-sort-pirority-queue->seq))))
+
+(def ^:const external-sort-chunk-size (* 1024 1024))
+
+(defn external-sort
+  ([seq]
+   (external-sort compare seq))
+  ([comp seq]
+   (let [chunks (->> (partition-all external-sort-chunk-size seq)
+                     (map sort))]
+     (if (nil? (second chunks))
+       (first chunks)
+       (let [files (->> chunks
+                        (reduce
+                         (fn [acc chunk]
+                           (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
+                                        (.deleteOnExit))]
+                             (with-open [out (DataOutputStream. (io/output-stream file))]
+                               (doseq [x chunk]
+                                 (nippy/freeze-to-out! out x)))
+                             (conj acc file)))
+                         []))
+             seq+cleaner-actions (for [^File file files]
+                                   (let [in (DataInputStream. (io/input-stream file))
+                                         cleaner-action (fn []
+                                                          (.close in)
+                                                          (.delete file))
+                                         seq (->> (repeatedly #(try
+                                                                 (nippy/thaw-from-in! in)
+                                                                 (catch Exception e
+                                                                   (cleaner-action)
+                                                                   (if (or (instance? IOException e)
+                                                                           (instance? IOException (.getCause e)))
+                                                                     nil
+                                                                     (throw e)))))
+                                                  (take-while identity))]
+                                     [seq cleaner-action]))
+             pq (->> (map first seq+cleaner-actions)
+                     (new-merge-sort-priority-queue comp))]
+         (doseq [[_ cleaner-action] seq+cleaner-actions]
+           (register-cleaner pq cleaner-action))
+         (merge-sort-pirority-queue->seq pq))))))
