@@ -389,7 +389,7 @@ WHERE {
                         (http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?t ?o)]
                        [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
                         [?s :crux.db/id]
-                        [:crux.rdf/zero ?o]]]}
+                        [:crux.rdf/zero-matches ?o]]]}
              (rdf/sparql->datalog "
 PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -413,11 +413,15 @@ SELECT ?person
   :x foaf:knows+ ?person
 }")))
 
-
-    ;; TODO; Parses to DISTINCT.
     ;; NOTE: Adapted from above example for zero-or-one.
-    #_(t/is (= '{}
-               (rdf/sparql->datalog "
+    ;; Parses to distinct and ZeroLengthPath in a union.
+    (t/is (= '{:find [?person],
+               :where
+               [(or-join [?person]
+                         (and [:http://example/x :crux.db/id]
+                              [:crux.rdf/zero-matches ?person])
+                         [:http://example/x :http://xmlns.com/foaf/0.1/knows ?person])]}
+             (rdf/sparql->datalog "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX :     <http://example/>
 SELECT ?person

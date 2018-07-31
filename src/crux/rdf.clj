@@ -23,9 +23,9 @@
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
            [org.eclipse.rdf4j.query.algebra
-            And ArbitraryLengthPath BindingSetAssignment Compare Difference Extension ExtensionElem Exists
+            And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
             Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Projection QueryModelNode
-            Regex StatementPattern TupleExpr Union ValueConstant Var]))
+            Regex StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 
@@ -233,9 +233,9 @@
   (symbol (str "?" s)))
 
 (defn- arbitrary-length-path-rule-head [s p o min-length]
-  (let [path-type (if (= 1 min-length)
-                    "PLUS"
-                    "STAR")]
+  (let [path-type (case (long min-length)
+                    1 "PLUS"
+                    0 "STAR")]
     (list (symbol (namespace p)
                   (str (name p) "-" path-type)) s o)))
 
@@ -249,6 +249,9 @@
 
   ArbitraryLengthPath
   (rdf->clj [this]
+    (when-not (instance? StatementPattern (.getPathExpression this))
+      (throw (UnsupportedOperationException.
+              "Arbitrary length paths only supported for statement patterns.")))
     (let [[[s p o]] (rdf->clj (.getPathExpression this))]
       [(arbitrary-length-path-rule-head s p o (.getMinLength this))]))
 
@@ -268,6 +271,10 @@
   Difference
   (rdf->clj [this]
     (throw (UnsupportedOperationException. "MINUS not supported, use NOT EXISTS.")))
+
+  Distinct
+  (rdf->clj [this]
+    (rdf->clj (.getArg this)))
 
   Extension
   (rdf->clj [this]
@@ -365,7 +372,8 @@
          (cons 'not not)
          (cons 'not-join (cons (mapv str->sparql-var not-join-vars) not)))]))
 
-  ;; TODO: To simplistic.
+  ;; TODO: To simplistic. Logical or is really short cutting, but is
+  ;; useful to support between predicates in a filter.
   Or
   (rdf->clj [this]
     (let [or-left (rdf->clj (.getLeftArg this))
@@ -429,7 +437,12 @@
 
   ValueConstant
   (rdf->clj [this]
-    (rdf->clj (.getValue this))))
+    (rdf->clj (.getValue this)))
+
+  ZeroLengthPath
+  (rdf->clj [this]
+    [[(rdf->clj (.getSubjectVar this)) :crux.db/id]
+     [(identity ::zero-matches) (rdf->clj (.getObjectVar this))]]))
 
 (defn- collect-args [^TupleExpr tuple-expr]
   (let [args (atom nil)]
@@ -469,7 +482,7 @@
                                   (arbitrary-length-path-rule-head '?t p o min-length)]]
                           (zero? min-length) (conj [(arbitrary-length-path-rule-head s p o min-length)
                                                     [s :crux.db/id]
-                                                    [(identity ::zero) o]])))))
+                                                    [(identity ::zero-matches) o]])))))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))
     @rule-name->rules))
