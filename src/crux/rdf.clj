@@ -232,6 +232,13 @@
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
+(defn- arbitrary-length-path-rule-head [s p o min-length]
+  (let [path-type (if (= 1 min-length)
+                    "PLUS"
+                    "STAR")]
+    (list (symbol (namespace p)
+                  (str (name p) "-" path-type)) s o)))
+
 (def ^:private blank-or-anonymous-var-pattern #"\??_")
 
 (extend-protocol RDFToClojure
@@ -242,7 +249,8 @@
 
   ArbitraryLengthPath
   (rdf->clj [this]
-    (throw (UnsupportedOperationException. "Arbitrary lengths paths are not supported.")))
+    (let [[[s p o]] (rdf->clj (.getPathExpression this))]
+      [(arbitrary-length-path-rule-head s p o (.getMinLength this))]))
 
   BindingSetAssignment
   (rdf->clj [this])
@@ -443,12 +451,39 @@
          (.visit tuple-expr))
     @args))
 
+(defn- collect-arbritrary-path-rules [^TupleExpr tuple-expr]
+  (let [rule-name->rules (atom {})]
+    (->> (proxy [AbstractQueryModelVisitor] []
+           (meetNode [node]
+             (when (instance? ArbitraryLengthPath node)
+               (let [[[_ p _]] (rdf->clj (.getPathExpression ^ArbitraryLengthPath node))
+                     s '?s
+                     o '?o
+                     min-length (.getMinLength ^ArbitraryLengthPath node)
+                     [rule-name] (arbitrary-length-path-rule-head s p o min-length)]
+                 (swap! rule-name->rules assoc rule-name
+                        (cond-> [[(arbitrary-length-path-rule-head s p o min-length)
+                                  [s p o]]
+                                 [(arbitrary-length-path-rule-head s p o min-length)
+                                  [s p '?t]
+                                  (arbitrary-length-path-rule-head '?t p o min-length)]]
+                          (zero? min-length) (conj [(arbitrary-length-path-rule-head s p o min-length)
+                                                    [s :crux.db/id]
+                                                    [(identity ::zero) o]])))))
+             (.visitChildren ^QueryModelNode node this)))
+         (.visit tuple-expr))
+    @rule-name->rules))
+
 (defn sparql->datalog
   ([sparql]
    (sparql->datalog sparql nil))
   ([sparql base-uri]
    (let [tuple-expr (.getTupleExpr (QueryParserUtil/parseQuery QueryLanguage/SPARQL sparql base-uri))
-         args (collect-args tuple-expr)]
+         args (collect-args tuple-expr)
+         rule-name->rules (collect-arbritrary-path-rules tuple-expr)]
      (cond-> {:find (mapv str->sparql-var (.getBindingNames tuple-expr))
               :where (use-default-language (rdf->clj tuple-expr) *default-language*)}
-       args (assoc :args args)))))
+       args (assoc :args args)
+       (seq rule-name->rules) (assoc :rules (vec (for [[_ rules] rule-name->rules
+                                                       rule rules]
+                                                   rule)))))))

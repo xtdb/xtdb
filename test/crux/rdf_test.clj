@@ -378,6 +378,53 @@ WHERE {
    }
 }")))
 
+    ;; NOTE: Adapted to remove first rdf:type/ part of the path which
+    ;; simply expands to a blank node with a random id.
+    (t/is (= '{:find [?x ?type],
+               :where [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?x ?type)]
+               :rules [[(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
+                        [?s :http://www.w3.org/2000/01/rdf-schema#subClassOf ?o]]
+                       [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
+                        [?s :http://www.w3.org/2000/01/rdf-schema#subClassOf ?t]
+                        (http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?t ?o)]
+                       [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
+                        [?s :crux.db/id]
+                        [:crux.rdf/zero ?o]]]}
+             (rdf/sparql->datalog "
+PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+SELECT ?x ?type
+{
+  ?x  rdfs:subClassOf* ?type
+}")))
+
+    (t/is (= '{:find [?person],
+               :where [(http://xmlns.com/foaf/0.1/knows-PLUS :http://example/x ?person)]
+               :rules [[(http://xmlns.com/foaf/0.1/knows-PLUS ?s ?o)
+                        [?s :http://xmlns.com/foaf/0.1/knows ?o]]
+                       [(http://xmlns.com/foaf/0.1/knows-PLUS ?s ?o)
+                        [?s :http://xmlns.com/foaf/0.1/knows ?t]
+                        (http://xmlns.com/foaf/0.1/knows-PLUS ?t ?o)]]}
+             (rdf/sparql->datalog "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX :     <http://example/>
+SELECT ?person
+{
+  :x foaf:knows+ ?person
+}")))
+
+
+    ;; TODO; Parses to DISTINCT.
+    ;; NOTE: Adapted from above example for zero-or-one.
+    #_(t/is (= '{}
+               (rdf/sparql->datalog "
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX :     <http://example/>
+SELECT ?person
+{
+  :x foaf:knows? ?person
+}")))
+
     (t/is (thrown-with-msg? UnsupportedOperationException #"Nested expressions are not supported."
                             (rdf/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
