@@ -141,11 +141,11 @@
        (sort comp (first parts))
        (let [files (->> parts
                         (reduce
-                         (fn [acc chunk]
+                         (fn [acc part]
                            (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
                                         (.deleteOnExit))]
                              (with-open [out (DataOutputStream. (io/output-stream file))]
-                               (doseq [x (sort comp chunk)]
+                               (doseq [x (sort comp part)]
                                  (nippy/freeze-to-out! out x)))
                              (conj acc file)))
                          []))
