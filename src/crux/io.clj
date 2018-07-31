@@ -128,24 +128,25 @@
    (->> (new-merge-sort-priority-queue comp sorted-seqs)
         (merge-sort-pirority-queue->seq))))
 
-(def ^:const external-sort-chunk-size (* 1024 1024))
+(def ^:const external-sort-part-size (* 1024 1024))
 
 (defn external-sort
   ([seq]
    (external-sort compare seq))
   ([comp seq]
-   (let [chunks (->> (partition-all external-sort-chunk-size seq)
-                     (map sort))]
-     (if (nil? (second chunks))
-       (first chunks)
-       (let [files (->> chunks
-                        (map (fn [chunk]
-                                (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
-                                             (.deleteOnExit))]
-                                  (with-open [out (DataOutputStream. (io/output-stream file))]
-                                    (doseq [x chunk]
-                                      (nippy/freeze-to-out! out x)))
-                                  file))))
+   (let [parts (partition-all external-sort-part-size seq)]
+     (if (nil? (second parts))
+       (sort (first parts))
+       (let [files (->> parts
+                        (reduce
+                         (fn [acc chunk]
+                           (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
+                                        (.deleteOnExit))]
+                             (with-open [out (DataOutputStream. (io/output-stream file))]
+                               (doseq [x (sort chunk)]
+                                 (nippy/freeze-to-out! out x)))
+                             (conj acc file)))
+                         []))
              seq+cleaner-actions (for [^File file files]
                                    (let [in (DataInputStream. (io/input-stream file))
                                          cleaner-action (fn []
