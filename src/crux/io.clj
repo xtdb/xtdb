@@ -134,15 +134,16 @@
   ([seq]
    (external-sort compare seq))
   ([comp seq]
-   (let [chunks (partition-all external-sort-chunk-size seq)]
+   (let [chunks (->> (partition-all external-sort-chunk-size seq)
+                     (map sort))]
      (if (nil? (second chunks))
-       (sort (first chunks))
+       (first chunks)
        (let [files (->> chunks
-                        (pmap (fn [chunk]
+                        (map (fn [chunk]
                                 (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
                                              (.deleteOnExit))]
                                   (with-open [out (DataOutputStream. (io/output-stream file))]
-                                    (doseq [x (sort chunk)]
+                                    (doseq [x chunk]
                                       (nippy/freeze-to-out! out x)))
                                   file))))
              seq+cleaner-actions (for [^File file files]
