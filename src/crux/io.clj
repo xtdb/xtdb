@@ -102,8 +102,7 @@
 (defn folder-human-size [f]
   (->human-size (folder-size f)))
 
-;; TODO: Intended to be used for external sorting, where each sorted
-;; seq will come from disk.
+;; External Merge Sort
 
 (defn- new-merge-sort-priority-queue ^PriorityQueue [comp sorted-seqs]
   (let [sorted-seqs (remove empty? sorted-seqs)
