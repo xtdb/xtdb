@@ -138,14 +138,14 @@
   ([comp seq external-sort-part-size]
    (let [parts (partition-all external-sort-part-size seq)]
      (if (nil? (second parts))
-       (sort (first parts))
+       (sort comp (first parts))
        (let [files (->> parts
                         (reduce
                          (fn [acc chunk]
                            (let [file (doto (File/createTempFile "crux-external-sort" ".nippy")
                                         (.deleteOnExit))]
                              (with-open [out (DataOutputStream. (io/output-stream file))]
-                               (doseq [x (sort chunk)]
+                               (doseq [x (sort comp chunk)]
                                  (nippy/freeze-to-out! out x)))
                              (conj acc file)))
                          []))
