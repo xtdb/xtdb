@@ -951,7 +951,9 @@
 ;; first vars of the join order overlap with the ones in order
 ;; by. Depending on the query this might not be possible. For example,
 ;; when using or-join/rules the order from the sub queries cannot be
-;; guaranteed.
+;; guaranteed. The order by vars must be in the set of bound vars for
+;; all or statements in the query for this to work. This is somewhat
+;; related to embedding or in the main query.
 (defn- order-by-comparator [vars order-by]
   (let [var->index (zipmap vars (range))]
     (reify Comparator
