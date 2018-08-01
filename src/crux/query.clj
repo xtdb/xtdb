@@ -562,6 +562,10 @@
 (defn- or-single-e-var-triple-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
+        ;; TODO: This could/should look this up directly in the index
+        ;; instead of loading the doc, similar to how the AEV/AVE
+        ;; indexes work. But quick spike didn't show any timing
+        ;; changes on LUBM.
         content-hash->doc (db/get-objects object-store snapshot (map :content-hash entities))
         result (set (for [{:keys [content-hash] :as entity} entities
                           :let [doc (get content-hash->doc content-hash)]
