@@ -454,7 +454,7 @@
     {result-name #{value}}
     {result-name #{entity}}))
 
-(defn- bound-results-for-var [object-store var->bindings join-keys join-results var]
+(defn- bound-results-for-var [snapshot object-store var->bindings join-keys join-results var]
   (let [{:keys [e-var var attr result-index result-name type]} (get var->bindings var)]
     (if (= "crux.query.value" (namespace result-name))
       (for [value (get join-results result-name)]
@@ -465,7 +465,7 @@
          :value? true})
       (when-let [entities (not-empty (get join-results e-var))]
         (let [content-hashes (map :content-hash entities)
-              content-hash->doc (db/get-objects object-store content-hashes)
+              content-hash->doc (db/get-objects object-store snapshot content-hashes)
               value-bytes (get join-keys result-index)]
           (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
                 :let [values (doc/normalize-value (get doc attr))]
@@ -510,11 +510,11 @@
                                              (cartesian-product
                                               (for [arg args]
                                                 (if (logic-var? arg)
-                                                  (bound-results-for-var object-store var->bindings join-keys join-results arg)
+                                                  (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg)
                                                   [{:value arg
                                                     :literal-arg? true}]))))
                   pred-fns (if (logic-var? pred-fn)
-                             (mapv :value (bound-results-for-var object-store var->bindings join-keys join-results pred-fn))
+                             (mapv :value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
                              [pred-fn])
                   pred-result+result-maps
                   (for [bound-result-args-tuple bound-result-args-tuples
@@ -562,7 +562,7 @@
 (defn- or-single-e-var-triple-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entities (doc/entities-at snapshot (mapv e args) business-time transact-time)
-        content-hash->doc (db/get-objects object-store (map :content-hash entities))
+        content-hash->doc (db/get-objects object-store snapshot (map :content-hash entities))
         result (set (for [{:keys [content-hash] :as entity} entities
                           :let [doc (get content-hash->doc content-hash)]
                           :when (contains? (set (doc/normalize-value (get doc a))) v)]
@@ -594,7 +594,7 @@
           (if (= (count join-keys) or-join-depth)
             (let [args (vec (for [bound-result-tuple (cartesian-product
                                                       (for [var bound-vars]
-                                                        (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                                                        (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
                               (zipmap bound-vars (map :value bound-result-tuple))))
                   free-results+bound-results
                   (let [free-results+bound-results
@@ -613,11 +613,11 @@
                                            (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
                                                   [(vec (for [bound-result-tuple (cartesian-product
                                                                                   (for [var free-vars-in-join-order]
-                                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                                                                                    (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
                                                           (mapv :value bound-result-tuple)))
                                                    (->> (for [bound-result-tuple (cartesian-product
                                                                                   (for [var bound-vars]
-                                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                                                    (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
                                                               result bound-result-tuple]
                                                           (bound-result->join-result result))
                                                         (apply merge-with into))]))))))))
@@ -692,7 +692,7 @@
             (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
               (let [args (vec (for [bound-result-tuple (cartesian-product
                                                         (for [var not-vars]
-                                                          (bound-results-for-var object-store var->bindings join-keys join-results var)))
+                                                          (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
                                     :let [args-tuple (zipmap not-vars (map :value bound-result-tuple))]]
                                 (with-meta args-tuple {:bound-result-tuple bound-result-tuple})))
                     {:keys [n-ary-join
@@ -700,7 +700,7 @@
                     args-to-remove (set (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
                                               bound-result-tuple (cartesian-product
                                                                   (for [var not-vars]
-                                                                    (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                                                                    (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
                                           (zipmap not-vars (map :value bound-result-tuple))))
                     args-to-keep (remove args-to-remove args)]
                 (when-let [join-results (some->> (for [args args-to-keep
@@ -1000,7 +1000,7 @@
        (cond->> (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
                       bound-result-tuple (cartesian-product
                                           (for [var find]
-                                            (bound-results-for-var object-store var->bindings join-keys join-results var)))]
+                                            (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
                   (with-meta
                     (mapv :value bound-result-tuple)
                     (zipmap (map :var bound-result-tuple) bound-result-tuple)))

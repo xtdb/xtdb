@@ -21,7 +21,11 @@
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops]))
 
+;; NOTE: The snapshot parameter here is an optimisation to avoid keep
+;; opening snapshots and allow caching of iterators. A non-KV backed
+;; object store could choose to ignore it, but it would be nice to
+;; hide it.
 (defprotocol ObjectStore
-  (get-objects [this ks])
+  (get-objects [this snapshot ks])
   (put-objects [this kvs])
   (delete-objects [this kvs]))

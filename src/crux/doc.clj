@@ -292,9 +292,8 @@
 
 (defrecord DocObjectStore [kv]
   db/ObjectStore
-  (get-objects [this ks]
-    (with-open [snapshot (ks/new-snapshot kv)
-                i (ks/new-iterator snapshot)]
+  (get-objects [this snapshot ks]
+    (with-open [i (ks/new-iterator snapshot)]
       (->> (for [seek-k (->> (map (comp idx/encode-doc-key idx/id->bytes) ks)
                              (sort bu/bytes-comparator))
                  :let [k (ks/seek i seek-k)]
@@ -935,12 +934,12 @@
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
-  (get-objects [this ks]
+  (get-objects [this snapshot ks]
     (->> (for [k ks]
            [k (lru/compute-if-absent
                cache
                k
-               #(get (db/get-objects object-store [%]) %))])
+               #(get (db/get-objects object-store snapshot [%]) %))])
          (into {})))
 
   (put-objects [this kvs]

@@ -116,11 +116,12 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
-(defn document [kvs request]
-  (let-valid [object-store (doc/->DocObjectStore kvs)
+(defn document [kv request]
+  (let-valid [object-store (doc/->DocObjectStore kv)
               content-hash (param request "hash")]
-    (success-response
-     (db/get-objects object-store [content-hash])))) ;;TODO doesn't work
+    (with-open [snapshot (kvs/new-snapshot kv)]
+      (success-response
+       (db/get-objects object-store snapshot [content-hash]))))) ;;TODO doesn't work
 
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn history [kvs request]
@@ -215,25 +216,25 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn handler [kvs tx-log db-dir bootstrap-servers request]
+(defn handler [kv tx-log db-dir bootstrap-servers request]
   (cond
     (check-path request ["/"] [:get])
-    (status kvs db-dir bootstrap-servers)
+    (status kv db-dir bootstrap-servers)
 
     (check-path request ["/d" "/document"] [:get :post])
-    (document kvs request)
+    (document kv request)
 
     (check-path request ["/h" "/history"] [:get :post])
-    (history kvs request)
+    (history kv request)
 
     (check-path request ["/q" "/query"] [:get :post])
-    (query kvs request)
+    (query kv request)
 
     (check-path request ["/tx-log"] [:post])
     (transact tx-log request)
 
     (check-path request ["/sparql/"] [:get :post])
-    (sparql-query kvs request)
+    (sparql-query kv request)
 
     :default
     {:status 400
@@ -241,8 +242,8 @@
      :body "Unsupported method on this address."}))
 
 (defn ^Closeable create-server
-  ([kvs tx-log db-dir bootstrap-servers port]
-   (let [server (j/run-jetty (p/wrap-params (partial handler kvs tx-log db-dir bootstrap-servers))
+  ([kv tx-log db-dir bootstrap-servers port]
+   (let [server (j/run-jetty (p/wrap-params (partial handler kv tx-log db-dir bootstrap-servers))
                              {:port port
                               :join? false})]
      (log/info (str "HTTP server started on port: " port))
