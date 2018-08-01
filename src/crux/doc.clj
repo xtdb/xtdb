@@ -46,7 +46,7 @@
   db/Index
   (seek-values [this k]
     (when-let [k (->> (or k idx/empty-byte-array)
-                      (idx/encode-attribute+value-entity-prefix-key (idx/id->bytes attr))
+                      (idx/encode-attribute+value+entity+content-hash-key (idx/id->bytes attr))
                       (ks/seek i))]
       (attribute-value+placeholder k peek-state)))
 
@@ -59,7 +59,7 @@
         (attribute-value+placeholder k peek-state)))))
 
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
-  (let [prefix (idx/encode-attribute+value-entity-prefix-key (idx/id->bytes attr) idx/empty-byte-array)]
+  (let [prefix (idx/encode-attribute+value+entity+content-hash-key (idx/id->bytes attr))]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix) attr (atom nil))))
 
 (defn- attribute-value-entity-entity+value [i ^bytes current-k attr value entity-as-of-idx peek-state]
@@ -81,7 +81,7 @@
 
 (defn- attribute-value-value+prefix-iterator [i value-entity-value-idx attr]
   (let [{:keys [value]} @(:peek-state value-entity-value-idx)
-        prefix (idx/encode-attribute+value-entity-prefix-key (idx/id->bytes attr) value)]
+        prefix (idx/encode-attribute+value+entity+content-hash-key (idx/id->bytes attr) value)]
     [value (new-prefix-kv-iterator i prefix)]))
 
 (defrecord DocAttributeValueEntityEntityIndex [i attr value-entity-value-idx entity-as-of-idx peek-state]
@@ -93,8 +93,7 @@
                          value
                          (if k
                            (idx/id->bytes k)
-                           idx/empty-byte-array)
-                         idx/empty-byte-array)
+                           idx/empty-byte-array))
                         (ks/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-state))))
 
@@ -123,7 +122,7 @@
     (when-let [k (->> (if k
                         (idx/id->bytes k)
                         idx/empty-byte-array)
-                      (idx/encode-attribute+entity-value-prefix-key (idx/id->bytes attr))
+                      (idx/encode-attribute+entity+value+content-hash-key (idx/id->bytes attr))
                       (ks/seek i))]
       (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
         (if (= ::deleted-entity placeholder)
@@ -142,7 +141,7 @@
             placeholder))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
-  (let [prefix (idx/encode-attribute+entity-value-prefix-key (idx/id->bytes attr) idx/empty-byte-array)]
+  (let [prefix (idx/encode-attribute+entity+value+content-hash-key (idx/id->bytes attr))]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix) attr entity-as-of-idx (atom nil))))
 
 (defn- attribute-entity-value-value+entity [i ^bytes current-k attr ^EntityTx entity-tx peek-state]
@@ -163,7 +162,7 @@
 
 (defn- attribute-value-entity-tx+prefix-iterator [i entity-value-entity-idx attr]
   (let [{:keys [^EntityTx entity-tx]} @(:peek-state entity-value-entity-idx)
-        prefix (idx/encode-attribute+entity-value-prefix-key (idx/id->bytes attr) (idx/id->bytes (.eid entity-tx)))]
+        prefix (idx/encode-attribute+entity+value+content-hash-key (idx/id->bytes attr) (idx/id->bytes (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 
 (defrecord DocAttributeEntityValueValueIndex [i attr entity-value-entity-idx peek-state]
@@ -173,8 +172,7 @@
       (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
                          (idx/id->bytes attr)
                          (idx/id->bytes (.eid entity-tx))
-                         (or k idx/empty-byte-array)
-                         idx/empty-byte-array)
+                         (or k idx/empty-byte-array))
                         (ks/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-state))))
 
@@ -360,7 +358,7 @@
   db/Index
   (db/seek-values [this k]
     (let [prefix-size (+ idx/index-id-size idx/id-size)
-          seek-k (idx/encode-entity+bt+tt-prefix-key
+          seek-k (idx/encode-entity+bt+tt+tx-id-key
                   (idx/id->bytes k)
                   business-time
                   transact-time)]
@@ -389,14 +387,14 @@
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [eids (->> (all-keys-in-prefix i (idx/encode-entity+bt+tt-prefix-key))
+    (let [eids (->> (all-keys-in-prefix i (idx/encode-entity+bt+tt+tx-id-key))
                     (map (comp :eid idx/decode-entity+bt+tt+tx-id-key))
                     (distinct))]
       (entities-at snapshot eids business-time transact-time))))
 
 (defn entity-history [snapshot entity]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [seek-k (idx/encode-entity+bt+tt-prefix-key (idx/id->bytes entity))]
+    (let [seek-k (idx/encode-entity+bt+tt+tx-id-key (idx/id->bytes entity))]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (idx/decode-entity+bt+tt+tx-id-key k)
                  (enrich-entity-tx v)))))))
