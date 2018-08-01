@@ -409,16 +409,16 @@
              [[(idx/value->bytes 1) :a]
               [(idx/value->bytes 3) :c]])]
     (t/is (= :a
-             (second (db/seek-values idx 0))))
+             (second (db/seek-values idx (idx/value->bytes 0)))))
     (t/is (= :a
-             (second (db/seek-values idx 1))))
+             (second (db/seek-values idx (idx/value->bytes 1)))))
     (t/is (= :c
              (second (db/next-values idx))))
     (t/is (= :c
-             (second (db/seek-values idx 2))))
+             (second (db/seek-values idx (idx/value->bytes 2)))))
     (t/is (= :c
-             (second (db/seek-values idx 3))))
-    (t/is (nil? (db/seek-values idx 4)))))
+             (second (db/seek-values idx (idx/value->bytes 3)))))
+    (t/is (nil? (db/seek-values idx (idx/value->bytes 4))))))
 
 (t/deftest test-or-virtual-index
   (let [idx-1 (doc/new-sorted-virtual-index
@@ -460,7 +460,7 @@
 
     (t/testing "can seek into indexes"
       (t/is (= :d
-               (second (db/seek-values idx 4))))
+               (second (db/seek-values idx (idx/value->bytes 4)))))
       (t/is (= :e1
                (second (db/next-values idx)))))))
 

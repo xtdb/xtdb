@@ -35,20 +35,6 @@
 (defn- new-prefix-kv-iterator [i prefix]
   (->PrefixKvIterator i prefix))
 
-;; TODO: This is confusing. It is used to enable building seek keys
-;; containing literal bytes already found in the index, while bytes
-;; are currently not supported (as they're not part of basic EDN)
-;; directly in the index.
-(defn- wrap-literal-key-bytes [k]
-  (reify
-    idx/ValueToBytes
-    (value->bytes [_]
-      k)
-
-    idx/IdToBytes
-    (id->bytes [_]
-      k)))
-
 ;; AVE
 
 (defn- attribute-value+placeholder [k peek-state]
@@ -59,9 +45,7 @@
 (defrecord DocAttributeValueEntityValueIndex [i attr peek-state]
   db/Index
   (seek-values [this k]
-    (when-let [k (->> (if k
-                        (idx/value->bytes k)
-                        idx/empty-byte-array)
+    (when-let [k (->> (or k idx/empty-byte-array)
                       (idx/encode-attribute+value-entity-prefix-key (idx/id->bytes attr))
                       (ks/seek i))]
       (attribute-value+placeholder k peek-state)))
@@ -189,9 +173,7 @@
       (when-let [k (->> (idx/encode-attribute+entity+value+content-hash-key
                          (idx/id->bytes attr)
                          (idx/id->bytes (.eid entity-tx))
-                         (if k
-                           (idx/value->bytes k)
-                           idx/empty-byte-array)
+                         (or k idx/empty-byte-array)
                          idx/empty-byte-array)
                         (ks/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-state))))
@@ -221,27 +203,27 @@
         value+results))))
 
 (defn- value-comparsion-predicate
-  ([compare-pred v]
-   (value-comparsion-predicate compare-pred v Integer/MAX_VALUE))
-  ([compare-pred v max-length]
-   (if v
-     (let [seek-k (idx/value->bytes v)]
-       (fn [value]
-         (compare-pred (bu/compare-bytes value seek-k max-length))))
+  ([compare-pred compare-v]
+   (value-comparsion-predicate compare-pred compare-v Integer/MAX_VALUE))
+  ([compare-pred ^bytes compare-v max-length]
+   (if compare-v
+     (fn [value]
+       (and value (compare-pred (bu/compare-bytes value compare-v max-length))))
      (constantly true))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate (comp not pos?) max-v)]
+  (let [pred (value-comparsion-predicate (comp not pos?) (idx/value->bytes max-v))]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-less-than-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate neg? max-v)]
+  (let [pred (value-comparsion-predicate neg? (idx/value->bytes max-v))]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-greater-than-equal-virtual-index [idx min-v]
-  (let [pred (value-comparsion-predicate (comp not neg?) min-v)]
+  (let [min-v (idx/value->bytes min-v)
+        pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
-                                        (if (pred (idx/value->bytes k))
+                                        (if (pred k)
                                           k
                                           min-v)))))
 
@@ -256,29 +238,21 @@
     (db/next-values idx)))
 
 (defn new-greater-than-virtual-index [idx min-v]
-  (let [pred (value-comparsion-predicate pos? min-v)
+  (let [min-v (idx/value->bytes min-v)
+        pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
-                                                (if (pred (idx/value->bytes k))
+                                                (if (pred k)
                                                   k
                                                   min-v)))]
     (->GreaterThanVirtualIndex idx)))
 
-(defn new-equal-virtual-index [idx v]
-  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) v)
-        pred (value-comparsion-predicate zero? v)]
-    (->PredicateVirtualIndex idx pred (fn [k]
-                                        (if (seek-k-pred (idx/value->bytes k))
-                                          k
-                                          v)))))
-
 (defn new-prefix-equal-virtual-index [idx ^bytes prefix-v]
-  (let [prefix (wrap-literal-key-bytes prefix-v)
-        seek-k-pred (value-comparsion-predicate (comp not neg?) prefix (alength prefix-v))
-        pred (value-comparsion-predicate zero? prefix (alength prefix-v))]
+  (let [seek-k-pred (value-comparsion-predicate (comp not neg?) prefix-v (alength prefix-v))
+        pred (value-comparsion-predicate zero? prefix-v (alength prefix-v))]
     (->PredicateVirtualIndex idx pred (fn [k]
-                                        (if (seek-k-pred (idx/value->bytes k))
+                                        (if (seek-k-pred k)
                                           k
-                                          prefix)))))
+                                          prefix-v)))))
 
 (defn wrap-with-range-constraints [idx range-constraints]
   (if range-constraints
@@ -453,7 +427,7 @@
   db/Index
   (seek-values [this k]
     (let [idx (Collections/binarySearch values
-                                        [(idx/value->bytes k)]
+                                        [k]
                                         sorted-virtual-index-key-comparator)
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
@@ -598,7 +572,7 @@
                                            (do (log/debug :next result-name)
                                                (db/next-values idx))
                                            (do (log/debug :seek result-name (bu/bytes->hex max-k))
-                                               (db/seek-values idx (wrap-literal-key-bytes max-k))))]
+                                               (db/seek-values idx max-k)))]
                   (when next-value+results
                     {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
                      :index (mod (inc index) (count iterators))}))
