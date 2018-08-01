@@ -133,7 +133,7 @@
   db/OrderedIndex
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
-          prefix-size (+ Short/SIZE idx/id-size idx/id-size)]
+          prefix-size (+ idx/index-id-size idx/id-size idx/id-size)]
       (when-let [k (some->> (bu/inc-unsigned-bytes! (Arrays/copyOf last-k prefix-size))
                             (ks/seek i))]
         (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
@@ -359,7 +359,7 @@
 (defrecord EntityAsOfIndex [i business-time transact-time]
   db/Index
   (db/seek-values [this k]
-    (let [prefix-size (+ Short/BYTES idx/id-size)
+    (let [prefix-size (+ idx/index-id-size idx/id-size)
           seek-k (idx/encode-entity+bt+tt-prefix-key
                   (idx/id->bytes k)
                   business-time
@@ -396,7 +396,7 @@
 
 (defn entity-history [snapshot entity]
   (with-open [i (ks/new-iterator snapshot)]
-    (let [seek-k (idx/encode-entity+bt+tt-prefix-key entity)]
+    (let [seek-k (idx/encode-entity+bt+tt-prefix-key (idx/id->bytes entity))]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (idx/decode-entity+bt+tt+tx-id-key k)
                  (enrich-entity-tx v)))))))

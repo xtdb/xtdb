@@ -11,6 +11,8 @@
 
 ;; Indexes
 
+(def ^{:tag 'long} index-id-size Byte/BYTES)
+
 (def ^:const ^:private content-hash->doc-index-id 0)
 
 (def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
@@ -223,20 +225,20 @@
            (->> (.readFully data-input)))))
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
-      (.putShort content-hash->doc-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size))
+      (.put (byte content-hash->doc-index-id))
       (.put content-hash)
       (.array)))
 
 (defn encode-doc-prefix-key ^bytes []
-  (-> (ByteBuffer/allocate (+ Short/BYTES))
-      (.putShort content-hash->doc-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size))
+      (.put (byte content-hash->doc-index-id))
       (.array)))
 
 (defn decode-doc-key ^bytes [^bytes doc-key]
-  (assert (= (+ Short/BYTES id-size) (alength doc-key)))
+  (assert (= (+ index-id-size id-size) (alength doc-key)))
   (let [buffer (ByteBuffer/wrap doc-key)]
-    (assert (= content-hash->doc-index-id (.getShort buffer)))
+    (assert (= content-hash->doc-index-id (.get buffer)))
     (new-id (doto (byte-array id-size)
               (->> (.get buffer))))))
 
@@ -246,8 +248,8 @@
               (zero? (alength entity))))
   (assert (or (= id-size (alength content-hash))
               (zero? (alength content-hash))))
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
-      (.putShort attribute+value+entity+content-hash-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size (alength v) id-size (alength content-hash)))
+      (.put (byte attribute+value+entity+content-hash-index-id))
       (.put attr)
       (.put v)
       (.put entity)
@@ -256,17 +258,17 @@
 
 (defn encode-attribute+value-entity-prefix-key ^bytes [^bytes attr ^bytes v]
   (assert (= id-size (alength attr)))
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v)))
-      (.putShort attribute+value+entity+content-hash-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size (alength v)))
+      (.put (byte attribute+value+entity+content-hash-index-id))
       (.put attr)
       (.put v)
       (.array)))
 
 (defn ^Id decode-attribute+value+entity+content-hash-key->value+entity+content-hash [^bytes k]
-  (assert (<= (+ Short/BYTES id-size id-size id-size) (alength k)))
+  (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)]
-    (assert (= attribute+value+entity+content-hash-index-id (.getShort buffer)))
-    (.position buffer (+ Short/BYTES id-size))
+    (assert (= attribute+value+entity+content-hash-index-id (.get buffer)))
+    (.position buffer (+ index-id-size id-size))
     [(doto (byte-array (- (.remaining buffer) id-size id-size))
        (->> (.get buffer)))
      (new-id (doto (byte-array id-size)
@@ -279,8 +281,8 @@
   (assert (= id-size (alength entity)))
   (assert (or (= id-size (alength content-hash))
               (zero? (alength content-hash))))
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
-      (.putShort attribute+entity+value+content-hash-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size (alength v) id-size (alength content-hash)))
+      (.put (byte attribute+entity+value+content-hash-index-id))
       (.put attr)
       (.put entity)
       (.put v)
@@ -291,17 +293,17 @@
   (assert (= id-size (alength attr)))
   (assert (or (= id-size (alength entity))
               (zero? (alength entity))))
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength entity)))
-      (.putShort attribute+entity+value+content-hash-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size (alength entity)))
+      (.put (byte attribute+entity+value+content-hash-index-id))
       (.put attr)
       (.put entity)
       (.array)))
 
 (defn ^Id decode-attribute+entity+value+content-hash-key->entity+value+content-hash [^bytes k]
-  (assert (<= (+ Short/BYTES id-size id-size) (alength k)))
+  (assert (<= (+ index-id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)]
-    (assert (= attribute+entity+value+content-hash-index-id (.getShort buffer)))
-    (.position buffer (+ Short/BYTES id-size))
+    (assert (= attribute+entity+value+content-hash-index-id (.get buffer)))
+    (.position buffer (+ index-id-size id-size))
     [(new-id (doto (byte-array id-size)
                (->> (.get buffer))))
      (doto (byte-array (- (.remaining buffer) id-size))
@@ -310,8 +312,8 @@
                (->> (.get buffer))))]))
 
 (defn encode-meta-key ^bytes [^bytes k]
-  (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
-      (.putShort meta-key->value-index-id)
+  (-> (ByteBuffer/allocate (+ index-id-size id-size))
+      (.put (byte meta-key->value-index-id))
       (.put k)
       (.array)))
 
@@ -322,9 +324,9 @@
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
 (defn encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^Long tx-id]
-  (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES Long/BYTES)
+  (cond-> (ByteBuffer/allocate (cond-> (+ index-id-size id-size Long/BYTES Long/BYTES)
                                  tx-id (+ Long/BYTES)))
-    true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
+    true (-> (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
              (.put ^bytes eid)
              (.putLong (date->reverse-time-ms business-time))
              (.putLong (date->reverse-time-ms transact-time)))
@@ -333,13 +335,13 @@
 
 (defn encode-entity+bt+tt-prefix-key
   (^bytes []
-   (-> (ByteBuffer/allocate Short/BYTES)
-       (.putShort entity+bt+tt+tx-id->content-hash-index-id)
+   (-> (ByteBuffer/allocate index-id-size)
+       (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
        (.array)))
-  (^bytes [eid]
-   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
-       (.putShort entity+bt+tt+tx-id->content-hash-index-id)
-       (.put (id->bytes eid))
+  (^bytes [^bytes eid]
+   (-> (ByteBuffer/allocate (+ index-id-size id-size))
+       (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
+       (.put eid)
        (.array)))
   (^bytes [eid business-time transact-time]
    (encode-entity+bt+tt+tx-id-key eid business-time transact-time nil)))
@@ -363,9 +365,9 @@
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
 (defn ^crux.index.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
-  (assert (= (+ Short/BYTES id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
-    (assert (= entity+bt+tt+tx-id->content-hash-index-id (.getShort buffer)))
+    (assert (= entity+bt+tt+tx-id->content-hash-index-id (.get buffer)))
     (->EntityTx (new-id (doto (byte-array id-size)
                           (->> (.get buffer))))
                 (reverse-time-ms->date (.getLong buffer))
