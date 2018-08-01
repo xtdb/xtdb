@@ -61,10 +61,7 @@
 (extend-protocol ValueToBytes
   (class (byte-array 0))
   (value->bytes [this]
-    (if (empty? this)
-      this
-      (doto (id-function this)
-        (aset 0 (byte bytes-value-type-id)))))
+    (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
 
   Byte
   (value->bytes [this]
@@ -144,7 +141,10 @@
 (extend-protocol IdToBytes
   (class (byte-array 0))
   (id->bytes [this]
-    this)
+    (if (= id-size (alength ^bytes this))
+      this
+      (throw (IllegalArgumentException.
+              (str "Not an id byte array: " (bu/bytes->hex this))))))
 
   ByteBuffer
   (id->bytes [this]
@@ -240,24 +240,27 @@
     (new-id (doto (byte-array id-size)
               (->> (.get buffer))))))
 
-(defn encode-attribute+value+entity+content-hash-key ^bytes [attr v entity content-hash]
-  (let [content-hash (id->bytes content-hash)
-        v (value->bytes v)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
-        (.putShort attribute+value+entity+content-hash-index-id)
-        (.put (id->bytes attr))
-        (.put v)
-        (.put (id->bytes entity))
-        (.put content-hash)
-        (.array))))
+(defn encode-attribute+value+entity+content-hash-key ^bytes [^bytes attr ^bytes v ^bytes entity ^bytes content-hash]
+  (assert (= id-size (alength attr)))
+  (assert (or (= id-size (alength entity))
+              (zero? (alength entity))))
+  (assert (or (= id-size (alength content-hash))
+              (zero? (alength content-hash))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
+      (.putShort attribute+value+entity+content-hash-index-id)
+      (.put attr)
+      (.put v)
+      (.put entity)
+      (.put content-hash)
+      (.array)))
 
-(defn encode-attribute+value-entity-prefix-key ^bytes [attr v]
-  (let [v (value->bytes v)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v)))
-        (.putShort attribute+value+entity+content-hash-index-id)
-        (.put (id->bytes attr))
-        (.put v)
-        (.array))))
+(defn encode-attribute+value-entity-prefix-key ^bytes [^bytes attr ^bytes v]
+  (assert (= id-size (alength attr)))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v)))
+      (.putShort attribute+value+entity+content-hash-index-id)
+      (.put attr)
+      (.put v)
+      (.array)))
 
 (defn ^Id decode-attribute+value+entity+content-hash-key->value+entity+content-hash [^bytes k]
   (assert (<= (+ Short/BYTES id-size id-size id-size) (alength k)))
@@ -271,21 +274,26 @@
      (new-id (doto (byte-array id-size)
                (->> (.get buffer))))]))
 
-(defn encode-attribute+entity+value+content-hash-key ^bytes [attr entity v content-hash]
-  (let [content-hash (id->bytes content-hash)
-        v (value->bytes v)]
-    (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
-        (.putShort attribute+entity+value+content-hash-index-id)
-        (.put (id->bytes attr))
-        (.put (id->bytes entity))
-        (.put v)
-        (.put content-hash)
-        (.array))))
+(defn encode-attribute+entity+value+content-hash-key ^bytes [^bytes attr ^bytes entity ^bytes v ^bytes content-hash]
+  (assert (= id-size (alength attr)))
+  (assert (= id-size (alength entity)))
+  (assert (or (= id-size (alength content-hash))
+              (zero? (alength content-hash))))
+  (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength v) id-size (alength content-hash)))
+      (.putShort attribute+entity+value+content-hash-index-id)
+      (.put attr)
+      (.put entity)
+      (.put v)
+      (.put content-hash)
+      (.array)))
 
-(defn encode-attribute+entity-value-prefix-key ^bytes [attr ^bytes entity]
+(defn encode-attribute+entity-value-prefix-key ^bytes [^bytes attr ^bytes entity]
+  (assert (= id-size (alength attr)))
+  (assert (or (= id-size (alength entity))
+              (zero? (alength entity))))
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size (alength entity)))
       (.putShort attribute+entity+value+content-hash-index-id)
-      (.put (id->bytes attr))
+      (.put attr)
       (.put entity)
       (.array)))
 
