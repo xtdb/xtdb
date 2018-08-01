@@ -953,7 +953,11 @@
 ;; when using or-join/rules the order from the sub queries cannot be
 ;; guaranteed. The order by vars must be in the set of bound vars for
 ;; all or statements in the query for this to work. This is somewhat
-;; related to embedding or in the main query.
+;; related to embedding or in the main query. Also, this sort is based
+;; on the actual values, and not the byte arrays, which would give
+;; different sort order for example for ids, where the hash used in
+;; the indexes won't sort the same as the actual value. For this to
+;; work well this would need to be revisited.
 (defn- order-by-comparator [vars order-by]
   (let [var->index (zipmap vars (range))]
     (reify Comparator
