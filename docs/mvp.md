@@ -287,8 +287,6 @@ results are removed from the corresponding parent result variables.
 
 + Rules in queries are not well tested.
 + Nested expressions in queries are not well tested.
-+ Join order is not necessarily calculated correctly for all queries,
-  which can lead to wrong or no results.
 + Point in time semantics when writing in the past.
 + Documents requires `:crux.db/id` which removes ability to share
   versions across entities. Needs analysis.
@@ -299,9 +297,6 @@ results are removed from the corresponding parent result variables.
   to be performed during the query.
 + The query engine is not optimised and constructs a lot of
   intermediate structures.
-+ Queries are not compiled, but are parsed and interpreted from
-  scratch at every invocation. This is especially an issue for
-  sub-queries which will be issued many times by a parent query.
 
 ### AWS Deployment
 
