@@ -178,14 +178,14 @@ cartesian product is used to generate the resulting tuples. The same
 is true for sub queries, in which case their results are used in the
 parent constraint in different ways.
 
-### Rules
+#### Rules
 
 Rules are expanded to `or-join` expressions, which as mentioned above,
 are implemented as sub queries. A combination of expanding the rules,
 renaming its local variables, and tabling to avoid infinite recursion
 is used during execution.
 
-### Order by, Offset and Limit
+#### Order by, Offset and Limit
 
 CRUX supports `:order-by`, which is a vector of index/direction
 (`:asc` or `:desc`) pairs, `:offset` and `:limit`. Sorting is
@@ -194,7 +194,7 @@ ability to spill over to disk. If order by is provided, the result is
 not a set, but a distinct vector. Offset and limit can be used even
 without order by, the result will then still be a set, but this is
 less intuitive as the order is then derived implicitly from the on
-disk indexes..
+disk indexes.
 
 Sorting could be made to use the on disk indexes directly to avoid a
 separate sort step, but there are several issues with this as it
