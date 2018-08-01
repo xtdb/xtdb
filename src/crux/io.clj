@@ -134,7 +134,7 @@
   ([seq]
    (external-sort compare seq))
   ([comp seq]
-   (external-sort compare seq default-external-sort-part-size))
+   (external-sort comp seq default-external-sort-part-size))
   ([comp seq external-sort-part-size]
    (let [parts (partition-all external-sort-part-size seq)]
      (if (nil? (second parts))
