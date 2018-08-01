@@ -187,7 +187,13 @@
           (throw e)))))
 
   (delete [_ ks]
-    (tx-delete env dbi ks))
+    (try
+      (tx-delete env dbi ks)
+      (catch ExceptionInfo e
+        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
+          (do (increase-mapsize env 2)
+              (tx-delete env dbi ks))
+          (throw e)))))
 
   (backup [_ dir]
     (env-copy env dir))
