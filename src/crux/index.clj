@@ -222,10 +222,10 @@
  (new-id (doto (byte-array id-size)
            (->> (.readFully data-input)))))
 
-(defn encode-doc-key ^bytes [content-hash]
+(defn encode-doc-key ^bytes [^bytes content-hash]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
       (.putShort content-hash->doc-index-id)
-      (.put (id->bytes content-hash))
+      (.put content-hash)
       (.array)))
 
 (defn encode-doc-prefix-key ^bytes []
@@ -309,10 +309,10 @@
      (new-id (doto (byte-array id-size)
                (->> (.get buffer))))]))
 
-(defn encode-meta-key ^bytes [k]
+(defn encode-meta-key ^bytes [^bytes k]
   (-> (ByteBuffer/allocate (+ Short/BYTES id-size))
       (.putShort meta-key->value-index-id)
-      (.put (id->bytes k))
+      (.put k)
       (.array)))
 
 (defn- date->reverse-time-ms ^long [^Date date]
@@ -321,11 +321,11 @@
 (defn- ^Date reverse-time-ms->date [^long reverse-time-ms]
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
-(defn encode-entity+bt+tt+tx-id-key ^bytes [eid ^Date business-time ^Date transact-time ^Long tx-id]
+(defn encode-entity+bt+tt+tx-id-key ^bytes [^bytes eid ^Date business-time ^Date transact-time ^Long tx-id]
   (cond-> (ByteBuffer/allocate (cond-> (+ Short/BYTES id-size Long/BYTES Long/BYTES)
                                  tx-id (+ Long/BYTES)))
     true (-> (.putShort entity+bt+tt+tx-id->content-hash-index-id)
-             (.put (id->bytes eid))
+             (.put ^bytes eid)
              (.putLong (date->reverse-time-ms business-time))
              (.putLong (date->reverse-time-ms transact-time)))
     tx-id (.putLong tx-id)

@@ -297,7 +297,7 @@
   (get-objects [this ks]
     (with-open [snapshot (ks/new-snapshot kv)
                 i (ks/new-iterator snapshot)]
-      (->> (for [seek-k (->> (map idx/encode-doc-key ks)
+      (->> (for [seek-k (->> (map (comp idx/encode-doc-key idx/id->bytes) ks)
                              (sort bu/bytes-comparator))
                  :let [k (ks/seek i seek-k)]
                  :when (and k (bu/bytes=? seek-k k))]
@@ -307,11 +307,11 @@
 
   (put-objects [this kvs]
     (ks/store kv (for [[k v] kvs]
-                   [(idx/encode-doc-key k)
+                   [(idx/encode-doc-key (idx/id->bytes k))
                     (nippy/fast-freeze v)])))
 
   (delete-objects [this ks]
-    (ks/delete kv (map idx/encode-doc-key ks)))
+    (ks/delete kv (map (comp idx/encode-doc-key idx/id->bytes) ks)))
 
   Closeable
   (close [_]))
@@ -319,13 +319,13 @@
 ;; Meta
 
 (defn store-meta [kv k v]
-  (ks/store kv [[(idx/encode-meta-key k)
+  (ks/store kv [[(idx/encode-meta-key (idx/id->bytes k))
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
   (with-open [snapshot (ks/new-snapshot kv)
               i (ks/new-iterator snapshot)]
-    (when-let [k (ks/seek i (idx/encode-meta-key k))]
+    (when-let [k (ks/seek i (idx/encode-meta-key (idx/id->bytes k)))]
       (nippy/fast-thaw (ks/value i)))))
 
 ;; Utils
@@ -361,7 +361,7 @@
   (db/seek-values [this k]
     (let [prefix-size (+ Short/BYTES idx/id-size)
           seek-k (idx/encode-entity+bt+tt-prefix-key
-                  k
+                  (idx/id->bytes k)
                   business-time
                   transact-time)]
       (loop [k (ks/seek i seek-k)]

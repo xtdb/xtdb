@@ -51,7 +51,7 @@
         content-hash (idx/new-id v)
         business-time (or business-time transact-time)]
     {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             eid
+             (idx/id->bytes eid)
              business-time
              transact-time
              tx-id)
@@ -61,7 +61,7 @@
   (let [eid (idx/new-id k)
         business-time (or business-time transact-time)]
     {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             eid
+             (idx/id->bytes eid)
              business-time
              transact-time
              tx-id)
@@ -79,7 +79,7 @@
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
      :kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             eid
+             (idx/id->bytes eid)
              business-time
              transact-time
              tx-id)
@@ -97,7 +97,7 @@
                                 :when (and doc (<= (compare (.bt ^EntityTx entity) business-time) 0))]
                           (db/submit-doc tx-log (idx/new-id doc) nil)))
      :kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             eid
+             (idx/id->bytes eid)
              business-time
              transact-time
              tx-id)
