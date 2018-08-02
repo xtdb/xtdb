@@ -44,7 +44,7 @@
 (defn- attribute-value+placeholder [k peek-state]
   (let [[value] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)]
     (reset! peek-state {:last-k k :value value})
-    [value {:crux.doc.binary-placeholder/value #{true}}]))
+    [value :crux.doc.binary-placeholder/value]))
 
 (defrecord DocAttributeValueEntityValueIndex [i attr peek-state]
   db/Index
@@ -117,7 +117,7 @@
         [_ [entity-tx]] (db/seek-values entity-as-of-idx e)]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
-      [(idx/id->bytes e) {:crux.doc.binary-placeholder/entity #{true}}]
+      [(idx/id->bytes e) :crux.doc.binary-placeholder/entity]
       ::deleted-entity)))
 
 (defrecord DocAttributeEntityValueEntityIndex [i attr entity-as-of-idx peek-state]
@@ -526,17 +526,12 @@
   (->OrVirtualIndex indexes (atom nil)))
 
 (defn- new-unary-join-iterator-state [idx [value results]]
-  (let [result-name (:name idx (gensym "result-name"))]
+  (let [result-name (:name idx)]
     {:idx idx
      :key (or value idx/nil-id-bytes)
      :result-name result-name
-     :results (cond
-                (nil? results)
-                nil
-                (map? results)
-                results
-                :else
-                {result-name (set results)})}))
+     :results (when (and result-name results)
+                {result-name results})}))
 
 (defrecord UnaryJoinVirtualIndex [indexes iterators-thunk-state]
   db/Index

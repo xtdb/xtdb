@@ -106,7 +106,7 @@
 ;; the spec.
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- cartesian-product [[x & xs]]
+(defn cartesian-product [[x & xs]]
   (when (seq x)
     (for [a x
           bs (or (cartesian-product xs) [[]])]
