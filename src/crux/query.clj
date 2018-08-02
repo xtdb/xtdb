@@ -729,6 +729,21 @@
            [sub-clause]))
        (reduce into [])))
 
+;; NOTE: this isn't exact, used to detect vars that can be bound
+;; before an or sub query. Is there a better way to incrementally
+;; build up the join order?
+(defn- add-pred-returns-bound-at-top-level [known-vars pred-clauses]
+  (->> pred-clauses
+       (reduce
+        (fn [acc {:keys [pred return]}]
+          (if (->> (cons (:pred-fn pred) (:args pred))
+                   (filter logic-var?)
+                   (set)
+                   (set/superset? acc))
+            (conj acc return)
+            acc))
+        known-vars)))
+
 (defn- compile-sub-query [where arg-vars rule-name->rules]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
@@ -761,7 +776,8 @@
                                             v-var->range-constriants
                                             var->joins)
         [pred-clause+idx-ids var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
-        known-vars (set/union e-vars v-vars pred-return-vars arg-vars)
+        known-vars (set/union e-vars v-vars arg-vars)
+        known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
         [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
                                                                        :or
                                                                        or-clauses
