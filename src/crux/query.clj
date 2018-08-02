@@ -498,15 +498,11 @@
         {:join-depth pred-join-depth
          :constraint-fn
          (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-           (let [bound-result-args-tuple (for [arg args]
-                                           (if (logic-var? arg)
-                                             (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg)
-                                             {:value arg
-                                              :literal-arg? true}))
-                 pred-fn (if (logic-var? pred-fn)
-                           (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
-                           pred-fn)]
-             (when-let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
+           (let [[pred-fn & args] (for [arg (cons pred-fn args)]
+                                    (if (logic-var? arg)
+                                      (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg))
+                                      arg))]
+             (when-let [pred-result (apply pred-fn args)]
                (when return
                  (doc/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
                join-results)))})))
@@ -631,10 +627,10 @@
          :constraint-fn
          (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
            (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-             (let [bound-result-tuple (for [var not-vars]
-                                        (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))
-                   args (when (seq not-vars)
-                          [(zipmap not-vars (map :value bound-result-tuple))])
+             (let [args (when (seq not-vars)
+                          [(->> (for [var not-vars]
+                                  (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules)]
                (when (empty? (doc/layered-idx->seq n-ary-join))
                  join-results))))})))
@@ -667,14 +663,14 @@
                 g)))
         g)))
 
-(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps]
+(defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps]
   (let [g (dep/graph)
         g (->> (keys var->joins)
                (reduce
                 (fn [g v]
                   (dep/depend g v ::root))
                 g))
-        g (add-all-dependencies g join-deps)
+        g (add-all-dependencies g triple-join-deps)
         pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses
                         :let [pred-vars (filter logic-var? (:args pred))]]
                     [(into pred-vars (potential-bpg-pair-vars g pred-vars))
@@ -763,10 +759,10 @@
         v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constriants))
         non-leaf-vars (set/union e-vars arg-vars v-range-vars)
-        [join-deps var->joins] (triple-joins triple-clauses
-                                             var->joins
-                                             non-leaf-vars
-                                             arg-vars)
+        [triple-join-deps var->joins] (triple-joins triple-clauses
+                                                    var->joins
+                                                    non-leaf-vars
+                                                    arg-vars)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
                                             v-var->range-constriants
@@ -793,7 +789,7 @@
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
         join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars join-deps)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps)
         arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
         var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
@@ -907,15 +903,15 @@
 
 (defn q
   ([{:keys [kv] :as db} q]
-   (time
-    (let [start-time (System/currentTimeMillis)]
-      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-        (let [result ((if (:order-by q)
-                        (comp vec distinct)
-                        set) (crux.query/q snapshot db q))]
-          (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-          (log/debug :query-result-size (count result))
-          result)))))
+   (let [start-time (System/currentTimeMillis)]
+     (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+       (let [result-coll-fn (if (:order-by q)
+                              (comp vec distinct)
+                              set)
+             result (result-coll-fn (crux.query/q snapshot db q))]
+         (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+         (log/debug :query-result-size (count result))
+         result))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
