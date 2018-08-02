@@ -25,9 +25,9 @@ living in Kafka.
 CRUX is ultimately a store of versioned EDN documents. The attributes
 of these documents are also indexed in the local KV stores, allowing
 for queries. CRUX does not use a schema for the documents. One reason
-for this as the document data might come from many different places,
-and not ultimately be owned by the system using CRUX to query the
-data.
+for this is that the document data might come from many different
+places, and not ultimately be owned by the system using CRUX to query
+the data.
 
 On the query side, CRUX uses a Datalog dialect that's a subset of
 Datomic/Datascript's with some extensions. The results of CRUX queries
@@ -137,15 +137,16 @@ protocol. Keywords, UUIDs, URIs and SHA-1 hex strings do this out of
 the box. Note that normal strings are not considered valid ids. CRUX
 will not automatically assigns ids. The id is always a SHA-1 hash.
 
-The attributes will be indexed locally to enable queries. Attributes
-which have vectors or sets as the values will have all their elements
-indexed. CRUX does not enforce any schema. A document can change the
-type of its fields at will between versions, though this isn't
-recommended, as it leads to confusion at query time.
+The attributes will be indexed locally on each node to enable
+queries. Attributes which have vectors or sets as the values will have
+all their elements indexed, and as mentioned, CRUX does not enforce
+any schema. A document can change the type of its fields at will
+between versions, though this isn't recommended, as it leads to
+confusion at query time.
 
 Indexing is done via the `crux.index.ValueToBytes` protocol. The
 default is to take the SHA-1 of the value serialised by Nippy. Ids
-index via `IdToBytes`. `Byte`, `Short`, `Integer, `Long`, `Float`,
+index via `IdToBytes`. `Byte`, `Short`, `Integer`, `Long`, `Float`,
 `Double`, `Date`, `Character` and `String` have implementations which
 respect ordering while serialised to unsigned bytes, which is what
 most underlying KV stores will use to order the keys. If the
@@ -234,7 +235,7 @@ not lend itself to naively be used as an event sourcing mechanism, as
 while the `tx-topic` will stay intact, it might refer to documents
 which have since been evicted.
 
-The ingestion side indexes both the `doc-topic` and the `tx-topic`,
+The consumer side indexes both the `doc-topic` and the `tx-topic`,
 into a bunch of local indexes in the KV store, which are used by the
 query engine. The indexes are:
 
@@ -242,7 +243,9 @@ query engine. The indexes are:
 + `attribute+value+entity+content-hash-index` Secondary index of
   attribute values, mapped to their entities and versions (content
   hashes).
-+ `attribute+entity+value+content-hash-index` Reverse of the above.
++ `attribute+entity+value+content-hash-index` Secondary index of
+  attribute entities, mapped to their values and versions (content
+  hashes). The reverse of the above.
 + `entity+bt+tt+tx-id->content-hash-index` Main temporal index, used
   to find the content hash of a specific entity version.
 + `meta-key->value-index` Used to store Kafka offsets and transaction
@@ -251,7 +254,7 @@ query engine. The indexes are:
 #### Query
 
 The query engine is built using the concept of "virtual indexes",
-which bottom out to a combination of the above physical indexes or
+which bottom out to a combination of the above physical indexes on
 disk or data directly in-memory. The actual queries are represented as
 a composition and combination of these indexes. Things like range
 constraints are applied as decorators on the lower level indexes. The
@@ -259,8 +262,8 @@ query engine itself never concerns itself with time, as this is hidden
 by the lower indexes.
 
 The query is itself ultimately represented as a single n-ary join
-across variables, each potentially represented by several indexes,
-each combined via an unary join across them. As the resulting tree is
+across variables, each potentially represented by several indexes, and
+combined via an unary join across them. As the resulting tree is
 walked the query engine further has a concept of constraints, which
 are applied to the results as the joins between the indexes are
 performed. Things like predicates and sub queries are implemented
@@ -277,11 +280,12 @@ worst case optimal join algorithm binds free variables which then are
 used as arguments in QSQ. The results of the sub query are then
 injected an n-ary index (relation) into the parent query, binding
 further variables in the current parent query sub tree ("sideways
-information passing"). Rules are evaluated via a of eager expansion of
-the rule bodies into the parent query and QSQ recursion. `or` and
-`or-join` are anonymous rules. `not` is a sub query which executes
-when all required variables are bound, and arguments which return
-results are removed from the corresponding parent result variables.
+information passing"). Rules are evaluated via a combination of eager
+expansion of the rule bodies into the parent query and QSQ
+recursion. `or` and `or-join` are anonymous rules. `not` is a sub
+query which executes when all required variables are bound, acting as
+a predicate which returns false if there are any sub query results,
+filtering the parent results.
 
 ### Known Issues
 
@@ -289,7 +293,7 @@ results are removed from the corresponding parent result variables.
 + Nested expressions in queries are not well tested.
 + Point in time semantics when writing in the past.
 + Documents requires `:crux.db/id` which removes ability to share
-  versions across entities. Needs analysis.
+  versions across entities.
 + Potential of inconsistent reads across different nodes when using
   REST API.
 + Architecture not tested in real application use.
@@ -318,9 +322,10 @@ sourced in its current form.
 **Q:** Does CRUX support RDF/SPARQL?
 
 **A:** No. We have a simple ingestion mechanism for RDF data in
-`crux.rdf` but this is not a core feature. RDF and SPARQL support
-could eventually be written as a layer on top of CRUX as a module, but
-there are no plans for this by the core team.
+`crux.rdf` but this is not a core feature. There's a also a query
+translator for a subset of SPARQL. RDF and SPARQL support could
+eventually be written as a layer on top of CRUX as a module, but there
+are no plans for this by the core team.
 
 
 **Q:** Does CRUX require Kafka?
@@ -329,7 +334,8 @@ there are no plans for this by the core team.
 `crux.tx.DocTxLog` that writes transactions directly into the local KV
 store. One can also implement the `crux.db.TxLog` protocol to replace
 the `crux.db.KafkaTxLog` implementation. That said, Kafka is assumed
-at the moment.
+at the moment. One can also run Kafka embedded as this allows later
+migration.
 
 
 **Q:** What consistency does CRUX provide?
@@ -390,7 +396,8 @@ compatibility is not a goal for CRUX.
 
 **A:** The goal is to support different languages, and decouple the
 query engine from its syntax, but this is not currently the case in
-the MVP.
+the MVP. There is a query translator for a subset of SPARQL in
+`crux.rdf`.
 
 
 **Q:** Does not a lack of schema lead to confusion?
@@ -449,7 +456,7 @@ queries. Sharding is mainly useful to increase throughput.
 
 **Q:** Does CRUX support aggregates?
 
-**A:** Not directly. The goal is that aggregates can be implemented on
+**A:** Not directly. One idea is that aggregates can be implemented on
 top of the lazy query results as normal functions and not embedded
 into the query engine directly.
 
