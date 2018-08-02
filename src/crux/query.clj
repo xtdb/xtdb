@@ -411,36 +411,31 @@
                :type :entity}])
        (into {})))
 
+(defn- value-var-binding [var result-index type]
+  {:var var
+   :result-name (symbol "crux.query.value" (name var))
+   :result-index result-index
+   :join-depth result-index
+   :type type})
+
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
   (->> (for [var arg-vars
              :let [result-index (get var->values-result-index var)]]
-         [var {:var var
-               :result-name (symbol "crux.query.value" (name var))
-               :result-index result-index
-               :join-depth result-index
-               :type :arg}])
+         [var (value-var-binding var result-index :arg)])
        (into {})))
 
 (defn- build-pred-return-var-bindings [var->values-result-index pred-clauses]
   (->> (for [{:keys [return]} pred-clauses
              :when return
              :let [result-index (get var->values-result-index return)]]
-         [return {:var return
-                  :result-name (symbol "crux.query.value" (name return))
-                  :result-index result-index
-                  :join-depth result-index
-                  :type :pred}])
+         [return (value-var-binding return result-index :pred)])
        (into {})))
 
 (defn- build-or-free-var-bindings [var->values-result-index or-clause+relation+or-branches]
   (->> (for [[_ _ or-branches] or-clause+relation+or-branches
              var (:free-vars (first or-branches))
              :let [result-index (get var->values-result-index var)]]
-         [var {:var var
-               :result-name (symbol "crux.query.value" (name var))
-               :result-index result-index
-               :join-depth result-index
-               :type :or}])
+         [var (value-var-binding var result-index :or)])
        (into {})))
 
 (defn- bound-result->join-result [{:keys [result-name value? entity value] :as result}]
@@ -487,31 +482,34 @@
        (long)
        (inc)))
 
+(defn- validate-existing-vars [var->bindings clause vars]
+  (doseq [var vars
+          :when (not (contains? var->bindings var))]
+    (throw (IllegalArgumentException.
+            (str "Clause refers to unknown variable: "
+                 var " " (pr-str clause))))))
+
 (defn- build-pred-constraints [pred-clause+idx-ids var->bindings]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
               pred-join-depth (calculate-constraint-join-depth var->bindings pred-vars)]]
-    (do (doseq [var pred-vars]
-          (when (not (contains? var->bindings var))
-            (throw (IllegalArgumentException.
-                    (str "Predicate refers to unknown variable: "
-                         var " " (pr-str clause))))))
-        (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-          (if (= (count join-keys) pred-join-depth)
-            (let [bound-result-args-tuple (for [arg args]
-                                            (if (logic-var? arg)
-                                              (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg)
-                                              {:value arg
-                                               :literal-arg? true}))
-                  pred-fn (if (logic-var? pred-fn)
-                            (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
-                            pred-fn)]
-              (when-let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
-                (when return
-                  (doc/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
-                join-results))
-            join-results)))))
+    (do (validate-existing-vars var->bindings clause pred-vars)
+        {:join-depth pred-join-depth
+         :constraint-fn
+         (fn pred-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+           (let [bound-result-args-tuple (for [arg args]
+                                           (if (logic-var? arg)
+                                             (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg)
+                                             {:value arg
+                                              :literal-arg? true}))
+                 pred-fn (if (logic-var? pred-fn)
+                           (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
+                           pred-fn)]
+             (when-let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
+               (when return
+                 (doc/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
+               join-results)))})))
 
 (defn- single-e-var-triple? [vars where]
   (and (= 1 (count where))
@@ -555,46 +553,43 @@
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               has-free-vars? (boolean (seq free-vars))
               {:keys [rule-name]} (meta clause)]]
-    (do (doseq [var bound-vars]
-          (when (not (contains? var->bindings var))
-            (throw (IllegalArgumentException.
-                    (str "Or refers to unknown variable: "
-                         var " " (pr-str clause))))))
-        (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-          (if (= (count join-keys) or-join-depth)
-            (let [args (when (seq bound-vars)
-                         [(->> (for [var bound-vars]
-                                 (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
-                               (zipmap bound-vars))])
-                  free-results+branch-matches?
-                  (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                             :let [cache-key (when rule-name
-                                               [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
-                         (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-                           (if (single-e-var-triple? bound-vars where)
-                             (or-single-e-var-triple-fast-path snapshot db where args)
-                             (or (get *recursion-table* cache-key)
-                                 (binding [*recursion-table* (if cache-key
-                                                               (assoc *recursion-table* cache-key [])
-                                                               *recursion-table*)]
-                                   (let [{:keys [n-ary-join
-                                                 var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                     (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
-                                       (if has-free-vars?
-                                         (vec (for [[join-keys join-results] idx-seq]
-                                                [(vec (for [var free-vars-in-join-order]
-                                                        (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))))
-                                                 true]))
-                                         [[nil true]]))))))))
-                       (reduce into []))
-                  free-results (->> (map first free-results+branch-matches?)
-                                    (distinct)
-                                    (vec))]
-              (when (seq free-results+branch-matches?)
-                (when has-free-vars?
-                  (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
-                join-results))
-            join-results)))))
+    (do (validate-existing-vars var->bindings clause bound-vars)
+        {:join-depth or-join-depth
+         :constraint-fn
+         (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+           (let [args (when (seq bound-vars)
+                        [(->> (for [var bound-vars]
+                                (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
+                              (zipmap bound-vars))])
+                 free-results+branch-matches?
+                 (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                            :let [cache-key (when rule-name
+                                              [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
+                        (or (when cache-key
+                              (get *recursion-table* cache-key))
+                            (binding [*recursion-table* (if cache-key
+                                                          (assoc *recursion-table* cache-key [])
+                                                          *recursion-table*)]
+                              (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+                                (if (single-e-var-triple? bound-vars where)
+                                  (or-single-e-var-triple-fast-path snapshot db where args)
+                                  (let [{:keys [n-ary-join
+                                                var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                    (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
+                                      (if has-free-vars?
+                                        (vec (for [[join-keys join-results] idx-seq]
+                                               [(vec (for [var free-vars-in-join-order]
+                                                       (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))))
+                                                true]))
+                                        [[nil true]]))))))))
+                      (reduce into []))
+                 free-results (->> (map first free-results+branch-matches?)
+                                   (distinct)
+                                   (vec))]
+             (when (seq free-results+branch-matches?)
+               (when has-free-vars?
+                 (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
+               join-results)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
 ;; propagating knowledge from the first var to the next. See comment
@@ -604,28 +599,23 @@
 (defn- build-unification-constraints [unify-clauses var->bindings]
   (for [{:keys [op args]
          :as clause} unify-clauses
-        :let [unify-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unify-vars)]]
-    (do (doseq [arg args
-                :when (and (logic-var? arg)
-                           (not (contains? var->bindings arg)))]
-          (throw (IllegalArgumentException.
-                  (str "Unification refers to unknown variable: "
-                       arg " " (pr-str clause)))))
-        (fn unification-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-          (if (= (count join-keys) unification-join-depth)
-            (let [values (for [arg args]
-                           (if (logic-var? arg)
-                             (let [{:keys [result-index]} (get var->bindings arg)]
-                               (->> (get join-keys result-index)
-                                    (sorted-set-by bu/bytes-comparator)))
-                             (->> (map idx/value->bytes (doc/normalize-value arg))
-                                  (into (sorted-set-by bu/bytes-comparator)))))]
-              (when (case op
-                      == (boolean (not-empty (apply set/intersection values)))
-                      != (empty? (apply set/intersection values)))
-                join-results))
-            join-results)))))
+        :let [unification-vars (filter logic-var? args)
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)]]
+    (do (validate-existing-vars var->bindings clause unification-vars)
+        {:join-depth unification-join-depth
+         :constraint-fn
+         (fn unification-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+           (let [values (for [arg args]
+                          (if (logic-var? arg)
+                            (let [{:keys [result-index]} (get var->bindings arg)]
+                              (->> (get join-keys result-index)
+                                   (sorted-set-by bu/bytes-comparator)))
+                            (->> (map idx/value->bytes (doc/normalize-value arg))
+                                 (into (sorted-set-by bu/bytes-comparator)))))]
+             (when (case op
+                     == (boolean (not-empty (apply set/intersection values)))
+                     != (empty? (apply set/intersection values)))
+               join-results)))})))
 
 (defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
@@ -636,31 +626,26 @@
                                                  (:body not-clause)])
               not-vars (remove blank-var? not-vars)
               not-join-depth (calculate-constraint-join-depth var->bindings not-vars)]]
-    (do (doseq [arg not-vars
-                :when (and (logic-var? arg)
-                           (not (contains? var->bindings arg)))]
-          (throw (IllegalArgumentException.
-                  (str "Not refers to unknown variable: "
-                       arg " " (pr-str not-clause)))))
-        (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-          (if (= (count join-keys) not-join-depth)
-            (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-              (let [bound-result-tuple (for [var not-vars]
-                                         (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))
-                    args (when (seq not-vars)
-                           [(zipmap not-vars (map :value bound-result-tuple))])
-                    {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules)]
-                (when (empty? (doc/layered-idx->seq n-ary-join))
-                  join-results)))
-            join-results)))))
+    (do (validate-existing-vars var->bindings not-clause not-vars)
+        {:join-depth not-join-depth
+         :constraint-fn
+         (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
+           (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+             (let [bound-result-tuple (for [var not-vars]
+                                        (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))
+                   args (when (seq not-vars)
+                          [(zipmap not-vars (map :value bound-result-tuple))])
+                   {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules)]
+               (when (empty? (doc/layered-idx->seq n-ary-join))
+                 join-results))))})))
 
-(defn- constrain-join-result-by-constraints [snapshot db idx-id->idx constraints join-keys join-results]
+(defn- constrain-join-result-by-constraints [snapshot db idx-id->idx depth->constraints join-keys join-results]
   (reduce
    (fn [results constraint]
      (when results
        (constraint snapshot db idx-id->idx join-keys results)))
    join-results
-   constraints))
+   (get depth->constraints (count join-keys))))
 
 (defn- potential-bpg-pair-vars [g vars]
   (for [var vars
@@ -825,12 +810,17 @@
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
         pred-constraints (build-pred-constraints pred-clause+idx-ids var->bindings)
         or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                             var->bindings vars-in-join-order v-var->range-constriants)]
-    {:constraints (concat unification-constraints
-                          pred-constraints
-                          not-constraints
-                          not-join-constraints
-                          or-constraints)
+                                             var->bindings vars-in-join-order v-var->range-constriants)
+        depth->constraints (->> (concat unification-constraints
+                                        pred-constraints
+                                        not-constraints
+                                        not-join-constraints
+                                        or-constraints)
+                                (reduce
+                                 (fn [acc {:keys [join-depth constraint-fn]}]
+                                   (update acc join-depth (fnil conj []) constraint-fn))
+                                 (vec (repeat join-depth nil))))]
+    {:depth->constraints depth->constraints
      :v-var->range-constriants v-var->range-constriants
      :vars-in-join-order vars-in-join-order
      :var->joins var->joins
@@ -854,7 +844,7 @@
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
-        {:keys [constraints
+        {:keys [depth->constraints
                 vars-in-join-order
                 v-var->range-constriants
                 var->joins
@@ -867,7 +857,7 @@
                                  (compile-sub-query where arg-vars rule-name->rules)))
         idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
-                              (constrain-join-result-by-constraints snapshot db idx-id->idx constraints join-keys join-results))
+                              (constrain-join-result-by-constraints snapshot db idx-id->idx depth->constraints join-keys join-results))
         unary-join-index-groups (for [v vars-in-join-order]
                                   (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
                                     (assoc (or (get idx-id->idx id) (idx-fn)) :name name)))]
@@ -917,14 +907,15 @@
 
 (defn q
   ([{:keys [kv] :as db} q]
-   (let [start-time (System/currentTimeMillis)]
-     (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
-       (let [result ((if (:order-by q)
-                       (comp vec distinct)
-                       set) (crux.query/q snapshot db q))]
-         (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-         (log/debug :query-result-size (count result))
-         result))))
+   (time
+    (let [start-time (System/currentTimeMillis)]
+      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+        (let [result ((if (:order-by q)
+                        (comp vec distinct)
+                        set) (crux.query/q snapshot db q))]
+          (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+          (log/debug :query-result-size (count result))
+          result)))))
   ([snapshot {:keys [object-store] :as db} q]
    (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)

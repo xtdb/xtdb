@@ -276,7 +276,7 @@
                                  [(+ 1 bah)]]})
       (t/is (= true false) "Expected exception")
       (catch IllegalArgumentException e
-        (t/is (re-find #"Predicate refers to unknown variable: bah" (.getMessage e)))))
+        (t/is (re-find #"Clause refers to unknown variable: bah" (.getMessage e)))))
 
     (try
       (q/q (q/db *kv*) '{:find [x]
