@@ -13,7 +13,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; Docs
+;; Indexes
 
 (defrecord PrefixKvIterator [i ^bytes prefix]
   ks/KvIterator
