@@ -12,7 +12,8 @@
             [crux.kv-store :as ks]
             [crux.db :as db])
   (:import [java.util Comparator]
-           [crux.doc BinaryJoinLayeredVirtualIndex]))
+           [crux.doc BinaryJoinLayeredVirtualIndex]
+           [crux.index EntityTx]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -409,7 +410,8 @@
                :result-index result-index
                :join-depth join-depth
                :result-name e
-               :type :entity}])
+               :type :entity
+               :value? false}])
        (into {})))
 
 (defn- value-var-binding [var result-index type]
@@ -417,7 +419,8 @@
    :result-name (symbol "crux.query.value" (name var))
    :result-index result-index
    :join-depth result-index
-   :type type})
+   :type type
+   :value? true})
 
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
   (->> (for [var arg-vars
@@ -445,16 +448,12 @@
     {result-name entity}))
 
 (defn- bound-results-for-var [snapshot object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name type]} (get var->bindings var)]
-    (if (= "crux.query.value" (namespace result-name))
-      (let [value (get join-results result-name)]
-        {:value value
-         :result-name result-name
-         :type type
-         :var var
-         :value? true})
-      (when-let [{:keys [content-hash] :as entity} (get join-results e-var)]
+  (let [{:keys [e-var var attr result-index result-name type value?] :as binding} (get var->bindings var)]
+    (if value?
+      (assoc binding :value (get join-results result-name))
+      (when-let [^EntityTx entity-tx (get join-results e-var)]
         (let [value-bytes (get join-keys result-index)
+              content-hash (.content-hash entity-tx)
               doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)
               values (doc/normalize-value (get doc attr))
               value (first (if (or (nil? value-bytes)
@@ -463,16 +462,9 @@
                              (for [value values
                                    :when (bu/bytes=? value-bytes (idx/value->bytes value))]
                                value)))]
-          {:value value
-           :e-var e-var
-           :v-var var
-           :attr attr
-           :doc doc
-           :entity entity
-           :result-name result-name
-           :type type
-           :var var
-           :value? false})))))
+          (merge binding {:value value
+                          :entity entity-tx
+                          :doc doc}))))))
 
 (declare build-sub-query)
 
