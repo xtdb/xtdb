@@ -410,14 +410,6 @@
   (close-level [_])
   (max-depth [_] 1))
 
-(def ^:private ^:dynamic *external-sort-limit* (* 1024 1024))
-
-(defn- read-external-sort-value [^RandomAccessFile raf [k offset length]]
-  (let [bs (byte-array length)]
-    (.seek raf offset)
-    (.readFully raf bs)
-    [k (nippy/fast-thaw bs)]))
-
 (def ^:private sorted-virtual-index-key-comparator
   (reify Comparator
     (compare [_ [a] [b]]
@@ -457,35 +449,7 @@
     (when file
       (.delete file))))
 
-;; NOTE: This isn't used anymore, but could be used for the or free
-;; vars. Complicated by the need to sorting across the tuples.
-(defn new-sorted-external-virtual-index [idx-or-seq]
-  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
-                     (idx->seq idx-or-seq)
-                     idx-or-seq)
-        file (doto (File/createTempFile "crux-external-sort" ".nippy")
-               (.deleteOnExit))
-        path (.getAbsolutePath file)
-        [acc] (with-open [raf (RandomAccessFile. file "rw")]
-                (->> idx-as-seq
-                     (reduce
-                      (fn [[acc ^long offset] [k v]]
-                        (let [bs ^bytes (nippy/fast-freeze v)]
-                          (.write raf bs)
-                          [(conj acc [k offset (count bs)])
-                           (+ offset (count bs))]))
-                      [[] 0])))
-        raf (RandomAccessFile. file "r")]
-    (cio/register-cleaner file (fn []
-                                 (.close raf)
-                                 (.delete (File. path))))
-    (->SortedVirtualIndex
-     (vec (sort-by first bu/bytes-comparator acc))
-     raf
-     file
-     (atom nil))))
-
-(defn new-sorted-in-memory-virtual-index [idx-or-seq]
+(defn new-sorted-virtual-index [idx-or-seq]
   (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
                      (idx->seq idx-or-seq)
                      idx-or-seq)]
@@ -496,14 +460,6 @@
      nil
      nil
      (atom nil))))
-
-(defn new-sorted-virtual-index [idx-or-seq]
-  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
-                     (idx->seq idx-or-seq)
-                     idx-or-seq)]
-    (if (and *external-sort-limit* (seq (drop *external-sort-limit* idx-as-seq)))
-      (new-sorted-external-virtual-index idx-as-seq)
-      (new-sorted-in-memory-virtual-index idx-as-seq))))
 
 (defrecord OrVirtualIndex [indexes peek-state]
   db/Index
@@ -738,16 +694,6 @@
     (when (pos? max-depth)
       (step [] 0 true))))
 
-(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
-  (-> (new-sorted-in-memory-virtual-index
-       (for [prefix (partition-by first tuples)
-             :let [value (ffirst prefix)]]
-         [(idx/value->bytes value)
-          {:value value
-           :child-idx (when (seq (next (first prefix)))
-                        (build-nested-index (map next prefix) next-range-constraints))}]))
-      (wrap-with-range-constraints range-constraints)))
-
 (defn- relation-virtual-index-depth ^long [iterators-state]
   (dec (count (:indexes @iterators-state))))
 
@@ -795,6 +741,16 @@
 
   (max-depth [this]
     max-depth))
+
+(defn- build-nested-index [tuples [range-constraints & next-range-constraints]]
+  (-> (new-sorted-virtual-index
+       (for [prefix (partition-by first tuples)
+             :let [value (ffirst prefix)]]
+         [(idx/value->bytes value)
+          {:value value
+           :child-idx (when (seq (next (first prefix)))
+                        (build-nested-index (map next prefix) next-range-constraints))}]))
+      (wrap-with-range-constraints range-constraints)))
 
 (defn update-relation-virtual-index!
   ([relation tuples]
