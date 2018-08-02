@@ -1,16 +1,14 @@
 (ns crux.doc
   (:require [clojure.tools.logging :as log]
             [clojure.set :as set]
-            [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.db :as db]
-            [crux.io :as cio]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable File RandomAccessFile]
-           [java.util Arrays Collections Comparator Date]
+  (:import [java.io Closeable]
+           [java.util Arrays Collections Comparator]
            [crux.index EntityTx]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -416,7 +414,7 @@
       (bu/compare-bytes (or a idx/nil-id-bytes)
                         (or b idx/nil-id-bytes)))))
 
-(defrecord SortedVirtualIndex [values ^RandomAccessFile raf ^File file seq-state]
+(defrecord SortedVirtualIndex [values seq-state]
   db/Index
   (seek-values [this k]
     (let [idx (Collections/binarySearch values
@@ -427,9 +425,7 @@
                                     idx))
           {:keys [fst]} (reset! seq-state {:fst x :rest xs})]
       (if fst
-        (if file
-          (read-external-sort-value raf fst)
-          fst)
+        fst
         (reset! seq-state nil))))
 
   db/OrderedIndex
@@ -438,16 +434,7 @@
                                                :as seq-state}]
                                            (assoc seq-state :fst x :rest xs)))]
       (when fst
-        (if file
-          (read-external-sort-value raf fst)
-          fst))))
-
-  Closeable
-  (close [this]
-    (when raf
-      (.close raf))
-    (when file
-      (.delete file))))
+        fst))))
 
 (defn new-sorted-virtual-index [idx-or-seq]
   (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
@@ -457,8 +444,6 @@
      (->> idx-as-seq
           (sort-by first bu/bytes-comparator)
           (vec))
-     nil
-     nil
      (atom nil))))
 
 (defrecord OrVirtualIndex [indexes peek-state]
