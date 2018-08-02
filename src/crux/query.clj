@@ -11,7 +11,8 @@
             [crux.lru :as lru]
             [crux.kv-store :as ks]
             [crux.db :as db])
-  (:import [java.util Comparator]))
+  (:import [java.util Comparator]
+           [crux.doc BinaryJoinLayeredVirtualIndex]))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -858,7 +859,7 @@
                                   (for [{:keys [id idx-fn name] :as join} (get var->joins v)]
                                     (assoc (or (get idx-id->idx id) (idx-fn)) :name name)))]
     (doseq [[_ idx] idx-id->idx
-            :when (instance? crux.doc.BinaryJoinLayeredVirtualIndex idx)]
+            :when (instance? BinaryJoinLayeredVirtualIndex idx)]
       (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constriants))
     (when (seq args)
       (doc/update-relation-virtual-index! (get idx-id->idx args-idx-id)
