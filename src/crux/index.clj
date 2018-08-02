@@ -22,7 +22,7 @@
 
 (def ^:const ^:private meta-key->value-index-id 4)
 
-(def ^:pvivate ^{:tag 'long} value-type-id-size Byte/BYTES)
+(def ^:private ^{:tag 'long} value-type-id-size Byte/BYTES)
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (+ (.getDigestLength (MessageDigest/getInstance id-hash-algorithm))
