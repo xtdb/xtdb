@@ -751,3 +751,25 @@
                      :else
                      [low high value idx]))]
              (recur (str acc (char c)) (long low) (long high) (long value) (long idx) total-weights))))))))
+
+;; Bloom Filter
+
+
+(def ^:const ^:private bloom-filter-hashes 2)
+
+(defn bloom-filter-probe [size x]
+  (let [h (hash x)]
+    (loop [n 0
+           p (java.util.BitSet.)]
+      (if (= bloom-filter-hashes n)
+        p
+        (recur (inc n)
+               (doto p
+                 (.set (long (mod (mix-collection-hash h n) size)))))))))
+
+(defn ^java.util.BitSet add-to-bloom-filter [^java.util.BitSet bs x]
+  (doto bs
+    (.or (bloom-filter-probe (.size bs) x))))
+
+(defn bloom-filter-might-contain? [^java.util.BitSet bs x]
+  (.intersects bs (bloom-filter-probe (.size bs) x)))
