@@ -242,46 +242,46 @@
                                            (idx/id->bytes content-hash))]]
                     (t/is (nil? (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
-;; TODO: These commented out tests don't work with the binary index,
-;; are indirectly covered by query tests. Are possible to rewrite to
-;; work in the new world, or to port to normal query-level testsl
-#_(t/deftest test-can-perform-unary-join
-    (let [tx-log (tx/->DocTxLog f/*kv*)
-          tx-ops (vec (concat (for [[relation vs] {:a [0 1 3 4 5 6 7 8 8 9 11 12]
-                                                   :b [0 2 6 7 8 9 12 12]
-                                                   :c [2 4 5 8 10 12 12]}
-                                    [i v] (map-indexed vector vs)
-                                    :let [eid (keyword (str (name relation) i "-" v))]]
-                                [:crux.tx/put eid {:crux.db/id eid relation v}])))
-          {:keys [transact-time tx-id]}
-          @(db/submit-tx tx-log tx-ops)]
-      (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-        (t/testing "checking data is loaded before join"
-          (t/is (= (idx/new-id :a0-0)
-                   (:eid (first (doc/entities-at snapshot [:a0-0] transact-time transact-time)))))
-          (t/is (= (count tx-ops) (count (doc/all-entities snapshot transact-time transact-time)))))
+(t/deftest test-can-perform-unary-join
+  (let [a-idx (doc/new-relation-virtual-index :a
+                                              [[0]
+                                               [1]
+                                               [3]
+                                               [4]
+                                               [5]
+                                               [6]
+                                               [7]
+                                               [8]
+                                               [8]
+                                               [9]
+                                               [11]
+                                               [12]]
+                                              1)
+        b-idx (doc/new-relation-virtual-index :b
+                                              [[0]
+                                               [2]
+                                               [6]
+                                               [7]
+                                               [8]
+                                               [9]
+                                               [12]]
+                                              1)
+        c-idx (doc/new-relation-virtual-index :c
+                                              [[2]
+                                               [4]
+                                               [5]
+                                               [8]
+                                               [10]
+                                               [12]]
+                                              1)]
 
-        (t/testing "unary join"
-          (let [a-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :a nil transact-time transact-time)
-                          (assoc :name :a))
-                b-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :b nil transact-time transact-time)
-                          (assoc :name :b))
-                c-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :c nil transact-time transact-time)
-                          (assoc :name :c))]
-            (t/is (= [{:a #{(idx/new-id :a7-8)
-                            (idx/new-id :a8-8)}
-                       :b #{(idx/new-id :b4-8)}
-                       :c #{(idx/new-id :c3-8)}}
-                      {:a #{(idx/new-id :a11-12)}
-                       :b #{(idx/new-id :b6-12)
-                            (idx/new-id :b7-12)}
-                       :c #{(idx/new-id :c5-12)
-                            (idx/new-id :c6-12)}}]
-                     (for [[v join-results] (->> (doc/new-unary-join-virtual-index [a-idx b-idx c-idx])
-                                                 (doc/idx->seq))]
-                       (->> (for [[k entities] join-results]
-                              [k (set (map :eid entities))])
-                            (into {}))))))))))
+    (t/is (= [{:x #{8}}
+              {:x #{12}}]
+             (for [[_ join-results] (-> (doc/new-unary-join-virtual-index [(assoc a-idx :name :x)
+                                                                           (assoc b-idx :name :x)
+                                                                           (assoc c-idx :name :x)])
+                                        (doc/idx->seq))]
+               join-results)))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
 
