@@ -275,8 +275,8 @@
                                                [12]]
                                               1)]
 
-    (t/is (= [{:x [8]}
-              {:x [12]}]
+    (t/is (= [{:x 8}
+              {:x 12}]
              (for [[_ join-results] (-> (doc/new-unary-join-virtual-index [(assoc a-idx :name :x)
                                                                            (assoc b-idx :name :x)
                                                                            (assoc c-idx :name :x)])
@@ -325,13 +325,13 @@
                        (doc/new-n-ary-join-layered-virtual-index)
                        (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
                        (doc/layered-idx->seq))]
-        (t/is (= [{:a [1], :b [3], :c [4]}
-                  {:a [1], :b [3], :c [5]}
-                  {:a [1], :b [4], :c [6]}
-                  {:a [1], :b [4], :c [8]}
-                  {:a [1], :b [4], :c [9]}
-                  {:a [1], :b [5], :c [2]}
-                  {:a [3], :b [5], :c [2]}]
+        (t/is (= [{:a 1, :b 3, :c 4}
+                  {:a 1, :b 3, :c 5}
+                  {:a 1, :b 4, :c 6}
+                  {:a 1, :b 4, :c 8}
+                  {:a 1, :b 4, :c 9}
+                  {:a 1, :b 5, :c 2}
+                  {:a 3, :b 5, :c 2}]
                  (for [[_ join-results] result]
                    join-results)))))))
 
@@ -360,32 +360,32 @@
                                            [5]]
                                           1)]
 
-    (t/is (= [[1] [2] [3] [4] [5]]
+    (t/is (= [1 2 3 4 5]
              (->> (doc/idx->seq r)
                   (map second))))
 
-    (t/is (= [[1] [2] [3]]
+    (t/is (= [1 2 3]
              (->> (doc/idx->seq (doc/new-less-than-virtual-index r 4))
                   (map second))))
 
-    (t/is (= [[1] [2] [3] [4]]
+    (t/is (= [1 2 3 4]
              (->> (doc/idx->seq (doc/new-less-than-equal-virtual-index r 4))
                   (map second))))
 
-    (t/is (= [[3] [4] [5]]
+    (t/is (= [3 4 5]
              (->> (doc/idx->seq (doc/new-greater-than-virtual-index r 2))
                   (map second))))
 
-    (t/is (= [[2] [3] [4] [5]]
+    (t/is (= [2 3 4 5]
              (->> (doc/idx->seq (doc/new-greater-than-equal-virtual-index r 2))
                   (map second))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= [2] (second (db/seek-values (doc/new-greater-than-equal-virtual-index r 2) (idx/value->bytes nil)))))
-      (t/is (= [3] (second (db/seek-values (doc/new-greater-than-virtual-index r 2) (idx/value->bytes 1))))))
+      (t/is (= 2 (second (db/seek-values (doc/new-greater-than-equal-virtual-index r 2) (idx/value->bytes nil)))))
+      (t/is (= 3 (second (db/seek-values (doc/new-greater-than-virtual-index r 2) (idx/value->bytes 1))))))
 
     (t/testing "combining indexes"
-      (t/is (= [[2] [3] [4]]
+      (t/is (= [2 3 4]
                (->> (doc/idx->seq (-> r
                                       (doc/new-greater-than-equal-virtual-index 2)
                                       (doc/new-less-than-virtual-index 5)))
@@ -481,11 +481,9 @@
              (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                              (doc/new-n-ary-join-layered-virtual-index)
                                              (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                             (doc/layered-idx->seq))
-                        result (q/cartesian-product
-                                (for [var [:a :b :c]]
-                                  (get join-results var)))]
-                    (vec result)))))))
+                                             (doc/layered-idx->seq))]
+                    (vec (for [var [:a :b :c]]
+                           (get join-results var)))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
   (let [p-idx (doc/new-relation-virtual-index :p
@@ -510,11 +508,9 @@
         (t/is (= #{[3]}
                  (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-and-idx])
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))
-                            result (q/cartesian-product
-                                    (for [var [:x]]
-                                      (get join-results var)))]
-                        (vec result)))))))
+                                                 (doc/layered-idx->seq))]
+                        (vec (for [var [:x]]
+                               (get join-results var)))))))))
 
     (t/testing "disjunction"
       (let [unary-or-idx (doc/new-or-virtual-index
@@ -527,11 +523,9 @@
                    [4]}
                  (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-or-idx])
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))
-                            result (q/cartesian-product
-                                    (for [var [:x]]
-                                      (get join-results var)))]
-                        (vec result)))))))))
+                                                 (doc/layered-idx->seq))]
+                        (vec (for [var [:x]]
+                               (get join-results var)))))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
   (let [p-idx (doc/new-relation-virtual-index :p
@@ -555,11 +549,9 @@
                (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
                                                (doc/new-n-ary-join-layered-virtual-index)
                                                (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                               (doc/layered-idx->seq))
-                          result (q/cartesian-product
-                                  (for [var [:x :y :z]]
-                                    (get join-results var)))]
-                      (vec result))))))
+                                               (doc/layered-idx->seq))]
+                      (vec (for [var [:x :y :z]]
+                             (get join-results var))))))))
 
     (t/testing "disjunction"
       (let [zero-idx (doc/new-relation-virtual-index :zero
@@ -574,11 +566,9 @@
                    [2 20 0]}
                  (set (for [[_ join-results] (-> lhs-index
                                                  (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))
-                            result (q/cartesian-product
-                                    (for [var [:x :y :z]]
-                                      (get join-results var)))]
-                        (vec result)))))
+                                                 (doc/layered-idx->seq))]
+                        (vec (for [var [:x :y :z]]
+                               (get join-results var)))))))
         (let [rhs-index (doc/new-n-ary-join-layered-virtual-index
                          [(doc/new-unary-join-virtual-index [(assoc q-idx :name :x)])
                           (doc/new-unary-join-virtual-index [(assoc zero-idx :name :y)])
@@ -588,11 +578,9 @@
                      [3 0 30]}
                    (set (for [[_ join-results] (-> rhs-index
                                                    (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                   (doc/layered-idx->seq))
-                              result (q/cartesian-product
-                                      (for [var [:x :y :z]]
-                                        (get join-results var)))]
-                          (vec result)))))
+                                                   (doc/layered-idx->seq))]
+                          (vec (for [var [:x :y :z]]
+                                 (get join-results var)))))))
           ;; TODO: Should we need to specify the vars? The lhs and rhs
           ;; vars needs to be the same.
           (let [n-ary-or (doc/new-n-ary-or-layered-virtual-index lhs-index rhs-index)]
@@ -604,8 +592,6 @@
                        [3 0 30]}
                      (set (for [[_ join-results] (-> n-ary-or
                                                      (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                     (doc/layered-idx->seq))
-                                result (q/cartesian-product
-                                        (for [var [:x :y :z]]
-                                          (get join-results var)))]
-                            (vec result)))))))))))
+                                                     (doc/layered-idx->seq))]
+                            (vec (for [var [:x :y :z]]
+                                   (get join-results var)))))))))))))
