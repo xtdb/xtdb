@@ -351,6 +351,50 @@
              (second (db/seek-values idx (idx/value->bytes 3)))))
     (t/is (nil? (db/seek-values idx (idx/value->bytes 4))))))
 
+(t/deftest test-range-predicates
+  (let [r (doc/new-relation-virtual-index :r
+                                          [[1]
+                                           [2]
+                                           [3]
+                                           [4]
+                                           [5]]
+                                          1)]
+
+    (t/is (= [[1] [2] [3] [4] [5]]
+             (->> (doc/idx->seq r)
+                  (map second))))
+
+    (t/is (= [[1] [2] [3]]
+             (->> (doc/idx->seq (doc/new-less-than-virtual-index r 4))
+                  (map second))))
+
+    (t/is (= [[1] [2] [3] [4]]
+             (->> (doc/idx->seq (doc/new-less-than-equal-virtual-index r 4))
+                  (map second))))
+
+    (t/is (= [[3] [4] [5]]
+             (->> (doc/idx->seq (doc/new-greater-than-virtual-index r 2))
+                  (map second))))
+
+    (t/is (= [[2] [3] [4] [5]]
+             (->> (doc/idx->seq (doc/new-greater-than-equal-virtual-index r 2))
+                  (map second))))
+
+    (t/testing "seek skips to lower range"
+      (t/is (= [2] (second (db/seek-values (doc/new-greater-than-equal-virtual-index r 2) (idx/value->bytes nil)))))
+      (t/is (= [3] (second (db/seek-values (doc/new-greater-than-virtual-index r 2) (idx/value->bytes 1))))))
+
+    (t/testing "combining indexes"
+      (t/is (= [[2] [3] [4]]
+               (->> (doc/idx->seq (-> r
+                                      (doc/new-greater-than-equal-virtual-index 2)
+                                      (doc/new-less-than-virtual-index 5)))
+                    (map second)))))
+
+    (t/testing "incompatible type"
+      (t/is (empty? (->> (doc/idx->seq (-> (doc/new-greater-than-equal-virtual-index r "foo")))
+                         (map second)))))))
+
 (t/deftest test-or-virtual-index
   (let [idx-1 (doc/new-sorted-virtual-index
                [[(idx/value->bytes 1) :a]
