@@ -731,9 +731,11 @@
 
 ;; NOTE: this isn't exact, used to detect vars that can be bound
 ;; before an or sub query. Is there a better way to incrementally
-;; build up the join order?
+;; build up the join order? Done twice to catch all vars, doesn't care
+;; about cyclic dependencies, these will be caught by the real dependency
+;; check later.
 (defn- add-pred-returns-bound-at-top-level [known-vars pred-clauses]
-  (->> pred-clauses
+  (->> (concat pred-clauses pred-clauses)
        (reduce
         (fn [acc {:keys [pred return]}]
           (if (->> (cons (:pred-fn pred) (:args pred))
