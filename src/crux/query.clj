@@ -553,6 +553,7 @@
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
+              has-free-vars? (boolean (seq free-vars))
               {:keys [rule-name]} (meta clause)]]
     (do (doseq [var bound-vars]
           (when (not (contains? var->bindings var))
@@ -578,26 +579,21 @@
                                                                *recursion-table*)]
                                    (let [{:keys [n-ary-join
                                                  var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                     (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
-                                            [(some->> (for [var free-vars-in-join-order]
-                                                        (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
-                                                      (not-empty)
-                                                      (vec))
-                                             true]))))))))
+                                     (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
+                                       (if has-free-vars?
+                                         (vec (for [[join-keys join-results] idx-seq]
+                                                [(vec (for [var free-vars-in-join-order]
+                                                        (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))))
+                                                 true]))
+                                         [[nil true]]))))))))
                        (reduce into []))
-                  free-results (->> (for [[free-result] free-results+branch-matches?
-                                          :when free-result]
-                                      free-result)
+                  free-results (->> (map first free-results+branch-matches?)
                                     (distinct)
                                     (vec))]
-              (when (seq free-results)
-                (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
-
-              (if (empty? bound-vars)
-                (when (seq free-results)
-                  join-results)
-                (when (seq free-results+branch-matches?)
-                  join-results)))
+              (when (seq free-results+branch-matches?)
+                (when has-free-vars?
+                  (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
+                join-results))
             join-results)))))
 
 ;; TODO: Unification could be improved by using dynamic relations
