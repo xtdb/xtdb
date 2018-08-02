@@ -534,15 +534,10 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [object-store business-time transact-time] :as db} where args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
-        [{:keys [content-hash] :as entity}] (doc/entities-at snapshot (mapv e args) business-time transact-time)
-        ;; TODO: This could/should look this up directly in the index
-        ;; instead of loading the doc, similar to how the AEV/AVE
-        ;; indexes work. But quick spike didn't show any timing
-        ;; changes on LUBM.
-        doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)]
-    (when (contains? (set (doc/normalize-value (get doc a))) v)
+        entity (get (first args) e)]
+    (when (doc/or-known-triple-fast-path snapshot entity a v business-time transact-time)
       [[nil true]])))
 
 (def ^:private ^:dynamic *recursion-table* {})

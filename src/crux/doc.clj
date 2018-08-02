@@ -39,6 +39,17 @@
 (defn ^java.io.Closeable new-prefix-kv-iterator [i prefix]
   (->PrefixKvIterator i prefix))
 
+(defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
+  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
+    (let [version-k (idx/encode-attribute+entity+value+content-hash-key
+                     (idx/id->bytes a)
+                     (idx/id->bytes (.eid entity-tx))
+                     (idx/value->bytes v)
+                     (idx/id->bytes (.content-hash entity-tx)))]
+      (with-open [i (new-prefix-kv-iterator (ks/new-iterator snapshot) version-k)]
+        (when (ks/seek i version-k)
+          entity-tx)))))
+
 ;; AVE
 
 (defn- attribute-value+placeholder [k peek-state]
