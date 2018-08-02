@@ -207,7 +207,16 @@
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
         (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-          (t/is (= 6 (count (map :content-hash picasso-history)))))))
+          (t/is (= 6 (count (map :content-hash picasso-history))))
+          (with-open [i (ks/new-iterator snapshot)]
+            (doseq [{:keys [content-hash]} picasso-history
+                    :when (not (bu/bytes=? idx/nil-id-bytes (idx/id->bytes content-hash)))
+                    :let [version-k (idx/encode-attribute+entity+value+content-hash-key
+                                     (idx/id->bytes :http://xmlns.com/foaf/0.1/givenName)
+                                     (idx/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
+                                     (idx/value->bytes "Pablo")
+                                     (idx/id->bytes content-hash))]]
+              (t/is (bu/bytes=? version-k (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k))))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -220,17 +229,18 @@
 
           (t/testing "eviction adds to and keeps tx history"
             (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-              ;; TODO: this is flaky
-              ;; (t/is (= 7 (count (map :content-hash picasso-history))))
+              (t/is (= 7 (count (map :content-hash picasso-history))))
               (t/testing "eviction removes docs"
-                (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history)))))))
-
-          ;; TODO: this functionality not exposed anymore. Could check
-          ;; index directly.
-          #_(t/testing "eviction removes secondary indexes"
-              (t/is (empty? (doc/entities-by-attribute-value-at snapshot :http://xmlns.com/foaf/0.1/givenName
-                                                                #(doc/new-equal-virtual-index % "Pablo")
-                                                                new-transact-time new-transact-time)))))))))
+                (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history)))))
+              (t/testing "eviction removes secondary indexes"
+                (with-open [i (ks/new-iterator snapshot)]
+                  (doseq [{:keys [content-hash]} picasso-history
+                          :let [version-k (idx/encode-attribute+entity+value+content-hash-key
+                                           (idx/id->bytes :http://xmlns.com/foaf/0.1/givenName)
+                                           (idx/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
+                                           (idx/value->bytes "Pablo")
+                                           (idx/id->bytes content-hash))]]
+                    (t/is (nil? (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 ;; TODO: These commented out tests don't work with the binary index,
 ;; are indirectly covered by query tests. Are possible to rewrite to
@@ -512,53 +522,7 @@
                         result (#'crux.query/cartesian-product
                                 (for [var [:a :b :c]]
                                   (get join-results var)))]
-                    (vec result)))))
-
-    ;; TODO: Same as above.
-    #_(t/testing "same join with kv indexes"
-        (let [data [{:crux.db/id :r74 :ra 7 :rb 4}
-                    {:crux.db/id :s40 :sb 4 :sc 0}
-                    {:crux.db/id :s41 :sb 4 :sc 1}
-                    {:crux.db/id :s42 :sb 4 :sc 2}
-                    {:crux.db/id :s43 :sb 4 :sc 3}
-                    {:crux.db/id :t70 :ta 7 :tc 0}
-                    {:crux.db/id :t71 :ta 7 :tc 1}
-                    {:crux.db/id :t72 :ta 7 :tc 2}]]
-          (let [tx-log (tx/->DocTxLog f/*kv*)
-                tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                      [:crux.tx/put id doc])))
-                {:keys [transact-time tx-id]}
-                @(db/submit-tx tx-log tx-ops)]
-            (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-              (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                               (assoc :name :r))
-                    ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                               (assoc :name :t))
-                    rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                               (assoc :name :r))
-                    sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                               (assoc :name :s))
-                    sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                               (assoc :name :s))
-                    tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                               (assoc :name :t))
-                    index-groups [[ra-idx ta-idx]
-                                  [rb-idx sb-idx]
-                                  [sc-idx tc-idx]]]
-                (t/is (= #{(idx/new-id :r74)
-                           (idx/new-id :s40)
-                           (idx/new-id :s41)
-                           (idx/new-id :s42)
-                           (idx/new-id :t70)
-                           (idx/new-id :t71)
-                           (idx/new-id :t72)}
-                         (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                                                         (doc/new-n-ary-join-layered-virtual-index)
-                                                         (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                         (doc/layered-idx->seq))
-                                    [k entities] join-results
-                                    {:keys [eid]} entities]
-                                eid)))))))))))
+                    (vec result)))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
   (let [p-idx (doc/new-relation-virtual-index :p

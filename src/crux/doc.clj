@@ -30,9 +30,13 @@
         k)))
 
   (value [_]
-    (ks/value i)))
+    (ks/value i))
 
-(defn- new-prefix-kv-iterator [i prefix]
+  Closeable
+  (close [_]
+    (.close ^Closeable i)))
+
+(defn ^java.io.Closeable new-prefix-kv-iterator [i prefix]
   (->PrefixKvIterator i prefix))
 
 ;; AVE
