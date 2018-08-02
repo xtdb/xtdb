@@ -70,7 +70,7 @@
   (loop [k current-k]
     (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) idx/id-size))))
     (or (let [[_ entity] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)
-              [_ [^EntityTx entity-tx]] (db/seek-values entity-as-of-idx entity)]
+              [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx entity)]
           (when entity-tx
             (let [version-k (idx/encode-attribute+value+entity+content-hash-key
                              (idx/id->bytes attr)
@@ -79,7 +79,7 @@
                              (idx/id->bytes (.content-hash entity-tx)))]
               (when-let [found-k (ks/seek i version-k)]
                 (when (bu/bytes=? version-k found-k)
-                  [(idx/id->bytes entity) [entity-tx]])))))
+                  [(idx/id->bytes entity) entity-tx])))))
         (when-let [k (some->> @peek-state (ks/seek i))]
           (recur k)))))
 
@@ -114,7 +114,7 @@
 
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
   (let [[e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)
-        [_ [entity-tx]] (db/seek-values entity-as-of-idx e)]
+        [_ entity-tx] (db/seek-values entity-as-of-idx e)]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
       [(idx/id->bytes e) :crux.doc.binary-placeholder/entity]
@@ -160,7 +160,7 @@
                              (idx/id->bytes (.content-hash entity-tx)))]
               (when-let [found-k (ks/seek i version-k)]
                 (when (bu/bytes=? version-k found-k)
-                  [value [entity-tx]]))))
+                  [value entity-tx]))))
           (when-let [k (some->> @peek-state (ks/seek i))]
             (recur k))))))
 
@@ -372,7 +372,7 @@
                               (enrich-entity-tx v))]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
-                [(idx/id->bytes (.eid entity-tx)) [entity-tx]])
+                [(idx/id->bytes (.eid entity-tx)) entity-tx])
               (recur (ks/next i)))))))))
 
 (defn new-entity-as-of-index [snapshot business-time transact-time]
@@ -382,7 +382,7 @@
   (with-open [i (ks/new-iterator snapshot)]
     (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
       (some->> (for [entity entities
-                     :let [[_ [entity-tx]] (db/seek-values entity-as-of-idx entity)]
+                     :let [[_ entity-tx] (db/seek-values entity-as-of-idx entity)]
                      :when entity-tx]
                  entity-tx)
                (not-empty)
@@ -585,7 +585,7 @@
   (->UnaryJoinVirtualIndex indexes (atom nil)))
 
 (defn constrain-join-result-by-empty-names [join-keys join-results]
-  (when (every? not-empty (vals join-results))
+  (when (not-any? nil? (vals join-results))
     join-results))
 
 (defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes depth-state]
@@ -749,7 +749,7 @@
           (swap! iterators-state merge {:child-idx child-idx
                                         :needs-seek? false})
           (when k
-            [k [value]])))))
+            [k value])))))
 
   db/Index
   (next-values [this]
@@ -760,7 +760,7 @@
           (let [[k {:keys [value child-idx]}] (db/next-values idx)]
             (swap! iterators-state assoc :child-idx child-idx)
             (when k
-              [k [value]]))))))
+              [k value]))))))
 
   db/LayeredIndex
   (open-level [this]

@@ -107,7 +107,9 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn cartesian-product [[x & xs]]
-  (when (seq x)
+  (when x
+    [(vec (cons x xs))])
+  #_(when (seq x)
     (for [a x
           bs (or (cartesian-product xs) [[]])]
       (cons a bs))))
@@ -451,38 +453,39 @@
 
 (defn- bound-result->join-result [{:keys [result-name value? entity value] :as result}]
   (if value?
-    {result-name #{value}}
-    {result-name #{entity}}))
+    {result-name value}
+    {result-name entity}))
 
 (defn- bound-results-for-var [snapshot object-store var->bindings join-keys join-results var]
   (let [{:keys [e-var var attr result-index result-name type]} (get var->bindings var)]
     (if (= "crux.query.value" (namespace result-name))
-      (for [value (get join-results result-name)]
+      (let [value (get join-results result-name)]
         {:value value
          :result-name result-name
          :type type
          :var var
          :value? true})
-      (when-let [entities (not-empty (get join-results e-var))]
-        (let [content-hashes (map :content-hash entities)
+      (when-let [entity (get join-results e-var)]
+        (let [entities [entity]
+              content-hashes (map :content-hash entities)
               content-hash->doc (db/get-objects object-store snapshot content-hashes)
               value-bytes (get join-keys result-index)]
-          (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
-                :let [values (doc/normalize-value (get doc attr))]
-                value values
-                :when (or (nil? value-bytes)
-                          (= (count values) 1)
-                          (bu/bytes=? value-bytes (idx/value->bytes value)))]
-            {:value value
-             :e-var e-var
-             :v-var var
-             :attr attr
-             :doc doc
-             :entity entity
-             :result-name result-name
-             :type type
-             :var var
-             :value? false}))))))
+          (first (for [[entity doc] (map vector entities (map content-hash->doc content-hashes))
+                       :let [values (doc/normalize-value (get doc attr))]
+                       value values
+                       :when (or (nil? value-bytes)
+                                 (= (count values) 1)
+                                 (bu/bytes=? value-bytes (idx/value->bytes value)))]
+                   {:value value
+                    :e-var e-var
+                    :v-var var
+                    :attr attr
+                    :doc doc
+                    :entity entity
+                    :result-name result-name
+                    :type type
+                    :var var
+                    :value? false})))))))
 
 (declare build-sub-query)
 
@@ -511,21 +514,20 @@
                                               (for [arg args]
                                                 (if (logic-var? arg)
                                                   (bound-results-for-var snapshot object-store var->bindings join-keys join-results arg)
-                                                  [{:value arg
-                                                    :literal-arg? true}]))))
-                  pred-fns (if (logic-var? pred-fn)
-                             (mapv :value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
-                             [pred-fn])
+                                                  {:value arg
+                                                   :literal-arg? true}))))
+                  pred-fn (if (logic-var? pred-fn)
+                            (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results pred-fn))
+                            pred-fn)
                   pred-result+result-maps
                   (for [bound-result-args-tuple bound-result-args-tuples
-                        pred-fn pred-fns
                         :let [pred-result (apply pred-fn (mapv :value bound-result-args-tuple))]
                         :when pred-result]
                     [pred-result
                      (->> (for [{:keys [literal-arg?] :as result} bound-result-args-tuple
                                 :when (not literal-arg?)]
                             (bound-result->join-result result))
-                          (apply merge-with into))])]
+                          (apply merge))])]
               (when return
                 (->> (for [[pred-result] pred-result+result-maps]
                        [pred-result])
@@ -533,7 +535,7 @@
                      (vec)
                      (doc/update-relation-virtual-index! (get idx-id->idx idx-id))))
               (when-let [join-results (some->> (map second pred-result+result-maps)
-                                               (apply merge-with into)
+                                               (apply merge)
                                                (merge join-results))]
                 join-results))
             join-results)))))
@@ -573,7 +575,7 @@
                       entity))]
     (when (seq result)
       [[[]
-        {e result}]])))
+        {e (first result)}]])))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -596,53 +598,57 @@
                          var " " (pr-str clause))))))
         (fn or-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
           (if (= (count join-keys) or-join-depth)
-            (let [args (vec (for [bound-result-tuple (cartesian-product
-                                                      (for [var bound-vars]
-                                                        (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
-                              (zipmap bound-vars (map :value bound-result-tuple))))
-                  free-results+bound-results
-                  (let [free-results+bound-results
-                        (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                                   :let [cache-key (when rule-name
-                                                     [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
-                               (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-                                 (if (single-e-var-triple? bound-vars where)
-                                   (or-single-e-var-triple-fast-path snapshot db where args)
-                                   (or (get *recursion-table* cache-key)
-                                       (binding [*recursion-table* (if cache-key
-                                                                     (assoc *recursion-table* cache-key [])
-                                                                     *recursion-table*)]
-                                         (let [{:keys [n-ary-join
-                                                       var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                           (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
-                                                  [(vec (for [bound-result-tuple (cartesian-product
-                                                                                  (for [var free-vars-in-join-order]
-                                                                                    (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
-                                                          (mapv :value bound-result-tuple)))
-                                                   (->> (for [bound-result-tuple (cartesian-product
-                                                                                  (for [var bound-vars]
-                                                                                    (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
-                                                              result bound-result-tuple]
-                                                          (bound-result->join-result result))
-                                                        (apply merge-with into))]))))))))
-                             (reduce into []))]
-                    free-results+bound-results)
-                  free-results (->> (for [[free-results] free-results+bound-results
-                                          free-result free-results]
-                                      free-result)
-                                    (distinct)
-                                    (vec))
-                  bound-results (->> (for [[_ bound-result] free-results+bound-results]
-                                       bound-result)
-                                     (apply merge-with into))]
-              (when (seq free-results)
-                (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
-
-              (if (empty? bound-vars)
+            (try
+              (let [args (vec (for [bound-result-tuple (cartesian-product
+                                                        (for [var bound-vars]
+                                                          (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
+                                (zipmap bound-vars (map :value bound-result-tuple))))
+                    free-results+bound-results
+                    (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                               :let [cache-key (when rule-name
+                                                 [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
+                           (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+                             (if (single-e-var-triple? bound-vars where)
+                               (or-single-e-var-triple-fast-path snapshot db where args)
+                               (or (get *recursion-table* cache-key)
+                                   (binding [*recursion-table* (if cache-key
+                                                                 (assoc *recursion-table* cache-key [])
+                                                                 *recursion-table*)]
+                                     (let [{:keys [n-ary-join
+                                                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                       (vec (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)]
+                                              [(vec (for [bound-result-tuple (cartesian-product
+                                                                              (for [var free-vars-in-join-order]
+                                                                                (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))]
+                                                      (mapv :value bound-result-tuple)))
+                                               (->> (for [bound-result-tuple (cartesian-product
+                                                                              (for [var bound-vars]
+                                                                                (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
+                                                          result bound-result-tuple]
+                                                      (bound-result->join-result result))
+                                                    (apply merge))]))))))))
+                         (reduce into []))
+                    free-results (->> (for [[free-results] free-results+bound-results
+                                            free-result free-results]
+                                        free-result)
+                                      (distinct)
+                                      (vec))
+                    bound-results (->> (for [[_ bound-result] free-results+bound-results]
+                                         bound-result)
+                                       (apply merge))]
                 (when (seq free-results)
-                  join-results)
-                (when (seq bound-results)
-                  (merge join-results bound-results))))
+                  (prn free-results)
+                  (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
+
+                (if (empty? bound-vars)
+                  (when (seq free-results)
+                    join-results)
+                  (when (seq bound-results)
+                    (merge join-results bound-results))))
+              (catch Exception e
+;                (.fillInStackTrace e)
+                (.printStackTrace e)
+                (throw e)))
             join-results)))))
 
 ;; TODO: Unification could be improved by using dynamic relations
@@ -711,7 +717,7 @@
                                                        :let [{:keys [bound-result-tuple]} (meta args)]
                                                        result bound-result-tuple]
                                                    (bound-result->join-result result))
-                                                 (apply merge-with into)
+                                                 (apply merge)
                                                  (merge join-results))]
                   join-results)))
             join-results)))))
