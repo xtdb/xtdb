@@ -754,7 +754,6 @@
 
 ;; Bloom Filter
 
-
 (def ^:const ^:private bloom-filter-hashes 2)
 
 (defn bloom-filter-probe [size x]
