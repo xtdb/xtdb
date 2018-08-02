@@ -35,10 +35,12 @@ The document store is accessed via an implementation of
 The attributes of each document is further indexed into two other
 indexes:
 
++ `attribute+entity+value+content-hash-index` Secondary index of
+  attribute entities, mapped to their values and versions (content
+  hashes). The reverse of the above.
 + `attribute+value+entity+content-hash-index` Secondary index of
   attribute values, mapped to their entities and versions (content
   hashes).
-+ `attribute+entity+value+content-hash-index` Reverse of the above.
 
 These are the main disk indexes used by the query engine, and a
 specific triple pattern in the query will use one of these. They are
@@ -109,7 +111,7 @@ each level represents a variable in the join, and the levels the join
 order, where the root is the first variable in the join order etc.
 
 At each level there is a unary join index, consisting of all indexes
-representing each occurrence of the variable. As mentioned above, the
+representing an occurrence of the variable. As mentioned above, the
 same index might be part of more than one unary join, each time
 representing a new variable at a new level. The important thing is
 that all variables across all indexes participating in the join share
@@ -117,10 +119,8 @@ the same total variable order.
 
 Arguments and constants are represented by a special, sorted,
 in-memory relation index, and participate in the join like any other
-index. This index will spill over to disk at a certain threshold, but
-currently the keys must still fit in memory. Each constant has its own
-single element index, while the arguments potentially have several
-elements.
+index. Each constant has its own single element index, while the
+arguments potentially have several elements.
 
 Apart from range constraints affecting a single index, there's also a
 constraining decorator that allows the walk of the tree to be
@@ -133,8 +133,8 @@ up with a key for each variable that gets bound. As these variables
 become available, constraints can fire. For example, a predicate will
 fire when the arguments have been bound, and potentially short circuit
 the walk by returning `nil`. `not` is a special kind of predicate that
-issues a sub query and removes all results from that query in the
-parent result. Note that all this happens many times during the parent
+issues a sub query, returning false if the sub query matches any
+results. Note that all this happens many times during the parent
 query, as the tree will be traversed up and down, each time binding
 new values to the variables.
 
@@ -146,15 +146,15 @@ the sub queries, and then participate in the join like any other
 relation (like a constant or the arguments).
 
 Unification differs from predicates mainly by not operating on the
-result map, but on the byte array keys. This avoids looking up the
-actual values.
+result map, but on the byte array join keys. This avoids looking up
+the actual values.
 
 The elements in the result map will either be literal values, like for
-arguments or constants, or sets of entities owning the value for a
+arguments or constants, or entities owning the value for a
 variable. Variables in `v` position will have an indirection to the
 owning `e` variable (constants will have been replaced by generated
 variables joining with a relation containing the constant value) to
-tell which entities to use to find it.
+tell which entity to use to find it.
 
 As each variable will have an attribute (with the entity position
 defaulting to `:crux.db/id`), resolving the actual value for an entity
@@ -173,9 +173,8 @@ the attribute used in the query for the `v` position.
 
 Once the full n-ary join for a query is setup, the layered index is
 simply walked as a tree. If the walk reaches a leaf with an intact
-result map, this map represents a result to the query, and the
-cartesian product is used to generate the resulting tuples. The same
-is true for sub queries, in which case their results are used in the
+result map, this map represents a result to the query. The same is
+true for sub queries, in which case their results are used in the
 parent constraint in different ways.
 
 #### Rules
@@ -195,9 +194,3 @@ not a set, but a distinct vector. Offset and limit can be used even
 without order by, the result will then still be a set, but this is
 less intuitive as the order is then derived implicitly from the on
 disk indexes.
-
-Sorting could be made to use the on disk indexes directly to avoid a
-separate sort step, but there are several issues with this as it
-stands. The most important issue is that currently many values are
-hashed in the indexes, and won't respect the expected sort order of
-their Clojure types. See the code for more comments about this.
