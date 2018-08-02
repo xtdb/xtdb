@@ -293,128 +293,47 @@
 ;; (1, 5, 2)
 ;; (3, 5, 2)
 ;; TODO: Same as above.
-#_(t/deftest test-can-perform-n-ary-join
-    (let [data [{:crux.db/id :r13 :ra 1 :rb 3}
-                {:crux.db/id :r14 :ra 1 :rb 4}
-                {:crux.db/id :r15 :ra 1 :rb 5}
-                {:crux.db/id :r35 :ra 3 :rb 5}
-                {:crux.db/id :s34 :sb 3 :sc 4}
-                {:crux.db/id :s35 :sb 3 :sc 5}
-                {:crux.db/id :s46 :sb 4 :sc 6}
-                {:crux.db/id :s48 :sb 4 :sc 8}
-                {:crux.db/id :s49 :sb 4 :sc 9}
-                {:crux.db/id :s52 :sb 5 :sc 2}
-                {:crux.db/id :t14 :ta 1 :tc 4}
-                {:crux.db/id :t15 :ta 1 :tc 5}
-                {:crux.db/id :t16 :ta 1 :tc 6}
-                {:crux.db/id :t18 :ta 1 :tc 8}
-                {:crux.db/id :t19 :ta 1 :tc 9}
-                {:crux.db/id :t12 :ta 1 :tc 2}
-                {:crux.db/id :t32 :ta 3 :tc 2}]]
-      (let [tx-log (tx/->DocTxLog f/*kv*)
-            tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                  [:crux.tx/put id doc])))
-            {:keys [transact-time tx-id]}
-            @(db/submit-tx tx-log tx-ops)]
-        (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-          (t/testing "checking data is loaded before join"
-            (t/is (= (count tx-ops)
-                     (count (doc/all-entities snapshot transact-time transact-time)))))
-
-          (t/testing "n-ary join"
-            (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                             (assoc :name :r))
-                  ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                             (assoc :name :t))
-                  rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                             (assoc :name :r))
-                  sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                             (assoc :name :s))
-                  sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                             (assoc :name :s))
-                  tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                             (assoc :name :t))
-                  index-groups [[ra-idx ta-idx]
-                                [rb-idx sb-idx]
-                                [sc-idx tc-idx]]
-                  result (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                             (doc/new-n-ary-join-layered-virtual-index)
-                             (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                             (doc/layered-idx->seq))]
-              (t/testing "order of results"
-                (t/is (= (vec (for [[a b c] [[1 3 4]
-                                             [1 3 5]
-                                             [1 4 6]
-                                             [1 4 8]
-                                             [1 4 9]
-                                             [1 5 2]
-                                             [3 5 2]]]
-                                [(bu/bytes->hex (idx/value->bytes a))
-                                 (bu/bytes->hex (idx/value->bytes b))
-                                 (bu/bytes->hex (idx/value->bytes c))]))
-                         (vec (for [[[a b c] join-results] result]
-                                [(bu/bytes->hex a)
-                                 (bu/bytes->hex b)
-                                 (bu/bytes->hex c)])))))
-              (t/is (= (set (map (comp idx/new-id :crux.db/id) data))
-                       (set (for [[v join-results] result
-                                  [k entities] join-results
-                                  {:keys [eid]} entities]
-                              eid))))))))))
-
-;; TODO: Same as above.
-#_(t/deftest test-n-ary-join-prunes-values-based-on-later-joins
-    (let [data [ ;; d365d8e84bb127ed8f4d076f7528641a7ce08049
-                {:crux.db/id :r13 :ra 1 :rb 3}
-                ;; Unifies with :ta, but not with :sb
-                ;; 597d68237e345bbb91eae7751e60a07fb904c8dd
-                {:crux.db/id :r14 :ra 1 :rb 4}
-                ;; Does not unify with :ta or :sb.
-                {:crux.db/id :r25 :ra 2 :rb 5}
-                ;; 9434448654674927dbc44b2280d44f92166ac350
-                {:crux.db/id :s34 :sb 3 :sc 4}
-                ;; Unifies with :rb, but not with :tc
-                ;; b824a31f61bf0fc0b498aa038dd9ae5bd08adb64
-                {:crux.db/id :s37 :sb 3 :sc 7}
-                ;; eed43fbbc28c9b627a8b3e0fba770bab9d7a9465
-                {:crux.db/id :t14 :ta 1 :tc 4}
-                ;; Unifies with :ra, but not with :sc
-                ;; 6c63a4086ad403653314c2ab546aadd54fff897d
-                {:crux.db/id :t15 :ta 1 :tc 5}
-                ;; Unifies with :sc, but not with :ra
-                ;; 41c3f3e9370cc85a4fea723d35b7327d33067c6e
-                {:crux.db/id :t34 :ta 3 :tc 4}]]
-      (let [tx-log (tx/->DocTxLog f/*kv*)
-            tx-ops (vec (concat (for [{:keys [crux.db/id] :as doc} data]
-                                  [:crux.tx/put id doc])))
-            {:keys [transact-time tx-id]}
-            @(db/submit-tx tx-log tx-ops)]
-        (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot f/*kv*) true)]
-          (let [ra-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ra nil transact-time transact-time)
-                           (assoc :name :r))
-                ta-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :ta nil transact-time transact-time)
-                           (assoc :name :t))
-                rb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :rb nil transact-time transact-time)
-                           (assoc :name :r))
-                sb-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sb nil transact-time transact-time)
-                           (assoc :name :s))
-                sc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :sc nil transact-time transact-time)
-                           (assoc :name :s))
-                tc-idx (-> (doc/new-entity-attribute-value-virtual-index snapshot :tc nil transact-time transact-time)
-                           (assoc :name :t))
-                index-groups [[ra-idx ta-idx]
-                              [rb-idx sb-idx]
-                              [sc-idx tc-idx]]]
-            (t/is (= #{(idx/new-id :r13)
-                       (idx/new-id :s34)
-                       (idx/new-id :t14)}
-                     (set (for [[v join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                                                     (doc/new-n-ary-join-layered-virtual-index)
-                                                     (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                     (doc/layered-idx->seq))
-                                [k entities] join-results
-                                {:keys [eid]} entities]
-                            eid)))))))))
+(t/deftest test-can-perform-n-ary-join
+  (let [r (doc/new-relation-virtual-index :r
+                                          [[1 3]
+                                           [1 4]
+                                           [1 5]
+                                           [3 5]]
+                                          2)
+        s (doc/new-relation-virtual-index :s
+                                          [[3 4]
+                                           [3 5]
+                                           [4 6]
+                                           [4 8]
+                                           [4 9]
+                                           [5 2]]
+                                          2)
+        t (doc/new-relation-virtual-index :t
+                                          [[1 4]
+                                           [1 5]
+                                           [1 6]
+                                           [1 8]
+                                           [1 9]
+                                           [1 2]
+                                           [3 2]]
+                                          2)]
+    (t/testing "n-ary join"
+      (let [index-groups [[(assoc r :name :a) (assoc t :name :a)]
+                          [(assoc r :name :b) (assoc s :name :b)]
+                          [(assoc s :name :c) (assoc t :name :c)]]
+            result (-> (mapv doc/new-unary-join-virtual-index index-groups)
+                       (doc/new-n-ary-join-layered-virtual-index)
+                       (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
+                       (doc/layered-idx->seq))]
+        (t/is (= [{:a #{1}, :b #{3}, :c #{4}}
+                  {:a #{1}, :b #{3}, :c #{5}}
+                  {:a #{1}, :b #{4}, :c #{6}}
+                  {:a #{1}, :b #{4}, :c #{8}}
+                  {:a #{1}, :b #{4}, :c #{9}}
+                  {:a #{1}, :b #{5}, :c #{2}}
+                  {:a #{3}, :b #{5}, :c #{2}}]
+                 (for [[_ join-results] result]
+                   join-results)))))))
 
 (t/deftest test-sorted-virtual-index
   (let [idx (doc/new-sorted-virtual-index
