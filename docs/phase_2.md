@@ -28,6 +28,10 @@ prioritise newer areas like subscriptions or retention.
 
 These points are discussed below.
 
+**It's worth keeping the "unbundled" concept in mind when reading this
+and reflect on what can be built as layers or on the side of CRUX, and
+how to avoid building it all into the core in an interlocking way.**
+
 ### Features
 
 #### Enhanced and Extended API
@@ -41,14 +45,14 @@ We could also make it easier to extend indexing, adding new value
 types and introduce a protocol explicitly for optional indexing. One
 can currently choose to not index a value, but have no access to the
 document at this point. Also, the indexing predicates might not be
-directly tied to a specific type.
+directly tied to a specific value type.
 
 History could be made easier to work with. While supporting full on
 history queries is hard, accessing and doing some form of filtering of
 the time line could be made easier.
 
 Using CAS could be made more intuitive, having some form of mechanism
-to allow someone to easy check if their operation passed or not. In
+to allow the user to easily check if their operation passed or not. In
 this area, we could also explicit introduce support for generic
 transaction functions. There's limited support to add new transaction
 commands at the moment, but this should not be necessary, instead a
@@ -78,9 +82,9 @@ even without adding new features to it. Among the things are:
 + Revisit doc store, and the fact that `:crux.db/id` currently has to
   be stored inside the docs, removing ability for cross-entity
   structural sharing.
-+ Revisit id generation and approaches where structured or similarity
-  between ids can be utilised.
-+ Explore bloom filters and similar caches.
++ Revisit SHA-1 id generation and approaches where structured or
+  similarity between ids can be utilised.
++ Explore bloom filters and similar caches to avoid IO.
 + Better query planner, at the moment a join order is picked once and
   never revisited.
 + Ability to collect statistics and data frequencies and feed them
@@ -88,7 +92,7 @@ even without adding new features to it. Among the things are:
 + Support variables in attribute position. Will likely require more
   indexes.
 + Support full nested expressions apart from simple predicates.
-+ Support triple patterns in map form, when the e is shared among
++ Support triple patterns in map form, when the `e` is shared among
   several patterns.
 + One could aim for closer Datomic/Datascript compatibility,
   introducing more of their functions and support bindings and `:in`
@@ -103,16 +107,16 @@ Currently we support a subset of SPARQL, not always with the correct
 semantics, and we can parse RDF but not necessarily in a consistent or
 strict way. There's no way of getting "raw" RDF back out, it's all
 EDN. We also don't support any OWL reasoning or RDF schema
-resolution. The latter is somewhat hampered by the fact that we don't
+resolution. This is somewhat hampered by the fact that we don't
 support variables in attribute position.
 
 One could also aim to map and support the entire set of standard
 SPARQL functions to Clojure implementations.
 
 This area is quite time consuming, and will require work in the core
-query engine to support certain things, but a lot of it can happen at
-its own layer. A positive is that there's a set of specifications to
-follow.
+query engine to support certain things, but a lot of it can happen
+independently at its own layer. A positive is that there's a set of
+specifications to follow.
 
 #### Subscriptions
 
@@ -140,10 +144,13 @@ registers subscriptions over Kafka in various ways. There are several
 issues that needs to be solved here. Preferably only one query node
 should send replies, this can potentially be done by partitioning the
 subscription topic(s) on user/query. As several users might subscribe
-to the same query, the query should only need to fire once, even if it
-is sent to several destinations.
+to the same query, the query should only need to fire once, even if
+the result is sent to several destinations.
 
-There needs to be a lot more analysis here even in this simple case.
+There needs to be a lot more analysis here even in this simple
+case. By their nature, subscriptions happen on newly transacted data,
+and never on history, but there's a question about what should happen
+when someone writes into the past.
 
 The more advanced case introduces proper incremental view maintenance
 and move CRUX more into rule engine territory, where subscriptions
@@ -165,16 +172,22 @@ versions and save space. Exactly what the key would be here is a bit
 unclear, it would need to be based on time stamp instead of content
 somehow.
 
-This entire area needs much further analysis. But the area has the
-benefit of not being so dependent on the query engine (though changes
-to keys would affect both) and can be worked on as a separate
-stream. Writes to the index during a roll-up window would need to
-overwrite the current version.
+Implementing TTL could be hard, Kafka has support for it, but on a
+topic level, one potential approach is to have more than on
+`doc-topic` with different TTL settings. Another approach is to have
+documents which have reached their TTL be evicted during transaction
+processing.
+
+This entire area needs further analysis. But the area has the benefit
+of not being so dependent on the query engine (though changes to keys
+would affect both) and can be worked on as a separate stream. Writes
+to the index during a roll-up window would need to overwrite the
+current version.
 
 #### Provenance
 
 We want to be able to record where data came from, and likely also
-issue queries about this. This is most easily done by adding "system"
+issue queries about this. This is most easily done by adding system
 entities on write in various ways, connected to the transacted
 entities, but which can still be queried using regular queries.
 
@@ -182,6 +195,8 @@ If we support transaction functions or rule engine features generating
 new data, this would also need to be tracked. In the extreme case, one
 should then be able to see the entire chain of data (and rules) that
 lead to the creation of a specific entity version.
+
+There's a w3c standard for provenance which may or may not be helpful.
 
 #### Authorisation on Read
 
@@ -193,6 +208,9 @@ might be tightly integrated in the query engine. A slightly easier
 case is to add it as a post processing layer, removing tuples
 containing entities or data the user is not allowed to see.
 
+Deciding what a user can see might itself require a query, as this
+information, like provenance could be stored as system entities.
+
 #### Sharding
 
 At the moment we assume that all data can fit in a single `tx-topic`
@@ -203,8 +221,14 @@ topics in a single CRUX instance, allowing query nodes to subscribe to
 a subset of these.
 
 The hard part is cross-shard queries, as this will require both
-coordination and operation across nodes to generate the result. This
-would break several assumptions currently made by the query engine. A
-work around can be found at firing queries to several nodes and then
-manually filter and joining the result in the code, but this would be
-outside CRUX.
+coordination and co-operation across nodes to generate the
+result. This would break several assumptions currently made by the
+query engine. A work around can be found at firing queries to several
+nodes and then manually filter and joining the result in the code, but
+this would be outside CRUX.
+
+As the query engine is built on the concept of composing indexes and
+uses Query-Subquery, supporting remote queries inside a query should
+be possible. But there needs to be a way of deciding when to go to
+another node for parts of the result, which will be related to the
+sharding strategy in the first place.
