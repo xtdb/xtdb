@@ -74,8 +74,8 @@ even without adding new features to it. Among the things are:
 
 + Utilise index sort order to avoid sort on order by.
 + Embed sub queries as nested n-ary or-joins where applicable.
-+ Revisit storage layer, explore succinct data structures and other
-  approaches than B-trees.
++ Revisit storage layer, explore succinct data structures, sparse
+  matrices and other approaches than B-trees.
 + Revisit storing data straight into the indexes, avoiding looking up
   the docs. Will decouple constraints depending on binary indexes,
   which currently have to wait until both variables are bound.
