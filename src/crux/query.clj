@@ -354,7 +354,8 @@
              var->joins]))
         [[] var->joins])))
 
-;; TODO: This is a naive, but not totally irrelevant measure.
+;; TODO: This is a naive, but not totally irrelevant measure. Aims to
+;; bind variables as early and cheaply as possible.
 (defn- clause-complexity [clause]
   (count (pr-str clause)))
 
