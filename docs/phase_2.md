@@ -54,6 +54,8 @@ transaction functions. There's limited support to add new transaction
 commands at the moment, but this should not be necessary, instead a
 `:crux.tx/fn` command could be introduced.
 
+Evolving the API is best done in combination of actual use of CRUX.
+
 #### Operations and Monitoring
 
 We have a start of an AWS deployment stack for CRUX, and a simple
