@@ -11,7 +11,8 @@
             [clojure.walk :as w]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
-            [crux.db :as db])
+            [crux.db :as db]
+            [crux.index :as idx])
   (:import [java.io StringReader]
            [java.net URLDecoder]
            [javax.xml.datatype DatatypeConstants]
@@ -225,6 +226,16 @@
          (keyword (str ns (name %)))
          %)
       x))))
+
+(defn ^org.eclipse.rdf4j.model.Value clj->rdf [x]
+  (let [factory (SimpleValueFactory/getInstance)]
+    (if (idx/valid-id? x)
+      (if (and (keyword? x) (= "_" (namespace x)))
+        (.createBNode factory (name x))
+        (.createIRI factory (if (and (keyword? x) (namespace x))
+                              (subs (str x) 1)
+                              (str x))))
+      (Literals/createLiteral factory x))))
 
 ;; SPARQL Spike
 ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321/
@@ -552,8 +563,3 @@
        slice (merge slice)
        order-by (assoc :order-by order-by)
        rules (assoc :rules rules)))))
-
-(defn ^org.eclipse.rdf4j.model.Literal clj->rdf-literal [x]
-  (Literals/createLiteral
-   (SimpleValueFactory/getInstance)
-   x))

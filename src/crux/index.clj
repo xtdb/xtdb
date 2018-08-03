@@ -215,6 +215,13 @@
     (assert (= id-size (alength bs)))
     (->Id bs 0)))
 
+(defn valid-id? [x]
+  (try
+    (id->bytes x)
+    true
+    (catch IllegalArgumentException _
+      false)))
+
 (nippy/extend-freeze
  Id
  :crux.index/id

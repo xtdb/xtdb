@@ -16,7 +16,8 @@
             [ring.util.request :as req])
   (:import [java.io Closeable]
            [org.apache.kafka.clients.consumer
-            KafkaConsumer]))
+            KafkaConsumer]
+           [org.eclipse.rdf4j.model BNode IRI Literal]))
 
 ;; ---------------------------------------------------
 ;; Utils
@@ -137,20 +138,16 @@
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
-  (let [sparql-value (if (keyword? x)
-                       (subs (str x) 1)
-                       (str x))
-        type (try
-               (idx/id->bytes x)
-               (if (rdf/blank-or-anonymous-var? sparql-value)
-                 "bnode"
-                 "uri")
-               (catch Exception _
-                 "literal"))]
-    (if (= "literal" type)
-      (let [literal (rdf/clj->rdf-literal x)]
-        [type (.getLabel literal) (str (.getDatatype literal))])
-      [type sparql-value])))
+  (let [rdf-value (rdf/clj->rdf x)]
+    (cond
+      (instance? Literal rdf-value)
+      ["literal" (.getLabel ^Literal rdf-value) (str (.getDatatype ^Literal rdf-value))]
+
+      (instance? BNode rdf-value)
+      ["bnode" (.getID ^BNode rdf-value)]
+
+      (instance? IRI rdf-value)
+      ["iri" (str rdf-value)])))
 
 (defn- unbound-sparql-value? [x]
   (and (keyword? x) (= "crux.rdf" (namespace x))))
