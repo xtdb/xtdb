@@ -8,6 +8,7 @@
             [crux.kafka.nippy])
   (:import [java.util List Map Date]
            [java.util.concurrent ExecutionException]
+           [java.time Duration]
            [org.apache.kafka.clients.admin
             AdminClient NewTopic]
            [org.apache.kafka.common TopicPartition]
@@ -127,7 +128,7 @@
   ([indexer consumer]
    (consume-and-index-entities indexer consumer 10000))
   ([indexer ^KafkaConsumer consumer timeout]
-   (let [records (.poll consumer timeout)
+   (let [records (.poll consumer (Duration/ofMillis timeout))
          txs (->> (for [record records]
                     (if (tx-record? record)
                       (index-tx-record indexer record)

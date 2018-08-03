@@ -11,7 +11,8 @@
             [crux.query :as q]
             [crux.fixtures :as f]
             [crux.embedded-kafka :as ek])
-  (:import [org.apache.kafka.clients.producer
+  (:import [java.time Duration]
+           [org.apache.kafka.clients.producer
             ProducerRecord]
            [org.apache.kafka.common TopicPartition]))
 
@@ -28,7 +29,7 @@
     @(.send ek/*producer* (ProducerRecord. topic person))
 
     (.assign ek/*consumer* partitions)
-    (let [records (.poll ek/*consumer* 10000)]
+    (let [records (.poll ek/*consumer* (Duration/ofMillis 10000))]
       (t/is (= 1 (count (seq records))))
       (t/is (= person (first (map k/consumer-record->value records)))))))
 
@@ -51,7 +52,7 @@
 
     (db/submit-tx tx-log tx-ops)
 
-    (let [docs (map k/consumer-record->value (.poll ek/*consumer* 10000))]
+    (let [docs (map k/consumer-record->value (.poll ek/*consumer* (Duration/ofMillis 10000)))]
       (t/is (= 7 (count docs)))
       (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                  {:foaf/firstName "Pablo"
@@ -76,12 +77,12 @@
       (db/submit-tx tx-log tx-ops)
 
       (t/is (= {:txs 1 :docs 3} (k/consume-and-index-entities indexer ek/*consumer*)))
-      (t/is (empty? (.poll ek/*consumer* 1000))))
+      (t/is (empty? (.poll ek/*consumer* (Duration/ofMillis 1000)))))
 
     (t/testing "restoring to stored offsets"
       (.seekToBeginning ek/*consumer* (.assignment ek/*consumer*))
       (k/seek-to-stored-offsets indexer ek/*consumer* (.assignment ek/*consumer*))
-      (t/is (empty? (.poll ek/*consumer* 1000))))
+      (t/is (empty? (.poll ek/*consumer* (Duration/ofMillis 1000)))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
