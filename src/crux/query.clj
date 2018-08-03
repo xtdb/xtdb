@@ -525,7 +525,7 @@
   (let [[[_ {:keys [e a v] :as clause}]] where
         entity (get (first args) e)]
     (when (doc/or-known-triple-fast-path snapshot entity a v business-time transact-time)
-      [[nil true]])))
+      [nil true])))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -551,33 +551,36 @@
                                 (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
                  free-results+branch-matches?
-                 (->> (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
-                            :let [cache-key (when rule-name
-                                              [rule-name branch-index (count free-vars) (set (mapv vals args))])]]
-                        (or (when cache-key
-                              (get *recursion-table* cache-key))
-                            (binding [*recursion-table* (if cache-key
-                                                          (assoc *recursion-table* cache-key [])
-                                                          *recursion-table*)]
-                              (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
-                                (if (single-e-var-triple? bound-vars where)
-                                  (or-single-e-var-triple-fast-path snapshot db where args)
-                                  (let [{:keys [n-ary-join
-                                                var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                    (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
-                                      (if has-free-vars?
-                                        (vec (for [[join-keys join-results] idx-seq]
-                                               [(vec (for [var free-vars-in-join-order]
-                                                       (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))))
-                                                true]))
-                                        [[nil true]]))))))))
-                      (reduce into []))
-                 free-results (->> (map first free-results+branch-matches?)
-                                   (distinct)
-                                   (vec))]
+                 (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                       :let [cache-key (when rule-name
+                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
+                             branch-result
+                             (or (when cache-key
+                                   (get *recursion-table* cache-key))
+                                 (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+                                   (if (single-e-var-triple? bound-vars where)
+                                     (or-single-e-var-triple-fast-path snapshot db where args)
+                                     (binding [*recursion-table* (if cache-key
+                                                                   (assoc *recursion-table* cache-key [])
+                                                                   *recursion-table*)]
+                                       (let [{:keys [n-ary-join
+                                                     var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                         (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
+                                           (if has-free-vars?
+                                             [(vec (for [[join-keys join-results] idx-seq]
+                                                     (vec (for [var free-vars-in-join-order]
+                                                            (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))))))
+                                              true]
+                                             [nil true])))))))]
+                       :when branch-result]
+                   branch-result)]
              (when (seq free-results+branch-matches?)
                (when has-free-vars?
-                 (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order)))
+                 (let [free-results (->> free-results+branch-matches?
+                                         (mapcat first)
+                                         (distinct)
+                                         (vec))]
+                   (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order))))
                join-results)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
