@@ -138,9 +138,7 @@
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
   (let [sparql-value (if (keyword? x)
-                       (if (= "crux.rdf" (namespace x))
-                         ""
-                         (subs (str x) 1))
+                       (subs (str x) 1)
                        (str x))
         type (try
                (idx/id->bytes x)
@@ -154,6 +152,9 @@
         [type (.getLabel literal) (str (.getDatatype literal))])
       [type sparql-value])))
 
+(defn- unbound? [x]
+  (and (keyword? x) (= "crux.rdf" (namespace x))))
+
 (defn- sparql-xml-response [vars results]
   (str "<?xml version=\"1.0\"?>\n"
        "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
@@ -165,6 +166,7 @@
        (st/join (for [result results]
                   (str "<result>"
                        (st/join (for [[var value] (zipmap vars result)
+                                      :when (not (unbound? value))
                                       :let [[type value dt] (edn->sparql-type+value+dt value)]]
                                   (if dt
                                     (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
@@ -181,6 +183,7 @@
        (->> (for [result results]
               (str "{"
                    (->> (for [[var value] (zipmap vars result)
+                              :when (not (unbound? value))
                               :let [[type value dt] (edn->sparql-type+value+dt value)]]
                           (if dt
                             (format "\"%s\": {\"type\": \"literal\", \"datatype\": \"%s\",  \"value:\": \"%s\"}"
