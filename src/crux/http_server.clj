@@ -152,7 +152,7 @@
         [type (.getLabel literal) (str (.getDatatype literal))])
       [type sparql-value])))
 
-(defn- unbound? [x]
+(defn- unbound-sparql-value? [x]
   (and (keyword? x) (= "crux.rdf" (namespace x))))
 
 (defn- sparql-xml-response [vars results]
@@ -166,7 +166,7 @@
        (st/join (for [result results]
                   (str "<result>"
                        (st/join (for [[var value] (zipmap vars result)
-                                      :when (not (unbound? value))
+                                      :when (not (unbound-sparql-value? value))
                                       :let [[type value dt] (edn->sparql-type+value+dt value)]]
                                   (if dt
                                     (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
@@ -183,7 +183,7 @@
        (->> (for [result results]
               (str "{"
                    (->> (for [[var value] (zipmap vars result)
-                              :when (not (unbound? value))
+                              :when (not (unbound-sparql-value? value))
                               :let [[type value dt] (edn->sparql-type+value+dt value)]]
                           (if dt
                             (format "\"%s\": {\"type\": \"literal\", \"datatype\": \"%s\",  \"value:\": \"%s\"}"
