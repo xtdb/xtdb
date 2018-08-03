@@ -9,6 +9,10 @@ A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 + [MVP Summary](docs/mvp.md)
 + [CRUX Implementation Notes](docs/implementation.md)
 
+## Phase 2
+
++ [Phase 2](docs/phase_2.md)
+
 ## Background
 
 Motivation: a database with the following characteristics:

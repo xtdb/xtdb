@@ -306,10 +306,10 @@ filtering the parent results.
 
 ### Future
 
-Phase 2, which is still to be decided, will be discussed during a few
-CRUX sessions in Stockholm August 6 to 10, 2018. The minimum outcome
-of the MVP if there is no phase 2 is likely that CRUX gets open
-sourced in its current form.
+[Phase 2](phase_2.md), which is still to be decided, will be discussed
+during a few CRUX sessions in Stockholm August 6 to 10, 2018. The
+minimum outcome of the MVP if there is no phase 2 is likely that CRUX
+gets open sourced in its current form.
 
 ### FAQs
 
