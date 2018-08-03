@@ -140,6 +140,9 @@
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
 
+(defn hex-id? [s]
+  (re-find hex-id-pattern s))
+
 (extend-protocol IdToBytes
   (class (byte-array 0))
   (id->bytes [this]
@@ -166,7 +169,7 @@
 
   String
   (id->bytes [this]
-    (if (re-find hex-id-pattern this)
+    (if (hex-id? this)
       (prepend-value-type-id (bu/hex->bytes this) id-value-type-id)
       (throw (IllegalArgumentException. (format "Not a %s hex string: %s" id-hash-algorithm this)))))
 

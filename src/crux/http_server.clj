@@ -135,6 +135,22 @@
     (success-response
      (q/q (q/db kvs) query-map))))
 
+;; TODO: This is a bit ad-hoc.
+(defn- edn->sparql-type+value [x]
+  (let [sparql-value (if (keyword? x)
+                       (if (= "crux.rdf" (namespace x))
+                         ""
+                         (subs (str x) 1))
+                       (str x))
+        type (try
+               (idx/id->bytes x)
+               (if (rdf/blank-or-anonymous-var? sparql-value)
+                 "bnode"
+                 "uri")
+               (catch Exception _
+                 "literal"))]
+    [type sparql-value]))
+
 (defn- sparql-xml-response [vars results]
   (str "<?xml version=\"1.0\"?>\n"
        "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
@@ -146,9 +162,7 @@
        (st/join (for [result results]
                   (str "<result>"
                        (st/join (for [[var value] (zipmap vars result)
-                                      :let [type (if (satisfies? idx/IdToBytes value)
-                                                   "uri"
-                                                   "literal")]]
+                                      :let [[type value] (edn->sparql-type+value value)]]
                                   (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
                                           var type value type)))
                        "</result>")))
@@ -161,9 +175,7 @@
        (->> (for [result results]
               (str "{"
                    (->> (for [[var value] (zipmap vars result)
-                              :let [type (if (satisfies? idx/IdToBytes value)
-                                           "uri"
-                                           "literal")]]
+                              :let [[type value] (edn->sparql-type+value value)]]
                           (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
                                   var
                                   type

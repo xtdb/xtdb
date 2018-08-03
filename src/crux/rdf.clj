@@ -241,7 +241,8 @@
     (list (symbol (namespace p)
                   (str (name p) "-" path-type)) s o)))
 
-(def ^:private blank-or-anonymous-var-pattern #"\??_")
+(defn blank-or-anonymous-var? [x]
+  (re-find  #"\??_" x))
 
 (extend-protocol RDFToClojure
   And
@@ -328,7 +329,7 @@
   LeftJoin
   (rdf->clj [this]
     (let [or-join-vars (->> (.getBindingNames this)
-                            (remove #(re-find blank-or-anonymous-var-pattern %))
+                            (remove blank-or-anonymous-var?)
                             (set))
           or-join-vars (set/intersection or-join-vars (set (.getBindingNames (.getRightArg this))))
           or-join-vars (mapv str->sparql-var or-join-vars)
@@ -366,7 +367,7 @@
                    (instance? Filter (.getParentNode this)))
       (throw (UnsupportedOperationException. "NOT only supported in FILTER NOT EXISTS.")))
     (let [not-vars (->> (.getAssuredBindingNames (.getSubQuery ^Exists (.getArg this)))
-                        (remove #(re-find blank-or-anonymous-var-pattern %))
+                        (remove blank-or-anonymous-var?)
                         (set))
           parent-vars (set (.getAssuredBindingNames ^Filter (.getParentNode this)))
           is-not? (set/subset? not-vars parent-vars)
@@ -432,10 +433,10 @@
   (rdf->clj [this]
     (let [is-or? (= (set (.getAssuredBindingNames this))
                     (->> (.getBindingNames this)
-                         (remove #(re-find blank-or-anonymous-var-pattern %))
+                         (remove blank-or-anonymous-var?)
                          (set)))
           or-join-vars (->> (.getAssuredBindingNames this)
-                            (remove #(re-find blank-or-anonymous-var-pattern %))
+                            (remove blank-or-anonymous-var?)
                             (mapv str->sparql-var))
           or-left (rdf->clj (.getLeftArg this))
           or-left (if (> (count or-left) 1)
