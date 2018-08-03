@@ -931,12 +931,12 @@
          (log/debug :query-result-size (count result))
          result))))
   ([snapshot {:keys [object-store] :as db} q]
+   (log/debug :query (pr-str q))
    (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (validate-args args)
-     (log/debug :query (pr-str q))
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
