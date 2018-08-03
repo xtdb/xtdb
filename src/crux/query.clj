@@ -354,8 +354,12 @@
              var->joins]))
         [[] var->joins])))
 
+;; TODO: This is a naive, but not totally irrelevant measure.
+(defn- clause-complexity [clause]
+  (count (pr-str clause)))
+
 (defn- or-joins [rules or-type or-clauses var->joins known-vars]
-  (->> or-clauses
+  (->> (sort-by clause-complexity or-clauses)
        (reduce
         (fn [[or-clause+idx-id+or-branches known-vars var->joins] clause]
           (let [or-join? (= :or-join or-type)
