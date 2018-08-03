@@ -53,12 +53,12 @@ the time line could be made easier.
 
 Using CAS could be made more intuitive, having some form of mechanism
 to allow the user to easily check if their operation passed or not. In
-this area, we could also explicit introduce support for generic
+this area, we could also explicitly introduce support for user defined
 transaction functions. There's limited support to add new transaction
 commands at the moment, but this should not be necessary, instead a
 `:crux.tx/fn` command could be introduced.
 
-Evolving the API is best done in combination of actual use of CRUX.
+Evolving the API is best done in combination with actual use of CRUX.
 
 #### Operations and Monitoring
 
@@ -78,11 +78,12 @@ even without adding new features to it. Among the things are:
   matrices and other approaches than B-trees.
 + Revisit storing data straight into the indexes, avoiding looking up
   the docs. Will decouple constraints depending on binary indexes,
-  which currently have to wait until both variables are bound.
+  which currently have to wait until both variables are bound. Using
+  covering indexes is also potentially faster.
 + Revisit doc store, and the fact that `:crux.db/id` currently has to
   be stored inside the docs, removing ability for cross-entity
   structural sharing.
-+ Revisit SHA-1 id generation and approaches where structured or
++ Revisit SHA-1 id generation and approaches where structure or
   similarity between ids can be utilised.
 + Explore bloom filters and similar caches to avoid IO.
 + Better query planner, at the moment a join order is picked once and
@@ -102,8 +103,10 @@ even without adding new features to it. Among the things are:
   introducing more of their functions and support bindings and `:in`
   etc.
 + We want to add performance test suites which also compare CRUX
-  against other stores on the same queries. This would preferably be
-  running in the cloud and generate reports daily or so.
+  against other stores on the same queries and data. This would
+  preferably be running in the cloud and generate reports daily or
+  so. We also want to test on larger data sets than the small ones
+  we've used so far.
 
 #### Enhanced RDF and SPARQL Support
 
@@ -119,7 +122,7 @@ SPARQL functions to Clojure implementations.
 
 This area is quite time consuming, and will require work in the core
 query engine to support certain things, but a lot of it can happen
-independently at its own layer. A positive is that there's a set of
+independently in its own layer. A positive is that there's a set of
 specifications to follow.
 
 #### Subscriptions
@@ -128,13 +131,14 @@ Subscriptions can be done in several ways, from the trivial (but less
 likely very useful) to very sophisticated where the core query engine
 becomes totally tuned for the incremental case and turns more into a
 real Datalog rule engine. This is a large and complicated area and one
-needs to strike the right balance, especially if we're talking Phase
-2. Subscriptions become even more complex in the face of deletions.
+needs to strike the right balance, especially if we're talking about
+things doable during Phase 2. Subscriptions become even more complex
+in the face of deletions.
 
 In the simplest case, one can fire all subscribed queries after each
 transaction, potentially filter the result tuples to ensure that at
-least one value in them has changed, and then somehow notify or send
-this result to the subscriber.
+least one value in them has changed since last time the query ran, and
+then somehow notify or send this result to the subscriber.
 
 Simple improvements to the above scheme can be to detect if any of the
 new documents transacted actually could affect the query result or not
@@ -161,7 +165,7 @@ and move CRUX more into rule engine territory, where subscriptions
 could be rules, which would fire when new matches become
 available. Like above, this gets complicated by the fact that rules
 might run at different nodes but submit data back into the same
-Kafka. We neither want all rules to fire at all nodes, but we also
+Kafka. We neither want all rules to fire at all nodes, and we also
 don't want the rules to fire in an uncoordinated way, potentially
 generating invalid data due to race conditions.
 
@@ -193,10 +197,18 @@ current version.
 We want to be able to record where data came from, and likely also
 issue queries about this. This is most easily done by adding system
 entities on write in various ways, connected to the transacted
-entities, but which can still be queried using regular queries.
+entities, but which can still be queried using regular queries. In
+theory this can be done totally on top of the current API, as the
+provenance meta data is just other entities.
+
+It also leads to the question if we should or need to provide this
+directly as a feature, or just have the ability to do so? It can be as
+simple as adding a provenance document to the transaction with meta
+data about the other documents in the transaction. If necessary, help
+with this could be provided in a higher level API.
 
 If we support transaction functions or rule engine features generating
-new data, this would also need to be tracked. In the extreme case, one
+    new data, this would also need to be tracked. In the extreme case, one
 should then be able to see the entire chain of data (and rules) that
 lead to the creation of a specific entity version.
 
@@ -204,7 +216,7 @@ There's a w3c standard for provenance which may or may not be helpful.
 
 #### Authorisation on Read
 
-Related to provenance, different data types, and different entities,
+Related to provenance. Different data types and different entities
 might have restrictions on who can see them. Sometimes one might be
 allowed to join on the data but not read it, sometimes it might be
 filtered away totally from the user. As this is a per-user filter, it
@@ -213,16 +225,25 @@ case is to add it as a post processing layer, removing tuples
 containing entities or data the user is not allowed to see.
 
 Deciding what a user can see might itself require a query, as this
-information, like provenance could be stored as system entities.
+information, like provenance could be stored as system
+entities. Unlike provenance the query engine would need some form of
+knowledge or support for this, potentially simply by a generic way of
+filtering the results which the user cannot bypass.
+
+"Real" authorisation for local clients would be hard to achieve, as
+they can always read the local index, so that would require encrypted
+indexes. In this context, we're talking about authorisation in the
+sense of help restricting the data sent from the node to the client,
+not hiding it from the code running on the node.
 
 #### Sharding
 
 At the moment we assume that all data can fit in a single `tx-topic`
 and be indexed on each individual query node. This assumption will
 likely not scale. Sharding is on one level easy, you simply run
-several CRUX instances, or support several separate partitions or
-topics in a single CRUX instance, allowing query nodes to subscribe to
-a subset of these.
+several CRUX instances with their own Kafka topics, or support several
+separate partitions or topics in a single CRUX instance, allowing
+query nodes to subscribe to a subset of these.
 
 The hard part is cross-shard queries, as this will require both
 coordination and co-operation across nodes to generate the
@@ -235,4 +256,13 @@ As the query engine is built on the concept of composing indexes and
 uses Query-Subquery, supporting remote queries inside a query should
 be possible. But there needs to be a way of deciding when to go to
 another node for parts of the result, which will be related to the
-sharding strategy in the first place.
+sharding strategy in the first place. As the time line is only valid
+within a single `tx-topic` or shard, coordination between shards needs
+to happen using some other mechanism.
+
+In the simplest case it can be to read the latest known data, but
+there are obvious issues with this. Another approach is to require a
+consistent business time definition across shards, and always issue
+queries with a business time. While this is easy to reason about, it's
+hard to ensure and achieve for all the normal reasons when it comes to
+make guarantees about time in a distributed system.
