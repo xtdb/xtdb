@@ -89,6 +89,10 @@ even without adding new features to it. Among the things are:
   never revisited.
 + Ability to collect statistics and data frequencies and feed them
   into the query planner to help it choose join order.
++ Support aggregates. This needs exploring, as some aggregates might
+  not be possible to do by simply operating on the lazy result. If
+  nothing else, we might want to supply aggregate functions that helps
+  the user to do so.
 + Support variables in attribute position. Will likely require more
   indexes.
 + Support full nested expressions apart from simple predicates.
