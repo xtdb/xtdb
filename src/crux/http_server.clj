@@ -136,7 +136,7 @@
      (q/q (q/db kvs) query-map))))
 
 ;; TODO: This is a bit ad-hoc.
-(defn- edn->sparql-type+value [x]
+(defn- edn->sparql-type+value+dt [x]
   (let [sparql-value (if (keyword? x)
                        (if (= "crux.rdf" (namespace x))
                          ""
@@ -149,7 +149,10 @@
                  "uri")
                (catch Exception _
                  "literal"))]
-    [type sparql-value]))
+    (if (= "literal" type)
+      (let [literal (rdf/clj->rdf-literal x)]
+        [type (.getLabel literal) (str (.getDatatype literal))])
+      [type sparql-value])))
 
 (defn- sparql-xml-response [vars results]
   (str "<?xml version=\"1.0\"?>\n"
@@ -162,9 +165,12 @@
        (st/join (for [result results]
                   (str "<result>"
                        (st/join (for [[var value] (zipmap vars result)
-                                      :let [[type value] (edn->sparql-type+value value)]]
-                                  (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
-                                          var type value type)))
+                                      :let [[type value dt] (edn->sparql-type+value+dt value)]]
+                                  (if dt
+                                    (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
+                                            var dt value)
+                                    (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
+                                            var type value type))))
                        "</result>")))
        "</results>"
        "</sparql>"))
@@ -175,11 +181,16 @@
        (->> (for [result results]
               (str "{"
                    (->> (for [[var value] (zipmap vars result)
-                              :let [[type value] (edn->sparql-type+value value)]]
-                          (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
-                                  var
-                                  type
-                                  value))
+                              :let [[type value dt] (edn->sparql-type+value+dt value)]]
+                          (if dt
+                            (format "\"%s\": {\"type\": \"literal\", \"datatype\": \"%s\",  \"value:\": \"%s\"}"
+                                    var
+                                    dt
+                                    value)
+                            (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
+                                    var
+                                    type
+                                    value)))
                         (st/join ", "))
                    "}"))
             (st/join ", " ))

@@ -19,6 +19,8 @@
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
            [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
+           [org.eclipse.rdf4j.model.util Literals]
+           [org.eclipse.rdf4j.model.impl SimpleValueFactory]
            [org.eclipse.rdf4j.query BindingSet QueryLanguage]
            [org.eclipse.rdf4j.query.parser QueryParserUtil]
            [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
@@ -242,7 +244,7 @@
                   (str (name p) "-" path-type)) s o)))
 
 (defn blank-or-anonymous-var? [x]
-  (re-find  #"\??_" x))
+  (re-find  #"^\??_" x))
 
 (extend-protocol RDFToClojure
   And
@@ -550,3 +552,8 @@
        slice (merge slice)
        order-by (assoc :order-by order-by)
        rules (assoc :rules rules)))))
+
+(defn ^org.eclipse.rdf4j.model.Literal clj->rdf-literal [x]
+  (Literals/createLiteral
+   (SimpleValueFactory/getInstance)
+   x))
