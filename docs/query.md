@@ -139,6 +139,10 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   internals](http://tonsky.me/blog/datascript-internals/)
 + [Joins via Geometric Resolutions: Worst-case and
   Beyond](https://arxiv.org/abs/1404.0703)
++ [Compressed Representation of Dynamic Binary Relations with
+  Applications](https://arxiv.org/abs/1707.02769)
++ [A succinct data structure for self-indexing ternary
+  relations](https://arxiv.org/abs/1707.02759)
 
 ### Retention
 
