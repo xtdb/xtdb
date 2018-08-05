@@ -143,6 +143,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Applications](https://arxiv.org/abs/1707.02769)
 + [A succinct data structure for self-indexing ternary
   relations](https://arxiv.org/abs/1707.02759)
++ [SuRF: Practical Range Query Filtering with Fast Succinct
+  Tries](https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf)
 
 ### Retention
 
