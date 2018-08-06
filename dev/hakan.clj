@@ -817,24 +817,25 @@
                                   ^java.util.BitSet l] :as k2-array} ^long row ^long col]
   (loop [row row
          col col
+         ;; TODO: Think this 2 should be k?
          n (quot n 2)
          gi 0]
-;;    (prn row col n gi t-size)
-    (if (< gi t-size)
-      (let [i (+ (if (>= row n)
-                   2
-                   0)
-                 (if (>= col n)
-                   1
-                   0))
-            gi (+ i gi)]
+    ;;    (prn row col n gi t-size)
+    (let [i (+ (if (>= row n)
+                 2
+                 0)
+               (if (>= col n)
+                 1
+                 0))
+          gi (+ i gi)]
+      (if (< gi t-size)
         (if (.get t gi)
           (recur (long (mod row n))
                  (long (mod col n))
                  (quot n 2)
                  (* (bitset-rank t gi) k2))
-          false))
-      (.get l (- gi t-size)))))
+          false)
+        (.get l (- gi t-size))))))
 
 (comment
   (let [k2 (new-static-k2-array
@@ -846,7 +847,6 @@
      (k2-array-contains? k2 9 6)
      (k2-array-contains? k2 8 6)
 
-     ;; TODO: These don't work:
      ;; 1st q
      (k2-array-contains? k2 1 2)
      (k2-array-contains? k2 3 0)
