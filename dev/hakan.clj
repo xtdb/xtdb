@@ -825,22 +825,21 @@
                                   ^java.util.BitSet l] :as k2-array} ^long row ^long col]
   (loop [row row
          col col
-         ;; TODO: Think this 2 should be k?
-         n (quot n 2)
+         n (quot n k)
          gi 0]
     ;;    (prn row col n gi t-size)
     (let [i (+ (if (>= row n)
-                 2
+                 k
                  0)
                (if (>= col n)
-                 1
+                 (quot k 2)
                  0))
           gi (+ i gi)]
       (if (< gi t-size)
         (if (.get t gi)
           (recur (long (mod row n))
                  (long (mod col n))
-                 (quot n 2)
+                 (quot n k)
                  (* (bitset-rank t gi) k2))
           false)
         (.get l (- gi t-size))))))
