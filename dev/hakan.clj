@@ -851,10 +851,10 @@
                                     ^long k2
                                     ^long t-size
                                     ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-array} ^long col ^long row]
+                                    ^java.util.BitSet l] :as k2-array} ^long row ^long col]
   (loop [n n
-         p col
-         q row
+         p row
+         q col
          z -1]
     (if (>= z t-size)
       (.get l (- z t-size))
@@ -876,7 +876,7 @@
                                     ^long k2
                                     ^long t-size
                                     ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-array} ^long col]
+                                    ^java.util.BitSet l] :as k2-array} ^long row]
   ((fn step [^long n ^long p ^long q ^long z]
      (if (>= z t-size)
        (when (.get l (- z t-size))
@@ -888,7 +888,7 @@
            (->> (range k)
                 (mapcat (fn [^long j]
                           (step n (mod p n) (+ q (* n j)) (+ y j)))))))))
-   n col 0 -1))
+   n row 0 -1))
 
 ;; NOTE: All elements in a row.
 (defn k2-array-predecessors [{:keys [^long n
@@ -896,7 +896,7 @@
                                      ^long k2
                                      ^long t-size
                                      ^java.util.BitSet t
-                                     ^java.util.BitSet l] :as k2-array} ^long row]
+                                     ^java.util.BitSet l] :as k2-array} ^long col]
   ((fn step [^long n ^long q ^long p ^long z]
      (if (>= z t-size)
        (when (.get l (- z t-size))
@@ -908,7 +908,7 @@
            (->> (range k)
                 (mapcat (fn [^long j]
                           (step n (mod q n) (+ p (* n j)) (+ y (* j k))))))))))
-   n row 0 -1))
+   n col 0 -1))
 
 (comment
   (let [k2 (new-static-k2-array
