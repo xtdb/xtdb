@@ -843,6 +843,7 @@
 
 ;; NOTE: Same as above, but based on the code in the paper.
 ;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
+;; NOTE: Redefined in terms of k2-array-range below.
 (defn k2-array-check-link? [{:keys [^long n
                                     ^long k
                                     ^long k2
@@ -907,6 +908,60 @@
                           (step n (mod q n) (+ p (* n j)) (+ y (* j k))))))))))
    n col 0 -1))
 
+;; TOO: How to make lazy/incremental?
+(defn k2-array-range [{:keys [^long n
+                              ^long k
+                              ^long k2
+                              ^long t-size
+                              ^java.util.BitSet t
+                              ^java.util.BitSet l] :as k2-array} row1 row2 col1 col2]
+  ((fn step [n p1 p2 q1 q2 dp dq z]
+     (let [n (long n)
+           z (long z)
+           p1 (long p1)
+           p2 (long p2)
+           q1 (long q1)
+           q2 (long q2)
+           dp (long dp)
+           dq (long dq)]
+       (if (>= z t-size)
+         (when (.get l (- z t-size))
+           [[dp dq]])
+         (when (or (= -1 z) (.get t z))
+           (let [n (quot n k)
+                 y (* (bitset-rank t z) k2)]
+             (->> (for [^long i (range (quot p1 n) (inc (quot p2 n)))
+                        :let [p1 (if (= i (quot p1 n))
+                                   (mod p1 n)
+                                   0)
+                              p2 (if (= i (quot p2 n))
+                                   (mod p2 n)
+                                   (dec n))]
+                        ^long j (range (quot q1 n) (inc (quot q2 n)))
+                        :let [q1 (if (= j (quot q1 n))
+                                   (mod q1 n)
+                                   0)
+                              q2 (if (= j (quot q2 n))
+                                   (mod q2 n)
+                                   (dec n))]]
+                    (step n p1 p2 q1 q2 (+ dp (* n i)) (+ dq (* n j)) (+ y (* k i) j)))
+                  (reduce into [])))))))
+   n row1 row2 col1 col2 0 0 -1))
+
+;; NOTE: The above re-implemented in terms of k2-array-range.
+(defn k2-array-check-link? [k2 row col]
+  (->> (k2-array-range k2 row row col col)
+       (seq)
+       (boolean)))
+
+(defn k2-array-succsessors [{:keys [^long n] :as k2} row]
+  (->> (k2-array-range k2 row row 0 n)
+       (map second)))
+
+(defn k2-array-predecessors [{:keys [^long n] :as k2} col]
+  (->> (k2-array-range k2 0 n col col)
+       (map first)))
+
 ;; Matrix data form https://arxiv.org/pdf/1707.02769.pdf page 8.
 (comment
   (let [k2 (new-static-k2-array
@@ -937,6 +992,14 @@
      ;; 2nd q
      (k2-array-check-link? k2 2 9)
      (k2-array-check-link? k2 5 8)
+
+     ;; Should be false
+     (k2-array-check-link? k2 0 0)
+
+     (k2-array-range k2 5 5 8 8)
+
+     (k2-array-range k2 1 1 0 16)
+     (k2-array-range k2 0 16 6 6)
 
      ;; TODO: Does not work yet:
      ;; Should return 2 3 4
