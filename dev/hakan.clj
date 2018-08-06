@@ -797,8 +797,18 @@
       rank
       (recur (.previousSetBit bs (dec n)) (inc rank)))))
 
-(defn new-static-k2-array [n k tree-bit-str leaf-bit-str]
-  {:n n
+(defn power-of? [^long x ^long y]
+  (if (zero? (rem x y))
+    (recur (quot x y) y)
+    (= 1 x)))
+
+(defn next-power-of ^long [^long x ^long y]
+  (long (Math/pow 2 (long (Math/pow y (Math/log x))))))
+
+(defn new-static-k2-array [^long n ^long k tree-bit-str leaf-bit-str]
+  {:n (if (power-of? n k)
+        n
+        (next-power-of n k))
    :k k
    :k2 (long (Math/pow k 2))
    :t (bit-str->bitset tree-bit-str)
@@ -837,7 +847,7 @@
 
 (comment
   (let [k2 (new-static-k2-array
-            16
+            10
             2
             "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
             "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
