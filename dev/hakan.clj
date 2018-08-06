@@ -776,7 +776,6 @@
 
 ;; k2-array
 
-
 ;; T = 1110 1101 1010 0100 0110 1001 0101 0010 1010 1100
 ;; L = 0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010
 
@@ -808,7 +807,6 @@
                 (count))
    :l (bit-str->bitset leaf-bit-str)})
 
-;; TODO: Doesn't really work.
 (defn k2-array-contains? [{:keys [^long n
                                   ^long k
                                   ^long k2
