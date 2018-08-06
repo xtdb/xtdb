@@ -776,9 +776,6 @@
 
 ;; k2-array
 
-;; T = 1110 1101 1010 0100 0110 1001 0101 0010 1010 1100
-;; L = 0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010
-
 (defn bit-str->bitset [s]
   (let [bs (java.util.BitSet.)
         bits (->> s
@@ -910,6 +907,7 @@
                           (step n (mod q n) (+ p (* n j)) (+ y (* j k))))))))))
    n col 0 -1))
 
+;; Matrix data form https://arxiv.org/pdf/1707.02769.pdf page 8.
 (comment
   (let [k2 (new-static-k2-array
             10
