@@ -400,8 +400,8 @@
                     (sort))]
 
     [(->> result
-           (map last)
-           (apply str))
+          (map last)
+          (apply str))
      (count (first (partition-by #{s} result)))]))
 
 (defn inverse-bwt [^String s eof-char-or-index]
@@ -802,7 +802,7 @@
 (defn next-power-of ^long [^long x ^long y]
   (long (Math/pow 2 (long (Math/pow y (Math/log x))))))
 
-(defn new-static-k2-array [^long n ^long k tree-bit-str leaf-bit-str]
+(defn new-static-k2-tree [^long n ^long k tree-bit-str leaf-bit-str]
   {:n (if (power-of? n k)
         n
         (next-power-of n k))
@@ -815,13 +815,13 @@
    :l (bit-str->bitset leaf-bit-str)})
 
 ;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
-;; NOTE: Redefined in terms of k2-array-range below.
-(defn k2-array-check-link? [{:keys [^long n
-                                    ^long k
-                                    ^long k2
-                                    ^long t-size
-                                    ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-array} ^long row ^long col]
+;; NOTE: Redefined in terms of k2-tree-range below.
+(defn k2-tree-check-link? [{:keys [^long n
+                                   ^long k
+                                   ^long k2
+                                   ^long t-size
+                                   ^java.util.BitSet t
+                                   ^java.util.BitSet l] :as k2-tree} ^long row ^long col]
   (loop [n n
          p row
          q col
@@ -841,12 +841,12 @@
         false))))
 
 ;; NOTE: All elements in a row.
-(defn k2-array-succsessors [{:keys [^long n
-                                    ^long k
-                                    ^long k2
-                                    ^long t-size
-                                    ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-array} ^long row]
+(defn k2-tree-succsessors [{:keys [^long n
+                                   ^long k
+                                   ^long k2
+                                   ^long t-size
+                                   ^java.util.BitSet t
+                                   ^java.util.BitSet l] :as k2-tree} ^long row]
   ((fn step [^long n ^long p ^long q ^long z]
      (if (>= z t-size)
        (when (.get l (- z t-size))
@@ -861,12 +861,12 @@
    n row 0 -1))
 
 ;; NOTE: All elements in a column.
-(defn k2-array-predecessors [{:keys [^long n
-                                     ^long k
-                                     ^long k2
-                                     ^long t-size
-                                     ^java.util.BitSet t
-                                     ^java.util.BitSet l] :as k2-array} ^long col]
+(defn k2-tree-predecessors [{:keys [^long n
+                                    ^long k
+                                    ^long k2
+                                    ^long t-size
+                                    ^java.util.BitSet t
+                                    ^java.util.BitSet l] :as k2-tree} ^long col]
   ((fn step [^long n ^long q ^long p ^long z]
      (if (>= z t-size)
        (when (.get l (- z t-size))
@@ -881,12 +881,12 @@
    n col 0 -1))
 
 ;; TOO: How to make iterative?
-(defn k2-array-range [{:keys [^long n
-                              ^long k
-                              ^long k2
-                              ^long t-size
-                              ^java.util.BitSet t
-                              ^java.util.BitSet l] :as k2-array} row1 row2 col1 col2]
+(defn k2-tree-range [{:keys [^long n
+                             ^long k
+                             ^long k2
+                             ^long t-size
+                             ^java.util.BitSet t
+                             ^java.util.BitSet l] :as k2-tree} row1 row2 col1 col2]
   ((fn step [n p1 p2 q1 q2 dp dq z]
      (let [n (long n)
            z (long z)
@@ -920,49 +920,49 @@
                   (apply concat)))))))
    n row1 row2 col1 col2 0 0 -1))
 
-;; NOTE: The above re-implemented in terms of k2-array-range.
-(defn k2-array-check-link? [k2 row col]
-  (->> (k2-array-range k2 row row col col)
+;; NOTE: The above re-implemented in terms of k2-tree-range.
+(defn k2-tree-check-link? [k2 row col]
+  (->> (k2-tree-range k2 row row col col)
        (seq)
        (boolean)))
 
-(defn k2-array-succsessors [{:keys [^long n] :as k2} row]
-  (->> (k2-array-range k2 row row 0 n)
+(defn k2-tree-succsessors [{:keys [^long n] :as k2} row]
+  (->> (k2-tree-range k2 row row 0 n)
        (map second)))
 
-(defn k2-array-predecessors [{:keys [^long n] :as k2} col]
-  (->> (k2-array-range k2 0 n col col)
+(defn k2-tree-predecessors [{:keys [^long n] :as k2} col]
+  (->> (k2-tree-range k2 0 n col col)
        (map first)))
 
 ;; Matrix data form https://arxiv.org/pdf/1707.02769.pdf page 8.
 (comment
-  (let [k2 (new-static-k2-array
+  (let [k2 (new-static-k2-tree
             10
             2
             "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
             "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
     [;; 3rd q
-     (k2-array-check-link? k2 9 6)
-     (k2-array-check-link? k2 8 6)
+     (k2-tree-check-link? k2 9 6)
+     (k2-tree-check-link? k2 8 6)
 
      ;; 1st q
-     (k2-array-check-link? k2 1 2)
-     (k2-array-check-link? k2 3 0)
+     (k2-tree-check-link? k2 1 2)
+     (k2-tree-check-link? k2 3 0)
 
      ;; 2nd q
-     (k2-array-check-link? k2 2 9)
-     (k2-array-check-link? k2 5 8)
+     (k2-tree-check-link? k2 2 9)
+     (k2-tree-check-link? k2 5 8)
 
      ;; Should be false
-     (k2-array-check-link? k2 0 0)
+     (k2-tree-check-link? k2 0 0)
 
-     (k2-array-range k2 5 5 8 8)
+     (k2-tree-range k2 5 5 8 8)
 
-     (k2-array-range k2 1 1 0 16)
-     (k2-array-range k2 0 16 6 6)
+     (k2-tree-range k2 1 1 0 16)
+     (k2-tree-range k2 0 16 6 6)
 
      ;; TODO: Does not work yet:
      ;; Should return 2 3 4
-     (k2-array-succsessors k2 1)
+     (k2-tree-succsessors k2 1)
      ;; Should return 3 7 8 9
-     (k2-array-predecessors k2 6)]))
+     (k2-tree-predecessors k2 6)]))
