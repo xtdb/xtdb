@@ -844,6 +844,72 @@
           false)
         (.get l (- gi t-size))))))
 
+;; NOTE: Same as above, but based on the code in the paper.
+;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
+(defn k2-array-check-link? [{:keys [^long n
+                                    ^long k
+                                    ^long k2
+                                    ^long t-size
+                                    ^java.util.BitSet t
+                                    ^java.util.BitSet l] :as k2-array} ^long col ^long row]
+  (loop [n n
+         p col
+         q row
+         z -1]
+    (if (>= z t-size)
+      (.get l (- z t-size))
+      (if (or (= -1 z) (.get t z))
+        (let [n (quot n k)
+              y (* (bitset-rank t z) k2)
+              y (+ y
+                   (* (Math/abs (quot p n)) k)
+                   (Math/abs (quot q n)))]
+          (recur n
+                 (long (mod p n))
+                 (long (mod q n))
+                 y))
+        false))))
+
+;; NOTE: All elements in a column.
+(defn k2-array-succsessors [{:keys [^long n
+                                    ^long k
+                                    ^long k2
+                                    ^long t-size
+                                    ^java.util.BitSet t
+                                    ^java.util.BitSet l] :as k2-array} ^long col]
+  ((fn step [^long n ^long p ^long q ^long z]
+     (if (>= z t-size)
+       (when (.get l (- z t-size))
+         [q])
+       (when (or (= -1 z) (.get t z))
+         (let [n (quot n k)
+               y (+ (* (bitset-rank t z) k2)
+                    (* (Math/abs (quot p n)) k))]
+           (->> (range k)
+                (mapcat (fn [^long j]
+                          (step n (mod p n) (+ q (* n j)) (+ y j)))))))))
+   n col 0 -1))
+
+;; NOTE: All elements in a row.
+(defn k2-array-predecessors [{:keys [^long n
+                                     ^long k
+                                     ^long k2
+                                     ^long t-size
+                                     ^java.util.BitSet t
+                                     ^java.util.BitSet l] :as k2-array} ^long row]
+  ((fn step [^long n ^long q ^long p ^long z]
+     (if (>= z t-size)
+       (when (.get l (- z t-size))
+         [p])
+       (when (or (= -1 z) (.get t z))
+         (let [n (quot n k)
+               y (+ (* (bitset-rank t z) k2)
+                    (Math/abs (quot q n)))]
+           (->> (range k)
+                (mapcat (fn [^long j]
+                          (step n (mod q n) (+ p (* n j)) (+ y (* j k))))))))))
+   n row 0 -1))
+
 (comment
   (let [k2 (new-static-k2-array
             10
@@ -860,4 +926,22 @@
 
      ;; 2nd q
      (k2-array-contains? k2 2 9)
-     (k2-array-contains? k2 5 8)]))
+     (k2-array-contains? k2 5 8)]
+
+    [;; 3rd q
+     (k2-array-check-link? k2 9 6)
+     (k2-array-check-link? k2 8 6)
+
+     ;; 1st q
+     (k2-array-check-link? k2 1 2)
+     (k2-array-check-link? k2 3 0)
+
+     ;; 2nd q
+     (k2-array-check-link? k2 2 9)
+     (k2-array-check-link? k2 5 8)
+
+     ;; TODO: Does not work yet:
+     ;; Should return 2 3 4
+     (k2-array-predecessors k2 1)
+     ;; Should return 3 7 8 9
+     (k2-array-succsessors k2 6)]))
