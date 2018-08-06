@@ -775,3 +775,82 @@
 
 
 ;; k2-array
+
+
+;; T = 1110 1101 1010 0100 0110 1001 0101 0010 1010 1100
+;; L = 0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010
+
+(defn bit-str->bitset [s]
+  (let [bs (java.util.BitSet.)
+        bits (->> s
+                  (remove #{\space})
+                  (vec))]
+    (dotimes [n (count bits)]
+      (when (= \1 (get bits n))
+        (.set bs n true)))
+    bs))
+
+;; TODO: Obviously slow, should use proper data structure.
+(defn bitset-rank ^long [^java.util.BitSet bs ^long n]
+  (loop [n (.previousSetBit bs n)
+         rank 0]
+    (if (= -1 n)
+      rank
+      (recur (.previousSetBit bs (dec n)) (inc rank)))))
+
+(defn new-static-k2-array [n k tree-bit-str leaf-bit-str]
+  {:n n
+   :k k
+   :k2 (long (Math/pow k 2))
+   :t (bit-str->bitset tree-bit-str)
+   :t-size (->> tree-bit-str
+                (remove #{\space})
+                (count))
+   :l (bit-str->bitset leaf-bit-str)})
+
+;; TODO: Doesn't really work.
+(defn k2-array-contains? [{:keys [^long n
+                                  ^long k
+                                  ^long k2
+                                  ^long t-size
+                                  ^java.util.BitSet t
+                                  ^java.util.BitSet l] :as k2-array} ^long row ^long col]
+  (loop [row row
+         col col
+         n (quot n 2)
+         gi 0]
+;;    (prn row col n gi t-size)
+    (if (< gi t-size)
+      (let [i (+ (if (>= row n)
+                   2
+                   0)
+                 (if (>= col n)
+                   1
+                   0))
+            gi (+ i gi)]
+        (if (.get t gi)
+          (recur (long (mod row n))
+                 (long (mod col n))
+                 (quot n 2)
+                 (* (bitset-rank t gi) k2))
+          false))
+      (.get l (- gi t-size)))))
+
+(comment
+  (let [k2 (new-static-k2-array
+            16
+            2
+            "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
+            "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
+    [;; 3rd q
+     (k2-array-contains? k2 9 6)
+     (k2-array-contains? k2 8 6)
+
+     ;; TODO: These don't work:
+     ;; 1st q
+     (k2-array-contains? k2 1 2)
+     (k2-array-contains? k2 3 0)
+
+     ;; 2nd q
+     (k2-array-contains? k2 2 9)
+     (k2-array-contains? k2 5 8)]))
