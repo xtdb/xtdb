@@ -774,7 +774,7 @@
   (.intersects bs (bloom-filter-probe (.size bs) x)))
 
 
-;; k2-array
+;; k2-tree
 
 (defn bit-str->bitset [s]
   (let [bs (java.util.BitSet.)
