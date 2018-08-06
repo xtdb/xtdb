@@ -814,34 +814,6 @@
                 (count))
    :l (bit-str->bitset leaf-bit-str)})
 
-(defn k2-array-contains? [{:keys [^long n
-                                  ^long k
-                                  ^long k2
-                                  ^long t-size
-                                  ^java.util.BitSet t
-                                  ^java.util.BitSet l] :as k2-array} ^long row ^long col]
-  (loop [row row
-         col col
-         n (quot n k)
-         gi 0]
-    ;;    (prn row col n gi t-size)
-    (let [i (+ (if (>= row n)
-                 k
-                 0)
-               (if (>= col n)
-                 (quot k 2)
-                 0))
-          gi (+ i gi)]
-      (if (< gi t-size)
-        (if (.get t gi)
-          (recur (long (mod row n))
-                 (long (mod col n))
-                 (quot n k)
-                 (* (bitset-rank t gi) k2))
-          false)
-        (.get l (- gi t-size))))))
-
-;; NOTE: Same as above, but based on the code in the paper.
 ;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
 ;; NOTE: Redefined in terms of k2-array-range below.
 (defn k2-array-check-link? [{:keys [^long n
@@ -969,18 +941,6 @@
             2
             "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
             "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
-    [;; 3rd q
-     (k2-array-contains? k2 9 6)
-     (k2-array-contains? k2 8 6)
-
-     ;; 1st q
-     (k2-array-contains? k2 1 2)
-     (k2-array-contains? k2 3 0)
-
-     ;; 2nd q
-     (k2-array-contains? k2 2 9)
-     (k2-array-contains? k2 5 8)]
-
     [;; 3rd q
      (k2-array-check-link? k2 9 6)
      (k2-array-check-link? k2 8 6)
