@@ -908,7 +908,7 @@
                           (step n (mod q n) (+ p (* n j)) (+ y (* j k))))))))))
    n col 0 -1))
 
-;; TOO: How to make lazy/incremental?
+;; TOO: How to make iterative?
 (defn k2-array-range [{:keys [^long n
                               ^long k
                               ^long k2
@@ -945,7 +945,7 @@
                                    (mod q2 n)
                                    (dec n))]]
                     (step n p1 p2 q1 q2 (+ dp (* n i)) (+ dq (* n j)) (+ y (* k i) j)))
-                  (reduce into [])))))))
+                  (apply concat)))))))
    n row1 row2 col1 col2 0 0 -1))
 
 ;; NOTE: The above re-implemented in terms of k2-array-range.
