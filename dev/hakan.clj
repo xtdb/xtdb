@@ -772,3 +772,6 @@
 
 (defn bloom-filter-might-contain? [^java.util.BitSet bs x]
   (.intersects bs (bloom-filter-probe (.size bs) x)))
+
+
+;; k2-array

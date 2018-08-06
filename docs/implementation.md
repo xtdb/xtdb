@@ -1,7 +1,7 @@
-## CRUX Implementation Notes
+## Crux Implementation Notes
 
 See the [MVP Summary](mvp.md) for the background and motivation behind
-CRUX.
+Crux.
 
 The document [Internals](internals.md) (and the other docs in this
 folder) discusses our ideas *before* we wrote the MVP, while this
@@ -11,14 +11,14 @@ MVP. As can be expected, some early ideas live on.
 ### Introduction
 
 This document mainly discusses the query engine, as this is the core
-of CRUX and where most its complexity lies. There are other parts of
-CRUX, like the ingestion piece, the KV store implementations, and the
+of Crux and where most its complexity lies. There are other parts of
+Crux, like the ingestion piece, the KV store implementations, and the
 REST API, but they are more straight forward to understand and
 requires less theoretical background.
 
 ### Document Store
 
-All documents in CRUX are consumed from the Kafka `doc-topic` and
+All documents in Crux are consumed from the Kafka `doc-topic` and
 stored on disk locally in an index:
 
 + `content-hash->doc-index` Main document store.
@@ -186,7 +186,7 @@ is used during execution.
 
 #### Order by, Offset and Limit
 
-CRUX supports `:order-by`, which is a vector of index/direction
+Crux supports `:order-by`, which is a vector of index/direction
 (`:asc` or `:desc`) pairs, `:offset` and `:limit`. Sorting is
 performed on the final result and on the Clojure values, with the
 ability to spill over to disk. If order by is provided, the result is

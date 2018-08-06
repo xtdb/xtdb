@@ -1,10 +1,10 @@
 ## Phase 2
 
-After the [MVP](mvp.md) there are several directions we can take CRUX.
+After the [MVP](mvp.md) there are several directions we can take Crux.
 Phase 2 is assumed to be 3 months long, roughly during the end of 2018
 and early 2019. Staffing is yet to be decided.
 
-One goal of Phase 2 is to reach a point where CRUX can be shared with
+One goal of Phase 2 is to reach a point where Crux can be shared with
 a wider audience, potentially even made public. To facilitate this,
 proving and enhancing the MVP in real use cases will likely be the
 most important thing.
@@ -29,14 +29,14 @@ prioritise newer areas like subscriptions or retention.
 These points are discussed below.
 
 **It's worth keeping the "unbundled" concept in mind when reading this
-and reflect on what can be built as layers or on the side of CRUX, and
+and reflect on what can be built as layers or on the side of Crux, and
 how to avoid building it all into the core in an interlocking way.**
 
 ### Features
 
 #### Enhanced and Extended API
 
-At the moment CRUX provides a quite low-level API and we could expose
+At the moment Crux provides a quite low-level API and we could expose
 a richer, more user friendly set of functions on top of this. This
 includes things like making it easier to get the actual docs for a
 query, currently they sit in the meta data of each tuple.
@@ -58,13 +58,13 @@ transaction functions. There's limited support to add new transaction
 commands at the moment, but this should not be necessary, instead a
 `:crux.tx/fn` command could be introduced.
 
-Evolving the API is best done in combination with actual use of CRUX.
+Evolving the API is best done in combination with actual use of Crux.
 
 #### Operations and Monitoring
 
-We have a start of an AWS deployment stack for CRUX, and a simple
+We have a start of an AWS deployment stack for Crux, and a simple
 status API. There is an immense amount of work that could be done in
-this area to make CRUX easier to run and give insights while doing so,
+this area to make Crux easier to run and give insights while doing so,
 via dashboards, better logging and potentially query consoles.
 
 #### Query Engine Performance and Enhancements
@@ -102,7 +102,7 @@ even without adding new features to it. Among the things are:
 + One could aim for closer Datomic/Datascript compatibility,
   introducing more of their functions and support bindings and `:in`
   etc.
-+ We want to add performance test suites which also compare CRUX
++ We want to add performance test suites which also compare Crux
   against other stores on the same queries and data. This would
   preferably be running in the cloud and generate reports daily or
   so. We also want to test on larger data sets than the small ones
@@ -161,7 +161,7 @@ and never on history, but there's a question about what should happen
 when someone writes into the past.
 
 The more advanced case introduces proper incremental view maintenance
-and move CRUX more into rule engine territory, where subscriptions
+and move Crux more into rule engine territory, where subscriptions
 could be rules, which would fire when new matches become
 available. Like above, this gets complicated by the fact that rules
 might run at different nodes but submit data back into the same
@@ -171,7 +171,7 @@ generating invalid data due to race conditions.
 
 #### Retention, TTL, Roll-ups
 
-CRUX currently has support to evict documents. This could be extended
+Crux currently has support to evict documents. This could be extended
 in various ways with TTL of documents, or having documents being
 mutable in a time window, say during this hour all transactions write
 to the same key for an entity, regardless content hash, but during
@@ -241,8 +241,8 @@ not hiding it from the code running on the node.
 At the moment we assume that all data can fit in a single `tx-topic`
 and be indexed on each individual query node. This assumption will
 likely not scale. Sharding is on one level easy, you simply run
-several CRUX instances with their own Kafka topics, or support several
-separate partitions or topics in a single CRUX instance, allowing
+several Crux instances with their own Kafka topics, or support several
+separate partitions or topics in a single Crux instance, allowing
 query nodes to subscribe to a subset of these.
 
 The hard part is cross-shard queries, as this will require both
@@ -250,7 +250,7 @@ coordination and co-operation across nodes to generate the
 result. This would break several assumptions currently made by the
 query engine. A work around can be found at firing queries to several
 nodes and then manually filter and joining the result in the code, but
-this would be outside CRUX.
+this would be outside Crux.
 
 As the query engine is built on the concept of composing indexes and
 uses Query-Subquery, supporting remote queries inside a query should

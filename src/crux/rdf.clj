@@ -241,7 +241,7 @@
 ;; https://www.w3.org/TR/2013/REC-sparql11-query-20130321/
 
 ;; TODO: This is a spike transforming a small subset of SPARQL into
-;; CRUX's Datalog dialect. Experimental.
+;; Crux's Datalog dialect. Experimental.
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 

@@ -59,7 +59,7 @@ function deleteOldStack() {
     aws cloudformation delete-stack \
         --stack-name $stack_name \
         >/dev/null
-    
+
     aws cloudformation wait stack-delete-complete \
         --stack-name $stack_name \
         >/dev/null
@@ -87,7 +87,7 @@ function createStack() {
 }
 
 function waitForCrux() {
-    vecho "Setting up the CRUX cluster..."
+    vecho "Setting up the Crux cluster..."
     cruxbox_ids=$(aws ec2 describe-instances \
                        --filters Name=instance-state-name,Values=running,Name=tag:Name,Values=CruxBox \
                        --query 'Reservations[*].Instances[0].InstanceId' \
@@ -105,18 +105,18 @@ function waitForCrux() {
     #                       --query "StackSummaries[?StackId=='$crux_stack_physid'].StackName" \
     #                       --output text)
 
-    vecho "Testing the CRUX HTTP server..."
+    vecho "Testing the Crux HTTP server..."
     lb_dns=$(aws elbv2 describe-load-balancers \
                  --names CruxLB \
                  --query 'LoadBalancers[0].DNSName' \
                  --output text)
     server_status=$(curl -s -o /dev/null -w "%{http_code}" $lb_dns:3000)
     if [ $server_status == "200" ]; then
-        echo "CRUX HTTP server running on$lb_dns:3000"
+        echo "Crux HTTP server running on$lb_dns:3000"
     else
-        echo "CRUX setup failed!"
-        vecho "Something went wrong with Zookeeper, Kafka, or CRUX"
-        vecho "CRUX HTTP server is supposed to be running on $lb_dns:3000 but did not respond with HTTP status 200"
+        echo "Crux setup failed!"
+        vecho "Something went wrong with Zookeeper, Kafka, or Crux"
+        vecho "Crux HTTP server is supposed to be running on $lb_dns:3000 but did not respond with HTTP status 200"
     fi
 }
 
