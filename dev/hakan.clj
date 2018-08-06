@@ -870,7 +870,7 @@
                  y))
         false))))
 
-;; NOTE: All elements in a column.
+;; NOTE: All elements in a row.
 (defn k2-array-succsessors [{:keys [^long n
                                     ^long k
                                     ^long k2
@@ -890,7 +890,7 @@
                           (step n (mod p n) (+ q (* n j)) (+ y j)))))))))
    n row 0 -1))
 
-;; NOTE: All elements in a row.
+;; NOTE: All elements in a column.
 (defn k2-array-predecessors [{:keys [^long n
                                      ^long k
                                      ^long k2
