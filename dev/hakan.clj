@@ -940,6 +940,6 @@
 
      ;; TODO: Does not work yet:
      ;; Should return 2 3 4
-     (k2-array-predecessors k2 1)
+     (k2-array-succsessors k2 1)
      ;; Should return 3 7 8 9
-     (k2-array-succsessors k2 6)]))
+     (k2-array-predecessors k2 6)]))
