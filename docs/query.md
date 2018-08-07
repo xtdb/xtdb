@@ -209,3 +209,5 @@ language. GraphQL requires extensions to do ad-hoc queries.**
 Processing](http://www.vldb.org/pvldb/vol11/p420-sahu.pdf)
 + [RETRO: A Framework for Semantics Preserving SQL-to-SPARQL
   Translation](https://www.utdallas.edu/~bxt043000/Publications/Technical-Reports/UTDCS-22-11.pdf)
++ [sql-gremlin: Provides a SQL interface to your TinkerPop enabled
+  graph db](https://github.com/twilmes/sql-gremlin)
