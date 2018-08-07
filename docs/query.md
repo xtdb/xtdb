@@ -153,6 +153,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Tries](https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf)
 + [EmptyHeaded: A Relational Engine for Graph
   Processing](https://arxiv.org/abs/1503.02368)
++ [Constraint Propagation - Models, Techniques,
+  Implementation](http://www.gecode.org/papers/Tack_PhD_2009.pdf)
 
 ### Retention
 
