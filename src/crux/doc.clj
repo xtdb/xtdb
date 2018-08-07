@@ -52,7 +52,6 @@
                       (ks/seek i))]
       (attribute-value+placeholder k peek-state)))
 
-  db/OrderedIndex
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
           prefix-size (- (alength last-k) idx/id-size idx/id-size)]
@@ -68,7 +67,7 @@
   (loop [k current-k]
     (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) idx/id-size))))
     (or (let [[_ entity] (idx/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)
-              [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx entity)]
+              [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx (idx/id->bytes entity))]
           (when entity-tx
             (let [version-k (idx/encode-attribute+value+entity+content-hash-key
                              (idx/id->bytes attr)
@@ -99,7 +98,6 @@
                         (ks/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-state))))
 
-  db/OrderedIndex
   (next-values [this]
     (let [[value i] (attribute-value-value+prefix-iterator i value-entity-value-idx attr)]
       (when-let [k (some->> @peek-state (ks/seek i))]
@@ -112,7 +110,7 @@
 
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
   (let [[e] (idx/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)
-        [_ entity-tx] (db/seek-values entity-as-of-idx e)]
+        [_ entity-tx] (db/seek-values entity-as-of-idx (idx/id->bytes e))]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
       [(idx/id->bytes e) :crux.doc.binary-placeholder/entity]
@@ -131,7 +129,6 @@
           (db/next-values this)
           placeholder))))
 
-  db/OrderedIndex
   (next-values [this]
     (let [{:keys [^bytes last-k]} @peek-state
           prefix-size (+ idx/index-id-size idx/id-size idx/id-size)]
@@ -178,7 +175,6 @@
                         (ks/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-state))))
 
-  db/OrderedIndex
   (next-values [this]
     (let [[entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr)]
       (when-let [k (some->> @peek-state (ks/seek i))]
@@ -196,7 +192,6 @@
       (when (pred (first value+results))
         value+results)))
 
-  db/OrderedIndex
   (next-values [this]
     (when-let [value+results (db/next-values idx)]
       (when (pred (first value+results))
@@ -233,7 +228,6 @@
     (or (db/seek-values idx k)
         (db/next-values idx)))
 
-  db/OrderedIndex
   (next-values [this]
     (db/next-values idx)))
 
@@ -360,7 +354,7 @@
   (db/seek-values [this k]
     (let [prefix-size (+ idx/index-id-size idx/id-size)
           seek-k (idx/encode-entity+bt+tt+tx-id-key
-                  (idx/id->bytes k)
+                  k
                   business-time
                   transact-time)]
       (loop [k (ks/seek i seek-k)]
@@ -371,20 +365,22 @@
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? idx/nil-id-bytes v)
                 [(idx/id->bytes (.eid entity-tx)) entity-tx])
-              (recur (ks/next i)))))))))
+              (recur (ks/next i))))))))
+
+  (db/next-values [this]
+    (throw (UnsupportedOperationException.))))
 
 (defn new-entity-as-of-index [snapshot business-time transact-time]
   (->EntityAsOfIndex (ks/new-iterator snapshot) business-time transact-time))
 
 (defn entities-at [snapshot entities business-time transact-time]
-  (with-open [i (ks/new-iterator snapshot)]
-    (let [entity-as-of-idx (->EntityAsOfIndex i business-time transact-time)]
-      (some->> (for [entity entities
-                     :let [[_ entity-tx] (db/seek-values entity-as-of-idx entity)]
-                     :when entity-tx]
-                 entity-tx)
-               (not-empty)
-               (vec)))))
+  (let [entity-as-of-idx (new-entity-as-of-index snapshot business-time transact-time)]
+    (some->> (for [entity entities
+                   :let [[_ entity-tx] (db/seek-values entity-as-of-idx (idx/id->bytes entity))]
+                   :when entity-tx]
+               entity-tx)
+             (not-empty)
+             (vec))))
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (ks/new-iterator snapshot)]
@@ -428,7 +424,6 @@
         fst
         (reset! seq-state nil))))
 
-  db/OrderedIndex
   (next-values [this]
     (let [{:keys [fst]} (swap! seq-state (fn [{[x & xs] :rest
                                                :as seq-state}]
@@ -437,7 +432,7 @@
         fst))))
 
 (defn new-sorted-virtual-index [idx-or-seq]
-  (let [idx-as-seq (if (satisfies? db/OrderedIndex idx-or-seq)
+  (let [idx-as-seq (if (satisfies? db/Index idx-or-seq)
                      (idx->seq idx-or-seq)
                      idx-or-seq)]
     (->SortedVirtualIndex
@@ -453,7 +448,6 @@
                               (db/seek-values idx k))))
     (db/next-values this))
 
-  db/OrderedIndex
   (next-values [this]
     (let [[n value] (->> (map-indexed vector @peek-state)
                          (remove (comp nil? second))
@@ -496,19 +490,6 @@
          (reset! iterators-thunk-state))
     (db/next-values this))
 
-  db/LayeredIndex
-  (open-level [this]
-    (doseq [idx indexes]
-      (db/open-level idx)))
-
-  (close-level [this]
-    (doseq [idx indexes]
-      (db/close-level idx)))
-
-  (max-depth [this]
-    1)
-
-  db/OrderedIndex
   (next-values [this]
     (when-let [iterators-thunk @iterators-thunk-state]
       (when-let [{:keys [iterators ^long index]} (iterators-thunk)]
@@ -531,7 +512,19 @@
               (when-let [result (->> (map :results iterators)
                                      (apply merge))]
                 [max-k result]))
-            (recur)))))))
+            (recur))))))
+
+  db/LayeredIndex
+  (open-level [this]
+    (doseq [idx indexes]
+      (db/open-level idx)))
+
+  (close-level [this]
+    (doseq [idx indexes]
+      (db/close-level idx)))
+
+  (max-depth [this]
+    1))
 
 (defn new-unary-join-virtual-index [indexes]
   (->UnaryJoinVirtualIndex indexes (atom nil)))
@@ -545,6 +538,9 @@
   (seek-values [this k]
     (db/seek-values (get unary-join-indexes @depth-state) k))
 
+  (next-values [this]
+    (db/next-values (get unary-join-indexes @depth-state)))
+
   db/LayeredIndex
   (open-level [this]
     (db/open-level (get unary-join-indexes @depth-state))
@@ -557,11 +553,7 @@
     nil)
 
   (max-depth [this]
-    (count unary-join-indexes))
-
-  db/OrderedIndex
-  (next-values [this]
-    (db/next-values (get unary-join-indexes @depth-state))))
+    (count unary-join-indexes)))
 
 (defn new-n-ary-join-layered-virtual-index [indexes]
   (->NAryJoinLayeredVirtualIndex indexes (atom 0)))
@@ -571,6 +563,10 @@
   (seek-values [this k]
     (let [{:keys [indexes depth]} @index-and-depth-state]
       (db/seek-values (get indexes depth) k)))
+
+  (next-values [this]
+    (let [{:keys [indexes depth]} @index-and-depth-state]
+      (db/next-values (get indexes depth))))
 
   db/LayeredIndex
   (open-level [this]
@@ -586,12 +582,7 @@
     nil)
 
   (max-depth [this]
-    (count (:indexes @index-and-depth-state)))
-
-  db/OrderedIndex
-  (next-values [this]
-    (let [{:keys [indexes depth]} @index-and-depth-state]
-      (db/next-values (get indexes depth)))))
+    (count (:indexes @index-and-depth-state))))
 
 (defn new-binary-join-virtual-index
   ([]
@@ -621,6 +612,13 @@
             [(first values) (second (last result))])
         (db/next-values this))))
 
+  (next-values [this]
+    (when-let [values (db/next-values n-ary-index)]
+      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+        (do (swap! walk-state assoc :last result)
+            [(first values) (second (last result))])
+        (recur))))
+
   db/LayeredIndex
   (open-level [this]
     (db/open-level n-ary-index)
@@ -633,15 +631,7 @@
     nil)
 
   (max-depth [this]
-    (db/max-depth n-ary-index))
-
-  db/OrderedIndex
-  (next-values [this]
-    (when-let [values (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
-        (do (swap! walk-state assoc :last result)
-            [(first values) (second (last result))])
-        (recur)))))
+    (db/max-depth n-ary-index)))
 
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
   (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
@@ -683,7 +673,7 @@
   (dec (count (:indexes @iterators-state))))
 
 (defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
-  db/OrderedIndex
+  db/Index
   (seek-values [this k]
     (let [{:keys [indexes]} @iterators-state]
       (when-let [idx (last indexes)]
@@ -693,7 +683,6 @@
           (when k
             [k value])))))
 
-  db/Index
   (next-values [this]
     (let [{:keys [needs-seek? indexes]} @iterators-state]
       (if needs-seek?
@@ -769,6 +758,44 @@
         (swap! or-state assoc-in [:rhs :peek] #(db/seek-values rhs k))))
     (db/next-values this))
 
+  (next-values [this]
+    (let [lhs-depth (long (get-in @or-state [:lhs :depth]))
+          rhs-depth (long (get-in @or-state [:rhs :depth]))
+          depth (max lhs-depth rhs-depth)
+          lhs-value (when (= lhs-depth depth)
+                      ((get-in @or-state [:lhs :peek])))
+          rhs-value (when (= rhs-depth depth)
+                      ((get-in @or-state [:rhs :peek])))]
+      (swap! or-state #(merge-with merge % {:lhs (when (= lhs-depth depth)
+                                                   {:last lhs-value})
+                                            :rhs (when (= rhs-depth depth)
+                                                   {:last rhs-value})}))
+      (cond
+        (and (= lhs-depth depth)
+             (= rhs-depth depth))
+        (if (or (nil? lhs-value)
+                (and (not (nil? rhs-value))
+                     (pos? (bu/compare-bytes (first lhs-value)
+                                             (first rhs-value)))))
+          (do (swap! or-state (fn [state]
+                                (-> state
+                                    (assoc-in [:rhs :peek] #(db/next-values rhs))
+                                    (assoc-in [:lhs :peek] (constantly lhs-value)))))
+              rhs-value)
+          (do (swap! or-state (fn [state]
+                                (-> state
+                                    (assoc-in [:lhs :peek] #(db/next-values lhs))
+                                    (assoc-in [:rhs :peek] (constantly rhs-value)))))
+              lhs-value))
+
+        lhs-value
+        (do (swap! or-state assoc-in [:lhs :peek] #(db/next-values lhs))
+            lhs-value)
+
+        rhs-value
+        (do (swap! or-state assoc-in [:rhs :peek] #(db/next-values rhs))
+            rhs-value))))
+
   db/LayeredIndex
   (open-level [this]
     (let [lhs-depth (long (get-in @or-state [:lhs :depth]))
@@ -836,46 +863,7 @@
     nil)
 
   (max-depth [this]
-    (db/max-depth lhs))
-
-  db/OrderedIndex
-  (next-values [this]
-    (let [lhs-depth (long (get-in @or-state [:lhs :depth]))
-          rhs-depth (long (get-in @or-state [:rhs :depth]))
-          depth (max lhs-depth rhs-depth)
-          lhs-value (when (= lhs-depth depth)
-                      ((get-in @or-state [:lhs :peek])))
-          rhs-value (when (= rhs-depth depth)
-                      ((get-in @or-state [:rhs :peek])))]
-      (swap! or-state #(merge-with merge % {:lhs (when (= lhs-depth depth)
-                                                   {:last lhs-value})
-                                            :rhs (when (= rhs-depth depth)
-                                                   {:last rhs-value})}))
-      (cond
-        (and (= lhs-depth depth)
-             (= rhs-depth depth))
-        (if (or (nil? lhs-value)
-                (and (not (nil? rhs-value))
-                     (pos? (bu/compare-bytes (first lhs-value)
-                                             (first rhs-value)))))
-          (do (swap! or-state (fn [state]
-                                (-> state
-                                    (assoc-in [:rhs :peek] #(db/next-values rhs))
-                                    (assoc-in [:lhs :peek] (constantly lhs-value)))))
-              rhs-value)
-          (do (swap! or-state (fn [state]
-                                (-> state
-                                    (assoc-in [:lhs :peek] #(db/next-values lhs))
-                                    (assoc-in [:rhs :peek] (constantly rhs-value)))))
-              lhs-value))
-
-        lhs-value
-        (do (swap! or-state assoc-in [:lhs :peek] #(db/next-values lhs))
-            lhs-value)
-
-        rhs-value
-        (do (swap! or-state assoc-in [:rhs :peek] #(db/next-values rhs))
-            rhs-value)))))
+    (db/max-depth lhs)))
 
 (defn new-n-ary-or-layered-virtual-index [lhs rhs]
   (->NAryOrLayeredVirtualIndex lhs rhs (atom {:lhs {:depth 0 :last nil :peek nil :parent-peek []}

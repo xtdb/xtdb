@@ -1,9 +1,7 @@
 (ns crux.db)
 
 (defprotocol Index
-  (seek-values [this k]))
-
-(defprotocol OrderedIndex
+  (seek-values [this k])
   (next-values [this]))
 
 (defprotocol LayeredIndex
