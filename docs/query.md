@@ -217,3 +217,5 @@ Processing](http://www.vldb.org/pvldb/vol11/p420-sahu.pdf)
   Web](https://github.com/semantic-integration/hypergraphql)
 + [Querying DBpedia with
   GraphQL](https://medium.com/@sklarman/querying-linked-data-with-graphql-959e28aa8013)
++ [Apache Calcite: The foundation for your next high-performance
+  database](https://calcite.apache.org/)
