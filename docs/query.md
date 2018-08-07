@@ -207,3 +207,5 @@ language. GraphQL requires extensions to do ad-hoc queries.**
   Variant](https://github.com/clojurewerkz/ogre)
 + [The Ubiquity of Large Graphs and Surprising Challenges of Graph
 Processing](http://www.vldb.org/pvldb/vol11/p420-sahu.pdf)
++ [RETRO: A Framework for Semantics Preserving SQL-to-SPARQL
+  Translation](https://www.utdallas.edu/~bxt043000/Publications/Technical-Reports/UTDCS-22-11.pdf)
