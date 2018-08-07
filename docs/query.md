@@ -211,3 +211,7 @@ Processing](http://www.vldb.org/pvldb/vol11/p420-sahu.pdf)
   Translation](https://www.utdallas.edu/~bxt043000/Publications/Technical-Reports/UTDCS-22-11.pdf)
 + [sql-gremlin: Provides a SQL interface to your TinkerPop enabled
   graph db](https://github.com/twilmes/sql-gremlin)
++ [Stardog 5: GraphQL Queries](https://www.stardog.com/docs/#_graphql_queries)
++ [hypergraphql: GraphQL interface for querying and serving linked
+  data on the
+  Web](https://github.com/semantic-integration/hypergraphql)
