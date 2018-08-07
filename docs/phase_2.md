@@ -15,6 +15,7 @@ On the feature side, there are several avenues we can pursue:
 + Operations and monitoring.
 + Query engine performance and enhancements.
 + Enhanced RDF and SPARQL support.
++ GraphQL and SQL/Calcite support.
 + Subscriptions.
 + Retention, TTL, roll-ups.
 + Provenance.
@@ -76,6 +77,7 @@ even without adding new features to it. Among the things are:
 + Embed sub queries as nested n-ary or-joins where applicable.
 + Revisit storage layer, explore succinct data structures, sparse
   matrices and other approaches than B-trees.
++ Revisit and explore alternative join strategies.
 + Revisit storing data straight into the indexes, avoiding looking up
   the docs. Will decouple constraints depending on binary indexes,
   which currently have to wait until both variables are bound. Using
@@ -124,6 +126,21 @@ This area is quite time consuming, and will require work in the core
 query engine to support certain things, but a lot of it can happen
 independently in its own layer. A positive is that there's a set of
 specifications to follow.
+
+#### GraphQL and SQL Support
+
+Adding either GraphQL or SQL support (via Apache Calcite) requires
+some form of schema to exist. This schema could partly be mined from
+the indexes and documents (some of this information would also be
+useful to the query planner), but most likely and easiest, the user
+could provide sub-schemas of the data in Crux and make it available
+through GraphQL or SQL. Potentially some of these other query
+languages can be nested on top of each other, at least initially. That
+is, there are GraphQL to SQL mappers, and there might be SQL to SPARQL
+mappers etc.s
+
+There are also other query languages like Cypher and
+Gremlin/Tinkerpop.
 
 #### Subscriptions
 
