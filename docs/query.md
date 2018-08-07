@@ -139,6 +139,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   internals](http://tonsky.me/blog/datascript-internals/)
 + [Joins via Geometric Resolutions: Worst-case and
   Beyond](https://arxiv.org/abs/1404.0703)
++ [Implementation of Tetris as a Model
+  Counter](https://arxiv.org/abs/1701.07473)
 + [Compressed Representation of Dynamic Binary Relations with
   Applications](https://arxiv.org/abs/1707.02769)
 + [A succinct data structure for self-indexing ternary
@@ -147,6 +149,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   functionality](http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1q)
 + [SuRF: Practical Range Query Filtering with Fast Succinct
   Tries](https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf)
++ [EmptyHeaded: A Relational Engine for Graph
+  Processing](https://arxiv.org/abs/1503.02368)
 
 ### Retention
 
