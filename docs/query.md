@@ -137,6 +137,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   datalog](https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md)
 + [A shallow dive into DataScript
   internals](http://tonsky.me/blog/datascript-internals/)
++ [Beyond Worst-Case Analysis for Joins with
+  Minesweeper](https://arxiv.org/abs/1302.0914)
 + [Joins via Geometric Resolutions: Worst-case and
   Beyond](https://arxiv.org/abs/1404.0703)
 + [Implementation of Tetris as a Model
