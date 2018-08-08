@@ -137,6 +137,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Rust](https://github.com/frankmcsherry/blog/blob/master/posts/2018-05-19.md)
 + [Differential
   datalog](https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md)
++ [Worst-case optimal joins, in
+  dataflow](http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html)
 + [A shallow dive into DataScript
   internals](http://tonsky.me/blog/datascript-internals/)
 + [Beyond Worst-Case Analysis for Joins with
@@ -147,6 +149,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Counter](https://arxiv.org/abs/1701.07473)
 + [Skew Strikes Back: New Developments in the Theory of Join
   Algorithms](https://arxiv.org/abs/1310.3314)
++ [Worst-case Optimal Join
+  Algorithms](https://arxiv.org/abs/1203.1952)
 + [Compressed Representation of Dynamic Binary Relations with
   Applications](https://arxiv.org/abs/1707.02769)
 + [A succinct data structure for self-indexing ternary
