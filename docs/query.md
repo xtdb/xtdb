@@ -110,6 +110,8 @@ while running, which would be a post MVP feature.
   Solving](https://arxiv.org/abs/1307.4635)
 + [Using Datalog with Binary Decision Diagrams for Program
 Analysis](https://people.csail.mit.edu/mcarbin/papers/aplas05.pdf)
++ [A purely functional implementation of ROBDDs in
+  Haskell](https://www.informatik.uni-kiel.de/~mh/lehre/abschlussarbeiten/msc/christiansen.pdf)
 + [On Fast Large-Scale Program Analysis in
   Datalog](http://discovery.ucl.ac.uk/1474713/1/main.pdf)
 + [Efficient Lazy Evaluation of Rule-Based
