@@ -145,6 +145,8 @@ Ask)](https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364
   Beyond](https://arxiv.org/abs/1404.0703)
 + [Implementation of Tetris as a Model
   Counter](https://arxiv.org/abs/1701.07473)
++ [Skew Strikes Back: New Developments in the Theory of Join
+  Algorithms](https://arxiv.org/abs/1310.3314)
 + [Compressed Representation of Dynamic Binary Relations with
   Applications](https://arxiv.org/abs/1707.02769)
 + [A succinct data structure for self-indexing ternary
