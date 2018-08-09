@@ -246,11 +246,11 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constriants]
+(defn- update-binary-index! [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
-        v-range-constraints (get v-var->range-constriants v)
+        v-range-constraints (get v-var->range-constraints v)
         entity-as-of-idx (doc/new-entity-as-of-index snapshot business-time transact-time)]
     (if (= (:v names) (first order))
       (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index snapshot a)
@@ -321,7 +321,7 @@
     (set (for [k ks]
            (symbol (name k))))))
 
-(defn- arg-joins [arg-vars e-vars v-var->range-constriants var->joins]
+(defn- arg-joins [arg-vars e-vars var->joins]
   (let [idx-id (gensym "args")
         join {:id idx-id
               :idx-fn #(doc/new-relation-virtual-index idx-id
@@ -336,7 +336,7 @@
                   (merge-with into var->joins)))
            var->joins))]))
 
-(defn- pred-joins [pred-clauses v-var->range-constriants var->joins]
+(defn- pred-joins [pred-clauses v-var->range-constraints var->joins]
   (->> pred-clauses
        (reduce
         (fn [[pred-clause+idx-ids var->joins] {:keys [return] :as pred-clause}]
@@ -346,7 +346,7 @@
                         :idx-fn #(doc/new-relation-virtual-index idx-id
                                                                  []
                                                                  1
-                                                                 [(get v-var->range-constriants return)])
+                                                                 [(get v-var->range-constraints return)])
                         :name (symbol "crux.query.value" (name return))}]
               [(conj pred-clause+idx-ids [pred-clause idx-id])
                (merge-with into var->joins {return [join]})])
@@ -541,7 +541,7 @@
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
 (defn- build-or-constraints [rule-name->rules or-clause+idx-id+or-branches
-                             var->bindings vars-in-join-order v-var->range-constriants]
+                             var->bindings vars-in-join-order v-var->range-constraints]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
@@ -586,7 +586,7 @@
                                          (apply concat)
                                          (distinct)
                                          (vec))]
-                   (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constriants free-vars-in-join-order))))
+                   (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constraints free-vars-in-join-order))))
                join-results)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
@@ -778,8 +778,8 @@
                       (into {}))
         e->v-var (set/map-invert v-var->e)
         var->joins {}
-        v-var->range-constriants (build-v-var-range-constraints e-vars range-clauses)
-        v-range-vars (set (keys v-var->range-constriants))
+        v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
+        v-range-vars (set (keys v-var->range-constraints))
         non-leaf-vars (set/union e-vars arg-vars v-range-vars)
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
@@ -787,9 +787,8 @@
                                                     arg-vars)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
-                                            v-var->range-constriants
                                             var->joins)
-        [pred-clause+idx-ids var->joins] (pred-joins pred-clauses v-var->range-constriants var->joins)
+        [pred-clause+idx-ids var->joins] (pred-joins pred-clauses v-var->range-constraints var->joins)
         known-vars (set/union e-vars v-vars arg-vars)
         known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
         [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
@@ -829,7 +828,7 @@
         not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
         pred-constraints (build-pred-constraints pred-clause+idx-ids var->bindings)
         or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                             var->bindings vars-in-join-order v-var->range-constriants)
+                                             var->bindings vars-in-join-order v-var->range-constraints)
         depth->constraints (->> (concat unification-constraints
                                         pred-constraints
                                         not-constraints
@@ -840,7 +839,7 @@
                                    (update acc join-depth (fnil conj []) constraint-fn))
                                  (vec (repeat join-depth nil))))]
     {:depth->constraints depth->constraints
-     :v-var->range-constriants v-var->range-constriants
+     :v-var->range-constraints v-var->range-constraints
      :vars-in-join-order vars-in-join-order
      :var->joins var->joins
      :var->bindings var->bindings
@@ -865,7 +864,7 @@
   (let [arg-vars (arg-vars args)
         {:keys [depth->constraints
                 vars-in-join-order
-                v-var->range-constriants
+                v-var->range-constraints
                 var->joins
                 var->bindings
                 arg-vars-in-join-order
@@ -882,12 +881,12 @@
                                     (assoc (or (get idx-id->idx id) (idx-fn)) :name name)))]
     (doseq [[_ idx] idx-id->idx
             :when (instance? BinaryJoinLayeredVirtualIndex idx)]
-      (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constriants))
+      (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constraints))
     (when (seq args)
       (doc/update-relation-virtual-index! (get idx-id->idx args-idx-id)
                                           (vec (for [arg args]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
-                                          (mapv v-var->range-constriants arg-vars-in-join-order)))
+                                          (mapv v-var->range-constraints arg-vars-in-join-order)))
     (log/debug :where (pr-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :var->bindings (pr-str var->bindings))
