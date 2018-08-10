@@ -1,5 +1,0 @@
-## Business Model
-
-1. Enterprise support license to fund continued investment.
-2. Brand enhancement to JUXT as a result of the R&D.
-

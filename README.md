@@ -6,22 +6,22 @@ A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
 ## MVP
 
-+ [MVP Summary](docs/mvp.md)
-+ [Crux Implementation Notes](docs/implementation.md)
++ [MVP Summary](docs/mvp.adoc)
++ [Crux Implementation Notes](docs/implementation.adoc)
 
 ## Phase 2
 
-+ [Phase 2](docs/phase_2.md)
++ [Phase 2](docs/phase_2.adoc)
 
 ## Background
 
 Motivation: a database with the following characteristics:
 
-+ [Graph Query](docs/query.md)
-+ [Additive Schema](docs/schema.md)
-+ [Bitemporality](docs/bitemp.md)
-+ [Data retention/excision strategies](docs/retention.md) (for GDPR)
-+ [Global locking](docs/transactions.md)
++ [Graph Query](docs/query.adoc)
++ [Additive Schema](docs/schema.adoc)
++ [Bitemporality](docs/bitemp.adoc)
++ [Data retention/excision strategies](docs/retention.adoc) (for GDPR)
++ [Global locking](docs/transactions.adoc)
 + Rapid data ingestion (using Kafka)
 + Scalable Query Engine using RocksDB
 
@@ -29,5 +29,5 @@ The documents above contain many references.
 
 ## Business Model
 
-+ [Business Model](docs/business_model.md)
-+ [Competitors](docs/competitors.md)
++ [Business Model](docs/business_model.adoc)
++ [Competitors](docs/competitors.adoc)

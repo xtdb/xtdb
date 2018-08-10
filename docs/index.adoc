@@ -1,0 +1,47 @@
+= Crux
+Håkan Råberg, Jon Pither, Malcolm Sparks, Hugo Jacobs
+0.1, 2018-08-10
+:toc: left
+:toclevels: 4
+:docinfo: shared
+:sectnums: true
+:sectnumlevels: 2
+:xrefstyle: short
+:docinfodir: docinfo
+:nofooter:
+
+A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
+
+== MVP
+
+include::mvp.adoc[leveloffset=+1]
+
+include::implementation.adoc[leveloffset=+1]
+
+== Phase 2
+
+include::phase_2.adoc[leveloffset=+1]
+
+== Background
+
+Motivation: a database with the following characteristics:
+
+include::query.adoc[leveloffset=+1]
+
+include::schema.adoc[leveloffset=+1]
+
+include::bitemp.adoc[leveloffset=+1]
+
+include::retention.adoc[leveloffset=+1]
+
+include::transactions.adoc[leveloffset=+1]
+
+== Business model
+
+include::business_model.adoc[leveloffset=+1]
+
+include::competitors.adoc[leveloffset=+1]
+
+== Internals
+
+include::internals.adoc[leveloffset=+1]
