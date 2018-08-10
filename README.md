@@ -31,3 +31,21 @@ The documents above contain many references.
 
 + [Business Model](docs/business_model.adoc)
 + [Competitors](docs/competitors.adoc)
+
+## Building
+
+``` sh
+lein uberjar
+java -jar target/crux-*-standalone.jar --help
+```
+
+## Developing
+
+Start a REPL. To run the system with embedded Kafka and ZK:
+
+``` clojure
+(dev)
+(start)
+```
+
+This will store data under `dev-storage` in the checkout directory.
