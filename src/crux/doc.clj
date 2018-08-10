@@ -438,6 +438,7 @@
     (->SortedVirtualIndex
      (->> idx-as-seq
           (sort-by first bu/bytes-comparator)
+          (distinct)
           (vec))
      (atom nil))))
 

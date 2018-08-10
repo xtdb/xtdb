@@ -884,7 +884,7 @@
       (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constraints))
     (when (seq args)
       (doc/update-relation-virtual-index! (get idx-id->idx args-idx-id)
-                                          (vec (for [arg args]
+                                          (vec (for [arg (distinct args)]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constraints arg-vars-in-join-order)))
     (log/debug :where (pr-str where))
