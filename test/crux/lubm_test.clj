@@ -42,8 +42,8 @@
            [:crux.tx/put (:crux.db/id entity) entity]))))
 
 (defn with-lubm-data [f]
-  (let [tx-topic "test-can-run-lubm-queries"
-        doc-topic "test-can-run-lubm-queries"
+  (let [tx-topic "test-can-run-lubm-tx-queries"
+        doc-topic "test-can-run-lubm-doc-queries"
         tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
                             (load-ntriples-example lubm-triples-resource))
                     (map #(rdf/use-default-language % :en))
@@ -59,8 +59,14 @@
     (doseq [tx-ops (partition-all 1000 tx-ops)]
       @(db/submit-tx tx-log (vec tx-ops)))
 
-    (k/consume-and-index-entities indexer ek/*consumer*)
-    (while (not-empty (k/consume-and-index-entities indexer ek/*consumer* 100)))
+    (let [consume-args {:indexer indexer
+                        :consumer ek/*consumer*
+                        :tx-topic tx-topic
+                        :doc-topic doc-topic}]
+      (k/consume-and-index-entities consume-args)
+      (while (not= {:txs 0 :docs 0}
+                   (k/consume-and-index-entities
+                     (assoc consume-args :timeout 100)))))
     (f)))
 
 ;; NOTE: Test order isn't alphabetic, this can be mitigated by

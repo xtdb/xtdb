@@ -100,7 +100,12 @@
      (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
      (while @running?
        (try
-         (k/consume-and-index-entities indexer consumer 100)
+         (k/consume-and-index-entities
+           {:indexer indexer
+            :consumber consumer
+            :timeout 100
+            :tx-topic tx-topic
+            :doc-topic doc-topic})
          (catch Exception e
            (log/error e "Error while consuming and indexing from Kafka:")))))))
 

@@ -114,32 +114,38 @@
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 
-(defn- tx-record? [^ConsumerRecord record]
-  (nil? (.key record)))
-
-(defn- store-tx-log-time [indexer records]
-  (when-let [tx-time (->> (filter tx-record? records)
-                          (map #(.timestamp ^ConsumerRecord %))
-                          (sort)
-                          (last))]
-    (db/store-index-meta indexer :crux.tx-log/tx-time (Date. ^long tx-time))))
+(defn nil-max
+  [a b]
+  (if (or (nil? a) (nil? b))
+    (or a b)
+    (max a b)))
 
 (defn consume-and-index-entities
-  ([indexer consumer]
-   (consume-and-index-entities indexer consumer 10000))
-  ([indexer ^KafkaConsumer consumer timeout]
-   (let [records (.poll consumer (Duration/ofMillis timeout))
-         txs (->> (for [record records]
-                    (if (tx-record? record)
-                      (index-tx-record indexer record)
-                      (index-doc-record indexer record)))
-                  (reduce into []))]
-     (store-topic-partition-offsets indexer consumer (.partitions records))
-     (store-tx-log-time indexer records)
-     (when-let [{txs true
-                 docs false} (not-empty (group-by tx-record? records))]
-       {:txs (count txs)
-        :docs (count docs)}))))
+  [{:keys [indexer ^KafkaConsumer consumer
+           timeout tx-topic doc-topic]
+    :or {timeout 10000}}]
+  (let [records (.poll consumer (Duration/ofMillis timeout))
+        {:keys [last-tx-log-time] :as result}
+        (reduce
+          (fn [state ^ConsumerRecord record]
+            (condp = (.topic record)
+              tx-topic
+              (do (index-tx-record indexer record)
+                  (-> state
+                      (update :txs inc)
+                      (update :last-tx-log-time nil-max (.timestamp record))))
+              doc-topic
+              (do (index-doc-record indexer record)
+                  (update state :docs inc))
+              (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
+          {:txs 0
+           :docs 0
+           :last-tx-log-time nil}
+          records)]
+    (store-topic-partition-offsets indexer consumer (.partitions records))
+    (when last-tx-log-time
+      (db/store-index-meta indexer :crux.tx-log/tx-time last-tx-log-time))
+    (dissoc result :last-tx-log-time)))
 
 (defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer ^List topics]
   (.subscribe consumer
