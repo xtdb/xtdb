@@ -287,6 +287,9 @@
                        (reduce into [])))))
 
 (defrecord DocObjectStore [kv]
+  Closeable
+  (close [_])
+
   db/ObjectStore
   (get-objects [this snapshot ks]
     (with-open [i (ks/new-iterator snapshot)]

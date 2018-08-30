@@ -1,20 +1,23 @@
 (ns crux.bootstrap
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
-            [clojure.tools.logging :as log]
             [clojure.tools.cli :as cli]
+            [clojure.tools.logging :as log]
             [crux.doc :as doc]
-            [crux.tx :as tx]
+            [crux.follower :as f]
             [crux.http-server :as srv]
+            [crux.index-consumer :as index-consumer]
+            [crux.kafka :as k]
             [crux.kv-store :as kv-store]
-            [crux.memdb]
-            [crux.rocksdb]
-            [crux.lmdb]
-            [crux.kafka :as k])
-  (:import [java.io Closeable]
-           [java.net InetAddress]
-           [java.util Properties])
-  (:gen-class))
+            crux.lmdb
+            crux.memdb
+            crux.rocksdb
+            [crux.tx :as tx])
+  (:import java.io.Closeable
+           java.net.InetAddress
+           java.util.Properties))
+
+(def system)
 
 (def cli-options
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
@@ -64,50 +67,38 @@
          (kv-store/open))))
 
 (defn start-system
-  ([{:keys [bootstrap-servers
-            group-id
-            tx-topic
-            doc-topic
-            db-dir
-            server-port]
-     :as options}]
-   (with-open [kv-store (start-kv-store options)
-               consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
-                                            "group.id" group-id})
-               producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-               admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
-               http-server (srv/create-server
-                            kv-store
-                            (k/->KafkaTxLog producer tx-topic doc-topic)
-                            db-dir
-                            bootstrap-servers
-                            (Long/parseLong server-port))]
-     (start-system kv-store consumer producer admin-client (delay true) options)))
-  ([kv-store consumer producer admin-client running? options]
-   (let [{:keys [bootstrap-servers
-                 group-id
-                 tx-topic
-                 doc-topic
-                 doc-partitions
-                 replication-factor]
-          :as options} (merge default-options options)
-         tx-log (k/->KafkaTxLog producer tx-topic doc-topic)
-         object-store (doc/->DocObjectStore kv-store)
-         indexer (tx/->DocIndexer kv-store tx-log object-store)
-         replication-factor (Long/parseLong replication-factor)]
-     (k/create-topic admin-client tx-topic 1 replication-factor k/tx-topic-config)
-     (k/create-topic admin-client doc-topic (Long/parseLong doc-partitions) replication-factor k/doc-topic-config)
-     (k/subscribe-from-stored-offsets indexer consumer [tx-topic doc-topic])
-     (while @running?
-       (try
-         (k/consume-and-index-entities
-           {:indexer indexer
-            :consumber consumer
-            :timeout 100
-            :tx-topic tx-topic
-            :doc-topic doc-topic})
-         (catch Exception e
-           (log/error e "Error while consuming and indexing from Kafka:")))))))
+  [options with-system-fn]
+  (let [{:keys [bootstrap-servers
+                group-id
+                tx-topic
+                doc-topic
+                db-dir
+                server-port]
+         :as options} (merge default-options options)]
+    (log/info "starting system")
+    (with-open [kv-store (start-kv-store options)
+                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
+                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
+                object-store ^Closeable (doc/->DocObjectStore kv-store)
+                indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
+                follower (f/create-follower indexer producer options)
+                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
+                http-server (srv/create-server
+                              kv-store
+                              tx-log
+                              db-dir
+                              bootstrap-servers
+                              (Long/parseLong server-port))
+                index-consumer (index-consumer/create-index-consumer
+                                 admin-client follower indexer options)]
+      (with-system-fn
+        {:kv-store kv-store
+         :producer producer
+         :indexer indexer
+         :admin-client admin-client
+         :http-server http-server
+         :index-consumer index-consumer})
+      (log/info "stopping system"))))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options
@@ -129,7 +120,11 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (start-system options)))))
+          (start-system
+            options
+            (fn [running-system]
+              (alter-var-root #'system (constantly running-system))
+              @(promise)))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler

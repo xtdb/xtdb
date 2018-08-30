@@ -1,25 +1,19 @@
 (ns crux.kafka
   "Currently uses nippy to play nice with RDF IRIs that are not
   valid keywords. Uses one transaction per message."
-  (:require [clojure.tools.logging :as log]
-            [crux.db :as db]
+  (:require [crux.db :as db]
             [crux.index :as idx]
-            [crux.tx :as tx]
-            [crux.kafka.nippy])
-  (:import [java.util List Map Date]
-           [java.util.concurrent ExecutionException]
-           [java.time Duration]
-           [org.apache.kafka.clients.admin
-            AdminClient NewTopic]
-           [org.apache.kafka.common TopicPartition]
-           [org.apache.kafka.clients.consumer
-            KafkaConsumer ConsumerRecord ConsumerRebalanceListener]
-           [org.apache.kafka.clients.producer
-            KafkaProducer ProducerRecord RecordMetadata]
-           [org.apache.kafka.common.errors
-            TopicExistsException]
-           [crux.kafka.nippy
-            NippySerializer NippyDeserializer]))
+            [crux.tx :as tx])
+  (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
+           java.io.Closeable
+           java.time.Duration
+           [java.util Date List Map]
+           java.util.concurrent.ExecutionException
+           [org.apache.kafka.clients.admin AdminClient NewTopic]
+           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
+           [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
+           org.apache.kafka.common.errors.TopicExistsException
+           org.apache.kafka.common.TopicPartition))
 
 (def default-producer-config
   {"enable.idempotence" "true"
@@ -65,6 +59,9 @@
 ;;; Transacting Producer
 
 (defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]
+  Closeable
+  (close [_])
+
   db/TxLog
   (submit-doc [this content-hash doc]
     (->> (ProducerRecord. doc-topic content-hash doc)
@@ -122,8 +119,8 @@
 
 (defn consume-and-index-entities
   [{:keys [indexer ^KafkaConsumer consumer
-           timeout tx-topic doc-topic]
-    :or {timeout 10000}}]
+           follower timeout tx-topic doc-topic]
+    :or   {timeout 10000}}]
   (let [records (.poll consumer (Duration/ofMillis timeout))
         {:keys [last-tx-log-time] :as result}
         (reduce
@@ -137,6 +134,7 @@
               doc-topic
               (do (index-doc-record indexer record)
                   (update state :docs inc))
+
               (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
           {:txs 0
            :docs 0
@@ -147,7 +145,8 @@
       (db/store-index-meta indexer :crux.tx-log/tx-time last-tx-log-time))
     (dissoc result :last-tx-log-time)))
 
-(defn subscribe-from-stored-offsets [indexer ^KafkaConsumer consumer ^List topics]
+(defn subscribe-from-stored-offsets
+  [indexer ^KafkaConsumer consumer ^List topics]
   (.subscribe consumer
               topics
               (reify ConsumerRebalanceListener

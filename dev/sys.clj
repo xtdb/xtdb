@@ -49,34 +49,27 @@
       (throw result)
       result)))
 
-(defn with-system-var [do-with-system-fn target-var]
-  (fn [system]
-    (try
-      (alter-var-root target-var (constantly system))
-      (do-with-system-fn system)
-      (finally
-        (alter-var-root target-var (constantly nil))))))
-
-(defn with-system-promise [do-with-system-fn promise]
-  (fn [system]
-    (deliver promise system)
-    (do-with-system-fn system)))
-
-(defn make-init-fn [with-system-fn do-with-system-fn close-fn]
+(defn make-init-fn
+  [system-var create-system]
   (fn []
-    (let [started? (promise)
+    (let [started-promise (promise)
+          close-promise (promise)
           instance (closeable
                     (future
                       (try
-                        (-> do-with-system-fn
-                            (with-system-promise started?)
-                            (with-system-fn))
+                        (create-system
+                          (fn [started-system]
+                            (alter-var-root system-var (constantly started-system))
+                            (deliver started-promise true)
+                            @close-promise))
                         (catch Throwable t
                           (log/error t "Exception caught, system will stop:")
-                          (throw t))))
+                          (throw t))
+                        (finally
+                          (alter-var-root system-var (constantly nil)))))
                     (fn [this]
-                      (close-fn this)
+                      (deliver close-promise true)
                       @this))]
       (while (not (or (deref @instance 100 false)
-                      (deref started? 100 false))))
+                      (deref started-promise 100 false))))
       instance)))
