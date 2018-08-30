@@ -1,16 +1,12 @@
 (ns crux.fixtures
-  (:require [crux.kv-store :as kv-store]
-            [crux.bootstrap]
-            [crux.db]
-            [crux.doc]
-            [crux.tx]
-            [crux.rocksdb]
-            [crux.lmdb]
-            [crux.memdb]
+  (:require [clojure.test :as t]
+            [crux.bootstrap :as b]
+            crux.db
             [crux.io :as cio]
-            [clojure.test :as t])
-  (:import [java.io Closeable]
-           [java.util Date UUID]))
+            [crux.embedded-kafka :as ek]
+            crux.tx)
+  (:import java.io.Closeable
+           java.util.UUID))
 
 (defn random-person [] {:crux.db/id (UUID/randomUUID)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
@@ -84,3 +80,17 @@
 (defn with-each-kv-store-implementation [f]
   (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-lmdb]]
     (with-kv-store-implementation f)))
+
+(def ^:dynamic *system*)
+(def ^:dynamic *extra-options*)
+
+(defn with-dev-system [f]
+  (assert ek/*kafka-bootstrap-servers*)
+  (b/start-system
+    (merge
+      b/default-options
+      {:bootstrap-servers ek/*kafka-bootstrap-servers*}
+      *extra-options*)
+    (fn [running-system]
+      (binding [*system* running-system]
+        (f)))))

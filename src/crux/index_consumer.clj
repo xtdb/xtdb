@@ -6,8 +6,7 @@
 (defrecord IndexerConsumer [running? ^Thread worker-thread]
   Closeable
   (close [_]
-    (reset! running? false)
-    (.join worker-thread)))
+    (reset! running? false)))
 
 (defn thread-main-loop
   [{:keys [running? indexer consumer follower options]}]
@@ -50,5 +49,5 @@
       (assoc
         index-follower
         :worker-thread
-        (doto (Thread. (partial thread-main-loop index-follower))
+        (doto (Thread. ^Runnable (partial thread-main-loop index-follower))
           (.start))))))

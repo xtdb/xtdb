@@ -9,6 +9,7 @@
             [crux.index-consumer :as index-consumer]
             [crux.kafka :as k]
             [crux.kv-store :as kv-store]
+            [crux.kafka.nippy]
             crux.lmdb
             crux.memdb
             crux.rocksdb
