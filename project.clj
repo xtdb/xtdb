@@ -10,6 +10,7 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.14.2"]
+                 [cheshire "5.8.0"]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.0"]

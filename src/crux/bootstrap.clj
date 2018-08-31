@@ -13,7 +13,8 @@
             crux.lmdb
             crux.memdb
             crux.rocksdb
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [clojure.string :as str])
   (:import java.io.Closeable
            java.net.InetAddress
            java.util.Properties))
@@ -40,6 +41,16 @@
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "port on which to run the HTTP server"
     :default "3000"]
+
+   ["-f" "--follow-topic FOLLOW_TOPIC"
+    "follow a extra topic syntax topic-name=format"
+    :validate [(fn [s] (re-matches #"\w+\=\w+" s))
+               "invalid follow topic format"]
+    :assoc-fn (fn [m k v]
+                (let [[topic topic-format] (str/split v "=")]
+                  (update m :follow-topics assoc topic topic-format)))
+    :default nil]
+
    ["-h" "--help"]])
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
@@ -82,7 +93,7 @@
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
                 object-store ^Closeable (doc/->DocObjectStore kv-store)
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
-                follower (f/create-follower indexer producer options)
+                follower (f/create-follower indexer tx-log options)
                 admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
                 http-server (srv/create-server
                               kv-store

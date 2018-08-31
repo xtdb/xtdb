@@ -1,12 +1,27 @@
 (ns crux.follower
-  (:require [clojure.tools.logging :as log]
+  (:require [cheshire.core :as json]
+            [clojure.tools.logging :as log]
+            [crux.db :as db]
             [crux.kafka :as k])
   (:import java.io.Closeable
            java.time.Duration
-           org.apache.kafka.clients.consumer.KafkaConsumer
+           java.util.UUID
+           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            org.apache.kafka.common.serialization.ByteArrayDeserializer))
 
-(defrecord Follower [producer
+(defmulti process-format
+  (fn [record format] format))
+
+(defmethod process-format "json"
+  [^ConsumerRecord record _]
+  (let [id (keyword (str (UUID/randomUUID)))]
+    [[:crux.tx/put
+      id
+      (assoc
+        (json/parse-string (String. ^bytes (.value record)) keyword)
+        :crux.db/id id)]]))
+
+(defrecord Follower [tx-log
                      indexer
                      running?
                      consumer
@@ -17,9 +32,13 @@
     (reset! running? false)))
 
 (defn poll-and-process-records
-  [{:keys [options]} ^KafkaConsumer consumer]
+  [{:keys [tx-log options]} ^KafkaConsumer consumer]
   (let [records (.poll consumer (Duration/ofMillis (get options :timeout 100)))]
-    (println "processing records: " (count (seq records)))))
+    (doseq [^ConsumerRecord record records
+            :let [tx-ops (process-format
+                           record
+                           (get-in options [:follow-topics (.topic record)]))]]
+      @(db/submit-tx tx-log tx-ops))))
 
 (defn main-loop
   [{:keys [running? indexer options] :as follower}]
@@ -29,7 +48,7 @@
                           "key.deserializer" (.getName ByteArrayDeserializer)
                           "value.deserializer" (.getName ByteArrayDeserializer)})]
     (when-let [follow-topics (:follow-topics options)]
-      (k/subscribe-from-stored-offsets indexer consumer follow-topics)
+      (k/subscribe-from-stored-offsets indexer consumer (keys follow-topics))
       (while @running?
         (try
           (poll-and-process-records follower consumer)
@@ -38,10 +57,10 @@
             (throw t)))))))
 
 (defn ^Closeable create-follower
-  [indexer producer {:keys [follow-topics bootstrap-servers group-id] :as options}]
+  [indexer tx-log {:keys [follow-topics bootstrap-servers group-id] :as options}]
   (let [follower (map->Follower
                    {:running? (atom true)
-                    :producer producer
+                    :tx-log tx-log
                     :indexer indexer
                     :options options})]
     (assoc
