@@ -76,7 +76,11 @@
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
 
-      (t/is (= {:txs 1 :docs 3} (k/consume-and-index-entities indexer ek/*consumer*)))
+      (t/is (= {:txs 1 :docs 3}
+               (k/consume-and-index-entities
+                 {:indexer indexer :consumer ek/*consumer*
+                  :tx-topic tx-topic
+                  :doc-topic doc-topic})))
       (t/is (empty? (.poll ek/*consumer* (Duration/ofMillis 1000)))))
 
     (t/testing "restoring to stored offsets"
@@ -107,7 +111,14 @@
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
-      (t/is (= {:txs 1 :docs 2} (k/consume-and-index-entities indexer ek/*consumer*))))
+      (t/is (= {:txs 1 :docs 2}
+               (select-keys
+                 (k/consume-and-index-entities
+                   {:indexer indexer
+                    :consumer ek/*consumer*
+                    :tx-topic tx-topic
+                    :doc-topic doc-topic})
+                 [:txs :docs]))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
@@ -213,7 +224,12 @@
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
-      (t/is (= {:txs 1 :docs 8} (k/consume-and-index-entities indexer ek/*consumer*))))
+      (t/is (= {:txs 1 :docs 8}
+               (k/consume-and-index-entities
+                 {:indexer indexer
+                  :consumer ek/*consumer*
+                  :tx-topic tx-topic
+                  :doc-topic doc-topic}))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}

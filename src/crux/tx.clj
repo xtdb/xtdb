@@ -2,13 +2,13 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]
+            [crux.db :as db]
             [crux.doc :as doc]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv-store :as ks]
-            [crux.db :as db])
-  (:import [java.util Date]
-           [crux.index EntityTx]))
+            [crux.kv-store :as ks])
+  (:import crux.index.EntityTx
+           java.io.Closeable))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -102,6 +102,9 @@
             idx/nil-id-bytes]]}))
 
 (defrecord DocIndexer [kv tx-log object-store]
+  Closeable
+  (close [_])
+
   db/Indexer
   (index-doc [_ content-hash doc]
     (when (and doc (not (contains? doc :crux.db/id)))

@@ -10,7 +10,8 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
-            [sys :refer [start stop clear reset]])
+            [sys :refer [start stop clear reset]]
+            [crux.follower :as f])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [ch.qos.logback.classic Level Logger]
@@ -37,52 +38,21 @@
      (.shutdown kafka)
      (.awaitShutdown kafka))))
 
-(defn with-crux-system [do-with-system-fn {:keys [bootstrap-servers
-                                                  group-id
-                                                  tx-topic
-                                                  doc-topic
-                                                  db-dir
-                                                  server-port]
-                                           :as options}]
-  (with-open [zookeeper (start-zookeeper options)
-              kafka (start-kafka options)
-              kv-store (b/start-kv-store options)
-              kafka-producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-              kafka-consumer (k/create-consumer {"bootstrap.servers" bootstrap-servers
-                                                 "group.id" group-id})
-              kafka-admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers
-                                                         "request.timeout.ms" "5000"})
-              http-server (srv/create-server
-                           kv-store
-                           (k/->KafkaTxLog kafka-producer tx-topic doc-topic)
-                           db-dir
-                           bootstrap-servers
-                           (Long/parseLong server-port))]
-    (->> {:zookeeper @zookeeper
-          :kafka @kafka
-          :kv-store kv-store
-          :kafka-producer kafka-producer
-          :kafka-consumer kafka-consumer
-          :kafka-admin-client kafka-admin-client
-          :options options}
-         (do-with-system-fn))))
-
-(defn start-index-node [running? {:keys [kv-store kafka-consumer kafka-producer kafka-admin-client options]
-                                  :as system}]
-  (b/start-system kv-store kafka-consumer kafka-producer kafka-admin-client running? options))
+(defn start-crux-dev-system
+  [with-system-fn]
+  (let [options (merge b/default-options options)]
+    (with-open [zookeeper (start-zookeeper options)
+                kafka (start-kafka options)]
+      (b/start-system
+        options
+        (fn [system]
+          (with-system-fn (merge system {:zookeeper zookeeper
+                                         :kafka kafka})))))))
 
 (defn make-crux-system-init-fn []
-  (fn []
-    (let [running? (atom true)
-          init-fn (sys/make-init-fn
-                   #(-> (sys/with-system-var % #'system)
-                        (with-crux-system (merge b/default-options options)))
-                   (partial start-index-node running?)
-                   (fn [_]
-                     (reset! running? false)))]
-      (init-fn))))
+  ((sys/make-init-fn #'system (fn [cont] (start-crux-dev-system cont)))))
 
-(alter-var-root #'sys/init (constantly (make-crux-system-init-fn)))
+(alter-var-root #'sys/init (constantly make-crux-system-init-fn))
 
 (defn delete-storage []
   (stop)

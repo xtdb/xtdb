@@ -90,20 +90,26 @@
         (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown)
         (cio/delete-dir data-dir)))))
 
+(def ^:dynamic ^AdminClient *admin-client*)
+
 (defn with-embedded-kafka-cluster [f]
   (with-embedded-zookeeper
-    (partial with-embedded-kafka f)))
+    (fn []
+      (with-embedded-kafka
+        (fn []
+          (with-open [admin-client
+                      (k/create-admin-client
+                        {"bootstrap.servers" *kafka-bootstrap-servers*})]
+            (binding [*admin-client* admin-client]
+              (f))))))))
 
-(def ^:dynamic ^AdminClient *admin-client*)
 (def ^:dynamic ^KafkaProducer *producer*)
 (def ^:dynamic ^KafkaConsumer *consumer*)
 
 (defn with-kafka-client [f]
-  (with-open [admin-client (k/create-admin-client {"bootstrap.servers"*kafka-bootstrap-servers*})
-              producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
+  (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
               consumer (k/create-consumer {"bootstrap.servers" *kafka-bootstrap-servers*
                                            "group.id" "0"})]
-    (binding [*admin-client* admin-client
-              *producer* producer
+    (binding [*producer* producer
               *consumer* consumer]
       (f))))

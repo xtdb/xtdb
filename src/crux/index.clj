@@ -1,11 +1,12 @@
 (ns crux.index
   (:require [crux.byte-utils :as bu]
             [taoensso.nippy :as nippy])
-  (:import [java.nio ByteBuffer]
-           [java.security MessageDigest]
-           [java.util Arrays Date UUID]
-           [java.net URI]
-           [clojure.lang IHashEq IPersistentMap Keyword]))
+  (:import [clojure.lang IHashEq IPersistentMap Keyword]
+           java.io.Closeable
+           java.net.URI
+           java.nio.ByteBuffer
+           java.security.MessageDigest
+           [java.util Arrays Date UUID]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
