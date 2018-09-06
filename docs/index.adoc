@@ -18,6 +18,8 @@ include::introduction.adoc[leveloffset=+1]
 
 include::implementation.adoc[leveloffset=+1]
 
+include::todos.adoc[leveloffset=+1]
+
 == Phase 2
 
 include::phase_2.adoc[leveloffset=+1]
