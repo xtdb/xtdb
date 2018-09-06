@@ -1,9 +1,12 @@
-== MVP Summary
+== What is Crux?
 
-=== Introduction
+Crux is a unbundled bitemporal graph database.
 
-The Crux MVP was developed between March 19 and August 10 in 2018. At
-different times 1-3 people have worked directly on the MVP code.
+Apache Kafka is used as the primary store and semi-immutable log, with
+Crux used as a library to provide materialised views for rich query
+support on top of a local Key/Value store such as RocksDB and LMDB.
+
+== Background
 
 The decision to develop Crux was taken by JUXT after feeling there’s a
 void in the market for ``unbundled'', to use Martin Kleppmann’s phrase,
@@ -60,7 +63,7 @@ of deployments.
 
 Supported KV stores are RocksDB, LMDB and an in-memory store.
 
-=== What can Crux currently do?
+== What can Crux currently do?
 
 Crux can be used either as a library, usually together with Kafka, or
 over HTTP. Crux supports four write operations and a Datalog query
@@ -213,13 +216,13 @@ Protocol queries under `/sparql/`. Only a small subset of SPARQL is
 supported, and is working by rewriting the query into the Crux datalog
 dialect and there are no further RDF features by using this.
 
-=== How does Crux do it?
+== How does Crux do it?
 
 Crux mainly consists of two parts, the transaction and ingestion piece,
 built around Kafka, and the query piece, built on top of a local KV
 store such as RocksDB. The ingestion engine populates the indexes.
 
-==== Ingestion
+=== Ingestion
 
 On the ingestion side, the main design is to split the data into two
 separate topics, the `tx-topic` and the `doc-topic`. The users don’t
@@ -251,7 +254,7 @@ find the content hash of a specific entity version.
 * `meta-key->value-index` Used to store Kafka offsets and transaction
 times.
 
-==== Query
+=== Query
 
 The query engine is built using the concept of ``virtual indexes'',
 which bottom out to a combination of the above physical indexes on disk
@@ -285,7 +288,7 @@ anonymous rules. `not` is a sub query which executes when all required
 variables are bound, acting as a predicate which returns false if there
 are any sub query results, filtering the parent results.
 
-=== Known Issues
+== Known Issues
 
 * Rules in queries are not well tested.
 * Nested expressions in queries are not well tested.
@@ -300,16 +303,16 @@ be performed during the query.
 * The query engine is not optimised and constructs a lot of intermediate
 structures.
 
-=== AWS Deployment
+== AWS Deployment
 
-=== Future
+== Future
 
 link:phase_2.md[Phase 2], which is still to be decided, will be
 discussed during a few Crux sessions in Stockholm August 6 to 10, 2018.
 The minimum outcome of the MVP if there is no phase 2 is likely that
 Crux gets open sourced in its current form.
 
-=== FAQs
+== FAQs
 
 [qanda]
 

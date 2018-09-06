@@ -12,9 +12,9 @@ Håkan Råberg, Jon Pither, Malcolm Sparks, Hugo Jacobs
 
 A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
-== MVP
+== Introduction
 
-include::mvp.adoc[leveloffset=+1]
+include::introduction.adoc[leveloffset=+1]
 
 include::implementation.adoc[leveloffset=+1]
 
