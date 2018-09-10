@@ -6,3 +6,4 @@ good shape for general usage.
 * Correct links after mvp->introduction
 * Remove legacy strategy A vs B etc, possibly all of internals.adoc in favour of implmentation.adoc
 * Remove internal documents such as business model
+* Update the styling to align with JUXT/tick

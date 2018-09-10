@@ -9,3 +9,5 @@ target
 /data
 /dev-storage
 /website/aero-deploy.tar.gz
+/docs/index.html
+/docs/docs.zip

@@ -1,0 +1,140 @@
+== FAQs
+
+[qanda]
+
+Does Crux support RDF/SPARQL?::
+  No. We have a simple ingestion mechanism for RDF data in `crux.rdf`
+but this is not a core feature. There’s a also a query translator for a
+subset of SPARQL. RDF and SPARQL support could eventually be written as
+a layer on top of Crux as a module, but there are no plans for this by
+the core team.
+
+Does Crux require Kafka?::
+  Not strictly. There is a local implementation called
+`crux.tx.DocTxLog` that writes transactions directly into the local KV
+store. One can also implement the `crux.db.TxLog` protocol to replace
+the `crux.db.KafkaTxLog` implementation. That said, Kafka is assumed at
+the moment. One can also run Kafka embedded as this allows later
+migration.
+
+What consistency does Crux provide?::
+  Crux does not try to enforce consistency among nodes, which all
+consume the log in the same order, but may be at different points. A
+client using the same node will have a consistent view. Reading your own
+writes can be achieved by providing the transaction time Kafka assigned
+to the submitted transaction, which is returned in a promise from
+`crux.tx/submit-tx`, in the call to `crux.query/db`. This will block
+until this transaction time has been seen by the local node.
++
+Write consistency across nodes is provided via the `:crux.db/cas`
+operation. The user needs to attempt to perform a CAS, then wait for the
+transaction time (as above), and check that the entity got updated. More
+advanced algorithms can be built on top of this. As mentioned above, all
+CAS operations in a transaction must pass their pre-condition check for
+the transaction to proceed and get indexed, which enables one to enforce
+consistency across documents. There’s currently no way to check if a
+transaction got aborted, apart from checking if the write succeeded.
+
+Does Crux provide transaction functions?::
+
+  Not directly in the MVP. But As the log is ingested in the same
+order at all nodes, purely functional transformations of the tx-ops are
+possible. The current transaction operations are implemented via a
+multi-method, `crux.tx/tx-command` which is possible to extend with
+further implementations. To make this work the spec `:crux.tx/tx-op`
+also needs to be extended to accept the new operation. A transaction
+command returns a map containing the keys `:kvs` `:pre-condition-fn` and
+`:post-condition-fn` (the functions are optional).
+
+Does Crux support the full Datomic/Datascript dialect of Datalog?::
+
+  No. The `:where` part is similar, but only the map form of queries
+are supported. There’s no support for Datomic’s built-in functions, or
+accessing the log and history directly. There’s also no support for
+variable bindings or multiple source vars.
++
+Differences include that `:rules` and `:args`, which is a relation
+represented as a list of maps which is joined with the query, are being
+provided in the same query map as the `:find` and `:where` clause. Crux
+additionally supports the built-in `==` for unification as well as the
+`!=`. Both these unification operators can also take sets of literals as
+arguments, requiring at least one to match, which is basically a form of
+or.
++
+Many of these things can be expected to change after the MVP, but
+compatibility is not a goal for Crux.
+
+Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
+
+  The goal is to support different languages, and decouple the query
+engine from its syntax, but this is not currently the case in the MVP.
+There is a query translator for a subset of SPARQL in `crux.rdf`.
+
+Does not a lack of schema lead to confusion?::
+
+  It of course depends.
++
+While Crux does not enforce a schema, but the user can. Crux only
+requires that the data can be represented as valid EDN documents. Data
+ingested from different systems can still be assigned qualified keys,
+which does not require a shared schema to be defined while still
+avoiding collision. Defining such a common schema up front might be
+prohibitive and Crux instead aims to enable exploration of the data from
+different sources early. This exploration can also help discover and
+define the common schema of interest.
++
+Enforcing constraints on the data to avoid indexing all attributes can
+be done with `crux.index.ValueToBytes`. Crux does this internally via
+`crux.index.ValueToBytes` for strings for example, only indexing the
+full string with range query support up to 128 characters, and as an
+opaque hash above that limit. Returning an empty byte array does not
+index a value. We are aiming to extend this to give further control over
+what to index. This is useful both to increase throughput and to save
+disk space. A smaller index also leads to more efficient queries.
+
+How does Crux deal with time?::
+
+  The business time can be set manually per transaction operation,
+and might already be defined by an upstream system before reaching Crux.
+This also allows to deal with integration concerns like when a message
+queue is down and data arrives later than it should.
++
+If not set, Crux defaults business time to the transaction time, which
+is the `LogAppendTime` assigned by the Kafka broker to the transaction
+record. This time is taken from the local clock of the Kafka broker,
+which acts as the master wall clock time.
++
+Crux does not rely on clock synchronisation or try to make any
+guarantees about business time. Assigning business time manually needs
+to be done with care, as there has to be either a clear owner of the
+clock, or that the exact business time ordering between different nodes
+doesn’t strictly matter for the data where it’s used. NTP can mitigate
+this, potentially to an acceptable degree, but it cannot fully guarantee
+ordering between nodes.
+
+Does Crux support sharding?::
+
+  Not in the MVP. At the moment the `tx-topic` must use a single
+partition to guarantee transaction ordering. We are considering support
+for sharding this topic via partitioning or by adding more transaction
+topics. Each partition / topic would have its own independent time line,
+but Crux would still support for cross shard queries. Sharding is mainly
+useful to increase throughput.
+
+Does Crux support aggregates?::
+
+  Not directly. One idea is that aggregates can be implemented on top
+of the lazy query results as normal functions and not embedded into the
+query engine directly.
+
+Does Crux support pull expressions?::
+
+  No. As each Crux query node is its own document store, the
+documents are local to the query node and can easily be accessed
+directly via the lower level read operations. We aim to make this more
+convenient later on.
++
+We are also considering to support remote document stores via the
+`crux.db.ObjectStore` interface, mainly to support larger data sets, but
+there would still be a local cache. The indexes would stay local as this
+is key to efficient queries.

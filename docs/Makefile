@@ -15,3 +15,6 @@ crux.epub:	index.html
 
 deploy: docs.zip
 	scp docs.zip "prod@juxt.pro:/srv/website-static/crux/$$(date +%s).zip"
+
+clean:
+	rm index.html

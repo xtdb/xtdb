@@ -18,7 +18,9 @@ include::introduction.adoc[leveloffset=+1]
 
 include::implementation.adoc[leveloffset=+1]
 
-include::todos.adoc[leveloffset=+1]
+include::faq.adoc[leveloffset=0]
+
+include::todos.adoc[leveloffset=0]
 
 == Phase 2
 
@@ -38,11 +40,7 @@ include::retention.adoc[leveloffset=+1]
 
 include::transactions.adoc[leveloffset=+1]
 
-== Business model
-
-include::business_model.adoc[leveloffset=+1]
-
-include::competitors.adoc[leveloffset=+1]
+include::competitors.adoc[leveloffset=0]
 
 == Internals
 
