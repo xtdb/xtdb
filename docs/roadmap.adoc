@@ -1,8 +1,6 @@
-== Phase 2
+== Roadmap (Phase 2)
 
-After the link:mvp.md[MVP] there are several directions we can take
-Crux. Phase 2 is assumed to be 3 months long, roughly during the end of
-2018 and early 2019. Staffing is yet to be decided.
+Phase 2 is targeted for the public beta, aimed for release early 2019.
 
 One goal of Phase 2 is to reach a point where Crux can be shared with a
 wider audience, potentially even made public. To facilitate this,
@@ -33,9 +31,7 @@ These points are discussed below.
 and reflect on what can be built as layers or on the side of Crux, and
 how to avoid building it all into the core in an interlocking way.*
 
-=== Features
-
-==== Enhanced and Extended API
+=== Enhanced and Extended API
 
 At the moment Crux provides a quite low-level API and we could expose a
 richer, more user friendly set of functions on top of this. This
@@ -61,14 +57,14 @@ commands at the moment, but this should not be necessary, instead a
 
 Evolving the API is best done in combination with actual use of Crux.
 
-==== Operations and Monitoring
+=== Operations and Monitoring
 
 We have a start of an AWS deployment stack for Crux, and a simple status
 API. There is an immense amount of work that could be done in this area
 to make Crux easier to run and give insights while doing so, via
 dashboards, better logging and potentially query consoles.
 
-==== Query Engine Performance and Enhancements
+=== Query Engine Performance and Enhancements
 
 There’s a lot of improvement to be made on the query engine internals,
 even without adding new features to it. Among the things are:
@@ -108,7 +104,7 @@ other stores on the same queries and data. This would preferably be
 running in the cloud and generate reports daily or so. We also want to
 test on larger data sets than the small ones we’ve used so far.
 
-==== Enhanced RDF and SPARQL Support
+=== Enhanced RDF and SPARQL Support
 
 Currently we support a subset of SPARQL, not always with the correct
 semantics, and we can parse RDF but not necessarily in a consistent or
@@ -125,7 +121,7 @@ query engine to support certain things, but a lot of it can happen
 independently in its own layer. A positive is that there’s a set of
 specifications to follow.
 
-==== GraphQL and SQL Support
+=== GraphQL and SQL Support
 
 Adding either GraphQL or SQL support (via Apache Calcite) requires some
 form of schema to exist. This schema could partly be mined from the
@@ -138,7 +134,7 @@ mappers, and there might be SQL to SPARQL mappers etc.s
 
 There are also other query languages like Cypher and Gremlin/Tinkerpop.
 
-==== Subscriptions
+=== Subscriptions
 
 Subscriptions can be done in several ways, from the trivial (but less
 likely very useful) to very sophisticated where the core query engine
@@ -182,7 +178,7 @@ want all rules to fire at all nodes, and we also don’t want the rules to
 fire in an uncoordinated way, potentially generating invalid data due to
 race conditions.
 
-==== Retention, TTL, Roll-ups
+=== Retention, TTL, Roll-ups
 
 Crux currently has support to evict documents. This could be extended in
 various ways with TTL of documents, or having documents being mutable in
@@ -203,7 +199,7 @@ affect both) and can be worked on as a separate stream. Writes to the
 index during a roll-up window would need to overwrite the current
 version.
 
-==== Provenance
+=== Provenance
 
 We want to be able to record where data came from, and likely also issue
 queries about this. This is most easily done by adding system entities
@@ -225,7 +221,7 @@ lead to the creation of a specific entity version.
 
 There’s a w3c standard for provenance which may or may not be helpful.
 
-==== Authorisation on Read
+=== Authorisation on Read
 
 Related to provenance. Different data types and different entities might
 have restrictions on who can see them. Sometimes one might be allowed to
@@ -247,7 +243,7 @@ indexes. In this context, we’re talking about authorisation in the sense
 of help restricting the data sent from the node to the client, not
 hiding it from the code running on the node.
 
-==== Sharding
+=== Sharding
 
 At the moment we assume that all data can fit in a single `tx-topic` and
 be indexed on each individual query node. This assumption will likely

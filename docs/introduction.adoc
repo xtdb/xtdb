@@ -287,27 +287,3 @@ bodies into the parent query and QSQ recursion. `or` and `or-join` are
 anonymous rules. `not` is a sub query which executes when all required
 variables are bound, acting as a predicate which returns false if there
 are any sub query results, filtering the parent results.
-
-== Known Issues
-
-* Rules in queries are not well tested.
-* Nested expressions in queries are not well tested.
-* Point in time semantics when writing in the past.
-* Documents requires `:crux.db/id` which removes ability to share
-versions across entities.
-* Potential of inconsistent reads across different nodes when using REST
-API.
-* Architecture not tested in real application use.
-* Lazy results requires consistent sorting across indexes. which has to
-be performed during the query.
-* The query engine is not optimised and constructs a lot of intermediate
-structures.
-
-== AWS Deployment
-
-== Future
-
-link:phase_2.md[Phase 2], which is still to be decided, will be
-discussed during a few Crux sessions in Stockholm August 6 to 10, 2018.
-The minimum outcome of the MVP if there is no phase 2 is likely that
-Crux gets open sourced in its current form.
