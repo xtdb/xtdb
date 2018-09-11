@@ -73,7 +73,7 @@ entity, or a document as of a specific version.
 ====
 The four transaction (write) operations are as follows:
 
-[source,clj]
+[source,clojure]
 ----
 [:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
 "090622a35d4b579d2fcfebf823821298711d3867"

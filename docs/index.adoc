@@ -9,6 +9,9 @@ Håkan Råberg, Jon Pither, Malcolm Sparks, Hugo Jacobs
 :xrefstyle: short
 :docinfodir: docinfo
 :nofooter:
+:highlightjs-theme: tomorrow-night
+:highlightjsdir: highlight
+:source-highlighter: highlightjs
 
 A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
 
