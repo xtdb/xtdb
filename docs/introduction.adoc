@@ -70,6 +70,7 @@ over HTTP. Crux supports four write operations and a Datalog query
 interface for reads. There’s additionally a way to get the history of an
 entity, or a document as of a specific version.
 
+====
 The four transaction (write) operations are as follows:
 
 [source,clj]
@@ -89,6 +90,7 @@ The four transaction (write) operations are as follows:
 [:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
+====
 
 The business time is optional and defaults to transaction time, which is
 taken from the Kafka log. Crux currently writes into the past at a
@@ -99,7 +101,10 @@ provided business time are evicted.
 
 The hashes are the SHA-1 content hash of the documents. Crux uses an
 attribute `:crux.db/id` on the documents that has to line up with the id
-it is submitted under. Hence, a document looks like this:
+it is submitted under.
+
+====
+A document looks like this:
 
 [source,clj]
 ----
@@ -107,6 +112,7 @@ it is submitted under. Hence, a document looks like this:
  :name "Pablo"
  :last-name "Picasso"}
 ----
+====
 
 In practice when using Crux, one calls `crux.db/submit-tx` with a set of
 transaction operations as above, where the hashes are replaced with

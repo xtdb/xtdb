@@ -1,5 +1,5 @@
 STYLESDIR = styles
-STYLESHEET = crux.css
+STYLESHEET = juxt.css
 
 index.html:	*.adoc ${STYLESDIR}/${STYLESHEET}
 	asciidoctor -d book -a "webfonts!" -a stylesdir=${STYLESDIR} -a stylesheet=${STYLESHEET} index.adoc
