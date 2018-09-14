@@ -13,6 +13,8 @@
                  [cheshire "5.8.0"]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix ""]
+                 [org.lwjgl/lwjgl "3.2.0" :classifier "natives-macos" :native-prefix ""]
+                 [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-macos" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.0"]
                  [org.apache.kafka/kafka-clients "2.0.0"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2" :exclusions [commons-io]]
