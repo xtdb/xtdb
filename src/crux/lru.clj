@@ -1,6 +1,6 @@
 (ns crux.lru
-  (:import [java.util LinkedHashMap]
-           [java.util.function Function]))
+  (:import [java.util Collections LinkedHashMap]
+           java.util.function.Function))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -9,11 +9,12 @@
   (evict [this k]))
 
 (defn new-cache [^long size]
-  (proxy [LinkedHashMap] [size 0.75 true]
-    (removeEldestEntry [_]
-      (> (count this) size))))
+  (Collections/synchronizedMap
+    (proxy [LinkedHashMap] [size 0.75 true]
+      (removeEldestEntry [_]
+        (> (count this) size)))))
 
-(extend-type LinkedHashMap
+(extend-type java.util.Collections$SynchronizedMap
   LRUCache
   (compute-if-absent [this k f]
     (.computeIfAbsent this k (reify Function
