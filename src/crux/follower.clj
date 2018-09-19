@@ -61,7 +61,7 @@
     (doseq [^ConsumerRecord record records
             :let [tx-ops (process-format
                            record
-                           (get-in options [:follow-topics (.topic record)]))]]
+                           (get-in options [:follow-topics (.topic record) :format]))]]
       @(db/submit-tx tx-log tx-ops))))
 
 (defn main-loop
