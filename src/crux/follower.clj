@@ -43,7 +43,10 @@
         (-> (String. ^bytes (.value record))
             (json/parse-string  keyword)
             (flatten-keys))
-        :crux.db/id id)]]))
+        :crux.db/id id
+        :crux.follower/topic (.topic record)
+        :crux.follower/partition (.partition record)
+        :crux.follower/key (String. (.value record)))]]))
 
 (defrecord Follower [tx-log
                      indexer
