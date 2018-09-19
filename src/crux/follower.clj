@@ -46,7 +46,7 @@
         :crux.db/id id
         :crux.follower/topic (.topic record)
         :crux.follower/partition (.partition record)
-        :crux.follower/key (String. (.value record)))]]))
+        :crux.follower/key (String. ^bytes (.value record)))]]))
 
 (defrecord Follower [tx-log
                      indexer
