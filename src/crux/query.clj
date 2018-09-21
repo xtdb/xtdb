@@ -540,8 +540,9 @@
 ;; the general case. Depends on the eager expansion of rules for some
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
-(defn- build-or-constraints [rule-name->rules or-clause+idx-id+or-branches
-                             var->bindings vars-in-join-order v-var->range-constraints]
+(defn- build-or-constraints
+  [rule-name->rules or-clause+idx-id+or-branches
+   var->bindings vars-in-join-order v-var->range-constraints]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)

@@ -105,6 +105,7 @@
                                  admin-client follower indexer options)]
       (with-system-fn
         {:kv-store kv-store
+         :tx-log tx-log
          :producer producer
          :indexer indexer
          :admin-client admin-client

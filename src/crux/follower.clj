@@ -2,7 +2,8 @@
   (:require [cheshire.core :as json]
             [clojure.tools.logging :as log]
             [crux.db :as db]
-            [crux.kafka :as k])
+            [crux.kafka :as k]
+            [clojure.string :as str])
   (:import java.io.Closeable
            java.time.Duration
            java.util.UUID
@@ -12,14 +13,40 @@
 (defmulti process-format
   (fn [record format] format))
 
+(defn flatten-keys
+  "transforms a map with nested objects to
+   encode the nested path with compound keys instead
+
+   so a map like {:a {:b 2}} becomes {:a.b 2} instead"
+  [input-map]
+  (letfn [(paths [position]
+            (mapcat
+              (fn [key]
+                (if (map? (get position key))
+                  (for [p (paths (get position key))]
+                    (cons key p))
+                  [[key]]))
+              (keys position)))]
+    (reduce
+      (fn [new-map path]
+        (let [new-path (keyword (str/join "." (map name path)))]
+          (assoc new-map new-path (get-in input-map path))))
+      {}
+      (paths input-map))))
+
 (defmethod process-format "json"
   [^ConsumerRecord record _]
   (let [id (keyword (str (UUID/randomUUID)))]
     [[:crux.tx/put
       id
       (assoc
-        (json/parse-string (String. ^bytes (.value record)) keyword)
-        :crux.db/id id)]]))
+        (-> (String. ^bytes (.value record))
+            (json/parse-string  keyword)
+            (flatten-keys))
+        :crux.db/id id
+        :crux.follower/topic (.topic record)
+        :crux.follower/partition (.partition record)
+        :crux.follower/key (String. ^bytes (.value record)))]]))
 
 (defrecord Follower [tx-log
                      indexer
@@ -37,7 +64,7 @@
     (doseq [^ConsumerRecord record records
             :let [tx-ops (process-format
                            record
-                           (get-in options [:follow-topics (.topic record)]))]]
+                           (get-in options [:follow-topics (.topic record) :format]))]]
       @(db/submit-tx tx-log tx-ops))))
 
 (defn main-loop

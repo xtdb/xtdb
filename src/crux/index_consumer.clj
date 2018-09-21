@@ -3,7 +3,8 @@
             [crux.kafka :as k])
   (:import java.io.Closeable))
 
-(defrecord IndexerConsumer [running? ^Thread worker-thread]
+(defrecord IndexerConsumer [running? ^Thread worker-thread
+                            options follower]
   Closeable
   (close [_]
     (reset! running? false)))
