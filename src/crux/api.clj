@@ -1,16 +1,28 @@
 (ns crux.api
   (:require [clojure.tools.logging :as log]
             [crux.bootstrap :as bootstrap]
+            [crux.db :as db]
             [crux.query :as query])
   (:import java.io.Closeable))
 
 (defprotocol CruxSystem
-  (db [this] "returns a db for the system"))
+  (db [this] [this business-time] [this business-time transact-time]
+    "returns a db for the system")
+  (submit-tx [this data] "writes the transactions to the log for processing"))
 
 (defrecord ApiSystem [close-promise underlying]
   CruxSystem
   (db [_]
     (query/db (:kv-store @underlying)))
+
+  (db [_ business-time]
+    (query/db (:kv-store @underlying) business-time))
+
+  (db [_ business-time transact-time]
+    (query/db (:kv-store @underlying) business-time transact-time))
+
+  (submit-tx [_ tx-ops]
+    (db/submit-tx (:tx-log @underlying) tx-ops))
 
   Closeable
   (close [_] (deliver close-promise true)))
