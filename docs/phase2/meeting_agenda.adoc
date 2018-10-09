@@ -1,0 +1,84 @@
+= Phase 2 Meeting aggenda
+
+== Discussion points
+
+I will add a lot of discussion points on the aggenda.
+There will not be time to discuss everything for to long
+so We will have to strike things and puch back things as we
+go trough discussion points. Some points might not need to be
+discussed after we gone trought some of the points.
+
+But the last discussion point "Define scope for face2" has to be
+reached by the end of these meetings. And has to be given enough
+time.
+
+==== Intro setting goals and structure for the meating
+
+* [ ] How manny Breaks?
+* [ ] Max time for all discussions
+* [ ] How much time to leave for final discussion
+
+==== Hopes + Dreams + ambitions
+
+Some room to talk about what we would like to achive as supposed
+to having to talk around what we can or what we should be achiving.
+
+==== Free for all whacky ideas consepts
+
+==== Journy This far
+
+==== Summary of POC learnings and discussions
+
+==== Cummersial justification
+
+==== Current indexing model and its limitations and our requirements
+
+==== Database or materialized view
+
+==== Alternative indexes (succinced / k2-k3)
+
+==== Aggregation Support Discussion
+
+==== Variable Attribute support ([entity variable-method "some value"])
+
+==== Discussion about required scalability
+* Global replication?
+
+==== Managing the git repo. What history to keep
+
+==== Retention Requirements
+
+==== Backup snapchots
+
+==== Streaming subscriptions with live queries
+
+==== Fully manneged vs self hosted.
+
+==== Graphql / SQL / Other / Datalog
+
+==== Data Migrations
+
+==== Database consistency models
+
+==== Licencing model
+
+==== Free spots for topics that comes up from discussions
+
+==== Define scope for face2
+
+- [ ] How long and how much time are we going to invest.
+
+- [ ] What would make us cancell the project
+
+- [ ] What do we which to have ready when its done.
+  Potentials:
+  - [ ] Operations and monitoring support?
+  - [ ] Deployment tools (ex: Cloudformation / terraform)
+  - [ ] Benchmarks results and promisses around performance and scaling support
+  - [ ] Query features
+  - [ ] Backup features
+  - [ ] Transaction features
+  - [ ] etc...
+
+- [ ] What are some question marks about the direction that
+      has to be answered.
