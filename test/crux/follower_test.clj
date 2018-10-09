@@ -20,7 +20,7 @@
                          {"bootstrap.servers" ek/*kafka-bootstrap-servers*
                           "key.serializer" (.getName StringSerializer)
                           "value.serializer" (.getName StringSerializer)})]
-    (binding [f/*extra-options* {:follow-topics {follower-topic "json"}}
+    (binding [f/*extra-options* {:follow-topics {follower-topic {:format "json"}}}
               *producer* producer]
       (f))))
 
