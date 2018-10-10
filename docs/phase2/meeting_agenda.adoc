@@ -1,41 +1,41 @@
-= Phase 2 Meeting aggenda
+= Phase 2 Meeting agenda
 
 == Discussion points
 
-I will add a lot of discussion points on the aggenda.
+I will add a lot of discussion points on the agenda.
 There will not be time to discuss everything for to long
-so we will have to strike things and puch back things as we
+so we will have to strike things and push back things as we
 go trough discussion points. Some points might not need to be
-discussed after we gone trought some of the points (or we have picked a direction already).
+discussed after we gone trough some of the points (or we have picked a direction already).
 
 But the last discussion point "Define scope for face2" has to be
 reached by the end of these meetings. And has to be given enough
 time.
 
-==== Intro setting goals and structure for the meating
+==== Intro setting goals and structure for the meeting
 
-* [ ] How manny Breaks?
+* [ ] How many Breaks?
 * [ ] Max time for all discussions
 * [ ] How much time to leave for final discussion
 
 ==== Hopes + Dreams + ambitions
 
-Some room to talk about what we would like to achive as supposed
-to having to talk around what we can or what we should be achiving.
+Some room to talk about what we would like to achieve as supposed
+to having to talk around what we can or what we should be achieving.
 
-==== Free for all whacky ideas consepts
+==== Free for all wacky ideas concepts
 
-==== Journy This far
+==== Journey This far
 
-==== Summary of POC learnings and discussions
+==== Summary of POC learning's and discussions
 
-==== Cummersial justification
+==== Commercial justification
 
 ==== Current indexing model and its limitations and our requirements
 
 ==== Database or materialized view
 
-==== Alternative indexes (succinced / k2-k3)
+==== Alternative indexes (succinct / k2-k3)
 
 ==== Aggregation Support Discussion
 
@@ -48,11 +48,11 @@ to having to talk around what we can or what we should be achiving.
 
 ==== Retention Requirements
 
-==== Backup snapchots
+==== Backup snapshots
 
 ==== Streaming subscriptions with live queries
 
-==== Fully manneged vs self hosted.
+==== Fully managed vs self hosted.
 
 ==== Graphql / SQL / Other / Datalog
 
@@ -60,7 +60,7 @@ to having to talk around what we can or what we should be achiving.
 
 ==== Database consistency models
 
-==== Licencing model
+==== Licensing model
 
 ==== Free spots for topics that comes up from discussions
 
@@ -68,13 +68,13 @@ to having to talk around what we can or what we should be achiving.
 
 - [ ] How long and how much time are we going to invest.
 
-- [ ] What would make us cancell the project
+- [ ] What would make us cancelled the project
 
 - [ ] What do we which to have ready when its done.
   Potentials:
   - [ ] Operations and monitoring support?
   - [ ] Deployment tools (ex: Cloudformation / terraform)
-  - [ ] Benchmarks results and promisses around performance and scaling support
+  - [ ] Benchmarks results and promises around performance and scaling support
   - [ ] Query features
   - [ ] Backup features
   - [ ] Transaction features
