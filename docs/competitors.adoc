@@ -11,7 +11,7 @@ _World’s leading graph database, with native graph storage and
 processing._
 
 Has its own query language, https://neo4j.com/developer/cypher/[Cypher].
-It also have a https://neo4j.com/developer/graphql/[GraphQL extension]
+It also has a https://neo4j.com/developer/graphql/[GraphQL extension]
 and a
 http://tinkerpop.apache.org/docs/current/reference/#neo4j-gremlin[Gremlin
 module]. Supports what they call
@@ -26,7 +26,7 @@ https://db-engines.com/en/system/Neo4j
 
 ==== https://en.wikipedia.org/wiki/DataStax[DataStax]
 
-_DataStax Enterprise: he always-on data platform, powered by the best
+_DataStax Enterprise: The always-on data platform, powered by the best
 distribution of Apache Cassandra._
 
 Built on top of DSE is
