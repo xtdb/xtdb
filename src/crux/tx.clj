@@ -137,7 +137,7 @@
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
                 (post-commit-fn)))
-          (log/warn "Transaction aborted:" (pr-str tx-ops))))))
+          (log/warn "Transaction aborted:" (pr-str tx-ops) tx-time tx-id)))))
 
   (store-index-meta [_ k v]
     (doc/store-meta kv k v))
