@@ -18,9 +18,9 @@
            [java.io Closeable]))
 
 (def storage-dir "dev-storage")
-(def options {:db-dir (str storage-dir "/data")
-              :zookeeper-data-dir (str storage-dir "/zookeeper")
-              :kafka-log-dir (str storage-dir "/kafka-log")})
+(def dev-options {:db-dir (str storage-dir "/data")
+                  :zookeeper-data-dir (str storage-dir "/zookeeper")
+                  :kafka-log-dir (str storage-dir "/kafka-log")})
 (def system)
 
 (defn ^Closeable start-zookeeper [{:keys [zookeeper-data-dir]}]
@@ -39,7 +39,7 @@
 
 (defn start-crux-dev-system
   [with-system-fn]
-  (let [options (merge b/default-options options)]
+  (let [options (merge b/default-options dev-options)]
     (with-open [zookeeper (start-zookeeper options)
                 kafka (start-kafka options)]
       (b/start-system

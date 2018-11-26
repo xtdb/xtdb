@@ -190,10 +190,9 @@
            replication-factor
            doc-partitions
            doc-topic] :as options}]
-  (let [replication-factor (Long/parseLong replication-factor)]
+  (let [replication-factor replication-factor]
     (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
-    (create-topic admin-client doc-topic
-                  (Long/parseLong doc-partitions)
+    (create-topic admin-client doc-topic doc-partitions
                   replication-factor doc-topic-config)
     (let [indexing-consumer (map->IndexingConsumer {:running? (atom true)
                                                     :indexer indexer

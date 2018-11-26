@@ -29,16 +29,19 @@
    ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
     :default "crux-docs"]
    ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
-    :default "1"]
+    :default 1
+    :parse-fn #(Long/parseLong %)]
    ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
-    :default "1"]
+    :default 1
+    :parse-fn #(Long/parseLong %)]
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: rocksdb, lmdb or memdb"
     :default "rocksdb"
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "port on which to run the HTTP server"
-    :default "3000"]
+    :default 3000
+    :parse-fn #(Long/parseLong %)]
 
    ["-h" "--help"]])
 
@@ -88,7 +91,7 @@
                              tx-log
                              db-dir
                              bootstrap-servers
-                             (Long/parseLong server-port))
+                             server-port)
                 indexing-consumer (k/create-indexing-consumer
                                    admin-client indexer options)]
       (with-system-fn
