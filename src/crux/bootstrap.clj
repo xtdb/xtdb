@@ -125,7 +125,7 @@
            options
            (fn [running-system]
              (alter-var-root #'system (constantly running-system))
-             @(promise)))))))
+             @(:indexing-consumer running-system)))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler

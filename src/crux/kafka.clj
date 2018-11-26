@@ -6,6 +6,7 @@
             [crux.tx :as tx]
             [clojure.tools.logging :as log])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
+           clojure.lang.IDeref
            java.io.Closeable
            java.time.Duration
            [java.util Date List Map]
@@ -112,12 +113,6 @@
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 
-(defn- nil-max
-  [a b]
-  (if (or (nil? a) (nil? b))
-    (or a b)
-    (max a b)))
-
 (defn consume-and-index-entities
   [{:keys [indexer ^KafkaConsumer consumer
            follower timeout tx-topic doc-topic]
@@ -131,7 +126,7 @@
               (do (index-tx-record indexer record)
                   (-> state
                       (update :txs inc)
-                      (update :last-tx-log-time nil-max (.timestamp record))))
+                      (update :last-tx-log-time max (.timestamp record))))
               doc-topic
               (do (index-doc-record indexer record)
                   (update state :docs inc))
@@ -139,7 +134,7 @@
               (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
           {:txs 0
            :docs 0
-           :last-tx-log-time nil}
+           :last-tx-log-time 0}
           records)]
     (store-topic-partition-offsets indexer consumer (.partitions records))
     (when last-tx-log-time
@@ -160,6 +155,9 @@
 ;; crux.bootstrap I think.
 
 (defrecord IndexingConsumer [running? ^Thread worker-thread options]
+  IDeref
+  (deref [_]
+    (.join worker-thread))
   Closeable
   (close [_]
     (reset! running? false)))
