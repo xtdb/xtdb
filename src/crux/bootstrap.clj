@@ -104,6 +104,22 @@
          :indexing-consumer indexing-consumer})
       (log/info "stopping system"))))
 
+;; NOTE: This isn't registered until the system manages to start up
+;; cleanly, so ctrl-c keeps working as expected in that case.
+(defn- shutdown-hook-promise []
+  (let [main-thread (Thread/currentThread)
+        shutdown? (promise)]
+    (.addShutdownHook (Runtime/getRuntime)
+                      (Thread. (fn []
+                                 (let [shutdown-ms 10000]
+                                   (deliver shutdown? true)
+                                   (.join main-thread shutdown-ms)
+                                   (if (.isAlive main-thread)
+                                     (do (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
+                                         (.halt (Runtime/getRuntime) 1))
+                                     (log/info "system stopped"))))))
+    shutdown?))
+
 (defn start-system-from-command-line [args]
   (let [{:keys [options
                 errors
@@ -128,7 +144,7 @@
            options
            (fn [running-system]
              (alter-var-root #'system (constantly running-system))
-             @(:indexing-consumer running-system)))))))
+             @(shutdown-hook-promise)))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
