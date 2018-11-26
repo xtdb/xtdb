@@ -7,7 +7,6 @@
                  [org.clojure/tools.logging "0.4.1"]
                  [org.clojure/tools.cli "0.3.7"]
                  [com.stuartsierra/dependency "0.2.0"]
-                 [ch.qos.logback/logback-classic "1.2.3"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.rocksdb/rocksdbjni "5.14.2"]
                  [cheshire "5.8.0"]
@@ -22,16 +21,20 @@
                  [ring/ring-core "1.6.3"]
                  [ring/ring-jetty-adapter "1.6.3"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
-                                  [org.apache.kafka/kafka_2.11 "2.0.0"]
+                                  [org.apache.kafka/kafka_2.11 "2.0.0"
+                                   :exclusions [com.fasterxml.jackson.core/jackson-core]]
                                   [org.apache.zookeeper/zookeeper "3.4.13"
                                    :exclusions [io.netty/netty
                                                 jline
                                                 org.apache.yetus/audience-annotations
                                                 org.slf4j/slf4j-log4j12
                                                 log4j]]
-                                  [criterium "0.4.4"]]
+                                  [criterium "0.4.4"]
+                                  [ch.qos.logback/logback-classic "1.2.3"]
+]
                    :source-paths ["dev"]
-                   :repl-options {:init-ns user}}}
+                   :repl-options {:init-ns user}}
+             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :java-source-paths ["src"]
   :javac-options ["-XDignore.symbol.file"]
   :aot [crux.kafka.nippy
