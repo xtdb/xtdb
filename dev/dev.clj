@@ -10,8 +10,7 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
-            [sys :refer [start stop clear reset]]
-            [crux.follower :as f])
+            [sys :refer [start stop clear reset]])
   (:import [kafka.server KafkaServerStartable]
            [org.apache.zookeeper.server ServerCnxnFactory]
            [ch.qos.logback.classic Level Logger]

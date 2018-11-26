@@ -111,7 +111,7 @@
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 
-(defn nil-max
+(defn- nil-max
   [a b]
   (if (or (nil? a) (nil? b))
     (or a b)

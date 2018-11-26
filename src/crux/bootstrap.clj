@@ -4,7 +4,6 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [crux.doc :as doc]
-            [crux.follower :as f]
             [crux.http-server :as srv]
             [crux.index-consumer :as index-consumer]
             [crux.kafka :as k]
@@ -41,15 +40,6 @@
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "port on which to run the HTTP server"
     :default "3000"]
-
-   ["-f" "--follow-topic FOLLOW_TOPIC"
-    "follow a extra topic syntax topic-name=format"
-    :validate [(fn [s] (re-matches #"\w+\=\w+" s))
-               "invalid follow topic format"]
-    :assoc-fn (fn [m k v]
-                (let [[topic topic-format] (str/split v "=")]
-                  (update m :follow-topics assoc topic topic-format)))
-    :default nil]
 
    ["-h" "--help"]])
 
@@ -93,16 +83,15 @@
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
                 object-store ^Closeable (doc/->DocObjectStore kv-store)
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
-                follower (f/create-follower indexer tx-log options)
                 admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
                 http-server (srv/create-server
-                              kv-store
-                              tx-log
-                              db-dir
-                              bootstrap-servers
-                              (Long/parseLong server-port))
+                             kv-store
+                             tx-log
+                             db-dir
+                             bootstrap-servers
+                             (Long/parseLong server-port))
                 index-consumer (index-consumer/create-index-consumer
-                                 admin-client follower indexer options)]
+                                admin-client indexer options)]
       (with-system-fn
         {:kv-store kv-store
          :tx-log tx-log
@@ -134,10 +123,10 @@
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
           (start-system
-            options
-            (fn [running-system]
-              (alter-var-root #'system (constantly running-system))
-              @(promise)))))))
+           options
+           (fn [running-system]
+             (alter-var-root #'system (constantly running-system))
+             @(promise)))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler

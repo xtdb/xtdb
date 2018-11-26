@@ -3,14 +3,13 @@
             [crux.kafka :as k])
   (:import java.io.Closeable))
 
-(defrecord IndexerConsumer [running? ^Thread worker-thread
-                            options follower]
+(defrecord IndexerConsumer [running? ^Thread worker-thread options]
   Closeable
   (close [_]
     (reset! running? false)))
 
 (defn thread-main-loop
-  [{:keys [running? indexer consumer follower options]}]
+  [{:keys [running? indexer consumer options]}]
   (with-open [consumer
               (k/create-consumer
                 {"bootstrap.servers" (:bootstrap-servers options)
@@ -22,7 +21,6 @@
         (k/consume-and-index-entities
           {:indexer indexer
            :consumer consumer
-           :follower follower
            :timeout 100
            :tx-topic (:tx-topic options)
            :doc-topic (:doc-topic options)})
@@ -31,7 +29,7 @@
           (Thread/sleep 500))))))
 
 (defn ^Closeable create-index-consumer
-  [admin-client follower indexer
+  [admin-client indexer
    {:keys [tx-topic
            bootstrap-servers
            group-id
@@ -43,12 +41,11 @@
     (k/create-topic admin-client doc-topic
                                 (Long/parseLong doc-partitions)
                                 replication-factor k/doc-topic-config)
-    (let [index-follower (map->IndexerConsumer {:running? (atom true)
+    (let [index-consumer (map->IndexerConsumer {:running? (atom true)
                                                 :indexer indexer
-                                                :follower follower
                                                 :options options})]
       (assoc
-        index-follower
+        index-consumer
         :worker-thread
-        (doto (Thread. ^Runnable (partial thread-main-loop index-follower))
+        (doto (Thread. ^Runnable (partial thread-main-loop index-consumer))
           (.start))))))
