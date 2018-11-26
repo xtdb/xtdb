@@ -102,10 +102,12 @@
          :admin-client admin-client
          :http-server http-server
          :indexing-consumer indexing-consumer})
-      (log/info "stopping system"))))
+      (log/info "stopping system"))
+    (log/info "system stopped")))
 
 ;; NOTE: This isn't registered until the system manages to start up
-;; cleanly, so ctrl-c keeps working as expected in that case.
+;; cleanly, so ctrl-c keeps working as expected in case the system
+;; fails to start.
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
         shutdown? (promise)]
@@ -114,10 +116,9 @@
                                  (let [shutdown-ms 10000]
                                    (deliver shutdown? true)
                                    (.join main-thread shutdown-ms)
-                                   (if (.isAlive main-thread)
-                                     (do (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
-                                         (.halt (Runtime/getRuntime) 1))
-                                     (log/info "system stopped"))))))
+                                   (when (.isAlive main-thread)
+                                     (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
+                                     (.halt (Runtime/getRuntime) 1))))))
     shutdown?))
 
 (defn start-system-from-command-line [args]
