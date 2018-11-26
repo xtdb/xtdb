@@ -3,7 +3,8 @@
   valid keywords. Uses one transaction per message."
   (:require [crux.db :as db]
             [crux.index :as idx]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [clojure.tools.logging :as log])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.time.Duration
@@ -154,3 +155,53 @@
                   (store-topic-partition-offsets indexer consumer partitions))
                 (onPartitionsAssigned [_ partitions]
                   (seek-to-stored-offsets indexer consumer partitions)))))
+
+;; TODO: revisit this, comes from the follower work, used to live in
+;; crux.bootstrap I think.
+
+(defrecord IndexingConsumer [running? ^Thread worker-thread options]
+  Closeable
+  (close [_]
+    (reset! running? false)))
+
+(defn- indexing-thread-main-loop
+  [{:keys [running? indexer consumer options]}]
+  (with-open [consumer
+              (create-consumer
+               {"bootstrap.servers" (:bootstrap-servers options)
+                "group.id" (:group-id options)})]
+    (subscribe-from-stored-offsets
+     indexer consumer [(:tx-topic options) (:doc-topic options)])
+    (while @running?
+      (try
+        (consume-and-index-entities
+         {:indexer indexer
+          :consumer consumer
+          :timeout 100
+          :tx-topic (:tx-topic options)
+          :doc-topic (:doc-topic options)})
+        (catch Exception e
+          (log/error e "Error while consuming and indexing from Kafka:")
+          (Thread/sleep 500))))))
+
+(defn ^Closeable create-indexing-consumer
+  [admin-client indexer
+   {:keys [tx-topic
+           bootstrap-servers
+           group-id
+           replication-factor
+           doc-partitions
+           doc-topic] :as options}]
+  (let [replication-factor (Long/parseLong replication-factor)]
+    (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
+    (create-topic admin-client doc-topic
+                  (Long/parseLong doc-partitions)
+                  replication-factor doc-topic-config)
+    (let [indexing-consumer (map->IndexingConsumer {:running? (atom true)
+                                                    :indexer indexer
+                                                    :options options})]
+      (assoc
+       indexing-consumer
+       :worker-thread
+       (doto (Thread. ^Runnable (partial indexing-thread-main-loop indexing-consumer))
+         (.start))))))

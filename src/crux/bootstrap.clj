@@ -5,7 +5,6 @@
             [clojure.tools.logging :as log]
             [crux.doc :as doc]
             [crux.http-server :as srv]
-            [crux.index-consumer :as index-consumer]
             [crux.kafka :as k]
             [crux.kv-store :as kv-store]
             [crux.kafka.nippy]
@@ -90,8 +89,8 @@
                              db-dir
                              bootstrap-servers
                              (Long/parseLong server-port))
-                index-consumer (index-consumer/create-index-consumer
-                                admin-client indexer options)]
+                indexing-consumer (k/create-indexing-consumer
+                                   admin-client indexer options)]
       (with-system-fn
         {:kv-store kv-store
          :tx-log tx-log
@@ -99,7 +98,7 @@
          :indexer indexer
          :admin-client admin-client
          :http-server http-server
-         :index-consumer index-consumer})
+         :indexing-consumer indexing-consumer})
       (log/info "stopping system"))))
 
 (defn start-system-from-command-line [args]
