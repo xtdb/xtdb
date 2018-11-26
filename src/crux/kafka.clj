@@ -160,9 +160,13 @@
     (.join worker-thread))
   Closeable
   (close [_]
-    (reset! running? false)))
+    (reset! running? false)
+    (.join worker-thread)))
 
-(defn- indexing-thread-main-loop
+(defmethod clojure.pprint/simple-dispatch IndexingConsumer [o]
+  ((get-method clojure.pprint/simple-dispatch clojure.lang.IPersistentMap) o))
+
+(defn- indexing-consumer-thread-main-loop
   [{:keys [running? indexer consumer options]}]
   (with-open [consumer
               (create-consumer
@@ -200,5 +204,6 @@
       (assoc
        indexing-consumer
        :worker-thread
-       (doto (Thread. ^Runnable (partial indexing-thread-main-loop indexing-consumer))
+       (doto (Thread. ^Runnable (partial indexing-consumer-thread-main-loop indexing-consumer)
+                      "crux.kafka.indexing-consumer-thread")
          (.start))))))
