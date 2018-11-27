@@ -62,13 +62,6 @@
   Closeable
   (close [_] (deliver close-promise true)))
 
-(defn q-maps
-  [db query]
-  (for [item (q/q db query)]
-    (into
-      {}
-      (for [[k v] (meta item)] [(keyword k) (:value v)]))))
-
 (defn ^Closeable start-system
   [options]
   (log/info "running crux in library mode")
