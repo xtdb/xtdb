@@ -1,10 +1,10 @@
 (ns crux.fixtures
   (:require [clojure.test :as t]
             [crux.bootstrap :as b]
-            crux.db
+            [crux.db :as db]
             [crux.io :as cio]
             [crux.embedded-kafka :as ek]
-            crux.tx)
+            [crux.tx :as tx])
   (:import java.io.Closeable
            java.util.UUID))
 
@@ -26,9 +26,9 @@
   ([kv entities]
    (transact-entity-maps! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (crux.tx/->DocTxLog kv)
+   (let [tx-log (tx/->DocTxLog kv)
          tx-ops (maps->tx-ops entities ts)]
-     @(crux.db/submit-tx tx-log tx-ops)
+     @(db/submit-tx tx-log tx-ops)
      entities)))
 
 (defn entities->delete-tx-ops [entities ts]
@@ -39,9 +39,9 @@
   ([kv entities]
    (delete-entities! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (crux.tx/->DocTxLog kv)
+   (let [tx-log (tx/->DocTxLog kv)
          tx-ops (entities->delete-tx-ops entities ts)]
-     @(crux.db/submit-tx tx-log tx-ops)
+     @(db/submit-tx tx-log tx-ops)
      entities)))
 
 (defn transact-people!

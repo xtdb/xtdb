@@ -960,6 +960,21 @@
          offset (drop offset)
          limit (take limit))))))
 
+(defn- entity-meta [db eid]
+  (->> (q db {:find '[e]
+              :where '[[e :crux.db/id eid]]
+              :args [{:eid eid}]})
+       (first)
+       (meta)
+       (first)
+       (val)))
+
+(defn entity-tx [db eid]
+  (:entity (entity-meta db eid)))
+
+(defn doc [db eid]
+  (:doc (entity-meta db eid)))
+
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time])
 
 (def ^:const default-query-cache-size 10240)

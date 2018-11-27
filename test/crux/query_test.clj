@@ -1,6 +1,7 @@
 (ns crux.query-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
+            [crux.db :as db]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.query :as q]))
 
@@ -1143,6 +1144,65 @@
     (t/is (= 2 (count (q/q (q/db *kv*) '{:find [l]
                                          :where [[_ :last-name l]]
                                          :limit 2}))))))
+
+(t/deftest test-query-and-cas
+  (let [tx-log (crux.tx/->DocTxLog *kv*)]
+
+    (t/testing "can create new user"
+      (let [{:keys [transact-time
+                    tx-id]}
+            @(db/submit-tx tx-log [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
+                                                            :name "Ivan 1st"}]])]
+
+        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* transact-time transact-time)
+                                      '{:find [n]
+                                        :where [[:ivan :name n]]})))
+
+        (t/is (= tx-id (:tx-id (q/entity-tx (q/db *kv* transact-time transact-time) :ivan))))
+
+        (t/is (= {:crux.db/id :ivan
+                  :name "Ivan 1st"} (q/doc (q/db *kv* transact-time transact-time) :ivan)))))
+
+    (t/testing "cannot create existing user"
+      (let [{:keys [transact-time
+                    tx-id]}
+            @(db/submit-tx tx-log [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
+                                                            :name "Ivan 2nd"}]])]
+
+        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* transact-time transact-time)
+                                      '{:find [n]
+                                        :where [[:ivan :name n]]})))
+
+        (t/is (not= tx-id (:tx-id (q/entity-tx (q/db *kv* transact-time transact-time) :ivan))))))
+
+    (t/testing "can update existing user"
+      (let [{:keys [transact-time]}
+            @(db/submit-tx tx-log [[:crux.tx/cas :ivan
+                                    {:crux.db/id :ivan
+                                     :name "Ivan 1st"}
+                                    {:crux.db/id :ivan
+                                     :name "Ivan 2nd"}]])]
+
+        (t/is (= #{["Ivan 2nd"]} (q/q (q/db *kv* transact-time transact-time)
+                                      '{:find [n]
+                                        :where [[:ivan :name n]]}))))
+
+      (t/testing "last CAS command in tx wins"
+        (let [{:keys [transact-time]}
+              @(db/submit-tx tx-log [[:crux.tx/cas :ivan
+                                      {:crux.db/id :ivan
+                                       :name "Ivan 2nd"}
+                                      {:crux.db/id :ivan
+                                       :name "Ivan 3rd"}]
+                                     [:crux.tx/cas :ivan
+                                      {:crux.db/id :ivan
+                                       :name "Ivan 2nd"}
+                                      {:crux.db/id :ivan
+                                       :name "Ivan 4th"}]])]
+
+          (t/is (= #{["Ivan 4th"]} (q/q (q/db *kv* transact-time
+                                              transact-time) '{:find [n]
+                                              :where [[:ivan :name n]]}))))))))
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
