@@ -962,17 +962,6 @@
 
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time])
 
-(def ^:const default-await-tx-timeout 10000)
-
-(defn- await-tx-time [kv transact-time ^long timeout]
-  (let [timeout-at (+ timeout (System/currentTimeMillis))]
-    (while (pos? (compare transact-time (doc/read-meta kv :crux.tx-log/tx-time)))
-      (Thread/sleep 100)
-      (when (>= (System/currentTimeMillis) timeout-at)
-        (throw (IllegalStateException.
-                (str "Timed out waiting for: " transact-time
-                     " index has:" (doc/read-meta kv :crux.tx-log/tx-time))))))))
-
 (def ^:const default-query-cache-size 10240)
 
 (defn db
@@ -990,7 +979,7 @@
                       business-time
                       (cio/next-monotonic-date)))
   ([kv business-time transact-time]
-   (await-tx-time kv transact-time default-await-tx-timeout)
+   (doc/await-tx-time kv transact-time)
    (->QueryDatasource kv
                       (doc/get-or-create-named-cache kv ::query-cache default-query-cache-size)
                       (doc/new-cached-object-store kv)

@@ -167,15 +167,17 @@
                                       :tx-id))))
 
             (t/testing "compare and set does nothing with wrong content hash"
-              (let [old-picasso (assoc picasso :baz :boz)]
-                @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])
+              (let [old-picasso (assoc picasso :baz :boz)
+                    {cas-failure-transact-time :transact-time}
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
+                (t/is (= cas-failure-transact-time (doc/await-tx-time f/*kv* cas-failure-transact-time 1000)))
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
                   (t/is (= [(idx/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
                                                 :tt new-transact-time
                                                 :tx-id new-tx-id})]
-                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))
+                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time cas-failure-transact-time))))))
 
             (t/testing "compare and set updates with correct content hash"
               (let [old-picasso new-picasso
@@ -184,13 +186,30 @@
                     {new-transact-time :transact-time
                      new-tx-id :tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
+                (t/is (= new-transact-time (doc/await-tx-time f/*kv* new-transact-time 1000)))
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
                   (t/is (= [(idx/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
                                                 :tt new-transact-time
                                                 :tx-id new-tx-id})]
-                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))))
+                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time))))))
+
+            (t/testing "compare and set can update non existing nil entity"
+              (let [new-eid (idx/new-id :http://dbpedia.org/resource/Pablo2)
+                    new-picasso (assoc new-picasso :crux.db/id :http://dbpedia.org/resource/Pablo2)
+                    new-content-hash (idx/new-id new-picasso)
+                    {new-transact-time :transact-time
+                     new-tx-id :tx-id}
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-business-time]])]
+                (t/is (= new-transact-time (doc/await-tx-time f/*kv* new-transact-time 1000)))
+                (with-open [snapshot (ks/new-snapshot f/*kv*)]
+                  (t/is (= [(idx/map->EntityTx {:eid new-eid
+                                                :content-hash new-content-hash
+                                                :bt new-business-time
+                                                :tt new-transact-time
+                                                :tx-id new-tx-id})]
+                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-business-time new-transact-time))))))))
 
         (t/testing "can delete entity"
           (let [new-business-time #inst "2018-05-23"

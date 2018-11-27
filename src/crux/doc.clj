@@ -345,6 +345,21 @@
          (take-while identity)
          (cons result))))
 
+(def ^:const default-await-tx-timeout 10000)
+
+(defn await-tx-time
+  ([kv transact-time]
+   (await-tx-time kv transact-time default-await-tx-timeout))
+  ([kv transact-time ^long timeout]
+   (let [timeout-at (+ timeout (System/currentTimeMillis))]
+     (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
+       (Thread/sleep 100)
+       (when (>= (System/currentTimeMillis) timeout-at)
+         (throw (IllegalStateException.
+                 (str "Timed out waiting for: " transact-time
+                      " index has:" (read-meta kv :crux.tx-log/tx-time))))))
+     (read-meta kv :crux.tx-log/tx-time))))
+
 ;; Entities
 
 (declare ^{:tag 'java.io.Closeable} new-cached-snapshot)
