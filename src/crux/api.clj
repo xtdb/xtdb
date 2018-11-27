@@ -1,9 +1,11 @@
 (ns crux.api
   (:require [clojure.tools.logging :as log]
+            [clojure.edn :as edn]
             [crux.bootstrap :as bootstrap]
             [crux.db :as db]
             [crux.kv-store :as ks]
-            [crux.query :as q])
+            [crux.query :as q]
+            [org.httpkit.client :as http])
   (:import java.io.Closeable
            crux.query.QueryDatasource))
 
@@ -90,19 +92,32 @@
   (log/info "running crux in local library mode")
   (start-system bootstrap/start-system options))
 
+(defn- api-post-sync [url body]
+  (let [{:keys [body error]}
+        @(http/post url {:body (pr-str body)})]
+    (if error
+      (throw error)
+      (edn/read-string body))))
+
 (defrecord RemoteDatasource [url business-time transact-time]
   CruxDatasource
   (doc [this eid]
-    (throw (UnsupportedOperationException.)))
+    (api-post-sync (str url "/doc") {:eid eid
+                                     :business-time business-time
+                                     :transact-time transact-time}))
 
   (entity-tx [this eid]
-    (throw (UnsupportedOperationException.)))
+    (api-post-sync (str url "/entity-tx") {:eid eid
+                                           :business-time business-time
+                                           :transact-time transact-time}))
 
   (new-snapshot [this]
     (throw (UnsupportedOperationException.)))
 
   (q [this q]
-    (throw (UnsupportedOperationException.)))
+    (api-post-sync (str url "/q") (assoc q
+                                         :business-time business-time
+                                         :transact-time transact-time)))
 
   (q [this snapshot q]
     (throw (UnsupportedOperationException.))))

@@ -131,20 +131,34 @@
     (success-response
      (doc/entity-history snapshot entity))))
 
+(defn- db-for-request [kvs {:keys [business-time transact-time]}]
+  (cond
+    (and business-time transact-time)
+    (q/db kvs business-time transact-time)
+
+    business-time
+    (q/db kvs business-time)
+
+    :else
+    (q/db kvs)))
+
 (defn query [kvs request]
-  (let-valid [{:keys [business-time transact-time]
-               :as query-map} (param request "q")]
+  (let-valid [query-map (param request "q")]
     (success-response
-     (q/q (cond
-            (and business-time transact-time)
-            (q/db kvs business-time transact-time)
-
-            business-time
-            (q/db kvs business-time)
-
-            :else
-            (q/db kvs))
+     (q/q (db-for-request kvs query-map)
           (dissoc query-map :business-time :transact-time)))))
+
+(defn doc [kvs request]
+  (let-valid [query-map (param request "doc")]
+    (success-response
+     (q/doc (db-for-request kvs query-map)
+            (:eid query-map)))))
+
+(defn entity-tx [kvs request]
+  (let-valid [query-map (param request "entity-tx")]
+    (success-response
+     (q/entity-tx (db-for-request kvs query-map)
+                  (:eid query-map)))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -262,6 +276,12 @@
 
     (check-path request ["/q" "/query"] [:get :post])
     (query kv request)
+
+    (check-path request ["/doc"] [:get :post])
+    (doc kv request)
+
+    (check-path request ["/entity-tx"] [:get :post])
+    (entity-tx kv request)
 
     (check-path request ["/tx-log"] [:post])
     (transact tx-log request)

@@ -19,7 +19,8 @@
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.3.2" :exclusions [commons-io]]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.3.2"]
                  [ring/ring-core "1.6.3"]
-                 [ring/ring-jetty-adapter "1.6.3"]]
+                 [ring/ring-jetty-adapter "1.6.3"]
+                 [http-kit "2.3.0"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.apache.kafka/kafka_2.11 "2.0.0"
                                    :exclusions [com.fasterxml.jackson.core/jackson-core]]
