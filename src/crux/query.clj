@@ -960,20 +960,25 @@
          offset (drop offset)
          limit (take limit))))))
 
-(defn- entity-meta [db eid]
+(defn result-tuple->docs [result-tuple]
+  (map :doc (vals (meta result-tuple))))
+
+(defn result-tuple->entity-txs [result-tuple]
+  (map :entity (vals (meta result-tuple))))
+
+(defn entity-tx [db eid]
   (->> (q db {:find '[e]
               :where '[[e :crux.db/id eid]]
               :args [{:eid eid}]})
-       (first)
-       (meta)
-       (first)
-       (val)))
-
-(defn entity-tx [db eid]
-  (:entity (entity-meta db eid)))
+       (map result-tuple->entity-txs)
+       (ffirst)))
 
 (defn doc [db eid]
-  (:doc (entity-meta db eid)))
+  (->> (q db {:find '[e]
+              :where '[[e :crux.db/id eid]]
+              :args [{:eid eid}]})
+       (map result-tuple->docs)
+       (ffirst)))
 
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time])
 
