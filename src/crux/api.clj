@@ -62,8 +62,8 @@
   Closeable
   (close [_] (deliver close-promise true)))
 
-(defn ^Closeable start-system
-  [options]
+(defn- ^Closeable start-system
+  [start-fn options]
   (log/info "running crux in library mode")
   (let [underlying (atom nil)
         close-promise (promise)
@@ -72,7 +72,7 @@
         running-future
         (future
           (log/info "crux thread intialized")
-          (bootstrap/start-system
+          (start-fn
             options
             (fn with-system-callback [system]
               (deliver started-promise true)
@@ -84,3 +84,51 @@
     (while (not (or (deref started-promise 100 false)
                     (deref running-future 100 false))))
     (->ApiSystem close-promise underlying)))
+
+(defn ^Closeable start-local-system
+  [options]
+  (log/info "running crux in local library mode")
+  (start-system bootstrap/start-system options))
+
+(defrecord RemoteDatasource [url business-time transact-time]
+  CruxDatasource
+  (doc [this eid]
+    (throw (UnsupportedOperationException.)))
+
+  (entity-tx [this eid]
+    (throw (UnsupportedOperationException.)))
+
+  (new-snapshot [this]
+    (throw (UnsupportedOperationException.)))
+
+  (q [this q]
+    (throw (UnsupportedOperationException.)))
+
+  (q [this snapshot q]
+    (throw (UnsupportedOperationException.))))
+
+(defrecord RemoteApiSystem [close-promise underlying crux-url]
+  CruxSystem
+  (db [_]
+    (->RemoteDatasource crux-url nil nil))
+
+  (db [_ business-time]
+    (->RemoteDatasource crux-url business-time nil))
+
+  (db [_ business-time transact-time]
+    (->RemoteDatasource crux-url business-time transact-time))
+
+  (submit-tx [_ tx-ops]
+    (db/submit-tx (:tx-log @underlying) tx-ops))
+
+  (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
+    (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))
+
+  Closeable
+  (close [_] (deliver close-promise true)))
+
+(defn ^Closeable start-remote-system
+  [options]
+  (log/info "running crux in remote library mode")
+  (let [{:keys [close-promise underlying]} (start-system bootstrap/start-remote-system options)]
+    (->RemoteApiSystem close-promise underlying (:crux-url options))))
