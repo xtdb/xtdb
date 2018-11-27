@@ -1005,3 +1005,6 @@
                       (doc/new-cached-object-store kv)
                       business-time
                       transact-time)))
+
+(defn submitted-tx-updated-entity? [kv {:keys [tx-id transact-time] :as submitted-tx} eid]
+  (= tx-id (:tx-id (entity-tx (db kv transact-time transact-time) eid))))

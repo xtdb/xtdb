@@ -77,8 +77,7 @@
                                 (.send producer))]
         (delay
          (let [record-meta ^RecordMetadata @tx-send-future]
-           {:tx-id (.offset record-meta)
-            :transact-time (Date. (.timestamp record-meta))}))))))
+           (tx/->SubmittedTx (.offset record-meta) (Date. (.timestamp record-meta)))))))))
 
 ;;; Indexing Consumer
 

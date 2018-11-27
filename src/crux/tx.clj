@@ -160,6 +160,8 @@
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
+(defrecord SubmittedTx [tx-id transact-time])
+
 (defrecord DocTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -174,5 +176,4 @@
         (db/submit-doc this (str (idx/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
-      (delay {:tx-id tx-id
-              :transact-time transact-time}))))
+      (delay (->SubmittedTx tx-id transact-time)))))
