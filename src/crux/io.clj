@@ -41,7 +41,7 @@
 (defn next-monotonic-date ^java.util.Date []
   (let [date (Date.)
         old-date @last-monotonic-date]
-    (if (and (not= date old-date)
+    (if (and (pos? (compare date old-date))
              (compare-and-set! last-monotonic-date old-date date))
       date
       (do (Thread/sleep 1)

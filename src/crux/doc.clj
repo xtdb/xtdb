@@ -8,7 +8,7 @@
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable]
-           [java.util Arrays Collections Comparator]
+           [java.util Arrays Collections Comparator Date]
            [crux.index EntityTx]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -319,10 +319,11 @@
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
-  (with-open [snapshot (ks/new-snapshot kv)
-              i (ks/new-iterator snapshot)]
-    (when-let [k (ks/seek i (idx/encode-meta-key (idx/id->bytes k)))]
-      (nippy/fast-thaw (ks/value i)))))
+  (let [prefix (idx/encode-meta-key (idx/id->bytes k))]
+    (with-open [snapshot (ks/new-snapshot kv)
+                i (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix)]
+      (when-let [k (ks/seek i prefix)]
+        (nippy/fast-thaw (ks/value i))))))
 
 ;; Utils
 
@@ -351,8 +352,10 @@
   ([kv transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout))
   ([kv transact-time ^long timeout]
-   (let [timeout-at (+ timeout (System/currentTimeMillis))]
-     (while (pos? (compare transact-time (read-meta kv :crux.tx-log/tx-time)))
+   (let [timeout-at (+ timeout (System/currentTimeMillis))
+         epoch (Date. 0)]
+     (while (pos? (compare transact-time (or (read-meta kv :crux.tx-log/tx-time)
+                                             epoch)))
        (Thread/sleep 100)
        (when (>= (System/currentTimeMillis) timeout-at)
          (throw (IllegalStateException.

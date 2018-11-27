@@ -458,9 +458,14 @@
                (second (db/next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta
-  (t/is (nil? (doc/read-meta f/*kv* :foo)))
-  (doc/store-meta f/*kv* :foo {:bar 2})
-  (t/is (= {:bar 2} (doc/read-meta f/*kv* :foo))))
+  (t/is (nil? (doc/read-meta f/*kv* :bar)))
+  (doc/store-meta f/*kv* :bar {:bar 2})
+  (t/is (= {:bar 2} (doc/read-meta f/*kv* :bar)))
+
+  (t/testing "need exact match"
+    ;; :bar 0062cdb7020ff920e5aa642c3d4066950dd1f01f4d
+    ;; :foo 000beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
+    (t/is (nil? (doc/read-meta f/*kv* :foo)))))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable

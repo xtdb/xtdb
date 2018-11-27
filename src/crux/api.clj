@@ -6,7 +6,7 @@
             [crux.kv-store :as ks]
             [crux.query :as q]
             [org.httpkit.client :as http])
-  (:import java.io.Closeable
+  (:import [java.io Closeable IOException]
            crux.query.QueryDatasource))
 
 (defprotocol CruxDatasource
@@ -93,10 +93,17 @@
   (start-system bootstrap/start-system options))
 
 (defn- api-post-sync [url body]
-  (let [{:keys [body error]}
-        @(http/post url {:body (pr-str body)})]
-    (if error
+  (let [{:keys [body error status]
+         :as result} @(http/post url {:body (pr-str body)
+                                      :as :text})]
+    (cond
+      error
       (throw error)
+
+      (not= 200 status)
+      (throw (IOException. (str "HTTP Status " status ": " body)))
+
+      :else
       (edn/read-string body))))
 
 (defrecord RemoteDatasource [url business-time transact-time]
@@ -122,16 +129,16 @@
   (q [this snapshot q]
     (throw (UnsupportedOperationException.))))
 
-(defrecord RemoteApiSystem [close-promise underlying crux-url]
+(defrecord RemoteApiSystem [close-promise underlying url]
   CruxSystem
   (db [_]
-    (->RemoteDatasource crux-url nil nil))
+    (->RemoteDatasource url nil nil))
 
   (db [_ business-time]
-    (->RemoteDatasource crux-url business-time nil))
+    (->RemoteDatasource url business-time nil))
 
   (db [_ business-time transact-time]
-    (->RemoteDatasource crux-url business-time transact-time))
+    (->RemoteDatasource url business-time transact-time))
 
   (submit-tx [_ tx-ops]
     (db/submit-tx (:tx-log @underlying) tx-ops))
@@ -146,4 +153,4 @@
   [options]
   (log/info "running crux in remote library mode")
   (let [{:keys [close-promise underlying]} (start-system bootstrap/start-remote-system options)]
-    (->RemoteApiSystem close-promise underlying (:crux-url options))))
+    (->RemoteApiSystem close-promise underlying (:url options))))

@@ -137,7 +137,7 @@
           records)]
     (store-topic-partition-offsets indexer consumer (.partitions records))
     (when last-tx-log-time
-      (db/store-index-meta indexer :crux.tx-log/tx-time last-tx-log-time))
+      (db/store-index-meta indexer :crux.tx-log/tx-time (Date. (long last-tx-log-time))))
     (dissoc result :last-tx-log-time)))
 
 (defn subscribe-from-stored-offsets
