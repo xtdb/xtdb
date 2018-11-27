@@ -132,9 +132,19 @@
      (doc/entity-history snapshot entity))))
 
 (defn query [kvs request]
-  (let-valid [query-map (param request "q")]
+  (let-valid [{:keys [business-time transact-time]
+               :as query-map} (param request "q")]
     (success-response
-     (q/q (q/db kvs) query-map))))
+     (q/q (cond
+            (and business-time transact-time)
+            (q/db kvs business-time transact-time)
+
+            business-time
+            (q/db kvs business-time)
+
+            :else
+            (q/db kvs))
+          (dissoc query-map :business-time :transact-time)))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
