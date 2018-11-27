@@ -1110,6 +1110,34 @@
     (catch IllegalArgumentException e
       (t/is (re-find #"Rule definitions require same arity:" (.getMessage e))))))
 
+;; https://github.com/juxt/crux/issues/70
+
+;; TODO: Reproduces but doesn't pass without breaking other
+;; functionality. Cause for losing laziness is realisation of entire
+;; leaf level at once in doc/layered-idx->seq via a vec call.
+
+#_(t/deftest test-lookup-by-value-bug-70
+    (f/transact-people! *kv* (cons {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
+                                   (repeat 1000 {:age 20})))
+
+    (let [warm-up-times 2
+          acceptable-limit-slowdown 0.2]
+      (dotimes [n warm-up-times]
+        (let [direct-hit-ns-start (System/nanoTime)]
+          (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+                                                 :where [[i :age 30]]})))
+          (let [direct-hit-ns (- (System/nanoTime) direct-hit-ns-start)
+                limited-hit-ns-start (System/nanoTime)]
+            (t/is (= 1 (count (q/q (q/db *kv*) '{:find [i]
+                                                 :where [[i :age 20]]
+                                                 :limit 1}))))
+            (when (= (dec warm-up-times) n)
+              (let [limited-hit-ns (- (System/nanoTime) limited-hit-ns-start)]
+                (t/is (> (double (/ (min direct-hit-ns limited-hit-ns)
+                                    (max direct-hit-ns limited-hit-ns)))
+                         acceptable-limit-slowdown)
+                      (pr-str direct-hit-ns limited-hit-ns)))))))))
+
 ;; https://github.com/juxt/crux/issues/71
 
 (t/deftest test-query-limits-bug-71
@@ -1121,7 +1149,6 @@
     (t/is (= 2 (count (q/q (q/db *kv*) '{:find [l]
                                          :where [[_ :last-name l]]
                                          :limit 2}))))))
-
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
