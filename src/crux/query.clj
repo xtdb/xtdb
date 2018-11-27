@@ -931,11 +931,11 @@
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
                               set)
-             result (result-coll-fn (crux.query/q snapshot db q))]
+             result (result-coll-fn (crux.query/q db snapshot q))]
          (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
          (log/debug :query-result-size (count result))
          result))))
-  ([snapshot {:keys [object-store] :as db} q]
+  ([{:keys [object-store] :as db} snapshot q]
    (log/debug :query (pr-str q))
    (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
      (when (= :clojure.spec.alpha/invalid q)
