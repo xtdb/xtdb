@@ -256,9 +256,9 @@
     (response 400 {"Content-Type" "text/plain"} nil)))
 
 (defn transact [tx-log request]
-  (let-valid [tx-op (param request)]
+  (let-valid [tx-ops (param request)]
     (success-response
-     @(db/submit-tx tx-log [tx-op]))))
+     @(db/submit-tx tx-log tx-ops))))
 
 ;; ---------------------------------------------------
 ;; Jetty server

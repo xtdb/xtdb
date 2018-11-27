@@ -70,21 +70,6 @@
                 :state (atom {}))
          (kv-store/open))))
 
-(defn start-remote-system
-  [options with-system-fn]
-  (let [{:keys [bootstrap-servers
-                tx-topic
-                doc-topic]
-         :as options} (merge default-options options)]
-    (log/info "starting remote system")
-    (with-open [producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)]
-      (with-system-fn
-        {:tx-log tx-log
-         :producer producer})
-      (log/info "stopping remote system"))
-    (log/info "remote system stopped")))
-
 (defn start-system
   [options with-system-fn]
   (let [{:keys [bootstrap-servers

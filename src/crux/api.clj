@@ -44,7 +44,7 @@
   (submitted-tx-updated-entity? [this submitted-tx eid]
     "checks if a submitted tx did update an entity"))
 
-(defrecord ApiSystem [close-promise underlying]
+(defrecord LocalNode [close-promise underlying]
   CruxSystem
   (db [_]
     (q/db (:kv-store @underlying)))
@@ -64,7 +64,7 @@
   Closeable
   (close [_] (deliver close-promise true)))
 
-(defn- ^Closeable start-system
+(defn ^Closeable start-local-node
   [start-fn options]
   (log/info "running crux in library mode")
   (let [underlying (atom nil)
@@ -74,23 +74,18 @@
         running-future
         (future
           (log/info "crux thread intialized")
-          (start-fn
-            options
-            (fn with-system-callback [system]
-              (deliver started-promise true)
-              (log/info "crux system start completed")
-              (reset! underlying system)
-              @close-promise
-              (log/info "starting teardown of crux system")))
+          (bootstrap/start-system
+           options
+           (fn with-system-callback [system]
+             (deliver started-promise true)
+             (log/info "crux system start completed")
+             (reset! underlying system)
+             @close-promise
+             (log/info "starting teardown of crux system")))
           (log/info "crux system completed teardown"))]
     (while (not (or (deref started-promise 100 false)
                     (deref running-future 100 false))))
-    (->ApiSystem close-promise underlying)))
-
-(defn ^Closeable start-local-system
-  [options]
-  (log/info "running crux in local library mode")
-  (start-system bootstrap/start-system options))
+    (->LocalNode close-promise underlying)))
 
 (defn- api-post-sync [url body]
   (let [{:keys [body error status]
@@ -129,7 +124,7 @@
   (q [this snapshot q]
     (throw (UnsupportedOperationException.))))
 
-(defrecord RemoteApiSystem [close-promise underlying url]
+(defrecord RemoteApiConnection [url]
   CruxSystem
   (db [_]
     (->RemoteDatasource url nil nil))
@@ -141,16 +136,13 @@
     (->RemoteDatasource url business-time transact-time))
 
   (submit-tx [_ tx-ops]
-    (db/submit-tx (:tx-log @underlying) tx-ops))
+    (api-post-sync (str url "/tx-log") tx-ops))
 
   (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
     (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))
 
   Closeable
-  (close [_] (deliver close-promise true)))
+  (close [_]))
 
-(defn ^Closeable start-remote-system
-  [options]
-  (log/info "running crux in remote library mode")
-  (let [{:keys [close-promise underlying]} (start-system bootstrap/start-remote-system options)]
-    (->RemoteApiSystem close-promise underlying (:url options))))
+(defn new-remote-api-connection [url]
+  (->RemoteApiConnection url))
