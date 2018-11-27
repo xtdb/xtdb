@@ -1110,6 +1110,18 @@
     (catch IllegalArgumentException e
       (t/is (re-find #"Rule definitions require same arity:" (.getMessage e))))))
 
+;; https://github.com/juxt/crux/issues/71
+
+(t/deftest test-query-limits-bug-71
+  (dotimes [_ 10]
+    (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
+                              {:name "Petr" :last-name "Petrov"}
+                              {:name "Petr" :last-name "Ivanov"}])
+
+    (t/is (= 2 (count (q/q (q/db *kv*) '{:find [l]
+                                         :where [[_ :last-name l]]
+                                         :limit 2}))))))
+
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test

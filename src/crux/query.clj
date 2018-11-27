@@ -956,6 +956,7 @@
                     (mapv :value bound-result-tuple)
                     (zipmap (map :var bound-result-tuple) bound-result-tuple)))
          order-by (cio/external-sort (order-by-comparator find order-by))
+         (or offset limit) dedupe
          offset (drop offset)
          limit (take limit))))))
 
