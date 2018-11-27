@@ -646,10 +646,10 @@
                        (when new-values
                          (conj max-ks max-k)))
         build-leaf-results (fn [max-ks idx]
-                             (vec (for [result (idx->seq idx)
-                                        :let [leaf-key (build-result max-ks result)]
-                                        :when leaf-key]
-                                    [leaf-key (last result)])))
+                             (for [result (idx->seq idx)
+                                   :let [leaf-key (build-result max-ks result)]
+                                   :when leaf-key]
+                               [leaf-key (last result)]))
         step (fn step [max-ks ^long depth needs-seek?]
                (let [close-level (fn []
                                    (when (pos? depth)
@@ -661,15 +661,15 @@
                                     (step max-ks (inc depth) true)
                                     (do (db/close-level idx)
                                         (step max-ks depth false))))]
-                 (lazy-seq
-                  (if (= depth (dec max-depth))
-                    (concat (build-leaf-results max-ks idx)
-                            (close-level))
-                    (if-let [result (if needs-seek?
-                                      (db/seek-values idx nil)
-                                      (db/next-values idx))]
-                      (open-level result)
-                      (close-level))))))]
+                 (if (= depth (dec max-depth))
+                   (concat (build-leaf-results max-ks idx)
+                           (lazy-seq
+                            (close-level)))
+                   (if-let [result (if needs-seek?
+                                     (db/seek-values idx nil)
+                                     (db/next-values idx))]
+                     (open-level result)
+                     (close-level)))))]
     (when (pos? max-depth)
       (step [] 0 true))))
 
