@@ -12,7 +12,7 @@
     "returns the document for an entity")
   (entity-tx [this eid]
     "returns the entity tx for an entity")
-  (new-snapshot [this snapshot]
+  (new-snapshot [this]
     "returns a new snapshot for q, allowing lazy results in a with-open block")
   (q [this q] [this snapshot q]
     "queries the db"))
@@ -37,7 +37,7 @@
 (defprotocol CruxSystem
   (db [this] [this business-time] [this business-time transact-time]
     "returns a db for the system")
-  (submit-tx [this data]
+  (submit-tx [this tx-ops]
     "writes the transactions to the log for processing")
   (submitted-tx-updated-entity? [this submitted-tx eid]
     "checks if a submitted tx did update an entity"))
