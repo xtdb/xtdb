@@ -101,7 +101,7 @@
                 server-port]
          :as options} (merge default-options options)]
     (log/info "starting system")
-    (when (s/invalid? :crux.bootstrap/options options)
+    (when (s/invalid? (s/conform :crux.bootstrap/options options))
       (throw (IllegalArgumentException.
               (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
     (with-open [kv-store (start-kv-store options)
