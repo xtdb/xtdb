@@ -91,9 +91,9 @@
     {:post-commit-fn #(when tx-log
                         (doseq [{:keys [content-hash]
                                  :as entity} (doc/entity-history snapshot eid)
-                                :let [doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)]
-                                :when (and doc (<= (compare (.bt ^EntityTx entity) business-time) 0))]
-                          (db/submit-doc tx-log (idx/new-id doc) nil)))
+                                :when (and (<= (compare (.bt ^EntityTx entity) business-time) 0)
+                                           (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
+                          (db/submit-doc tx-log content-hash nil)))
      :kvs [[(idx/encode-entity+bt+tt+tx-id-key
              (idx/id->bytes eid)
              business-time
