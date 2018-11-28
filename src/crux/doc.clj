@@ -319,11 +319,12 @@
                  (nippy/fast-freeze v)]]))
 
 (defn read-meta [kv k]
-  (let [prefix (idx/encode-meta-key (idx/id->bytes k))]
+  (let [seek-k (idx/encode-meta-key (idx/id->bytes k))]
     (with-open [snapshot (ks/new-snapshot kv)
-                i (new-prefix-kv-iterator (ks/new-iterator snapshot) prefix)]
-      (when-let [k (ks/seek i prefix)]
-        (nippy/fast-thaw (ks/value i))))))
+                i (ks/new-iterator snapshot)]
+      (when-let [k (ks/seek i seek-k)]
+        (when (bu/bytes=? seek-k k)
+          (nippy/fast-thaw (ks/value i)))))))
 
 ;; Utils
 
