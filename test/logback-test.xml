@@ -8,5 +8,6 @@
     <appender-ref ref="STDOUT" />
   </root>
   <logger name="crux" level="INFO" />
+  <logger name="crux.http-server" level="WARN" />
   <logger name="crux.tx" level="ERROR" />
 </configuration>

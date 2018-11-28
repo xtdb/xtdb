@@ -4,6 +4,7 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.embedded-kafka :as ek]
+            [crux.http-server :as srv]
             [crux.tx :as tx])
   (:import java.io.Closeable
            java.util.UUID))
@@ -80,6 +81,20 @@
 (defn with-each-kv-store-implementation [f]
   (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-lmdb]]
     (with-kv-store-implementation f)))
+
+(def ^:dynamic ^String *host* "localhost")
+
+(def default-api-port 3000)
+
+(def ^:dynamic *api-url* (str "http://" *host* ":" default-api-port))
+
+(defn with-http-server [f]
+  (let [port (cio/free-port)]
+    (binding [*api-url* (str "http://" *host* ":" port)]
+      (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) (:db-dir *kv*) ek/*kafka-bootstrap-servers* port)]
+        (f)))))
+
+;; TODO: This should really create their own ports etc.
 
 (def ^:dynamic *system*)
 (def ^:dynamic *extra-options*)

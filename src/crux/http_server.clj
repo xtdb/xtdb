@@ -119,17 +119,22 @@
 
 (defn document [kv request]
   (let-valid [object-store (doc/->DocObjectStore kv)
-              content-hash (param request "hash")]
+              content-hash (idx/new-id (param request "hash"))]
     (with-open [snapshot (kvs/new-snapshot kv)]
       (success-response
-       (db/get-objects object-store snapshot [content-hash]))))) ;;TODO doesn't work
+       (get (db/get-objects object-store snapshot [content-hash]) content-hash)))))
+
+(defn- plain-entity-tx [entity-tx]
+  (into {} (-> entity-tx
+               (update :content-hash str)
+               (update :eid str))))
 
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn history [kvs request]
   (let-valid [snapshot (kvs/new-snapshot kvs)
               entity (param request "entity")]
     (success-response
-     (doc/entity-history snapshot entity))))
+     (mapv plain-entity-tx (doc/entity-history snapshot entity)))))
 
 (defn- db-for-request [kvs {:keys [business-time transact-time]}]
   (cond
@@ -157,8 +162,9 @@
 (defn entity-tx [kvs request]
   (let-valid [query-map (param request "entity-tx")]
     (success-response
-     (q/entity-tx (db-for-request kvs query-map)
-                  (:eid query-map)))))
+     (when-let [entity-tx (q/entity-tx (db-for-request kvs query-map)
+                                       (:eid query-map))]
+       (plain-entity-tx entity-tx)))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -258,7 +264,7 @@
 (defn transact [tx-log request]
   (let-valid [tx-ops (param request)]
     (success-response
-     @(db/submit-tx tx-log tx-ops))))
+     (into {} @(db/submit-tx tx-log tx-ops)))))
 
 ;; ---------------------------------------------------
 ;; Jetty server

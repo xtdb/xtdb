@@ -3,8 +3,11 @@
             [clojure.edn :as edn]
             [crux.bootstrap :as bootstrap]
             [crux.db :as db]
+            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.query :as q]
+            [crux.tx :as tx]
             [org.httpkit.client :as http])
   (:import [java.io Closeable IOException]
            crux.query.QueryDatasource))
@@ -39,6 +42,10 @@
 (defprotocol CruxSystem
   (db [this] [this business-time] [this business-time transact-time]
     "returns a db for the system")
+  (history [this eid]
+    "returns the transaction history of an entity")
+  (document [this content-hash]
+    "reads a document from the document store")
   (submit-tx [this tx-ops]
     "writes the transactions to the log for processing")
   (submitted-tx-updated-entity? [this submitted-tx eid]
@@ -54,6 +61,15 @@
 
   (db [_ business-time transact-time]
     (q/db (:kv-store @underlying) business-time transact-time))
+
+  (history [_ eid]
+    (doc/entity-history (:kv-store @underlying) eid))
+
+  (document [_ content-hash]
+    (let [kv (:kv-store @underlying)
+          object-store (doc/->DocObjectStore kv)]
+      (with-open [snapshot (ks/new-snapshot kv)]
+        (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (submit-tx [_ tx-ops]
     (db/submit-tx (:tx-log @underlying) tx-ops))
@@ -101,6 +117,12 @@
       :else
       (edn/read-string body))))
 
+(defn- enrich-entity-tx [entity-tx]
+  (some->  entity-tx
+           (idx/map->EntityTx)
+           (update :eid idx/new-id)
+           (update :content-hash idx/new-id)))
+
 (defrecord RemoteDatasource [url business-time transact-time]
   CruxDatasource
   (doc [this eid]
@@ -109,9 +131,9 @@
                                      :transact-time transact-time}))
 
   (entity-tx [this eid]
-    (api-post-sync (str url "/entity-tx") {:eid eid
-                                           :business-time business-time
-                                           :transact-time transact-time}))
+    (enrich-entity-tx (api-post-sync (str url "/entity-tx") {:eid eid
+                                                             :business-time business-time
+                                                             :transact-time transact-time})))
 
   (new-snapshot [this]
     (throw (UnsupportedOperationException.)))
@@ -135,8 +157,15 @@
   (db [_ business-time transact-time]
     (->RemoteDatasource url business-time transact-time))
 
+  (history [_ eid]
+    (->> (api-post-sync (str url "/history") eid)
+         (mapv enrich-entity-tx)))
+
+  (document [_ content-hash]
+    (api-post-sync (str url "/document") (str content-hash)))
+
   (submit-tx [_ tx-ops]
-    (api-post-sync (str url "/tx-log") tx-ops))
+    (tx/map->SubmittedTx (api-post-sync (str url "/tx-log") tx-ops)))
 
   (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
     (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))
@@ -144,5 +173,5 @@
   Closeable
   (close [_]))
 
-(defn new-remote-api-connection [url]
+(defn ^Closeable new-api-client [url]
   (->RemoteApiConnection url))
