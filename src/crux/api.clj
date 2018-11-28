@@ -10,7 +10,7 @@
             [crux.query :as q]
             [crux.tx :as tx]
             [org.httpkit.client :as http])
-  (:import [java.io Closeable IOException]
+  (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
 
 (defprotocol CruxDatasource
@@ -18,8 +18,8 @@
     "returns the entity document")
   (entity-tx [this eid]
     "returns the entity tx for an entity")
-  (new-snapshot [this]
-    "returns a new snapshot for q, allowing lazy results in a with-open block")
+  (^java.io.Closeable new-snapshot [this]
+   "returns a new snapshot for q, allowing lazy results in a with-open block")
   (q [this q] [this snapshot q]
     "queries the db"))
 
@@ -109,22 +109,40 @@
                     (deref running-future 100 false))))
     (->LocalNode close-promise underlying options)))
 
-(defn- api-call-sync [http-method url body]
-  (let [{:keys [body error status headers]
-         :as result} @(http-method url {:body (pr-str body)
-                                        :as :text})]
-    (cond
-      error
-      (throw error)
+(defn- edn-list->lazy-seq [in]
+  (let [in (PushbackReader. (InputStreamReader. in))
+        open-paren \(]
+    (when-not (= (int open-paren) (.read in))
+      (throw (RuntimeException. "Expected delimiter: (")))
+    (->> (repeatedly #(try
+                        (edn/read {:eof ::eof} in)
+                        (catch RuntimeException e
+                          (if (= "Unmatched delimiter: )" (.getMessage e))
+                            ::eof
+                            (throw e)))))
+         (take-while #(not= ::eof %)))))
 
-      (= "application/edn" (:content-type headers))
-      (edn/read-string body)
+(defn- api-request-sync
+  ([url body]
+   (api-request-sync url body {}))
+  ([url body opts]
+   (let [{:keys [body error status headers]
+          :as result} @(http/request (merge {:url url
+                                             :method :post
+                                             :body (some-> body pr-str)
+                                             :as :text}
+                                            opts))]
+     (cond
+       error
+       (throw error)
 
-      :else
-      (throw (ex-info (str "HTTP Status " status) result)))))
+       (= "application/edn" (:content-type headers))
+       (if (string? body)
+         (edn/read-string body)
+         body)
 
-(defn- api-post-sync [url body]
-  (api-call-sync http/post url body))
+       :else
+       (throw (ex-info (str "HTTP status " status) result))))))
 
 (defn- enrich-entity-tx [entity-tx]
   (some-> entity-tx
@@ -132,12 +150,21 @@
           (update :eid idx/new-id)
           (update :content-hash idx/new-id)))
 
+(defrecord RemoteSnapshot [streams-state]
+  Closeable
+  (close [_]
+    (doseq [stream @streams-state]
+      (.close ^Closeable stream))))
+
+(defn- register-stream-with-remote-snapshot! [snapshot in]
+  (swap! (:streams-state snapshot) conj in))
+
 (defrecord RemoteDatasource [url business-time transact-time]
   CruxDatasource
   (entity [this eid]
-    (api-post-sync (str url "/entity") {:eid eid
-                                        :business-time business-time
-                                        :transact-time transact-time}))
+    (api-request-sync (str url "/entity") {:eid eid
+                                           :business-time business-time
+                                           :transact-time transact-time}))
 
   (entity-tx [this eid]
     (enrich-entity-tx (api-post-sync (str url "/entity-tx") {:eid eid
@@ -145,20 +172,29 @@
                                                              :transact-time transact-time})))
 
   (new-snapshot [this]
-    (throw (UnsupportedOperationException.)))
+    (->RemoteSnapshot (atom [])))
 
   (q [this q]
-    (api-post-sync (str url "/q") (assoc q
-                                         :business-time business-time
-                                         :transact-time transact-time)))
+    (api-request-sync (str url "/q") (assoc q
+                                            :business-time business-time
+                                            :transact-time transact-time)))
 
   (q [this snapshot q]
-    (throw (UnsupportedOperationException.))))
+    ;; TODO: Note that http-kit's client always consumes the entire
+    ;; result into memory, so this doesn't currently really work as
+    ;; intended.
+    (let [in (api-request-sync (str url "/q?lazy=true")
+                               (assoc q
+                                      :business-time business-time
+                                      :transact-time transact-time)
+                               {:as :stream})]
+      (register-stream-with-remote-snapshot! snapshot in)
+      (edn-list->lazy-seq in))))
 
 (defrecord RemoteApiConnection [url]
   CruxSystem
   (status [_]
-    (api-call-sync http/get url nil))
+    (api-request-sync url nil {:method :get}))
 
   (db [_]
     (->RemoteDatasource url nil nil))
@@ -170,14 +206,14 @@
     (->RemoteDatasource url business-time transact-time))
 
   (history [_ eid]
-    (->> (api-post-sync (str url "/history") eid)
+    (->> (api-request-sync (str url "/history") eid)
          (mapv enrich-entity-tx)))
 
   (document [_ content-hash]
-    (api-post-sync (str url "/document") (str content-hash)))
+    (api-request-sync (str url "/document") (str content-hash)))
 
   (submit-tx [_ tx-ops]
-    (tx/map->SubmittedTx (api-post-sync (str url "/tx-log") tx-ops)))
+    (tx/map->SubmittedTx (api-request-sync (str url "/tx-log") tx-ops)))
 
   (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
     (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))

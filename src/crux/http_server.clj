@@ -1,5 +1,6 @@
 (ns crux.http-server
   (:require [clojure.edn :as edn]
+            [clojure.java.io :as io]
             [clojure.string :as st]
             [clojure.tools.logging :as log]
             [crux.db :as db]
@@ -13,7 +14,8 @@
             [crux.kv-store :as kvs]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
-            [ring.util.request :as req])
+            [ring.util.request :as req]
+            [ring.util.io :as rio])
   (:import java.io.Closeable
            java.time.Duration
            org.apache.kafka.clients.consumer.KafkaConsumer
@@ -81,17 +83,17 @@
              (.getMessage e) "\n"
              (ex-data e))))
 
-(defmacro let-valid [bindings expr]
-  `(try
-     (let ~bindings
-       (try
-         ~expr
-         (catch Exception e#
-           (if (st/starts-with? (.getMessage e#) "Invalid input")
-             (exception-response 400 e#) ;; Valid edn, invalid content
-             (exception-response 500 e#))))) ;; Valid content; something internal failed, or content validity is not properly checked
-     (catch Exception e#
-       (exception-response 400 e#)))) ;;Invalid edn
+(defn wrap-exception-handling [handler]
+  (fn [request]
+    (try
+      (try
+        (handler request)
+        (catch Exception e
+          (if (st/starts-with? (.getMessage e) "Invalid input")
+            (exception-response 400 e) ;; Valid edn, invalid content
+            (exception-response 500 e)))) ;; Valid content; something internal failed, or content validity is not properly checked
+      (catch Exception e
+        (exception-response 400 e))))) ;;Invalid edn
 
 (defn zk-active? [bootstrap-servers]
   (try
@@ -122,8 +124,8 @@
                 (pr-str status-map)))))
 
 (defn document [kv request]
-  (let-valid [object-store (doc/->DocObjectStore kv)
-              content-hash (idx/new-id (param request "hash"))]
+  (let [object-store (doc/->DocObjectStore kv)
+        content-hash (idx/new-id (param request "hash"))]
     (with-open [snapshot (kvs/new-snapshot kv)]
       (success-response
        (get (db/get-objects object-store snapshot [content-hash]) content-hash)))))
@@ -135,10 +137,10 @@
 
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn history [kvs request]
-  (let-valid [snapshot (kvs/new-snapshot kvs)
-              entity (param request "entity")]
-    (success-response
-     (mapv plain-entity-tx (doc/entity-history snapshot entity)))))
+  (let [entity (param request "entity")]
+    (with-open [snapshot (kvs/new-snapshot kvs)]
+      (success-response
+       (mapv plain-entity-tx (doc/entity-history snapshot entity))))))
 
 (defn- db-for-request [kvs {:keys [business-time transact-time]}]
   (cond
@@ -152,19 +154,40 @@
     (q/db kvs)))
 
 (defn query [kvs request]
-  (let-valid [query-map (param request "q")]
-    (success-response
-     (q/q (db-for-request kvs query-map)
-          (dissoc query-map :business-time :transact-time)))))
+  (let [lazy? (Boolean/parseBoolean (-> request
+                                        :query-params
+                                        (get "lazy")))
+        query-map (param request "q")]
+    (if lazy?
+      (let [snapshot (kvs/new-snapshot kvs)
+            result (q/q (db-for-request kvs query-map) snapshot
+                        (dissoc query-map :business-time :transact-time))]
+        (try
+          (response 200
+                    {"Content-Type" "application/edn"}
+                    (rio/piped-input-stream
+                     (fn [out]
+                       (with-open [out (io/writer out)
+                                   snapshot snapshot]
+                         (.write out "(")
+                         (doseq [tuple result]
+                           (.write out (pr-str tuple)))
+                         (.write out ")")))))
+          (catch Throwable t
+            (.close snapshot)
+            (throw t))))
+      (success-response
+       (q/q (db-for-request kvs query-map)
+            (dissoc query-map :business-time :transact-time))))))
 
 (defn entity [kvs request]
-  (let-valid [query-map (param request "entity")]
+  (let [query-map (param request "entity")]
     (success-response
      (q/entity (db-for-request kvs query-map)
                (:eid query-map)))))
 
 (defn entity-tx [kvs request]
-  (let-valid [query-map (param request "entity-tx")]
+  (let [query-map (param request "entity-tx")]
     (success-response
      (when-let [entity-tx (q/entity-tx (db-for-request kvs query-map)
                                        (:eid query-map))]
@@ -266,7 +289,7 @@
     (response 400 {"Content-Type" "text/plain"} nil)))
 
 (defn transact [tx-log request]
-  (let-valid [tx-ops (param request)]
+  (let [tx-ops (param request)]
     (success-response
      (into {} @(db/submit-tx tx-log tx-ops)))))
 
@@ -306,7 +329,9 @@
 
 (defn ^Closeable create-server
   ([kv tx-log bootstrap-servers port]
-   (let [server (j/run-jetty (p/wrap-params (partial handler kv tx-log bootstrap-servers))
+   (let [server (j/run-jetty (-> (partial handler kv tx-log bootstrap-servers)
+                                 (p/wrap-params)
+                                 (wrap-exception-handling))
                              {:port port
                               :join? false})]
      (log/info (str "HTTP server started on port: " port))

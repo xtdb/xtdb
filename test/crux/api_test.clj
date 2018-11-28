@@ -3,7 +3,8 @@
             [crux.api :as api]
             [crux.fixtures :as f])
   (:import crux.index.EntityTx
-           crux.tx.SubmittedTx))
+           crux.tx.SubmittedTx
+           clojure.lang.LazySeq))
 
 (t/use-fixtures :each f/with-kv-store f/with-http-server)
 
@@ -30,6 +31,16 @@
                                                        :where [[e :name "Ivan"]]})))
       (t/is (= #{} (api/q (api/db api-client #inst "1999") '{:find [e]
                                                              :where [[e :name "Ivan"]]}))))
+
+    (t/testing "query with streaming result"
+      (let [db (api/db api-client)]
+        (with-open [snapshot (api/new-snapshot db)]
+          (let [result (api/q db snapshot '{:find [e]
+                                            :where [[e :name "Ivan"]]})]
+            (t/is (instance? LazySeq result))
+            (t/is (not (realized? result)))
+            (t/is (= '([:ivan]) result))
+            (t/is (realized? result))))))
 
     (t/testing "entity"
       (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/entity (api/db api-client) :ivan)))
