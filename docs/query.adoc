@@ -76,89 +76,56 @@ doesn’t mean this necessarily should be simple to do while running,
 which would be a post MVP feature.
 
 * https://redis.io/topics/indexes[Secondary indexing with Redis]
-* https://arxiv.org/abs/1210.0481[Leapfrog Triejoin: a worst-case
-optimal join algorithm]
-* https://developer.logicblox.com/wp-content/uploads/2013/10/LB1201_LeapfrogTriejoin.pdf[LogicBlox
-Technical Report: Leapfrog Triejoin: A Worst-Case Optimal Join
-Algorithm]
-* https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/[On
-the Way to Better SQL Joins in CockroachDB]
-* https://arxiv.org/abs/1604.03234[Hippo: A Fast, yet Scalable, Database
-Indexing Approach]
-* https://arxiv.org/abs/1801.10207[A-Tree: A Bounded Approximate Index
-Structurqe]
+* https://arxiv.org/abs/1210.0481[Leapfrog Triejoin: a worst-case optimal join algorithm]
+* https://developer.logicblox.com/wp-content/uploads/2013/10/LB1201_LeapfrogTriejoin.pdf[LogicBlox Technical Report: Leapfrog Triejoin: A Worst-Case Optimal Join Algorithm]
+* https://www.cockroachlabs.com/blog/better-sql-joins-in-cockroachdb/[On the Way to Better SQL Joins in CockroachDB]
+* https://arxiv.org/abs/1604.03234[Hippo: A Fast, yet Scalable, Database Indexing Approach]
+* https://arxiv.org/abs/1801.10207[A-Tree: A Bounded Approximate Index Structure]
 * https://en.wikipedia.org/wiki/Spatial_index[Spatial index]
 * https://docs.dgraph.io/design-concepts/[Dgraph Design Concepts]
-* https://people.eecs.berkeley.edu/~anuragk/papers/zipg.pdf[ZipG: A
-Memory-efficient Graph Store for Interactive Queries]
-* https://people.eecs.berkeley.edu/~anuragk/succinct-techreport.pdf[Succinct:
-Enabling Queries on Compressed Data]
-* https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf[TAO:
-Facebook’s Distributed Data Store for the Social Graph]
-* https://www.slideshare.net/thobe/an-overview-of-neo4j-internals[An
-overview of Neo4j Internals]
-* https://www.arangodb.com/2016/04/index-free-adjacency-hybrid-indexes-graph-databases/[Index
-Free Adjacency or Hybrid Indexes for Graph Databases]
-* https://www.datastax.com/2016/08/inside-dse-graph-what-powers-the-best-enterprise-graph-database[Inside
-DSE Graph: What Powers the Best Enterprise Graph DB]
-* https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding[Adaptive
-Tuple Differential Coding]
-* https://github.com/ndimiduk/orderly[Orderly: Schema and type system
-for creating sortable byte]
-* https://arxiv.org/abs/1307.4635[Integrating Datalog and Constraint
-Solving]
-* https://people.csail.mit.edu/mcarbin/papers/aplas05.pdf[Using Datalog
-with Binary Decision Diagrams for Program Analysis]
-* https://www.informatik.uni-kiel.de/~mh/lehre/abschlussarbeiten/msc/christiansen.pdf[A
-purely functional implementation of ROBDDs in Haskell]
-* http://discovery.ucl.ac.uk/1474713/1/main.pdf[On Fast Large-Scale
-Program Analysis in Datalog]
-* https://pdfs.semanticscholar.org/004c/2bd66cc6e8aeb9f03c0ea88041d05981acb6.pdf[Efficient
-Lazy Evaluation of Rule-Based Programs]
-* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.96.5371&rep=rep1&type=pdf[The
-LEAPS Algorithms]
-* https://web.archive.org/web/20120308104055/http://ssdi.di.fct.unl.pt/krr/docs/magicsets.pdf[Magic
-sets and other strange ways to implement logic programs]
-* https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf[What
-You Always Wanted to Know About Datalog (And Never Dared to Ask)]
-* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.104.1950&rep=rep1&type=pdf[Magic
-functions: A technique to optimize extended datalog recursive programs]
-* https://arxiv.org/abs/1806.01799[Survey and Taxonomy of Lossless Graph
-Compression and Space-Efficient Graph Representations]
-* https://github.com/diegocaro/temporalgraphs/blob/master/docs/index.md[Compact
-Data Structures and Query Processing for Temporal Graphs]
-* http://www.vldb.org/pvldb/vol6/p517-yuan.pdf[TripleBit: a Fast and
-Compact System for Large Scale RDF Data]
+* https://people.eecs.berkeley.edu/~anuragk/papers/zipg.pdf[ZipG: A Memory-efficient Graph Store for Interactive Queries]
+* https://people.eecs.berkeley.edu/~anuragk/succinct-techreport.pdf[Succinct: Enabling Queries on Compressed Data]
+* https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf[TAO: Facebook’s Distributed Data Store for the Social Graph]
+* https://www.slideshare.net/thobe/an-overview-of-neo4j-internals[An overview of Neo4j Internals]
+* https://www.arangodb.com/2016/04/index-free-adjacency-hybrid-indexes-graph-databases/[Index Free Adjacency or Hybrid Indexes for Graph Databases]
+* https://www.datastax.com/2016/08/inside-dse-graph-what-powers-the-best-enterprise-graph-database[Inside DSE Graph: What Powers the Best Enterprise Graph DB]
+* https://www.researchgate.net/publication/221465140_Adaptive_Tuple_Differential_Coding[Adaptive Tuple Differential Coding]
+* https://github.com/ndimiduk/orderly[Orderly: Schema and type system for creating sortable byte]
+* https://arxiv.org/abs/1307.4635[Integrating Datalog and Constraint Solving]
+* https://people.csail.mit.edu/mcarbin/papers/aplas05.pdf[Using Datalog with Binary Decision Diagrams for Program Analysis]
+* https://www.informatik.uni-kiel.de/~mh/lehre/abschlussarbeiten/msc/christiansen.pdf[A purely functional implementation of ROBDDs in Haskell]
+* http://discovery.ucl.ac.uk/1474713/1/main.pdf[On Fast Large-Scale Program Analysis in Datalog]
+* https://pdfs.semanticscholar.org/004c/2bd66cc6e8aeb9f03c0ea88041d05981acb6.pdf[Efficient Lazy Evaluation of Rule-Based Programs]
+* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.96.5371&rep=rep1&type=pdf[The LEAPS Algorithms]
+* https://web.archive.org/web/20120308104055/http://ssdi.di.fct.unl.pt/krr/docs/magicsets.pdf[Magic sets and other strange ways to implement logic programs]
+* https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf[What You Always Wanted to Know About Datalog (And Never Dared to Ask)]
+* http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.104.1950&rep=rep1&type=pdf[Magic functions: A technique to optimize extended datalog recursive  programs]
+* https://arxiv.org/abs/1806.01799[Survey and Taxonomy of Lossless Graph Compression and Space-Efficient Graph Representations]
+* https://github.com/diegocaro/temporalgraphs/blob/master/docs/index.md[Compact Data Structures and Query Processing for Temporal Graphs]
+* http://www.vldb.org/pvldb/vol6/p517-yuan.pdf[TripleBit: a Fast and Compact System for Large Scale RDF Data]
 * http://webdam.inria.fr/Alice/[Foundations of Databases]
-* https://github.com/frankmcsherry/blog/blob/master/posts/2018-05-19.md[A
-relatively simple Datalog engine in Rust]
-* https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md[Differential
-datalog]
-* http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html[Worst-case
-optimal joins, in dataflow]
-* http://tonsky.me/blog/datascript-internals/[A shallow dive into
-DataScript internals]
-* https://arxiv.org/abs/1302.0914[Beyond Worst-Case Analysis for Joins
-with Minesweeper]
-* https://arxiv.org/abs/1404.0703[Joins via Geometric Resolutions:
-Worst-case and Beyond]
-* https://arxiv.org/abs/1701.07473[Implementation of Tetris as a Model
-Counter]
-* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in
-the Theory of Join Algorithms]
+* https://github.com/frankmcsherry/blog/blob/master/posts/2018-05-19.md[A relatively simple Datalog engine in Rust]
+* https://github.com/frankmcsherry/blog/blob/master/posts/2016-06-21.md[Differential datalog]
+* http://www.frankmcsherry.org/dataflow/relational/join/2015/04/11/genericjoin.html[Worst-case optimal joins, in dataflow]
+* http://tonsky.me/blog/datascript-internals/[A shallow dive into DataScript internals]
+* https://arxiv.org/abs/1302.0914[Beyond Worst-Case Analysis for Joins with Minesweeper]
+* https://arxiv.org/abs/1404.0703[Joins via Geometric Resolutions: Worst-case and Beyond]
+* https://arxiv.org/abs/1701.07473[Implementation of Tetris as a Model Counter]
+* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms]
 * https://arxiv.org/abs/1203.1952[Worst-case Optimal Join Algorithms]
-* https://arxiv.org/abs/1707.02769[Compressed Representation of Dynamic
-Binary Relations with Applications]
-* https://arxiv.org/abs/1707.02759[A succinct data structure for
-self-indexing ternary relations]
-* http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1q[Compact
-representation of Web graphs with extended functionality]
-* https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf[SuRF:
-Practical Range Query Filtering with Fast Succinct Tries]
-* https://arxiv.org/abs/1503.02368[EmptyHeaded: A Relational Engine for
-Graph Processing]
-* http://www.gecode.org/papers/Tack_PhD_2009.pdf[Constraint Propagation
-- Models, Techniques, Implementation]
+* https://arxiv.org/abs/1707.02769[Compressed Representation of Dynamic Binary Relations with Applications]
+* https://arxiv.org/abs/1707.02759[A succinct data structure for self-indexing ternary relations]
+* http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1q[Compact representation of Web graphs with extended functionality]
+* https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf[SuRF: Practical Range Query Filtering with Fast Succinct Tries]
+* https://arxiv.org/abs/1503.02368[EmptyHeaded: A Relational Engine for Graph Processing]
+* http://www.gecode.org/papers/Tack_PhD_2009.pdf[Constraint Propagation - Models, Techniques, Implementation]
+* https://oss.redislabs.com/redisgraph/design/[RedisGraph: A High Performance In-Memory Graph Database]
+* https://www.slideshare.net/RedisLabs/redisconf18-lower-latency-graph-queries-in-cypher-with-redis-graph[RedisConf18 - Lower Latency Graph Queries in Cypher with Redis Graph]
+* http://graphblas.org[Graph BLAS Forum]
+* https://arxiv.org/abs/1504.01039[Graphs, Matrices, and the GraphBLAS: Seven Good Reasons]
+* http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf[A Demonstration of MAGiQ: Matrix Algebra Approach for Solving RDF Graph Queries]
+* https://people.csail.mit.edu/jshun/6886-s18/[MIT 6.886 Graph Analytics Spring 2018]
+* https://spcl.inf.ethz.ch/Research/Performance/LogGraph/loggraph_full.pdf[Log(Graph): A Near-Optimal High-Performance Graph Representation]
 
 === Retention
 
