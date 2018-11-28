@@ -19,7 +19,6 @@
 
     (t/testing "transaction"
       (let [submitted-tx (api/submit-tx api-client [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"}]])]
-        (t/is (instance? SubmittedTx submitted-tx))
         (t/is (true? (api/submitted-tx-updated-entity? api-client submitted-tx :ivan)))
 
         (let [status-map (api/status api-client)]
@@ -53,8 +52,6 @@
 
     (t/testing "entity-tx, document and history"
       (let [entity-tx (api/entity-tx (api/db api-client) :ivan)]
-        (t/is (instance? EntityTx entity-tx))
-
         (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/document api-client (:content-hash entity-tx))))
         (t/is (= [entity-tx] (api/history api-client :ivan)))
 

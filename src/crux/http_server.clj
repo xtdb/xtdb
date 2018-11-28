@@ -175,16 +175,16 @@
             (dissoc query-map :business-time :transact-time))))))
 
 (defn entity [kv request]
-  (let [query-map (param request "entity")]
+  (let [body (param request "entity")]
     (success-response
-     (q/entity (db-for-request kv query-map)
-               (:eid query-map)))))
+     (q/entity (db-for-request kv body)
+               (:eid body)))))
 
 (defn entity-tx [kv request]
-  (let [query-map (param request "entity-tx")]
+  (let [body (param request "entity-tx")]
     (success-response
-     (q/entity-tx (db-for-request kv query-map)
-                  (:eid query-map)))))
+     (q/entity-tx (db-for-request kv body)
+                  (:eid body)))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
