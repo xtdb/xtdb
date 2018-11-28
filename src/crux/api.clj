@@ -15,13 +15,14 @@
 
 (defprotocol CruxDatasource
   (entity [this eid]
-    "returns the entity document")
+    "Returns the document map for an entity.")
   (entity-tx [this eid]
-    "returns the entity tx for an entity")
+    "Returns the entity tx for an entity.")
   (^java.io.Closeable new-snapshot [this]
-   "returns a new snapshot for q, allowing lazy results in a with-open block")
+   "Returns a new snapshot for usage with q, allowing for lazy results
+   in a with-open block.")
   (q [this q] [this snapshot q]
-    "queries the db"))
+    "Queries the db."))
 
 (extend-protocol CruxDatasource
   QueryDatasource
@@ -42,17 +43,19 @@
 
 (defprotocol CruxSystem
   (status [this]
-    "returns the status of this node")
+    "Returns the status of this node as a map.")
   (db [this] [this business-time] [this business-time transact-time]
-    "returns a db for the system")
+    "Returns a db as of optional business and transaction time. Both
+    defaulting to now.")
   (history [this eid]
-    "returns the transaction history of an entity")
+    "Returns the transaction history of an entity.")
   (document [this content-hash]
-    "reads a document from the document store")
+    "Reads a document from the document store based on its content
+    hash.")
   (submit-tx [this tx-ops]
-    "writes the transactions to the log for processing")
+    "Writes transactions to the log for processing.")
   (submitted-tx-updated-entity? [this submitted-tx eid]
-    "checks if a submitted tx did update an entity"))
+    "Checks if a submitted tx did update an entity."))
 
 (defrecord LocalNode [close-promise underlying options]
   CruxSystem
@@ -87,6 +90,7 @@
   (close [_] (deliver close-promise true)))
 
 (defn ^Closeable start-local-node
+  "Starts a Crux query node in local library mode."
   [start-fn options]
   (log/info "running crux in library mode")
   (let [underlying (atom nil)
@@ -167,9 +171,9 @@
                                            :transact-time transact-time}))
 
   (entity-tx [this eid]
-    (enrich-entity-tx (api-post-sync (str url "/entity-tx") {:eid eid
-                                                             :business-time business-time
-                                                             :transact-time transact-time})))
+    (enrich-entity-tx (api-request-sync (str url "/entity-tx") {:eid eid
+                                                                :business-time business-time
+                                                                :transact-time transact-time})))
 
   (new-snapshot [this]
     (->RemoteSnapshot (atom [])))
@@ -191,7 +195,7 @@
       (register-stream-with-remote-snapshot! snapshot in)
       (edn-list->lazy-seq in))))
 
-(defrecord RemoteApiConnection [url]
+(defrecord RemoteApiClient [url]
   CruxSystem
   (status [_]
     (api-request-sync url nil {:method :get}))
@@ -221,5 +225,7 @@
   Closeable
   (close [_]))
 
-(defn ^Closeable new-api-client [url]
-  (->RemoteApiConnection url))
+(defn ^Closeable new-api-client
+  "Creates a new remote API client."
+  [url]
+  (->RemoteApiClient url))
