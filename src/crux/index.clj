@@ -2,7 +2,7 @@
   (:require [crux.byte-utils :as bu]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
-           java.io.Closeable
+           [java.io Closeable Writer]
            java.net.URI
            java.nio.ByteBuffer
            java.security.MessageDigest
@@ -211,6 +211,10 @@
       0
       (bu/compare-bytes bytes (id->bytes that)))))
 
+(defmethod print-method Id [id ^Writer w]
+  (.write w "#crux/id ")
+  (print-method (str id) w))
+
 (defn ^Id new-id [id]
   (let [bs (id->bytes id)]
     (assert (= id-size (alength bs)))
@@ -355,6 +359,10 @@
   IdToBytes
   (id->bytes [this]
     (id->bytes eid)))
+
+(defmethod print-method EntityTx [entity-tx ^Writer w]
+  (.write w "#crux/entity-tx ")
+  (print-method (into {} entity-tx) w))
 
 ;; TODO: Not sure why these are needed, external sorting thaws
 ;; incompatible records without it.

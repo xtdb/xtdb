@@ -113,13 +113,19 @@
                     (deref running-future 100 false))))
     (->LocalNode close-promise underlying options)))
 
+(def ^:private remote-api-readers
+  {'crux/id idx/new-id
+   'crux/entity-tx idx/map->EntityTx
+   'crux/submitted-tx tx/map->SubmittedTx})
+
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
         open-paren \(]
     (when-not (= (int open-paren) (.read in))
       (throw (RuntimeException. "Expected delimiter: (")))
     (->> (repeatedly #(try
-                        (edn/read {:eof ::eof} in)
+                        (edn/read {:eof ::eof
+                                   :readers remote-api-readers} in)
                         (catch RuntimeException e
                           (if (= "Unmatched delimiter: )" (.getMessage e))
                             ::eof
@@ -142,17 +148,11 @@
 
        (= "application/edn" (:content-type headers))
        (if (string? body)
-         (edn/read-string body)
+         (edn/read-string {:readers remote-api-readers} body)
          body)
 
        :else
        (throw (ex-info (str "HTTP status " status) result))))))
-
-(defn- enrich-entity-tx [entity-tx]
-  (some-> entity-tx
-          (idx/map->EntityTx)
-          (update :eid idx/new-id)
-          (update :content-hash idx/new-id)))
 
 (defrecord RemoteSnapshot [streams-state]
   Closeable
@@ -171,9 +171,9 @@
                                            :transact-time transact-time}))
 
   (entity-tx [this eid]
-    (enrich-entity-tx (api-request-sync (str url "/entity-tx") {:eid eid
-                                                                :business-time business-time
-                                                                :transact-time transact-time})))
+    (api-request-sync (str url "/entity-tx") {:eid eid
+                                              :business-time business-time
+                                              :transact-time transact-time}))
 
   (new-snapshot [this]
     (->RemoteSnapshot (atom [])))
@@ -210,14 +210,13 @@
     (->RemoteDatasource url business-time transact-time))
 
   (history [_ eid]
-    (->> (api-request-sync (str url "/history") eid)
-         (mapv enrich-entity-tx)))
+    (api-request-sync (str url "/history") eid))
 
   (document [_ content-hash]
     (api-request-sync (str url "/document") (str content-hash)))
 
   (submit-tx [_ tx-ops]
-    (tx/map->SubmittedTx (api-request-sync (str url "/tx-log") tx-ops)))
+    (api-request-sync (str url "/tx-log") tx-ops))
 
   (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
     (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))

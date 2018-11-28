@@ -8,7 +8,7 @@
             [crux.io :as cio]
             [crux.kv-store :as ks])
   (:import crux.index.EntityTx
-           java.io.Closeable))
+           [java.io Closeable Writer]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -161,6 +161,10 @@
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
 (defrecord SubmittedTx [tx-id transact-time])
+
+(defmethod print-method SubmittedTx [submitted-tx ^Writer w]
+  (.write w "#crux/submitted-tx ")
+  (print-method (into {} submitted-tx) w))
 
 (defrecord DocTxLog [kv]
   db/TxLog

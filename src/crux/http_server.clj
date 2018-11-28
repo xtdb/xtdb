@@ -129,17 +129,12 @@
       (success-response
        (get (db/get-objects object-store snapshot [content-hash]) content-hash)))))
 
-(defn- plain-entity-tx [entity-tx]
-  (into {} (-> entity-tx
-               (update :content-hash str)
-               (update :eid str))))
-
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn history [kvs request]
   (let [entity (param request "entity")]
     (with-open [snapshot (kvs/new-snapshot kvs)]
       (success-response
-       (mapv plain-entity-tx (doc/entity-history snapshot entity))))))
+       (doc/entity-history snapshot entity)))))
 
 (defn- db-for-request [kvs {:keys [business-time transact-time]}]
   (cond
@@ -188,9 +183,8 @@
 (defn entity-tx [kvs request]
   (let [query-map (param request "entity-tx")]
     (success-response
-     (when-let [entity-tx (q/entity-tx (db-for-request kvs query-map)
-                                       (:eid query-map))]
-       (plain-entity-tx entity-tx)))))
+     (q/entity-tx (db-for-request kvs query-map)
+                  (:eid query-map)))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -290,7 +284,7 @@
 (defn transact [tx-log request]
   (let [tx-ops (param request)]
     (success-response
-     (into {} @(db/submit-tx tx-log tx-ops)))))
+     @(db/submit-tx tx-log tx-ops))))
 
 ;; ---------------------------------------------------
 ;; Jetty server
