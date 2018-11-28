@@ -46,6 +46,7 @@ Data & Time Travel in PostgreSQL]
 inhomogeneously bitemporal data with Datomic and Clojure]
 * https://iansrobinson.com/2014/05/13/time-based-versioned-graphs/[Time-Based
 Versioned Graphs]
+* https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]
 
 === Business Time
 
