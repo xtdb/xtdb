@@ -30,7 +30,12 @@
       (t/is (= #{[:ivan]} (api/q (api/db api-client) '{:find [e]
                                                        :where [[e :name "Ivan"]]})))
       (t/is (= #{} (api/q (api/db api-client #inst "1999") '{:find [e]
-                                                             :where [[e :name "Ivan"]]}))))
+                                                             :where [[e :name "Ivan"]]})))
+
+      (t/testing "malformed query"
+        (t/is (thrown-with-msg? Exception
+                                #"HTTP status 400"
+                                (api/q (api/db api-client) '{:find [e]})))))
 
     (t/testing "query with streaming result"
       (let [db (api/db api-client)]
