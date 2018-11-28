@@ -603,18 +603,4 @@
                                                    (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
                                                    (doc/layered-idx->seq))]
                           (vec (for [var [:x :y :z]]
-                                 (get join-results var)))))))
-          ;; TODO: Should we need to specify the vars? The lhs and rhs
-          ;; vars needs to be the same.
-          (let [n-ary-or (doc/new-n-ary-or-layered-virtual-index lhs-index rhs-index)]
-            (t/is (= #{[1 3 0]
-                       [2 4 0]
-                       [1 0 10]
-                       [2 0 20]
-                       [2 20 0]
-                       [3 0 30]}
-                     (set (for [[_ join-results] (-> n-ary-or
-                                                     (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                     (doc/layered-idx->seq))]
-                            (vec (for [var [:x :y :z]]
-                                   (get join-results var)))))))))))))
+                                 (get join-results var))))))))))))
