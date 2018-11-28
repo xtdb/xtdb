@@ -89,6 +89,7 @@
 (def ^:dynamic *api-url* (str "http://" *host* ":" default-api-port))
 
 (defn with-http-server [f]
+  (assert *kv*)
   (let [port (cio/free-port)]
     (binding [*api-url* (str "http://" *host* ":" port)]
       (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) (:db-dir *kv*) ek/*kafka-bootstrap-servers* port)]
