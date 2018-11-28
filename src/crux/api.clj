@@ -4,6 +4,7 @@
             [crux.bootstrap :as bootstrap]
             [crux.db :as db]
             [crux.doc :as doc]
+            [crux.http-server :as srv]
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.query :as q]
@@ -13,8 +14,8 @@
            crux.query.QueryDatasource))
 
 (defprotocol CruxDatasource
-  (doc [this eid]
-    "returns the document for an entity")
+  (entity [this eid]
+    "returns the entity document")
   (entity-tx [this eid]
     "returns the entity tx for an entity")
   (new-snapshot [this]
@@ -24,8 +25,8 @@
 
 (extend-protocol CruxDatasource
   QueryDatasource
-  (doc [this eid]
-    (q/doc this eid))
+  (entity [this eid]
+    (q/entity this eid))
 
   (entity-tx [this eid]
     (q/entity-tx this eid))
@@ -40,6 +41,8 @@
     (q/q this snapshot q)))
 
 (defprotocol CruxSystem
+  (status [this]
+    "returns the status of this node")
   (db [this] [this business-time] [this business-time transact-time]
     "returns a db for the system")
   (history [this eid]
@@ -51,8 +54,11 @@
   (submitted-tx-updated-entity? [this submitted-tx eid]
     "checks if a submitted tx did update an entity"))
 
-(defrecord LocalNode [close-promise underlying]
+(defrecord LocalNode [close-promise underlying options]
   CruxSystem
+  (status [_]
+    (srv/status-map (:kv-store @underlying) (:bootstrap-servers options)))
+
   (db [_]
     (q/db (:kv-store @underlying)))
 
@@ -101,7 +107,7 @@
           (log/info "crux system completed teardown"))]
     (while (not (or (deref started-promise 100 false)
                     (deref running-future 100 false))))
-    (->LocalNode close-promise underlying)))
+    (->LocalNode close-promise underlying options)))
 
 (defn- api-post-sync [url body]
   (let [{:keys [body error status]
@@ -125,10 +131,10 @@
 
 (defrecord RemoteDatasource [url business-time transact-time]
   CruxDatasource
-  (doc [this eid]
-    (api-post-sync (str url "/doc") {:eid eid
-                                     :business-time business-time
-                                     :transact-time transact-time}))
+  (entity [this eid]
+    (api-post-sync (str url "/entity") {:eid eid
+                                        :business-time business-time
+                                        :transact-time transact-time}))
 
   (entity-tx [this eid]
     (enrich-entity-tx (api-post-sync (str url "/entity-tx") {:eid eid
@@ -148,6 +154,12 @@
 
 (defrecord RemoteApiConnection [url]
   CruxSystem
+  (status [_]
+    (let [{:keys [error body]} @(http/get url)]
+      (if error
+        (throw error)
+        (edn/read-string body))))
+
   (db [_]
     (->RemoteDatasource url nil nil))
 

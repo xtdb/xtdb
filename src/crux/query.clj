@@ -960,7 +960,7 @@
          offset (drop offset)
          limit (take limit))))))
 
-(defn result-tuple->docs [result-tuple]
+(defn result-tuple->entities [result-tuple]
   (map :doc (vals (meta result-tuple))))
 
 (defn result-tuple->entity-txs [result-tuple]
@@ -973,11 +973,11 @@
        (map result-tuple->entity-txs)
        (ffirst)))
 
-(defn doc [db eid]
+(defn entity [db eid]
   (->> (q db {:find '[e]
               :where '[[e :crux.db/id eid]]
               :args [{:eid eid}]})
-       (map result-tuple->docs)
+       (map result-tuple->entities)
        (ffirst)))
 
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time])

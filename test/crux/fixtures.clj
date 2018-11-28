@@ -92,7 +92,7 @@
   (assert *kv*)
   (let [port (cio/free-port)]
     (binding [*api-url* (str "http://" *host* ":" port)]
-      (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) (:db-dir *kv*) ek/*kafka-bootstrap-servers* port)]
+      (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) ek/*kafka-bootstrap-servers* port)]
         (f)))))
 
 ;; TODO: This should really create their own ports etc.

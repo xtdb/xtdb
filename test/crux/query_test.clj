@@ -1164,7 +1164,7 @@
         (t/is (= tx-id (:tx-id (q/entity-tx (q/db *kv* transact-time transact-time) :ivan))))
 
         (t/is (= {:crux.db/id :ivan
-                  :name "Ivan 1st"} (q/doc (q/db *kv* transact-time transact-time) :ivan)))))
+                  :name "Ivan 1st"} (q/entity (q/db *kv* transact-time transact-time) :ivan)))))
 
     (t/testing "cannot create existing user"
       (let [{:keys [transact-time
@@ -1209,7 +1209,7 @@
             (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
             (t/is (= #{["Ivan 4th"]} (q/q (q/db *kv* transact-time
                                                 transact-time) '{:find [n]
-                                                                 :where [[:ivan :name n]]})))))
+                                                :where [[:ivan :name n]]})))))
 
         (t/testing "normal put after CAS works"
           (let [{:keys [transact-time] :as submitted-tx}
@@ -1220,11 +1220,11 @@
             (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
             (t/is (= #{["Ivan 5th"]} (q/q (q/db *kv* transact-time
                                                 transact-time) '{:find [n]
-                                                                 :where [[:ivan :name n]]})))
+                                                :where [[:ivan :name n]]})))
 
             (t/testing "earlier submitted txs can still be checked"
               (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan))))
-))))))
+            ))))))
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test

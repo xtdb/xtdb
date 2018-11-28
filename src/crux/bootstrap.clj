@@ -89,7 +89,6 @@
                 http-server (srv/create-server
                              kv-store
                              tx-log
-                             db-dir
                              bootstrap-servers
                              server-port)
                 indexing-consumer (k/create-indexing-consumer

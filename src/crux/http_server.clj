@@ -14,9 +14,9 @@
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.request :as req])
-  (:import [java.io Closeable]
-           [org.apache.kafka.clients.consumer
-            KafkaConsumer]
+  (:import java.io.Closeable
+           java.time.Duration
+           org.apache.kafka.clients.consumer.KafkaConsumer
            [org.eclipse.rdf4j.model BNode IRI Literal]))
 
 ;; ---------------------------------------------------
@@ -97,21 +97,25 @@
   (try
     (with-open [^KafkaConsumer consumer
                 (k/create-consumer
-                 {"bootstrap.servers" bootstrap-servers})]
+                 {"bootstrap.servers" bootstrap-servers
+                  "default.api.timeout.ms" (int 1000)})]
       (boolean (.listTopics consumer)))
-    (catch Exception e false)))
+    (catch Exception e
+      false)))
 
 ;; ---------------------------------------------------
 ;; Services
 
-(defn status [kvs db-dir bootstrap-servers]
-  (let [zk-status (zk-active? bootstrap-servers)
-        status-map {:crux.zk/zk-active? zk-status
-                    :crux.kv-store/kv-backend (.getName (class kvs))
-                    :crux.kv-store/estimate-num-keys (kvs/count-keys kvs)
-                    :crux.kv-store/size (cio/folder-human-size db-dir)
-                    :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)}]
-    (if zk-status
+(defn status-map [kvs bootstrap-servers]
+  {:crux.zk/zk-active? (zk-active? bootstrap-servers)
+   :crux.kv-store/kv-backend (.getName (class kvs))
+   :crux.kv-store/estimate-num-keys (kvs/count-keys kvs)
+   :crux.kv-store/size (some-> (:db-dir kvs) (cio/folder-size))
+   :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)})
+
+(defn status [kvs bootstrap-servers]
+  (let [status-map (status-map kvs bootstrap-servers)]
+    (if (:crux.zk/zk-active? status-map)
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
@@ -153,11 +157,11 @@
      (q/q (db-for-request kvs query-map)
           (dissoc query-map :business-time :transact-time)))))
 
-(defn doc [kvs request]
-  (let-valid [query-map (param request "doc")]
+(defn entity [kvs request]
+  (let-valid [query-map (param request "entity")]
     (success-response
-     (q/doc (db-for-request kvs query-map)
-            (:eid query-map)))))
+     (q/entity (db-for-request kvs query-map)
+               (:eid query-map)))))
 
 (defn entity-tx [kvs request]
   (let-valid [query-map (param request "entity-tx")]
@@ -269,10 +273,10 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn handler [kv tx-log db-dir bootstrap-servers request]
+(defn handler [kv tx-log bootstrap-servers request]
   (cond
     (check-path request ["/"] [:get])
-    (status kv db-dir bootstrap-servers)
+    (status kv bootstrap-servers)
 
     (check-path request ["/d" "/document"] [:get :post])
     (document kv request)
@@ -283,8 +287,8 @@
     (check-path request ["/q" "/query"] [:get :post])
     (query kv request)
 
-    (check-path request ["/doc"] [:get :post])
-    (doc kv request)
+    (check-path request ["/entity"] [:get :post])
+    (entity kv request)
 
     (check-path request ["/entity-tx"] [:get :post])
     (entity-tx kv request)
@@ -301,8 +305,8 @@
      :body "Unsupported method on this address."}))
 
 (defn ^Closeable create-server
-  ([kv tx-log db-dir bootstrap-servers port]
-   (let [server (j/run-jetty (p/wrap-params (partial handler kv tx-log db-dir bootstrap-servers))
+  ([kv tx-log bootstrap-servers port]
+   (let [server (j/run-jetty (p/wrap-params (partial handler kv tx-log bootstrap-servers))
                              {:port port
                               :join? false})]
      (log/info (str "HTTP server started on port: " port))
