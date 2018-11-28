@@ -94,19 +94,3 @@
     (binding [*api-url* (str "http://" *host* ":" port)]
       (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) ek/*kafka-bootstrap-servers* port)]
         (f)))))
-
-;; TODO: This should really create their own ports etc.
-
-(def ^:dynamic *system*)
-(def ^:dynamic *extra-options*)
-
-(defn with-dev-system [f]
-  (assert ek/*kafka-bootstrap-servers*)
-  (b/start-system
-    (merge
-      b/default-options
-      {:bootstrap-servers ek/*kafka-bootstrap-servers*}
-      *extra-options*)
-    (fn [running-system]
-      (binding [*system* running-system]
-        (f)))))

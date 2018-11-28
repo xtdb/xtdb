@@ -18,8 +18,6 @@
            java.net.InetAddress
            java.util.Properties))
 
-(def system)
-
 (def cli-options
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
     :default "localhost:9092"]
@@ -171,7 +169,6 @@
           (start-system
            options
            (fn [running-system]
-             (alter-var-root #'system (constantly running-system))
              @(shutdown-hook-promise)))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
