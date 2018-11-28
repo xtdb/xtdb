@@ -3,6 +3,7 @@
             [clojure.pprint :as pp]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [crux.doc :as doc]
             [crux.http-server :as srv]
             [crux.kafka :as k]
@@ -45,6 +46,26 @@
 
    ["-h" "--help"]])
 
+(s/def ::bootstrap-servers (s/and string? #(re-matches #"\w+:\d+(,\w+:\d+)*" %)))
+(s/def ::group-id string?)
+(s/def ::tx-topic string?)
+(s/def ::doc-topic string?)
+(s/def ::doc-partitions pos-int?)
+(s/def ::replication-factor pos-int?)
+(s/def ::db-dir string?)
+(s/def ::kv-backend #{"rocksdb" "lmdb" "memdb"})
+(s/def ::server-port pos-int?)
+
+(s/def ::options (s/keys :opt-un [::bootstrap-servers
+                                  ::group-id
+                                  ::tx-topic
+                                  ::doc-topic
+                                  ::doc-partitions
+                                  ::replication-factor
+                                  ::db-dir
+                                  ::kv-backend
+                                  ::server-port]))
+
 (def default-options (:options (cli/parse-opts [] cli-options)))
 
 (defn parse-version []
@@ -80,6 +101,9 @@
                 server-port]
          :as options} (merge default-options options)]
     (log/info "starting system")
+    (when (s/invalid? :crux.bootstrap/options options)
+      (throw (IllegalArgumentException.
+              (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
     (with-open [kv-store (start-kv-store options)
                 producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
