@@ -52,8 +52,7 @@
    (case (:request-method request)
      :get (-> request
               :query-params
-              (find param-name)
-              last
+              (get param-name)
               read-unknown)
      :post (-> request
                req/body-string
