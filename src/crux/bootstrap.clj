@@ -120,6 +120,7 @@
                              server-port)
                 indexing-consumer (k/create-indexing-consumer
                                    admin-client indexer options)]
+      (log/info "system started")
       (with-system-fn
         {:kv-store kv-store
          :tx-log tx-log

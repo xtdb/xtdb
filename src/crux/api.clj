@@ -100,23 +100,18 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close."
   [options]
-  (log/info "running crux in library mode")
   (let [underlying (atom nil)
         close-promise (promise)
         started-promise (promise)
         options (merge bootstrap/default-options options)
         running-future
         (future
-          (log/info "crux thread intialized")
           (bootstrap/start-system
            options
            (fn with-system-callback [system]
-             (log/info "crux system start completed")
              (reset! underlying system)
              (deliver started-promise true)
-             @close-promise
-             (log/info "starting teardown of crux system")))
-          (log/info "crux system completed teardown"))]
+             @close-promise)))]
     (while (not (or (deref started-promise 100 false)
                     (deref running-future 100 false))))
     (map->LocalNode (merge {:close-promise close-promise  :options options}
