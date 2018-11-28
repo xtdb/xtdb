@@ -54,7 +54,7 @@
 (s/def ::replication-factor pos-int?)
 (s/def ::db-dir string?)
 (s/def ::kv-backend #{"rocksdb" "lmdb" "memdb"})
-(s/def ::server-port pos-int?)
+(s/def ::server-port (s/int-in 1 65536))
 
 (s/def ::options (s/keys :opt-un [::bootstrap-servers
                                   ::group-id

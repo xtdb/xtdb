@@ -937,8 +937,8 @@
          result))))
   ([{:keys [object-store] :as db} snapshot q]
    (log/debug :query (pr-str q))
-   (let [{:keys [find where args rules offset limit order-by] :as q} (s/conform :crux.query/query q)]
-     (when (= :clojure.spec.alpha/invalid q)
+   (let [{:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform :crux.query/query q)]
+     (when (s/invalid? q-conformed)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (validate-args args)
