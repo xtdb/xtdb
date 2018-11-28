@@ -1,20 +1,22 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.embedded-kafka :as ek])
   (:import crux.index.EntityTx
            crux.tx.SubmittedTx
            clojure.lang.LazySeq))
 
-(t/use-fixtures :each f/with-kv-store f/with-http-server)
+(t/use-fixtures :each f/with-kv-store ek/with-embedded-kafka-cluster f/with-http-server)
 
 (t/deftest test-can-access-api-over-http
   (with-open [api-client (api/new-api-client f/*api-url*)]
     (t/testing "status"
-      (t/is (= {:crux.kv-store/kv-backend "crux.rocksdb.RocksKv"
+      (t/is (= {:crux.zk/zk-active? true
+                :crux.kv-store/kv-backend "crux.rocksdb.RocksKv"
                 :crux.kv-store/estimate-num-keys 0
                 :crux.tx-log/tx-time nil}
-               (dissoc (api/status api-client) :crux.zk/zk-active? :crux.kv-store/size))))
+               (dissoc (api/status api-client) :crux.kv-store/size))))
 
     (t/testing "transaction"
       (let [submitted-tx (api/submit-tx api-client [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"}]])]
