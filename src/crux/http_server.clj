@@ -11,7 +11,7 @@
             [crux.rdf :as rdf]
             [crux.tx :as tx]
             [crux.query :as q]
-            [crux.kv-store :as kvs]
+            [crux.kv-store :as ks]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.request :as req]
@@ -107,15 +107,15 @@
 ;; ---------------------------------------------------
 ;; Services
 
-(defn status-map [kvs bootstrap-servers]
+(defn status-map [kv bootstrap-servers]
   {:crux.zk/zk-active? (zk-active? bootstrap-servers)
-   :crux.kv-store/kv-backend (.getName (class kvs))
-   :crux.kv-store/estimate-num-keys (kvs/count-keys kvs)
-   :crux.kv-store/size (some-> (:db-dir kvs) (cio/folder-size))
-   :crux.tx-log/tx-time (doc/read-meta kvs :crux.tx-log/tx-time)})
+   :crux.kv-store/kv-backend (.getName (class kv))
+   :crux.kv-store/estimate-num-keys (ks/count-keys kv)
+   :crux.kv-store/size (some-> (:db-dir kv) (cio/folder-size))
+   :crux.tx-log/tx-time (doc/read-meta kv :crux.tx-log/tx-time)})
 
-(defn status [kvs bootstrap-servers]
-  (let [status-map (status-map kvs bootstrap-servers)]
+(defn status [kv bootstrap-servers]
+  (let [status-map (status-map kv bootstrap-servers)]
     (if (:crux.zk/zk-active? status-map)
       (success-response status-map)
       (response 500
@@ -125,36 +125,36 @@
 (defn document [kv request]
   (let [object-store (doc/->DocObjectStore kv)
         content-hash (idx/new-id (param request "hash"))]
-    (with-open [snapshot (kvs/new-snapshot kv)]
+    (with-open [snapshot (ks/new-snapshot kv)]
       (success-response
        (get (db/get-objects object-store snapshot [content-hash]) content-hash)))))
 
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
-(defn history [kvs request]
+(defn history [kv request]
   (let [entity (param request "entity")]
-    (with-open [snapshot (kvs/new-snapshot kvs)]
+    (with-open [snapshot (ks/new-snapshot kv)]
       (success-response
        (doc/entity-history snapshot entity)))))
 
-(defn- db-for-request [kvs {:keys [business-time transact-time]}]
+(defn- db-for-request [kv {:keys [business-time transact-time]}]
   (cond
     (and business-time transact-time)
-    (q/db kvs business-time transact-time)
+    (q/db kv business-time transact-time)
 
     business-time
-    (q/db kvs business-time)
+    (q/db kv business-time)
 
     :else
-    (q/db kvs)))
+    (q/db kv)))
 
-(defn query [kvs request]
+(defn query [kv request]
   (let [lazy? (Boolean/parseBoolean (-> request
                                         :query-params
                                         (get "lazy")))
         query-map (param request "q")]
     (if lazy?
-      (let [snapshot (kvs/new-snapshot kvs)
-            result (q/q (db-for-request kvs query-map) snapshot
+      (let [snapshot (ks/new-snapshot kv)
+            result (q/q (db-for-request kv query-map) snapshot
                         (dissoc query-map :business-time :transact-time))]
         (try
           (response 200
@@ -171,19 +171,19 @@
             (.close snapshot)
             (throw t))))
       (success-response
-       (q/q (db-for-request kvs query-map)
+       (q/q (db-for-request kv query-map)
             (dissoc query-map :business-time :transact-time))))))
 
-(defn entity [kvs request]
+(defn entity [kv request]
   (let [query-map (param request "entity")]
     (success-response
-     (q/entity (db-for-request kvs query-map)
+     (q/entity (db-for-request kv query-map)
                (:eid query-map)))))
 
-(defn entity-tx [kvs request]
+(defn entity-tx [kv request]
   (let [query-map (param request "entity-tx")]
     (success-response
-     (q/entity-tx (db-for-request kvs query-map)
+     (q/entity-tx (db-for-request kv query-map)
                   (:eid query-map)))))
 
 ;; TODO: This is a bit ad-hoc.
@@ -247,7 +247,7 @@
        "]}}"))
 
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
-(defn sparql-query [kvs request]
+(defn sparql-query [kv request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])
@@ -262,7 +262,7 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (rdf/sparql->datalog query)
-          results (q/q (q/db kvs) query-map)]
+          results (q/q (q/db kv) query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond (= "application/sparql-results+xml" accept)

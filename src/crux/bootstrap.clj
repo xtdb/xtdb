@@ -6,7 +6,7 @@
             [crux.doc :as doc]
             [crux.http-server :as srv]
             [crux.kafka :as k]
-            [crux.kv-store :as kv-store]
+            [crux.kv-store :as ks]
             [crux.kafka.nippy]
             crux.lmdb
             crux.memdb
@@ -68,7 +68,7 @@
     (->> (assoc kv-store
                 :db-dir db-dir
                 :state (atom {}))
-         (kv-store/open))))
+         (ks/open))))
 
 (defn start-system
   [options with-system-fn]

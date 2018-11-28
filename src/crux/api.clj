@@ -89,9 +89,17 @@
   Closeable
   (close [_] (deliver close-promise true)))
 
-(defn ^Closeable start-local-node
-  "Starts a Crux query node in local library mode."
-  [start-fn options]
+(defn ^LocalNode start-local-node
+  "Starts a Crux query node in local library mode.
+
+  For valid options, see crux.bootstrap/cli-options. Options are
+  specified as keywords using their long format name,
+  like :bootstrap-servers etc.
+
+  Returns a crux.api.LocalNode component that implements
+  java.io.Closeable, which allows the system to be stopped by calling
+  close."
+  [options]
   (log/info "running crux in library mode")
   (let [underlying (atom nil)
         close-promise (promise)
