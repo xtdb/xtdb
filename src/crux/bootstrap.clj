@@ -149,21 +149,17 @@
 (def env-prefix "CRUX_")
 
 (defn- options-from-env []
-  (let [{specs :summary} (cli/parse-opts [] cli-options :summary-fn identity)]
-    (->> (for [{:keys [id parse-fn validate-fn]} specs
-               :let [env-var (str env-prefix (str/replace (str/upper-case (name id)) "-" "_"))
-                     v (System/getenv env-var)]
-               :when v]
-           [id (cond->> v
-                 parse-fn (parse-fn)
-                 validate-fn (validate-fn))])
-         (into {}))))
+  (->> (for [id (keys default-options)
+             :let [env-var (str env-prefix (str/replace (str/upper-case (name id)) "-" "_"))
+                   v (System/getenv env-var)]
+             :when v]
+         [(str "--" (name id)) v])
+       (apply concat)))
 
 (defn start-system-from-command-line [args]
   (let [{:keys [options
                 errors
-                summary]} (cli/parse-opts args cli-options :no-defaults true)
-        options (merge default-options (options-from-env) options)
+                summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
         {:strs [version
                 revision]} (parse-version)]
     (cond
