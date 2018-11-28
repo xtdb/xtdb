@@ -146,11 +146,24 @@
                                      (.halt (Runtime/getRuntime) 1))))))
     shutdown?))
 
+(def env-prefix "CRUX_")
+
+(defn- options-from-env []
+  (let [{specs :summary} (cli/parse-opts [] cli-options :summary-fn identity)]
+    (->> (for [{:keys [id parse-fn validate-fn]} specs
+               :let [env-var (str env-prefix (str/replace (str/upper-case (name id)) "-" "_"))
+                     v (System/getenv env-var)]
+               :when v]
+           [id (cond->> v
+                 parse-fn (parse-fn)
+                 validate-fn (validate-fn))])
+         (into {}))))
+
 (defn start-system-from-command-line [args]
   (let [{:keys [options
                 errors
-                summary]} (cli/parse-opts args cli-options)
-        options (merge default-options options)
+                summary]} (cli/parse-opts args cli-options :no-defaults true)
+        options (merge default-options (options-from-env) options)
         {:strs [version
                 revision]} (parse-version)]
     (cond
