@@ -10,49 +10,50 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.rdf :as rdf]
-            [sys :refer [start stop clear reset]])
-  (:import [kafka.server KafkaServerStartable]
-           [org.apache.zookeeper.server ServerCnxnFactory]
+            [crux.rdf :as rdf])
+  (:import kafka.server.KafkaServerStartable
+           org.apache.zookeeper.server.ServerCnxnFactory
            [ch.qos.logback.classic Level Logger]
-           [org.slf4j LoggerFactory]
-           [java.io Closeable]))
+           org.slf4j.LoggerFactory
+           java.io.Closeable))
 
 (def storage-dir "dev-storage")
 (def dev-options {:db-dir (str storage-dir "/data")
                   :zookeeper-data-dir (str storage-dir "/zookeeper")
                   :kafka-log-dir (str storage-dir "/kafka-log")})
+
 (def system)
 
-(defn ^Closeable start-zookeeper [{:keys [zookeeper-data-dir]}]
-  (sys/closeable
-   (ek/start-zookeeper (io/file zookeeper-data-dir))
-   (fn [^ServerCnxnFactory zk]
-     (.shutdown zk))))
+(defn start []
+  (alter-var-root
+   #'system (constantly
+             (let [{:keys [zookeeper-data-dir kafka-log-dir]
+                    :as options} (merge b/default-options dev-options)
+                   zookeeper (ek/start-zookeeper (io/file zookeeper-data-dir))
+                   kafka (ek/start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})]
+               (merge (api/start-local-node options) {:zookeeper zookeeper
+                                                      :kafka kafka}))))
+  :started)
 
-(defn ^Closeable start-kafka [{:keys [kafka-log-dir]}]
-  (sys/closeable
-   (ek/start-kafka-broker
-    {"log.dir" (str (io/file kafka-log-dir))})
-   (fn [^KafkaServerStartable kafka]
-     (.shutdown kafka)
-     (.awaitShutdown kafka))))
+(defn stop []
+  (when (and (bound? #'system)
+             (not (nil? system)))
+    (alter-var-root #'system
+                    (fn [{:keys [kafka zookeeper] :as node}]
+                      (.close ^Closeable node)
+                      (ek/stop-kafka-broker kafka)
+                      (ek/stop-zookeeper zookeeper))))
+  :stopped)
 
-(defn start-crux-dev-system
-  [with-system-fn]
-  (let [options (merge b/default-options dev-options)]
-    (with-open [zookeeper (start-zookeeper options)
-                kafka (start-kafka options)]
-      (b/start-system
-        options
-        (fn [system]
-          (with-system-fn (merge system {:zookeeper zookeeper
-                                         :kafka kafka})))))))
+(defn clear []
+  (alter-var-root #'system (constantly nil)))
 
-(defn make-crux-system-init-fn []
-  ((sys/make-init-fn #'system (fn [cont] (start-crux-dev-system cont)))))
-
-(alter-var-root #'sys/init (constantly make-crux-system-init-fn))
+(defn reset []
+  (stop)
+  (let [result (tn/refresh :after 'dev/start)]
+    (if (instance? Throwable result)
+      (throw result)
+      result)))
 
 (defn delete-storage []
   (stop)

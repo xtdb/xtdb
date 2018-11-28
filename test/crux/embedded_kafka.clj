@@ -52,6 +52,10 @@
   (doto (KafkaServerStartable. (KafkaConfig. (merge default-kafka-broker-config config)))
     (.startup)))
 
+(defn stop-kafka-broker [^KafkaServerStartable broker]
+  (some-> broker .shutdown)
+  (some-> broker .awaitShutdown))
+
 (defn with-embedded-kafka [f]
   (let [log-dir (doto (cio/create-tmpdir "kafka-log")
                   (write-kafka-meta-properties *broker-id*))
@@ -65,8 +69,7 @@
       (binding [*kafka-bootstrap-servers* (str *host* ":" port)]
         (f))
       (finally
-        (some-> broker .shutdown)
-        (some-> broker .awaitShutdown)
+        (stop-kafka-broker broker)
         (cio/delete-dir log-dir)))))
 
 (defn start-zookeeper ^ServerCnxnFactory
@@ -79,6 +82,9 @@
      (doto (ServerCnxnFactory/createFactory port max-connections)
        (.startup server)))))
 
+(defn stop-zookeeper [^ServerCnxnFactory server-cnxn-factory]
+  (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown))
+
 (defn with-embedded-zookeeper [f]
   (let [data-dir (cio/create-tmpdir "zookeeper")
         port (cio/free-port)
@@ -87,7 +93,7 @@
       (binding [*zookeeper-connect* (str  *host* ":" port)]
         (f))
       (finally
-        (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown)
+        (stop-zookeeper server-cnxn-factory)
         (cio/delete-dir data-dir)))))
 
 (def ^:dynamic ^AdminClient *admin-client*)

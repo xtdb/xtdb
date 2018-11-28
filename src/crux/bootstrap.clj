@@ -91,6 +91,9 @@
                 :state (atom {}))
          (ks/open))))
 
+;; Inspired by
+;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
+
 (defn start-system
   [options with-system-fn]
   (let [{:keys [bootstrap-servers

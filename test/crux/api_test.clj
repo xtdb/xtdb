@@ -11,11 +11,10 @@
 (t/deftest test-can-access-api-over-http
   (with-open [api-client (api/new-api-client f/*api-url*)]
     (t/testing "status"
-      (t/is (= {:crux.zk/zk-active? false
-                :crux.kv-store/kv-backend "crux.rocksdb.RocksKv"
+      (t/is (= {:crux.kv-store/kv-backend "crux.rocksdb.RocksKv"
                 :crux.kv-store/estimate-num-keys 0
                 :crux.tx-log/tx-time nil}
-               (dissoc (api/status api-client) :crux.kv-store/size))))
+               (dissoc (api/status api-client) :crux.zk/zk-active? :crux.kv-store/size))))
 
     (t/testing "transaction"
       (let [submitted-tx (api/submit-tx api-client [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"}]])]

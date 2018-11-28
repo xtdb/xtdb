@@ -57,34 +57,34 @@
   (submitted-tx-updated-entity? [this submitted-tx eid]
     "Checks if a submitted tx did update an entity."))
 
-(defrecord LocalNode [close-promise underlying options]
+(defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
   (status [_]
-    (srv/status-map (:kv-store @underlying) (:bootstrap-servers options)))
+    (srv/status-map kv-store (:bootstrap-servers options)))
 
   (db [_]
-    (q/db (:kv-store @underlying)))
+    (q/db kv-store))
 
   (db [_ business-time]
-    (q/db (:kv-store @underlying) business-time))
+    (q/db kv-store business-time))
 
   (db [_ business-time transact-time]
-    (q/db (:kv-store @underlying) business-time transact-time))
+    (q/db kv-store business-time transact-time))
 
   (history [_ eid]
-    (doc/entity-history (:kv-store @underlying) eid))
+    (doc/entity-history kv-store eid))
 
   (document [_ content-hash]
-    (let [kv (:kv-store @underlying)
+    (let [kv kv-store
           object-store (doc/->DocObjectStore kv)]
       (with-open [snapshot (ks/new-snapshot kv)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (submit-tx [_ tx-ops]
-    (db/submit-tx (:tx-log @underlying) tx-ops))
+    (db/submit-tx tx-log tx-ops))
 
   (submitted-tx-updated-entity? [_ submitted-tx eid]
-    (q/submitted-tx-updated-entity? (:kv-store @underlying) submitted-tx eid))
+    (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
 
   Closeable
   (close [_] (deliver close-promise true)))
@@ -111,15 +111,16 @@
           (bootstrap/start-system
            options
            (fn with-system-callback [system]
-             (deliver started-promise true)
              (log/info "crux system start completed")
              (reset! underlying system)
+             (deliver started-promise true)
              @close-promise
              (log/info "starting teardown of crux system")))
           (log/info "crux system completed teardown"))]
     (while (not (or (deref started-promise 100 false)
                     (deref running-future 100 false))))
-    (->LocalNode close-promise underlying options)))
+    (map->LocalNode (merge {:close-promise close-promise  :options options}
+                           @underlying))))
 
 (def ^:private remote-api-readers
   {'crux/id idx/new-id
