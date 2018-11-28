@@ -109,25 +109,28 @@
                     (deref running-future 100 false))))
     (->LocalNode close-promise underlying options)))
 
-(defn- api-post-sync [url body]
-  (let [{:keys [body error status]
-         :as result} @(http/post url {:body (pr-str body)
-                                      :as :text})]
+(defn- api-call-sync [http-method url body]
+  (let [{:keys [body error status headers]
+         :as result} @(http-method url {:body (pr-str body)
+                                        :as :text})]
     (cond
       error
       (throw error)
 
-      (not= 200 status)
-      (throw (IOException. (str "HTTP Status " status ": " body)))
+      (= "application/edn" (:content-type headers))
+      (edn/read-string body)
 
       :else
-      (edn/read-string body))))
+      (throw (ex-info (str "HTTP Status " status) result)))))
+
+(defn- api-post-sync [url body]
+  (api-call-sync http/post url body))
 
 (defn- enrich-entity-tx [entity-tx]
-  (some->  entity-tx
-           (idx/map->EntityTx)
-           (update :eid idx/new-id)
-           (update :content-hash idx/new-id)))
+  (some-> entity-tx
+          (idx/map->EntityTx)
+          (update :eid idx/new-id)
+          (update :content-hash idx/new-id)))
 
 (defrecord RemoteDatasource [url business-time transact-time]
   CruxDatasource
@@ -155,10 +158,7 @@
 (defrecord RemoteApiConnection [url]
   CruxSystem
   (status [_]
-    (let [{:keys [error body]} @(http/get url)]
-      (if error
-        (throw error)
-        (edn/read-string body))))
+    (api-call-sync http/get url nil))
 
   (db [_]
     (->RemoteDatasource url nil nil))
