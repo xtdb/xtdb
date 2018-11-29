@@ -14,7 +14,8 @@
             crux.rocksdb
             [crux.tx :as tx]
             [clojure.string :as str])
-  (:import [java.io Closeable Reader]
+  (:import clojure.lang.IPersistentMap
+           [java.io Closeable Reader]
            java.net.InetAddress
            java.util.Properties))
 
@@ -38,9 +39,11 @@
     :parse-fn #(Long/parseLong %)]
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
-   ["-k" "--kv-backend KV_BACKEND" "KV storage backend: rocksdb, lmdb or memdb"
-    :default "rocksdb"
-    :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
+   ["-k" "--kv-backend KV_BACKEND" "KV storage backend:
+   crux.rocksdb.RocksKv, crux.lmdb.LMDBKv or crux.memdb.MemKv"
+    :default crux.rocksdb.RocksKv
+    :parse-fn (comp deref resolve symbol)
+    :validate [#(extends? ks/KvStore %) "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
@@ -55,7 +58,7 @@
 (s/def ::create-topics boolean?)
 (s/def ::replication-factor pos-int?)
 (s/def ::db-dir string?)
-(s/def ::kv-backend #{"rocksdb" "lmdb" "memdb"})
+(s/def ::kv-backend #(extends? ks/KvStore %))
 (s/def ::server-port (s/int-in 1 65536))
 
 (s/def ::options (s/keys :opt-un [::bootstrap-servers
@@ -88,14 +91,10 @@
 (defn ^Closeable start-kv-store [{:keys [db-dir
                                          kv-backend]
                                   :as options}]
-  (let [kv-store ((case kv-backend
-                    "rocksdb" crux.rocksdb/map->RocksKv
-                    "lmdb" crux.lmdb/map->LMDBKv
-                    "memdb" crux.memdb/map->MemKv) {})]
-    (->> (assoc kv-store
-                :db-dir db-dir
-                :state (atom {}))
-         (ks/open))))
+  (->> (assoc (eval (list (symbol (.getName crux.rocksdb.RocksKv) "create") {}))
+              :db-dir db-dir
+              :state (atom {}))
+       (ks/open)))
 
 (defn- read-kafka-properties-file [f]
   (when f

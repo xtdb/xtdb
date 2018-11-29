@@ -52,11 +52,11 @@
    (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
 
 (def ^:dynamic *kv*)
-(def ^:dynamic *kv-backend* "rocksdb")
+(def ^:dynamic *kv-backend* crux.rocksdb.RocksKv)
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
-    (binding [*kv* (crux.bootstrap/start-kv-store {:db-dir db-dir :kv-backend *kv-backend*})]
+    (binding [*kv* (b/start-kv-store {:db-dir db-dir :kv-backend *kv-backend*})]
       (try
         (with-open [*kv* ^Closeable *kv*]
           (f))
@@ -64,17 +64,17 @@
           (cio/delete-dir db-dir))))))
 
 (defn with-memdb [f]
-  (binding [*kv-backend* "memdb"]
+  (binding [*kv-backend* crux.memdb.MemKv]
     (t/testing "MemDB"
       (f))))
 
 (defn with-rocksdb [f]
-  (binding [*kv-backend* "rocksdb"]
+  (binding [*kv-backend* crux.rocksdb.RocksKv]
     (t/testing "RocksDB"
       (f))))
 
 (defn with-lmdb [f]
-  (binding [*kv-backend* "lmdb"]
+  (binding [*kv-backend* crux.lmdb.LMDBKv]
     (t/testing "LMDB"
       (f))))
 

@@ -27,8 +27,12 @@
 (defn ^LocalNode start-crux-system [{:keys [embed-kafka?] :as options}]
   (let [embedded-kafka (when embed-kafka?
                          (ek/start-embedded-kafka options))]
-    (assoc (api/start-local-node options)
-           :embedded-kafka embedded-kafka)))
+    (try
+      (assoc (api/start-local-node options)
+             :embedded-kafka embedded-kafka)
+      (catch Throwable t
+        (.close embedded-kafka)
+        (throw t)))))
 
 (defn ^LocalNode stop-crux-system [{:keys [embedded-kafka] :as system}]
   (.close ^Closeable system)

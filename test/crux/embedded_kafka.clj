@@ -126,5 +126,9 @@
 
 (defn ^EmbeddedKafka start-embedded-kafka [{:keys [zookeeper-data-dir kafka-log-dir]}]
   (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir))
-        kafka (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})]
+        kafka (try
+                (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})
+                (catch Throwable t
+                  (.close zookeeper)
+                  (throw t)))]
     (->EmbeddedKafka zookeeper kafka)))
