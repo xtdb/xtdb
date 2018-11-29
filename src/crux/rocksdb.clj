@@ -77,6 +77,12 @@
     (-> (.getProperty db "rocksdb.estimate-num-keys")
         (Long/parseLong)))
 
+  (db-dir [_]
+    db-dir)
+
+  (kv-name [this]
+    (.getName (class this)))
+
   Closeable
   (close [{:keys [^RocksDB db ^Options options ^WriteOptions write-options]}]
     (.close db)

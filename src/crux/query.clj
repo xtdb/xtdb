@@ -988,20 +988,20 @@
   ([kv]
    (let [business-time (cio/next-monotonic-date)]
      (->QueryDatasource kv
-                        (doc/get-or-create-named-cache kv ::query-cache default-query-cache-size)
+                        (lru/get-named-cache kv ::query-cache default-query-cache-size)
                         (doc/new-cached-object-store kv)
                         business-time
                         business-time)))
   ([kv business-time]
    (->QueryDatasource kv
-                      (doc/get-or-create-named-cache kv ::query-cache default-query-cache-size)
+                      (lru/get-named-cache kv ::query-cache default-query-cache-size)
                       (doc/new-cached-object-store kv)
                       business-time
                       (cio/next-monotonic-date)))
   ([kv business-time transact-time]
    (doc/await-tx-time kv transact-time)
    (->QueryDatasource kv
-                      (doc/get-or-create-named-cache kv ::query-cache default-query-cache-size)
+                      (lru/get-named-cache kv ::query-cache default-query-cache-size)
                       (doc/new-cached-object-store kv)
                       business-time
                       transact-time)))

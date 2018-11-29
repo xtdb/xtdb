@@ -67,6 +67,12 @@
   (count-keys [_]
     (count @db))
 
+  (db-dir [_]
+    db-dir)
+
+  (kv-name [this]
+    (.getName (class this)))
+
   Closeable
   (close [_]
     (when (and db-dir persist-on-close?)

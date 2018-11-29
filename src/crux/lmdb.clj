@@ -205,6 +205,12 @@
         (LMDB/mdb_stat (:txn tx) dbi stat)
         (.ms_entries stat))))
 
+  (db-dir [this]
+    (.getName (class this)))
+
+  (kv-name [_]
+    "crux.rocksdb.LMDBKv")
+
   Closeable
   (close [_]
     (env-close env)))

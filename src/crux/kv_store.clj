@@ -16,4 +16,6 @@
   (store [this kvs])
   (delete [this ks])
   (backup [this dir])
-  (count-keys [this]))
+  (count-keys [this])
+  (db-dir [this])
+  (kv-name [this]))

@@ -109,9 +109,9 @@
 
 (defn status-map [kv bootstrap-servers]
   {:crux.zk/zk-active? (zk-active? bootstrap-servers)
-   :crux.kv-store/kv-backend (.getName (class kv))
+   :crux.kv-store/kv-backend (ks/kv-name kv)
    :crux.kv-store/estimate-num-keys (ks/count-keys kv)
-   :crux.kv-store/size (some-> (:db-dir kv) (cio/folder-size))
+   :crux.kv-store/size (some-> (ks/db-dir kv) (cio/folder-size))
    :crux.tx-log/tx-time (doc/read-meta kv :crux.tx-log/tx-time)})
 
 (defn status [kv bootstrap-servers]

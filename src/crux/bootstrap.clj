@@ -9,6 +9,7 @@
             [crux.kafka :as k]
             [crux.kv-store :as ks]
             [crux.kafka.nippy]
+            [crux.lru :as lru]
             crux.lmdb
             crux.memdb
             crux.rocksdb
@@ -91,9 +92,9 @@
 (defn ^Closeable start-kv-store [{:keys [db-dir
                                          kv-backend]
                                   :as options}]
-  (->> (assoc (eval (list (symbol (.getName crux.rocksdb.RocksKv) "create") {}))
-              :db-dir db-dir
-              :state (atom {}))
+  (->> (lru/new-cache-providing-kv-store
+        (eval (list (symbol (.getName crux.rocksdb.RocksKv) "create")
+                    {:db-dir (str db-dir)})))
        (ks/open)))
 
 (defn- read-kafka-properties-file [f]

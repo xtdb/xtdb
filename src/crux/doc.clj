@@ -792,24 +792,11 @@
 
 (def ^:const default-doc-cache-size 10240)
 
-;; TODO: this should be changed to something more sensible, currently
-;; the KV has a state atom where the cache lives, this is to simplify
-;; API usage, and the kv instance is the main object. The main blocker
-;; to remove this is the crux.query/db call hiding the cache.
-;; NOTE: now also used for query caching in crux.query/build-sub-query.
-(defn get-or-create-named-cache [{:keys [state] :as kv} cache-name cache-size]
-  (get (swap! state
-              update
-              cache-name
-              (fn [cache]
-                (or cache (lru/new-cache cache-size))))
-       cache-name))
-
 (defn new-cached-object-store
   ([kv]
    (new-cached-object-store kv default-doc-cache-size))
   ([kv cache-size]
-   (->CachedObjectStore (get-or-create-named-cache kv ::doc-cache cache-size)
+   (->CachedObjectStore (lru/get-named-cache kv ::doc-cache cache-size)
                         (->DocObjectStore kv))))
 
 (defn- ensure-iterator-open [closed-state]
