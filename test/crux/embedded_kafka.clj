@@ -70,10 +70,10 @@
         (stop-kafka-broker broker)
         (cio/delete-dir log-dir)))))
 
-(defn start-zookeeper ^ServerCnxnFactory
-  ([data-dir]
+(defn start-zookeeper
+  (^ServerCnxnFactory [data-dir]
    (start-zookeeper data-dir default-zookeeper-port))
-  ([data-dir ^long port]
+  (^ServerCnxnFactory [data-dir ^long port]
    (let [tick-time 500
          max-connections 16
          server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
@@ -129,6 +129,6 @@
         kafka (try
                 (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})
                 (catch Throwable t
-                  (.close zookeeper)
+                  (stop-zookeeper zookeeper)
                   (throw t)))]
     (->EmbeddedKafka zookeeper kafka)))
