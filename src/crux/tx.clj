@@ -20,21 +20,24 @@
 (s/def ::put-op (s/cat :op #{:crux.tx/put}
                        :id ::id
                        :doc ::doc
-                       :business-time (s/? inst?)))
+                       :start-business-time (s/? inst?)
+                       :end-business-time (s/? inst?)))
 
 (s/def ::delete-op (s/cat :op #{:crux.tx/delete}
                           :id ::id
-                          :business-time (s/? inst?)))
+                          :start-business-time (s/? inst?)
+                          :end-business-time (s/? inst?)))
 
 (s/def ::cas-op (s/cat :op #{:crux.tx/cas}
                        :id ::id
                        :old-doc ::doc
                        :new-doc ::doc
-                       :business-time (s/? inst?)))
+                       :at-business-time (s/? inst?)))
 
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
                          :id ::id
-                         :business-time (s/? inst?)))
+                         :start-business-time (s/? inst?)
+                         :end-business-time (s/? inst?)))
 
 (s/def ::tx-op (s/and (s/or :put ::put-op
                             :delete ::delete-op
@@ -46,30 +49,38 @@
 
 (defmulti tx-command (fn [kv snapshot object-store tx-log [op] transact-time tx-id] op))
 
-(defmethod tx-command :crux.tx/put [kv snapshot object-store tx-log [op k v business-time] transact-time tx-id]
-  (let [eid (idx/new-id k)
-        content-hash (idx/new-id v)
-        business-time (or business-time transact-time)]
-    {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             (idx/id->bytes eid)
-             business-time
-             transact-time
-             tx-id)
-            (idx/id->bytes content-hash)]]}))
+(defn- in-range-pred [start end]
+  #(and (not (pos? (compare start %)))
+        (neg? (compare % end))))
 
-(defmethod tx-command :crux.tx/delete [kv snapshot object-store tx-log [op k business-time] transact-time tx-id]
+(defn- put-delete-kvs [snapshot k start-business-time end-business-time transact-time tx-id content-hash-bytes]
   (let [eid (idx/new-id k)
-        business-time (or business-time transact-time)]
-    {:kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             (idx/id->bytes eid)
-             business-time
-             transact-time
-             tx-id)
-            idx/nil-id-bytes]]}))
+        start-business-time (or start-business-time transact-time)
+        dates-in-history (when end-business-time
+                           (->> (map :bt (doc/entity-history snapshot eid))
+                                (filter (in-range-pred start-business-time end-business-time))))
+        dates-to-correct (->> (concat [start-business-time]
+                                      dates-in-history
+                                      (when end-business-time
+                                        [end-business-time]))
+                              (into (sorted-set)))]
+    {:kvs (vec (for [business-time dates-to-correct]
+                 [(idx/encode-entity+bt+tt+tx-id-key
+                   (idx/id->bytes eid)
+                   business-time
+                   transact-time
+                   tx-id)
+                  content-hash-bytes]))}))
 
-(defmethod tx-command :crux.tx/cas [kv snapshot object-store tx-log [op k old-v new-v business-time :as cas-op] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [kv snapshot object-store tx-log [op k v start-business-time end-business-time] transact-time tx-id]
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (idx/id->bytes (idx/new-id v))))
+
+(defmethod tx-command :crux.tx/delete [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id idx/nil-id-bytes))
+
+(defmethod tx-command :crux.tx/cas [kv snapshot object-store tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
   (let [eid (idx/new-id k)
-        business-time (or business-time transact-time)
+        business-time (or at-business-time transact-time)
         {:keys [content-hash]
          :as entity} (first (doc/entities-at snapshot [eid] business-time transact-time))
         old-v-bytes (idx/id->bytes old-v)
@@ -84,19 +95,20 @@
              tx-id)
             (idx/id->bytes new-v-id)]]}))
 
-(defmethod tx-command :crux.tx/evict [kv snapshot object-store tx-log [op k business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (idx/new-id k)
-        business-time (or business-time transact-time)]
-
+        history-descending (doc/entity-history snapshot eid)
+        start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
+        end-business-time (or end-business-time transact-time)]
     {:post-commit-fn #(when tx-log
-                        (doseq [{:keys [content-hash]
-                                 :as entity} (doc/entity-history snapshot eid)
-                                :when (and (<= (compare (.bt ^EntityTx entity) business-time) 0)
+                        (doseq [^EntityTx entity-tx history-descending
+                                :let [content-hash (.content-hash entity-tx)]
+                                :when (and ((in-range-pred start-business-time end-business-time) (.bt entity-tx))
                                            (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
                           (db/submit-doc tx-log content-hash nil)))
      :kvs [[(idx/encode-entity+bt+tt+tx-id-key
              (idx/id->bytes eid)
-             business-time
+             end-business-time
              transact-time
              tx-id)
             idx/nil-id-bytes]]}))

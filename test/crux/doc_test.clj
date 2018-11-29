@@ -47,7 +47,9 @@
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
         (t/is (empty? (db/get-objects object-store snapshot [])))))))
 
-(t/deftest test-can-index-tx-ops
+;; TODO: This is a large, useful, test that exercises many parts, but
+;; might be better split up.
+(t/deftest test-can-index-tx-ops-acceptance-test
   (let [tx-log (tx/->DocTxLog f/*kv*)
         object-store (doc/->DocObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
@@ -241,7 +243,7 @@
       (let [new-business-time #inst "2018-05-23"
             {new-transact-time :transact-time
              new-tx-id :tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-transact-time)))
@@ -261,45 +263,131 @@
                                            (idx/id->bytes content-hash))]]
                     (t/is (nil? (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
-(t/deftest test-can-perform-unary-join
-  (let [a-idx (doc/new-relation-virtual-index :a
-                                              [[0]
-                                               [1]
-                                               [3]
-                                               [4]
-                                               [5]
-                                               [6]
-                                               [7]
-                                               [8]
-                                               [9]
-                                               [11]
-                                               [12]]
-                                              1)
-        b-idx (doc/new-relation-virtual-index :b
-                                              [[0]
-                                               [2]
-                                               [6]
-                                               [7]
-                                               [8]
-                                               [9]
-                                               [12]]
-                                              1)
-        c-idx (doc/new-relation-virtual-index :c
-                                              [[2]
-                                               [4]
-                                               [5]
-                                               [8]
-                                               [10]
-                                               [12]]
-                                              1)]
+(t/deftest test-can-correct-ranges-in-the-past
+  (let [tx-log (tx/->DocTxLog f/*kv*)
+        object-store (doc/->DocObjectStore f/*kv*)
+        ivan {:crux.db/id :ivan :name "Ivan"}
 
-    (t/is (= [{:x 8}
-              {:x 12}]
-             (for [[_ join-results] (-> (doc/new-unary-join-virtual-index [(assoc a-idx :name :x)
-                                                                           (assoc b-idx :name :x)
-                                                                           (assoc c-idx :name :x)])
-                                        (doc/idx->seq))]
-               join-results)))))
+        v1-ivan (assoc ivan :version 1)
+        v1-business-time #inst "2018-11-26"
+        {v1-transact-time :transact-time
+         v1-tx-id :tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v1-ivan v1-business-time]])
+
+        v2-ivan (assoc ivan :version 2)
+        v2-business-time #inst "2018-11-27"
+        {v2-transact-time :transact-time
+         v2-tx-id :tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v2-ivan v2-business-time]])
+
+        v3-ivan (assoc ivan :version 3)
+        v3-business-time #inst "2018-11-28"
+        {v3-transact-time :transact-time
+         v3-tx-id :tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-business-time]])]
+
+    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (t/testing "first version of entity is visible"
+        (t/is (= v1-tx-id (-> (doc/entities-at snapshot [:ivan] v1-business-time v3-transact-time)
+                              (first)
+                              :tx-id))))
+
+      (t/testing "second version of entity is visible"
+        (t/is (= v2-tx-id (-> (doc/entities-at snapshot [:ivan] v2-business-time v3-transact-time)
+                              (first)
+                              :tx-id))))
+
+      (t/testing "third version of entity is visible"
+        (t/is (= v3-tx-id (-> (doc/entities-at snapshot [:ivan] v3-business-time v3-transact-time)
+                              (first)
+                              :tx-id)))))
+
+    (let [corrected-ivan (assoc ivan :version 4)
+          corrected-start-business-time #inst "2018-11-27"
+          corrected-end-business-time #inst "2018-11-29"
+          {corrected-transact-time :transact-time
+           corrected-tx-id :tx-id}
+          @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-business-time corrected-end-business-time]])]
+
+      (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (t/testing "first version of entity is still there"
+          (t/is (= v1-tx-id (-> (doc/entities-at snapshot [:ivan] v1-business-time corrected-transact-time)
+                                (first)
+                                :tx-id))))
+
+        (t/testing "second version of entity was corrected"
+          (t/is (= {:content-hash (idx/new-id corrected-ivan)
+                    :tx-id corrected-tx-id}
+                   (-> (doc/entities-at snapshot [:ivan] v2-business-time corrected-transact-time)
+                       (first)
+                       (select-keys [:tx-id :content-hash])))))
+
+        (t/testing "third version of entity was corrected"
+          (t/is (= {:content-hash (idx/new-id corrected-ivan)
+                    :tx-id corrected-tx-id}
+                   (-> (doc/entities-at snapshot [:ivan] v3-business-time corrected-transact-time)
+                       (first)
+                       (select-keys [:tx-id :content-hash]))))))
+
+      (let [deleted-start-business-time #inst "2018-11-25"
+            deleted-end-business-time #inst "2018-11-27"
+            {deleted-transact-time :transact-time
+             deleted-tx-id :tx-id}
+            @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-business-time deleted-end-business-time]])]
+
+        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (t/testing "first version of entity was deleted"
+            (t/is (empty? (doc/entities-at snapshot [:ivan] v1-business-time deleted-transact-time))))
+
+          (t/testing "second version of entity was deleted"
+            (t/is (empty? (doc/entities-at snapshot [:ivan] v2-business-time deleted-transact-time))))
+
+          (t/testing "third version of entity is still there"
+            (t/is (= {:content-hash (idx/new-id corrected-ivan)
+                      :tx-id corrected-tx-id}
+                     (-> (doc/entities-at snapshot [:ivan] v3-business-time deleted-transact-time)
+                         (first)
+                         (select-keys [:tx-id :content-hash])))))))))
+
+  (t/deftest test-can-perform-unary-join
+    (let [a-idx (doc/new-relation-virtual-index :a
+                                                [[0]
+                                                 [1]
+                                                 [3]
+                                                 [4]
+                                                 [5]
+                                                 [6]
+                                                 [7]
+                                                 [8]
+                                                 [9]
+                                                 [11]
+                                                 [12]]
+                                                1)
+          b-idx (doc/new-relation-virtual-index :b
+                                                [[0]
+                                                 [2]
+                                                 [6]
+                                                 [7]
+                                                 [8]
+                                                 [9]
+                                                 [12]]
+                                                1)
+          c-idx (doc/new-relation-virtual-index :c
+                                                [[2]
+                                                 [4]
+                                                 [5]
+                                                 [8]
+                                                 [10]
+                                                 [12]]
+                                                1)]
+
+      (t/is (= [{:x 8}
+                {:x 12}]
+               (for [[_ join-results] (-> (doc/new-unary-join-virtual-index [(assoc a-idx :name :x)
+                                                                             (assoc b-idx :name :x)
+                                                                             (assoc c-idx :name :x)])
+                                          (doc/idx->seq))]
+                 join-results))))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
 
