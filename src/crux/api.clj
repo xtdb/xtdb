@@ -120,7 +120,8 @@
                 (.isAlive node-thread)))
     (when (realized? error-promise)
       (throw @error-promise))
-    (map->LocalNode (merge {:close-promise close-promise  :options options}
+    (map->LocalNode (merge {:close-promise close-promise
+                            :options options}
                            @system-promise))))
 
 (def ^:private remote-api-readers
