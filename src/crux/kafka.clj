@@ -6,7 +6,6 @@
             [crux.tx :as tx]
             [clojure.tools.logging :as log])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
-           clojure.lang.IDeref
            java.io.Closeable
            java.time.Duration
            [java.util Date List Map]
@@ -154,9 +153,6 @@
 ;; crux.bootstrap I think.
 
 (defrecord IndexingConsumer [running? ^Thread worker-thread options]
-  IDeref
-  (deref [_]
-    (.join worker-thread))
   Closeable
   (close [_]
     (reset! running? false)
