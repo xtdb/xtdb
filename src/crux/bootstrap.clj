@@ -42,9 +42,8 @@
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend:
    crux.rocksdb.RocksKv, crux.lmdb.LMDBKv or crux.memdb.MemKv"
-    :default crux.rocksdb.RocksKv
-    :parse-fn (comp deref resolve symbol)
-    :validate [#(extends? ks/KvStore %) "Unknown storage backend"]]
+    :default "crux.rocksdb.RocksKv"
+    :validate [#(extends? ks/KvStore (resolve (symbol %))) "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
@@ -59,7 +58,7 @@
 (s/def ::create-topics boolean?)
 (s/def ::replication-factor pos-int?)
 (s/def ::db-dir string?)
-(s/def ::kv-backend #(extends? ks/KvStore %))
+(s/def ::kv-backend #(extends? ks/KvStore (resolve (symbol %))))
 (s/def ::server-port (s/int-in 1 65536))
 
 (s/def ::options (s/keys :opt-un [::bootstrap-servers
@@ -93,7 +92,7 @@
                                          kv-backend]
                                   :as options}]
   (->> (lru/new-cache-providing-kv-store
-        (eval (list (symbol (.getName crux.rocksdb.RocksKv) "create")
+        (eval (list (symbol kv-backend "create")
                     {:db-dir (str db-dir)})))
        (ks/open)))
 
