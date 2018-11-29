@@ -4,16 +4,14 @@
             [crux.kafka :as k])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
-           [org.apache.kafka.clients.admin
-            AdminClient]
-           [org.apache.kafka.clients.producer
-            KafkaProducer]
-           [org.apache.kafka.clients.consumer
-            KafkaConsumer]
+           org.apache.kafka.clients.admin.AdminClient
+           org.apache.kafka.clients.producer.KafkaProducer
+           org.apache.kafka.clients.consumer.KafkaConsumer
            [org.apache.zookeeper.server
-             ServerCnxnFactory ServerCnxnFactory ZooKeeperServer]
-           [java.net InetSocketAddress]
-           [java.util Properties]))
+            ServerCnxnFactory ServerCnxnFactory ZooKeeperServer]
+           java.io.Closeable
+           java.net.InetSocketAddress
+           java.util.Properties))
 
 ;; Based on:
 ;; https://github.com/pingles/clj-kafka/blob/master/test/clj_kafka/test/utils.clj
@@ -119,3 +117,14 @@
     (binding [*producer* producer
               *consumer* consumer]
       (f))))
+
+(defrecord EmbeddedKafka [zookeeper kafka]
+  Closeable
+  (close [_]
+    (stop-kafka-broker kafka)
+    (stop-zookeeper zookeeper)))
+
+(defn ^EmbeddedKafka start-embedded-kafka [{:keys [zookeeper-data-dir kafka-log-dir]}]
+  (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir))
+        kafka (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})]
+    (->EmbeddedKafka zookeeper kafka)))
