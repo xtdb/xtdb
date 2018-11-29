@@ -27,6 +27,8 @@
     :default "crux-transaction-log"]
    ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
     :default "crux-docs"]
+   ["-c" "--[no-]create-topics" "Should Crux create Kafka topics"
+    :default true]
    ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
     :default 1
     :parse-fn #(Long/parseLong %)]
@@ -49,6 +51,7 @@
 (s/def ::tx-topic string?)
 (s/def ::doc-topic string?)
 (s/def ::doc-partitions pos-int?)
+(s/def ::create-topics boolean?)
 (s/def ::replication-factor pos-int?)
 (s/def ::db-dir string?)
 (s/def ::kv-backend #{"rocksdb" "lmdb" "memdb"})
@@ -59,6 +62,7 @@
                                   ::tx-topic
                                   ::doc-topic
                                   ::doc-partitions
+                                  ::create-topics
                                   ::replication-factor
                                   ::db-dir
                                   ::kv-backend
@@ -98,7 +102,6 @@
                 group-id
                 tx-topic
                 doc-topic
-                db-dir
                 server-port]
          :as options} (merge default-options options)]
     (log/info "starting system")
@@ -107,6 +110,8 @@
               (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
     (with-open [kv-store (start-kv-store options)
                 producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
+                consumer (k/create-consumer {"bootstrap.servers" (:bootstrap-servers options)
+                                             "group.id" (:group-id options)})
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
                 object-store ^Closeable (doc/->DocObjectStore kv-store)
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
@@ -116,13 +121,13 @@
                              tx-log
                              bootstrap-servers
                              server-port)
-                indexing-consumer (k/create-indexing-consumer
-                                   admin-client indexer options)]
+                indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")
       (with-system-fn
         {:kv-store kv-store
          :tx-log tx-log
          :producer producer
+         :consumer consumer
          :indexer indexer
          :admin-client admin-client
          :http-server http-server
@@ -143,7 +148,8 @@
                                    (.join main-thread shutdown-ms)
                                    (when (.isAlive main-thread)
                                      (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
-                                     (.halt (Runtime/getRuntime) 1))))))
+                                     (.halt (Runtime/getRuntime) 1))))
+                               "crux.bootstrap.shutdown-hook-thread"))
     shutdown?))
 
 (def env-prefix "CRUX_")
