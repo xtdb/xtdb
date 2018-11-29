@@ -1,7 +1,7 @@
 (ns crux.api
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
-            [crux.bootstrap :as bootstrap]
+            [crux.bootstrap :as b]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.http-server :as srv]
@@ -87,7 +87,8 @@
     (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
 
   Closeable
-  (close [_] (deliver close-promise true)))
+  (close [_]
+    (deliver close-promise true)))
 
 (defn ^LocalNode start-local-node
   "Starts a Crux query node in local library mode.
@@ -100,22 +101,27 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close."
   [options]
-  (let [underlying (atom nil)
+  (let [system-promise (promise)
         close-promise (promise)
-        started-promise (promise)
-        options (merge bootstrap/default-options options)
-        running-future
-        (future
-          (bootstrap/start-system
-           options
-           (fn with-system-callback [system]
-             (reset! underlying system)
-             (deliver started-promise true)
-             @close-promise)))]
-    (while (not (or (deref started-promise 100 false)
-                    (deref running-future 100 false))))
+        error-promise (promise)
+        options (merge b/default-options options)
+        node-thread (doto (Thread. (fn []
+                                     (try
+                                       (b/start-system
+                                        options
+                                        (fn with-system-callback [system]
+                                          (deliver system-promise system)
+                                          @close-promise))
+                                       (catch Throwable t
+                                         (deliver error-promise t))))
+                                   "crux.api.local-node-thread")
+                      (.start))]
+    (while (and (nil? (deref system-promise 100 nil))
+                (.isAlive node-thread)))
+    (when (realized? error-promise)
+      (throw @error-promise))
     (map->LocalNode (merge {:close-promise close-promise  :options options}
-                           @underlying))))
+                           @system-promise))))
 
 (def ^:private remote-api-readers
   {'crux/id idx/new-id
