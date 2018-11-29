@@ -149,8 +149,8 @@
           (fn [url body opts]
             (f (merge {:url url
                        :method :post
-                       :as "UTF-8"
-                       :body (some-> body pr-str)}
+                       :body (some-> body pr-str)
+                       :as "UTF-8"}
                       opts))))
         (catch IOException not-found))
       (try
