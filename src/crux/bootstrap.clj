@@ -14,13 +14,14 @@
             crux.rocksdb
             [crux.tx :as tx]
             [clojure.string :as str])
-  (:import java.io.Closeable
+  (:import [java.io Closeable Reader]
            java.net.InetAddress
            java.util.Properties))
 
 (def cli-options
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
     :default "localhost:9092"]
+   [nil "--kafka-properties-file KAFKA_PROPERTIES_FILE" "Kafka properties file for shared connection properties"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
     :default (.getHostName (InetAddress/getLocalHost))]
    ["-t" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
@@ -40,7 +41,7 @@
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: rocksdb, lmdb or memdb"
     :default "rocksdb"
     :validate [#{"rocksdb" "lmdb" "memdb"} "Unknown storage backend"]]
-   ["-s" "--server-port SERVER_PORT" "port on which to run the HTTP server"
+   ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
 
@@ -70,13 +71,16 @@
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
 
-(defn parse-version []
-  (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
-    (->> (doto (Properties.)
-           (.load in))
-         (into {}))))
+(defn- load-properties [^Reader in]
+  (->> (doto (Properties.)
+         (.load in))
+       (into {})))
 
-(defn options->table [options]
+(defn- parse-pom-version []
+  (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
+    (load-properties in)))
+
+(defn- options->table [options]
   (with-out-str
     (pp/print-table (for [[k v] options]
                       {:key k :value v}))))
@@ -93,6 +97,11 @@
                 :state (atom {}))
          (ks/open))))
 
+(defn- read-kafka-properties-file [f]
+  (when f
+    (with-open [in (io/reader (io/file f))]
+      (load-properties in))))
+
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
@@ -102,37 +111,40 @@
                 group-id
                 tx-topic
                 doc-topic
-                server-port]
+                server-port
+                kafka-properties-file]
          :as options} (merge default-options options)]
     (log/info "starting system")
     (when (s/invalid? (s/conform :crux.bootstrap/options options))
       (throw (IllegalArgumentException.
               (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
-    (with-open [kv-store (start-kv-store options)
-                producer (k/create-producer {"bootstrap.servers" bootstrap-servers})
-                consumer (k/create-consumer {"bootstrap.servers" (:bootstrap-servers options)
-                                             "group.id" (:group-id options)})
-                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
-                object-store ^Closeable (doc/->DocObjectStore kv-store)
-                indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
-                admin-client (k/create-admin-client {"bootstrap.servers" bootstrap-servers})
-                http-server (srv/create-server
-                             kv-store
-                             tx-log
-                             bootstrap-servers
-                             server-port)
-                indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
-      (log/info "system started")
-      (with-system-fn
-        {:kv-store kv-store
-         :tx-log tx-log
-         :producer producer
-         :consumer consumer
-         :indexer indexer
-         :admin-client admin-client
-         :http-server http-server
-         :indexing-consumer indexing-consumer})
-      (log/info "stopping system"))
+    (let [kafka-properties (merge {"bootstrap.servers" bootstrap-servers}
+                                  (read-kafka-properties-file kafka-properties-file))]
+      (with-open [kv-store (start-kv-store options)
+                  producer (k/create-producer kafka-properties)
+                  consumer (k/create-consumer (merge {"group.id" (:group-id options)}
+                                                     kafka-properties))
+                  tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
+                  object-store ^Closeable (doc/->DocObjectStore kv-store)
+                  indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
+                  admin-client (k/create-admin-client kafka-properties)
+                  http-server (srv/create-server
+                               kv-store
+                               tx-log
+                               bootstrap-servers
+                               server-port)
+                  indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
+        (log/info "system started")
+        (with-system-fn
+          {:kv-store kv-store
+           :tx-log tx-log
+           :producer producer
+           :consumer consumer
+           :indexer indexer
+           :admin-client admin-client
+           :http-server http-server
+           :indexing-consumer indexing-consumer})
+        (log/info "stopping system")))
     (log/info "system stopped")))
 
 ;; NOTE: This isn't registered until the system manages to start up
@@ -167,7 +179,7 @@
                 errors
                 summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
         {:strs [version
-                revision]} (parse-version)]
+                revision]} (parse-pom-version)]
     (cond
       (:help options)
       (println summary)
