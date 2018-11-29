@@ -34,7 +34,7 @@
 
       (t/testing "malformed query"
         (t/is (thrown-with-msg? Exception
-                                #"HTTP status 400"
+                                #"status 400"
                                 (api/q (api/db api-client) '{:find [e]})))))
 
     (t/testing "query with streaming result"

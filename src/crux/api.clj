@@ -8,8 +8,7 @@
             [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.query :as q]
-            [crux.tx :as tx]
-            [org.httpkit.client :as http])
+            [crux.tx :as tx])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
 
@@ -143,16 +142,37 @@
                             (throw e)))))
          (take-while #(not= ::eof %)))))
 
+(def ^:private internal-http-request
+  (or (try
+        (require 'clj-http.client)
+        (let [f (resolve 'clj-http.client/request)]
+          (fn [url body opts]
+            (f (merge {:url url
+                       :method :post
+                       :as "UTF-8"
+                       :body (some-> body pr-str)}
+                      opts))))
+        (catch IOException not-found))
+      (try
+        (require 'org.httpkit.client)
+        (let [f (resolve 'org.httpkit.client/request)]
+          (fn [url body opts]
+            @(f (merge {:url url
+                        :method :post
+                        :body (some-> body pr-str)
+                        :as :text}
+                       opts))))
+        (catch IOException not-found))
+      (fn [_ _ _]
+        (throw (IllegalStateException. "No supported HTTP client found.")))))
+
 (defn- api-request-sync
   ([url body]
    (api-request-sync url body {}))
   ([url body opts]
    (let [{:keys [body error status headers]
-          :as result} @(http/request (merge {:url url
-                                             :method :post
-                                             :body (some-> body pr-str)
-                                             :as :text}
-                                            opts))]
+          :as result}
+         (internal-http-request url body opts)]
      (cond
        error
        (throw error)
@@ -195,9 +215,6 @@
                                             :transact-time transact-time)))
 
   (q [this snapshot q]
-    ;; TODO: Note that http-kit's client always consumes the entire
-    ;; result into memory, so this doesn't currently really work as
-    ;; intended.
     (let [in (api-request-sync (str url "/q?lazy=true")
                                (assoc q
                                       :business-time business-time

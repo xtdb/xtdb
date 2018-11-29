@@ -8,8 +8,8 @@
                  [org.clojure/tools.cli "0.3.7"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 [org.rocksdb/rocksdbjni "5.14.2"]
                  [cheshire "5.8.0"]
+                 [org.rocksdb/rocksdbjni "5.14.2"]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix ""]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-macos" :native-prefix ""]
@@ -20,7 +20,8 @@
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.3.2"]
                  [ring/ring-core "1.6.3"]
                  [ring/ring-jetty-adapter "1.6.3"]
-                 [http-kit "2.3.0"]]
+                 [clj-http "3.9.1" :scope "provided" :exclusions [commons-io]]
+                 [http-kit "2.3.0" :scope "provided"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.apache.kafka/kafka_2.11 "2.0.0"
                                    :exclusions [com.fasterxml.jackson.core/jackson-core]]
@@ -31,8 +32,7 @@
                                                 org.slf4j/slf4j-log4j12
                                                 log4j]]
                                   [criterium "0.4.4"]
-                                  [ch.qos.logback/logback-classic "1.2.3"]
-]
+                                  [ch.qos.logback/logback-classic "1.2.3"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
