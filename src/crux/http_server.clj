@@ -9,6 +9,7 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf]
+            [crux.sparql :as sparql]
             [crux.tx :as tx]
             [crux.query :as q]
             [crux.kv-store :as ks]
@@ -200,7 +201,7 @@
       ["iri" (str rdf-value)])))
 
 (defn- unbound-sparql-value? [x]
-  (and (keyword? x) (= "crux.rdf" (namespace x))))
+  (and (keyword? x) (= "crux.sparql" (namespace x))))
 
 (defn- sparql-xml-response [vars results]
   (str "<?xml version=\"1.0\"?>\n"
@@ -261,7 +262,7 @@
           accept (if (= "*/*" accept)
                    "application/sparql-results+xml"
                    accept)
-          {:keys [find] :as query-map} (rdf/sparql->datalog query)
+          {:keys [find] :as query-map} (sparql/sparql->datalog query)
           results (q/q (q/db kv) query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)

@@ -5,11 +5,12 @@
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.tx :as tx]
-            [crux.rdf :as rdf]
+            [crux.fixtures :as f]
             [crux.kafka :as k]
             [crux.query :as q]
-            [crux.fixtures :as f])
+            [crux.rdf :as rdf]
+            [crux.sparql :as sparql]
+            [crux.tx :as tx])
   (:import [java.time Duration]
            [org.apache.kafka.clients.producer
             ProducerRecord]
@@ -233,7 +234,7 @@
     (t/testing "querying transacted data"
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 SELECT ?x
 WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
@@ -243,7 +244,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
                  [(keyword "http://somewhere/JohnSmith/") "John Smith"]
                  [(keyword "http://somewhere/MattJones/") "Matt Jones"]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 SELECT ?x ?fname
 WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
@@ -251,7 +252,7 @@ WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
       (t/is (= #{["John"]
                  ["Rebecca"]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 SELECT ?givenName
 WHERE
@@ -262,7 +263,7 @@ WHERE
       (t/is (= #{["Rebecca"]
                  ["Sarah"]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -273,7 +274,7 @@ WHERE
 
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 PREFIX info: <http://somewhere/peopleInfo#>
 
@@ -286,13 +287,13 @@ WHERE
 
       ;; NOTE: Without post processing the extra optional is correct.
       (t/is (= #{["Becky Smith" 23]
-                 ["Becky Smith" :crux.rdf/optional]
-                 ["Sarah Jones" :crux.rdf/optional]
+                 ["Becky Smith" :crux.sparql/optional]
+                 ["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
-                 ["John Smith" :crux.rdf/optional]
-                 ["Matt Jones" :crux.rdf/optional]}
+                 ["John Smith" :crux.sparql/optional]
+                 ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 PREFIX info:    <http://somewhere/peopleInfo#>
 PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -307,7 +308,7 @@ WHERE
       (t/is (= #{["Becky Smith" 23]
                  ["John Smith" 25]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 PREFIX info:   <http://somewhere/peopleInfo#>
 PREFIX vcard:  <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -319,13 +320,13 @@ WHERE
     ?person info:age ?age .
 }"))))
 
-      (t/is (= #{["Becky Smith" :crux.rdf/optional]
-                 ["Sarah Jones" :crux.rdf/optional]
+      (t/is (= #{["Becky Smith" :crux.sparql/optional]
+                 ["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
-                 ["John Smith" :crux.rdf/optional]
-                 ["Matt Jones" :crux.rdf/optional]}
+                 ["John Smith" :crux.sparql/optional]
+                 ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
-                    (crux.rdf/sparql->datalog
+                    (sparql/sparql->datalog
               "
 PREFIX info:        <http://somewhere/peopleInfo#>
 PREFIX vcard:      <http://www.w3.org/2001/vcard-rdf/3.0#>

@@ -1,7 +1,8 @@
 (ns crux.rdf-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [crux.rdf :as rdf]))
+            [crux.rdf :as rdf]
+            [crux.sparql :as sparql]))
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
@@ -55,7 +56,7 @@
     (t/is (= (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                '{:find [?x]
                  :where [[?x :vcard/FN "John Smith"]]})
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 SELECT ?x
 WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
@@ -64,7 +65,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }")))
                '{:find [?y ?givenName]
                  :where [[?y :vcard/Family "Smith"]
                          [?y :vcard/Given ?givenName]]})
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 SELECT ?y ?givenName
 WHERE
@@ -76,7 +77,7 @@ WHERE
                        '{:find [?g]
                          :where [[?y :vcard/Given ?g]
                                  [(re-find #"(?i)r" ?g)]]}))
-             (pr-str (rdf/sparql->datalog
+             (pr-str (sparql/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -89,7 +90,7 @@ WHERE
                '{:find [?resource]
                  :where [[?resource :info/age ?age]
                          [(>= ?age 24)]]})
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX info: <http://somewhere/peopleInfo#>
 
@@ -105,7 +106,7 @@ WHERE
                '{:find [?name]
                  :where [(or [?_anon_1 :foaf/name ?name]
                              [?_anon_2 :vcard/FN ?name])]})
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX vCard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -121,7 +122,7 @@ WHERE
                [[?x :http://xmlns.com/foaf/0.1/givenName ?name]
                 [?x :http://xmlns.com/foaf/0.1/knows ?y]
                 [(== ?y #{:http://example.org/A :http://example.org/B})]]}
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -138,7 +139,7 @@ WHERE
                 [?x :http://xmlns.com/foaf/0.1/knows ?y]
                 [(!= ?y :http://example.org/A)]
                 [(!= ?y :http://example.org/B)]]}
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -158,7 +159,7 @@ WHERE
           [[:http://example.org/book/book1
             :http://purl.org/dc/elements/1.1/title
             ?title]]}
-        (rdf/sparql->datalog
+        (sparql/sparql->datalog
          "SELECT ?title
 WHERE
 {
@@ -170,7 +171,7 @@ WHERE
           :where
           [[?x :http://xmlns.com/foaf/0.1/name ?name]
            [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]]}
-        (rdf/sparql->datalog
+        (sparql/sparql->datalog
          "PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
 WHERE
@@ -178,14 +179,14 @@ WHERE
     ?x foaf:mbox ?mbox }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"Does not support variables in predicate position: \?p"
-                            (rdf/sparql->datalog
+                            (sparql/sparql->datalog
                              "SELECT ?v WHERE { ?v ?p \"cat\"@en }")))
 
     (t/is
      (= '{:find [?v],
           :where
           [[?v :http://xmlns.com/foaf/0.1/givenName "cat"]]}
-        (rdf/sparql->datalog
+        (sparql/sparql->datalog
          "SELECT ?v WHERE { ?v <http://xmlns.com/foaf/0.1/givenName> \"cat\"@en }")))
 
     (t/is
@@ -194,7 +195,7 @@ WHERE
           [[?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]
            [(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]]}
-        (rdf/sparql->datalog
+        (sparql/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ?name
@@ -210,7 +211,7 @@ WHERE  {
           [[?P :http://xmlns.com/foaf/0.1/givenName ?G]
            [?P :http://xmlns.com/foaf/0.1/surname ?S]
            [(http://www.w3.org/2005/xpath-functions#concat ?G " " ?S) ?name]]}
-        (rdf/sparql->datalog
+        (sparql/sparql->datalog
          "
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
@@ -221,7 +222,7 @@ WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
                        :where
                        [[?x :http://purl.org/dc/elements/1.1/title ?title]
                         [(re-find #"^SPARQL" ?title)]]})
-             (pr-str (rdf/sparql->datalog
+             (pr-str (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -233,7 +234,7 @@ WHERE   { ?x dc:title ?title
                        :where
                        [[?x :http://purl.org/dc/elements/1.1/title ?title]
                         [(re-find #"(?i)web" ?title)]]})
-             (pr-str (rdf/sparql->datalog
+             (pr-str (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -246,7 +247,7 @@ WHERE   { ?x dc:title ?title
                [[?x :http://example.org/ns#price ?price]
                 [?x :http://purl.org/dc/elements/1.1/title ?title]
                 [(< ?price 30.5M)]]}
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
@@ -261,8 +262,8 @@ WHERE   { ?x ns:price ?price .
                 (or-join
                  [?mbox ?x]
                  [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]
-                 (and [(identity :crux.rdf/optional) ?mbox] [(identity ?x)]))]}
-             (rdf/sparql->datalog
+                 (and [(identity :crux.sparql/optional) ?mbox] [(identity ?x)]))]}
+             (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 SELECT ?name ?mbox
@@ -276,8 +277,8 @@ WHERE  { ?x foaf:name  ?name .
                 (or-join
                  [?x ?price]
                  (and [?x :http://example.org/ns#price ?price] [(< ?price 30)])
-                 (and [(identity ?x)] [(identity :crux.rdf/optional) ?price]))]}
-             (rdf/sparql->datalog "
+                 (and [(identity ?x)] [(identity :crux.sparql/optional) ?price]))]}
+             (sparql/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
 SELECT  ?title ?price
@@ -290,7 +291,7 @@ WHERE   { ?x dc:title ?title .
                [(or
                  [?book :http://purl.org/dc/elements/1.0/title ?title]
                  [?book :http://purl.org/dc/elements/1.1/title ?title])]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -304,7 +305,7 @@ WHERE  { { ?book dc10:title  ?title } UNION { ?book dc11:title  ?title } }")))
                [(or-join [?book]
                          [?book :http://purl.org/dc/elements/1.0/title ?x]
                          [?book :http://purl.org/dc/elements/1.1/title ?y])]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -318,7 +319,7 @@ WHERE  { { ?book dc10:title ?x } UNION { ?book dc11:title  ?y } }")))
                          [?book :http://purl.org/dc/elements/1.0/creator ?author])
                     (and [?book :http://purl.org/dc/elements/1.1/title ?title]
                          [?book :http://purl.org/dc/elements/1.1/creator ?author]))]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX dc10:  <http://purl.org/dc/elements/1.0/>
 PREFIX dc11:  <http://purl.org/dc/elements/1.1/>
 
@@ -335,7 +336,7 @@ WHERE  { { ?book dc10:title ?title .  ?book dc10:creator ?author }
                    :rdf/type
                    :http://xmlns.com/foaf/0.1/Person]
                   (not-join [?person] [?person :http://xmlns.com/foaf/0.1/name ?name])]})
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -353,7 +354,7 @@ WHERE
                    :rdf/type
                    :http://xmlns.com/foaf/0.1/Person]
                   [?person :http://xmlns.com/foaf/0.1/name ?name]]})
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 PREFIX  foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -366,7 +367,7 @@ WHERE
 
     ;; NOTE: original has DISTINCT in select and ?p as predicate.
     (t/is (thrown-with-msg? UnsupportedOperationException #"MINUS not supported, use NOT EXISTS."
-                            (rdf/sparql->datalog
+                            (sparql/sparql->datalog
                              "              PREFIX :       <http://example/>
 PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
 
@@ -389,8 +390,8 @@ WHERE {
                         (http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?t ?o)]
                        [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
                         [?s :crux.db/id]
-                        [:crux.rdf/zero-matches ?o]]]}
-             (rdf/sparql->datalog "
+                        [:crux.sparql/zero-matches ?o]]]}
+             (sparql/sparql->datalog "
 PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 SELECT ?x ?type
@@ -405,7 +406,7 @@ SELECT ?x ?type
                        [(http://xmlns.com/foaf/0.1/knows-PLUS ?s ?o)
                         [?s :http://xmlns.com/foaf/0.1/knows ?t]
                         (http://xmlns.com/foaf/0.1/knows-PLUS ?t ?o)]]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX :     <http://example/>
 SELECT ?person
@@ -419,9 +420,9 @@ SELECT ?person
                :where
                [(or-join [?person]
                          (and [:http://example/x :crux.db/id]
-                              [:crux.rdf/zero-matches ?person])
+                              [:crux.sparql/zero-matches ?person])
                          [:http://example/x :http://xmlns.com/foaf/0.1/knows ?person])]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX :     <http://example/>
 SELECT ?person
@@ -430,7 +431,7 @@ SELECT ?person
 }")))
 
     (t/is (thrown-with-msg? UnsupportedOperationException #"Nested expressions are not supported."
-                            (rdf/sparql->datalog "
+                            (sparql/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
 
@@ -451,7 +452,7 @@ SELECT  ?title ?price
                :args
                [{?book :http://example.org/book/book1}
                 {?book :http://example.org/book/book3}]}
-             (rdf/sparql->datalog "
+             (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -468,9 +469,9 @@ SELECT ?book ?title ?price
                [[?book :http://purl.org/dc/elements/1.1/title ?title]
                 [?book :http://example.org/ns#price ?price]],
                :args
-               [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
-                {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
-             (rdf/sparql->datalog "
+               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.sparql/undefined}]}
+             (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -488,9 +489,9 @@ SELECT ?book ?title ?price
                [[?book :http://purl.org/dc/elements/1.1/title ?title]
                 [?book :http://example.org/ns#price ?price]],
                :args
-               [{?book :crux.rdf/undefined, ?title "SPARQL Tutorial"}
-                {?book :http://example.org/book/book2, ?title :crux.rdf/undefined}]}
-             (rdf/sparql->datalog "
+               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.sparql/undefined}]}
+             (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
 PREFIX ns:   <http://example.org/ns#>
@@ -509,7 +510,7 @@ VALUES (?book ?title)
                :where [[?x :http://xmlns.com/foaf/0.1/name ?name]]
                :limit 20
                :order-by [[?name :asc]]}
-             (rdf/sparql->datalog
+             (sparql/sparql->datalog
               "
 PREFIX foaf:    <http://xmlns.com/foaf/0.1/>
 
