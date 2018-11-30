@@ -6,7 +6,8 @@
             [crux.kv-store :as ks])
   (:import java.io.Closeable
            clojure.lang.MapEntry
-           [org.rocksdb Checkpoint Options ReadOptions RocksDB RocksIterator WriteBatch WriteOptions]))
+           [org.rocksdb Checkpoint CompressionType Options ReadOptions
+            RocksDB RocksIterator WriteBatch WriteOptions]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -44,6 +45,8 @@
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)
+                 (.setCompressionType CompressionType/LZ4_COMPRESSION)
+                 (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                  (.setCreateIfMissing true))
           db (try
                (RocksDB/open opts (.getAbsolutePath (doto (io/file db-dir)
