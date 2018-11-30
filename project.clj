@@ -9,39 +9,35 @@
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
                  [cheshire "5.8.1"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.2" :exclusions [commons-io]]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.2"]
-
-                 ;; Provided dependencies.
-                 ;; Kafka
+                 ;; Provided dependencies included in uberjar.
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
-                 ;; KV
                  [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl "3.2.0" :classifier "natives-macos" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-macos" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.0" :scope "provided"]
-                 ;; HTTP Server
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
-                 ;; HTTP Client
-                 [clj-http "3.9.1" :exclusions [commons-io] :scope "provided"]
-                 [http-kit "2.3.0" :scope "provided"]]
-  :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
-                                  [org.apache.kafka/kafka_2.11 "2.1.0"
-                                   :exclusions [com.fasterxml.jackson.core/jackson-core]]
-                                  [org.apache.zookeeper/zookeeper "3.4.13"
-                                   :exclusions [io.netty/netty
-                                                jline
-                                                org.apache.yetus/audience-annotations
-                                                org.slf4j/slf4j-log4j12
-                                                log4j]]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.2" :exclusions [commons-io] :scope "provided"]
+                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.2" :scope "provided"]]
+  :profiles { ;; Provided dependencies excluded from uberjar.
+             :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.0"
+                                        :exclusions [com.fasterxml.jackson.core/jackson-core]]
+                                       [org.apache.zookeeper/zookeeper "3.4.13"
+                                        :exclusions [io.netty/netty
+                                                     jline
+                                                     org.apache.yetus/audience-annotations
+                                                     org.slf4j/slf4j-log4j12
+                                                     log4j]]
+                                       [clj-http "3.9.1" :exclusions [commons-io]]
+                                       [http-kit "2.3.0"]]}
+             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+             :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
                                   [ch.qos.logback/logback-classic "1.2.3"]]
                    :source-paths ["dev"]
-                   :repl-options {:init-ns user}}
-             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
+                   :repl-options {:init-ns user}}}
   :java-source-paths ["src"]
   :javac-options ["-XDignore.symbol.file"]
   :aot [crux.kafka.nippy
