@@ -7,7 +7,9 @@
            crux.tx.SubmittedTx
            clojure.lang.LazySeq))
 
-(t/use-fixtures :each f/with-kv-store ek/with-embedded-kafka-cluster f/with-http-server)
+;; TODO: This should have a fixture actually starting the local node
+;; for real via crux.api instead of just the HTTP server.
+(t/use-fixtures :each f/with-kv-store ek/with-embedded-kafka-cluster ek/with-kafka-client f/with-http-server)
 
 (t/deftest test-can-access-api-over-http
   (with-open [api-client (api/new-api-client f/*api-url*)]

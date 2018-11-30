@@ -139,6 +139,8 @@
       (db/store-index-meta indexer :crux.tx-log/tx-time (Date. (long last-tx-log-time))))
     (dissoc result :last-tx-log-time)))
 
+;; TODO: Think we need to manually assign all available doc partitions until
+;; we have a way of sharding them?
 (defn subscribe-from-stored-offsets
   [indexer ^KafkaConsumer consumer ^List topics]
   (.subscribe consumer
@@ -148,9 +150,6 @@
                   (store-topic-partition-offsets indexer consumer partitions))
                 (onPartitionsAssigned [_ partitions]
                   (seek-to-stored-offsets indexer consumer partitions)))))
-
-;; TODO: revisit this, comes from the follower work, used to live in
-;; crux.bootstrap I think.
 
 (defrecord IndexingConsumer [running? ^Thread worker-thread options]
   Closeable

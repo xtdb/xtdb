@@ -105,46 +105,46 @@
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
 (defn start-system
-  [options with-system-fn]
-  (let [{:keys [bootstrap-servers
-                group-id
-                tx-topic
-                doc-topic
-                server-port
-                kafka-properties-file]
-         :as options} (merge default-options options)]
-    (log/info "starting system")
-    (when (s/invalid? (s/conform :crux.bootstrap/options options))
-      (throw (IllegalArgumentException.
-              (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
-    (let [kafka-properties (merge {"bootstrap.servers" bootstrap-servers}
-                                  (read-kafka-properties-file kafka-properties-file))]
-      (with-open [kv-store (start-kv-store options)
-                  producer (k/create-producer kafka-properties)
-                  consumer (k/create-consumer (merge {"group.id" (:group-id options)}
-                                                     kafka-properties))
-                  tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
-                  object-store ^Closeable (doc/->DocObjectStore kv-store)
-                  indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
-                  admin-client (k/create-admin-client kafka-properties)
-                  http-server (srv/create-server
-                               kv-store
-                               tx-log
-                               bootstrap-servers
-                               server-port)
-                  indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
-        (log/info "system started")
-        (with-system-fn
-          {:kv-store kv-store
-           :tx-log tx-log
-           :producer producer
-           :consumer consumer
-           :indexer indexer
-           :admin-client admin-client
-           :http-server http-server
-           :indexing-consumer indexing-consumer})
-        (log/info "stopping system")))
-    (log/info "system stopped")))
+  [{:keys [bootstrap-servers
+           group-id
+           tx-topic
+           doc-topic
+           server-port
+           kafka-properties-file]
+    :as options}
+   with-system-fn]
+  (log/info "starting system")
+  (when (s/invalid? (s/conform :crux.bootstrap/options options))
+    (throw (IllegalArgumentException.
+            (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
+  (let [kafka-properties (merge {"bootstrap.servers" bootstrap-servers}
+                                (read-kafka-properties-file kafka-properties-file))]
+    (with-open [kv-store (start-kv-store options)
+                producer (k/create-producer kafka-properties)
+                consumer (k/create-consumer (merge {"group.id" (:group-id options)}
+                                                   kafka-properties))
+                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
+                object-store ^Closeable (doc/->DocObjectStore kv-store)
+                indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
+                admin-client (k/create-admin-client kafka-properties)
+                http-server (srv/create-server
+                             kv-store
+                             tx-log
+                             consumer
+                             server-port)
+                indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
+      (log/info "system started")
+      (with-system-fn
+        {:kv-store kv-store
+         :tx-log tx-log
+         :producer producer
+         :consumer consumer
+         :indexer indexer
+         :admin-client admin-client
+         :http-server http-server
+         :indexing-consumer indexing-consumer})
+      (log/info "stopping system")))
+  (log/info "system stopped"))
 
 ;; NOTE: This isn't registered until the system manages to start up
 ;; cleanly, so ctrl-c keeps working as expected in case the system

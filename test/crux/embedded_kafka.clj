@@ -23,14 +23,13 @@
 (def default-zookeeper-port 2182)
 (def default-kafka-port 9092)
 
-(def ^:dynamic *zookeeper-connect* (str *host* ":" default-zookeeper-port))
-(def ^:dynamic *kafka-bootstrap-servers* (str *host* ":" default-kafka-port))
+(def ^:dynamic *zookeeper-connect*)
+(def ^:dynamic *kafka-bootstrap-servers*)
 
 (def default-kafka-broker-config
   {"host" *host*
-   "port" (str default-kafka-port)
+   "port" (int default-kafka-port)
    "broker.id" *broker-id*
-   "zookeeper.connect" *zookeeper-connect*
    "offsets.topic.replication.factor" "1"
    "transaction.state.log.replication.factor" "1"
    "transaction.state.log.min.isr" "1"
@@ -59,7 +58,7 @@
                   (write-kafka-meta-properties *broker-id*))
         port (cio/free-port)
         broker (start-kafka-broker {"host.name" *host*
-                                    "port" (str port)
+                                    "port" (int port)
                                     "broker.id" *broker-id*
                                     "zookeeper.connect" *zookeeper-connect*
                                     "log.dir" (.getAbsolutePath log-dir)})]
@@ -118,17 +117,22 @@
               *consumer* consumer]
       (f))))
 
-(defrecord EmbeddedKafka [zookeeper kafka]
+(defrecord EmbeddedKafka [zookeeper kafka bootstrap-servers]
   Closeable
   (close [_]
     (stop-kafka-broker kafka)
     (stop-zookeeper zookeeper)))
 
-(defn ^EmbeddedKafka start-embedded-kafka [{:keys [zookeeper-data-dir kafka-log-dir]}]
-  (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir))
+(defn ^EmbeddedKafka start-embedded-kafka [{:keys [zookeeper-data-dir kafka-log-dir zk-port kafka-port]
+                                            :or {zk-port default-zookeeper-port
+                                                 kafka-port default-kafka-port}
+                                            :as options}]
+  (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir) zk-port)
         kafka (try
-                (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))})
+                (start-kafka-broker {"log.dir" (str (io/file kafka-log-dir))
+                                     "port" (int kafka-port)
+                                     "zookeeper.connect" (str *host* ":" zk-port)})
                 (catch Throwable t
                   (stop-zookeeper zookeeper)
                   (throw t)))]
-    (->EmbeddedKafka zookeeper kafka)))
+    (->EmbeddedKafka zookeeper kafka (str *host* ":" kafka-port))))

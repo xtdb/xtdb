@@ -83,13 +83,11 @@
     (with-kv-store-implementation f)))
 
 (def ^:dynamic ^String *host* "localhost")
-
-(def default-api-port 3000)
-
-(def ^:dynamic *api-url* (str "http://" *host* ":" default-api-port))
+(def ^:dynamic *api-url*)
 
 (defn with-http-server [f]
   (assert *kv*)
+  (assert ek/*kafka-bootstrap-servers*)
   (let [port (cio/free-port)]
     (binding [*api-url* (str "http://" *host* ":" port)]
       (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) ek/*kafka-bootstrap-servers* port)]

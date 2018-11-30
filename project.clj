@@ -9,18 +9,24 @@
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
                  [cheshire "5.8.1"]
-                 [org.rocksdb/rocksdbjni "5.17.2"]
-                 [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix ""]
-                 [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix ""]
-                 [org.lwjgl/lwjgl "3.2.0" :classifier "natives-macos" :native-prefix ""]
-                 [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-macos" :native-prefix ""]
-                 [org.lwjgl/lwjgl-lmdb "3.2.0"]
-                 [org.apache.kafka/kafka-clients "2.1.0"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.2" :exclusions [commons-io]]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.2"]
-                 [ring/ring-core "1.7.1"]
-                 [ring/ring-jetty-adapter "1.7.1"]
-                 [clj-http "3.9.1" :scope "provided" :exclusions [commons-io]]
+
+                 ;; Provided dependencies.
+                 ;; Kafka
+                 [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
+                 ;; KV
+                 [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]
+                 [org.lwjgl/lwjgl "3.2.0" :classifier "natives-linux" :native-prefix "" :scope "provided"]
+                 [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-linux" :native-prefix "" :scope "provided"]
+                 [org.lwjgl/lwjgl "3.2.0" :classifier "natives-macos" :native-prefix "" :scope "provided"]
+                 [org.lwjgl/lwjgl-lmdb "3.2.0" :classifier "natives-macos" :native-prefix "" :scope "provided"]
+                 [org.lwjgl/lwjgl-lmdb "3.2.0" :scope "provided"]
+                 ;; HTTP Server
+                 [ring/ring-core "1.7.1" :scope "provided"]
+                 [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
+                 ;; HTTP Client
+                 [clj-http "3.9.1" :exclusions [commons-io] :scope "provided"]
                  [http-kit "2.3.0" :scope "provided"]]
   :profiles {:dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [org.apache.kafka/kafka_2.11 "2.1.0"

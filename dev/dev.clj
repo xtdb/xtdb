@@ -28,7 +28,9 @@
   (let [embedded-kafka (when embed-kafka?
                          (ek/start-embedded-kafka options))]
     (try
-      (assoc (api/start-local-node options)
+      (assoc (api/start-local-node
+              (cond-> options
+                embed-kafka? (assoc :bootstrap-servers (:bootstrap-servers embedded-kafka))))
              :embedded-kafka embedded-kafka)
       (catch Throwable t
         (.close embedded-kafka)

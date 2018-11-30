@@ -1,7 +1,6 @@
 (ns crux.api
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
-            [crux.bootstrap :as b]
             [crux.db :as db]
             [crux.doc :as doc]
             [crux.http-server :as srv]
@@ -58,8 +57,10 @@
 
 (defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
-  (status [_]
-    (srv/status-map kv-store (:bootstrap-servers options)))
+  (status [this]
+    (require 'crux.http-server)
+    ((resolve 'crux.http-server/status-map)
+     kv-store (:bootstrap-servers options)))
 
   (db [_]
     (q/db kv-store))
@@ -74,9 +75,8 @@
     (doc/entity-history kv-store eid))
 
   (document [_ content-hash]
-    (let [kv kv-store
-          object-store (doc/->DocObjectStore kv)]
-      (with-open [snapshot (ks/new-snapshot kv)]
+    (let [object-store (doc/->DocObjectStore kv-store)]
+      (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (submit-tx [_ tx-ops]
@@ -100,13 +100,14 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close."
   [options]
+  (require 'crux.bootstrap)
   (let [system-promise (promise)
         close-promise (promise)
         error-promise (promise)
-        options (merge b/default-options options)
+        options (merge @(resolve 'crux.bootstrap/default-options) options)
         node-thread (doto (Thread. (fn []
                                      (try
-                                       (b/start-system
+                                       ((resolve 'crux.bootstrap/start-system)
                                         options
                                         (fn with-system-callback [system]
                                           (deliver system-promise system)
