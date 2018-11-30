@@ -14,15 +14,15 @@
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.index :as idx])
-  (:import [java.io StringReader]
-           [java.net URLDecoder]
-           [javax.xml.datatype DatatypeConstants]
+  (:import java.io.StringReader
+           java.net.URLDecoder
+           javax.xml.datatype.DatatypeConstants
            [org.eclipse.rdf4j.rio Rio RDFFormat]
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
-           [org.eclipse.rdf4j.model.datatypes XMLDatatypeUtil]
+           org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil
            [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
-           [org.eclipse.rdf4j.model.util Literals]
-           [org.eclipse.rdf4j.model.impl SimpleValueFactory]))
+           org.eclipse.rdf4j.model.util.Literals
+           org.eclipse.rdf4j.model.impl.SimpleValueFactory))
 
 ;;; Main part, uses RDF4J classes to parse N-Triples.
 

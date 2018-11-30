@@ -1,7 +1,12 @@
 (ns crux.http-server
+  "HTTP API end point for Crux.
+
+  Requires ring/ring-core, ring/ring-jetty-adapter,
+  org.apache.kafka/kafka-clients and
+  org.eclipse.rdf4j/rdf4j-queryparser-sparql on the classpath"
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [clojure.string :as st]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.doc :as doc]
@@ -19,6 +24,7 @@
             [ring.util.io :as rio])
   (:import java.io.Closeable
            java.time.Duration
+           java.util.UUID
            org.apache.kafka.clients.consumer.KafkaConsumer
            [org.eclipse.rdf4j.model BNode IRI Literal]))
 
@@ -34,7 +40,7 @@
 (defn read-unknown [s]
   (cond
     (uuid-str? s)
-    (java.util.UUID/fromString s)
+    (UUID/fromString s)
 
     (sha1-20-str? s)
     s
@@ -89,7 +95,7 @@
       (try
         (handler request)
         (catch Exception e
-          (if (st/starts-with? (.getMessage e) "Invalid input")
+          (if (str/starts-with? (.getMessage e) "Invalid input")
             (exception-response 400 e) ;; Valid edn, invalid content
             (exception-response 500 e)))) ;; Valid content; something internal failed, or content validity is not properly checked
       (catch Exception e
@@ -207,26 +213,26 @@
   (str "<?xml version=\"1.0\"?>\n"
        "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
        "<head>"
-       (st/join (for [var vars]
-                  (format "<variable name=\"%s\"/>" var)))
+       (str/join (for [var vars]
+                   (format "<variable name=\"%s\"/>" var)))
        "</head>"
        "<results>"
-       (st/join (for [result results]
-                  (str "<result>"
-                       (st/join (for [[var value] (zipmap vars result)
-                                      :when (not (unbound-sparql-value? value))
-                                      :let [[type value dt] (edn->sparql-type+value+dt value)]]
-                                  (if dt
-                                    (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
-                                            var dt value)
-                                    (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
-                                            var type value type))))
-                       "</result>")))
+       (str/join (for [result results]
+                   (str "<result>"
+                        (str/join (for [[var value] (zipmap vars result)
+                                        :when (not (unbound-sparql-value? value))
+                                        :let [[type value dt] (edn->sparql-type+value+dt value)]]
+                                    (if dt
+                                      (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
+                                              var dt value)
+                                      (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
+                                              var type value type))))
+                        "</result>")))
        "</results>"
        "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (str "{\"head\": {\"vars\": [" (st/join ", " (map (comp pr-str str) vars)) "]}, "
+  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp pr-str str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
        (->> (for [result results]
               (str "{"
@@ -242,9 +248,9 @@
                                     var
                                     type
                                     value)))
-                        (st/join ", "))
+                        (str/join ", "))
                    "}"))
-            (st/join ", " ))
+            (str/join ", " ))
        "]}}"))
 
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
@@ -331,5 +337,5 @@
                                  (wrap-exception-handling))
                              {:port port
                               :join? false})]
-     (log/info (str "HTTP server started on port: " port))
+     (log/info "HTTP server started on port: " port)
      (reify Closeable (close [_] (.stop server))))))

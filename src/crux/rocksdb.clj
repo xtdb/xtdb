@@ -1,4 +1,7 @@
 (ns crux.rocksdb
+  "RocksDB KV backend for Crux.
+
+  Requires org.rocksdb/rocksdbjni on the classpath."
   (:require [clojure.java.io :as io]
             [crux.kv-store :as ks])
   (:import java.io.Closeable

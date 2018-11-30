@@ -1,6 +1,4 @@
 (ns crux.kafka
-  "Currently uses nippy to play nice with RDF IRIs that are not
-  valid keywords. Uses one transaction per message."
   (:require [crux.db :as db]
             [crux.index :as idx]
             [crux.tx :as tx]

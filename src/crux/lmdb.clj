@@ -1,4 +1,8 @@
 (ns crux.lmdb
+  "LMDB KV backend for Crux.
+
+  Requires org.lwjgl/lwjgl-lmdb and org.lwjgl/lwjgl on the classpath,
+  including native dependencies."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]

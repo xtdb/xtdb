@@ -1,15 +1,15 @@
-(ns ^{:doc "Public API for Crux."}
-    crux.api
-    (:require [clojure.tools.logging :as log]
-              [clojure.edn :as edn]
-              [crux.db :as db]
-              [crux.doc :as doc]
-              [crux.index :as idx]
-              [crux.kv-store :as ks]
-              [crux.query :as q]
-              [crux.tx :as tx])
-    (:import [java.io Closeable InputStreamReader IOException PushbackReader]
-             crux.query.QueryDatasource))
+(ns crux.api
+  "Public API for Crux."
+  (:require [clojure.tools.logging :as log]
+            [clojure.edn :as edn]
+            [crux.db :as db]
+            [crux.doc :as doc]
+            [crux.index :as idx]
+            [crux.kv-store :as ks]
+            [crux.query :as q]
+            [crux.tx :as tx])
+  (:import [java.io Closeable InputStreamReader IOException PushbackReader]
+           crux.query.QueryDatasource))
 
 (defprotocol CruxDatasource
   "Represents the database as of a specific business and transaction
@@ -105,10 +105,11 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close.
 
-  NOTE: requires ring/ring-core, ring/ring-jetty-adapter and
-  org.apache.kafka/kafka-clients and any KV store dependencies on the
-  classpath. The crux.memdb.MemKv KV backend works without additional
-  dependencies.
+  NOTE: requires ring/ring-core, ring/ring-jetty-adapter,
+  org.apache.kafka/kafka-clients,
+  org.eclipse.rdf4j/rdf4j-queryparser-sparql and any KV store
+  dependencies on the classpath. The crux.memdb.MemKv KV backend works
+  without additional dependencies.
 
   See also crux.kafka.embedded-kafka for self-contained deployments."
   [options]

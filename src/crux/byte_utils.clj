@@ -1,8 +1,8 @@
 (ns crux.byte-utils
-  (:import [java.nio ByteBuffer]
-           [java.security MessageDigest]
+  (:import java.nio.ByteBuffer
+           java.security.MessageDigest
            [java.util Arrays Comparator]
-           [crux ByteUtils]))
+           crux.ByteUtils))
 
 (set! *unchecked-math* :warn-on-boxed)
 

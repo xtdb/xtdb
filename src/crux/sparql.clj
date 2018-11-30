@@ -11,8 +11,8 @@
             [clojure.set :as set]
             [crux.rdf :as rdf])
   (:import [org.eclipse.rdf4j.query BindingSet QueryLanguage]
-           [org.eclipse.rdf4j.query.parser QueryParserUtil]
-           [org.eclipse.rdf4j.query.algebra.helpers AbstractQueryModelVisitor]
+           org.eclipse.rdf4j.query.parser.QueryParserUtil
+           org.eclipse.rdf4j.query.algebra.helpers.AbstractQueryModelVisitor
            [org.eclipse.rdf4j.query.algebra
             And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
             Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Order OrderElem Projection QueryModelNode

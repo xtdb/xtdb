@@ -7,9 +7,9 @@
             [crux.db :as db]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable]
+  (:import java.io.Closeable
            [java.util Arrays Collections Comparator Date]
-           [crux.index EntityTx]))
+           crux.index.EntityTx))
 
 (set! *unchecked-math* :warn-on-boxed)
 

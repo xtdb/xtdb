@@ -1,6 +1,7 @@
 (ns dev
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as tn]
+            [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]

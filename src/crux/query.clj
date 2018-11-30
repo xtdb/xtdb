@@ -11,9 +11,9 @@
             [crux.lru :as lru]
             [crux.kv-store :as ks]
             [crux.db :as db])
-  (:import [java.util Comparator]
-           [crux.doc BinaryJoinLayeredVirtualIndex]
-           [crux.index EntityTx]))
+  (:import java.util.Comparator
+           crux.doc.BinaryJoinLayeredVirtualIndex
+           crux.index.EntityTx))
 
 (defn- logic-var? [x]
   (symbol? x))

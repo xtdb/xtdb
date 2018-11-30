@@ -1,4 +1,5 @@
 (ns crux.kv-store
+  "Protocols for KV backend implementations."
   (:refer-clojure :exclude [next])
   (:import [java.io Closeable]))
 

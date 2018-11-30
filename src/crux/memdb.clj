@@ -1,4 +1,5 @@
 (ns crux.memdb
+  "In-memory KV backend for Crux."
   (:require [crux.byte-utils :as bu]
             [crux.kv-store :as ks]
             [clojure.java.io :as io]
