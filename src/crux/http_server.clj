@@ -149,31 +149,30 @@
     (q/db kv)))
 
 (defn query [kv request]
-  (let [lazy? (Boolean/parseBoolean (-> request
-                                        :query-params
-                                        (get "lazy")))
-        query-map (param request "q")]
-    (if lazy?
-      (let [snapshot (ks/new-snapshot kv)
-            result (q/q (db-for-request kv query-map) snapshot
-                        (dissoc query-map :business-time :transact-time))]
-        (try
-          (response 200
-                    {"Content-Type" "application/edn"}
-                    (rio/piped-input-stream
-                     (fn [out]
-                       (with-open [out (io/writer out)
-                                   snapshot snapshot]
-                         (.write out "(")
-                         (doseq [tuple result]
-                           (.write out (pr-str tuple)))
-                         (.write out ")")))))
-          (catch Throwable t
-            (.close snapshot)
-            (throw t))))
-      (success-response
-       (q/q (db-for-request kv query-map)
-            (dissoc query-map :business-time :transact-time))))))
+  (let [query-map (param request "q")]
+    (success-response
+     (q/q (db-for-request kv query-map)
+          (dissoc query-map :business-time :transact-time)))))
+
+(defn query-stream [kv request]
+  (let [query-map (param request "q")]
+    (let [snapshot (ks/new-snapshot kv)
+          result (q/q (db-for-request kv query-map) snapshot
+                      (dissoc query-map :business-time :transact-time))]
+      (try
+        (response 200
+                  {"Content-Type" "application/edn"}
+                  (rio/piped-input-stream
+                   (fn [out]
+                     (with-open [out (io/writer out)
+                                 snapshot snapshot]
+                       (.write out "(")
+                       (doseq [tuple result]
+                         (.write out (pr-str tuple)))
+                       (.write out ")")))))
+        (catch Throwable t
+          (.close snapshot)
+          (throw t))))))
 
 (defn entity [kv request]
   (let [body (param request "entity")]
@@ -295,14 +294,17 @@
     (check-path request ["/"] [:get])
     (status kv bootstrap-servers)
 
-    (check-path request ["/d" "/document"] [:get :post])
+    (check-path request ["/document"] [:get :post])
     (document kv request)
 
-    (check-path request ["/h" "/history"] [:get :post])
+    (check-path request ["/history"] [:get :post])
     (history kv request)
 
-    (check-path request ["/q" "/query"] [:get :post])
+    (check-path request ["/query"] [:get :post])
     (query kv request)
+
+    (check-path request ["/query-stream"] [:get :post])
+    (query-stream kv request)
 
     (check-path request ["/entity"] [:get :post])
     (entity kv request)
