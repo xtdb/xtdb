@@ -1,17 +1,19 @@
-(ns crux.api
-  (:require [clojure.tools.logging :as log]
-            [clojure.edn :as edn]
-            [crux.db :as db]
-            [crux.doc :as doc]
-            [crux.http-server :as srv]
-            [crux.index :as idx]
-            [crux.kv-store :as ks]
-            [crux.query :as q]
-            [crux.tx :as tx])
-  (:import [java.io Closeable InputStreamReader IOException PushbackReader]
-           crux.query.QueryDatasource))
+(ns ^{:doc "Public API for Crux."}
+    crux.api
+    (:require [clojure.tools.logging :as log]
+              [clojure.edn :as edn]
+              [crux.db :as db]
+              [crux.doc :as doc]
+              [crux.index :as idx]
+              [crux.kv-store :as ks]
+              [crux.query :as q]
+              [crux.tx :as tx])
+    (:import [java.io Closeable InputStreamReader IOException PushbackReader]
+             crux.query.QueryDatasource))
 
 (defprotocol CruxDatasource
+  "Represents the database as of a specific business and transaction
+  time."
   (entity [this eid]
     "Returns the document map for an entity.")
   (entity-tx [this eid]
@@ -41,16 +43,17 @@
      (q/q this snapshot q))))
 
 (defprotocol CruxSystem
-  (status [this]
-    "Returns the status of this node as a map.")
+  "Provides API access to Crux."
   (db [this] [this business-time] [this business-time transact-time]
     "Returns a db as of optional business and transaction time. Both
     defaulting to now.")
-  (history [this eid]
-    "Returns the transaction history of an entity.")
   (document [this content-hash]
     "Reads a document from the document store based on its content
     hash.")
+  (history [this eid]
+    "Returns the transaction history of an entity.")
+  (status [this]
+    "Returns the status of this node as a map.")
   (submit-tx [this tx-ops]
     "Writes transactions to the log for processing.")
   (submitted-tx-updated-entity? [this submitted-tx eid]
@@ -58,11 +61,6 @@
 
 (defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
-  (status [this]
-    (require 'crux.http-server)
-    ((resolve 'crux.http-server/status-map)
-     kv-store (:bootstrap-servers options)))
-
   (db [_]
     (q/db kv-store))
 
@@ -72,14 +70,19 @@
   (db [_ business-time transact-time]
     (q/db kv-store business-time transact-time))
 
-  (history [_ eid]
-    (with-open [snapshot (ks/new-snapshot kv-store)]
-      (doc/entity-history snapshot eid)))
-
   (document [_ content-hash]
     (let [object-store (doc/->DocObjectStore kv-store)]
       (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
+
+  (history [_ eid]
+    (with-open [snapshot (ks/new-snapshot kv-store)]
+      (doc/entity-history snapshot eid)))
+
+  (status [this]
+    (require 'crux.http-server)
+    ((resolve 'crux.http-server/status-map)
+     kv-store (:bootstrap-servers options)))
 
   (submit-tx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
@@ -92,7 +95,7 @@
     (deliver close-promise true)))
 
 (defn ^LocalNode start-local-node
-  "Starts a Crux query node in local library mode.
+  "Starts a CruxSystem query node in local library mode.
 
   For valid options, see crux.bootstrap/cli-options. Options are
   specified as keywords using their long format name,
@@ -100,7 +103,12 @@
 
   Returns a crux.api.LocalNode component that implements
   java.io.Closeable, which allows the system to be stopped by calling
-  close."
+  close.
+
+  NOTE: requires ring/ring-core, ring/ring-jetty-adapter and
+  org.apache.kafka/kafka-clients and any KV store dependencies on the
+  classpath. The crux.memdb.MemKv KV backend works without additional
+  dependencies."
   [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
@@ -228,9 +236,6 @@
 
 (defrecord RemoteApiClient [url]
   CruxSystem
-  (status [_]
-    (api-request-sync url nil {:method :get}))
-
   (db [_]
     (->RemoteDatasource url nil nil))
 
@@ -240,11 +245,14 @@
   (db [_ business-time transact-time]
     (->RemoteDatasource url business-time transact-time))
 
+  (document [_ content-hash]
+    (api-request-sync (str url "/document") (str content-hash)))
+
   (history [_ eid]
     (api-request-sync (str url "/history") eid))
 
-  (document [_ content-hash]
-    (api-request-sync (str url "/document") (str content-hash)))
+  (status [_]
+    (api-request-sync url nil {:method :get}))
 
   (submit-tx [_ tx-ops]
     (api-request-sync (str url "/tx-log") tx-ops))
@@ -256,6 +264,8 @@
   (close [_]))
 
 (defn ^Closeable new-api-client
-  "Creates a new remote API client."
+  "Creates a new remote API client CruxSystem.
+
+  NOTE: requires either clj-http or http-kit on the classpath."
   [url]
   (->RemoteApiClient url))
