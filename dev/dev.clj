@@ -21,7 +21,8 @@
 (def dev-options {:db-dir (str storage-dir "/data")
                   :zookeeper-data-dir (str storage-dir "/zookeeper")
                   :kafka-log-dir (str storage-dir "/kafka-log")
-                  :embed-kafka? true})
+                  :embed-kafka? true
+                  :http-server? true})
 
 (def system)
 

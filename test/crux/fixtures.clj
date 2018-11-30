@@ -105,13 +105,13 @@
 
 (defn with-embedded-kafka-cluster [f]
   (let [zookeeper-data-dir (cio/create-tmpdir "zookeeper")
-        zk-port (cio/free-port)
+        zookeeper-port (cio/free-port)
         kafka-log-dir (doto (cio/create-tmpdir "kafka-log")
                         (write-kafka-meta-properties ek/*broker-id*))
         kafka-port (cio/free-port)]
     (try
       (with-open [embedded-kafka (ek/start-embedded-kafka {:zookeeper-data-dir (str zookeeper-data-dir)
-                                                           :zk-port zk-port
+                                                           :zookeeper-port zookeeper-port
                                                            :kafka-log-dir (str kafka-log-dir)
                                                            :kafka-port kafka-port})
                   admin-client (k/create-admin-client
@@ -149,6 +149,7 @@
                                                     :db-dir db-dir
                                                     :tx-topic tx-topic
                                                     :doc-topic doc-topic
+                                                    :http-server? true
                                                     :kv-backend *kv-backend*
                                                     :bootstrap-servers *kafka-bootstrap-servers*})]
         (binding [*api* local-node

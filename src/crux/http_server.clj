@@ -1,5 +1,5 @@
 (ns crux.http-server
-  "HTTP API end point for Crux.
+  "HTTP API for Crux.
 
   Requires ring/ring-core, ring/ring-jetty-adapter,
   org.apache.kafka/kafka-clients and

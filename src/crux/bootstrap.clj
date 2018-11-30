@@ -5,7 +5,6 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.doc :as doc]
-            [crux.http-server :as srv]
             [crux.kafka :as k]
             [crux.kv-store :as ks]
             [crux.kafka.nippy]
@@ -113,6 +112,20 @@
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
+(defn- ^Closeable start-http-server
+  [kv-store
+   tx-log
+   {:keys [bootstrap-servers
+           server-port
+           http-server?]
+    :or {http-server? true}
+    :as options}]
+  (if http-server?
+    (do (require 'crux.http-server)
+        ((resolve 'crux.http-server/create-server) kv-store tx-log bootstrap-servers server-port))
+    (reify Closeable
+      (close [_]))))
+
 (defn start-system
   [{:keys [bootstrap-servers
            group-id
@@ -136,11 +149,7 @@
                 object-store ^Closeable (doc/->DocObjectStore kv-store)
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-properties)
-                http-server (srv/create-server
-                             kv-store
-                             tx-log
-                             bootstrap-servers
-                             server-port)
+                http-server (start-http-server kv-store tx-log options)
                 indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")
       (with-system-fn

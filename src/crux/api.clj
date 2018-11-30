@@ -105,19 +105,23 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close.
 
-  NOTE: requires ring/ring-core, ring/ring-jetty-adapter,
-  org.apache.kafka/kafka-clients,
-  org.eclipse.rdf4j/rdf4j-queryparser-sparql and any KV store
-  dependencies on the classpath. The crux.memdb.MemKv KV backend works
-  without additional dependencies.
+  NOTE: requires any KV store dependencies on the classpath. The
+  crux.memdb.MemKv KV backend works without additional dependencies.
+
+  The HTTP API can be started by setting the option http-server? to
+  true. This will require further dependencies on the classpath, see
+  crux.http-server for details.
 
   See also crux.kafka.embedded-kafka for self-contained deployments."
-  [options]
+  [{:keys [http-server?] :as options
+    :or {http-server? false}}]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
         close-promise (promise)
         error-promise (promise)
-        options (merge @(resolve 'crux.bootstrap/default-options) options)
+        options (merge @(resolve 'crux.bootstrap/default-options)
+                       options
+                       {:http-server? http-server?})
         node-thread (doto (Thread. (fn []
                                      (try
                                        ((resolve 'crux.bootstrap/start-system)
