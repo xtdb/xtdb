@@ -10,7 +10,7 @@
            java.time.Duration
            [java.util Date List Map]
            java.util.concurrent.ExecutionException
-           [org.apache.kafka.clients.admin AdminClient NewTopic]
+           [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            org.apache.kafka.common.errors.TopicExistsException
@@ -139,8 +139,9 @@
       (db/store-index-meta indexer :crux.tx-log/tx-time (Date. (long last-tx-log-time))))
     (dissoc result :last-tx-log-time)))
 
-;; TODO: Think we need to manually assign all available doc partitions until
-;; we have a way of sharding them?
+;; TODO: This works as long as each node has a unique consumer group
+;; id, if not the node will only get a subset of the doc-topic. The
+;; tx-topic is always only one partition.
 (defn subscribe-from-stored-offsets
   [indexer ^KafkaConsumer consumer ^List topics]
   (.subscribe consumer
@@ -176,6 +177,10 @@
         (log/error e "Error while consuming and indexing from Kafka:")
         (Thread/sleep 500)))))
 
+(defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
+  (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
+    (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
+
 (defn ^Closeable create-indexing-consumer
   [admin-client consumer indexer
    {:keys [tx-topic
@@ -187,6 +192,7 @@
     (create-topic admin-client tx-topic 1 replication-factor tx-topic-config)
     (create-topic admin-client doc-topic doc-partitions
                   replication-factor doc-topic-config))
+  (ensure-tx-topic-has-single-partition admin-client tx-topic)
   (let [indexing-consumer (map->IndexingConsumer {:running? (atom true)
                                                   :indexer indexer
                                                   :consumer consumer
