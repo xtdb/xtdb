@@ -70,12 +70,12 @@
                                   ::broker-config]))
 
 (defn ^EmbeddedKafka start-embedded-kafka
-  "Starts Zookeeper and Kafka locally. This can be used to run Crux in a
+  "Starts ZooKeeper and Kafka locally. This can be used to run Crux in a
   self-contained single node mode. The options zookeeper-data-dir and
   kafka-log-dir are required.
 
   Returns a crux.kafka.embedded_kafka.EmbeddedKafka component that
-  implements java.io.Closeable, which allows Zookeeper and Kafka to be
+  implements java.io.Closeable, which allows ZooKeeper and Kafka to be
   stopped by calling close.
 
   NOTE: requires org.apache.kafka/kafka_2.11 and
