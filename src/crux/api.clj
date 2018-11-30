@@ -108,7 +108,9 @@
   NOTE: requires ring/ring-core, ring/ring-jetty-adapter and
   org.apache.kafka/kafka-clients and any KV store dependencies on the
   classpath. The crux.memdb.MemKv KV backend works without additional
-  dependencies."
+  dependencies.
+
+  See also crux.kafka.embedded-kafka for self-contained deployments."
   [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)

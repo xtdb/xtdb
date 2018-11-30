@@ -10,8 +10,7 @@
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.kafka :as k]
-            [crux.fixtures :as f]
-            [crux.embedded-kafka :as ek])
+            [crux.fixtures :as f])
   (:import [java.util Date]))
 
 ;; See:
@@ -48,19 +47,19 @@
                             (load-ntriples-example lubm-triples-resource))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         object-store (doc/new-cached-object-store f/*kv*)
         indexer (tx/->DocIndexer f/*kv* tx-log object-store)]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (doseq [tx-ops (partition-all 1000 tx-ops)]
       @(db/submit-tx tx-log (vec tx-ops)))
 
     (let [consume-args {:indexer indexer
-                        :consumer ek/*consumer*
+                        :consumer f/*consumer*
                         :tx-topic tx-topic
                         :doc-topic doc-topic}]
       (k/consume-and-index-entities consume-args)
@@ -73,7 +72,7 @@
 ;; defining a test-ns-hook (see bottom of this file) which runs the
 ;; tests in order, but this isn't compatible with fixtures or running
 ;; individual tests.
-(t/use-fixtures :once ek/with-embedded-kafka-cluster ek/with-kafka-client f/with-kv-store with-lubm-data)
+(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client f/with-kv-store with-lubm-data)
 
 ;; This query bears large input and high selectivity. It queries about just one class and
 ;; one property and does not assume any hierarchy information or inference.

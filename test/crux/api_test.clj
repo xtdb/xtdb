@@ -1,12 +1,11 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures :as f]
-            [crux.embedded-kafka :as ek])
+            [crux.fixtures :as f])
   (:import clojure.lang.LazySeq))
 
-(t/use-fixtures :once ek/with-embedded-kafka-cluster)
-(t/use-fixtures :each f/with-each-api-impl)
+(t/use-fixtures :once f/with-embedded-kafka-cluster)
+(t/use-fixtures :each f/with-each-api-implementation)
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"

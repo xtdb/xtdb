@@ -9,27 +9,26 @@
             [crux.rdf :as rdf]
             [crux.kafka :as k]
             [crux.query :as q]
-            [crux.fixtures :as f]
-            [crux.embedded-kafka :as ek])
+            [crux.fixtures :as f])
   (:import [java.time Duration]
            [org.apache.kafka.clients.producer
             ProducerRecord]
            [org.apache.kafka.common TopicPartition]))
 
-(t/use-fixtures :once ek/with-embedded-kafka-cluster)
-(t/use-fixtures :each ek/with-kafka-client f/with-kv-store)
+(t/use-fixtures :once f/with-embedded-kafka-cluster)
+(t/use-fixtures :each f/with-kafka-client f/with-kv-store)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
         person (f/random-person)
         partitions [(TopicPartition. topic 0)]]
 
-    (k/create-topic ek/*admin-client* topic 1 1 {})
+    (k/create-topic f/*admin-client* topic 1 1 {})
 
-    @(.send ek/*producer* (ProducerRecord. topic person))
+    @(.send f/*producer* (ProducerRecord. topic person))
 
-    (.assign ek/*consumer* partitions)
-    (let [records (.poll ek/*consumer* (Duration/ofMillis 10000))]
+    (.assign f/*consumer* partitions)
+    (let [records (.poll f/*consumer* (Duration/ofMillis 10000))]
       (t/is (= 1 (count (seq records))))
       (t/is (= person (first (map k/consumer-record->value records)))))))
 
@@ -43,16 +42,16 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [doc-topic])
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [doc-topic])
 
     (db/submit-tx tx-log tx-ops)
 
-    (let [docs (map k/consumer-record->value (.poll ek/*consumer* (Duration/ofMillis 10000)))]
+    (let [docs (map k/consumer-record->value (.poll f/*consumer* (Duration/ofMillis 10000)))]
       (t/is (= 7 (count docs)))
       (t/is (= (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                  {:foaf/firstName "Pablo"
@@ -66,27 +65,27 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
 
       (t/is (= {:txs 1 :docs 3}
                (k/consume-and-index-entities
-                 {:indexer indexer :consumer ek/*consumer*
+                 {:indexer indexer :consumer f/*consumer*
                   :tx-topic tx-topic
                   :doc-topic doc-topic})))
-      (t/is (empty? (.poll ek/*consumer* (Duration/ofMillis 1000)))))
+      (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000)))))
 
     (t/testing "restoring to stored offsets"
-      (.seekToBeginning ek/*consumer* (.assignment ek/*consumer*))
-      (k/seek-to-stored-offsets indexer ek/*consumer* (.assignment ek/*consumer*))
-      (t/is (empty? (.poll ek/*consumer* (Duration/ofMillis 1000)))))
+      (.seekToBeginning f/*consumer* (.assignment f/*consumer*))
+      (k/seek-to-stored-offsets indexer f/*consumer* (.assignment f/*consumer*))
+      (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000)))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://example.org/Picasso]}
@@ -102,12 +101,12 @@
                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
@@ -115,7 +114,7 @@
                (select-keys
                  (k/consume-and-index-entities
                    {:indexer indexer
-                    :consumer ek/*consumer*
+                    :consumer f/*consumer*
                     :tx-topic tx-topic
                     :doc-topic doc-topic})
                  [:txs :docs]))))
@@ -176,13 +175,13 @@
                                    next-n))
         n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
-      (do (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-          (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-          (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+      (do (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+          (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+          (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
           (t/testing "transacting and indexing"
             (future
@@ -190,11 +189,11 @@
                (with-open [in (io/input-stream mappingbased-properties-file)]
                  (reset! n-transacted (rdf/submit-ntriples tx-log in tx-size)))))
             (time
-             (loop [{:keys [docs]} (k/consume-and-index-entities indexer ek/*consumer* 100)
+             (loop [{:keys [docs]} (k/consume-and-index-entities indexer f/*consumer* 100)
                     n 0]
                (let [n (add-and-print-progress n docs "indexed")]
                  (when-not (= n @n-transacted)
-                   (recur (k/consume-and-index-entities indexer ek/*consumer* 100)
+                   (recur (k/consume-and-index-entities indexer f/*consumer* 100)
                           (long n)))))))
 
           (t/testing "querying transacted data"
@@ -215,19 +214,19 @@
         tx-ops (->> (load-ntriples-example "crux/vc-db-1.nt")
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog ek/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
         indexer (tx/->DocIndexer f/*kv* tx-log (doc/->DocObjectStore f/*kv*))]
 
-    (k/create-topic ek/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic ek/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer ek/*consumer* [tx-topic doc-topic])
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
       (t/is (= {:txs 1 :docs 8}
                (k/consume-and-index-entities
                  {:indexer indexer
-                  :consumer ek/*consumer*
+                  :consumer f/*consumer*
                   :tx-topic tx-topic
                   :doc-topic doc-topic}))))
 
