@@ -11,6 +11,23 @@
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
 
+(defprotocol CruxSystem
+  "Provides API access to Crux."
+  (db [this] [this business-time] [this business-time transact-time]
+    "Returns a db as of optional business and transaction time. Both
+    defaulting to now.")
+  (document [this content-hash]
+    "Reads a document from the document store based on its content
+    hash.")
+  (history [this eid]
+    "Returns the transaction history of an entity.")
+  (status [this]
+    "Returns the status of this node as a map.")
+  (submit-tx [this tx-ops]
+    "Writes transactions to the log for processing.")
+  (submitted-tx-updated-entity? [this submitted-tx eid]
+    "Checks if a submitted tx did update an entity."))
+
 (defprotocol CruxDatasource
   "Represents the database as of a specific business and transaction
   time."
@@ -23,6 +40,8 @@
    in a with-open block.")
   (q [this q] [this snapshot q]
     "Queries the db."))
+
+;; Local Node
 
 (extend-protocol CruxDatasource
   QueryDatasource
@@ -41,23 +60,6 @@
 
     ([this snapshot q]
      (q/q this snapshot q))))
-
-(defprotocol CruxSystem
-  "Provides API access to Crux."
-  (db [this] [this business-time] [this business-time transact-time]
-    "Returns a db as of optional business and transaction time. Both
-    defaulting to now.")
-  (document [this content-hash]
-    "Reads a document from the document store based on its content
-    hash.")
-  (history [this eid]
-    "Returns the transaction history of an entity.")
-  (status [this]
-    "Returns the status of this node as a map.")
-  (submit-tx [this tx-ops]
-    "Writes transactions to the log for processing.")
-  (submitted-tx-updated-entity? [this submitted-tx eid]
-    "Checks if a submitted tx did update an entity."))
 
 (defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
@@ -140,6 +142,8 @@
     (map->LocalNode (merge {:close-promise close-promise
                             :options options}
                            @system-promise))))
+
+;; Remote API
 
 (def ^:private remote-api-readers
   {'crux/id idx/new-id
