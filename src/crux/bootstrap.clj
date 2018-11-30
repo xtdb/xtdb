@@ -10,15 +10,14 @@
             [crux.kv-store :as ks]
             [crux.kafka.nippy]
             [crux.lru :as lru]
-            crux.lmdb
-            crux.memdb
-            crux.rocksdb
             [crux.tx :as tx]
             [clojure.string :as str])
-  (:import clojure.lang.IPersistentMap
+  (:import [clojure.lang IPersistentMap IRecord]
            [java.io Closeable Reader]
            java.net.InetAddress
            java.util.Properties))
+
+(declare require-and-ensure-kv-record)
 
 (def cli-options
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
@@ -43,7 +42,7 @@
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend:
    crux.rocksdb.RocksKv, crux.lmdb.LMDBKv or crux.memdb.MemKv"
     :default "crux.rocksdb.RocksKv"
-    :validate [#(extends? ks/KvStore (resolve (symbol %))) "Unknown storage backend"]]
+    :validate [#'require-and-ensure-kv-record "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
@@ -58,7 +57,7 @@
 (s/def ::create-topics boolean?)
 (s/def ::replication-factor pos-int?)
 (s/def ::db-dir string?)
-(s/def ::kv-backend #(extends? ks/KvStore (resolve (symbol %))))
+(s/def ::kv-backend #'require-and-ensure-kv-record)
 (s/def ::server-port (s/int-in 1 65536))
 
 (s/def ::options (s/keys :opt-un [::bootstrap-servers
@@ -88,13 +87,23 @@
     (pp/print-table (for [[k v] options]
                       {:key k :value v}))))
 
+(defn- require-and-ensure-kv-record [record-class-name]
+  (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
+    (require (symbol record-ns))
+    (let [record-class ^Class (resolve (symbol record-class-name))]
+      (and (extends? ks/KvStore record-class)
+           (.isAssignableFrom ^Class IRecord record-class)))))
+
 (defn ^Closeable start-kv-store [{:keys [db-dir
                                          kv-backend]
                                   :as options}]
-  (->> (lru/new-cache-providing-kv-store
-        (eval (list (symbol kv-backend "create")
-                    {:db-dir (str db-dir)})))
-       (ks/open)))
+  (require-and-ensure-kv-record kv-backend)
+  (let [record-class ^Class (resolve (symbol kv-backend))
+        kv (.invoke (.getMethod record-class "create"
+                                (into-array [clojure.lang.IPersistentMap]))
+                    nil (object-array [{:db-dir db-dir}]))]
+    (->> (lru/new-cache-providing-kv-store kv)
+         (ks/open))))
 
 (defn- read-kafka-properties-file [f]
   (when f

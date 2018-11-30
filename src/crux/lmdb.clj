@@ -206,7 +206,7 @@
         (.ms_entries stat))))
 
   (db-dir [this]
-    (.getName (class this)))
+    (str db-dir))
 
   (kv-name [_]
     "crux.rocksdb.LMDBKv")

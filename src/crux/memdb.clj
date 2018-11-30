@@ -68,7 +68,7 @@
     (count @db))
 
   (db-dir [_]
-    db-dir)
+    (str db-dir))
 
   (kv-name [this]
     (.getName (class this)))
