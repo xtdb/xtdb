@@ -58,12 +58,12 @@
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
-    (binding [*kv* (b/start-kv-store {:db-dir db-dir :kv-backend *kv-backend*})]
-      (try
+    (try
+      (binding [*kv* (b/start-kv-store {:db-dir db-dir :kv-backend *kv-backend*})]
         (with-open [*kv* ^Closeable *kv*]
-          (f))
-        (finally
-          (cio/delete-dir db-dir))))))
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)))))
 
 (defn with-memdb [f]
   (binding [*kv-backend* "crux.memdb.MemKv"]
@@ -87,15 +87,37 @@
 (def ^:dynamic ^String *host* "localhost")
 (def ^:dynamic *api-url*)
 
+(def ^:dynamic *api*)
+
 (defn with-local-node [f]
-  (assert *kv*)
-  (assert ek/*kafka-bootstrap-servers*)
+  (assert (bound? #'ek/*kafka-bootstrap-servers*))
   (let [server-port (cio/free-port)
-        db-dir (ks/db-dir *kv*)]
-    (.close ^Closeable *kv*)
-    (binding [*api-url* (str "http://" *host* ":" server-port)]
+        db-dir (str (cio/create-tmpdir "kv-store"))
+        test-id (UUID/randomUUID)
+        tx-topic (str "tx-topic-" test-id)
+        doc-topic (str "doc-topic-" test-id)]
+    (try
       (with-open [local-node (api/start-local-node {:server-port server-port
                                                     :db-dir db-dir
+                                                    :tx-topic tx-topic
+                                                    :doc-topic doc-topic
                                                     :kv-backend *kv-backend*
                                                     :bootstrap-servers ek/*kafka-bootstrap-servers*})]
-        (f)))))
+        (binding [*api* local-node
+                  *api-url* (str "http://" *host* ":" server-port)]
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)))))
+
+(defn with-api-client [f]
+  (assert (bound? #'*api-url*))
+  (with-open [api-client (api/new-api-client *api-url*)]
+    (binding [*api* api-client]
+      (f))))
+
+(defn with-each-api-impl [f]
+  (t/testing "Local API"
+    (with-local-node f))
+  (t/testing "Remote API"
+    (with-local-node
+      #(with-api-client f))))

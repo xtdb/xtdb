@@ -33,11 +33,12 @@
   (new-snapshot [this]
     (ks/new-snapshot (:kv this)))
 
-  (q [this q]
-    (q/q this q))
+  (q
+    ([this q]
+     (q/q this q))
 
-  (q [this snapshot q]
-    (q/q this snapshot q)))
+    ([this snapshot q]
+     (q/q this snapshot q))))
 
 (defprotocol CruxSystem
   (status [this]
@@ -72,7 +73,8 @@
     (q/db kv-store business-time transact-time))
 
   (history [_ eid]
-    (doc/entity-history kv-store eid))
+    (with-open [snapshot (ks/new-snapshot kv-store)]
+      (doc/entity-history snapshot eid)))
 
   (document [_ content-hash]
     (let [object-store (doc/->DocObjectStore kv-store)]
@@ -80,7 +82,7 @@
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (submit-tx [_ tx-ops]
-    (db/submit-tx tx-log tx-ops))
+    @(db/submit-tx tx-log tx-ops))
 
   (submitted-tx-updated-entity? [_ submitted-tx eid]
     (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
