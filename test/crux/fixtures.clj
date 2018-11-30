@@ -1,10 +1,12 @@
 (ns crux.fixtures
   (:require [clojure.test :as t]
+            [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.embedded-kafka :as ek]
             [crux.http-server :as srv]
+            [crux.kv-store :as ks]
             [crux.tx :as tx])
   (:import java.io.Closeable
            java.util.UUID))
@@ -85,10 +87,15 @@
 (def ^:dynamic ^String *host* "localhost")
 (def ^:dynamic *api-url*)
 
-(defn with-http-server [f]
+(defn with-local-node [f]
   (assert *kv*)
   (assert ek/*kafka-bootstrap-servers*)
-  (let [port (cio/free-port)]
-    (binding [*api-url* (str "http://" *host* ":" port)]
-      (with-open [http-server (srv/create-server *kv* (tx/->DocTxLog *kv*) ek/*kafka-bootstrap-servers* port)]
+  (let [server-port (cio/free-port)
+        db-dir (ks/db-dir *kv*)]
+    (.close ^Closeable *kv*)
+    (binding [*api-url* (str "http://" *host* ":" server-port)]
+      (with-open [local-node (api/start-local-node {:server-port server-port
+                                                    :db-dir db-dir
+                                                    :kv-backend *kv-backend*
+                                                    :bootstrap-servers ek/*kafka-bootstrap-servers*})]
         (f)))))

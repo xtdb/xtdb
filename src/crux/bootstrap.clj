@@ -139,7 +139,7 @@
                 http-server (srv/create-server
                              kv-store
                              tx-log
-                             consumer
+                             bootstrap-servers
                              server-port)
                 indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")

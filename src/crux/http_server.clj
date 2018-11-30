@@ -102,6 +102,7 @@
                   "default.api.timeout.ms" (int 1000)})]
       (boolean (.listTopics consumer)))
     (catch Exception e
+      (log/debug e "Could not list Kafka topics:")
       false)))
 
 ;; ---------------------------------------------------
