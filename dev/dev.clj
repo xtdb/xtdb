@@ -35,13 +35,12 @@
                 embed-kafka? (assoc :bootstrap-servers (:bootstrap-servers embedded-kafka))))
              :embedded-kafka embedded-kafka)
       (catch Throwable t
-        (.close embedded-kafka)
+        (some-> embedded-kafka (.close))
         (throw t)))))
 
 (defn ^LocalNode stop-crux-system [{:keys [embedded-kafka] :as system}]
   (.close ^Closeable system)
-  (some-> ^Closeable embedded-kafka (.close))
-  system)
+  (some-> ^Closeable embedded-kafka (.close)))
 
 (defn start []
   (alter-var-root #'system (fn [_] (start-crux-system dev-options)))
