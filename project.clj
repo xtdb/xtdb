@@ -33,7 +33,8 @@
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
-                                  [ch.qos.logback/logback-classic "1.2.3"]]
+                                  [ch.qos.logback/logback-classic "1.2.3"]
+                                  [net.mikera/core.matrix "0.62.0"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :java-source-paths ["src"]

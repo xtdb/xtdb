@@ -1,5 +1,6 @@
 (ns hakan
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [clojure.core.matrix :as m]))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
 
@@ -966,3 +967,47 @@
      (k2-tree-succsessors k2 1)
      ;; Should return 3 7 8 9
      (k2-tree-predecessors k2 6)]))
+
+;; Matrix / GraphBLAS style breath first search
+;; https://redislabs.com/redis-enterprise/technology/redisgraph/
+
+(def adjacency-matrix
+  (m/matrix [[0 0 0 1 0 0 0]
+             [1 0 0 0 0 0 0]
+             [0 0 0 1 0 1 1]
+             [1 0 0 0 0 0 1]
+             [0 1 0 0 0 0 1]
+             [0 0 1 0 1 0 0]
+             [0 1 0 0 0 0 0]]))
+
+;; Breath first search, looking for neighbours of elements 1 and 3 (0
+;; and 2 in zero-based indexing).
+(def bfs-mask (m/matrix [1 0 1 0 0 0 0]))
+
+;; One hop.
+(assert (= [0.0 1.0 0.0 1.0 0.0 1.0 0.0]
+           (m/mmul adjacency-matrix bfs-mask)))
+
+;; Two hops, value is number of in-edges.
+(assert (= [1.0 0.0 2.0 0.0 1.0 0.0 1.0]
+           (m/mmul adjacency-matrix adjacency-matrix bfs-mask)))
+
+;; Breath first search, looking for neighbours of elements 1, 3 and 4
+;; with individual results.
+(def multiple-source-bfs-mask
+  (m/matrix [[0 1 0]
+             [0 0 0]
+             [0 0 1]
+             [1 0 0]
+             [0 0 0]
+             [0 0 0]
+             [0 0 0]]))
+
+(assert (= [[1.0 0.0 0.0]
+            [0.0 1.0 0.0]
+            [1.0 0.0 0.0]
+            [0.0 1.0 0.0]
+            [0.0 0.0 0.0]
+            [0.0 0.0 1.0]
+            [0.0 0.0 0.0]]
+           (m/mmul adjacency-matrix multiple-source-bfs-mask)))
