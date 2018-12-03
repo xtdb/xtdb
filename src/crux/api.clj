@@ -6,8 +6,7 @@
             [crux.doc :as doc]
             [crux.index :as idx]
             [crux.kv-store :as ks]
-            [crux.query :as q]
-            [crux.tx :as tx])
+            [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
 
