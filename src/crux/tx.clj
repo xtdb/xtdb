@@ -50,19 +50,18 @@
 (defmulti tx-command (fn [kv snapshot object-store tx-log [op] transact-time tx-id] op))
 
 (defn- in-range-pred [start end]
-  #(and (not (pos? (compare start %)))
-        (neg? (compare % end))))
+  #(and (or (nil? start)
+            (not (pos? (compare start %))))
+        (or (nil? end)
+            (neg? (compare % end)))))
 
 (defn- put-delete-kvs [snapshot k start-business-time end-business-time transact-time tx-id content-hash-bytes]
   (let [eid (idx/new-id k)
         start-business-time (or start-business-time transact-time)
         dates-in-history (when end-business-time
-                           (->> (map :bt (doc/entity-history snapshot eid))
-                                (filter (in-range-pred start-business-time end-business-time))))
-        dates-to-correct (->> (concat [start-business-time]
-                                      dates-in-history
-                                      (when end-business-time
-                                        [end-business-time]))
+                           (map :bt (doc/entity-history snapshot eid)))
+        dates-to-correct (->> (cons start-business-time dates-in-history)
+                              (filter (in-range-pred start-business-time end-business-time))
                               (into (sorted-set)))]
     {:kvs (vec (for [business-time dates-to-correct]
                  [(idx/encode-entity+bt+tt+tx-id-key

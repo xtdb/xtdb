@@ -330,7 +330,7 @@
                        (select-keys [:tx-id :content-hash]))))))
 
       (let [deleted-start-business-time #inst "2018-11-25"
-            deleted-end-business-time #inst "2018-11-27"
+            deleted-end-business-time #inst "2018-11-28"
             {deleted-transact-time :transact-time
              deleted-tx-id :tx-id}
             @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-business-time deleted-end-business-time]])]
@@ -347,7 +347,20 @@
                       :tx-id corrected-tx-id}
                      (-> (doc/entities-at snapshot [:ivan] v3-business-time deleted-transact-time)
                          (first)
-                         (select-keys [:tx-id :content-hash])))))))))
+                         (select-keys [:tx-id :content-hash])))))))
+
+      (t/testing "end range is exclusive"
+        (let [{deleted-transact-time :transact-time
+               deleted-tx-id :tx-id}
+              @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-business-time v3-business-time]])]
+
+          (with-open [snapshot (ks/new-snapshot f/*kv*)]
+            (t/testing "third version of entity is still there"
+              (t/is (= {:content-hash (idx/new-id corrected-ivan)
+                        :tx-id corrected-tx-id}
+                       (-> (doc/entities-at snapshot [:ivan] v3-business-time deleted-transact-time)
+                           (first)
+                           (select-keys [:tx-id :content-hash]))))))))))
 
   (t/deftest test-can-perform-unary-join
     (let [a-idx (doc/new-relation-virtual-index :a
