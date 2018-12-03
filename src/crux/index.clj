@@ -144,6 +144,15 @@
 (defn hex-id? [s]
   (re-find hex-id-pattern s))
 
+(defn- maybe-uuid-str [s]
+  (try
+    (UUID/fromString s)
+    (catch IllegalArgumentException _)))
+
+(defn- maybe-keyword-str [s]
+  (when-let [[_ n] (re-find #"\:(.+)" s)]
+    (keyword n)))
+
 (extend-protocol IdToBytes
   (class (byte-array 0))
   (id->bytes [this]
@@ -172,7 +181,10 @@
   (id->bytes [this]
     (if (hex-id? this)
       (prepend-value-type-id (bu/hex->bytes this) id-value-type-id)
-      (throw (IllegalArgumentException. (format "Not a %s hex string: %s" id-hash-algorithm this)))))
+      (if-let [id (or (maybe-uuid-str this)
+                      (maybe-keyword-str this))]
+        (id->bytes id)
+        (throw (IllegalArgumentException. (format "Not a %s hex, keyword or an UUID string: %s" id-hash-algorithm this))))))
 
   IPersistentMap
   (id->bytes [this]

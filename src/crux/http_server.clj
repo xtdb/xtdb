@@ -10,6 +10,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
+            [crux.index :as idx]
             [crux.io]
             [crux.kafka]
             [crux.rdf :as rdf]
@@ -26,26 +27,17 @@
 ;; ---------------------------------------------------
 ;; Utils
 
-(defn- uuid-str? [s]
-  (re-matches #"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" s))
-
-(defn- sha1-20-str? [s]
-  (re-matches #"[a-f0-9]{20}" s))
-
 (defn- read-unknown [s]
   (cond
-    (uuid-str? s)
-    (UUID/fromString s)
-
-    (sha1-20-str? s)
-    s
+    (idx/valid-id? s)
+    (idx/new-id s)
 
     (try
       (edn/read-string s)
-      (catch Exception e false))
+      (catch Exception e))
     (edn/read-string s)
 
-    :default
+    :else
     (keyword s)))
 
 (defn- param
