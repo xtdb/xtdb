@@ -4,7 +4,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
-           [java.io DataInputStream DataOutputStream File IOException]
+           [java.io Closeable DataInputStream DataOutputStream File IOException]
            [java.lang.ref ReferenceQueue PhantomReference]
            [java.util Comparator Date IdentityHashMap PriorityQueue]
            [java.net ServerSocket]))
@@ -76,6 +76,12 @@
     (string? f) (folder-size (io/file f))
     (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :else (.length f)))
+
+(defn try-close [^Closeable c]
+  (try
+    (some-> c (.close))
+    (catch Throwable t
+      (log/error t "Could not close:" c))))
 
 ;; External Merge Sort
 

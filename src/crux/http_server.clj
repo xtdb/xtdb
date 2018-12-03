@@ -307,6 +307,7 @@
   the Crux HTTP API. Takes a either a crux.api.LocalNode or its
   dependencies explicitly as arguments."
   ([{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
+                                              :or {server-port 3000}
                                               :as options}]
    (let [server (j/run-jetty (-> (partial handler local-node)
                                  (p/wrap-params)
