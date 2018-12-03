@@ -114,7 +114,7 @@
   crux.http-server/start-http-server.  This will require further
   dependencies on the classpath, see crux.http-server for details.
 
-  See also crux.kafka.embedded-kafka for self-contained deployments."
+  See also crux.kafka.embedded for self-contained deployments."
   [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)

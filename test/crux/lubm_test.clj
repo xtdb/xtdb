@@ -388,26 +388,3 @@
                            (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                              '{:find [x]
                                :where [[x :rdf/type :ub/UndergraduateStudent]]}))))))
-
-;; NOTE: Does not allow for running individual tests, which was one of
-;; the reasons to break it out into several test functions.
-#_(defn test-ns-hook []
-    ((t/join-fixtures [ek/with-embedded-kafka-cluster
-                       ek/with-kafka-client
-                       f/with-kv-store
-                       with-lubm-data])
-     (fn []
-       (test-lubm-query-01)
-       (test-lubm-query-02)
-       (test-lubm-query-03)
-       (test-lubm-query-04)
-       (test-lubm-query-05)
-       (test-lubm-query-06)
-       (test-lubm-query-07)
-       (test-lubm-query-08)
-       (test-lubm-query-09)
-       (test-lubm-query-10)
-       (test-lubm-query-11)
-       (test-lubm-query-12)
-       (test-lubm-query-13)
-       (test-lubm-query-14))))

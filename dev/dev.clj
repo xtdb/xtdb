@@ -6,7 +6,7 @@
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
             [crux.doc :as doc]
-            [crux.kafka.embedded-kafka :as ek]
+            [crux.kafka.embedded :as ek]
             [crux.http-server :as srv]
             [crux.index :as idx]
             [crux.io :as cio]

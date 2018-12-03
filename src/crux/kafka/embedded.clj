@@ -1,4 +1,4 @@
-(ns crux.kafka.embedded-kafka
+(ns crux.kafka.embedded
   "Embedded Kafka for self-contained Crux deployments.
 
   Requires org.apache.kafka/kafka_2.11 and
