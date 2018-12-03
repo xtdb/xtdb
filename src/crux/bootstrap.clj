@@ -115,14 +115,12 @@
 (defn- ^Closeable start-http-server
   [kv-store
    tx-log
-   {:keys [bootstrap-servers
-           server-port
-           http-server?]
+   {:keys [http-server?]
     :or {http-server? true}
     :as options}]
   (if http-server?
     (do (require 'crux.http-server)
-        ((resolve 'crux.http-server/create-server) kv-store tx-log bootstrap-servers server-port))
+        ((resolve 'crux.http-server/start-server) kv-store tx-log options))
     (reify Closeable
       (close [_]))))
 
@@ -150,7 +148,7 @@
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-properties)
                 http-server (start-http-server kv-store tx-log options)
-                indexing-consumer (k/create-indexing-consumer admin-client consumer indexer options)]
+                indexing-consumer (k/start-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")
       (with-system-fn
         {:kv-store kv-store

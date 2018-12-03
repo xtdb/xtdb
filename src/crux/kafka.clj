@@ -191,7 +191,7 @@
   (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
     (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
-(defn ^Closeable create-indexing-consumer
+(defn ^Closeable start-indexing-consumer
   [admin-client consumer indexer
    {:keys [tx-topic
            replication-factor
