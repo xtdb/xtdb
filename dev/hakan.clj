@@ -971,6 +971,8 @@
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
 
+;; Using core.matrix for simplicity for now to explore the algorithms.
+
 (def adjacency-matrix
   (m/matrix [[0 0 0 1 0 0 0]
              [1 0 0 0 0 0 0]
@@ -1011,3 +1013,159 @@
             [0.0 0.0 1.0]
             [0.0 0.0 0.0]]
            (m/mmul adjacency-matrix multiple-source-bfs-mask)))
+
+;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
+
+(def magiq [[0 2 1 0 1]
+            [0 0 0 2 2]
+            [0 0 0 3 0]
+            [0 0 0 0 0]
+            [0 0 5 5 0]])
+;; a b c e = 1 2 3 5
+
+;; SELECT ?x ?y ?z ?w WHERE {
+;; ?x <a> ?y .
+;; ?y <c> ?z .
+;; ?x <b> ?w .
+;; }
+
+;; Mxy = I ∗ a ⊗ A
+;; Myz = diag(any(M'xy)) ∗ c ⊗ A
+;; Mxy = Mxy × diag(any(Myz))
+;; Mxw = diag(any(Mxy)) ∗ b ⊗ A
+
+;; "The first line selects the valid bindings of variables x and y
+;; using predicate a from the RDF matrix A, and stores the results in
+;; matrix Mxy. The second line uses the bindings of y and predicate c
+;; to select the bindings of z.  The third line updates the bindings
+;; of x and y to eliminate bindings invalidated by predicate
+;; c. Finally, the fourth line uses the bindings of x in Mxy with
+;; predicate b to select the valid bindings of w."
+
+;; "The undirected version of the query graph is traversed in a
+;; depth-first fashion"
+
+;; "Forward edges are translated to RDF selection operations that
+;; produce the binding matrix for the variables of the query
+;; edge. Backward edges are translated to selection operations that
+;; filter out invalid variable bindings"
+
+;; Determine if any array elements are nonzero.
+(defn matlab-any [m]
+  (->> (m/columns m)
+       (mapv #(if (some pos? %) 1.0 0.0))
+       (m/matrix)))
+
+(assert (= [0.0 0.0 1.0]
+           (matlab-any [[0 0 3]
+                        [0 0 3]
+                        [0 0 3]])))
+
+;; Creates a sparse matrix with matlab syntax, cols, rows, vals, rows,
+;; cols
+(defn matlab-sparse [i j v m n]
+  (-> (m/zero-matrix m n)
+      (m/set-indices (map vector i j)
+                     (map double v))))
+
+(assert (= [[0.0 0.0 0.0]
+            [0.0 0.0 0.0]
+            [0.0 1.0 0.0]]
+           (matlab-sparse [2] [1] [1] 3 3)))
+
+;; This example is LUBM query 2 written with clause order.
+
+;; SELECT ?x, ?y, ?z
+;; WHERE
+;; { ?z ub:subOrganizationOf ?y .
+;;   ?z rdf:type ub:Department .
+;;   ?x ub:memberOf ?z .
+;;   ?x rdf:type ub:GraduateStudent .
+;;   ?x ub:undergraduateDegreeFrom ?y
+;;   ?y rdf:type ub:University .
+;; }
+
+;; This is a GUESS based on the Matlab translation in the
+;; paper. Should be possible to play with in the REPL if one loads
+;; some real LUBM data into matrix form. This is taken from the
+;; screenshot on page 4. This also includes the graph form of the
+;; query above and the order its walked.
+
+;; G is a list of matrixes, one per predicate. N is dimension (I think).
+;; [G, N] = load_rdf_graph('data/lubm2560.nt');
+
+;; This creates a matrix with a single cell set, GradStud, and selects
+;; the entries in G{type} with this value into M_01 (GradStud- > ?x).
+;; GradStud and type are ids of predicates I think.
+;; M_01 = sparse([GradStud], [GradStud], [1], N, N) * G{type};
+
+;; (def m_01 (m/mmul (matlab-sparse [GradStud] [GradStud] [1.0] n n)
+;;                   (get g type)))
+
+;; Transposes M_01 (') any returns one for every row with a column set
+;; and creates a diagonal matrix to select elements from G{uGradFrom}
+;; based on ?x into M_12 (?x -> ?y).
+;; M_12 = diag(any(M_01')) * G{uGradFrom};
+
+;; (def m_12 (m/mmul (m/diagonal-matrix (matlab-any (m/transpose m_01)))
+;;                   (get g uGradFrom)))
+
+;; Transposes M_12 and selects like above, navigates from ?y to its types.
+;; M_24 = diag(any(M_12')) * G{type};
+
+;; (def m_24 (m/mmul (m/diagonal-matrix (matlab-any (m/transpose m_12)))
+;;                   (get g type)))
+
+;; Select the types with Univ. M_24 (?y -> Univ)
+;; M_24 = M_24 * sparse([Univ], [Univ], [1], N, N);
+
+;; (def m_24 (m/mmul m24 (matlab-sparse [Univ] [Univ] [1.0] n n)))
+
+;; Navigates from ?y to subOrgOf to M_25 (?z -> ?y) as the navigation is
+;; backwards there's no transpose (I think).
+;; M_25 = diag(any(M_24)) * G{subOrgOf};
+
+;; (def m_25 (m/mmul (m/diagonal-matrix (matlab-any m_24))
+;;                   (get g subOrgOf)))
+
+;; Updates ?x -> ?y, I think to ensure it contains the same links to
+;; ?y as M_25 (?z -> ?y).
+;; M_12 = M_12 * diag(any(M_25));
+
+;; (def m_12 (m/mmul m_12 (m/diagonal-matrix (matlab-any m_25))))
+
+;; Navigate to M_13 (?x -> ?z).
+;; M_13 = diag(any(M_12)) * G{memberOf};
+
+;; (def m_13 (m/mmul (m/diagonal-matrix (matlab-any m_12))
+;;                   (get g memberOf)))
+
+;; Selects the ?z with type Dept into M_36 (?z -> Dept)
+;; M_36 = diag(any(M_13')) * G{type};
+
+;; (def m_36 (m/mmul (m/diagonal-matrix (matlab-any (m/transpose m_13)))
+;;                   (get g type)))
+
+;; M_36 = M_36 * sparse([Dept], [Dept], [1], N, N);
+
+;; (def m_36 (m/mmul m36 (matlab-sparse [Dept] [Dept] [1.0] n n)))
+
+;; Updates ?x -> ?z based on Dept to ensure they contain the same ?z.
+;; M_13 = M_13 * diag(any(M_36));
+
+;; (def m_13 (m/mmul m_13 (m/diagonal-matrix (matlab-any m_36))))
+
+;; Updates GradStud -> ?x based on ?x -> ?z to ensure they contain the
+;; same ?x.
+;; M_01 = M_01 * diag(any(M_13));
+
+;; (def m_01 (m/mmul m_01 (m/diagonal-matrix (matlab-any m_13))))
+
+;; print_results({M_01, M_12, M_24, M_25, M_13, M_36});
+
+;; (m/pm m_01)
+;; (m/pm m_12)
+;; (m/pm m_24)
+;; (m/pm m_25)
+;; (m/pm m_13)
+;; (m/pm m_36)
