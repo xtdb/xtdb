@@ -6,7 +6,6 @@
             [crux.db :as db]
             [crux.io :as cio]
             [crux.kafka.embedded-kafka :as ek]
-            [crux.http-server :as srv]
             [crux.kafka :as k]
             [crux.kv-store :as ks]
             [crux.tx :as tx])
