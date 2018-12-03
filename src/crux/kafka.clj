@@ -55,6 +55,17 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
+(defn zk-active? [bootstrap-servers]
+  (try
+    (with-open [^KafkaConsumer consumer
+                (create-consumer
+                 {"bootstrap.servers" bootstrap-servers
+                  "default.api.timeout.ms" (int 1000)})]
+      (boolean (.listTopics consumer)))
+    (catch Exception e
+      (log/debug e "Could not list Kafka topics:")
+      false)))
+
 ;;; Transacting Producer
 
 (defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]

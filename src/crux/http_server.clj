@@ -15,6 +15,7 @@
             [crux.kafka :as k]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
+            [crux.status :as status]
             [crux.tx :as tx]
             [crux.query :as q]
             [crux.kv-store :as ks]
@@ -101,29 +102,11 @@
       (catch Exception e
         (exception-response 400 e))))) ;;Invalid edn
 
-(defn zk-active? [bootstrap-servers]
-  (try
-    (with-open [^KafkaConsumer consumer
-                (k/create-consumer
-                 {"bootstrap.servers" bootstrap-servers
-                  "default.api.timeout.ms" (int 1000)})]
-      (boolean (.listTopics consumer)))
-    (catch Exception e
-      (log/debug e "Could not list Kafka topics:")
-      false)))
-
 ;; ---------------------------------------------------
 ;; Services
 
-(defn status-map [kv bootstrap-servers]
-  {:crux.zk/zk-active? (zk-active? bootstrap-servers)
-   :crux.kv-store/kv-backend (ks/kv-name kv)
-   :crux.kv-store/estimate-num-keys (ks/count-keys kv)
-   :crux.kv-store/size (some-> (ks/db-dir kv) (cio/folder-size))
-   :crux.tx-log/tx-time (doc/read-meta kv :crux.tx-log/tx-time)})
-
 (defn status [kv bootstrap-servers]
-  (let [status-map (status-map kv bootstrap-servers)]
+  (let [status-map (status/status-map kv bootstrap-servers)]
     (if (:crux.zk/zk-active? status-map)
       (success-response status-map)
       (response 500
