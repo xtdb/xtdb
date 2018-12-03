@@ -34,7 +34,7 @@
   ([kv entities]
    (transact-entity-maps! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (tx/->DocTxLog kv)
+   (let [tx-log (tx/->KvTxLog kv)
          tx-ops (maps->tx-ops entities ts)]
      @(db/submit-tx tx-log tx-ops)
      entities)))
@@ -47,7 +47,7 @@
   ([kv entities]
    (delete-entities! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (tx/->DocTxLog kv)
+   (let [tx-log (tx/->KvTxLog kv)
          tx-ops (entities->delete-tx-ops entities ts)]
      @(db/submit-tx tx-log tx-ops)
      entities)))

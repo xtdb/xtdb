@@ -5,15 +5,10 @@
             [crux.codec :as c]
             [crux.kv-store :as ks]
             [crux.db :as db]
-            [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable
            [java.util Arrays Collections Comparator Date]
            crux.codec.EntityTx))
-
-;; TODO: Consider doing the big ns rename, where this potentially
-;; becomes crux.index and current crux.index becomes something like
-;; crux.codec.
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -257,7 +252,7 @@
     (range-constraints idx)
     idx))
 
-;; Doc Store
+;; Object Store
 
 (defn normalize-value [v]
   (cond-> v
@@ -290,7 +285,7 @@
                           (c/encode-attribute+entity+value+content-hash-key k id v content-hash)])
                        (reduce into [])))))
 
-(defrecord DocObjectStore [kv]
+(defrecord KvObjectStore [kv]
   Closeable
   (close [_])
 
@@ -770,86 +765,3 @@
   ([relation-name tuples max-depth layered-range-constraints]
    (let [iterators-state (atom nil)]
      (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
-
-;; Caching
-
-(defrecord CachedObjectStore [cache object-store]
-  db/ObjectStore
-  (get-objects [this snapshot ks]
-    (->> (for [k ks]
-           [k (lru/compute-if-absent
-               cache
-               k
-               #(get (db/get-objects object-store snapshot [%]) %))])
-         (into {})))
-
-  (put-objects [this kvs]
-    (db/put-objects object-store kvs))
-
-  (delete-objects [this ks]
-    (doseq [k ks]
-      (lru/evict cache k))
-    (db/delete-objects object-store ks))
-
-  Closeable
-  (close [_]))
-
-(def ^:const default-doc-cache-size 10240)
-
-(defn new-cached-object-store
-  ([kv]
-   (new-cached-object-store kv default-doc-cache-size))
-  ([kv cache-size]
-   (->CachedObjectStore (lru/get-named-cache kv ::doc-cache cache-size)
-                        (->DocObjectStore kv))))
-
-(defn- ensure-iterator-open [closed-state]
-  (when @closed-state
-    (throw (IllegalStateException. "Iterator closed."))))
-
-(defrecord CachedIterator [i closed-state]
-  ks/KvIterator
-  (seek [_ k]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (ks/seek i k)))
-
-  (next [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (ks/next i)))
-
-  (value [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (ks/value i)))
-
-  Closeable
-  (close [_]
-    (ensure-iterator-open closed-state)
-    (reset! closed-state true)))
-
-(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
-  ks/KvSnapshot
-  (new-iterator [_]
-    (if-let [i (->> @iterators-state
-                    (filter (comp deref :closed-state))
-                    (first))]
-      (if (compare-and-set! (:closed-state i) true false)
-        i
-        (recur))
-      (let [i (->CachedIterator (ks/new-iterator snapshot) (atom false))]
-        (swap! iterators-state conj i)
-        i)))
-
-  Closeable
-  (close [_]
-    (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
-      (locking i
-        (reset! closed-state true)
-        (.close i)))
-    (when close-snapshot?
-      (.close snapshot))))
-
-(defn ^crux.index.CachedSnapshot new-cached-snapshot [snapshot close-snapshot?]
-  (->CachedSnapshot snapshot close-snapshot? (atom #{})))

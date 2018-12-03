@@ -26,8 +26,8 @@
          (#(rdf/maps-by-id %)))))
 
 (t/deftest test-can-store-doc
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (idx/->DocObjectStore f/*kv*)
+  (let [tx-log (tx/->KvTxLog f/*kv*)
+        object-store (idx/->KvObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)]
@@ -50,8 +50,8 @@
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (idx/->DocObjectStore f/*kv*)
+  (let [tx-log (tx/->KvTxLog f/*kv*)
+        object-store (idx/->KvObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)
@@ -264,8 +264,8 @@
                     (t/is (nil? (ks/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
-  (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (idx/->DocObjectStore f/*kv*)
+  (let [tx-log (tx/->KvTxLog f/*kv*)
+        object-store (idx/->KvObjectStore f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)

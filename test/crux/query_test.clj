@@ -1146,7 +1146,7 @@
                                          :limit 2}))))))
 
 (t/deftest test-query-and-cas
-  (let [tx-log (crux.tx/->DocTxLog *kv*)]
+  (let [tx-log (crux.tx/->KvTxLog *kv*)]
 
     (t/testing "can create new user"
       (let [{:crux.tx/keys [tx-time

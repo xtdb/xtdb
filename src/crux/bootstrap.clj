@@ -130,8 +130,8 @@
                 consumer (k/create-consumer (merge {"group.id" (:group-id options)}
                                                    kafka-properties))
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
-                object-store ^Closeable (idx/->DocObjectStore kv-store)
-                indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
+                object-store ^Closeable (idx/->KvObjectStore kv-store)
+                indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-properties)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")

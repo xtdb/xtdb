@@ -6,6 +6,7 @@
             [crux.index :as idx]
             [crux.tx :as tx]
             [crux.kv-store :as ks]
+            [crux.lru :as lru]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.kafka :as k]
@@ -47,8 +48,8 @@
                     (map #(rdf/use-default-language % :en))
                     (vec))
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
-        object-store (idx/new-cached-object-store f/*kv*)
-        indexer (tx/->DocIndexer f/*kv* tx-log object-store)]
+        object-store (lru/new-cached-object-store f/*kv*)
+        indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)

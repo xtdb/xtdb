@@ -112,7 +112,7 @@
              tx-id)
             c/nil-id-bytes]]}))
 
-(defrecord DocIndexer [kv tx-log object-store]
+(defrecord KvIndexer [kv tx-log object-store]
   Closeable
   (close [_])
 
@@ -171,16 +171,16 @@
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
-(defrecord DocTxLog [kv]
+(defrecord KvTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (db/index-doc (->DocIndexer kv this (idx/->DocObjectStore kv)) content-hash doc))
+    (db/index-doc (->KvIndexer kv this (idx/->KvObjectStore kv)) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
-          indexer (->DocIndexer kv this (idx/->DocObjectStore kv))]
+          indexer (->KvIndexer kv this (idx/->KvObjectStore kv))]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)

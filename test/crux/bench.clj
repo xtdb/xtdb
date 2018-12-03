@@ -30,7 +30,7 @@
 
 (defn- insert-data [n batch-size ts index]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
-    @(db/submit-tx (tx/->DocTxLog *kv*)
+    @(db/submit-tx (tx/->KvTxLog *kv*)
                    (f/maps->tx-ops people ts))))
 
 (defn- perform-query [ts query index]

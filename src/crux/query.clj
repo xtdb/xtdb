@@ -561,7 +561,7 @@
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
-                                  (with-open [snapshot (idx/new-cached-snapshot snapshot false)]
+                                  (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
                                     (cond
                                       cached-result
                                       cached-result
@@ -629,7 +629,7 @@
         {:join-depth not-join-depth
          :constraint-fn
          (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-           (with-open [snapshot (idx/new-cached-snapshot snapshot false)]
+           (with-open [snapshot (lru/new-cached-snapshot snapshot false)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
                                   (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
@@ -927,7 +927,7 @@
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
-     (with-open [snapshot (idx/new-cached-snapshot (ks/new-snapshot kv) true)]
+     (with-open [snapshot (lru/new-cached-snapshot (ks/new-snapshot kv) true)]
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
                               set)
@@ -989,20 +989,20 @@
    (let [business-time (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                        (idx/new-cached-object-store kv)
+                        (lru/new-cached-object-store kv)
                         business-time
                         business-time)))
   ([kv business-time]
    (->QueryDatasource kv
                       (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (idx/new-cached-object-store kv)
+                      (lru/new-cached-object-store kv)
                       business-time
                       (cio/next-monotonic-date)))
   ([kv business-time transact-time]
    (idx/await-tx-time kv transact-time)
    (->QueryDatasource kv
                       (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (idx/new-cached-object-store kv)
+                      (lru/new-cached-object-store kv)
                       business-time
                       transact-time)))
 

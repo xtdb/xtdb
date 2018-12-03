@@ -72,7 +72,7 @@
     (q/db kv-store business-time transact-time))
 
   (document [_ content-hash]
-    (let [object-store (idx/->DocObjectStore kv-store)
+    (let [object-store (idx/->KvObjectStore kv-store)
           content-hash (c/new-id content-hash)]
       (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
