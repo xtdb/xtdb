@@ -4,7 +4,7 @@
   Requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
   (:require [clojure.java.io :as io]
-            [crux.io :as cio]
+            [crux.io]
             [clojure.spec.alpha :as s])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
