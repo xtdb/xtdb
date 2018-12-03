@@ -5,15 +5,15 @@
             [clojure.walk :as w]
             [com.stuartsierra.dependency :as dep]
             [crux.byte-utils :as bu]
+            [crux.codec :as c]
             [crux.doc :as doc]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.kv-store :as ks]
             [crux.db :as db])
   (:import java.util.Comparator
            crux.doc.BinaryJoinLayeredVirtualIndex
-           crux.index.EntityTx))
+           crux.codec.EntityTx))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -229,7 +229,7 @@
                                   (group-by :sym))]
     (->> (for [[v-var clauses] v-var->range-clauses]
            [v-var (->> (for [{:keys [op val]} clauses
-                             :let [type-prefix (idx/value-bytes-type-id (idx/value->bytes val))]]
+                             :let [type-prefix (c/value-bytes-type-id (c/value->bytes val))]]
                          (case op
                            < #(-> (doc/new-less-than-virtual-index % val)
                                   (doc/new-prefix-equal-virtual-index type-prefix))
@@ -465,7 +465,7 @@
                                    (= (count values) 1))
                              values
                              (for [value values
-                                   :when (bu/bytes=? value-bytes (idx/value->bytes value))]
+                                   :when (bu/bytes=? value-bytes (c/value->bytes value))]
                                value)))]
           (merge binding {:value value
                           :entity entity-tx
@@ -609,7 +609,7 @@
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
                                    (sorted-set-by bu/bytes-comparator)))
-                            (->> (map idx/value->bytes (doc/normalize-value arg))
+                            (->> (map c/value->bytes (doc/normalize-value arg))
                                  (into (sorted-set-by bu/bytes-comparator)))))]
              (when (case op
                      == (boolean (not-empty (apply set/intersection values)))

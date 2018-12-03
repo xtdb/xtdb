@@ -12,8 +12,8 @@
             [clojure.walk :as w]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
-            [crux.db :as db]
-            [crux.index :as idx])
+            [crux.codec :as c]
+            [crux.db :as db])
   (:import java.io.StringReader
            java.net.URLDecoder
            javax.xml.datatype.DatatypeConstants
@@ -223,7 +223,7 @@
 
 (defn ^org.eclipse.rdf4j.model.Value clj->rdf [x]
   (let [factory (SimpleValueFactory/getInstance)]
-    (if (idx/valid-id? x)
+    (if (c/valid-id? x)
       (if (and (keyword? x) (= "_" (namespace x)))
         (.createBNode factory (name x))
         (.createIRI factory (if (and (keyword? x) (namespace x))

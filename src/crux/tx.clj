@@ -2,18 +2,18 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv-store :as ks])
-  (:import crux.index.EntityTx
+  (:import crux.codec.EntityTx
            [java.io Closeable Writer]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(s/def ::id (s/conformer (comp str idx/new-id)))
-(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str idx/new-id)))
+(s/def ::id (s/conformer (comp str c/new-id)))
+(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str c/new-id)))
                           :content-hash ::id)
                     (s/conformer second)))
 
@@ -56,7 +56,7 @@
             (neg? (compare % end)))))
 
 (defn- put-delete-kvs [snapshot k start-business-time end-business-time transact-time tx-id content-hash-bytes]
-  (let [eid (idx/new-id k)
+  (let [eid (c/new-id k)
         start-business-time (or start-business-time transact-time)
         dates-in-history (when end-business-time
                            (map :bt (doc/entity-history snapshot eid)))
@@ -64,38 +64,38 @@
                               (filter (in-range-pred start-business-time end-business-time))
                               (into (sorted-set)))]
     {:kvs (vec (for [business-time dates-to-correct]
-                 [(idx/encode-entity+bt+tt+tx-id-key
-                   (idx/id->bytes eid)
+                 [(c/encode-entity+bt+tt+tx-id-key
+                   (c/id->bytes eid)
                    business-time
                    transact-time
                    tx-id)
                   content-hash-bytes]))}))
 
 (defmethod tx-command :crux.tx/put [kv snapshot object-store tx-log [op k v start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (idx/id->bytes (idx/new-id v))))
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->bytes (c/new-id v))))
 
 (defmethod tx-command :crux.tx/delete [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id idx/nil-id-bytes))
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-bytes))
 
 (defmethod tx-command :crux.tx/cas [kv snapshot object-store tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
-  (let [eid (idx/new-id k)
+  (let [eid (c/new-id k)
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
          :as entity} (first (doc/entities-at snapshot [eid] business-time transact-time))
-        old-v-bytes (idx/id->bytes old-v)
-        new-v-id (idx/new-id new-v)]
-    {:pre-commit-fn #(if (bu/bytes=? (idx/id->bytes content-hash) old-v-bytes)
+        old-v-bytes (c/id->bytes old-v)
+        new-v-id (c/new-id new-v)]
+    {:pre-commit-fn #(if (bu/bytes=? (c/id->bytes content-hash) old-v-bytes)
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
-     :kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             (idx/id->bytes eid)
+     :kvs [[(c/encode-entity+bt+tt+tx-id-key
+             (c/id->bytes eid)
              business-time
              transact-time
              tx-id)
-            (idx/id->bytes new-v-id)]]}))
+            (c/id->bytes new-v-id)]]}))
 
 (defmethod tx-command :crux.tx/evict [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
-  (let [eid (idx/new-id k)
+  (let [eid (c/new-id k)
         history-descending (doc/entity-history snapshot eid)
         start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
         end-business-time (or end-business-time transact-time)]
@@ -105,12 +105,12 @@
                                 :when (and ((in-range-pred start-business-time end-business-time) (.bt entity-tx))
                                            (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
                           (db/submit-doc tx-log content-hash nil)))
-     :kvs [[(idx/encode-entity+bt+tt+tx-id-key
-             (idx/id->bytes eid)
+     :kvs [[(c/encode-entity+bt+tt+tx-id-key
+             (c/id->bytes eid)
              end-business-time
              transact-time
              tx-id)
-            idx/nil-id-bytes]]}))
+            c/nil-id-bytes]]}))
 
 (defrecord DocIndexer [kv tx-log object-store]
   Closeable
@@ -121,7 +121,7 @@
     (when (and doc (not (contains? doc :crux.db/id)))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
-    (let [content-hash (idx/new-id content-hash)
+    (let [content-hash (c/new-id content-hash)
           existing-doc (with-open [snapshot (ks/new-snapshot kv)]
                          (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
       (cond
@@ -165,8 +165,8 @@
 (defn tx-ops->docs [tx-ops]
   (vec (for [[op id :as tx-op] tx-ops
              doc (filter map? tx-op)]
-         (if (and (satisfies? idx/IdToBytes id)
-                  (= (idx/new-id id) (idx/new-id (get doc :crux.db/id))))
+         (if (and (satisfies? c/IdToBytes id)
+                  (= (c/new-id id) (c/new-id (get doc :crux.db/id))))
            doc
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
@@ -182,7 +182,7 @@
           conformed-tx-ops (conform-tx-ops tx-ops)
           indexer (->DocIndexer kv this (doc/->DocObjectStore kv))]
       (doseq [doc (tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (idx/new-id doc)) doc))
+        (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
       (delay {:crux.tx/tx-id tx-id

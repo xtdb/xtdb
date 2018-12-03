@@ -8,7 +8,7 @@
             [crux.doc :as doc]
             [crux.kafka.embedded :as ek]
             [crux.http-server :as srv]
-            [crux.index :as idx]
+            [crux.codec :as c]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf])

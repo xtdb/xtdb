@@ -4,7 +4,6 @@
             [clojure.set :as set]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.index :as idx]
             [crux.tx :as tx]
             [crux.kv-store :as ks]
             [crux.rdf :as rdf]

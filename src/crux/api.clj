@@ -2,9 +2,9 @@
   "Public API for Crux."
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.doc :as doc]
-            [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -48,7 +48,7 @@
     (q/entity this eid))
 
   (entity-tx [this eid]
-    (idx/entity-tx->edn (q/entity-tx this eid)))
+    (c/entity-tx->edn (q/entity-tx this eid)))
 
   (new-snapshot [this]
     (ks/new-snapshot (:kv this)))
@@ -73,13 +73,13 @@
 
   (document [_ content-hash]
     (let [object-store (doc/->DocObjectStore kv-store)
-          content-hash (idx/new-id content-hash)]
+          content-hash (c/new-id content-hash)]
       (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (history [_ eid]
     (with-open [snapshot (ks/new-snapshot kv-store)]
-      (mapv idx/entity-tx->edn (doc/entity-history snapshot eid))))
+      (mapv c/entity-tx->edn (doc/entity-history snapshot eid))))
 
   (status [this]
     (require 'crux.status)

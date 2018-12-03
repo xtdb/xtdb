@@ -1,8 +1,8 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures :as f]
-            [crux.index :as idx])
+            [crux.codec :as c]
+            [crux.fixtures :as f])
   (:import clojure.lang.LazySeq
            java.util.Date))
 
@@ -54,8 +54,8 @@
       (t/testing "entity-tx, document and history"
         (let [entity-tx (api/entity-tx (api/db f/*api*) :ivan)]
           (t/is (= (merge submitted-tx
-                          {:crux.db/id (str (idx/new-id :ivan))
-                           :crux.db/content-hash (str (idx/new-id {:crux.db/id :ivan :name "Ivan"}))
+                          {:crux.db/id (str (c/new-id :ivan))
+                           :crux.db/content-hash (str (c/new-id {:crux.db/id :ivan :name "Ivan"}))
                            :crux.db/business-time business-time})
                    entity-tx))
           (t/is (= {:crux.db/id :ivan :name "Ivan"} (api/document f/*api* (:crux.db/content-hash entity-tx))))

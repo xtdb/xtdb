@@ -1,7 +1,7 @@
 (ns crux.kafka
   (:require [crux.db :as db]
-            [crux.index :as idx]
             [clojure.spec.alpha :as s]
+            [crux.codec :as c]
             [crux.tx :as tx]
             [clojure.tools.logging :as log])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
@@ -87,7 +87,7 @@
   (submit-tx [this tx-ops]
     (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
       (doseq [doc (tx/tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (idx/new-id doc)) doc))
+        (db/submit-doc this (str (c/new-id doc)) doc))
       (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
                                 (.send producer))]
         (delay

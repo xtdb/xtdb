@@ -10,7 +10,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
-            [crux.index :as idx]
+            [crux.codec :as c]
             [crux.io]
             [crux.kafka]
             [crux.rdf :as rdf]
@@ -29,8 +29,8 @@
 
 (defn- read-unknown [s]
   (cond
-    (idx/valid-id? s)
-    (idx/new-id s)
+    (c/valid-id? s)
+    (c/new-id s)
 
     (try
       (edn/read-string s)

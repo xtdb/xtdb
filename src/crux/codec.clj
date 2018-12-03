@@ -1,4 +1,4 @@
-(ns crux.index
+(ns crux.codec
   (:require [crux.byte-utils :as bu]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
@@ -241,12 +241,12 @@
 
 (nippy/extend-freeze
  Id
- :crux.index/id
+ :crux.codec/id
  [x data-output]
  (.write data-output (id->bytes x)))
 
 (nippy/extend-thaw
- :crux.index/id
+ :crux.codec/id
  [data-input]
  (new-id (doto (byte-array id-size)
            (->> (.readFully data-input)))))
@@ -376,16 +376,16 @@
 ;; incompatible records without it.
 (nippy/extend-freeze
  EntityTx
- :crux.index/entity-tx
+ :crux.codec/entity-tx
  [x data-output]
  (nippy/-freeze-without-meta! (into {} x) data-output))
 
 (nippy/extend-thaw
- :crux.index/entity-tx
+ :crux.codec/entity-tx
  [data-input]
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
-(defn ^crux.index.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
+(defn ^crux.codec.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id (.get buffer)))

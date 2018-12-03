@@ -1,1 +1,1 @@
-{crux/id crux.index/new-id}
+{crux/id crux.codec/new-id}
