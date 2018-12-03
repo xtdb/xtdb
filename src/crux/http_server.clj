@@ -142,7 +142,7 @@
   (let [entity (param request "entity")]
     (with-open [snapshot (ks/new-snapshot kv)]
       (success-response
-       (doc/entity-history snapshot entity)))))
+       (mapv idx/entity-tx->edn (doc/entity-history snapshot entity))))))
 
 (defn- db-for-request [kv {:keys [business-time transact-time]}]
   (cond
@@ -190,8 +190,8 @@
 (defn entity-tx [kv request]
   (let [body (param request "entity-tx")]
     (success-response
-     (q/entity-tx (db-for-request kv body)
-                  (:eid body)))))
+     (idx/entity-tx->edn (q/entity-tx (db-for-request kv body)
+                                      (:eid body))))))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]

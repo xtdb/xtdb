@@ -360,10 +360,6 @@
   (id->bytes [this]
     (id->bytes eid)))
 
-(defmethod print-method EntityTx [entity-tx ^Writer w]
-  (.write w "#crux/entity-tx ")
-  (print-method (into {} entity-tx) w))
-
 ;; TODO: Not sure why these are needed, external sorting thaws
 ;; incompatible records without it.
 (nippy/extend-freeze
@@ -387,3 +383,11 @@
                 (reverse-time-ms->date (.getLong buffer))
                 (.getLong buffer)
                 nil)))
+
+(defn entity-tx->edn [{:keys [eid bt tt tx-id content-hash] :as entity-tx}]
+  (when entity-tx
+    {:crux.db/id (str eid)
+     :crux.db/content-hash (str content-hash)
+     :crux.db/business-time bt
+     :crux.tx/tx-id tx-id
+     :crux.tx/tx-time tt}))

@@ -49,7 +49,7 @@
     (q/entity this eid))
 
   (entity-tx [this eid]
-    (q/entity-tx this eid))
+    (idx/entity-tx->edn (q/entity-tx this eid)))
 
   (new-snapshot [this]
     (ks/new-snapshot (:kv this)))
@@ -78,13 +78,14 @@
     (q/db kv-store business-time transact-time))
 
   (document [_ content-hash]
-    (let [object-store (doc/->DocObjectStore kv-store)]
+    (let [object-store (doc/->DocObjectStore kv-store)
+          content-hash (idx/new-id content-hash)]
       (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (history [_ eid]
     (with-open [snapshot (ks/new-snapshot kv-store)]
-      (doc/entity-history snapshot eid)))
+      (mapv idx/entity-tx->edn (doc/entity-history snapshot eid))))
 
   (status [this]
     (require 'crux.http-server)
@@ -150,18 +151,13 @@
 
 ;; Remote API
 
-(def ^:private remote-api-readers
-  {'crux/id idx/new-id
-   'crux/entity-tx idx/map->EntityTx})
-
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
         open-paren \(]
     (when-not (= (int open-paren) (.read in))
       (throw (RuntimeException. "Expected delimiter: (")))
     (->> (repeatedly #(try
-                        (edn/read {:eof ::eof
-                                   :readers remote-api-readers} in)
+                        (edn/read {:eof ::eof} in)
                         (catch RuntimeException e
                           (if (= "Unmatched delimiter: )" (.getMessage e))
                             ::eof
@@ -205,7 +201,7 @@
 
        (= "application/edn" (:content-type headers))
        (if (string? body)
-         (edn/read-string {:readers remote-api-readers} body)
+         (edn/read-string body)
          body)
 
        :else
@@ -237,8 +233,8 @@
 
   (q [this q]
     (api-request-sync (str url "/query") (assoc q
-                                            :business-time business-time
-                                            :transact-time transact-time)))
+                                                :business-time business-time
+                                                :transact-time transact-time)))
 
   (q [this snapshot q]
     (let [in (api-request-sync (str url "/query-stream")
@@ -273,7 +269,7 @@
     (api-request-sync (str url "/tx-log") tx-ops))
 
   (submitted-tx-updated-entity? [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
-    (= tx-id (:tx-id (entity-tx (db this tx-time tx-time) eid))))
+    (= tx-id (:crux.tx/tx-id (entity-tx (db this tx-time tx-time) eid))))
 
   Closeable
   (close [_]))
