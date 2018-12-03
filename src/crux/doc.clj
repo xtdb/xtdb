@@ -11,6 +11,10 @@
            [java.util Arrays Collections Comparator Date]
            crux.index.EntityTx))
 
+;; TODO: Consider doing the big ns rename, where this potentially
+;; becomes crux.index and current crux.index becomes something like
+;; crux.codec.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 ;; Indexes

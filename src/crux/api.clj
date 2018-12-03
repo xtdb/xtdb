@@ -61,6 +61,11 @@
     ([this snapshot q]
      (q/q this snapshot q))))
 
+;; TODO: Would be better if the HTTP API depended on and wrapped this
+;; instead of re-implementing it. Especially the status end-point
+;; which gets lazily required here. Then we could potentially get rid
+;; of the http-server? flag and have the user (or the main method)
+;; compose it themselves.
 (defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
   (db [_]
