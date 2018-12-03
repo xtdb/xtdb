@@ -4,7 +4,7 @@
             [crux.byte-utils :as bu]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv-store :as ks])
   (:import crux.codec.EntityTx
@@ -59,7 +59,7 @@
   (let [eid (c/new-id k)
         start-business-time (or start-business-time transact-time)
         dates-in-history (when end-business-time
-                           (map :bt (doc/entity-history snapshot eid)))
+                           (map :bt (idx/entity-history snapshot eid)))
         dates-to-correct (->> (cons start-business-time dates-in-history)
                               (filter (in-range-pred start-business-time end-business-time))
                               (into (sorted-set)))]
@@ -81,7 +81,7 @@
   (let [eid (c/new-id k)
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
-         :as entity} (first (doc/entities-at snapshot [eid] business-time transact-time))
+         :as entity} (first (idx/entities-at snapshot [eid] business-time transact-time))
         old-v-bytes (c/id->bytes old-v)
         new-v-id (c/new-id new-v)]
     {:pre-commit-fn #(if (bu/bytes=? (c/id->bytes content-hash) old-v-bytes)
@@ -96,7 +96,7 @@
 
 (defmethod tx-command :crux.tx/evict [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (c/new-id k)
-        history-descending (doc/entity-history snapshot eid)
+        history-descending (idx/entity-history snapshot eid)
         start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
         end-business-time (or end-business-time transact-time)]
     {:post-commit-fn #(when tx-log
@@ -127,11 +127,11 @@
       (cond
         (and doc (nil? existing-doc))
         (do (db/put-objects object-store [[content-hash doc]])
-            (doc/index-doc kv content-hash doc))
+            (idx/index-doc kv content-hash doc))
 
         (and (nil? doc) existing-doc)
         (do (db/delete-objects object-store [content-hash])
-            (doc/delete-doc-from-index kv content-hash existing-doc)))))
+            (idx/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (ks/new-snapshot kv)]
@@ -151,10 +151,10 @@
           (log/warn "Transaction aborted:" (pr-str tx-ops) tx-time tx-id)))))
 
   (store-index-meta [_ k v]
-    (doc/store-meta kv k v))
+    (idx/store-meta kv k v))
 
   (read-index-meta [_ k]
-    (doc/read-meta kv k)))
+    (idx/read-meta kv k)))
 
 (defn conform-tx-ops [tx-ops]
   (let [conformed-ops (s/conform ::tx-ops tx-ops)]
@@ -174,13 +174,13 @@
 (defrecord DocTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (db/index-doc (->DocIndexer kv this (doc/->DocObjectStore kv)) content-hash doc))
+    (db/index-doc (->DocIndexer kv this (idx/->DocObjectStore kv)) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
-          indexer (->DocIndexer kv this (doc/->DocObjectStore kv))]
+          indexer (->DocIndexer kv this (idx/->DocObjectStore kv))]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)

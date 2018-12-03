@@ -1,4 +1,4 @@
-(ns crux.doc
+(ns crux.index
   (:require [clojure.tools.logging :as log]
             [clojure.set :as set]
             [crux.byte-utils :as bu]
@@ -46,7 +46,7 @@
 (defn- attribute-value+placeholder [k peek-state]
   (let [[value] (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)]
     (reset! peek-state {:last-k k :value value})
-    [value :crux.doc.binary-placeholder/value]))
+    [value :crux.index.binary-placeholder/value]))
 
 (defrecord DocAttributeValueEntityValueIndex [i attr peek-state]
   db/Index
@@ -117,7 +117,7 @@
         [_ entity-tx] (db/seek-values entity-as-of-idx (c/id->bytes e))]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
-      [(c/id->bytes e) :crux.doc.binary-placeholder/entity]
+      [(c/id->bytes e) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
 
 (defrecord DocAttributeEntityValueEntityIndex [i attr entity-as-of-idx peek-state]
@@ -851,5 +851,5 @@
     (when close-snapshot?
       (.close snapshot))))
 
-(defn ^crux.doc.CachedSnapshot new-cached-snapshot [snapshot close-snapshot?]
+(defn ^crux.index.CachedSnapshot new-cached-snapshot [snapshot close-snapshot?]
   (->CachedSnapshot snapshot close-snapshot? (atom #{})))

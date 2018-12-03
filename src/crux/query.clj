@@ -6,13 +6,13 @@
             [com.stuartsierra.dependency :as dep]
             [crux.byte-utils :as bu]
             [crux.codec :as c]
-            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
             [crux.kv-store :as ks]
             [crux.db :as db])
   (:import java.util.Comparator
-           crux.doc.BinaryJoinLayeredVirtualIndex
+           crux.index.BinaryJoinLayeredVirtualIndex
            crux.codec.EntityTx))
 
 (defn- logic-var? [x]
@@ -231,14 +231,14 @@
            [v-var (->> (for [{:keys [op val]} clauses
                              :let [type-prefix (c/value-bytes-type-id (c/value->bytes val))]]
                          (case op
-                           < #(-> (doc/new-less-than-virtual-index % val)
-                                  (doc/new-prefix-equal-virtual-index type-prefix))
-                           <= #(-> (doc/new-less-than-equal-virtual-index % val)
-                                   (doc/new-prefix-equal-virtual-index type-prefix))
-                           > #(-> (doc/new-greater-than-virtual-index % val)
-                                  (doc/new-prefix-equal-virtual-index type-prefix))
-                           >= #(-> (doc/new-greater-than-equal-virtual-index % val)
-                                   (doc/new-prefix-equal-virtual-index type-prefix))))
+                           < #(-> (idx/new-less-than-virtual-index % val)
+                                  (idx/new-prefix-equal-virtual-index type-prefix))
+                           <= #(-> (idx/new-less-than-equal-virtual-index % val)
+                                   (idx/new-prefix-equal-virtual-index type-prefix))
+                           > #(-> (idx/new-greater-than-virtual-index % val)
+                                  (idx/new-prefix-equal-virtual-index type-prefix))
+                           >= #(-> (idx/new-greater-than-equal-virtual-index % val)
+                                   (idx/new-prefix-equal-virtual-index type-prefix))))
                        (apply comp))])
          (into {}))))
 
@@ -251,17 +251,17 @@
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get v-var->range-constraints v)
-        entity-as-of-idx (doc/new-entity-as-of-index snapshot business-time transact-time)]
+        entity-as-of-idx (idx/new-entity-as-of-index snapshot business-time transact-time)]
     (if (= (:v names) (first order))
-      (let [v-doc-idx (doc/new-doc-attribute-value-entity-value-index snapshot a)
-            e-idx (doc/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
+      (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
+            e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
         (log/debug :join-order :ave (pr-str v) e (pr-str clause))
-        (doc/update-binary-join-order! binary-idx (doc/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
-      (let [e-doc-idx (doc/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
-            v-idx (-> (doc/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
-                      (doc/wrap-with-range-constraints v-range-constraints))]
+        (idx/update-binary-join-order! binary-idx (idx/wrap-with-range-constraints v-doc-idx v-range-constraints) e-idx))
+      (let [e-doc-idx (idx/new-doc-attribute-entity-value-entity-index snapshot a entity-as-of-idx)
+            v-idx (-> (idx/new-doc-attribute-entity-value-value-index snapshot a e-doc-idx)
+                      (idx/wrap-with-range-constraints v-range-constraints))]
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
-        (doc/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
+        (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars]
   (let [v->clauses (group-by :v triple-clauses)]
@@ -274,17 +274,17 @@
                           (gensym (str "literal_" v "_")))
                   join {:id (gensym "triple")
                         :name e-var
-                        :idx-fn #(-> (doc/new-binary-join-virtual-index)
+                        :idx-fn #(-> (idx/new-binary-join-virtual-index)
                                      (with-meta {:clause clause
                                                  :names {:e e-var
                                                          :v v-var}}))}
                   var->joins (merge-with into var->joins {v-var [join]
                                                           e-var [join]})
                   var->joins (if (literal? e)
-                               (merge-with into var->joins {e-var [{:idx-fn #(doc/new-relation-virtual-index e-var [[e]] 1)}]})
+                               (merge-with into var->joins {e-var [{:idx-fn #(idx/new-relation-virtual-index e-var [[e]] 1)}]})
                                var->joins)
                   var->joins (if (literal? v)
-                               (merge-with into var->joins {v-var [{:idx-fn #(doc/new-relation-virtual-index v-var [[v]] 1)}]})
+                               (merge-with into var->joins {v-var [{:idx-fn #(idx/new-relation-virtual-index v-var [[v]] 1)}]})
                                var->joins)
                   v-is-leaf? (and (logic-var? v)
                                   (= 1 (count (get v->clauses v)))
@@ -324,7 +324,7 @@
 (defn- arg-joins [arg-vars e-vars var->joins]
   (let [idx-id (gensym "args")
         join {:id idx-id
-              :idx-fn #(doc/new-relation-virtual-index idx-id
+              :idx-fn #(idx/new-relation-virtual-index idx-id
                                                        []
                                                        (count arg-vars))}]
     [idx-id
@@ -343,7 +343,7 @@
           (if return
             (let [idx-id (gensym "pred-return")
                   join {:id idx-id
-                        :idx-fn #(doc/new-relation-virtual-index idx-id
+                        :idx-fn #(idx/new-relation-virtual-index idx-id
                                                                  []
                                                                  1
                                                                  [(get v-var->range-constraints return)])
@@ -390,7 +390,7 @@
                 idx-id (gensym "or-free-vars")
                 join (when (seq free-vars)
                        {:id idx-id
-                        :idx-fn #(doc/new-relation-virtual-index idx-id
+                        :idx-fn #(idx/new-relation-virtual-index idx-id
                                                                  []
                                                                  (count free-vars))})]
             (when (not (apply = (map :or-vars or-branches)))
@@ -460,7 +460,7 @@
         (let [value-bytes (get join-keys result-index)
               content-hash (.content-hash entity-tx)
               doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)
-              values (doc/normalize-value (get doc attr))
+              values (idx/normalize-value (get doc attr))
               value (first (if (or (nil? value-bytes)
                                    (= (count values) 1))
                              values
@@ -502,7 +502,7 @@
                                       arg))]
              (when-let [pred-result (apply pred-fn args)]
                (when return
-                 (doc/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
+                 (idx/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
                join-results)))})))
 
 (defn- single-e-var-triple? [vars where]
@@ -529,7 +529,7 @@
 (defn- or-single-e-var-triple-fast-path [snapshot {:keys [business-time transact-time] :as db} where args]
   (let [[[_ {:keys [e a v] :as clause}]] where
         entity (get (first args) e)]
-    (when (doc/or-known-triple-fast-path snapshot entity a v business-time transact-time)
+    (when (idx/or-known-triple-fast-path snapshot entity a v business-time transact-time)
       [])))
 
 (def ^:private ^:dynamic *recursion-table* {})
@@ -561,7 +561,7 @@
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
                                                             (get *recursion-table* cache-key))]]
-                                  (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+                                  (with-open [snapshot (idx/new-cached-snapshot snapshot false)]
                                     (cond
                                       cached-result
                                       cached-result
@@ -575,7 +575,7 @@
                                                                     *recursion-table*)]
                                         (let [{:keys [n-ary-join
                                                       var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
-                                          (when-let [idx-seq (seq (doc/layered-idx->seq n-ary-join))]
+                                          (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                             (if has-free-vars?
                                               (vec (for [[join-keys join-results] idx-seq]
                                                      (vec (for [var free-vars-in-join-order]
@@ -587,7 +587,7 @@
                                          (apply concat)
                                          (distinct)
                                          (vec))]
-                   (doc/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constraints free-vars-in-join-order))))
+                   (idx/update-relation-virtual-index! (get idx-id->idx idx-id) free-results (map v-var->range-constraints free-vars-in-join-order))))
                join-results)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
@@ -609,7 +609,7 @@
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
                                    (sorted-set-by bu/bytes-comparator)))
-                            (->> (map c/value->bytes (doc/normalize-value arg))
+                            (->> (map c/value->bytes (idx/normalize-value arg))
                                  (into (sorted-set-by bu/bytes-comparator)))))]
              (when (case op
                      == (boolean (not-empty (apply set/intersection values)))
@@ -629,13 +629,13 @@
         {:join-depth not-join-depth
          :constraint-fn
          (fn not-constraint [snapshot {:keys [object-store] :as db} idx-id->idx join-keys join-results]
-           (with-open [snapshot (doc/new-cached-snapshot snapshot false)]
+           (with-open [snapshot (idx/new-cached-snapshot snapshot false)]
              (let [args (when (seq not-vars)
                           [(->> (for [var not-vars]
                                   (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
                    {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules)]
-               (when (empty? (doc/layered-idx->seq n-ary-join))
+               (when (empty? (idx/layered-idx->seq n-ary-join))
                  join-results))))})))
 
 (defn- constrain-join-result-by-constraints [snapshot db idx-id->idx depth->constraints join-keys join-results]
@@ -884,7 +884,7 @@
             :when (instance? BinaryJoinLayeredVirtualIndex idx)]
       (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constraints))
     (when (seq args)
-      (doc/update-relation-virtual-index! (get idx-id->idx args-idx-id)
+      (idx/update-relation-virtual-index! (get idx-id->idx args-idx-id)
                                           (vec (for [arg (distinct args)]
                                                  (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
                                           (mapv v-var->range-constraints arg-vars-in-join-order)))
@@ -892,9 +892,9 @@
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :var->bindings (pr-str var->bindings))
     (constrain-result-fn [] [])
-    {:n-ary-join (-> (mapv doc/new-unary-join-virtual-index unary-join-index-groups)
-                     (doc/new-n-ary-join-layered-virtual-index)
-                     (doc/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
+    {:n-ary-join (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
+                     (idx/new-n-ary-join-layered-virtual-index)
+                     (idx/new-n-ary-constraining-layered-virtual-index constrain-result-fn))
      :var->bindings var->bindings}))
 
 ;; NOTE: For ascending sort, it might be possible to pick the right
@@ -927,7 +927,7 @@
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
-     (with-open [snapshot (doc/new-cached-snapshot (ks/new-snapshot kv) true)]
+     (with-open [snapshot (idx/new-cached-snapshot (ks/new-snapshot kv) true)]
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
                               set)
@@ -949,7 +949,7 @@
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
-       (cond->> (for [[join-keys join-results] (doc/layered-idx->seq n-ary-join)
+       (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
                                                  (bound-results-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (with-meta
@@ -989,20 +989,20 @@
    (let [business-time (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                        (doc/new-cached-object-store kv)
+                        (idx/new-cached-object-store kv)
                         business-time
                         business-time)))
   ([kv business-time]
    (->QueryDatasource kv
                       (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (doc/new-cached-object-store kv)
+                      (idx/new-cached-object-store kv)
                       business-time
                       (cio/next-monotonic-date)))
   ([kv business-time transact-time]
-   (doc/await-tx-time kv transact-time)
+   (idx/await-tx-time kv transact-time)
    (->QueryDatasource kv
                       (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (doc/new-cached-object-store kv)
+                      (idx/new-cached-object-store kv)
                       business-time
                       transact-time)))
 

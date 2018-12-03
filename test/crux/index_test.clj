@@ -1,4 +1,4 @@
-(ns crux.doc-test
+(ns crux.index-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
@@ -6,7 +6,7 @@
             [crux.byte-utils :as bu]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.tx :as tx]
             [crux.kv-store :as ks]
             [crux.rdf :as rdf]
@@ -27,7 +27,7 @@
 
 (t/deftest test-can-store-doc
   (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (doc/->DocObjectStore f/*kv*)
+        object-store (idx/->DocObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)]
@@ -51,7 +51,7 @@
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
   (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (doc/->DocObjectStore f/*kv*)
+        object-store (idx/->DocObjectStore f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)
@@ -68,20 +68,20 @@
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "can see entity at transact and business time"
         (t/is (= expected-entities
-                 (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
+                 (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
         (t/is (= expected-entities
-                 (doc/all-entities snapshot tx-time tx-time))))
+                 (idx/all-entities snapshot tx-time tx-time))))
 
       (t/testing "cannot see entity before business or transact time"
-        (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" tx-time)))
-        (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20")))
+        (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" tx-time)))
+        (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20")))
 
-        (t/is (empty? (doc/all-entities snapshot #inst "2018-05-20" tx-time)))
-        (t/is (empty? (doc/all-entities snapshot tx-time #inst "2018-05-20"))))
+        (t/is (empty? (idx/all-entities snapshot #inst "2018-05-20" tx-time)))
+        (t/is (empty? (idx/all-entities snapshot tx-time #inst "2018-05-20"))))
 
       (t/testing "can see entity after business or transact time"
-        (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" tx-time)))
-        (t/is (some? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
+        (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" tx-time)))
+        (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid eid
@@ -89,7 +89,7 @@
                                       :bt business-time
                                       :tt tx-time
                                       :tx-id tx-id})]
-                 (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
+                 (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -105,14 +105,14 @@
                                         :bt new-business-time
                                         :tt new-tx-time
                                         :tx-id new-tx-id})]
-                   (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                         :content-hash new-content-hash
                                         :bt new-business-time
                                         :tt new-tx-time
-                                        :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-tx-time)))
+                                        :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
 
-          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
+          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
@@ -128,18 +128,18 @@
                                         :bt new-business-time
                                         :tt new-tx-time
                                         :tx-id new-tx-id})]
-                   (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                         :content-hash content-hash
                                         :bt business-time
                                         :tt tx-time
                                         :tx-id tx-id})]
-                   (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                         :content-hash new-content-hash
                                         :bt new-business-time
                                         :tt new-tx-time
-                                        :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-tx-time))))
+                                        :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time))))
 
         (t/testing "can correct entity at earlier business time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -157,14 +157,14 @@
                                             :bt new-business-time
                                             :tt new-tx-time
                                             :tx-id new-tx-id})]
-                       (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                       (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
               (t/is (= [(c/map->EntityTx {:eid eid
                                             :content-hash new-content-hash
                                             :bt new-business-time
                                             :tt new-tx-time
-                                            :tx-id new-tx-id})] (doc/all-entities snapshot new-business-time new-tx-time)))
+                                            :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
 
-              (t/is (= prev-tx-id (-> (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
+              (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
                                       :tx-id))))
 
@@ -172,14 +172,14 @@
               (let [old-picasso (assoc picasso :baz :boz)
                     {cas-failure-tx-time :crux.tx/tx-time}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
-                (t/is (= cas-failure-tx-time (doc/await-tx-time f/*kv* cas-failure-tx-time 1000)))
+                (t/is (= cas-failure-tx-time (idx/await-tx-time f/*kv* cas-failure-tx-time 1000)))
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
                                                 :tt new-tx-time
                                                 :tx-id new-tx-id})]
-                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time cas-failure-tx-time))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time cas-failure-tx-time))))))
 
             (t/testing "compare and set updates with correct content hash"
               (let [old-picasso new-picasso
@@ -188,14 +188,14 @@
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
-                (t/is (= new-tx-time (doc/await-tx-time f/*kv* new-tx-time 1000)))
+                (t/is (= new-tx-time (idx/await-tx-time f/*kv* new-tx-time 1000)))
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
                                                 :tt new-tx-time
                                                 :tx-id new-tx-id})]
-                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time))))))
 
             (t/testing "compare and set can update non existing nil entity"
               (let [new-eid (c/new-id :http://dbpedia.org/resource/Pablo2)
@@ -204,14 +204,14 @@
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-business-time]])]
-                (t/is (= new-tx-time (doc/await-tx-time f/*kv* new-tx-time 1000)))
+                (t/is (= new-tx-time (idx/await-tx-time f/*kv* new-tx-time 1000)))
                 (with-open [snapshot (ks/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid new-eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
                                                 :tt new-tx-time
                                                 :tx-id new-tx-id})]
-                           (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-business-time new-tx-time))))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-business-time new-tx-time))))))))
 
         (t/testing "can delete entity"
           (let [new-business-time #inst "2018-05-23"
@@ -219,15 +219,15 @@
                  new-tx-id :crux.tx/tx-id}
                 @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
             (with-open [snapshot (ks/new-snapshot f/*kv*)]
-              (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+              (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (-> (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-tx-time)
+                (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-tx-time)
                                    (first)
                                    :tx-id)))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
-        (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+        (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
           (t/is (= 6 (count (map :content-hash picasso-history))))
           (with-open [i (ks/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
@@ -237,7 +237,7 @@
                                      (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/value->bytes "Pablo")
                                      (c/id->bytes content-hash))]]
-              (t/is (bu/bytes=? version-k (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k))))))))
+              (t/is (bu/bytes=? version-k (ks/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -246,10 +246,10 @@
             @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-business-time]])]
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
-          (t/is (empty? (doc/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
 
           (t/testing "eviction adds to and keeps tx history"
-            (let [picasso-history (doc/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+            (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
               (t/is (= 7 (count (map :content-hash picasso-history))))
               (t/testing "eviction removes docs"
                 (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history)))))
@@ -261,11 +261,11 @@
                                            (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
                                            (c/value->bytes "Pablo")
                                            (c/id->bytes content-hash))]]
-                    (t/is (nil? (ks/seek (doc/new-prefix-kv-iterator i version-k) version-k)))))))))))))
+                    (t/is (nil? (ks/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
   (let [tx-log (tx/->DocTxLog f/*kv*)
-        object-store (doc/->DocObjectStore f/*kv*)
+        object-store (idx/->DocObjectStore f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)
@@ -288,17 +288,17 @@
 
     (with-open [snapshot (ks/new-snapshot f/*kv*)]
       (t/testing "first version of entity is visible"
-        (t/is (= v1-tx-id (-> (doc/entities-at snapshot [:ivan] v1-business-time v3-tx-time)
+        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time v3-tx-time)
                               (first)
                               :tx-id))))
 
       (t/testing "second version of entity is visible"
-        (t/is (= v2-tx-id (-> (doc/entities-at snapshot [:ivan] v2-business-time v3-tx-time)
+        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-business-time v3-tx-time)
                               (first)
                               :tx-id))))
 
       (t/testing "third version of entity is visible"
-        (t/is (= v3-tx-id (-> (doc/entities-at snapshot [:ivan] v3-business-time v3-tx-time)
+        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-business-time v3-tx-time)
                               (first)
                               :tx-id)))))
 
@@ -311,21 +311,21 @@
 
       (with-open [snapshot (ks/new-snapshot f/*kv*)]
         (t/testing "first version of entity is still there"
-          (t/is (= v1-tx-id (-> (doc/entities-at snapshot [:ivan] v1-business-time corrected-tx-time)
+          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time corrected-tx-time)
                                 (first)
                                 :tx-id))))
 
         (t/testing "second version of entity was corrected"
           (t/is (= {:content-hash (c/new-id corrected-ivan)
                     :tx-id corrected-tx-id}
-                   (-> (doc/entities-at snapshot [:ivan] v2-business-time corrected-tx-time)
+                   (-> (idx/entities-at snapshot [:ivan] v2-business-time corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash])))))
 
         (t/testing "third version of entity was corrected"
           (t/is (= {:content-hash (c/new-id corrected-ivan)
                     :tx-id corrected-tx-id}
-                   (-> (doc/entities-at snapshot [:ivan] v3-business-time corrected-tx-time)
+                   (-> (idx/entities-at snapshot [:ivan] v3-business-time corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash]))))))
 
@@ -337,15 +337,15 @@
 
         (with-open [snapshot (ks/new-snapshot f/*kv*)]
           (t/testing "first version of entity was deleted"
-            (t/is (empty? (doc/entities-at snapshot [:ivan] v1-business-time deleted-tx-time))))
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-business-time deleted-tx-time))))
 
           (t/testing "second version of entity was deleted"
-            (t/is (empty? (doc/entities-at snapshot [:ivan] v2-business-time deleted-tx-time))))
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-business-time deleted-tx-time))))
 
           (t/testing "third version of entity is still there"
             (t/is (= {:content-hash (c/new-id corrected-ivan)
                       :tx-id corrected-tx-id}
-                     (-> (doc/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
+                     (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
                          (first)
                          (select-keys [:tx-id :content-hash])))))))
 
@@ -358,12 +358,12 @@
             (t/testing "third version of entity is still there"
               (t/is (= {:content-hash (c/new-id corrected-ivan)
                         :tx-id corrected-tx-id}
-                       (-> (doc/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
+                       (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
                            (first)
                            (select-keys [:tx-id :content-hash]))))))))))
 
   (t/deftest test-can-perform-unary-join
-    (let [a-idx (doc/new-relation-virtual-index :a
+    (let [a-idx (idx/new-relation-virtual-index :a
                                                 [[0]
                                                  [1]
                                                  [3]
@@ -376,7 +376,7 @@
                                                  [11]
                                                  [12]]
                                                 1)
-          b-idx (doc/new-relation-virtual-index :b
+          b-idx (idx/new-relation-virtual-index :b
                                                 [[0]
                                                  [2]
                                                  [6]
@@ -385,7 +385,7 @@
                                                  [9]
                                                  [12]]
                                                 1)
-          c-idx (doc/new-relation-virtual-index :c
+          c-idx (idx/new-relation-virtual-index :c
                                                 [[2]
                                                  [4]
                                                  [5]
@@ -396,10 +396,10 @@
 
       (t/is (= [{:x 8}
                 {:x 12}]
-               (for [[_ join-results] (-> (doc/new-unary-join-virtual-index [(assoc a-idx :name :x)
+               (for [[_ join-results] (-> (idx/new-unary-join-virtual-index [(assoc a-idx :name :x)
                                                                              (assoc b-idx :name :x)
                                                                              (assoc c-idx :name :x)])
-                                          (doc/idx->seq))]
+                                          (idx/idx->seq))]
                  join-results))))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
@@ -413,13 +413,13 @@
 ;; (3, 5, 2)
 ;; TODO: Same as above.
 (t/deftest test-can-perform-n-ary-join
-  (let [r (doc/new-relation-virtual-index :r
+  (let [r (idx/new-relation-virtual-index :r
                                           [[1 3]
                                            [1 4]
                                            [1 5]
                                            [3 5]]
                                           2)
-        s (doc/new-relation-virtual-index :s
+        s (idx/new-relation-virtual-index :s
                                           [[3 4]
                                            [3 5]
                                            [4 6]
@@ -427,7 +427,7 @@
                                            [4 9]
                                            [5 2]]
                                           2)
-        t (doc/new-relation-virtual-index :t
+        t (idx/new-relation-virtual-index :t
                                           [[1 4]
                                            [1 5]
                                            [1 6]
@@ -440,10 +440,10 @@
       (let [index-groups [[(assoc r :name :a) (assoc t :name :a)]
                           [(assoc r :name :b) (assoc s :name :b)]
                           [(assoc s :name :c) (assoc t :name :c)]]
-            result (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                       (doc/new-n-ary-join-layered-virtual-index)
-                       (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                       (doc/layered-idx->seq))]
+            result (-> (mapv idx/new-unary-join-virtual-index index-groups)
+                       (idx/new-n-ary-join-layered-virtual-index)
+                       (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                       (idx/layered-idx->seq))]
         (t/is (= [{:a 1, :b 3, :c 4}
                   {:a 1, :b 3, :c 5}
                   {:a 1, :b 4, :c 6}
@@ -455,7 +455,7 @@
                    join-results)))))))
 
 (t/deftest test-sorted-virtual-index
-  (let [idx (doc/new-sorted-virtual-index
+  (let [idx (idx/new-sorted-virtual-index
              [[(c/value->bytes 1) :a]
               [(c/value->bytes 3) :c]])]
     (t/is (= :a
@@ -471,7 +471,7 @@
     (t/is (nil? (db/seek-values idx (c/value->bytes 4))))))
 
 (t/deftest test-range-predicates
-  (let [r (doc/new-relation-virtual-index :r
+  (let [r (idx/new-relation-virtual-index :r
                                           [[1]
                                            [2]
                                            [3]
@@ -480,54 +480,54 @@
                                           1)]
 
     (t/is (= [1 2 3 4 5]
-             (->> (doc/idx->seq r)
+             (->> (idx/idx->seq r)
                   (map second))))
 
     (t/is (= [1 2 3]
-             (->> (doc/idx->seq (doc/new-less-than-virtual-index r 4))
+             (->> (idx/idx->seq (idx/new-less-than-virtual-index r 4))
                   (map second))))
 
     (t/is (= [1 2 3 4]
-             (->> (doc/idx->seq (doc/new-less-than-equal-virtual-index r 4))
+             (->> (idx/idx->seq (idx/new-less-than-equal-virtual-index r 4))
                   (map second))))
 
     (t/is (= [3 4 5]
-             (->> (doc/idx->seq (doc/new-greater-than-virtual-index r 2))
+             (->> (idx/idx->seq (idx/new-greater-than-virtual-index r 2))
                   (map second))))
 
     (t/is (= [2 3 4 5]
-             (->> (doc/idx->seq (doc/new-greater-than-equal-virtual-index r 2))
+             (->> (idx/idx->seq (idx/new-greater-than-equal-virtual-index r 2))
                   (map second))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (second (db/seek-values (doc/new-greater-than-equal-virtual-index r 2) (c/value->bytes nil)))))
-      (t/is (= 3 (second (db/seek-values (doc/new-greater-than-virtual-index r 2) (c/value->bytes 1))))))
+      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/value->bytes nil)))))
+      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/value->bytes 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
-               (->> (doc/idx->seq (-> r
-                                      (doc/new-greater-than-equal-virtual-index 2)
-                                      (doc/new-less-than-virtual-index 5)))
+               (->> (idx/idx->seq (-> r
+                                      (idx/new-greater-than-equal-virtual-index 2)
+                                      (idx/new-less-than-virtual-index 5)))
                     (map second)))))
 
     (t/testing "incompatible type"
-      (t/is (empty? (->> (doc/idx->seq (-> (doc/new-greater-than-equal-virtual-index r "foo")))
+      (t/is (empty? (->> (idx/idx->seq (-> (idx/new-greater-than-equal-virtual-index r "foo")))
                          (map second)))))))
 
 (t/deftest test-or-virtual-index
-  (let [idx-1 (doc/new-sorted-virtual-index
+  (let [idx-1 (idx/new-sorted-virtual-index
                [[(c/value->bytes 1) :a]
                 [(c/value->bytes 3) :c]
                 [(c/value->bytes 5) :e1]])
-        idx-2 (doc/new-sorted-virtual-index
+        idx-2 (idx/new-sorted-virtual-index
                [[(c/value->bytes 2) :b]
                 [(c/value->bytes 4) :d]
                 [(c/value->bytes 5) :e2]
                 [(c/value->bytes 7) :g]])
-        idx-3 (doc/new-sorted-virtual-index
+        idx-3 (idx/new-sorted-virtual-index
                [[(c/value->bytes 5) :e3]
                 [(c/value->bytes 6) :f]])
-        idx (doc/new-or-virtual-index [idx-1 idx-2 idx-3])]
+        idx (idx/new-or-virtual-index [idx-1 idx-2 idx-3])]
     (t/testing "interleaves results in value order"
       (t/is (= :a
                (second (db/seek-values idx nil))))
@@ -559,32 +559,32 @@
                (second (db/next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta
-  (t/is (nil? (doc/read-meta f/*kv* :bar)))
-  (doc/store-meta f/*kv* :bar {:bar 2})
-  (t/is (= {:bar 2} (doc/read-meta f/*kv* :bar)))
+  (t/is (nil? (idx/read-meta f/*kv* :bar)))
+  (idx/store-meta f/*kv* :bar {:bar 2})
+  (t/is (= {:bar 2} (idx/read-meta f/*kv* :bar)))
 
   (t/testing "need exact match"
     ;; :bar 0062cdb7020ff920e5aa642c3d4066950dd1f01f4d
     ;; :foo 000beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
-    (t/is (nil? (doc/read-meta f/*kv* :foo)))))
+    (t/is (nil? (idx/read-meta f/*kv* :foo)))))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable
 ;; twice in two positions. All relations and the join order must be in
 ;; the same order for it to work.
 (t/deftest test-n-ary-join-based-on-relational-tuples
-  (let [r-idx (doc/new-relation-virtual-index :r
+  (let [r-idx (idx/new-relation-virtual-index :r
                                               [[7 4]
                                                ;; extra sanity check
                                                [8 4]]
                                               2)
-        s-idx (doc/new-relation-virtual-index :s
+        s-idx (idx/new-relation-virtual-index :s
                                               [[4 0]
                                                [4 1]
                                                [4 2]
                                                [4 3]]
                                               2)
-        t-idx (doc/new-relation-virtual-index :t
+        t-idx (idx/new-relation-virtual-index :t
                                               [[7 0]
                                                [7 1]
                                                [7 2]
@@ -602,62 +602,62 @@
                [7 4 2]
                [8 4 1]
                [8 4 2]}
-             (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                                             (doc/new-n-ary-join-layered-virtual-index)
-                                             (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                             (doc/layered-idx->seq))]
+             (set (for [[_ join-results] (-> (mapv idx/new-unary-join-virtual-index index-groups)
+                                             (idx/new-n-ary-join-layered-virtual-index)
+                                             (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                             (idx/layered-idx->seq))]
                     (vec (for [var [:a :b :c]]
                            (get join-results var)))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-unary-conjunction-and-disjunction
-  (let [p-idx (doc/new-relation-virtual-index :p
+  (let [p-idx (idx/new-relation-virtual-index :p
                                               [[1]
                                                [2]
                                                [3]]
                                               1)
-        q-idx (doc/new-relation-virtual-index :q
+        q-idx (idx/new-relation-virtual-index :q
                                               [[2]
                                                [3]
                                                [4]]
                                               1)
-        r-idx (doc/new-relation-virtual-index :r
+        r-idx (idx/new-relation-virtual-index :r
                                               [[3]
                                                [4]
                                                [5]]
                                               1)]
     (t/testing "conjunction"
-      (let [unary-and-idx (doc/new-unary-join-virtual-index [(assoc p-idx :name :x)
+      (let [unary-and-idx (idx/new-unary-join-virtual-index [(assoc p-idx :name :x)
                                                              (assoc q-idx :name :x)
                                                              (assoc r-idx :name :x)])]
         (t/is (= #{[3]}
-                 (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-and-idx])
-                                                 (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))]
+                 (set (for [[_ join-results] (-> (idx/new-n-ary-join-layered-virtual-index [unary-and-idx])
+                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                                 (idx/layered-idx->seq))]
                         (vec (for [var [:x]]
                                (get join-results var)))))))))
 
     (t/testing "disjunction"
-      (let [unary-or-idx (doc/new-or-virtual-index
-                          [(doc/new-unary-join-virtual-index [(assoc p-idx :name :x)])
-                           (doc/new-unary-join-virtual-index [(assoc q-idx :name :x)
+      (let [unary-or-idx (idx/new-or-virtual-index
+                          [(idx/new-unary-join-virtual-index [(assoc p-idx :name :x)])
+                           (idx/new-unary-join-virtual-index [(assoc q-idx :name :x)
                                                               (assoc r-idx :name :x)])])]
         (t/is (= #{[1]
                    [2]
                    [3]
                    [4]}
-                 (set (for [[_ join-results] (-> (doc/new-n-ary-join-layered-virtual-index [unary-or-idx])
-                                                 (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))]
+                 (set (for [[_ join-results] (-> (idx/new-n-ary-join-layered-virtual-index [unary-or-idx])
+                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                                 (idx/layered-idx->seq))]
                         (vec (for [var [:x]]
                                (get join-results var)))))))))))
 
 (t/deftest test-n-ary-join-based-on-relational-tuples-with-n-ary-conjunction-and-disjunction
-  (let [p-idx (doc/new-relation-virtual-index :p
+  (let [p-idx (idx/new-relation-virtual-index :p
                                               [[1 3]
                                                [2 4]
                                                [2 20]]
                                               2)
-        q-idx (doc/new-relation-virtual-index :q
+        q-idx (idx/new-relation-virtual-index :q
                                               [[1 10]
                                                [2 20]
                                                [3 30]]
@@ -670,38 +670,38 @@
       (t/is (= #{[1 3 10]
                  [2 4 20]
                  [2 20 20]}
-               (set (for [[_ join-results] (-> (mapv doc/new-unary-join-virtual-index index-groups)
-                                               (doc/new-n-ary-join-layered-virtual-index)
-                                               (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                               (doc/layered-idx->seq))]
+               (set (for [[_ join-results] (-> (mapv idx/new-unary-join-virtual-index index-groups)
+                                               (idx/new-n-ary-join-layered-virtual-index)
+                                               (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                               (idx/layered-idx->seq))]
                       (vec (for [var [:x :y :z]]
                              (get join-results var))))))))
 
     (t/testing "disjunction"
-      (let [zero-idx (doc/new-relation-virtual-index :zero
+      (let [zero-idx (idx/new-relation-virtual-index :zero
                                                      [[0]]
                                                      1)
-            lhs-index (doc/new-n-ary-join-layered-virtual-index
-                       [(doc/new-unary-join-virtual-index [(assoc p-idx :name :x)])
-                        (doc/new-unary-join-virtual-index [(assoc p-idx :name :y)])
-                        (doc/new-unary-join-virtual-index [(assoc zero-idx :name :z)])])]
+            lhs-index (idx/new-n-ary-join-layered-virtual-index
+                       [(idx/new-unary-join-virtual-index [(assoc p-idx :name :x)])
+                        (idx/new-unary-join-virtual-index [(assoc p-idx :name :y)])
+                        (idx/new-unary-join-virtual-index [(assoc zero-idx :name :z)])])]
         (t/is (= #{[1 3 0]
                    [2 4 0]
                    [2 20 0]}
                  (set (for [[_ join-results] (-> lhs-index
-                                                 (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                 (doc/layered-idx->seq))]
+                                                 (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                                 (idx/layered-idx->seq))]
                         (vec (for [var [:x :y :z]]
                                (get join-results var)))))))
-        (let [rhs-index (doc/new-n-ary-join-layered-virtual-index
-                         [(doc/new-unary-join-virtual-index [(assoc q-idx :name :x)])
-                          (doc/new-unary-join-virtual-index [(assoc zero-idx :name :y)])
-                          (doc/new-unary-join-virtual-index [(assoc q-idx :name :z)])])]
+        (let [rhs-index (idx/new-n-ary-join-layered-virtual-index
+                         [(idx/new-unary-join-virtual-index [(assoc q-idx :name :x)])
+                          (idx/new-unary-join-virtual-index [(assoc zero-idx :name :y)])
+                          (idx/new-unary-join-virtual-index [(assoc q-idx :name :z)])])]
           (t/is (= #{[1 0 10]
                      [2 0 20]
                      [3 0 30]}
                    (set (for [[_ join-results] (-> rhs-index
-                                                   (doc/new-n-ary-constraining-layered-virtual-index doc/constrain-join-result-by-empty-names)
-                                                   (doc/layered-idx->seq))]
+                                                   (idx/new-n-ary-constraining-layered-virtual-index idx/constrain-join-result-by-empty-names)
+                                                   (idx/layered-idx->seq))]
                           (vec (for [var [:x :y :z]]
                                  (get join-results var))))))))))))

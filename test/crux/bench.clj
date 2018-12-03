@@ -1,7 +1,6 @@
 (ns crux.bench
   (:require [criterium.core :as crit]
             [crux.db :as db]
-            [crux.doc :as doc]
             [crux.tx :as tx]
             [crux.query :as q]
             [crux.fixtures :as f :refer [*kv*]]

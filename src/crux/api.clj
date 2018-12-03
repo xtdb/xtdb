@@ -4,7 +4,7 @@
             [clojure.edn :as edn]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.kv-store :as ks]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -72,14 +72,14 @@
     (q/db kv-store business-time transact-time))
 
   (document [_ content-hash]
-    (let [object-store (doc/->DocObjectStore kv-store)
+    (let [object-store (idx/->DocObjectStore kv-store)
           content-hash (c/new-id content-hash)]
       (with-open [snapshot (ks/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (history [_ eid]
     (with-open [snapshot (ks/new-snapshot kv-store)]
-      (mapv c/entity-tx->edn (doc/entity-history snapshot eid))))
+      (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
   (status [this]
     (require 'crux.status)

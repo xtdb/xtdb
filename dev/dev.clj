@@ -5,7 +5,7 @@
             [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
-            [crux.doc :as doc]
+            [crux.index :as idx]
             [crux.kafka.embedded :as ek]
             [crux.http-server :as srv]
             [crux.codec :as c]
