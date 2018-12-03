@@ -4,6 +4,7 @@
   Requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
   (:require [clojure.java.io :as io]
+            [crux.io :as cio]
             [clojure.spec.alpha :as s])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
@@ -23,7 +24,7 @@
 
 (def default-kafka-broker-config
   {"host" *host*
-   "port" (int default-kafka-port)
+   "port" (str default-kafka-port)
    "broker.id" *broker-id*
    "offsets.topic.replication.factor" "1"
    "transaction.state.log.replication.factor" "1"
@@ -51,7 +52,7 @@
 (defn stop-zookeeper [^ServerCnxnFactory server-cnxn-factory]
   (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown))
 
-(defrecord EmbeddedKafka [zookeeper kafka bootstrap-servers]
+(defrecord EmbeddedKafka [zookeeper kafka options]
   Closeable
   (close [_]
     (stop-kafka-broker kafka)
@@ -59,9 +60,9 @@
 
 (s/def ::zookeeper-data-dir string?)
 (s/def ::kafka-log-dir string?)
-(s/def ::zk-port (s/int-in 1 65536))
-(s/def ::kafka-port (s/int-in 1 65536))
-(s/def ::broker-config map?)
+(s/def ::zk-port :crux.io/port)
+(s/def ::kafka-port :crux.io/port)
+(s/def ::broker-config (s/map-of string? string?))
 
 (s/def ::options (s/keys :req-un [::zookeeper-data-dir
                                   ::kafka-log-dir]
@@ -84,16 +85,16 @@
     :or {zookeeper-port default-zookeeper-port
          kafka-port default-kafka-port}
     :as options}]
-  (when (s/invalid? (s/conform :crux.kafka.embedded-kafka/options options))
+  (when (s/invalid? (s/conform ::options options))
     (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str :crux.kafka.embedded-kafka/options options)))))
+            (str "Invalid options: " (s/explain-str ::options options)))))
   (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir) zookeeper-port)
         kafka (try
                 (start-kafka-broker (merge broker-config
                                            {"log.dir" (str (io/file kafka-log-dir))
-                                            "port" (int kafka-port)
+                                            "port" (str kafka-port)
                                             "zookeeper.connect" (str *host* ":" zookeeper-port)}))
                 (catch Throwable t
                   (stop-zookeeper zookeeper)
                   (throw t)))]
-    (->EmbeddedKafka zookeeper kafka (str *host* ":" kafka-port))))
+    (->EmbeddedKafka zookeeper kafka (assoc options :bootstrap-servers (str *host* ":" kafka-port)))))

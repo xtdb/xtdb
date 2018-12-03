@@ -1,5 +1,6 @@
 (ns crux.io
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
@@ -8,6 +9,8 @@
            [java.lang.ref ReferenceQueue PhantomReference]
            [java.util Comparator Date IdentityHashMap PriorityQueue]
            [java.net ServerSocket]))
+
+(s/def ::port (s/int-in 1 65536))
 
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
 ;; We currently still support Java 8.

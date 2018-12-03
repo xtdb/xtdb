@@ -48,19 +48,17 @@
 
    ["-h" "--help"]])
 
-(s/def ::bootstrap-servers (s/and string? #(re-matches #"\w+:\d+(,\w+:\d+)*" %)))
-(s/def ::group-id string?)
-(s/def ::tx-topic string?)
-(s/def ::doc-topic string?)
-(s/def ::doc-partitions pos-int?)
+(s/def ::tx-topic :crux.kafka/topic)
+(s/def ::doc-topic :crux.kafka/topic)
+(s/def ::doc-partitions :crux.kafka/partitions)
 (s/def ::create-topics boolean?)
-(s/def ::replication-factor pos-int?)
+(s/def ::replication-factor :crux.kafka/replication-factor)
 (s/def ::db-dir string?)
 (s/def ::kv-backend #'require-and-ensure-kv-record)
-(s/def ::server-port (s/int-in 1 65536))
+(s/def ::server-port :crux.io/port)
 
-(s/def ::options (s/keys :opt-un [::bootstrap-servers
-                                  ::group-id
+(s/def ::options (s/keys :opt-un [:crux.kafka/bootstrap-servers
+                                  :crux.kafka/group-id
                                   ::tx-topic
                                   ::doc-topic
                                   ::doc-partitions
@@ -122,9 +120,9 @@
     :as options}
    with-system-fn]
   (log/info "starting system")
-  (when (s/invalid? (s/conform :crux.bootstrap/options options))
+  (when (s/invalid? (s/conform ::options options))
     (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str :crux.bootstrap/options options)))))
+            (str "Invalid options: " (s/explain-str ::options options)))))
   (let [kafka-properties (merge {"bootstrap.servers" bootstrap-servers}
                                 (read-kafka-properties-file kafka-properties-file))]
     (with-open [kv-store (start-kv-store options)

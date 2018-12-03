@@ -115,9 +115,9 @@
                                                            :kafka-log-dir (str kafka-log-dir)
                                                            :kafka-port kafka-port})
                   admin-client (k/create-admin-client
-                                {"bootstrap.servers" (:bootstrap-servers embedded-kafka)})]
+                                {"bootstrap.servers" (get-in embedded-kafka [:options :bootstrap-servers])})]
         (binding [*admin-client* admin-client
-                  *kafka-bootstrap-servers* (:bootstrap-servers embedded-kafka)]
+                  *kafka-bootstrap-servers* (get-in embedded-kafka [:options :bootstrap-servers])]
           (f)))
       (finally
         (cio/delete-dir kafka-log-dir)

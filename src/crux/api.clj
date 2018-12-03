@@ -60,7 +60,7 @@
     ([this snapshot q]
      (q/q this snapshot q))))
 
-(defrecord LocalNode [close-promise options kv-store tx-log]
+(defrecord LocalNode [close-promise kv-store tx-log options]
   CruxSystem
   (db [_]
     (q/db kv-store))

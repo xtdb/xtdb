@@ -1,6 +1,7 @@
 (ns crux.kafka
   (:require [crux.db :as db]
             [crux.index :as idx]
+            [clojure.spec.alpha :as s]
             [crux.tx :as tx]
             [clojure.tools.logging :as log])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
@@ -13,6 +14,12 @@
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            org.apache.kafka.common.errors.TopicExistsException
            org.apache.kafka.common.TopicPartition))
+
+(s/def ::bootstrap-servers (s/and string? #(re-matches #"\w+:\d+(,\w+:\d+)*" %)))
+(s/def ::group-id string?)
+(s/def ::topic string?)
+(s/def ::partitions pos-int?)
+(s/def ::replication-factor pos-int?)
 
 (def default-producer-config
   {"enable.idempotence" "true"
@@ -162,14 +169,11 @@
                 (onPartitionsAssigned [_ partitions]
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
-(defrecord IndexingConsumer [running? ^Thread worker-thread options]
+(defrecord IndexingConsumer [running? ^Thread worker-thread consumer indexer options]
   Closeable
   (close [_]
     (reset! running? false)
     (.join worker-thread)))
-
-(defmethod clojure.pprint/simple-dispatch IndexingConsumer [o]
-  ((get-method clojure.pprint/simple-dispatch clojure.lang.IPersistentMap) o))
 
 (defn- indexing-consumer-thread-main-loop
   [{:keys [running? indexer consumer options]}]
