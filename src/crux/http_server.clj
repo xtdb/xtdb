@@ -302,18 +302,26 @@
      :headers {"Content-Type" "text/plain"}
      :body "Unsupported method on this address."}))
 
-(defn ^Closeable start-server
-  ([kv tx-log {:keys [server-port]
-               :as options}]
-   (let [local-node (api/->LocalNode (promise)
-                                     options
-                                     kv
-                                     tx-log)
-         server (j/run-jetty (-> (partial handler local-node)
+(defn ^Closeable start-http-server
+  "Starts a HTTP server listening to the specified server-port, serving
+  the Crux HTTP API. Takes a either a crux.api.LocalNode or its
+  dependencies explicitly as arguments."
+  ([{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
+                                              :as options}]
+   (let [server (j/run-jetty (-> (partial handler local-node)
                                  (p/wrap-params)
                                  (wrap-exception-handling))
                              {:port server-port
                               :join? false})]
      (log/info "HTTP server started on port: " server-port)
-     (reify Closeable (close [_]
-                        (.stop server))))))
+     (reify Closeable
+       (close [_]
+         (.stop server)))))
+  ([kv-store tx-log {:keys [bootstrap-servers
+                            server-port]
+                     :as options}]
+   (start-http-server (api/->LocalNode (promise)
+                                       options
+                                       kv-store
+                                       tx-log)
+                      options)))

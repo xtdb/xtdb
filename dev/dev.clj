@@ -22,23 +22,33 @@
                   :zookeeper-data-dir (str storage-dir "/zookeeper")
                   :kafka-log-dir (str storage-dir "/kafka-log")
                   :embed-kafka? true
-                  :http-server? true})
+                  :http-server? true
+                  :server-port 3000})
 
 (def system)
 
-(defn ^LocalNode start-crux-system [{:keys [embed-kafka?] :as options}]
+(defn ^LocalNode start-crux-system [{:keys [embed-kafka? http-server?] :as options}]
   (let [embedded-kafka (when embed-kafka?
                          (ek/start-embedded-kafka options))]
     (try
-      (assoc (api/start-local-node
-              (cond-> options
-                embed-kafka? (assoc :bootstrap-servers (:bootstrap-servers embedded-kafka))))
-             :embedded-kafka embedded-kafka)
+      (let [options (cond-> options
+                      embed-kafka? (assoc :bootstrap-servers (:bootstrap-servers embedded-kafka)))
+            local-node (api/start-local-node options)]
+        (try
+          (let [http-server (when http-server?
+                              (srv/start-http-server local-node options))]
+            (assoc local-node
+                   :http-server http-server
+                   :embedded-kafka embedded-kafka))
+          (catch Throwable t
+            (some-> ^Closeable local-node (.close))
+            (throw t))))
       (catch Throwable t
         (some-> embedded-kafka (.close))
         (throw t)))))
 
-(defn ^LocalNode stop-crux-system [{:keys [embedded-kafka] :as system}]
+(defn ^LocalNode stop-crux-system [{:keys [http-server embedded-kafka] :as system}]
+  (some-> ^Closeable http-server (.close))
   (.close ^Closeable system)
   (some-> ^Closeable embedded-kafka (.close)))
 

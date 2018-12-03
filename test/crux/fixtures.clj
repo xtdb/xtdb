@@ -4,6 +4,7 @@
             [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.db :as db]
+            [crux.http-server :as srv]
             [crux.io :as cio]
             [crux.kafka.embedded-kafka :as ek]
             [crux.kafka :as k]
@@ -142,15 +143,16 @@
         db-dir (str (cio/create-tmpdir "kv-store"))
         test-id (UUID/randomUUID)
         tx-topic (str "tx-topic-" test-id)
-        doc-topic (str "doc-topic-" test-id)]
+        doc-topic (str "doc-topic-" test-id)
+        options {:server-port server-port
+                 :db-dir db-dir
+                 :tx-topic tx-topic
+                 :doc-topic doc-topic
+                 :kv-backend *kv-backend*
+                 :bootstrap-servers *kafka-bootstrap-servers*}]
     (try
-      (with-open [local-node (api/start-local-node {:server-port server-port
-                                                    :db-dir db-dir
-                                                    :tx-topic tx-topic
-                                                    :doc-topic doc-topic
-                                                    :http-server? true
-                                                    :kv-backend *kv-backend*
-                                                    :bootstrap-servers *kafka-bootstrap-servers*})]
+      (with-open [local-node (api/start-local-node options)
+                  http-server (srv/start-http-server local-node options)]
         (binding [*api* local-node
                   *api-url* (str "http://" ek/*host* ":" server-port)]
           (f)))

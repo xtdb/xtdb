@@ -60,8 +60,6 @@
     ([this snapshot q]
      (q/q this snapshot q))))
 
-;; TODO: we could potentially get rid of the http-server? flag and
-;; have the user (or the main method) compose it themselves.
 (defrecord LocalNode [close-promise options kv-store tx-log]
   CruxSystem
   (db [_]
@@ -112,20 +110,18 @@
   NOTE: requires any KV store dependencies on the classpath. The
   crux.memdb.MemKv KV backend works without additional dependencies.
 
-  The HTTP API can be started by setting the option http-server? to
-  true. This will require further dependencies on the classpath, see
-  crux.http-server for details.
+  The HTTP API can be started by passing the LocalNode to
+  crux.http-server/start-http-server.  This will require further
+  dependencies on the classpath, see crux.http-server for details.
 
   See also crux.kafka.embedded-kafka for self-contained deployments."
-  [{:keys [http-server?] :as options
-    :or {http-server? false}}]
+  [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
         close-promise (promise)
         error-promise (promise)
         options (merge @(resolve 'crux.bootstrap/default-options)
-                       options
-                       {:http-server? http-server?})
+                       options)
         node-thread (doto (Thread. (fn []
                                      (try
                                        ((resolve 'crux.bootstrap/start-system)

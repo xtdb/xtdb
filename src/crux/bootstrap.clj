@@ -112,18 +112,6 @@
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
-(defn- ^Closeable start-http-server
-  [kv-store
-   tx-log
-   {:keys [http-server?]
-    :or {http-server? true}
-    :as options}]
-  (if http-server?
-    (do (require 'crux.http-server)
-        ((resolve 'crux.http-server/start-server) kv-store tx-log options))
-    (reify Closeable
-      (close [_]))))
-
 (defn start-system
   [{:keys [bootstrap-servers
            group-id
@@ -147,7 +135,6 @@
                 object-store ^Closeable (doc/->DocObjectStore kv-store)
                 indexer ^Closeable (tx/->DocIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-properties)
-                http-server (start-http-server kv-store tx-log options)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")
       (with-system-fn
@@ -157,7 +144,6 @@
          :consumer consumer
          :indexer indexer
          :admin-client admin-client
-         :http-server http-server
          :indexing-consumer indexing-consumer})
       (log/info "stopping system")))
   (log/info "system stopped"))
@@ -210,8 +196,11 @@
           (log/info "options:" (options->table options))
           (start-system
            options
-           (fn [running-system]
-             @(shutdown-hook-promise)))))))
+           (fn [{:keys [kv-store tx-log] :as running-system}]
+             (require 'crux.http-server)
+             (with-open [http-server ^Closeable ((resolve 'crux.http-server/start-http-server)
+                                                 kv-store tx-log options)]
+               @(shutdown-hook-promise))))))))
 
 (Thread/setDefaultUncaughtExceptionHandler
  (reify Thread$UncaughtExceptionHandler
