@@ -1,4 +1,4 @@
-(ns crux.lmdb
+(ns crux.kv.lmdb
   "LMDB KV backend for Crux.
 
   Requires org.lwjgl/lwjgl-lmdb and org.lwjgl/lwjgl on the classpath,
@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [crux.byte-utils :as bu]
             [crux.io :as cio]
-            [crux.kv-store :as ks])
+            [crux.kv :as kv])
   (:import [clojure.lang ExceptionInfo MapEntry]
            java.io.Closeable
            [org.lwjgl.system MemoryStack MemoryUtil]
@@ -130,7 +130,7 @@
                                LMDB/MDB_NOTLS))
 
 (defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
-  ks/KvIterator
+  kv/KvIterator
   (seek [_ k]
     (with-open [stack (.push stack)]
       (let [k ^bytes k
@@ -148,7 +148,7 @@
     (.close stack)))
 
 (defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
-  ks/KvSnapshot
+  kv/KvSnapshot
   (new-iterator [_]
     (let [stack (.push stack)]
       (->LMDBKvIterator stack
@@ -162,7 +162,7 @@
     (.close stack)))
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
-  ks/KvStore
+  kv/KvStore
   (open [this]
     (let [env-flags (or env-flags default-env-flags)
           env (env-create)]

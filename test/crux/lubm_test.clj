@@ -5,7 +5,6 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.tx :as tx]
-            [crux.kv-store :as ks]
             [crux.lru :as lru]
             [crux.rdf :as rdf]
             [crux.query :as q]

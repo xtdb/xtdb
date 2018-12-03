@@ -6,7 +6,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv-store :as ks])
+            [crux.kv :as kv])
   (:import crux.codec.EntityTx
            [java.io Closeable Writer]))
 
@@ -122,7 +122,7 @@
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
-          existing-doc (with-open [snapshot (ks/new-snapshot kv)]
+          existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                          (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
       (cond
         (and doc (nil? existing-doc))
@@ -134,7 +134,7 @@
             (idx/delete-doc-from-index kv content-hash existing-doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
-    (with-open [snapshot (ks/new-snapshot kv)]
+    (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (for [tx-op tx-ops]
                                  (tx-command kv snapshot object-store tx-log tx-op tx-time tx-id))]
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
@@ -144,7 +144,7 @@
                  (every? true?))
           (do (->> (map :kvs tx-command-results)
                    (reduce into (sorted-map-by bu/bytes-comparator))
-                   (ks/store kv))
+                   (kv/store kv))
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
                 (post-commit-fn)))

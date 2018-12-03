@@ -1,7 +1,7 @@
 (ns crux.lru
   (:require [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv-store :as ks])
+            [crux.kv :as kv])
   (:import java.io.Closeable
            [java.util Collections LinkedHashMap]
            java.util.function.Function))
@@ -36,30 +36,30 @@
 ;; main system directly, but that requires passing more stuff around
 ;; to the lower levels.
 (defrecord CacheProvidingKvStore [kv cache-state]
-  ks/KvStore
+  kv/KvStore
   (open [this]
-    (assoc this :kv (ks/open kv)))
+    (assoc this :kv (kv/open kv)))
 
   (new-snapshot [_]
-    (ks/new-snapshot kv))
+    (kv/new-snapshot kv))
 
   (store [_ kvs]
-    (ks/store kv kvs))
+    (kv/store kv kvs))
 
   (delete [_ ks]
-    (ks/delete kv ks))
+    (kv/delete kv ks))
 
   (backup [_ dir]
-    (ks/backup kv dir))
+    (kv/backup kv dir))
 
   (count-keys [_]
-    (ks/count-keys kv))
+    (kv/count-keys kv))
 
   (db-dir [_]
-    (ks/db-dir kv))
+    (kv/db-dir kv))
 
   (kv-name [_]
-    (ks/kv-name kv))
+    (kv/kv-name kv))
 
   Closeable
   (close [_]
@@ -113,21 +113,21 @@
     (throw (IllegalStateException. "Iterator closed."))))
 
 (defrecord CachedIterator [i closed-state]
-  ks/KvIterator
+  kv/KvIterator
   (seek [_ k]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/seek i k)))
+      (kv/seek i k)))
 
   (next [_]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/next i)))
+      (kv/next i)))
 
   (value [_]
     (locking i
       (ensure-iterator-open closed-state)
-      (ks/value i)))
+      (kv/value i)))
 
   Closeable
   (close [_]
@@ -135,7 +135,7 @@
     (reset! closed-state true)))
 
 (defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
-  ks/KvSnapshot
+  kv/KvSnapshot
   (new-iterator [_]
     (if-let [i (->> @iterators-state
                     (filter (comp deref :closed-state))
@@ -143,7 +143,7 @@
       (if (compare-and-set! (:closed-state i) true false)
         i
         (recur))
-      (let [i (->CachedIterator (ks/new-iterator snapshot) (atom false))]
+      (let [i (->CachedIterator (kv/new-iterator snapshot) (atom false))]
         (swap! iterators-state conj i)
         i)))
 

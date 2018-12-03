@@ -9,7 +9,7 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.lru :as lru]
-            [crux.kv-store :as ks]
+            [crux.kv :as kv]
             [crux.db :as db])
   (:import java.util.Comparator
            crux.index.BinaryJoinLayeredVirtualIndex
@@ -927,7 +927,7 @@
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)]
-     (with-open [snapshot (lru/new-cached-snapshot (ks/new-snapshot kv) true)]
+     (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
                               set)

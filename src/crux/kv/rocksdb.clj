@@ -1,9 +1,9 @@
-(ns crux.rocksdb
+(ns crux.kv.rocksdb
   "RocksDB KV backend for Crux.
 
   Requires org.rocksdb/rocksdbjni on the classpath."
   (:require [clojure.java.io :as io]
-            [crux.kv-store :as ks])
+            [crux.kv :as kv])
   (:import java.io.Closeable
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint CompressionType Options ReadOptions
@@ -16,7 +16,7 @@
     (.key i)))
 
 (defrecord RocksKvIterator [^RocksIterator i]
-  ks/KvIterator
+  kv/KvIterator
   (seek [this k]
     (.seek i k)
     (iterator->key i))
@@ -31,7 +31,7 @@
     (.close i)))
 
 (defrecord RocksKvSnapshot [^RocksDB db ^ReadOptions read-options snapshot]
-  ks/KvSnapshot
+  kv/KvSnapshot
   (new-iterator [this]
     (->RocksKvIterator (.newIterator db read-options)))
 
@@ -41,7 +41,7 @@
     (.releaseSnapshot db snapshot)))
 
 (defrecord RocksKv [db-dir]
-  ks/KvStore
+  kv/KvStore
   (open [this]
     (RocksDB/loadLibrary)
     (let [opts (doto (Options.)

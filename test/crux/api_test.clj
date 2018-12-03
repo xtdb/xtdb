@@ -12,10 +12,10 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= {:crux.zk/zk-active? true
-              :crux.kv-store/kv-backend "crux.rocksdb.RocksKv"
-              :crux.kv-store/estimate-num-keys 0
+              :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
+              :crux.kv/estimate-num-keys 0
               :crux.tx-log/tx-time nil}
-             (dissoc (api/status f/*api*) :crux.kv-store/size))))
+             (dissoc (api/status f/*api*) :crux.kv/size))))
 
   (t/testing "transaction"
     (let [business-time (Date.)
@@ -23,7 +23,7 @@
       (t/is (true? (api/submitted-tx-updated-entity? f/*api* submitted-tx :ivan)))
 
       (let [status-map (api/status f/*api*)]
-        (t/is (pos? (:crux.kv-store/estimate-num-keys status-map)))
+        (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
         (t/is (= (:crux.tx/tx-time submitted-tx) (:crux.tx-log/tx-time status-map))))
 
       (t/testing "query"

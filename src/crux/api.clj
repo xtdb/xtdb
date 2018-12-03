@@ -5,7 +5,7 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv-store :as ks]
+            [crux.kv :as kv]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
@@ -51,7 +51,7 @@
     (c/entity-tx->edn (q/entity-tx this eid)))
 
   (new-snapshot [this]
-    (ks/new-snapshot (:kv this)))
+    (kv/new-snapshot (:kv this)))
 
   (q
     ([this q]
@@ -74,11 +74,11 @@
   (document [_ content-hash]
     (let [object-store (idx/->KvObjectStore kv-store)
           content-hash (c/new-id content-hash)]
-      (with-open [snapshot (ks/new-snapshot kv-store)]
+      (with-open [snapshot (kv/new-snapshot kv-store)]
         (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
 
   (history [_ eid]
-    (with-open [snapshot (ks/new-snapshot kv-store)]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
   (status [this]

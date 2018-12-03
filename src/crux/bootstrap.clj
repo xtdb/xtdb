@@ -6,7 +6,7 @@
             [clojure.spec.alpha :as s]
             [crux.index :as idx]
             [crux.kafka :as k]
-            [crux.kv-store :as ks]
+            [crux.kv :as kv]
             [crux.kafka.nippy]
             [crux.lru :as lru]
             [crux.tx :as tx]
@@ -39,8 +39,8 @@
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend:
-   crux.rocksdb.RocksKv, crux.lmdb.LMDBKv or crux.memdb.MemKv"
-    :default "crux.rocksdb.RocksKv"
+   crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
+    :default "crux.kv.rocksdb.RocksKv"
     :validate [#'require-and-ensure-kv-record "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
@@ -88,7 +88,7 @@
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))
     (let [record-class ^Class (resolve (symbol record-class-name))]
-      (and (extends? ks/KvStore record-class)
+      (and (extends? kv/KvStore record-class)
            (.isAssignableFrom ^Class IRecord record-class)))))
 
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
@@ -100,7 +100,7 @@
                                 (into-array [clojure.lang.IPersistentMap]))
                     nil (object-array [{:db-dir db-dir}]))]
     (->> (lru/new-cache-providing-kv-store kv)
-         (ks/open))))
+         (kv/open))))
 
 (defn- read-kafka-properties-file [f]
   (when f

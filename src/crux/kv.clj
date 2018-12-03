@@ -1,7 +1,7 @@
-(ns crux.kv-store
+(ns crux.kv
   "Protocols for KV backend implementations."
   (:refer-clojure :exclude [next])
-  (:import [java.io Closeable]))
+  (:import java.io.Closeable))
 
 (defprotocol KvIterator
   (seek [this k])

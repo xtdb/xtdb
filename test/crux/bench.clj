@@ -3,8 +3,7 @@
             [crux.db :as db]
             [crux.tx :as tx]
             [crux.query :as q]
-            [crux.fixtures :as f :refer [*kv*]]
-            [crux.kv-store :as ks])
+            [crux.fixtures :as f :refer [*kv*]])
   (:import [java.util Date]))
 
 (def queries {:name '{:find [e]

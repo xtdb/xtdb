@@ -1,7 +1,7 @@
-(ns crux.memdb
+(ns crux.kv.memdb
   "In-memory KV backend for Crux."
   (:require [crux.byte-utils :as bu]
-            [crux.kv-store :as ks]
+            [crux.kv :as kv]
             [clojure.java.io :as io]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable))
@@ -16,18 +16,18 @@
        (into (sorted-map-by bu/bytes-comparator))))
 
 (defrecord MemKvIterator [db cursor]
-  ks/KvIterator
-  (ks/seek [this k]
+  kv/KvIterator
+  (kv/seek [this k]
     (let [[x & xs] (subseq db >= k)]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
-  (ks/next [this]
+  (kv/next [this]
     (some->> (swap! cursor (fn [{[x & xs] :rest}]
                              {:first x :rest xs}))
              :first
              (key)))
-  (ks/value [this]
+  (kv/value [this]
     (some->> @cursor
              :first
              (val)))
@@ -36,7 +36,7 @@
   (close [_]))
 
 (defrecord MemKvSnapshot [db]
-  ks/KvSnapshot
+  kv/KvSnapshot
   (new-iterator [_]
     (->MemKvIterator db (atom {:rest (seq db)})))
 
@@ -44,7 +44,7 @@
   (close [_]))
 
 (defrecord MemKv [db db-dir persist-on-close?]
-  ks/KvStore
+  kv/KvStore
   (open [this]
     (if (.isFile (io/file db-dir "memdb"))
       (assoc this :db (atom (restore-db db-dir)))

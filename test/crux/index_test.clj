@@ -8,7 +8,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.tx :as tx]
-            [crux.kv-store :as ks]
+            [crux.kv :as kv]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.fixtures :as f]
@@ -35,7 +35,7 @@
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
     (db/submit-doc tx-log content-hash picasso)
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/is (= {content-hash picasso}
                (db/get-objects object-store snapshot [content-hash])))
 
@@ -65,7 +65,7 @@
                                                :tt tx-time
                                                :tx-id tx-id})]]
 
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "can see entity at transact and business time"
         (t/is (= expected-entities
                  (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
@@ -99,7 +99,7 @@
              new-tx-id :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
-        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
                                         :content-hash new-content-hash
                                         :bt new-business-time
@@ -122,7 +122,7 @@
              new-tx-id :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
-        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
                                         :content-hash new-content-hash
                                         :bt new-business-time
@@ -151,7 +151,7 @@
                  new-tx-id :crux.tx/tx-id}
                 @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
 
-            (with-open [snapshot (ks/new-snapshot f/*kv*)]
+            (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (= [(c/map->EntityTx {:eid eid
                                             :content-hash new-content-hash
                                             :bt new-business-time
@@ -173,7 +173,7 @@
                     {cas-failure-tx-time :crux.tx/tx-time}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
                 (t/is (= cas-failure-tx-time (idx/await-tx-time f/*kv* cas-failure-tx-time 1000)))
-                (with-open [snapshot (ks/new-snapshot f/*kv*)]
+                (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
@@ -189,7 +189,7 @@
                      new-tx-id :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
                 (t/is (= new-tx-time (idx/await-tx-time f/*kv* new-tx-time 1000)))
-                (with-open [snapshot (ks/new-snapshot f/*kv*)]
+                (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
@@ -205,7 +205,7 @@
                      new-tx-id :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-business-time]])]
                 (t/is (= new-tx-time (idx/await-tx-time f/*kv* new-tx-time 1000)))
-                (with-open [snapshot (ks/new-snapshot f/*kv*)]
+                (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid new-eid
                                                 :content-hash new-content-hash
                                                 :bt new-business-time
@@ -218,7 +218,7 @@
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id :crux.tx/tx-id}
                 @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
-            (with-open [snapshot (ks/new-snapshot f/*kv*)]
+            (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-tx-time)
@@ -226,10 +226,10 @@
                                    :tx-id)))))))))
 
     (t/testing "can retrieve history of entity"
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (with-open [snapshot (kv/new-snapshot f/*kv*)]
         (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
           (t/is (= 6 (count (map :content-hash picasso-history))))
-          (with-open [i (ks/new-iterator snapshot)]
+          (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (bu/bytes=? c/nil-id-bytes (c/id->bytes content-hash)))
                     :let [version-k (c/encode-attribute+entity+value+content-hash-key
@@ -237,7 +237,7 @@
                                      (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/value->bytes "Pablo")
                                      (c/id->bytes content-hash))]]
-              (t/is (bu/bytes=? version-k (ks/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
+              (t/is (bu/bytes=? version-k (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -245,7 +245,7 @@
              new-tx-id :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-business-time]])]
 
-        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
 
           (t/testing "eviction adds to and keeps tx history"
@@ -254,14 +254,14 @@
               (t/testing "eviction removes docs"
                 (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history)))))
               (t/testing "eviction removes secondary indexes"
-                (with-open [i (ks/new-iterator snapshot)]
+                (with-open [i (kv/new-iterator snapshot)]
                   (doseq [{:keys [content-hash]} picasso-history
                           :let [version-k (c/encode-attribute+entity+value+content-hash-key
                                            (c/id->bytes :http://xmlns.com/foaf/0.1/givenName)
                                            (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
                                            (c/value->bytes "Pablo")
                                            (c/id->bytes content-hash))]]
-                    (t/is (nil? (ks/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
+                    (t/is (nil? (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
   (let [tx-log (tx/->KvTxLog f/*kv*)
@@ -286,7 +286,7 @@
          v3-tx-id :crux.tx/tx-id}
         @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-business-time]])]
 
-    (with-open [snapshot (ks/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "first version of entity is visible"
         (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time v3-tx-time)
                               (first)
@@ -309,7 +309,7 @@
            corrected-tx-id :crux.tx/tx-id}
           @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-business-time corrected-end-business-time]])]
 
-      (with-open [snapshot (ks/new-snapshot f/*kv*)]
+      (with-open [snapshot (kv/new-snapshot f/*kv*)]
         (t/testing "first version of entity is still there"
           (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time corrected-tx-time)
                                 (first)
@@ -335,7 +335,7 @@
              deleted-tx-id :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-business-time deleted-end-business-time]])]
 
-        (with-open [snapshot (ks/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/testing "first version of entity was deleted"
             (t/is (empty? (idx/entities-at snapshot [:ivan] v1-business-time deleted-tx-time))))
 
@@ -354,7 +354,7 @@
                deleted-tx-id :crux.tx/tx-id}
               @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-business-time v3-business-time]])]
 
-          (with-open [snapshot (ks/new-snapshot f/*kv*)]
+          (with-open [snapshot (kv/new-snapshot f/*kv*)]
             (t/testing "third version of entity is still there"
               (t/is (= {:content-hash (c/new-id corrected-ivan)
                         :tx-id corrected-tx-id}

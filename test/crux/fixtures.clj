@@ -8,7 +8,6 @@
             [crux.io :as cio]
             [crux.kafka.embedded :as ek]
             [crux.kafka :as k]
-            [crux.kv-store :as ks]
             [crux.tx :as tx])
   (:import java.io.Closeable
            [java.util Properties UUID]
@@ -59,7 +58,7 @@
    (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
 
 (def ^:dynamic *kv*)
-(def ^:dynamic *kv-backend* "crux.rocksdb.RocksKv")
+(def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
@@ -71,17 +70,17 @@
         (cio/delete-dir db-dir)))))
 
 (defn with-memdb [f]
-  (binding [*kv-backend* "crux.memdb.MemKv"]
+  (binding [*kv-backend* "crux.kv.memdb.MemKv"]
     (t/testing "MemDB"
       (f))))
 
 (defn with-rocksdb [f]
-  (binding [*kv-backend* "crux.rocksdb.RocksKv"]
+  (binding [*kv-backend* "crux.kv.rocksdb.RocksKv"]
     (t/testing "RocksDB"
       (f))))
 
 (defn with-lmdb [f]
-  (binding [*kv-backend* "crux.lmdb.LMDBKv"]
+  (binding [*kv-backend* "crux.kv.lmdb.LMDBKv"]
     (t/testing "LMDB"
       (f))))
 
