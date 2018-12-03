@@ -1149,39 +1149,39 @@
   (let [tx-log (crux.tx/->DocTxLog *kv*)]
 
     (t/testing "can create new user"
-      (let [{:keys [transact-time
-                    tx-id] :as submitted-tx}
+      (let [{:crux.tx/keys [tx-time
+                            tx-id] :as submitted-tx}
             @(db/submit-tx tx-log [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
                                                             :name "Ivan 1st"}]])]
 
         (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
         (t/is (false? (q/submitted-tx-updated-entity? *kv* submitted-tx :petr)))
 
-        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* transact-time transact-time)
+        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* tx-time tx-time)
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
 
-        (t/is (= tx-id (:tx-id (q/entity-tx (q/db *kv* transact-time transact-time) :ivan))))
+        (t/is (= tx-id (:tx-id (q/entity-tx (q/db *kv* tx-time tx-time) :ivan))))
 
         (t/is (= {:crux.db/id :ivan
-                  :name "Ivan 1st"} (q/entity (q/db *kv* transact-time transact-time) :ivan)))))
+                  :name "Ivan 1st"} (q/entity (q/db *kv* tx-time tx-time) :ivan)))))
 
     (t/testing "cannot create existing user"
-      (let [{:keys [transact-time
-                    tx-id] :as submitted-tx}
+      (let [{:crux.tx/keys [tx-time
+                            tx-id] :as submitted-tx}
             @(db/submit-tx tx-log [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
                                                             :name "Ivan 2nd"}]])]
 
         (t/is (false? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
 
-        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* transact-time transact-time)
+        (t/is (= #{["Ivan 1st"]} (q/q (q/db *kv* tx-time tx-time)
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
 
-        (t/is (not= tx-id (:tx-id (q/entity-tx (q/db *kv* transact-time transact-time) :ivan))))))
+        (t/is (not= tx-id (:tx-id (q/entity-tx (q/db *kv* tx-time tx-time) :ivan))))))
 
     (t/testing "can update existing user"
-      (let [{:keys [transact-time] :as submitted-update-tx}
+      (let [{:crux.tx/keys [tx-time] :as submitted-update-tx}
             @(db/submit-tx tx-log [[:crux.tx/cas :ivan
                                     {:crux.db/id :ivan
                                      :name "Ivan 1st"}
@@ -1189,12 +1189,12 @@
                                      :name "Ivan 2nd"}]])]
 
         (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan)))
-        (t/is (= #{["Ivan 2nd"]} (q/q (q/db *kv* transact-time transact-time)
+        (t/is (= #{["Ivan 2nd"]} (q/q (q/db *kv* tx-time tx-time)
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
 
         (t/testing "last CAS command in tx wins"
-          (let [{:keys [transact-time] :as submitted-tx}
+          (let [{:crux.tx/keys [tx-time] :as submitted-tx}
                 @(db/submit-tx tx-log [[:crux.tx/cas :ivan
                                         {:crux.db/id :ivan
                                          :name "Ivan 2nd"}
@@ -1207,19 +1207,19 @@
                                          :name "Ivan 4th"}]])]
 
             (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
-            (t/is (= #{["Ivan 4th"]} (q/q (q/db *kv* transact-time
-                                                transact-time) '{:find [n]
+            (t/is (= #{["Ivan 4th"]} (q/q (q/db *kv* tx-time
+                                                tx-time) '{:find [n]
                                                 :where [[:ivan :name n]]})))))
 
         (t/testing "normal put after CAS works"
-          (let [{:keys [transact-time] :as submitted-tx}
+          (let [{:crux.tx/keys [tx-time] :as submitted-tx}
                 @(db/submit-tx tx-log [[:crux.tx/put :ivan
                                         {:crux.db/id :ivan
                                          :name "Ivan 5th"}]])]
 
             (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-tx :ivan)))
-            (t/is (= #{["Ivan 5th"]} (q/q (q/db *kv* transact-time
-                                                transact-time) '{:find [n]
+            (t/is (= #{["Ivan 5th"]} (q/q (q/db *kv* tx-time
+                                                tx-time) '{:find [n]
                                                 :where [[:ivan :name n]]})))
 
             (t/testing "earlier submitted txs can still be checked"

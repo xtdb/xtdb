@@ -152,8 +152,7 @@
 
 (def ^:private remote-api-readers
   {'crux/id idx/new-id
-   'crux/entity-tx idx/map->EntityTx
-   'crux/submitted-tx tx/map->SubmittedTx})
+   'crux/entity-tx idx/map->EntityTx})
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -273,8 +272,8 @@
   (submit-tx [_ tx-ops]
     (api-request-sync (str url "/tx-log") tx-ops))
 
-  (submitted-tx-updated-entity? [this {:keys [transact-time tx-id] :as submitted-tx} eid]
-    (= tx-id (:tx-id (entity-tx (db this transact-time transact-time) eid))))
+  (submitted-tx-updated-entity? [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
+    (= tx-id (:tx-id (entity-tx (db this tx-time tx-time) eid))))
 
   Closeable
   (close [_]))

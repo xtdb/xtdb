@@ -21,7 +21,7 @@
 
       (let [status-map (api/status f/*api*)]
         (t/is (pos? (:crux.kv-store/estimate-num-keys status-map)))
-        (t/is (= (:transact-time submitted-tx) (:crux.tx-log/tx-time status-map))))))
+        (t/is (= (:crux.tx/tx-time submitted-tx) (:crux.tx-log/tx-time status-map))))))
 
   (t/testing "query"
     (t/is (= #{[:ivan]} (api/q (api/db f/*api*) '{:find [e]

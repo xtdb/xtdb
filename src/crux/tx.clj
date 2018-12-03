@@ -171,18 +171,6 @@
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
-;; TODO: Consider getting rid of this, and potentially also EntityTx
-;; and replace them with namespaced kw maps, at least at the API
-;; level, and remove their readers. The id can keep its reader, but
-;; should turn it to strings in the external API so it can be used
-;; without special readers. Bonus question: should we consider
-;; supporting JSON responses in the API?
-(defrecord SubmittedTx [tx-id transact-time])
-
-(defmethod print-method SubmittedTx [submitted-tx ^Writer w]
-  (.write w "#crux/submitted-tx ")
-  (print-method (into {} submitted-tx) w))
-
 (defrecord DocTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -197,4 +185,5 @@
         (db/submit-doc this (str (idx/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
-      (delay (->SubmittedTx tx-id transact-time)))))
+      (delay {:crux.tx/tx-id tx-id
+              :crux.tx/tx-time transact-time}))))
