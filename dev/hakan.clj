@@ -766,7 +766,7 @@
                (doto p
                  (.set (long (mod (mix-collection-hash h n) size)))))))))
 
-(defn ^java.util.BitSet add-to-bloom-filter [^java.util.BitSet bs x]
+(defn add-to-bloom-filter ^java.util.BitSet [^java.util.BitSet bs x]
   (doto bs
     (.or (bloom-filter-probe (.size bs) x))))
 

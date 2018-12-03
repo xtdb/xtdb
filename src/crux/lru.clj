@@ -156,5 +156,5 @@
     (when close-snapshot?
       (.close snapshot))))
 
-(defn ^crux.lru.CachedSnapshot new-cached-snapshot [snapshot close-snapshot?]
+(defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
   (->CachedSnapshot snapshot close-snapshot? (atom #{})))

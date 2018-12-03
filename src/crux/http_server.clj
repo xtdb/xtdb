@@ -212,11 +212,12 @@
   (close [_]
     (.stop server)))
 
-(defn ^Closeable start-http-server
+(defn start-http-server
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.LocalNode or its
   dependencies explicitly as arguments."
-  ([{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
+  (^crux.http_server.HTTPServer
+   [{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
                                               :or {server-port 3000}
                                               :as options}]
    (when (s/invalid? (s/conform ::options options))
@@ -229,7 +230,8 @@
                               :join? false})]
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options)))
-  ([kv-store tx-log {:keys [bootstrap-servers
+  (^crux.http_server.HTTPServer
+   [kv-store tx-log {:keys [bootstrap-servers
                             server-port]
                      :as options}]
    (start-http-server (api/->LocalNode (promise)

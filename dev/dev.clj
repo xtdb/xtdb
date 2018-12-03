@@ -29,7 +29,7 @@
 
 (def system)
 
-(defn ^LocalNode start-dev-system [{:keys [embed-kafka? http-server?] :as options}]
+(defn start-dev-system ^crux.api.LocalNode [{:keys [embed-kafka? http-server?] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
@@ -47,7 +47,7 @@
           (cio/try-close c))
         (throw t)))))
 
-(defn ^LocalNode stop-dev-system [{:keys [http-server embedded-kafka] :as system}]
+(defn stop-dev-system ^crux.api.LocalNode [{:keys [http-server embedded-kafka] :as system}]
   (doseq [c [http-server system embedded-kafka]]
     (cio/try-close c)))
 

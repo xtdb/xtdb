@@ -40,9 +40,9 @@
   (some-> broker .awaitShutdown))
 
 (defn start-zookeeper
-  (^ServerCnxnFactory [data-dir]
+  (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir]
    (start-zookeeper data-dir default-zookeeper-port))
-  (^ServerCnxnFactory [data-dir ^long port]
+  (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir ^long port]
    (let [tick-time 500
          max-connections 16
          server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
@@ -70,7 +70,7 @@
                                   ::kafka-port
                                   ::broker-config]))
 
-(defn ^EmbeddedKafka start-embedded-kafka
+(defn start-embedded-kafka
   "Starts ZooKeeper and Kafka locally. This can be used to run Crux in a
   self-contained single node mode. The options zookeeper-data-dir and
   kafka-log-dir are required.
@@ -81,6 +81,7 @@
 
   NOTE: requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
+  ^crux.kafka.embedded.EmbeddedKafka
   [{:keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
     :or {zookeeper-port default-zookeeper-port
          kafka-port default-kafka-port}

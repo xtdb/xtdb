@@ -43,13 +43,16 @@
 (def doc-topic-config
   {"cleanup.policy" "compact"})
 
-(defn ^KafkaProducer create-producer [config]
+(defn create-producer
+  ^org.apache.kafka.clients.producer.KafkaProducer [config]
   (KafkaProducer. ^Map (merge default-producer-config config)))
 
-(defn ^KafkaConsumer create-consumer [config]
+(defn create-consumer
+  ^org.apache.kafka.clients.consumer.KafkaConsumer [config]
   (KafkaConsumer. ^Map (merge default-consumer-config config)))
 
-(defn ^AdminClient create-admin-client [config]
+(defn create-admin-client
+  ^org.apache.kafka.clients.admin.AdminClient [config]
   (AdminClient/create ^Map config))
 
 (defn create-topic [^AdminClient admin-client topic num-partitions replication-factor config]
@@ -195,7 +198,8 @@
   (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
     (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
-(defn ^Closeable start-indexing-consumer
+(defn start-indexing-consumer
+  ^crux.kafka.IndexingConsumer
   [admin-client consumer indexer
    {:keys [tx-topic
            replication-factor

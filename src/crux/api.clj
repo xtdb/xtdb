@@ -96,7 +96,7 @@
   (close [_]
     (deliver close-promise true)))
 
-(defn ^LocalNode start-local-node
+(defn start-local-node
   "Starts a CruxSystem query node in local library mode.
 
   For valid options, see crux.bootstrap/cli-options. Options are
@@ -115,7 +115,7 @@
   dependencies on the classpath, see crux.http-server for details.
 
   See also crux.kafka.embedded for self-contained deployments."
-  [options]
+  ^crux.api.LocalNode [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
         close-promise (promise)
@@ -266,9 +266,9 @@
   Closeable
   (close [_]))
 
-(defn ^Closeable new-api-client
+(defn new-api-client
   "Creates a new remote API client CruxSystem.
 
   NOTE: requires either clj-http or http-kit on the classpath."
-  [url]
+  ^java.io.Closeable [url]
   (->RemoteApiClient url))

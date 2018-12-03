@@ -91,9 +91,9 @@
       (and (extends? ks/KvStore record-class)
            (.isAssignableFrom ^Class IRecord record-class)))))
 
-(defn ^Closeable start-kv-store [{:keys [db-dir
-                                         kv-backend]
-                                  :as options}]
+(defn start-kv-store ^java.io.Closeable [{:keys [db-dir
+                                                 kv-backend]
+                                          :as options}]
   (require-and-ensure-kv-record kv-backend)
   (let [record-class ^Class (resolve (symbol kv-backend))
         kv (.invoke (.getMethod record-class "create"

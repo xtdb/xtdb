@@ -221,7 +221,7 @@
          %)
       x))))
 
-(defn ^org.eclipse.rdf4j.model.Value clj->rdf [x]
+(defn clj->rdf ^org.eclipse.rdf4j.model.Value [x]
   (let [factory (SimpleValueFactory/getInstance)]
     (if (c/valid-id? x)
       (if (and (keyword? x) (= "_" (namespace x)))

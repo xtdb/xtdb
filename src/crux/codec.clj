@@ -227,7 +227,7 @@
   (.write w "#crux/id ")
   (print-method (str id) w))
 
-(defn ^Id new-id [id]
+(defn new-id ^crux.codec.Id [id]
   (let [bs (id->bytes id)]
     (assert (= id-size (alength bs)))
     (->Id bs 0)))
@@ -286,7 +286,7 @@
        (.put content-hash)
        (.array))))
 
-(defn ^Id decode-attribute+value+entity+content-hash-key->value+entity+content-hash [^bytes k]
+(defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash ^crux.codec.Id [^bytes k]
   (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)]
     (assert (= attribute+value+entity+content-hash-index-id (.get buffer)))
@@ -319,7 +319,7 @@
        (.put content-hash)
        (.array))))
 
-(defn ^Id decode-attribute+entity+value+content-hash-key->entity+value+content-hash [^bytes k]
+(defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash ^crux.codec.Id [^bytes k]
   (assert (<= (+ index-id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)]
     (assert (= attribute+entity+value+content-hash-index-id (.get buffer)))
@@ -385,7 +385,7 @@
  [data-input]
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
-(defn ^crux.codec.EntityTx decode-entity+bt+tt+tx-id-key [^bytes key]
+(defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes key]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
   (let [buffer (ByteBuffer/wrap key)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id (.get buffer)))
