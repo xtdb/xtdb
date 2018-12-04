@@ -138,6 +138,7 @@
 
 (defn with-local-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
+  (assert (not (bound? #'*kv*)))
   (let [server-port (cio/free-port)
         db-dir (str (cio/create-tmpdir "kv-store"))
         test-id (UUID/randomUUID)
