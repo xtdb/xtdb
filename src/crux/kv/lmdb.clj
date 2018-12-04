@@ -129,13 +129,13 @@
                                LMDB/MDB_NOMETASYNC
                                LMDB/MDB_NOTLS))
 
-(defrecord LMDBKvIterator [^MemoryStack stack ^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
+(defrecord LMDBKvIterator [^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
   kv/KvIterator
   (seek [_ k]
-    (with-open [stack (.push stack)]
+    (with-open [stack (MemoryStack/stackPush)]
       (let [k ^bytes k
             kb (.flip (.put (.malloc stack (alength k)) k))
-            kv (.mv_data (MDBVal/callocStack stack) kb)]
+            kv (.mv_data kv kb)]
         (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
   (next [this]
     (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
@@ -144,22 +144,19 @@
 
   Closeable
   (close [_]
-    (.close cursor)
-    (.close stack)))
+    (.close cursor)))
 
-(defrecord LMDBKvSnapshot [^MemoryStack stack env dbi ^LMDBTransaction tx]
+(defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx]
   kv/KvSnapshot
   (new-iterator [_]
-    (let [stack (.push stack)]
-      (->LMDBKvIterator stack
-                        (new-cursor stack dbi (:txn tx))
-                        (MDBVal/callocStack stack)
-                        (MDBVal/callocStack stack))))
+    (with-open [stack (MemoryStack/stackPush)]
+      (->LMDBKvIterator (new-cursor stack dbi (:txn tx))
+                        (MDBVal/create)
+                        (MDBVal/create))))
 
   Closeable
   (close [_]
-    (.close tx)
-    (.close stack)))
+    (.close tx)))
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
@@ -177,9 +174,9 @@
           (throw t)))))
 
   (new-snapshot [_]
-    (let [stack (MemoryStack/stackPush)
-          tx (new-transaction stack env LMDB/MDB_RDONLY)]
-      (->LMDBKvSnapshot stack env dbi tx)))
+    (with-open [stack (MemoryStack/stackPush)]
+      (let [tx (new-transaction stack env LMDB/MDB_RDONLY)]
+        (->LMDBKvSnapshot env dbi tx))))
 
   (store [_ kvs]
     (try
