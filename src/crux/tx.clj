@@ -49,7 +49,7 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [kv snapshot object-store tx-log [op] transact-time tx-id] op))
+(defmulti tx-command (fn [snapshot object-store tx-log [op] transact-time tx-id] op))
 
 (defn- in-range-pred [start end]
   #(and (or (nil? start)
@@ -73,13 +73,13 @@
                    tx-id)
                   content-hash-bytes]))}))
 
-(defmethod tx-command :crux.tx/put [kv snapshot object-store tx-log [op k v start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [snapshot object-store tx-log [op k v start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->bytes (c/new-id v))))
 
-(defmethod tx-command :crux.tx/delete [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-bytes))
 
-(defmethod tx-command :crux.tx/cas [kv snapshot object-store tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [snapshot object-store tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
@@ -96,7 +96,7 @@
              tx-id)
             (c/id->bytes new-v-id)]]}))
 
-(defmethod tx-command :crux.tx/evict [kv snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
@@ -138,7 +138,7 @@
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (for [tx-op tx-ops]
-                                 (tx-command kv snapshot object-store tx-log tx-op tx-time tx-id))]
+                                 (tx-command snapshot object-store tx-log tx-op tx-time tx-id))]
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
                    (pre-commit-fn))
