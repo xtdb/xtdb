@@ -4,14 +4,15 @@
             [crux.codec :as c]
             [crux.fixtures :as f])
   (:import clojure.lang.LazySeq
-           java.util.Date))
+           java.util.Date
+           crux.api.StandaloneSystem))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster)
 (t/use-fixtures :each f/with-each-api-implementation)
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
-    (t/is (= {:crux.zk/zk-active? true
+    (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
               :crux.kv/estimate-num-keys 0
               :crux.tx-log/tx-time nil}

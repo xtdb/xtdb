@@ -6,7 +6,9 @@
             [crux.kv :as kv]))
 
 (defn status-map [kv bootstrap-servers]
-  {:crux.zk/zk-active? (k/zk-active? bootstrap-servers)
+  {:crux.zk/zk-active? (if bootstrap-servers
+                         (k/zk-active? bootstrap-servers)
+                         false)
    :crux.kv/kv-backend (kv/kv-name kv)
    :crux.kv/estimate-num-keys (kv/count-keys kv)
    :crux.kv/size (some-> (kv/db-dir kv) (cio/folder-size))

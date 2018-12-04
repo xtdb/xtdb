@@ -84,7 +84,7 @@
       (kv/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (kv/backup f/*kv* backup-dir)
-      (with-open [restored-kv (b/start-kv-store {:db-dir backup-dir
+      (with-open [restored-kv (b/start-kv-store {:db-dir (str backup-dir)
                                                  :kv-backend f/*kv-backend*})]
         (t/is (= "Crux" (String. ^bytes (value restored-kv (bu/long->bytes 1)))))
 

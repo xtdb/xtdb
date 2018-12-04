@@ -7,7 +7,8 @@
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.tx :as tx])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
 
@@ -115,7 +116,8 @@
   crux.http-server/start-http-server.  This will require further
   dependencies on the classpath, see crux.http-server for details.
 
-  See also crux.kafka.embedded for self-contained deployments."
+  See also crux.kafka.embedded or crux.api/new-standalone-system for
+  self-contained deployments."
   ^crux.api.LocalNode [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
@@ -141,6 +143,54 @@
     (map->LocalNode (merge {:close-promise close-promise
                             :options options}
                            @system-promise))))
+
+(defrecord StandaloneSystem [kv-store tx-log options]
+  CruxSystem
+  (db [_]
+    (db (map->LocalNode {:kv-store kv-store})))
+
+  (db [_ business-time]
+    (db (map->LocalNode {:kv-store kv-store}) business-time))
+
+  (db [_ business-time transact-time]
+    (db (map->LocalNode {:kv-store kv-store}) business-time transact-time))
+
+  (document [_ content-hash]
+    (document (map->LocalNode {:kv-store kv-store}) content-hash))
+
+  (history [_ eid]
+    (history (map->LocalNode {:kv-store kv-store}) eid))
+
+  (status [this]
+    (status (map->LocalNode {:kv-store kv-store})))
+
+  (submit-tx [_ tx-ops]
+    (submit-tx (map->LocalNode {:tx-log tx-log}) tx-ops))
+
+  (submitted-tx-updated-entity? [_ submitted-tx eid]
+    (submitted-tx-updated-entity? (map->LocalNode {:kv-store kv-store}) submitted-tx eid))
+
+  Closeable
+  (close [_]
+    (.close ^Closeable kv-store)))
+
+(defn new-standalone-system
+  "Creates a minimal standalone system writing the transaction log into
+  its local KV store without relying on Kafka.
+
+  Returns a crux.api.StandaloneSystem component that implements
+  java.io.Closeable, which allows the system to be stopped by calling
+  close.
+
+  NOTE: requires any KV store dependencies on the classpath. The
+  crux.memdb.MemKv KV backend works without additional dependencies."
+  ^crux.api.StandaloneSystem [{:keys [db-dir kv-backend] :as options}]
+  (require 'crux.bootstrap)
+  (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)
+        tx-log (tx/->KvTxLog kv-store)]
+    (map->StandaloneSystem {:kv-store kv-store
+                            :tx-log tx-log
+                            :options options})))
 
 ;; Remote API
 

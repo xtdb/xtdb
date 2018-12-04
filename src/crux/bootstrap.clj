@@ -91,9 +91,15 @@
       (and (extends? kv/KvStore record-class)
            (.isAssignableFrom ^Class IRecord record-class)))))
 
+(s/def ::kv-store-options (s/keys :req-un [::db-dir
+                                           ::kv-backend]))
+
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend]
                                           :as options}]
+  (when (s/invalid? (s/conform ::kv-store-options options))
+    (throw (IllegalArgumentException.
+            (str "Invalid options: " (s/explain-str ::kv-store-options options)))))
   (require-and-ensure-kv-record kv-backend)
   (let [record-class ^Class (resolve (symbol kv-backend))
         kv (.invoke (.getMethod record-class "create"

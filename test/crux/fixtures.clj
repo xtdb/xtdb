@@ -63,7 +63,7 @@
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (binding [*kv* (b/start-kv-store {:db-dir db-dir :kv-backend *kv-backend*})]
+      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir) :kv-backend *kv-backend*})]
         (with-open [*kv* ^Closeable *kv*]
           (f)))
       (finally
@@ -159,6 +159,19 @@
       (finally
         (cio/delete-dir db-dir)))))
 
+(defn with-standalone-system [f]
+  (assert (not (bound? #'*kv*)))
+  (let [server-port (cio/free-port)
+        db-dir (str (cio/create-tmpdir "kv-store"))
+        options {:db-dir db-dir
+                 :kv-backend *kv-backend*}]
+    (try
+      (with-open [standalone-system (api/new-standalone-system options)]
+        (binding [*api* standalone-system]
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)))))
+
 (defn with-api-client [f]
   (assert (bound? #'*api-url*))
   (with-open [api-client (api/new-api-client *api-url*)]
@@ -166,8 +179,10 @@
       (f))))
 
 (defn with-each-api-implementation [f]
-  (t/testing "Local API"
+  (t/testing "Local API LocalNode"
     (with-local-node f))
+  (t/testing "Local API StandaloneSystem"
+    (with-standalone-system f))
   (t/testing "Remote API"
     (with-local-node
       #(with-api-client f))))
