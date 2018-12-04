@@ -6,7 +6,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn long->bytes [l]
+(defn long->bytes ^bytes [l]
   (-> (ByteBuffer/allocate Long/BYTES)
       (.putLong l)
       (.array)))

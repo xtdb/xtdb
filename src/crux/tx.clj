@@ -6,7 +6,8 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
            [java.io Closeable Writer]))
 
@@ -181,6 +182,8 @@
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
           indexer (->KvIndexer kv this (idx/->KvObjectStore kv))]
+      (kv/store kv [[(c/encode-tx-log-key tx-id)
+                     (nippy/fast-freeze tx-ops)]])
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)

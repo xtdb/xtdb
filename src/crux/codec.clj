@@ -23,6 +23,8 @@
 
 (def ^:const ^:private meta-key->value-index-id 4)
 
+(def ^:const ^:private tx-id->tx-index-id 5)
+
 (def ^:private ^{:tag 'long} value-type-id-size Byte/BYTES)
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
@@ -403,3 +405,14 @@
      :crux.db/business-time bt
      :crux.tx/tx-id tx-id
      :crux.tx/tx-time tt}))
+
+(defn encode-tx-log-key ^bytes [^long tx-id]
+  (let [bs (bu/long->bytes tx-id)]
+    (assert (zero? (aget bs 0)))
+    (doto bs
+      (aset 0 (byte tx-id->tx-index-id)))))
+
+(defn decode-tx-log-key ^long [^bytes key]
+  (assert (= (aget key 0) tx-id->tx-index-id))
+  (bu/bytes->long (doto key
+                    (aset 0 (byte 0)))))
