@@ -6,7 +6,8 @@
 (defprotocol KvIterator
   (seek [this k])
   (next [this])
-  (value [this]))
+  (value [this])
+  (refresh [this]))
 
 (defprotocol KvSnapshot
   (^java.io.Closeable new-iterator [this]))

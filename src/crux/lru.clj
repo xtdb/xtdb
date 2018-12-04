@@ -27,6 +27,83 @@
   (evict [this k]
     (.remove this k)))
 
+(defrecord CachedObjectStore [cache object-store]
+  db/ObjectStore
+  (get-objects [this snapshot ks]
+    (->> (for [k ks]
+           [k (compute-if-absent
+               cache
+               k
+               #(get (db/get-objects object-store snapshot [%]) %))])
+         (into {})))
+
+  (put-objects [this kvs]
+    (db/put-objects object-store kvs))
+
+  (delete-objects [this ks]
+    (doseq [k ks]
+      (evict cache k))
+    (db/delete-objects object-store ks))
+
+  Closeable
+  (close [_]))
+
+(defn- ensure-iterator-open [closed-state]
+  (when @closed-state
+    (throw (IllegalStateException. "Iterator closed."))))
+
+(defrecord CachedIterator [i closed-state]
+  kv/KvIterator
+  (seek [_ k]
+    (locking i
+      (ensure-iterator-open closed-state)
+      (kv/seek i k)))
+
+  (next [_]
+    (locking i
+      (ensure-iterator-open closed-state)
+      (kv/next i)))
+
+  (value [_]
+    (locking i
+      (ensure-iterator-open closed-state)
+      (kv/value i)))
+
+  (refresh [this]
+    (locking i
+      (ensure-iterator-open closed-state)
+      (assoc this :i (kv/refresh i))))
+
+  Closeable
+  (close [_]
+    (ensure-iterator-open closed-state)
+    (reset! closed-state true)))
+
+(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
+  kv/KvSnapshot
+  (new-iterator [_]
+    (if-let [i (->> @iterators-state
+                    (filter (comp deref :closed-state))
+                    (first))]
+      (if (compare-and-set! (:closed-state i) true false)
+        (kv/refresh i)
+        (recur))
+      (let [i (->CachedIterator (kv/new-iterator snapshot) (atom false))]
+        (swap! iterators-state conj i)
+        i)))
+
+  Closeable
+  (close [_]
+    (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
+      (locking i
+        (reset! closed-state true)
+        (.close i)))
+    (when close-snapshot?
+      (.close snapshot))))
+
+(defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
+  (->CachedSnapshot snapshot close-snapshot? (atom #{})))
+
 (defprotocol CacheProvider
   (get-named-cache [this cache-name cache-size]))
 
@@ -41,7 +118,7 @@
     (assoc this :kv (kv/open kv)))
 
   (new-snapshot [_]
-    (kv/new-snapshot kv))
+    (new-cached-snapshot (kv/new-snapshot kv) true))
 
   (store [_ kvs]
     (kv/store kv kvs))
@@ -75,28 +152,9 @@
          cache-name)))
 
 (defn new-cache-providing-kv-store [kv]
-  (->CacheProvidingKvStore kv (atom {})))
-
-(defrecord CachedObjectStore [cache object-store]
-  db/ObjectStore
-  (get-objects [this snapshot ks]
-    (->> (for [k ks]
-           [k (compute-if-absent
-               cache
-               k
-               #(get (db/get-objects object-store snapshot [%]) %))])
-         (into {})))
-
-  (put-objects [this kvs]
-    (db/put-objects object-store kvs))
-
-  (delete-objects [this ks]
-    (doseq [k ks]
-      (evict cache k))
-    (db/delete-objects object-store ks))
-
-  Closeable
-  (close [_]))
+  (if (instance? CacheProvidingKvStore kv)
+    kv
+    (->CacheProvidingKvStore kv (atom {}))))
 
 (def ^:const default-doc-cache-size 10240)
 
@@ -106,55 +164,3 @@
   ([kv cache-size]
    (->CachedObjectStore (get-named-cache kv ::doc-cache cache-size)
                         (idx/->KvObjectStore kv))))
-
-
-(defn- ensure-iterator-open [closed-state]
-  (when @closed-state
-    (throw (IllegalStateException. "Iterator closed."))))
-
-(defrecord CachedIterator [i closed-state]
-  kv/KvIterator
-  (seek [_ k]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/seek i k)))
-
-  (next [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/next i)))
-
-  (value [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/value i)))
-
-  Closeable
-  (close [_]
-    (ensure-iterator-open closed-state)
-    (reset! closed-state true)))
-
-(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
-  kv/KvSnapshot
-  (new-iterator [_]
-    (if-let [i (->> @iterators-state
-                    (filter (comp deref :closed-state))
-                    (first))]
-      (if (compare-and-set! (:closed-state i) true false)
-        i
-        (recur))
-      (let [i (->CachedIterator (kv/new-iterator snapshot) (atom false))]
-        (swap! iterators-state conj i)
-        i)))
-
-  Closeable
-  (close [_]
-    (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
-      (locking i
-        (reset! closed-state true)
-        (.close i)))
-    (when close-snapshot?
-      (.close snapshot))))
-
-(defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
-  (->CachedSnapshot snapshot close-snapshot? (atom #{})))

@@ -129,7 +129,7 @@
                                LMDB/MDB_NOMETASYNC
                                LMDB/MDB_NOTLS))
 
-(defrecord LMDBKvIterator [^LMDBCursor cursor ^MDBVal kv ^MDBVal dv]
+(defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv]
   kv/KvIterator
   (seek [_ k]
     (with-open [stack (MemoryStack/stackPush)]
@@ -137,10 +137,16 @@
             kb (.flip (.put (.malloc stack (alength k)) k))
             kv (.mv_data kv kb)]
         (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
+
   (next [this]
     (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
+
   (value [this]
     (bu/byte-buffer->bytes (.mv_data dv)))
+
+  (refresh [this]
+    (LMDB/mdb_cursor_renew (:txn tx) (:cursor cursor))
+    this)
 
   Closeable
   (close [_]
@@ -151,6 +157,7 @@
   (new-iterator [_]
     (with-open [stack (MemoryStack/stackPush)]
       (->LMDBKvIterator (new-cursor stack dbi (:txn tx))
+                        tx
                         (MDBVal/create)
                         (MDBVal/create))))
 

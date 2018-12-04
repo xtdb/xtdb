@@ -20,11 +20,17 @@
   (seek [this k]
     (.seek i k)
     (iterator->key i))
+
   (next [this]
     (.next i)
     (iterator->key i))
+
   (value [this]
     (.value i))
+
+  (kv/refresh [this]
+    ;; TODO: https://github.com/facebook/rocksdb/pull/3465
+    this)
 
   Closeable
   (close [this]

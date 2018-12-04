@@ -381,8 +381,7 @@
         @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-business-time]
                                [:crux.tx/put :petr tx2-petr tx2-business-time]])]
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)
-                snapshot (lru/new-cached-snapshot snapshot false)]
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/is (= [{:crux.tx/tx-id tx1-id
                  :crux.tx/tx-time tx1-tx-time
                  :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-business-time]]}

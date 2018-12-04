@@ -32,6 +32,9 @@
              :first
              (val)))
 
+  (kv/refresh [this]
+    this)
+
   Closeable
   (close [_]))
 
