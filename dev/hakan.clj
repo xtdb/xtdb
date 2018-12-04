@@ -1211,33 +1211,59 @@
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 
-(def ^:const max-size 5000)
-
 (defn load-rdf-into-matrix [resource]
   (let [value->id (atom {})
         id->matrix (atom {})]
     (with-open [in (io/input-stream (io/resource resource))]
       (doseq [[s p o] (map rdf/statement->clj (rdf/ntriples-seq in))]
-        (swap! id->matrix
-               update
-               p
-               (fn [x]
-                 (or x (DMatrixSparseTriplet. max-size max-size 0))))
         (doseq [v [s p o]]
           (swap! value->id
                  update
                  v
                  (fn [x]
                    (or x (count @value->id)))))
-        (let [m ^DMatrixSparseTriplet (get @id->matrix p)]
-          (.addItem m
-                    (int (get @value->id s))
-                    (int (get @value->id o))
-                    1.0))))
-    {:id->matrix (->> (for [[k ^DMatrixSparseTriplet v] @id->matrix]
-                        [k (.invoke (.getMethod ConvertDMatrixStruct "convert"
-                                                (into-array [DMatrixSparseTriplet DMatrixSparseCSC]))
-                                    nil
-                                    (object-array [v nil]))])
-                      (into {}))
-     :value->id @value->id}))
+        (swap! id->matrix
+               update
+               p
+               (fn [x]
+                 (let [^DMatrixSparseCSC m  (or x (DMatrixSparseCSC. 1000 1000))
+                       size (long (max (.getNumRows m)
+                                       (long (dec (count @value->id)))
+                                       (inc (long (get @value->id s)))
+                                       (inc (long (get @value->id o)))))
+                       m (if (> size (.getNumRows m))
+                           (let [m2 (DMatrixSparseCSC. (* 2 size) (* 2 size))]
+                             (CommonOps_DSCC/extract m
+                                                     0
+                                                     (.getNumCols m)
+                                                     0
+                                                     (.getNumRows m)
+                                                     m2
+                                                     0
+                                                     0)
+                             m2)
+                           m)]
+                   (.set m
+                         (int (get @value->id s))
+                         (int (get @value->id o))
+                         1.0)
+                   m)))))
+    (let [max-size (->> (for [[_ ^DMatrixSparseCSC v] @id->matrix]
+                          (.getNumRows v))
+                        (reduce max))
+          stride 1024
+          max-size (bit-and (bit-not (dec stride))
+                            (dec (+ stride (long max-size))))]
+      {:id->matrix (->> (for [[k ^DMatrixSparseCSC v] @id->matrix
+                              :let [m2 (DMatrixSparseCSC. max-size max-size)]]
+                          (do (CommonOps_DSCC/extract v
+                                                      0
+                                                      (.getNumCols v)
+                                                      0
+                                                      (.getNumRows v)
+                                                      m2
+                                                      0
+                                                      0)
+                              [k m2]))
+                        (into {}))
+       :value->id @value->id})))
