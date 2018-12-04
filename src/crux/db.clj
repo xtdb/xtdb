@@ -17,7 +17,8 @@
 
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
-  (submit-tx [this tx-ops]))
+  (submit-tx [this tx-ops])
+  (tx-log [this snapshot]))
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep
 ;; opening snapshots and allow caching of iterators. A non-KV backed

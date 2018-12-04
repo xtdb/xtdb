@@ -327,7 +327,7 @@
 
 ;; Utils
 
-(defn- all-keys-in-prefix
+(defn all-keys-in-prefix
   ([i prefix]
    (all-keys-in-prefix i prefix false))
   ([i ^bytes prefix entries?]

@@ -6,6 +6,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            crux.query.QueryDatasource))
@@ -51,7 +52,7 @@
     (c/entity-tx->edn (q/entity-tx this eid)))
 
   (new-snapshot [this]
-    (kv/new-snapshot (:kv this)))
+    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q
     ([this q]

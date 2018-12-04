@@ -9,6 +9,7 @@
             [crux.index :as idx]
             [crux.tx :as tx]
             [crux.kv :as kv]
+            [crux.lru :as lru]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.fixtures :as f]
@@ -361,6 +362,35 @@
                        (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
                            (first)
                            (select-keys [:tx-id :content-hash])))))))))))
+
+(t/deftest test-can-read-kv-tx-log
+  (let [tx-log (tx/->KvTxLog f/*kv*)
+        ivan {:crux.db/id :ivan :name "Ivan"}
+
+        tx1-ivan (assoc ivan :version 1)
+        tx1-business-time #inst "2018-11-26"
+        {tx1-id :crux.tx/tx-id
+         tx1-tx-time :crux.tx/tx-time}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx1-ivan tx1-business-time]])
+
+        tx2-ivan (assoc ivan :version 2)
+        tx2-petr {:crux.db/id :petr :name "Petr"}
+        tx2-business-time #inst "2018-11-27"
+        {tx2-id :crux.tx/tx-id
+         tx2-tx-time :crux.tx/tx-time}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-business-time]
+                               [:crux.tx/put :petr tx2-petr tx2-business-time]])]
+
+    (with-open [snapshot (kv/new-snapshot f/*kv*)
+                snapshot (lru/new-cached-snapshot snapshot false)]
+      (t/is (= [{:crux.tx/tx-id tx1-id
+                 :crux.tx/tx-time tx1-tx-time
+                 :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-business-time]]}
+                {:crux.tx/tx-id tx2-id
+                 :crux.tx/tx-time tx2-tx-time
+                 :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-business-time]
+                                  [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-business-time]]}]
+               (db/tx-log tx-log snapshot))))))
 
 (t/deftest test-can-perform-unary-join
   (let [a-idx (idx/new-relation-virtual-index :a

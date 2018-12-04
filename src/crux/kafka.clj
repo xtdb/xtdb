@@ -96,7 +96,10 @@
         (delay
          (let [record-meta ^RecordMetadata @tx-send-future]
            {:crux.tx/tx-id (.offset record-meta)
-            :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
+            :crux.tx/tx-time (Date. (.timestamp record-meta))})))))
+
+  (tx-log [this snapshot]
+    (throw (UnsupportedOperationException.))))
 
 ;;; Indexing Consumer
 

@@ -406,13 +406,19 @@
      :crux.tx/tx-id tx-id
      :crux.tx/tx-time tt}))
 
-(defn encode-tx-log-key ^bytes [^long tx-id]
-  (let [bs (bu/long->bytes tx-id)]
-    (assert (zero? (aget bs 0)))
-    (doto bs
-      (aset 0 (byte tx-id->tx-index-id)))))
+(defn encode-tx-log-key ^bytes
+  ([]
+   (byte-array [tx-id->tx-index-id]))
+  ([^long tx-id ^Date tx-time]
+   (-> (ByteBuffer/allocate (+ index-id-size Long/BYTES Long/BYTES))
+       (.put (byte tx-id->tx-index-id))
+       (.putLong tx-id)
+       (.putLong (.getTime tx-time))
+       (.array))))
 
-(defn decode-tx-log-key ^long [^bytes key]
-  (assert (= (aget key 0) tx-id->tx-index-id))
-  (bu/bytes->long (doto key
-                    (aset 0 (byte 0)))))
+(defn decode-tx-log-key [^bytes key]
+  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (alength key)))
+  (let [buffer (ByteBuffer/wrap key)]
+    (assert (= tx-id->tx-index-id (.get buffer)))
+    {:crux.tx/tx-id (.getLong buffer)
+     :crux.tx/tx-time (Date. (.getLong buffer))}))
