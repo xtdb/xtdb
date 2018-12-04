@@ -360,47 +360,47 @@
                         :tx-id corrected-tx-id}
                        (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
                            (first)
-                           (select-keys [:tx-id :content-hash]))))))))))
+                           (select-keys [:tx-id :content-hash])))))))))))
 
-  (t/deftest test-can-perform-unary-join
-    (let [a-idx (idx/new-relation-virtual-index :a
-                                                [[0]
-                                                 [1]
-                                                 [3]
-                                                 [4]
-                                                 [5]
-                                                 [6]
-                                                 [7]
-                                                 [8]
-                                                 [9]
-                                                 [11]
-                                                 [12]]
-                                                1)
-          b-idx (idx/new-relation-virtual-index :b
-                                                [[0]
-                                                 [2]
-                                                 [6]
-                                                 [7]
-                                                 [8]
-                                                 [9]
-                                                 [12]]
-                                                1)
-          c-idx (idx/new-relation-virtual-index :c
-                                                [[2]
-                                                 [4]
-                                                 [5]
-                                                 [8]
-                                                 [10]
-                                                 [12]]
-                                                1)]
+(t/deftest test-can-perform-unary-join
+  (let [a-idx (idx/new-relation-virtual-index :a
+                                              [[0]
+                                               [1]
+                                               [3]
+                                               [4]
+                                               [5]
+                                               [6]
+                                               [7]
+                                               [8]
+                                               [9]
+                                               [11]
+                                               [12]]
+                                              1)
+        b-idx (idx/new-relation-virtual-index :b
+                                              [[0]
+                                               [2]
+                                               [6]
+                                               [7]
+                                               [8]
+                                               [9]
+                                               [12]]
+                                              1)
+        c-idx (idx/new-relation-virtual-index :c
+                                              [[2]
+                                               [4]
+                                               [5]
+                                               [8]
+                                               [10]
+                                               [12]]
+                                              1)]
 
-      (t/is (= [{:x 8}
-                {:x 12}]
-               (for [[_ join-results] (-> (idx/new-unary-join-virtual-index [(assoc a-idx :name :x)
-                                                                             (assoc b-idx :name :x)
-                                                                             (assoc c-idx :name :x)])
-                                          (idx/idx->seq))]
-                 join-results))))))
+    (t/is (= [{:x 8}
+              {:x 12}]
+             (for [[_ join-results] (-> (idx/new-unary-join-virtual-index [(assoc a-idx :name :x)
+                                                                           (assoc b-idx :name :x)
+                                                                           (assoc c-idx :name :x)])
+                                        (idx/idx->seq))]
+               join-results)))))
 
 ;; Q(a, b, c) ← R(a, b), S(b, c), T (a, c).
 
