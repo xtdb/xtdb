@@ -1,6 +1,10 @@
 (ns hakan
   (:require [clojure.spec.alpha :as s]
-            [clojure.core.matrix :as m]))
+            [clojure.core.matrix :as m])
+  (:import org.ejml.data.DMatrixSparseCSC
+           org.ejml.generic.GenericMatrixOps_F64
+           org.ejml.sparse.csc.CommonOps_DSCC
+           org.ejml.equation.Equation))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
 
@@ -1169,3 +1173,34 @@
 ;; (m/pm m_25)
 ;; (m/pm m_13)
 ;; (m/pm m_36)
+
+;; Using EJML instead of core.matrix
+
+(defn vector-matrix->sparse-matrix ^DMatrixSparseCSC [vm]
+  (let [[r c] (m/shape vm)
+        m (DMatrixSparseCSC. r (or c 1))]
+    (m/emap-indexed (fn [[r c] x]
+                      (.set m r (or c 0) x))
+                    vm)
+    m))
+
+(let [m (DMatrixSparseCSC. 0 0)]
+  (CommonOps_DSCC/mult
+   (vector-matrix->sparse-matrix adjacency-matrix)
+   (vector-matrix->sparse-matrix bfs-mask)
+   m)
+  (assert
+   (GenericMatrixOps_F64/isEquivalent
+    (vector-matrix->sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
+    m
+    0)))
+
+(let [e (doto (Equation.)
+          (.alias (vector-matrix->sparse-matrix adjacency-matrix) "A")
+          (.alias (vector-matrix->sparse-matrix bfs-mask) "x"))
+      s (.compile e "y = A * x")]
+  (.perform s)
+  (GenericMatrixOps_F64/isEquivalent
+   (vector-matrix->sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
+   (.lookupDDRM e "y")
+   0))
