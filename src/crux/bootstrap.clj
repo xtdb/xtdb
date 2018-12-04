@@ -129,16 +129,16 @@
   (when (s/invalid? (s/conform ::options options))
     (throw (IllegalArgumentException.
             (str "Invalid options: " (s/explain-str ::options options)))))
-  (let [kafka-properties (merge {"bootstrap.servers" bootstrap-servers}
-                                (read-kafka-properties-file kafka-properties-file))]
+  (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
+                            (read-kafka-properties-file kafka-properties-file))]
     (with-open [kv-store (start-kv-store options)
-                producer (k/create-producer kafka-properties)
+                producer (k/create-producer kafka-config)
                 consumer (k/create-consumer (merge {"group.id" (:group-id options)}
-                                                   kafka-properties))
-                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic)
+                                                   kafka-config))
+                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
                 object-store ^Closeable (idx/->KvObjectStore kv-store)
                 indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
-                admin-client (k/create-admin-client kafka-properties)
+                admin-client (k/create-admin-client kafka-config)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer indexer options)]
       (log/info "system started")
       (with-system-fn

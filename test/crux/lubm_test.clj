@@ -46,7 +46,7 @@
                             (load-ntriples-example lubm-triples-resource))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
         object-store (lru/new-cached-object-store f/*kv*)
         indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
 

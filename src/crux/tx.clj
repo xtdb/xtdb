@@ -192,8 +192,11 @@
       (delay {:crux.tx/tx-id tx-id
               :crux.tx/tx-time transact-time})))
 
-  (tx-log [this snapshot]
-    (let [i (kv/new-iterator snapshot)]
-      (vec (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key) true)]
-             (assoc (c/decode-tx-log-key k)
-                    :crux.tx/tx-ops (nippy/fast-thaw v)))))))
+  (new-tx-log-context [this]
+    (kv/new-snapshot kv))
+
+  (tx-log [this tx-log-context]
+    (let [i (kv/new-iterator tx-log-context)]
+      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key) true)]
+        (assoc (c/decode-tx-log-key k)
+               :crux.tx/tx-ops (nippy/fast-thaw v))))))

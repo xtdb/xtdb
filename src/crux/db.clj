@@ -1,4 +1,5 @@
-(ns crux.db)
+(ns crux.db
+  (:import java.io.Closeable))
 
 (defprotocol Index
   (seek-values [this k])
@@ -18,7 +19,8 @@
 (defprotocol TxLog
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
-  (tx-log [this snapshot]))
+  (new-tx-log-context ^java.io.Closeable [this])
+  (tx-log [this tx-log-context]))
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep
 ;; opening snapshots and allow caching of iterators. A non-KV backed

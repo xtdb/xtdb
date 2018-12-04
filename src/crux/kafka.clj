@@ -76,9 +76,14 @@
       (log/debug e "Could not list Kafka topics:")
       false)))
 
+(defn tx-record->tx-log-entry [^ConsumerRecord record]
+  {:crux.tx/tx-time (Date. (.timestamp record))
+   :crux.tx/tx-ops (.value record)
+   :crux.tx/tx-id (.offset record)})
+
 ;;; Transacting Producer
 
-(defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic]
+(defrecord KafkaTxLog [^KafkaProducer producer tx-topic doc-topic kafka-config]
   Closeable
   (close [_])
 
@@ -98,8 +103,18 @@
            {:crux.tx/tx-id (.offset record-meta)
             :crux.tx/tx-time (Date. (.timestamp record-meta))})))))
 
-  (tx-log [this snapshot]
-    (throw (UnsupportedOperationException.))))
+  (new-tx-log-context [this]
+    (create-consumer (assoc kafka-config "enable.auto.commit" "false")))
+
+  (tx-log [this tx-topic-consumer]
+    (let [tx-topic-consumer ^KafkaConsumer tx-topic-consumer]
+      (.assign tx-topic-consumer [(TopicPartition. tx-topic 0)])
+      (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer))
+      ((fn step []
+         (lazy-seq
+          (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
+            (concat (map tx-record->tx-log-entry records)
+                    (step)))))))))
 
 ;;; Indexing Consumer
 
@@ -123,14 +138,14 @@
 
 (defn- index-doc-record [indexer ^ConsumerRecord record]
   (let [content-hash (.key record)
-        doc (consumer-record->value record)]
+        doc (.value record)]
     (db/index-doc indexer content-hash doc)
     doc))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
-  (let [tx-time (Date. (.timestamp record))
-        tx-ops (consumer-record->value record)
-        tx-id (.offset record)]
+  (let [{:crux.tx/keys [tx-time
+                        tx-ops
+                        tx-id]} (tx-record->tx-log-entry record)]
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 

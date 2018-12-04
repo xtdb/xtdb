@@ -381,15 +381,17 @@
         @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-business-time]
                                [:crux.tx/put :petr tx2-petr tx2-business-time]])]
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)]
-      (t/is (= [{:crux.tx/tx-id tx1-id
-                 :crux.tx/tx-time tx1-tx-time
-                 :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-business-time]]}
-                {:crux.tx/tx-id tx2-id
-                 :crux.tx/tx-time tx2-tx-time
-                 :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-business-time]
-                                  [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-business-time]]}]
-               (db/tx-log tx-log snapshot))))))
+    (with-open [tx-log-context (db/new-tx-log-context tx-log)]
+      (let [log (db/tx-log tx-log tx-log-context)]
+        (t/is (not (realized? log)))
+        (t/is (= [{:crux.tx/tx-id tx1-id
+                   :crux.tx/tx-time tx1-tx-time
+                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-business-time]]}
+                  {:crux.tx/tx-id tx2-id
+                   :crux.tx/tx-time tx2-tx-time
+                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-business-time]
+                                    [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-business-time]]}]
+                 log))))))
 
 (t/deftest test-can-perform-unary-join
   (let [a-idx (idx/new-relation-virtual-index :a

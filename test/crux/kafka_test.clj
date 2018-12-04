@@ -11,10 +11,10 @@
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [crux.tx :as tx])
-  (:import [java.time Duration]
-           [org.apache.kafka.clients.producer
-            ProducerRecord]
-           [org.apache.kafka.common TopicPartition]))
+  (:import java.time.Duration
+           java.util.List
+           org.apache.kafka.clients.producer.ProducerRecord
+           org.apache.kafka.common.TopicPartition))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster)
 (t/use-fixtures :each f/with-kafka-client f/with-kv-store)
@@ -43,7 +43,7 @@
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -66,7 +66,7 @@
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {"bootstrap.servers" f/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -74,26 +74,38 @@
     (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (db/submit-tx tx-log tx-ops)
+      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
 
-      (t/is (= {:txs 1 :docs 3}
-               (k/consume-and-index-entities
-                 {:indexer indexer :consumer f/*consumer*
-                  :tx-topic tx-topic
-                  :doc-topic doc-topic})))
-      (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000)))))
+        (t/is (= {:txs 1 :docs 3}
+                 (k/consume-and-index-entities
+                  {:indexer indexer :consumer f/*consumer*
+                   :tx-topic tx-topic
+                   :doc-topic doc-topic})))
+        (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000))))
 
-    (t/testing "restoring to stored offsets"
-      (.seekToBeginning f/*consumer* (.assignment f/*consumer*))
-      (k/seek-to-stored-offsets indexer f/*consumer* (.assignment f/*consumer*))
-      (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000)))))
+        (t/testing "restoring to stored offsets"
+          (.seekToBeginning f/*consumer* (.assignment f/*consumer*))
+          (k/seek-to-stored-offsets indexer f/*consumer* (.assignment f/*consumer*))
+          (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000)))))
 
-    (t/testing "querying transacted data"
-      (t/is (= #{[:http://example.org/Picasso]}
-               (q/q (q/db f/*kv*)
-                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
-                      '{:find [e]
-                        :where [[e :foaf/firstName "Pablo"]]})))))))
+        (t/testing "querying transacted data"
+          (t/is (= #{[:http://example.org/Picasso]}
+                   (q/q (q/db f/*kv*)
+                        (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
+                          '{:find [e]
+                            :where [[e :foaf/firstName "Pablo"]]})))))
+
+        (t/testing "can read tx log"
+          (with-open [consumer (db/new-tx-log-context tx-log)]
+            (let [log (db/tx-log tx-log consumer)]
+              (t/is (not (realized? log)))
+              ;; Cannot compare the tx-ops as they contain blank nodes
+              ;; with random ids.
+              (t/is (= {:crux.tx/tx-time tx-time
+                        :crux.tx/tx-id tx-id}
+                       (dissoc (first log) :crux.tx/tx-ops)))
+              (t/is (= 1 (count log)))
+              (t/is (= 3 (count (:crux.tx/tx-ops (first log))))))))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
@@ -102,7 +114,7 @@
                             (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -176,7 +188,7 @@
                                    next-n))
         n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
@@ -215,7 +227,7 @@
         tx-ops (->> (load-ntriples-example "crux/vc-db-1.nt")
                     (map #(rdf/use-default-language % :en))
                     (vec))
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic)
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)

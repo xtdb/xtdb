@@ -10,11 +10,11 @@
   (refresh [this]))
 
 (defprotocol KvSnapshot
-  (^java.io.Closeable new-iterator [this]))
+  (new-iterator ^java.io.Closeable [this]))
 
 (defprotocol KvStore
-  (open [this])
-  (^java.io.Closeable new-snapshot [this])
+  (open ^crux.kv.KvStore [this])
+  (new-snapshot ^java.io.Closeable [this])
   (store [this kvs])
   (delete [this ks])
   (backup [this dir])
