@@ -1,9 +1,12 @@
 (ns hakan
   (:require [clojure.spec.alpha :as s]
-            [clojure.core.matrix :as m])
-  (:import org.ejml.data.DMatrixSparseCSC
+            [clojure.java.io :as io]
+            [clojure.core.matrix :as m]
+            [crux.rdf :as rdf])
+  (:import [org.ejml.data DMatrix DMatrixSparseCSC DMatrixSparseTriplet]
            org.ejml.generic.GenericMatrixOps_F64
            org.ejml.sparse.csc.CommonOps_DSCC
+           org.ejml.ops.ConvertDMatrixStruct
            org.ejml.equation.Equation))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
@@ -1176,7 +1179,7 @@
 
 ;; Using EJML instead of core.matrix
 
-(defn vector-matrix->sparse-matrix ^DMatrixSparseCSC [vm]
+(defn core-matrix->ejml-sparse-matrix ^DMatrixSparseCSC [vm]
   (let [[r c] (m/shape vm)
         m (DMatrixSparseCSC. r (or c 1))]
     (m/emap-indexed (fn [[r c] x]
@@ -1186,21 +1189,54 @@
 
 (let [m (DMatrixSparseCSC. 0 0)]
   (CommonOps_DSCC/mult
-   (vector-matrix->sparse-matrix adjacency-matrix)
-   (vector-matrix->sparse-matrix bfs-mask)
+   (core-matrix->ejml-sparse-matrix adjacency-matrix)
+   (core-matrix->ejml-sparse-matrix bfs-mask)
    m)
   (assert
    (GenericMatrixOps_F64/isEquivalent
-    (vector-matrix->sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
+    (core-matrix->ejml-sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
     m
     0)))
 
 (let [e (doto (Equation.)
-          (.alias (vector-matrix->sparse-matrix adjacency-matrix) "A")
-          (.alias (vector-matrix->sparse-matrix bfs-mask) "x"))
+          (.alias (core-matrix->ejml-sparse-matrix adjacency-matrix) "A")
+          (.alias (core-matrix->ejml-sparse-matrix bfs-mask) "x"))
       s (.compile e "y = A * x")]
   (.perform s)
   (GenericMatrixOps_F64/isEquivalent
-   (vector-matrix->sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
+   (core-matrix->ejml-sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
    (.lookupDDRM e "y")
    0))
+
+(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
+
+(def ^:const max-size 5000)
+
+(defn load-rdf-into-matrix [resource]
+  (let [value->id (atom {})
+        id->matrix (atom {})]
+    (with-open [in (io/input-stream (io/resource resource))]
+      (doseq [[s p o] (map rdf/statement->clj (rdf/ntriples-seq in))]
+        (swap! id->matrix
+               update
+               p
+               (fn [x]
+                 (or x (DMatrixSparseTriplet. max-size max-size 0))))
+        (doseq [v [s p o]]
+          (swap! value->id
+                 update
+                 v
+                 (fn [x]
+                   (or x (count @value->id)))))
+        (let [m ^DMatrixSparseTriplet (get @id->matrix p)]
+          (.addItem m
+                    (int (get @value->id s))
+                    (int (get @value->id o))
+                    1.0))))
+    {:id->matrix (->> (for [[k ^DMatrixSparseTriplet v] @id->matrix]
+                        [k (.invoke (.getMethod ConvertDMatrixStruct "convert"
+                                                (into-array [DMatrixSparseTriplet DMatrixSparseCSC]))
+                                    nil
+                                    (object-array [v nil]))])
+                      (into {}))
+     :value->id @value->id}))
