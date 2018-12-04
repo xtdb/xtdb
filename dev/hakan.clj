@@ -994,11 +994,11 @@
 (def bfs-mask (m/matrix [1 0 1 0 0 0 0]))
 
 ;; One hop.
-(assert (= [0.0 1.0 0.0 1.0 0.0 1.0 0.0]
+(assert (= (m/matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
            (m/mmul adjacency-matrix bfs-mask)))
 
 ;; Two hops, value is number of in-edges.
-(assert (= [1.0 0.0 2.0 0.0 1.0 0.0 1.0]
+(assert (= (m/matrix [1.0 0.0 2.0 0.0 1.0 0.0 1.0])
            (m/mmul adjacency-matrix adjacency-matrix bfs-mask)))
 
 ;; Breath first search, looking for neighbours of elements 1, 3 and 4
@@ -1012,22 +1012,22 @@
              [0 0 0]
              [0 0 0]]))
 
-(assert (= [[1.0 0.0 0.0]
-            [0.0 1.0 0.0]
-            [1.0 0.0 0.0]
-            [0.0 1.0 0.0]
-            [0.0 0.0 0.0]
-            [0.0 0.0 1.0]
-            [0.0 0.0 0.0]]
+(assert (= (m/matrix [[1.0 0.0 0.0]
+                      [0.0 1.0 0.0]
+                      [1.0 0.0 0.0]
+                      [0.0 1.0 0.0]
+                      [0.0 0.0 0.0]
+                      [0.0 0.0 1.0]
+                      [0.0 0.0 0.0]])
            (m/mmul adjacency-matrix multiple-source-bfs-mask)))
 
 ;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
 
-(def magiq [[0 2 1 0 1]
-            [0 0 0 2 2]
-            [0 0 0 3 0]
-            [0 0 0 0 0]
-            [0 0 5 5 0]])
+(def magiq (m/matrix [[0 2 1 0 1]
+                      [0 0 0 2 2]
+                      [0 0 0 3 0]
+                      [0 0 0 0 0]
+                      [0 0 5 5 0]]))
 ;; a b c e = 1 2 3 5
 
 ;; SELECT ?x ?y ?z ?w WHERE {
@@ -1063,7 +1063,7 @@
        (mapv #(if (some pos? %) 1.0 0.0))
        (m/matrix)))
 
-(assert (= [0.0 0.0 1.0]
+(assert (= (m/matrix [0.0 0.0 1.0])
            (matlab-any [[0 0 3]
                         [0 0 3]
                         [0 0 3]])))
@@ -1073,11 +1073,12 @@
 (defn matlab-sparse [i j v m n]
   (-> (m/zero-matrix m n)
       (m/set-indices (map vector i j)
-                     (map double v))))
+                     (map double v))
+      (m/sparse)))
 
-(assert (= [[0.0 0.0 0.0]
-            [0.0 0.0 0.0]
-            [0.0 1.0 0.0]]
+(assert (= (m/matrix [[0.0 0.0 0.0]
+                      [0.0 0.0 0.0]
+                      [0.0 1.0 0.0]])
            (matlab-sparse [2] [1] [1] 3 3)))
 
 ;; This example is LUBM query 2 written with clause order.
