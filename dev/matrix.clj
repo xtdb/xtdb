@@ -6,7 +6,7 @@
   (:import [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
-           org.ejml.sparse.csc.CommonOps_DSCC
+           [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
            org.ejml.generic.GenericMatrixOps_F64))
 
 ;; Matrix / GraphBLAS style breath first search
@@ -104,9 +104,35 @@
 (defn transpose-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
   (CommonOps_DSCC/transpose m nil nil))
 
+(defn boolean-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
+  (dotimes [n (alength (.nz_values m))]
+    (when (pos? (aget (.nz_values m) n))
+      (aset (.nz_values m) n 1.0)))
+  m)
+
+(defn ^DMatrixSparseCSC assign-mask
+  ([^DMatrixSparseCSC mask ^DMatrixSparseCSC w u]
+   (assign-mask mask w u pos?))
+  ([^DMatrixSparseCSC mask ^DMatrixSparseCSC w u pred]
+   (assert (= 1 (.getNumCols mask) (.getNumCols w)))
+   (dotimes [n (min (.getNumRows mask) (.getNumRows w))]
+     (when (pred (.get mask n 0))
+       (.set w n 0 (double u))))
+   w))
+
+(defn mask ^DMatrixSparseCSC [^DMatrixSparseCSC mask ^DMatrixSparseCSC w]
+  (assign-mask mask w 0.0 zero?))
+
+(defn inverse-mask ^DMatrixSparseCSC [^DMatrixSparseCSC mask ^DMatrixSparseCSC w]
+  (assign-mask mask w 0.0 pos?))
+
 (defn multiply-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
   (doto (DMatrixSparseCSC. (.getNumRows a) (.getNumCols b))
     (->> (CommonOps_DSCC/mult a b))))
+
+(defn or-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
+  (->> (multiply-matrix a b)
+       (boolean-matrix)))
 
 (defn multiply-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
   (let [c (DMatrixSparseCSC. (max (.getNumRows a) (.getNumRows b))
@@ -119,6 +145,10 @@
                              (max (.getNumCols a) (.getNumCols b)))]
     (CommonOps_DSCC/add 1.0 a 1.0 b c nil nil)
     c))
+
+(defn or-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
+  (->> (add-elements-matrix a b)
+       (boolean-matrix)))
 
 ;; NOTE: these return row vectors, which they potentially shouldn't?
 ;; Though the result of this is always fed straight into a diagonal.
@@ -181,7 +211,7 @@
       (println "Vector: neighbours =")
       (.print (multiply-matrix (transpose-matrix graph) vec)))
 
-    (println "Exercise 8: Keep track of ‘visited’ nodes")
+    (println "Exercise 7: Traverse the graph")
     (let [w (doto (col-vector num-nodes)
               (.set 0 0 1.0))]
       (println "Vector: wavefront(src) =")
@@ -190,7 +220,7 @@
              n 0]
         (when (< n num-nodes)
           ;; TODO: This should really use or and not accumulate.
-          (let [w (multiply-matrix (transpose-matrix graph) w)]
+          (let [w (or-matrix (transpose-matrix graph) w)]
             (println "Vector: wavefront =")
             (.print w)
             (recur w (inc n))))))
@@ -205,18 +235,32 @@
              w w
              n 0]
         (when (< n num-nodes)
-          (let [v (add-elements-matrix v w)]
+          (let [v (or-elements-matrix v w)]
             (println "Vector: visited =")
             (.print v)
-            ;; TODO: This requires using v as a mask on w, can be
-            ;; potentially be simulated with element wise
-            ;; multiplication of 1 and 0. Note that in this case the
-            ;; mask of visited nodes should be inverted.
-            (let [w (multiply-matrix (transpose-matrix graph) w)]
+            (let [w (inverse-mask v (or-matrix (transpose-matrix graph) w))]
               (println "Vector: wavefront =")
               (.print w)
-              (when (pos? (.getNonZeroLength w))
-                (recur v w (inc n))))))))))
+              (when-not (MatrixFeatures_DSCC/isZeros w 0)
+                (recur v w (inc n))))))))
+
+    (println "Exercise 10: level BFS")
+    (let [w (doto (col-vector num-nodes)
+              (.set 0 0 1.0))
+          levels (col-vector num-nodes)]
+      (println "Vector: wavefront(src) =")
+      (.print w)
+      (loop [levels levels
+             w w
+             lvl 1]
+        (let [levels (assign-mask w levels lvl)]
+          (println "Vector: levels =")
+          (.print levels)
+          (let [w (inverse-mask levels (or-matrix (transpose-matrix graph) w))]
+            (println "Vector: wavefront =")
+            (.print w)
+            (when-not (MatrixFeatures_DSCC/isZeros w 0)
+              (recur levels w (inc lvl)))))))))
 
 (def ^:const example-data-artists-resource "crux/example-data-artists.nt")
 
