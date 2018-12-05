@@ -5,7 +5,8 @@
             [crux.rdf :as rdf])
   (:import [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
-           org.ejml.sparse.csc.CommonOps_DSCC))
+           org.ejml.sparse.csc.CommonOps_DSCC
+           org.ejml.generic.GenericMatrixOps_F64))
 
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
@@ -13,6 +14,12 @@
 
 (defn square-matrix ^DMatrixSparseCSC [size]
   (DMatrixSparseCSC. size size))
+
+(defn sparse-vector ^DMatrixSparseCSC [size]
+  (DMatrixSparseCSC. 1 size))
+
+(defn equals-matrix [^DMatrix a ^DMatrix b]
+  (GenericMatrixOps_F64/isEquivalent a b 0.0))
 
 (defn resize-matrix [^DMatrixSparse m new-size]
   (let [grown (square-matrix new-size)]
@@ -74,7 +81,7 @@
     (.print m))
   (doseq [r (range (.getNumRows m))
           c (range (.getNumCols m))
-          :when (= 1.0 (.get m r c))]
+          :when (= 1.0 (.unsafe_get m r c))]
     (if (= 1 (.getNumRows m))
       (prn (get id->value c))
       (prn (get id->value r) (get id->value c))))
@@ -97,14 +104,30 @@
     (doto (square-matrix target-size)
       (->> (CommonOps_DSCC/mult a b)))))
 
+(defn multiply-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
+  (let [target-size (max (.getNumRows a) (.getNumRows b))
+        c (square-matrix target-size)]
+    (CommonOps_DSCC/elementMult a b c nil nil)
+    c))
+
 (defn matlab-any-matrix ^DMatrixRMaj [^DMatrixSparseCSC m]
   (CommonOps_DSCC/maxCols m nil))
 
-(defn diagonal-matrix ^DMatrixSparseCSC [^DMatrixRMaj v]
+(defn matlab-any-matrix-sparse ^DMatrixSparseCSC [^DMatrixSparseCSC m]
+  (let [v (sparse-vector (.getNumRows m))]
+    (doseq [^long x (->> (.col_idx m)
+                         (map-indexed vector)
+                         (remove (comp zero? second))
+                         (partition-by second)
+                         (map ffirst))]
+      (.unsafe_set v 0 (dec x) 1.0))
+    v))
+
+(defn diagonal-matrix ^DMatrixSparseCSC [^DMatrix v]
   (let [target-size (.getNumCols v)
         m (square-matrix target-size)]
     (doseq [i (range target-size)
-            :let [x (.get v 0 i)]
+            :let [x (.unsafe_get v 0 i)]
             :when (not (zero? x))]
       (.unsafe_set m i i x))
     m))
@@ -404,6 +427,6 @@
   (let [[r c] (m/shape vm)
         m (DMatrixSparseCSC. r (or c 1))]
     (m/emap-indexed (fn [[r c] x]
-                      (.set m r (or c 0) x))
+                      (.unsafe_set m r (or c 0) x))
                     vm)
     m))
