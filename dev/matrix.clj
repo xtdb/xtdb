@@ -5,6 +5,7 @@
             [crux.rdf :as rdf])
   (:import [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
+           org.ejml.dense.row.CommonOps_DDRM
            org.ejml.sparse.csc.CommonOps_DSCC
            org.ejml.generic.GenericMatrixOps_F64))
 
@@ -16,8 +17,11 @@
 (defn square-matrix ^DMatrixSparseCSC [size]
   (DMatrixSparseCSC. size size))
 
-(defn sparse-vector ^DMatrixSparseCSC [size]
+(defn row-vector ^DMatrixSparseCSC [size]
   (DMatrixSparseCSC. 1 size))
+
+(defn col-vector ^DMatrixSparseCSC [size]
+  (DMatrixSparseCSC. size 1))
 
 (defn equals-matrix [^DMatrix a ^DMatrix b]
   (GenericMatrixOps_F64/isEquivalent a b 0.0))
@@ -101,37 +105,118 @@
   (CommonOps_DSCC/transpose m nil nil))
 
 (defn multiply-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (let [target-size (max (.getNumRows a) (.getNumRows b))]
-    (doto (square-matrix target-size)
-      (->> (CommonOps_DSCC/mult a b)))))
+  (doto (DMatrixSparseCSC. (.getNumRows a) (.getNumCols b))
+    (->> (CommonOps_DSCC/mult a b))))
 
 (defn multiply-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (let [target-size (max (.getNumRows a) (.getNumRows b))
-        c (square-matrix target-size)]
+  (let [c (DMatrixSparseCSC. (max (.getNumRows a) (.getNumRows b))
+                             (max (.getNumCols a) (.getNumCols b)))]
     (CommonOps_DSCC/elementMult a b c nil nil)
     c))
 
+(defn add-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
+  (let [c (DMatrixSparseCSC. (max (.getNumRows a) (.getNumRows b))
+                             (max (.getNumCols a) (.getNumCols b)))]
+    (CommonOps_DSCC/add 1.0 a 1.0 b c nil nil)
+    c))
+
+;; NOTE: these return row vectors, which they potentially shouldn't?
+;; Though the result of this is always fed straight into a diagonal.
 (defn matlab-any-matrix ^DMatrixRMaj [^DMatrixSparseCSC m]
-  (CommonOps_DSCC/maxCols m nil))
+  (CommonOps_DDRM/transpose (CommonOps_DSCC/maxCols m nil) nil))
 
 (defn matlab-any-matrix-sparse ^DMatrixSparseCSC [^DMatrixSparseCSC m]
-  (let [v (sparse-vector (.getNumRows m))]
+  (let [v (col-vector (.getNumRows m))]
     (doseq [^long x (->> (.col_idx m)
                          (map-indexed vector)
                          (remove (comp zero? second))
                          (partition-by second)
                          (map ffirst))]
-      (.unsafe_set v 0 (dec x) 1.0))
+      (.unsafe_set v (dec x) 0 1.0))
     v))
 
 (defn diagonal-matrix ^DMatrixSparseCSC [^DMatrix v]
-  (let [target-size (.getNumCols v)
+  (let [target-size (.getNumRows v)
         m (square-matrix target-size)]
     (doseq [i (range target-size)
-            :let [x (.unsafe_get v 0 i)]
+            :let [x (.unsafe_get v i 0)]
             :when (not (zero? x))]
       (.unsafe_set m i i x))
     m))
+
+;; GraphBLAS Tutorial https://github.com/tgmattso/GraphBLAS
+
+(defn graph-blas-tutorial []
+  (let [num-nodes 7
+        graph (doto (square-matrix num-nodes)
+                (.set 0 1 1.0)
+                (.set 0 3 1.0)
+                (.set 1 4 1.0)
+                (.set 1 6 1.0)
+                (.set 2 5 1.0)
+                (.set 3 0 1.0)
+                (.set 3 2 1.0)
+                (.set 4 5 1.0)
+                (.set 5 2 1.0)
+                (.set 6 2 1.0)
+                (.set 6 3 1.0)
+                (.set 6 4 1.0))
+        vec (doto (col-vector num-nodes)
+              (.set 2 0 1.0))]
+    (println "Exercise 3: Adjacency matrix")
+    (println "Matrix: Graoh =")
+    (.print graph)
+
+    (println "Exercise 4: Matrix Vector Multiplication")
+    (println "Vector: Target node =")
+    (.print vec)
+    (println "Vector: sources =")
+    (.print (multiply-matrix graph vec))
+
+    (println "Exercise 5: Matrix Vector Multiplication")
+    (let [vec (doto (col-vector num-nodes)
+                (.set 6 0 1.0))]
+      (println "Vector: source node =")
+      (.print vec)
+      (println "Vector: neighbours =")
+      (.print (multiply-matrix (transpose-matrix graph) vec)))
+
+    (println "Exercise 8: Keep track of ‘visited’ nodes")
+    (let [w (doto (col-vector num-nodes)
+              (.set 0 0 1.0))]
+      (println "Vector: wavefront(src) =")
+      (.print w)
+      (loop [w w
+             n 0]
+        (when (< n num-nodes)
+          ;; TODO: This should really use or and not accumulate.
+          (let [w (multiply-matrix (transpose-matrix graph) w)]
+            (println "Vector: wavefront =")
+            (.print w)
+            (recur w (inc n))))))
+
+    (println "Exercise 9: Avoid revisiting")
+    (let [w (doto (col-vector num-nodes)
+              (.set 0 0 1.0))
+          v (col-vector num-nodes)]
+      (println "Vector: wavefront(src) =")
+      (.print w)
+      (loop [v v
+             w w
+             n 0]
+        (when (< n num-nodes)
+          (let [v (add-elements-matrix v w)]
+            (println "Vector: visited =")
+            (.print v)
+            ;; TODO: This requires using v as a mask on w, can be
+            ;; potentially be simulated with element wise
+            ;; multiplication of 1 and 0. Note that in this case the
+            ;; mask of visited nodes should be inverted.
+            (let [w (multiply-matrix (transpose-matrix graph) w)]
+              (println "Vector: wavefront =")
+              (.print w)
+              (when (pos? (.getNonZeroLength w))
+                (recur v w (inc n))))))))))
 
 (def ^:const example-data-artists-resource "crux/example-data-artists.nt")
 
