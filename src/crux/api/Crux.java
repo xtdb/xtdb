@@ -4,6 +4,9 @@ import java.util.Map;
 
 import clojure.java.api.Clojure;
 
+/**
+ * Public API entry point for starting a {@link #ICruxSystem}.
+ */
 public class Crux {
     /**
      * Starts a query node in local library mode.
@@ -27,6 +30,9 @@ public class Crux {
      *
      * See also crux.kafka.embedded or crux.API#newStandaloneSystem.
      * for self-contained deployments.
+     *
+     * @param options see crux.bootstrap/cli-options.
+     * @return        the started local node.
      */
     public static ICruxSystem startLocalNode(Map options) {
         return (ICruxSystem) Clojure.var("crux.api/start-local-node").invoke(options);
@@ -42,6 +48,9 @@ public class Crux {
 
      * NOTE: requires any KV store dependencies on the classpath. The
      * crux.memdb.MemKv KV backend works without additional dependencies.
+     *
+     * @param options see crux.bootstrap/start-kv-store.
+     * @return        a standalone system.
      */
     public static ICruxSystem newStandaloneSystem(Map options) {
         return (ICruxSystem) Clojure.var("crux.api/new-standalone-system").invoke(options);
@@ -51,6 +60,9 @@ public class Crux {
      * Creates a new remote API client CruxSystem.
      *
      * NOTE: requires either clj-http or http-kit on the classpath.
+     *
+     * @param url the URL to a Crux HTTP end-point.
+     * @return    a remote API client.
      */
     public static ICruxSystem newApiClient(String url) {
         return (ICruxSystem) Clojure.var("crux.api/new-api-client").invoke(url);
