@@ -127,6 +127,7 @@ which would be a post MVP feature.
 * http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf[A Demonstration of MAGiQ: Matrix Algebra Approach for Solving RDF Graph Queries]
 * https://people.csail.mit.edu/jshun/6886-s18/[MIT 6.886 Graph Analytics Spring 2018]
 * https://spcl.inf.ethz.ch/Research/Performance/LogGraph/loggraph_full.pdf[Log(Graph): A Near-Optimal High-Performance Graph Representation]
+* http://www.cs.ucsb.edu/~ravenben/temp/rigel.pdf[Fast and Scalable Analysis of Massive Social Graphs]
 
 === Retention
 
