@@ -22,7 +22,8 @@
   (:import java.io.Closeable
            java.time.Duration
            java.util.UUID
-           org.eclipse.jetty.server.Server))
+           org.eclipse.jetty.server.Server
+           [crux.api ICruxDatasource ICruxSystem]))
 
 ;; ---------------------------------------------------
 ;; Utils
@@ -92,47 +93,47 @@
 ;; ---------------------------------------------------
 ;; Services
 
-(defn- status [local-node]
-  (let [status-map (api/status local-node)]
+(defn- status [^ICruxSystem local-node]
+  (let [status-map (.status local-node)]
     (if (:crux.zk/zk-active? status-map)
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
-(defn document [local-node request]
+(defn document [^ICruxSystem local-node request]
   (let [content-hash (param request "hash")]
     (success-response
-     (api/document local-node content-hash))))
+     (.document local-node content-hash))))
 
 ;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
-(defn- history [local-node request]
+(defn- history [^ICruxSystem local-node request]
   (let [entity (param request "entity")]
     (success-response
-     (api/history local-node entity))))
+     (.history local-node entity))))
 
-(defn- db-for-request [local-node {:keys [business-time transact-time]}]
+(defn- db-for-request ^ICruxDatasource [^ICruxSystem local-node {:keys [business-time transact-time]}]
   (cond
     (and business-time transact-time)
-    (api/db local-node business-time transact-time)
+    (.db local-node business-time transact-time)
 
     business-time
-    (api/db local-node business-time)
+    (.db local-node business-time)
 
     :else
-    (api/db local-node)))
+    (.db local-node)))
 
-(defn- query [local-node request]
+(defn- query [^ICruxSystem local-node request]
   (let [query-map (param request "q")]
     (success-response
-     (api/q (db-for-request local-node query-map)
-            (dissoc query-map :business-time :transact-time)))))
+     (.q (db-for-request local-node query-map)
+         (dissoc query-map :business-time :transact-time)))))
 
-(defn- query-stream [local-node request]
+(defn- query-stream [^ICruxSystem local-node request]
   (let [query-map (param request "q")
         db (db-for-request local-node query-map)
-        snapshot (api/new-snapshot db)
-        result (api/q db snapshot (dissoc query-map :business-time :transact-time))]
+        snapshot (.newSnapshot db)
+        result (.q db snapshot (dissoc query-map :business-time :transact-time))]
     (try
       (response 200
                 {"Content-Type" "application/edn"}
@@ -148,22 +149,22 @@
         (.close snapshot)
         (throw t)))))
 
-(defn- entity [local-node request]
+(defn- entity [^ICruxSystem local-node request]
   (let [body (param request "entity")]
     (success-response
-     (api/entity (db-for-request local-node body)
-                 (:eid body)))))
+     (.entity (db-for-request local-node body)
+              (:eid body)))))
 
-(defn- entity-tx [local-node request]
+(defn- entity-tx [^ICruxSystem local-node request]
   (let [body (param request "entity-tx")]
     (success-response
-     (api/entity-tx (db-for-request local-node body)
-                    (:eid body)))))
+     (.entityTx (db-for-request local-node body)
+                (:eid body)))))
 
-(defn- transact [local-node request]
+(defn- transact [^ICruxSystem local-node request]
   (let [tx-ops (param request)]
     (success-response
-     (api/submit-tx local-node tx-ops))))
+     (.submitTx local-node tx-ops))))
 
 ;; ---------------------------------------------------
 ;; Jetty server

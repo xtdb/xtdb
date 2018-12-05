@@ -13,7 +13,8 @@
            [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
            org.apache.kafka.clients.producer.KafkaProducer
-           org.apache.kafka.clients.consumer.KafkaConsumer))
+           org.apache.kafka.clients.consumer.KafkaConsumer
+           [crux.api Crux ICruxSystem]))
 
 (defn random-person [] {:crux.db/id (UUID/randomUUID)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
@@ -134,7 +135,7 @@
       (f))))
 
 (def ^:dynamic *api-url*)
-(def ^:dynamic *api*)
+(def ^:dynamic ^ICruxSystem *api*)
 
 (defn with-local-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
@@ -151,7 +152,7 @@
                  :kv-backend *kv-backend*
                  :bootstrap-servers *kafka-bootstrap-servers*}]
     (try
-      (with-open [local-node (api/start-local-node options)
+      (with-open [local-node (Crux/startLocalNode options)
                   http-server (srv/start-http-server local-node options)]
         (binding [*api* local-node
                   *api-url* (str "http://" ek/*host* ":" server-port)]
@@ -166,7 +167,7 @@
         options {:db-dir db-dir
                  :kv-backend *kv-backend*}]
     (try
-      (with-open [standalone-system (api/new-standalone-system options)]
+      (with-open [standalone-system (Crux/newStandaloneSystem options)]
         (binding [*api* standalone-system]
           (f)))
       (finally
@@ -174,7 +175,7 @@
 
 (defn with-api-client [f]
   (assert (bound? #'*api-url*))
-  (with-open [api-client (api/new-api-client *api-url*)]
+  (with-open [api-client (Crux/newApiClient *api-url*)]
     (binding [*api* api-client]
       (f))))
 

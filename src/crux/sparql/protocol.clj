@@ -5,7 +5,8 @@
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [ring.util.request :as req])
-  (:import [org.eclipse.rdf4j.model BNode IRI Literal]))
+  (:import [org.eclipse.rdf4j.model BNode IRI Literal]
+           crux.api.Crux$CruxSystem))
 
 
 ;; TODO: This is a bit ad-hoc.
@@ -69,7 +70,7 @@
        "]}}"))
 
 ;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
-(defn sparql-query [local-node request]
+(defn sparql-query [^Crux$CruxSystem local-node request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])
@@ -84,7 +85,7 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          results (api/q (api/db local-node) query-map)]
+          results (.q (.db local-node) query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond (= "application/sparql-results+xml" accept)

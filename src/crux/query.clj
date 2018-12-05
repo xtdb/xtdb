@@ -13,7 +13,8 @@
             [crux.db :as db])
   (:import java.util.Comparator
            crux.index.BinaryJoinLayeredVirtualIndex
-           crux.codec.EntityTx))
+           crux.codec.EntityTx
+           crux.api.ICruxDatasource))
 
 (defn- logic-var? [x]
   (symbol? x))
@@ -980,7 +981,22 @@
        (map result-tuple->entities)
        (ffirst)))
 
-(defrecord QueryDatasource [kv query-cache object-store business-time transact-time])
+(defrecord QueryDatasource [kv query-cache object-store business-time transact-time]
+  ICruxDatasource
+  (entity [this eid]
+    (entity this eid))
+
+  (entityTx [this eid]
+    (c/entity-tx->edn (entity-tx this eid)))
+
+  (newSnapshot [this]
+    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
+
+  (q [this q]
+    (crux.query/q this q))
+
+  (q [this snapshot q]
+    (crux.query/q this snapshot q)))
 
 (def ^:const default-query-cache-size 10240)
 

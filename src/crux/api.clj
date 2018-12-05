@@ -10,60 +10,12 @@
             [crux.query :as q]
             [crux.tx :as tx])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
-           crux.query.QueryDatasource))
-
-(defprotocol CruxSystem
-  "Provides API access to Crux."
-  (db [this] [this business-time] [this business-time transact-time]
-    "Returns a db as of optional business and transaction time. Both
-    defaulting to now.")
-  (document [this content-hash]
-    "Reads a document from the document store based on its content
-    hash.")
-  (history [this eid]
-    "Returns the transaction history of an entity.")
-  (status [this]
-    "Returns the status of this node as a map.")
-  (submit-tx [this tx-ops]
-    "Writes transactions to the log for processing.")
-  (submitted-tx-updated-entity? [this submitted-tx eid]
-    "Checks if a submitted tx did update an entity."))
-
-(defprotocol CruxDatasource
-  "Represents the database as of a specific business and transaction
-  time."
-  (entity [this eid]
-    "Returns the document map for an entity.")
-  (entity-tx [this eid]
-    "Returns the entity tx for an entity.")
-  (^java.io.Closeable new-snapshot [this]
-   "Returns a new snapshot for usage with q, allowing for lazy results
-   in a with-open block.")
-  (q [this q] [this snapshot q]
-    "Queries the db."))
+           [crux.api Crux ICruxSystem ICruxDatasource]))
 
 ;; Local Node
 
-(extend-protocol CruxDatasource
-  QueryDatasource
-  (entity [this eid]
-    (q/entity this eid))
-
-  (entity-tx [this eid]
-    (c/entity-tx->edn (q/entity-tx this eid)))
-
-  (new-snapshot [this]
-    (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
-
-  (q
-    ([this q]
-     (q/q this q))
-
-    ([this snapshot q]
-     (q/q this snapshot q))))
-
 (defrecord LocalNode [close-promise kv-store tx-log options]
-  CruxSystem
+  ICruxSystem
   (db [_]
     (q/db kv-store))
 
@@ -88,10 +40,10 @@
     ((resolve 'crux.status/status-map)
      kv-store (:bootstrap-servers options)))
 
-  (submit-tx [_ tx-ops]
+  (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 
-  (submitted-tx-updated-entity? [_ submitted-tx eid]
+  (hasSubmittedTxUpdatedEntity [_ submitted-tx eid]
     (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
 
   Closeable
@@ -99,7 +51,7 @@
     (deliver close-promise true)))
 
 (defn start-local-node
-  "Starts a CruxSystem query node in local library mode.
+  "Starts an ICruxSystem query node in local library mode.
 
   For valid options, see crux.bootstrap/cli-options. Options are
   specified as keywords using their long format name,
@@ -118,7 +70,7 @@
 
   See also crux.kafka.embedded or crux.api/new-standalone-system for
   self-contained deployments."
-  ^crux.api.LocalNode [options]
+  ^ICruxSystem [options]
   (require 'crux.bootstrap)
   (let [system-promise (promise)
         close-promise (promise)
@@ -144,31 +96,34 @@
                             :options options}
                            @system-promise))))
 
+;; Standalone System
+
+
 (defrecord StandaloneSystem [kv-store tx-log options]
-  CruxSystem
-  (db [_]
-    (db (map->LocalNode {:kv-store kv-store})))
+  ICruxSystem
+  (db [this]
+    (.db ^LocalNode (map->LocalNode this)))
 
-  (db [_ business-time]
-    (db (map->LocalNode {:kv-store kv-store}) business-time))
+  (db [this business-time]
+    (.db ^LocalNode (map->LocalNode this) business-time))
 
-  (db [_ business-time transact-time]
-    (db (map->LocalNode {:kv-store kv-store}) business-time transact-time))
+  (db [this business-time transact-time]
+    (.db ^LocalNode (map->LocalNode this) business-time transact-time))
 
-  (document [_ content-hash]
-    (document (map->LocalNode {:kv-store kv-store}) content-hash))
+  (document [this content-hash]
+    (.document ^LocalNode (map->LocalNode this) content-hash))
 
-  (history [_ eid]
-    (history (map->LocalNode {:kv-store kv-store}) eid))
+  (history [this eid]
+    (.history ^LocalNode (map->LocalNode this) eid))
 
   (status [this]
-    (status (map->LocalNode {:kv-store kv-store})))
+    (.status ^LocalNode (map->LocalNode this)))
 
-  (submit-tx [_ tx-ops]
-    (submit-tx (map->LocalNode {:tx-log tx-log}) tx-ops))
+  (submitTx [this tx-ops]
+    (.submitTx ^LocalNode (map->LocalNode this) tx-ops))
 
-  (submitted-tx-updated-entity? [_ submitted-tx eid]
-    (submitted-tx-updated-entity? (map->LocalNode {:kv-store kv-store}) submitted-tx eid))
+  (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
+    (.hasSubmittedTxUpdatedEntity ^LocalNode (map->LocalNode this) submitted-tx eid))
 
   Closeable
   (close [_]
@@ -184,7 +139,7 @@
 
   NOTE: requires any KV store dependencies on the classpath. The
   crux.memdb.MemKv KV backend works without additional dependencies."
-  ^crux.api.StandaloneSystem [{:keys [db-dir kv-backend] :as options}]
+  ^ICruxSystem [{:keys [db-dir kv-backend] :as options}]
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)
         tx-log (tx/->KvTxLog kv-store)]
@@ -260,18 +215,18 @@
   (swap! (:streams-state snapshot) conj in))
 
 (defrecord RemoteDatasource [url business-time transact-time]
-  CruxDatasource
+  ICruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/entity") {:eid eid
                                            :business-time business-time
                                            :transact-time transact-time}))
 
-  (entity-tx [this eid]
+  (entityTx [this eid]
     (api-request-sync (str url "/entity-tx") {:eid eid
                                               :business-time business-time
                                               :transact-time transact-time}))
 
-  (new-snapshot [this]
+  (newSnapshot [this]
     (->RemoteSnapshot (atom [])))
 
   (q [this q]
@@ -289,7 +244,7 @@
       (edn-list->lazy-seq in))))
 
 (defrecord RemoteApiClient [url]
-  CruxSystem
+  ICruxSystem
   (db [_]
     (->RemoteDatasource url nil nil))
 
@@ -308,18 +263,18 @@
   (status [_]
     (api-request-sync url nil {:method :get}))
 
-  (submit-tx [_ tx-ops]
+  (submitTx [_ tx-ops]
     (api-request-sync (str url "/tx-log") tx-ops))
 
-  (submitted-tx-updated-entity? [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
-    (= tx-id (:crux.tx/tx-id (entity-tx (db this tx-time tx-time) eid))))
+  (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
+    (= tx-id (:crux.tx/tx-id (.entityTx (.db this tx-time tx-time) eid))))
 
   Closeable
   (close [_]))
 
 (defn new-api-client
-  "Creates a new remote API client CruxSystem.
+  "Creates a new remote API client ICruxSystem.
 
   NOTE: requires either clj-http or http-kit on the classpath."
-  ^java.io.Closeable [url]
+  ^ICruxSystem [url]
   (->RemoteApiClient url))
