@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             [clojure.core.matrix :as m]
             [crux.rdf :as rdf])
-  (:import [org.ejml.data DMatrix DMatrixRMaj DMatrixSparseCSC DMatrixSparseTriplet]
+  (:import [org.ejml.data DMatrix DMatrixRMaj
+            DMatrixSparse DMatrixSparseCSC DMatrixSparseTriplet]
            org.ejml.generic.GenericMatrixOps_F64
            org.ejml.sparse.csc.CommonOps_DSCC
            org.ejml.ops.ConvertDMatrixStruct
@@ -1188,30 +1189,22 @@
                     vm)
     m))
 
-(let [m (DMatrixSparseCSC. 0 0)]
-  (CommonOps_DSCC/mult
-   (core-matrix->ejml-sparse-matrix adjacency-matrix)
-   (core-matrix->ejml-sparse-matrix bfs-mask)
-   m)
-  (assert
-   (GenericMatrixOps_F64/isEquivalent
-    (core-matrix->ejml-sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
-    m
-    0)))
+(defn ensure-matrix-capacity ^DMatrixSparseCSC [^DMatrixSparseCSC m size factor]
+  (if (> (long size) (.getNumRows m))
+    (let [new-size (* (long factor) (long size))
+          grown (DMatrixSparseCSC. new-size new-size)]
+      (CommonOps_DSCC/extract m
+                              0
+                              (.getNumCols m)
+                              0
+                              (.getNumRows m)
+                              grown
+                              0
+                              0)
+      grown)
+    m))
 
-(let [e (doto (Equation.)
-          (.alias (core-matrix->ejml-sparse-matrix adjacency-matrix) "A")
-          (.alias (core-matrix->ejml-sparse-matrix bfs-mask) "x"))
-      s (.compile e "y = A * x")]
-  (.perform s)
-  (GenericMatrixOps_F64/isEquivalent
-   (core-matrix->ejml-sparse-matrix [0.0 1.0 0.0 1.0 0.0 1.0 0.0])
-   (.lookupDDRM e "y")
-   0))
-
-(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
-
-(defn load-rdf-into-matrix [resource]
+(defn load-rdf-into-matrix-graph [resource]
   (let [value->id (atom {})
         eid->matrix (atom {})]
     (with-open [in (io/input-stream (io/resource resource))]
@@ -1226,115 +1219,39 @@
                update
                p
                (fn [x]
-                 (let [^DMatrixSparseCSC m  (or x (DMatrixSparseCSC. 1 1))
-                       size (long (max (.getNumRows m)
-                                       (long (dec (count @value->id)))
-                                       (inc (long (get @value->id s)))
-                                       (inc (long (get @value->id o)))))
-                       m (if (> size (.getNumRows m))
-                           (let [m2 (DMatrixSparseCSC. (* 2 size) (* 2 size))]
-                             (CommonOps_DSCC/extract m
-                                                     0
-                                                     (.getNumCols m)
-                                                     0
-                                                     (.getNumRows m)
-                                                     m2
-                                                     0
-                                                     0)
-                             m2)
-                           m)]
-                   (.set m
-                         (int (get @value->id s))
-                         (int (get @value->id o))
-                         1.0)
+                 (let [s-id (long (get @value->id s))
+                       o-id (long (get @value->id o))
+                       size (count @value->id)
+                       m (or x (DMatrixSparseCSC. size size))
+                       m (ensure-matrix-capacity m size 2)]
+                   (.set m s-id o-id 1.0)
                    m)))))
-    (let [max-size (->> (for [[_ ^DMatrixSparseCSC v] @eid->matrix]
-                          (.getNumRows v))
-                        (reduce max))
-          stride 8
-          max-size (bit-and (bit-not (dec stride))
-                            (dec (+ stride (long max-size))))]
-      {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] @eid->matrix
-                               :let [m2 (DMatrixSparseCSC. max-size max-size)]]
-                           (do (CommonOps_DSCC/extract v
-                                                       0
-                                                       (.getNumCols v)
-                                                       0
-                                                       (.getNumRows v)
-                                                       m2
-                                                       0
-                                                       0)
-                               [k (doto m2
-                                    (.shrinkArrays)
-                                    (.sortIndices nil))]))
+    (let [max-size (count @value->id)]
+      {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] @eid->matrix]
+                           [k (ensure-matrix-capacity v max-size 1)])
                          (into {}))
        :value->id @value->id
-       :id->value (into (sorted-map) (clojure.set/map-invert @value->id))
+       :id->value (->> (clojure.set/map-invert @value->id)
+                       (into (sorted-map)))
        :max-size max-size})))
 
-(defn lubm-query-2-with-matrix [{:keys [eid->matrix value->id id->value max-size]}]
-  (let [m_01 (DMatrixSparseCSC. max-size max-size)
-        _ (CommonOps_DSCC/mult
-           (doto (DMatrixSparseCSC. max-size max-size)
-             (.set (get value->id
-                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                          :ub/GraduateStudent))
-                   (get value->id
-                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                          :ub/GraduateStudent))
-                   1.0))
-           (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (crux.rdf/with-prefix :rdf/type))
-                                     nil
-                                     nil)
-           m_01)
-        _ (doto m_01
-            (.shrinkArrays)
-            (.sortIndices nil))
-        m_12 (DMatrixSparseCSC. max-size max-size)
-        _ (CommonOps_DSCC/mult
-           (let [any (CommonOps_DSCC/maxCols (CommonOps_DSCC/transpose m_01
-                                                                       nil
-                                                                       nil)
-
-                                             nil)]
-             (CommonOps_DSCC/diag (.data any)))
-           (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-                                                                          :ub/undergraduateDegreeFrom))
-                                     nil
-                                     nil)
-           m_12)
-        _ (doto m_12
-            (.shrinkArrays)
-            (.sortIndices nil))]
-
-    ;; These are the undergraduateDegreeFrom triples for the
-    ;; GarduateStudent. The filter doesn't work properly, lists everyone.
-    (doseq [r (range (.getNumRows m_12))
-            c (range (.getNumCols m_12))
-            :when (.isAssigned m_12 r c)]
-      (prn (get id->value r) (get id->value c)))
-
-    ;; These are all the graduate students.
-    #_(doseq [r (range (.getNumRows m_01))
-              c (range (.getNumCols m_01))
-              :when (.isAssigned m_01 r c)]
-        (prn (get id->value r) (get id->value c)))
-    m_12))
-
-(def ^:const example-data-artists-resource  "crux/example-data-artists.nt")
-
-(defn print-assigned-values [{:keys [id->value]} ^DMatrixSparseCSC m]
-  (.printNonZero m)
+(defn print-assigned-values [{:keys [id->value]} ^DMatrix m]
+  (if (instance? DMatrixSparse m)
+    (.printNonZero ^DMatrixSparse m)
+    (.print m))
   (doseq [r (range (.getNumRows m))
           c (range (.getNumCols m))
-          :when (and (.isAssigned m r c)
-                     (= 1.0 (.get m r c)))]
-    (prn (get id->value r) (get id->value c))))
+          :when (= 1.0 (.get m r c))]
+    (if (= 1 (.getNumRows m))
+      (prn (get id->value c))
+      (prn (get id->value r) (get id->value c))))
+  (prn))
 
 (defn new-constant-matix ^DMatrixSparseCSC [{:keys [value->id max-size]} & vs]
   (let [m (DMatrixSparseCSC. max-size max-size)]
     (doseq [v vs
-            :let [id (get value->id v)]]
+            :let [id (get value->id v)]
+            :when id]
       (.set m id id 1.0))
     m))
 
@@ -1353,27 +1270,100 @@
   (CommonOps_DSCC/maxCols m nil))
 
 (defn diagonal-matrix ^DMatrixSparseCSC [^DMatrixRMaj v]
-  (CommonOps_DSCC/diag (.data v)))
+  (let [target-size (.getNumCols v)
+        m (DMatrixSparseCSC. target-size target-size)]
+    (doseq [i (range target-size)
+            :let [x (.get v 0 i)]
+            :when (not (zero? x))]
+      (.set m i i x))
+    m))
 
-(defn example-data-artists-with-matrix [{:keys [eid->matrix id->value value->id max-size] :as ctx}]
+(def ^:const example-data-artists-resource "crux/example-data-artists.nt")
+
+(defn example-data-artists-with-matrix [{:keys [eid->matrix id->value value->id max-size] :as graph}]
   (println "== Data")
   (doseq [[k ^DMatrixSparseCSC v] eid->matrix]
     (prn k)
-    (print-assigned-values ctx v)
-    (prn))
+    (print-assigned-values graph v))
 
   (println "== Query")
-  (let [potato-eaters-label (multiply-matrix
-                             (new-constant-matix ctx "The Potato Eaters")
+  (let [ ;; ?x :rdf/label "The Potato Eaters" -- backwards, so
+        ;; transposing adjacency matrix.
+        potato-eaters-label (multiply-matrix
+                             (new-constant-matix graph "The Potato Eaters" "Guernica")
                              (transpose-matrix (:http://www.w3.org/2000/01/rdf-schema#label eid->matrix)))
-        ;; TODO: This doesn't filter the second matrix based on the
-        ;; set values in the first.
-        potato-eaters-mask (->> (transpose-matrix potato-eaters-label)
+        ;; Create mask for subjects. A mask is a diagonal, like the
+        ;; constant matrix. Done to "lift" the new left hand side into
+        ;; "focus".
+        potato-eaters-mask (->> potato-eaters-label ;; TODO: Why transpose here in MAGiQ paper?
                                 (matlab-any-matrix)
                                 (diagonal-matrix))
+        ;; ?y :example/creatorOf ?x -- backwards, so transposing adjacency
+        ;; matrix.
         creator-of (multiply-matrix
                     potato-eaters-mask
-                    (transpose-matrix (:http://example.org/creatorOf eid->matrix)))]
-    (print-assigned-values ctx potato-eaters-label)
-    (print-assigned-values ctx potato-eaters-mask)
-    (print-assigned-values ctx creator-of)))
+                    (transpose-matrix (:http://example.org/creatorOf eid->matrix)))
+        ;; ?y :foaf/firstName ?z -- forwards, so no transpose of adjacency matrix.
+        creator-of-fname (multiply-matrix
+                          (->> creator-of
+                               (matlab-any-matrix)
+                               (diagonal-matrix))
+                          (:http://xmlns.com/foaf/0.1/firstName eid->matrix))]
+    (print-assigned-values graph potato-eaters-label)
+    (print-assigned-values graph potato-eaters-mask)
+    (print-assigned-values graph creator-of)
+    (print-assigned-values graph creator-of-fname)))
+
+
+(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
+
+;; TODO: Doesn't work. Redo based on example-data-artists-with-matrix
+;; example.
+#_(defn lubm-query-2-with-matrix [{:keys [eid->matrix value->id id->value max-size]}]
+    (let [m_01 (DMatrixSparseCSC. max-size max-size)
+          _ (CommonOps_DSCC/mult
+             (doto (DMatrixSparseCSC. max-size max-size)
+               (.set (get value->id
+                          (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                            :ub/GraduateStudent))
+                     (get value->id
+                          (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                            :ub/GraduateStudent))
+                     1.0))
+             (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (crux.rdf/with-prefix :rdf/type))
+                                       nil
+                                       nil)
+             m_01)
+          _ (doto m_01
+              (.shrinkArrays)
+              (.sortIndices nil))
+          m_12 (DMatrixSparseCSC. max-size max-size)
+          _ (CommonOps_DSCC/mult
+             (let [any (CommonOps_DSCC/maxCols (CommonOps_DSCC/transpose m_01
+                                                                         nil
+                                                                         nil)
+
+                                               nil)]
+               (CommonOps_DSCC/diag (.data any)))
+             (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                            :ub/undergraduateDegreeFrom))
+                                       nil
+                                       nil)
+             m_12)
+          _ (doto m_12
+              (.shrinkArrays)
+              (.sortIndices nil))]
+
+      ;; These are the undergraduateDegreeFrom triples for the
+      ;; GarduateStudent. The filter doesn't work properly, lists everyone.
+      (doseq [r (range (.getNumRows m_12))
+              c (range (.getNumCols m_12))
+              :when (.isAssigned m_12 r c)]
+        (prn (get id->value r) (get id->value c)))
+
+      ;; These are all the graduate students.
+      #_(doseq [r (range (.getNumRows m_01))
+                c (range (.getNumCols m_01))
+                :when (.isAssigned m_01 r c)]
+          (prn (get id->value r) (get id->value c)))
+      m_12))
