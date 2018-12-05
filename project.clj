@@ -35,11 +35,8 @@
                                   [criterium "0.4.4"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [net.mikera/core.matrix "0.62.0"]
-                                  [org.ejml/ejml-all "0.37"
-                                   :exclusions [com.google.code.findbugs/jsr305
-                                                org.ejml/ejml-fdense
-                                                org.ejml/ejml-cdense
-                                                org.ejml/ejml-zdense]]]
+                                  [org.ejml/ejml-dsparse "0.37"
+                                   :exclusions [com.google.code.findbugs/jsr305]]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :java-source-paths ["src"]
