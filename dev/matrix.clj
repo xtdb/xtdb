@@ -11,6 +11,7 @@
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
 ;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
+;; gSMat https://arxiv.org/pdf/1807.07691.pdf
 
 (defn square-matrix ^DMatrixSparseCSC [size]
   (DMatrixSparseCSC. size size))
