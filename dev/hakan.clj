@@ -2,12 +2,11 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.java.io :as io]
             [clojure.core.matrix :as m]
+            [clojure.set :as set]
             [crux.rdf :as rdf])
   (:import [org.ejml.data DMatrix DMatrixRMaj
-            DMatrixSparse DMatrixSparseCSC DMatrixSparseTriplet]
-           org.ejml.generic.GenericMatrixOps_F64
-           org.ejml.sparse.csc.CommonOps_DSCC
-           org.ejml.ops.ConvertDMatrixStruct))
+            DMatrixSparse DMatrixSparseCSC]
+           org.ejml.sparse.csc.CommonOps_DSCC))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
 
@@ -1188,8 +1187,11 @@
                     vm)
     m))
 
-(defn resize-matrix [^DMatrixSparseCSC m new-size]
-  (let [grown (DMatrixSparseCSC. new-size new-size)]
+(defn square-matrix ^DMatrixSparseCSC [size]
+  (DMatrixSparseCSC. size size))
+
+(defn resize-matrix [^DMatrixSparse m new-size]
+  (let [grown (square-matrix new-size)]
     (CommonOps_DSCC/extract m
                             0
                             (.getNumCols m)
@@ -1210,40 +1212,39 @@
            (dec (+ stride x))))
 
 (defn load-rdf-into-matrix-graph [resource]
-  (let [value->id (atom {})
-        eid->matrix (atom {})]
-    (with-open [in (io/input-stream (io/resource resource))]
-      (let [{:keys [value->id
-                    eid->matrix]}
-            (->> (rdf/ntriples-seq in)
-                 (map rdf/statement->clj)
-                 (reduce (fn [{:keys [value->id eid->matrix]} [s p o]]
-                           (let [value->id (reduce (fn [value->id v]
-                                                     (update value->id v (fn [x]
-                                                                           (or x (count value->id)))))
-                                                   value->id
-                                                   [s p o])]
-                             {:eid->matrix (update eid->matrix
-                                                   p
-                                                   (fn [x]
-                                                     (let [s-id (long (get value->id s))
-                                                           o-id (long (get value->id o))
-                                                           size (count value->id)
-                                                           m (or x (DMatrixSparseCSC. size size))
-                                                           m (ensure-matrix-capacity m size 2)]
-                                                       (.set m s-id o-id 1.0)
-                                                       m)))
-                              :value->id value->id}))))
-            max-size (round-to-power-of-two (count value->id) 64)]
-        {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] eid->matrix]
-                             [k (ensure-matrix-capacity v max-size 1)])
-                           (into {}))
-         :value->id value->id
-         :id->value (->> (clojure.set/map-invert value->id)
-                         (into (sorted-map)))
-         :max-size max-size}))))
+  (with-open [in (io/input-stream (io/resource resource))]
+    (let [{:keys [value->id
+                  eid->matrix]}
+          (->> (rdf/ntriples-seq in)
+               (map rdf/statement->clj)
+               (reduce (fn [{:keys [value->id eid->matrix]} [s p o]]
+                         (let [value->id (reduce (fn [value->id v]
+                                                   (update value->id v (fn [x]
+                                                                         (or x (count value->id)))))
+                                                 value->id
+                                                 [s p o])]
+                           {:eid->matrix (update eid->matrix
+                                                 p
+                                                 (fn [x]
+                                                   (let [s-id (long (get value->id s))
+                                                         o-id (long (get value->id o))
+                                                         size (count value->id)
+                                                         m (if x
+                                                             (ensure-matrix-capacity x size 2)
+                                                             (square-matrix size))]
+                                                     (doto m
+                                                       (.unsafe_set s-id o-id 1.0)))))
+                            :value->id value->id}))))
+          max-size (round-to-power-of-two (count value->id) 64)]
+      {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] eid->matrix]
+                           [k (ensure-matrix-capacity v max-size 1)])
+                         (into {}))
+       :value->id value->id
+       :id->value (->> (set/map-invert value->id)
+                       (into (sorted-map)))
+       :max-size max-size})))
 
-(defn print-assigned-values [{:keys [id->value]} ^DMatrix m]
+(defn print-assigned-values [{:keys [id->value] :as graph} ^DMatrix m]
   (if (instance? DMatrixSparse m)
     (.printNonZero ^DMatrixSparse m)
     (.print m))
@@ -1255,35 +1256,32 @@
       (prn (get id->value r) (get id->value c))))
   (prn))
 
-(defn new-constant-matix ^DMatrixSparseCSC [{:keys [value->id max-size]} & vs]
-  (let [m (DMatrixSparseCSC. max-size max-size)]
+(defn new-constant-matix ^DMatrixSparseCSC [{:keys [value->id max-size] :as graph} & vs]
+  (let [m (square-matrix max-size)]
     (doseq [v vs
             :let [id (get value->id v)]
             :when id]
-      (.set m id id 1.0))
+      (.unsafe_set m id id 1.0))
     m))
 
 (defn transpose-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
-  (CommonOps_DSCC/transpose m
-                            nil
-                            nil))
+  (CommonOps_DSCC/transpose m nil nil))
 
 (defn multiply-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (let [target-size (max (.getNumRows a) (.getNumRows b))
-        c (DMatrixSparseCSC. target-size target-size)]
-    (CommonOps_DSCC/mult a b c)
-    c))
+  (let [target-size (max (.getNumRows a) (.getNumRows b))]
+    (doto (square-matrix target-size)
+      (->> (CommonOps_DSCC/mult a b)))))
 
 (defn matlab-any-matrix ^DMatrixRMaj [^DMatrixSparseCSC m]
   (CommonOps_DSCC/maxCols m nil))
 
 (defn diagonal-matrix ^DMatrixSparseCSC [^DMatrixRMaj v]
   (let [target-size (.getNumCols v)
-        m (DMatrixSparseCSC. target-size target-size)]
+        m (square-matrix target-size)]
     (doseq [i (range target-size)
             :let [x (.get v 0 i)]
             :when (not (zero? x))]
-      (.set m i i x))
+      (.unsafe_set m i i x))
     m))
 
 (def ^:const example-data-artists-resource "crux/example-data-artists.nt")
