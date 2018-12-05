@@ -1105,18 +1105,18 @@
 ;; This creates a matrix with a single cell set, GradStud, and selects
 ;; the entries in G{type} with this value into M_01 (GradStud- > ?x).
 ;; GradStud and type are ids of predicates I think.
-;; M_01 = sparse([GradStud], [GradStud], [1], N, N) * G{type};
+;; M_01 = sparse([GradStud], [GradStud], [1], N, N) * G{type}';
 
 ;; (def m_01 (m/mmul (matlab-sparse [GradStud] [GradStud] [1.0] n n)
-;;                   (get g type)))
+;;                   (m/transpose (get g type))))
 
 ;; Transposes M_01 (') any returns one for every row with a column set
 ;; and creates a diagonal matrix to select elements from G{uGradFrom}
 ;; based on ?x into M_12 (?x -> ?y).
-;; M_12 = diag(any(M_01')) * G{uGradFrom};
+;; M_12 = diag(any(M_01')) * G{uGradFrom}';
 
 ;; (def m_12 (m/mmul (m/diagonal-matrix (matlab-any (m/transpose m_01)))
-;;                   (get g uGradFrom)))
+;;                   (m/transpose (get g uGradFrom))))
 
 ;; Transposes M_12 and selects like above, navigates from ?y to its types.
 ;; M_24 = diag(any(M_12')) * G{type};
@@ -1131,10 +1131,10 @@
 
 ;; Navigates from ?y to subOrgOf to M_25 (?z -> ?y) as the navigation is
 ;; backwards there's no transpose (I think).
-;; M_25 = diag(any(M_24)) * G{subOrgOf};
+;; M_25 = diag(any(M_24)) * G{subOrgOf}';
 
 ;; (def m_25 (m/mmul (m/diagonal-matrix (matlab-any m_24))
-;;                   (get g subOrgOf)))
+;;                   (m/transpose (get g subOrgOf))))
 
 ;; Updates ?x -> ?y, I think to ensure it contains the same links to
 ;; ?y as M_25 (?z -> ?y).
@@ -1213,7 +1213,7 @@
 
 (defn load-rdf-into-matrix [resource]
   (let [value->id (atom {})
-        id->matrix (atom {})]
+        eid->matrix (atom {})]
     (with-open [in (io/input-stream (io/resource resource))]
       (doseq [[s p o] (map rdf/statement->clj (rdf/ntriples-seq in))]
         (doseq [v [s p o]]
@@ -1222,7 +1222,7 @@
                  v
                  (fn [x]
                    (or x (count @value->id)))))
-        (swap! id->matrix
+        (swap! eid->matrix
                update
                p
                (fn [x]
@@ -1248,22 +1248,75 @@
                          (int (get @value->id o))
                          1.0)
                    m)))))
-    (let [max-size (->> (for [[_ ^DMatrixSparseCSC v] @id->matrix]
+    (let [max-size (->> (for [[_ ^DMatrixSparseCSC v] @eid->matrix]
                           (.getNumRows v))
                         (reduce max))
           stride 1024
           max-size (bit-and (bit-not (dec stride))
                             (dec (+ stride (long max-size))))]
-      {:id->matrix (->> (for [[k ^DMatrixSparseCSC v] @id->matrix
-                              :let [m2 (DMatrixSparseCSC. max-size max-size)]]
-                          (do (CommonOps_DSCC/extract v
-                                                      0
-                                                      (.getNumCols v)
-                                                      0
-                                                      (.getNumRows v)
-                                                      m2
-                                                      0
-                                                      0)
-                              [k m2]))
-                        (into {}))
-       :value->id @value->id})))
+      {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] @eid->matrix
+                               :let [m2 (DMatrixSparseCSC. max-size max-size)]]
+                           (do (CommonOps_DSCC/extract v
+                                                       0
+                                                       (.getNumCols v)
+                                                       0
+                                                       (.getNumRows v)
+                                                       m2
+                                                       0
+                                                       0)
+                               [k (doto m2
+                                    (.shrinkArrays)
+                                    (.sortIndices nil))]))
+                         (into {}))
+       :value->id @value->id
+       :id->value (clojure.set/map-invert @value->id)
+       :max-size max-size})))
+
+(defn lubm-query-2-with-matrix [{:keys [eid->matrix value->id id->value max-size]}]
+  (let [m_01 (DMatrixSparseCSC. max-size max-size)
+        _ (CommonOps_DSCC/mult
+           (doto (DMatrixSparseCSC. max-size max-size)
+             (.set (get value->id
+                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                          :ub/GraduateStudent))
+                   (get value->id
+                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                          :ub/GraduateStudent))
+                   1.0))
+           (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (crux.rdf/with-prefix :rdf/type))
+                                     nil
+                                     nil)
+           m_01)
+        _ (doto m_01
+            (.shrinkArrays)
+            (.sortIndices nil))
+        m_12 (DMatrixSparseCSC. max-size max-size)
+        _ (CommonOps_DSCC/mult
+           (let [any (CommonOps_DSCC/maxCols (CommonOps_DSCC/transpose m_01
+                                                                       nil
+                                                                       nil)
+
+                                             nil)]
+             (CommonOps_DSCC/diag (.data any)))
+           (CommonOps_DSCC/transpose ^DMatrixSparseCSC (get eid->matrix (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+                                                                          :ub/undergraduateDegreeFrom))
+                                     nil
+                                     nil)
+           m_12)
+        _ (doto m_12
+            (.shrinkArrays)
+            (.sortIndices nil))]
+
+    ;; These are the undergraduateDegreeFrom triples for the
+    ;; GarduateStudent. The filter doesn't work properly, lists everyone.
+    (doseq [r (range (.getNumRows m_12))
+            c (range (.getNumCols m_12))
+            :when (.isAssigned m_12 r c)]
+      (prn (get id->value r) (get id->value c)))
+
+    ;; These are all the graduate students.
+    #_(doseq [r (range (.getNumRows m_01))
+              c (range (.getNumCols m_01))
+              :when (.isAssigned m_01 r c)]
+        (prn (get id->value r) (get id->value c)))
+    m_12))
