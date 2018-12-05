@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [clojure.core.matrix :as m]
             [crux.rdf :as rdf])
-  (:import [org.ejml.data DMatrix DMatrixSparseCSC DMatrixSparseTriplet]
+  (:import [org.ejml.data DMatrix DMatrixRMaj DMatrixSparseCSC DMatrixSparseTriplet]
            org.ejml.generic.GenericMatrixOps_F64
            org.ejml.sparse.csc.CommonOps_DSCC
            org.ejml.ops.ConvertDMatrixStruct
@@ -1226,7 +1226,7 @@
                update
                p
                (fn [x]
-                 (let [^DMatrixSparseCSC m  (or x (DMatrixSparseCSC. 1000 1000))
+                 (let [^DMatrixSparseCSC m  (or x (DMatrixSparseCSC. 1 1))
                        size (long (max (.getNumRows m)
                                        (long (dec (count @value->id)))
                                        (inc (long (get @value->id s)))
@@ -1251,7 +1251,7 @@
     (let [max-size (->> (for [[_ ^DMatrixSparseCSC v] @eid->matrix]
                           (.getNumRows v))
                         (reduce max))
-          stride 1024
+          stride 8
           max-size (bit-and (bit-not (dec stride))
                             (dec (+ stride (long max-size))))]
       {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] @eid->matrix
@@ -1269,7 +1269,7 @@
                                     (.sortIndices nil))]))
                          (into {}))
        :value->id @value->id
-       :id->value (clojure.set/map-invert @value->id)
+       :id->value (into (sorted-map) (clojure.set/map-invert @value->id))
        :max-size max-size})))
 
 (defn lubm-query-2-with-matrix [{:keys [eid->matrix value->id id->value max-size]}]
@@ -1320,3 +1320,60 @@
               :when (.isAssigned m_01 r c)]
         (prn (get id->value r) (get id->value c)))
     m_12))
+
+(def ^:const example-data-artists-resource  "crux/example-data-artists.nt")
+
+(defn print-assigned-values [{:keys [id->value]} ^DMatrixSparseCSC m]
+  (.printNonZero m)
+  (doseq [r (range (.getNumRows m))
+          c (range (.getNumCols m))
+          :when (and (.isAssigned m r c)
+                     (= 1.0 (.get m r c)))]
+    (prn (get id->value r) (get id->value c))))
+
+(defn new-constant-matix ^DMatrixSparseCSC [{:keys [value->id max-size]} & vs]
+  (let [m (DMatrixSparseCSC. max-size max-size)]
+    (doseq [v vs
+            :let [id (get value->id v)]]
+      (.set m id id 1.0))
+    m))
+
+(defn transpose-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
+  (CommonOps_DSCC/transpose m
+                            nil
+                            nil))
+
+(defn multiply-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
+  (let [target-size (max (.getNumRows a) (.getNumRows b))
+        c (DMatrixSparseCSC. target-size target-size)]
+    (CommonOps_DSCC/mult a b c)
+    c))
+
+(defn matlab-any-matrix ^DMatrixRMaj [^DMatrixSparseCSC m]
+  (CommonOps_DSCC/maxCols m nil))
+
+(defn diagonal-matrix ^DMatrixSparseCSC [^DMatrixRMaj v]
+  (CommonOps_DSCC/diag (.data v)))
+
+(defn example-data-artists-with-matrix [{:keys [eid->matrix id->value value->id max-size] :as ctx}]
+  (println "== Data")
+  (doseq [[k ^DMatrixSparseCSC v] eid->matrix]
+    (prn k)
+    (print-assigned-values ctx v)
+    (prn))
+
+  (println "== Query")
+  (let [potato-eaters-label (multiply-matrix
+                             (new-constant-matix ctx "The Potato Eaters")
+                             (transpose-matrix (:http://www.w3.org/2000/01/rdf-schema#label eid->matrix)))
+        ;; TODO: This doesn't filter the second matrix based on the
+        ;; set values in the first.
+        potato-eaters-mask (->> (transpose-matrix potato-eaters-label)
+                                (matlab-any-matrix)
+                                (diagonal-matrix))
+        creator-of (multiply-matrix
+                    potato-eaters-mask
+                    (transpose-matrix (:http://example.org/creatorOf eid->matrix)))]
+    (print-assigned-values ctx potato-eaters-label)
+    (print-assigned-values ctx potato-eaters-mask)
+    (print-assigned-values ctx creator-of)))
