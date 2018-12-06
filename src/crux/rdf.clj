@@ -17,7 +17,8 @@
   (:import java.io.StringReader
            java.net.URLDecoder
            javax.xml.datatype.DatatypeConstants
-           [org.eclipse.rdf4j.rio Rio RDFFormat]
+           [org.eclipse.rdf4j.rio RDFHandler]
+           org.eclipse.rdf4j.rio.ntriples.NTriplesParserFactory
            [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
            org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil
            [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
@@ -109,12 +110,13 @@
 
   BNode
   (rdf->clj [this]
-    (bnode->kw this)))
+    (bnode->kw this))
 
-(defn statement->clj [^Statement statement]
-  [(rdf->clj (.getSubject statement))
-   (rdf->clj (.getPredicate statement))
-   (rdf->clj (.getObject statement))])
+  Statement
+  (rdf->clj [this]
+    [(rdf->clj (.getSubject this))
+     (rdf->clj (.getPredicate this))
+     (rdf->clj (.getObject this))]))
 
 (defn use-default-language [rdf-map language]
   (w/postwalk (fn [x]
@@ -165,28 +167,39 @@
   (str/replace s missing-lang-string ""))
 
 (defn parse-ntriples-str [s]
-  (Rio/parse (StringReader. s)
-             ""
-             RDFFormat/NTRIPLES
-             empty-resource-array))
+  (let [parser (.getParser (NTriplesParserFactory.))
+        statements (atom [])]
+    (.setRDFHandler parser (reify RDFHandler
+                             (startRDF [_])
+                             (endRDF [_])
+                             (handleComment [_ _])
+                             (handleNamespace [_ ns _])
+                             (handleStatement [_ s]
+                               (swap! statements conj s))))
+    (.parse parser (StringReader. s) "")
+    @statements))
 
 (defn ntriples-seq [in]
   (->> (line-seq (io/reader in))
        (map patch-missing-lang-string)
-       (partition-by #(re-find #"<.+?>" %))
+       (partition-by (fn [^String line]
+                       (if-let [idx (or (str/index-of line \space)
+                                        (str/index-of line \tab))]
+                         (subs line 0 (inc idx))
+                         line)))
        (partition-all 100)
-       (map (fn [entity-lines]
-              (let [lines (apply concat entity-lines)]
-                (try
-                  (parse-ntriples-str (str/join "\n" lines))
-                  (catch Exception e
-                    (->> (for [lines entity-lines]
-                           (try
-                             (log/debug e "Could not parse block of entities, parsing one by one.")
-                             (parse-ntriples-str (str/join "\n" lines))
-                             (catch Exception e
-                               (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
-                         (apply concat)))))))
+       (pmap (fn [entity-lines]
+               (let [lines (apply concat entity-lines)]
+                 (try
+                   (parse-ntriples-str (str/join "\n" lines))
+                   (catch Exception e
+                     (->> (for [lines entity-lines]
+                            (try
+                              (log/debug e "Could not parse block of entities, parsing one by one.")
+                              (parse-ntriples-str (str/join "\n" lines))
+                              (catch Exception e
+                                (log/debug e "Could not parse entity:" (str/join "\n" lines)))))
+                          (apply concat)))))))
        (apply concat)))
 
 (def ^:dynamic *ntriples-log-size* 100000)
