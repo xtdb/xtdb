@@ -46,7 +46,8 @@
 ;; "Elapsed time: 2472368.881591 msecs"
 
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
-(def ^:const watdiv-queries nil)
+(def ^:const watdiv-num-queries nil)
+(def ^:const watdiv-indexes nil)
 
 (def run-watdiv-tests? (and false (boolean (io/resource watdiv-triples-resource))))
 
@@ -86,18 +87,28 @@
   (if run-watdiv-tests?
     (time
      (with-open [desc-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.desc"))
-                 sparql-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.sparql"))]
+                 sparql-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.sparql"))
+                 out (io/writer (io/file (format "target/watdiv_%s.edn" (System/currentTimeMillis))))]
+       (.write out "[\n")
        (doseq [[idx [d q]] (->> (cond->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                               watdiv-queries (take watdiv-queries))
-                                (map-indexed vector))]
-         (println idx)
-         (time
-          (t/is (count (try
-                         (q/q (q/db f/*kv*)
-                              (sparql/sparql->datalog q))
-                         (catch Throwable t
-                           (println "Failed query:")
-                           (println q)
-                           (println t)
-                           (throw t)))))))))
+                                  watdiv-num-queries (take watdiv-num-queries))
+                                (map-indexed vector))
+               :when (or (nil? watdiv-indexes)
+                         (contains? watdiv-indexes idx))
+               :let [start-time (System/currentTimeMillis)]]
+         (.write out "{")
+         (.write out (str ":idx " (pr-str idx) "\n"))
+         (t/is (try
+                 (.write out (str ":query " (pr-str q) "\n"))
+                 (.write out (str ":results " (pr-str (count (q/q (q/db f/*kv*)
+                                                                  (sparql/sparql->datalog q))))
+                                  "\n"))
+                 true
+                 (catch Throwable t
+                   (.write out (str ":error " (pr-str (str t)) "\n"))
+                   (throw t))))
+         (.write out (str ":time " (pr-str (-  (System/currentTimeMillis) start-time))))
+         (.write out "}\n")
+         (.flush out))
+       (.write out "]")))
     (t/is true "skipping")))
