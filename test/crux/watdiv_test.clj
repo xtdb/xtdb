@@ -45,10 +45,18 @@
 ;; Ran 12401 assertions, in 1 test functions
 ;; 518 errors
 
-;; Second test run, with -Xmss10Mb, from lein:
+;; Second test run, with -Xmss10M, from lein:
 ;; "Elapsed time: 3255993.121931 msecs"
 ;; Ran 1 tests containing 12401 assertions.
 ;; 0 failures, 186 errors.
+
+;; Thrid test run, with -Xmss32M, from lein trampoline:
+;; lein test crux.watdiv-test
+;; "Elapsed time: 130545.461865 msecs"
+;; "Elapsed time: 3729324.4121 msecs"
+
+;; Ran 1 tests containing 12401 assertions.
+;; 0 failures, 0 errors.
 
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
 (def ^:const watdiv-num-queries nil)
