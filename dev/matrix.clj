@@ -51,7 +51,7 @@
     (let [{:keys [value->id
                   eid->matrix]}
           (->> (rdf/ntriples-seq in)
-               (map rdf/statement->clj)
+               (map rdf/rdf->clj)
                (reduce (fn [{:keys [value->id eid->matrix]} [s p o]]
                          (let [value->id (reduce (fn [value->id v]
                                                    (update value->id v (fn [x]
