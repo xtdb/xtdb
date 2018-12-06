@@ -38,7 +38,7 @@
                                                   :where [[e :name \"Ivan\"]]}"))))
 
         (t/testing "query vector"
-          (t/is (= #{[:ivan]} (.q (.db f/*api*) '[:find [e]
+          (t/is (= #{[:ivan]} (.q (.db f/*api*) '[:find e
                                                   :where [e :name "Ivan"]]))))
 
         (t/testing "malformed query"

@@ -930,9 +930,7 @@
   (cond
     (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
                                             (partition-all 2 ))]
-                           [k (if (= :where k)
-                                (vec v)
-                                (first v))]))
+                           [k (vec v)]))
     (string? q) (edn/read-string q)
     :else
     q))
