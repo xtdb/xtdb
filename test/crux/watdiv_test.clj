@@ -40,10 +40,15 @@
 ;; wc -l test/watdiv/watdiv-stress-100/test.1.sparql
 ;; 12400 test/watdiv/watdiv-stress-100/test.1.sparql
 
+;; "Elapsed time: 2472368.881591 msecs"
 ;; Tested 1 namespaces
 ;; Ran 12401 assertions, in 1 test functions
 ;; 518 errors
-;; "Elapsed time: 2472368.881591 msecs"
+
+;; Second test run, with -Xmss10Mb, from lein:
+;; "Elapsed time: 3255993.121931 msecs"
+;; Ran 1 tests containing 12401 assertions.
+;; 0 failures, 186 errors.
 
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
 (def ^:const watdiv-num-queries nil)
