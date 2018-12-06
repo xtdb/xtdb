@@ -11,12 +11,10 @@
             [crux.lru :as lru]
             [crux.tx :as tx]
             [clojure.string :as str])
-  (:import [clojure.lang IPersistentMap IRecord]
+  (:import clojure.lang.IPersistentMap
            [java.io Closeable Reader]
            java.net.InetAddress
            java.util.Properties))
-
-(declare require-and-ensure-kv-record)
 
 (def cli-options
   [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
@@ -38,35 +36,27 @@
     :parse-fn #(Long/parseLong %)]
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
-   ["-k" "--kv-backend KV_BACKEND" "KV storage backend:
-   crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
+   ["-k" "--kv-backend KV_BACKEND" "KV storage backend: crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
     :default "crux.kv.rocksdb.RocksKv"
-    :validate [#'require-and-ensure-kv-record "Unknown storage backend"]]
+    :validate [kv/require-and-ensure-kv-record "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
 
    ["-h" "--help"]])
 
-(s/def ::tx-topic :crux.kafka/topic)
-(s/def ::doc-topic :crux.kafka/topic)
-(s/def ::doc-partitions :crux.kafka/partitions)
-(s/def ::create-topics boolean?)
-(s/def ::replication-factor :crux.kafka/replication-factor)
-(s/def ::db-dir string?)
-(s/def ::kv-backend #'require-and-ensure-kv-record)
-(s/def ::server-port :crux.io/port)
+(s/def :crux.http-server/server-port :crux.io/port)
 
 (s/def ::options (s/keys :opt-un [:crux.kafka/bootstrap-servers
                                   :crux.kafka/group-id
-                                  ::tx-topic
-                                  ::doc-topic
-                                  ::doc-partitions
-                                  ::create-topics
-                                  ::replication-factor
-                                  ::db-dir
-                                  ::kv-backend
-                                  ::server-port]))
+                                  :crux.kafka/tx-topic
+                                  :crux.kafka/doc-topic
+                                  :crux.kafka/doc-partitions
+                                  :crux.kaka/create-topics
+                                  :crux.kafka/replication-factor
+                                  :crux.kv/db-dir
+                                  :crux.kv/kv-backend
+                                  :crux.http-server/server-port]))
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
 
@@ -84,29 +74,15 @@
     (pp/print-table (for [[k v] options]
                       {:key k :value v}))))
 
-(defn- require-and-ensure-kv-record [record-class-name]
-  (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
-    (require (symbol record-ns))
-    (let [record-class ^Class (resolve (symbol record-class-name))]
-      (and (extends? kv/KvStore record-class)
-           (.isAssignableFrom ^Class IRecord record-class)))))
-
-(s/def ::kv-store-options (s/keys :req-un [::db-dir
-                                           ::kv-backend]))
-
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend]
                                           :as options}]
-  (when (s/invalid? (s/conform ::kv-store-options options))
-    (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str ::kv-store-options options)))))
-  (require-and-ensure-kv-record kv-backend)
-  (let [record-class ^Class (resolve (symbol kv-backend))
-        kv (.invoke (.getMethod record-class "create"
+  (let [kv-record-class (kv/require-and-ensure-kv-record kv-backend)
+        kv (.invoke (.getMethod kv-record-class "create"
                                 (into-array [clojure.lang.IPersistentMap]))
-                    nil (object-array [{:db-dir db-dir}]))]
-    (->> (lru/new-cache-providing-kv-store kv)
-         (kv/open))))
+                    nil (object-array [{}]))]
+    (-> (lru/new-cache-providing-kv-store kv)
+        (kv/open options))))
 
 (defn- read-kafka-properties-file [f]
   (when f

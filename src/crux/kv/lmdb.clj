@@ -5,6 +5,7 @@
   including native dependencies."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.io :as cio]
             [crux.kv :as kv])
@@ -165,14 +166,23 @@
   (close [_]
     (.close tx)))
 
+(s/def ::env-flags pos-int?)
+
+(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+                         :opt [::env-flags]))
+
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this]
+  (open [this {:keys [db-dir crux.kv.lmdb/env-flags] :as options}]
+    (when (s/invalid? (s/conform ::options options))
+      (throw (IllegalArgumentException.
+              (str "Invalid options: " (s/explain-str ::options options)))))
     (let [env-flags (or env-flags default-env-flags)
           env (env-create)]
       (try
         (env-open env db-dir env-flags)
         (assoc this
+               :db-dir db-dir
                :env env
                :env-flags env-flags
                :dbi (dbi-open env))

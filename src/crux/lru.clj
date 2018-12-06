@@ -114,8 +114,8 @@
 ;; to the lower levels.
 (defrecord CacheProvidingKvStore [kv cache-state]
   kv/KvStore
-  (open [this]
-    (assoc this :kv (kv/open kv)))
+  (open [this options]
+    (assoc this :kv (kv/open kv options)))
 
   (new-snapshot [_]
     (new-cached-snapshot (kv/new-snapshot kv) true))

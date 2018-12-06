@@ -12,24 +12,24 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.rdf :as rdf])
-  (:import crux.api.LocalNode
+  (:import [crux.api LocalNode ICruxSystem]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
            java.io.Closeable))
 
 (def storage-dir "dev-storage")
-(def dev-options {:db-dir (str storage-dir "/data")
-                  :zookeeper-data-dir (str storage-dir "/zookeeper")
-                  :kafka-log-dir (str storage-dir "/kafka-log")
-                  :embed-kafka? true
-                  :kafka-port 9092
+(def dev-options {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+                  :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+                  :crux.kafka.embedded/kafka-port 9092
+                  :dev/embed-kafka? true
+                  :dev/http-server? true
+                  :db-dir (str storage-dir "/data")
                   :bootstrap-servers "localhost:9092"
-                  :http-server? true
                   :server-port 3000})
 
-(def system)
+(def ^ICruxSystem system)
 
-(defn start-dev-system ^crux.api.LocalNode [{:keys [embed-kafka? http-server?] :as options}]
+(defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server?] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?

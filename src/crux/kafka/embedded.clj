@@ -59,16 +59,16 @@
     (stop-zookeeper zookeeper)))
 
 (s/def ::zookeeper-data-dir string?)
+(s/def ::zookeeper-port :crux.io/port)
 (s/def ::kafka-log-dir string?)
-(s/def ::zk-port :crux.io/port)
 (s/def ::kafka-port :crux.io/port)
 (s/def ::broker-config (s/map-of string? string?))
 
-(s/def ::options (s/keys :req-un [::zookeeper-data-dir
-                                  ::kafka-log-dir]
-                         :opt-un [::zk-port
-                                  ::kafka-port
-                                  ::broker-config]))
+(s/def ::options (s/keys :req [::zookeeper-data-dir
+                               ::kafka-log-dir]
+                         :opt [::zookeeper-port
+                               ::kafka-port
+                               ::broker-config]))
 
 (defn start-embedded-kafka
   "Starts ZooKeeper and Kafka locally. This can be used to run Crux in a
@@ -82,7 +82,7 @@
   NOTE: requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
   ^crux.kafka.embedded.EmbeddedKafka
-  [{:keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
+  [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
     :or {zookeeper-port default-zookeeper-port
          kafka-port default-kafka-port}
     :as options}]

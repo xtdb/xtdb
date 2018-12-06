@@ -3,6 +3,7 @@
 
   Requires org.rocksdb/rocksdbjni on the classpath."
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [crux.kv :as kv])
   (:import java.io.Closeable
            clojure.lang.MapEntry
@@ -46,11 +47,19 @@
     (.close read-options)
     (.releaseSnapshot db snapshot)))
 
+(s/def ::db-options #(instance? Options %))
+
+(s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+                         :opt [::db-options]))
+
 (defrecord RocksKv [db-dir]
   kv/KvStore
-  (open [this]
+  (open [this {:keys [db-dir ^Options crux.kv.rocksdb/db-options] :as options}]
     (RocksDB/loadLibrary)
-    (let [opts (doto (Options.)
+    (when (s/invalid? (s/conform ::options options))
+      (throw (IllegalArgumentException.
+              (str "Invalid options: " (s/explain-str ::options options)))))
+    (let [opts (doto (or db-options (Options.))
                  (.setCompressionType CompressionType/LZ4_COMPRESSION)
                  (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                  (.setCreateIfMissing true))
@@ -60,8 +69,12 @@
                (catch Throwable t
                  (.close opts)
                  (throw t)))]
-      (assoc this :db db :options opts :write-options (doto (WriteOptions.)
-                                                        (.setDisableWAL true)))))
+      (assoc this
+             :db-dir db-dir
+             :db db
+             :options opts
+             :write-options (doto (WriteOptions.)
+                              (.setDisableWAL true)))))
 
   (new-snapshot [{:keys [^RocksDB db]}]
     (let [snapshot (.getSnapshot db)]

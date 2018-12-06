@@ -110,10 +110,11 @@
                         (write-kafka-meta-properties ek/*broker-id*))
         kafka-port (cio/free-port)]
     (try
-      (with-open [embedded-kafka (ek/start-embedded-kafka {:zookeeper-data-dir (str zookeeper-data-dir)
-                                                           :zookeeper-port zookeeper-port
-                                                           :kafka-log-dir (str kafka-log-dir)
-                                                           :kafka-port kafka-port})
+      (with-open [embedded-kafka (ek/start-embedded-kafka
+                                  #:crux.kafka.embedded{:zookeeper-data-dir (str zookeeper-data-dir)
+                                                        :zookeeper-port zookeeper-port
+                                                        :kafka-log-dir (str kafka-log-dir)
+                                                        :kafka-port kafka-port})
                   admin-client (k/create-admin-client
                                 {"bootstrap.servers" (get-in embedded-kafka [:options :bootstrap-servers])})]
         (binding [*admin-client* admin-client

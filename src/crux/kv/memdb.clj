@@ -1,8 +1,9 @@
 (ns crux.kv.memdb
   "In-memory KV backend for Crux."
-  (:require [crux.byte-utils :as bu]
-            [crux.kv :as kv]
+  (:require [clojure.spec.alpha :as s]
             [clojure.java.io :as io]
+            [crux.byte-utils :as bu]
+            [crux.kv :as kv]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable))
 
@@ -46,12 +47,21 @@
   Closeable
   (close [_]))
 
+(s/def ::persist-on-close? boolean?)
+
+(s/def ::options (s/keys :opt-un [:crux.kv/db-dir]
+                         :opt [::persist-on-close?]))
+
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
-  (open [this]
-    (if (.isFile (io/file db-dir "memdb"))
-      (assoc this :db (atom (restore-db db-dir)))
-      (assoc this :db (atom (sorted-map-by bu/bytes-comparator)))))
+  (open [this {:keys [db-dir crux.memdb.kv/persist-on-close?] :as options}]
+    (when (s/invalid? (s/conform ::options options))
+      (throw (IllegalArgumentException.
+              (str "Invalid options: " (s/explain-str ::options options)))))
+    (let [this (assoc this :db-dir db-dir :persist-on-close? persist-on-close?)]
+      (if (.isFile (io/file db-dir "memdb"))
+        (assoc this :db (atom (restore-db db-dir)))
+        (assoc this :db (atom (sorted-map-by bu/bytes-comparator))))))
 
   (new-snapshot [_]
     (->MemKvSnapshot @db))

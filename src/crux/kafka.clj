@@ -21,6 +21,11 @@
 (s/def ::partitions pos-int?)
 (s/def ::replication-factor pos-int?)
 
+(s/def ::tx-topic ::topic)
+(s/def ::doc-topic ::topic)
+(s/def ::doc-partitions ::partitions)
+(s/def ::create-topics boolean?)
+
 (def default-producer-config
   {"enable.idempotence" "true"
    "acks" "all"
