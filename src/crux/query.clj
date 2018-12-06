@@ -1,8 +1,9 @@
 (ns crux.query
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.edn :as edn]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.walk :as w]
+            [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
             [crux.byte-utils :as bu]
             [crux.codec :as c]
@@ -925,9 +926,21 @@
                              (= :desc direction) -))
                      order-by))))))))
 
+(defn normalize-query [q]
+  (cond
+    (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
+                                            (partition-all 2 ))]
+                           [k (if (= :where k)
+                                (vec v)
+                                (first v))]))
+    (string? q) (edn/read-string q)
+    :else
+    q))
+
 (defn q
   ([{:keys [kv] :as db} q]
-   (let [start-time (System/currentTimeMillis)]
+   (let [start-time (System/currentTimeMillis)
+         q (normalize-query q)]
      (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
@@ -937,8 +950,9 @@
          (log/debug :query-result-size (count result))
          result))))
   ([{:keys [object-store] :as db} snapshot q]
-   (log/debug :query (pr-str q))
-   (let [{:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform :crux.query/query q)]
+   (let [q (normalize-query q)
+         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform :crux.query/query q)]
+     (log/debug :query (pr-str q))
      (when (s/invalid? q-conformed)
        (throw (IllegalArgumentException.
                (str "Invalid input: " (s/explain-str :crux.query/query q)))))

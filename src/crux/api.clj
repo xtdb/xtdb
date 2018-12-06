@@ -230,13 +230,13 @@
     (->RemoteSnapshot (atom [])))
 
   (q [this q]
-    (api-request-sync (str url "/query") (assoc q
+    (api-request-sync (str url "/query") (assoc (q/normalize-query q)
                                                 :business-time business-time
                                                 :transact-time transact-time)))
 
   (q [this snapshot q]
     (let [in (api-request-sync (str url "/query-stream")
-                               (assoc q
+                               (assoc (q/normalize-query q)
                                       :business-time business-time
                                       :transact-time transact-time)
                                {:as :stream})]

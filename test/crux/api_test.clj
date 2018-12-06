@@ -33,6 +33,14 @@
         (t/is (= #{} (.q (.db f/*api* #inst "1999") '{:find [e]
                                                       :where [[e :name "Ivan"]]})))
 
+        (t/testing "query string"
+          (t/is (= #{[:ivan]} (.q (.db f/*api*) "{:find [e]
+                                                  :where [[e :name \"Ivan\"]]}"))))
+
+        (t/testing "query vector"
+          (t/is (= #{[:ivan]} (.q (.db f/*api*) '[:find [e]
+                                                  :where [e :name "Ivan"]]))))
+
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
                                   #"(status 400|Invalid input)"

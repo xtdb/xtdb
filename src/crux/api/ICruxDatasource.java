@@ -38,17 +38,17 @@ public interface ICruxDatasource {
     /**
      * Queries the db.
      *
-     * @param query the query.
+     * @param query the query in map, vector or string form.
      * @return      a set of result tuples.
      */
-    public Set<List> q(Map query);
+    public Set<List> q(Object query);
 
     /**
      * Queries the db lazily.
      *
      * @param snapshot a snapshot from {@link #newSnapshot()]}.
-     * @param query    the query.
+     * @param query    the query in map, vector or string form.
      * @return         a lazy sequence of result tuples.
      */
-    public Iterable<List> q(Closeable snapshot, Map query);
+    public Iterable<List> q(Closeable snapshot, Object query);
 }
