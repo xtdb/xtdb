@@ -123,6 +123,21 @@
     :else
     (.db local-node)))
 
+(defn- streamed-edn-response [^Closeable ctx edn]
+  (try
+    (->> (rio/piped-input-stream
+          (fn [out]
+            (with-open [ctx ctx
+                        out (io/writer out)]
+              (.write out "(")
+              (doseq [x edn]
+                (.write out (pr-str x)))
+              (.write out ")"))))
+         (response 200 {"Content-Type" "application/edn"}))
+    (catch Throwable t
+      (.close ctx)
+      (throw t))))
+
 (defn- query [^ICruxSystem local-node request]
   (let [query-map (param request "q")]
     (success-response
@@ -134,20 +149,7 @@
         db (db-for-request local-node query-map)
         snapshot (.newSnapshot db)
         result (.q db snapshot (dissoc query-map :business-time :transact-time))]
-    (try
-      (response 200
-                {"Content-Type" "application/edn"}
-                (rio/piped-input-stream
-                 (fn [out]
-                   (with-open [out (io/writer out)
-                               snapshot snapshot]
-                     (.write out "(")
-                     (doseq [tuple result]
-                       (.write out (pr-str tuple)))
-                     (.write out ")")))))
-      (catch Throwable t
-        (.close snapshot)
-        (throw t)))))
+    (streamed-edn-response snapshot result)))
 
 (defn- entity [^ICruxSystem local-node request]
   (let [body (param request "entity")]
@@ -165,6 +167,11 @@
   (let [tx-ops (param request)]
     (success-response
      (.submitTx local-node tx-ops))))
+
+(defn- tx-log [^ICruxSystem local-node request]
+  (let [ctx (.newTxLogContext local-node)
+        result (.txLog local-node ctx)]
+    (streamed-edn-response ctx result)))
 
 ;; ---------------------------------------------------
 ;; Jetty server
@@ -194,6 +201,9 @@
 
     (check-path request ["/tx-log"] [:post])
     (transact local-node request)
+
+    (check-path request ["/tx-log"] [:get])
+    (tx-log local-node request)
 
     (check-path request ["/sparql/"] [:get :post])
     (sparql-protocol/sparql-query local-node request)

@@ -75,4 +75,22 @@ public interface ICruxSystem extends Closeable {
      * @return            true if the entity was updated in this transaction.
      */
     public boolean hasSubmittedTxUpdatedEntity(Map submittedTx, Object eid);
+
+
+    /**
+     * Returns a new transaction log context allowing for lazy reading
+     * of the transaction log in a try-with-resources block using
+     * {@link #txLog(Closeable txLogContext)}.
+     *
+     * @return an implementation specific snapshot
+     */
+    public Closeable newTxLogContext();
+
+    /**
+     * Reads the transaction log lazily.
+     *
+     * @param snapshot a snapshot from {@link #newSnapshot()]}.
+     * @return         a lazy sequence of the transaction log.
+     */
+    public Iterable<List> txLog(Closeable txLogContext);
 }

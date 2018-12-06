@@ -27,9 +27,9 @@ public interface ICruxDatasource {
     public Map entityTx(Object eid);
 
     /**
-     * Returns a new snapshot for usage with q, allowing for lazy
-     * results in a try-with-resources block for {@link #q(Closeable
-     * snapshot, Map query)}.
+     * Returns a new snapshot allowing for lazy query results in a
+     * try-with-resources block using {@link #q(Closeable snapshot,
+     * Map query)}.
      *
      * @return an implementation specific snapshot
      */

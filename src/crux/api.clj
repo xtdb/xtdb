@@ -46,6 +46,12 @@
   (hasSubmittedTxUpdatedEntity [_ submitted-tx eid]
     (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
 
+  (newTxLogContext [_]
+    (db/new-tx-log-context tx-log))
+
+  (txLog [_ tx-log-context]
+    (db/tx-log tx-log tx-log-context))
+
   Closeable
   (close [_]
     (deliver close-promise true)))
@@ -124,6 +130,12 @@
 
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxUpdatedEntity ^LocalNode (map->LocalNode this) submitted-tx eid))
+
+  (newTxLogContext [this]
+    (.newTxLogContext ^LocalNode (map->LocalNode this)))
+
+  (txLog [this tx-log-context]
+    (.txLog ^LocalNode (map->LocalNode this) tx-log-context))
 
   Closeable
   (close [_]
@@ -205,13 +217,13 @@
        :else
        (throw (ex-info (str "HTTP status " status) result))))))
 
-(defrecord RemoteSnapshot [streams-state]
+(defrecord RemoteApiStream [streams-state]
   Closeable
   (close [_]
     (doseq [stream @streams-state]
       (.close ^Closeable stream))))
 
-(defn- register-stream-with-remote-snapshot! [snapshot in]
+(defn- register-stream-with-remote-stream! [snapshot in]
   (swap! (:streams-state snapshot) conj in))
 
 (defrecord RemoteDatasource [url business-time transact-time]
@@ -227,7 +239,7 @@
                                               :transact-time transact-time}))
 
   (newSnapshot [this]
-    (->RemoteSnapshot (atom [])))
+    (->RemoteApiStream (atom [])))
 
   (q [this q]
     (api-request-sync (str url "/query") (assoc (q/normalize-query q)
@@ -240,7 +252,7 @@
                                       :business-time business-time
                                       :transact-time transact-time)
                                {:as :stream})]
-      (register-stream-with-remote-snapshot! snapshot in)
+      (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in))))
 
 (defrecord RemoteApiClient [url]
@@ -268,6 +280,17 @@
 
   (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
     (= tx-id (:crux.tx/tx-id (.entityTx (.db this tx-time tx-time) eid))))
+
+  (newTxLogContext [_]
+    (->RemoteApiStream (atom [])))
+
+  (txLog [_ tx-log-context]
+    (let [in (api-request-sync (str url "/tx-log")
+                               nil
+                               {:method :get
+                                :as :stream})]
+      (register-stream-with-remote-stream! tx-log-context in)
+      (edn-list->lazy-seq in)))
 
   Closeable
   (close [_]))
