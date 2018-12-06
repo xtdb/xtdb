@@ -174,28 +174,33 @@
                             (throw e)))))
          (take-while #(not= ::eof %)))))
 
-(def ^:private internal-http-request
+(def ^{:doc "Can be rebound using binding or alter-var-root to a
+  function that takes a request map and returns a response
+  map. The :body for POSTs will be provided as an EDN string by the
+  caller. Should return the result body as a string by default, or as
+  a stream when the :as :stream option is set.
+
+  Will be called with :url, :method, :body, :headers and
+  optionally :as with the value :stream.
+
+  Expects :body, :status, :error and :headers in the response map.
+
+  Defaults to using clj-http or http-kit if available."
+       :dynamic true}
+  *internal-http-request-fn*
   (or (try
         (require 'clj-http.client)
         (let [f (resolve 'clj-http.client/request)]
-          (fn [url body opts]
-            (f (merge {:url url
-                       :method :post
-                       :body (some-> body pr-str)
-                       :as "UTF-8"}
-                      opts))))
+          (fn [opts]
+            (f (merge {:as "UTF-8"} opts))))
         (catch IOException not-found))
       (try
         (require 'org.httpkit.client)
         (let [f (resolve 'org.httpkit.client/request)]
-          (fn [url body opts]
-            @(f (merge {:url url
-                        :method :post
-                        :body (some-> body pr-str)
-                        :as :text}
-                       opts))))
+          (fn [opts]
+            @(f (merge {:as :text} opts))))
         (catch IOException not-found))
-      (fn [_ _ _]
+      (fn [_]
         (throw (IllegalStateException. "No supported HTTP client found.")))))
 
 (defn- api-request-sync
@@ -204,7 +209,12 @@
   ([url body opts]
    (let [{:keys [body error status headers]
           :as result}
-         (internal-http-request url body opts)]
+         (*internal-http-request-fn* (merge {:url url
+                                             :method :post
+                                             :headers (when body
+                                                        {"Content-Type" "application/edn"})
+                                             :body (some-> body pr-str)}
+                                            opts))]
      (cond
        error
        (throw error)
