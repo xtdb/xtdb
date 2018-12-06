@@ -33,6 +33,7 @@
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
+                                  [datascript "0.16.9"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]]
