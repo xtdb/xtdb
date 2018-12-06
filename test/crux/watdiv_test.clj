@@ -22,6 +22,29 @@
 ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2
 ;; https://dsg.uwaterloo.ca/watdiv/stress-workloads.tar.gz
 
+;; First test run:
+
+;; WatDiv 10M:
+;; wc -l test/watdiv/watdiv.10M.nt
+;; 10916457 test/watdiv/watdiv.10M.nt
+;; du -hs test/watdiv/watdiv.10M.nt
+;; 1.5G	test/watdiv/watdiv.10M.nt
+
+;; Ingest:
+;; "Elapsed time: 136125.904116 msecs"
+;; du -hs /tmp/kafka-log* /tmp/kv-store*
+;; 672M	/tmp/kafka-log1198983040100044874
+;; 192M	/tmp/kv-store1625659699196661317
+
+;; Query:
+;; wc -l test/watdiv/watdiv-stress-100/test.1.sparql
+;; 12400 test/watdiv/watdiv-stress-100/test.1.sparql
+
+;; Tested 1 namespaces
+;; Ran 12401 assertions, in 1 test functions
+;; 518 errors
+;; "Elapsed time: 2472368.881591 msecs"
+
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
 (def ^:const watdiv-queries nil)
 
@@ -64,9 +87,17 @@
     (time
      (with-open [desc-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.desc"))
                  sparql-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.sparql"))]
-       (doseq [[d q] (cond->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                       watdiv-queries (take watdiv-queries))]
+       (doseq [[idx [d q]] (->> (cond->> (map vector (line-seq desc-in) (line-seq sparql-in))
+                               watdiv-queries (take watdiv-queries))
+                                (map-indexed vector))]
+         (println idx)
          (time
-          (t/is (count (q/q (q/db f/*kv*)
-                            (sparql/sparql->datalog q))))))))
+          (t/is (count (try
+                         (q/q (q/db f/*kv*)
+                              (sparql/sparql->datalog q))
+                         (catch Throwable t
+                           (println "Failed query:")
+                           (println q)
+                           (println t)
+                           (throw t)))))))))
     (t/is true "skipping")))
