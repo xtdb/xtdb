@@ -16,7 +16,7 @@
            [org.eclipse.rdf4j.query.algebra
             And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
             Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Order OrderElem Projection QueryModelNode
-            Regex Slice StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
+            Regex SameTerm Slice StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
@@ -88,8 +88,12 @@
 
   Filter
   (rdf->clj [this]
-    (vec (concat (rdf/rdf->clj (.getArg this))
-                 (rdf/rdf->clj (.getCondition this)))))
+    (let [smap (when (instance? SameTerm (.getCondition this))
+                 (let [same-term ^SameTerm (.getCondition this)]
+                   {(rdf/rdf->clj (.getLeftArg same-term))
+                    (rdf/rdf->clj (.getRightArg same-term))}))]
+      (vec (concat (w/postwalk-replace smap (rdf/rdf->clj (.getArg this)))
+                   (rdf/rdf->clj (.getCondition this))))))
 
   FunctionCall
   (rdf->clj [this]
@@ -203,6 +207,9 @@
                                  (str "(?" flags ")"))
                                (rdf/rdf->clj (.getPatternArg this)))))
             (rdf/rdf->clj (.getArg this)))]])
+
+  SameTerm
+  (rdf->clj [this])
 
   Slice
   (rdf->clj [this]
