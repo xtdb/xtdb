@@ -11,7 +11,7 @@
 :highlightjsdir: highlight
 :source-highlighter: highlightjs
 
-A Clojure graph database currently sitting on top of RocksDB or LMDB, and Kafka.
+image::crux-banner.png[]
 
 == Introduction
 
