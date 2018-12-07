@@ -1,5 +1,4 @@
 = Crux
-0.1, 2018-08-10
 :toc: left
 :toclevels: 4
 :docinfo: shared
