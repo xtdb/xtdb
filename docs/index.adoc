@@ -1,6 +1,7 @@
 = Crux
 :toc: left
 :toclevels: 4
+:toc-title:
 :docinfo: shared
 :sectnumlevels: 0
 :xrefstyle: short
