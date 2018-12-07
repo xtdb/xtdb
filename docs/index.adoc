@@ -9,6 +9,7 @@
 :highlightjs-theme: tomorrow-night
 :highlightjsdir: highlight
 :source-highlighter: highlightjs
+:notitle:
 
 image::crux-banner.png[]
 

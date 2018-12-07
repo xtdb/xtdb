@@ -131,7 +131,7 @@ meta.foundation-mq-large { font-family: "only screen and (min-width:1440px)"; wi
 
 html, body { font-size: 100%; }
 
-body { background: white; color: #222222; padding: 0; margin: 0; font-family: "Helvetica Neue", "Helvetica", Helvetica, Arial, sans-serif; font-weight: normal; font-style: normal; line-height: 1; position: relative; cursor: auto; }
+body { background: white; color: #222222; padding: 0; margin: 0; font-family: "Roboto", sans-serif; font-weight: normal; font-style: normal; line-height: 1; position: relative; cursor: auto; }
 
 a:hover { cursor: pointer; }
 
@@ -188,7 +188,7 @@ p { font-family: inherit; font-weight: normal; font-size: 1em; line-height: 1.6;
 p aside { font-size: 0.875em; line-height: 1.35; font-style: italic; }
 
 /* Default header styles */
-h1, h2, h3, #toctitle, .sidebarblock > .content > .title, h4, h5, h6 { font-family: "Helvetica Neue", "Helvetica", Helvetica, Arial, sans-serif; font-weight: bold; font-style: normal; color: #222222; text-rendering: optimizeLegibility; margin-top: 0.2em; margin-bottom: 0.5em; line-height: 1.2125em; }
+h1, h2, h3, #toctitle, .sidebarblock > .content > .title, h4, h5, h6 { font-family: "Roboto", sans-serif; font-weight: bold; font-style: normal; color: #222222; text-rendering: optimizeLegibility; margin-top: 0.2em; margin-bottom: 0.5em; line-height: 1.2125em; }
 h1 small, h2 small, h3 small, #toctitle small, .sidebarblock > .content > .title small, h4 small, h5 small, h6 small { font-size: 60%; color: #6f6f6f; line-height: 0; }
 
 h1 { font-size: 2.125em; }
@@ -323,7 +323,7 @@ b.button:after { content: "]"; padding: 0 2px 0 3px; }
 #toc > ul { margin-left: 0.125em; }
 #toc ul.sectlevel0 > li > a { font-style: italic; }
 #toc ul.sectlevel0 ul.sectlevel1 { margin: 0.5em 0; }
-#toc ul { font-family: "Helvetica Neue", "Helvetica", Helvetica, Arial, sans-serif; list-style-type: none; }
+#toc ul { font-family: "Roboto", sans-serif; list-style-type: none; }
 #toc li { line-height: 1.3334; margin-top: 0.3334em; }
 #toc a { text-decoration: none; }
 #toc a:active { text-decoration: underline; }
@@ -377,7 +377,7 @@ table.tableblock #preamble > .sectionbody > .paragraph:first-of-type p { font-si
 .admonitionblock > table { border-collapse: separate; border: 0; background: none; width: 100%; }
 .admonitionblock > table td.icon { text-align: center; width: 80px; }
 .admonitionblock > table td.icon img { max-width: none; }
-.admonitionblock > table td.icon .title { font-weight: bold; font-family: "Helvetica Neue", "Helvetica", Helvetica, Arial, sans-serif; text-transform: uppercase; }
+.admonitionblock > table td.icon .title { font-weight: bold; font-family: "Roboto", sans-serif; text-transform: uppercase; }
 .admonitionblock > table td.content { padding-left: 1.125em; padding-right: 1.25em; border-left: 1px solid #dddddd; color: #555555; }
 .admonitionblock > table td.content > :last-child > :last-child { margin-bottom: 0; }
 
@@ -679,9 +679,15 @@ b.conum * { color: inherit !important; }
 a { color: #d67214; text-decoration: underline; }
 a.fa { text-decoration: none; }
 
+h1 { font-size: 2em; }
+
+h2 { font-size: 1.75em; }
+
+h3, #toctitle, .sidebarblock > .content > .title { font-size: 1.5em; }
+
 .ulist li, .olist li { margin-left: 2em; }
 
-body { background-color: white; font-family: 'Roboto', sans-serif; }
+body { background-color: white; }
 
 :not(pre) > code { color: #333333; font-family: monospace; font-size: 1.2em; }
 
@@ -696,10 +702,6 @@ body { background-color: white; font-family: 'Roboto', sans-serif; }
 
 .diagram { padding: 6pt; }
 
-@font-face { font-family: 'RochesterYada'; font-style: normal; font-weight: 400; src: url("/public/fonts/RochesterYada.woff2") format("woff2"); }
-
-.yada { font-family: "RochesterYada", sans-serif; font-size: 1.40em; font-weight: normal; line-height: 70%; }
-
 h3 .yada, #toctitle .yada, .sidebarblock > .content > .title .yada { font-weight: normal !important; }
 
 .bg-lightgrey { background-color: whitesmoke; }
@@ -707,3 +709,7 @@ h3 .yada, #toctitle .yada, .sidebarblock > .content > .title .yada { font-weight
 .bg-juxtorange { background-color: #f4901d; }
 
 .bg-darkorange { background-color: #d67214; }
+
+@media only screen and (min-width: 700px) { #header { margin-left: 42px; } }
+
+@media only screen and (min-width: 700px) { #content { margin-left: 42px; } }
