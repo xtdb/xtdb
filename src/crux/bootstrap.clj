@@ -45,6 +45,8 @@
 
    ["-h" "--help"]])
 
+(s/check-asserts true)
+
 (s/def :crux.http-server/server-port :crux.io/port)
 
 (s/def ::options (s/keys :opt-un [:crux.kafka/bootstrap-servers
@@ -99,9 +101,7 @@
     :as options}
    with-system-fn]
   (log/info "starting system")
-  (when (s/invalid? (s/conform ::options options))
-    (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str ::options options)))))
+  (s/assert ::options options)
   (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
                             (read-kafka-properties-file kafka-properties-file))]
     (with-open [kv-store (start-kv-store options)

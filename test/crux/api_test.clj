@@ -43,7 +43,7 @@
 
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
-                                  #"(status 400|Invalid input)"
+                                  #"(status 400|Spec assertion failed)"
                                   (.q (.db f/*api*) '{:find [e]})))))
 
       (t/testing "query with streaming result"

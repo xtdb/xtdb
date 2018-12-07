@@ -55,9 +55,7 @@
 (defrecord MemKv [db db-dir persist-on-close?]
   kv/KvStore
   (open [this {:keys [db-dir crux.memdb.kv/persist-on-close?] :as options}]
-    (when (s/invalid? (s/conform ::options options))
-      (throw (IllegalArgumentException.
-              (str "Invalid options: " (s/explain-str ::options options)))))
+    (s/assert ::options options)
     (let [this (assoc this :db-dir db-dir :persist-on-close? persist-on-close?)]
       (if (.isFile (io/file db-dir "memdb"))
         (assoc this :db (atom (restore-db db-dir)))

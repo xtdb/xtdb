@@ -55,10 +55,8 @@
 (defrecord RocksKv [db-dir]
   kv/KvStore
   (open [this {:keys [db-dir ^Options crux.kv.rocksdb/db-options] :as options}]
+    (s/assert ::options options)
     (RocksDB/loadLibrary)
-    (when (s/invalid? (s/conform ::options options))
-      (throw (IllegalArgumentException.
-              (str "Invalid options: " (s/explain-str ::options options)))))
     (let [opts (doto (or db-options (Options.))
                  (.setCompressionType CompressionType/LZ4_COMPRESSION)
                  (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)

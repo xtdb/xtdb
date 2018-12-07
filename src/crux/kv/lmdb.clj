@@ -174,9 +174,7 @@
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
   (open [this {:keys [db-dir crux.kv.lmdb/env-flags] :as options}]
-    (when (s/invalid? (s/conform ::options options))
-      (throw (IllegalArgumentException.
-              (str "Invalid options: " (s/explain-str ::options options)))))
+    (s/assert ::options options)
     (let [env-flags (or env-flags default-env-flags)
           env (env-create)]
       (try

@@ -948,12 +948,10 @@
          (log/debug :query-result-size (count result))
          result))))
   ([{:keys [object-store] :as db} snapshot q]
+   (s/assert ::query q)
    (let [q (normalize-query q)
-         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform :crux.query/query q)]
+         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)]
      (log/debug :query (pr-str q))
-     (when (s/invalid? q-conformed)
-       (throw (IllegalArgumentException.
-               (str "Invalid input: " (s/explain-str :crux.query/query q)))))
      (validate-args args)
      (let [rule-name->rules (group-by (comp :name :head) rules)
            {:keys [n-ary-join

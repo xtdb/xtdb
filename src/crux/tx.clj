@@ -159,10 +159,8 @@
     (idx/read-meta kv k)))
 
 (defn conform-tx-ops [tx-ops]
-  (let [conformed-ops (s/conform ::tx-ops tx-ops)]
-    (if (s/invalid? conformed-ops)
-      (throw (ex-info "Invalid input" (s/explain-data ::tx-ops tx-ops)))
-      conformed-ops)))
+  (s/assert ::tx-ops tx-ops)
+  (s/conform ::tx-ops tx-ops))
 
 (defn tx-ops->docs [tx-ops]
   (vec (for [[op id :as tx-op] tx-ops

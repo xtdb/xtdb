@@ -84,7 +84,7 @@
       (try
         (handler request)
         (catch Exception e
-          (if (str/starts-with? (.getMessage e) "Invalid input")
+          (if (str/starts-with? (.getMessage e) "Spec assertion failed")
             (exception-response 400 e) ;; Valid edn, invalid content
             (exception-response 500 e)))) ;; Valid content; something internal failed, or content validity is not properly checked
       (catch Exception e
@@ -231,9 +231,7 @@
    [{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
                                               :or {server-port 3000}
                                               :as options}]
-   (when (s/invalid? (s/conform ::options options))
-     (throw (IllegalArgumentException.
-             (str "Invalid options: " (s/explain-str ::options options)))))
+   (s/assert ::options options)
    (let [server (j/run-jetty (-> (partial handler local-node)
                                  (p/wrap-params)
                                  (wrap-exception-handling))

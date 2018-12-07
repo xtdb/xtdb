@@ -86,9 +86,7 @@
     :or {zookeeper-port default-zookeeper-port
          kafka-port default-kafka-port}
     :as options}]
-  (when (s/invalid? (s/conform ::options options))
-    (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str ::options options)))))
+  (s/assert ::options options)
   (let [zookeeper (start-zookeeper (io/file zookeeper-data-dir) zookeeper-port)
         kafka (try
                 (start-kafka-broker (merge broker-config

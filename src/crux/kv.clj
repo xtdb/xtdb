@@ -41,9 +41,7 @@
 (defn new-kv-store ^java.io.Closeable [{:keys [db-dir
                                                kv-backend]
                                         :as options}]
-  (when (s/invalid? (s/conform ::options options))
-    (throw (IllegalArgumentException.
-            (str "Invalid options: " (s/explain-str ::options options)))))
+  (s/assert ::options options)
   (let [kv-record-class (require-and-ensure-kv-record kv-backend)]
     (.invoke (.getMethod kv-record-class "create"
                          (into-array [clojure.lang.IPersistentMap]))
