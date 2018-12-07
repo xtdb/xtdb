@@ -28,8 +28,8 @@ public class Crux {
      * dependencies on the classpath, see crux.http-server for
      * details.
      *
-     * See also crux.kafka.embedded or crux.API#newStandaloneSystem.
-     * for self-contained deployments.
+     * See also crux.kafka.embedded or {@link #newStandaloneSystem(Map
+     * options)} for self-contained deployments.
      *
      * @param options see crux.bootstrap/cli-options.
      * @return        the started local node.
@@ -57,9 +57,12 @@ public class Crux {
     }
 
     /**
-     * Creates a new remote API client CruxSystem.
+     * Creates a new remote API client ICruxSystem. The remote client
+     * requires business and transaction time to be specified for all
+     * calls to {@link ICruxSystem#db()}.
      *
-     * NOTE: requires either clj-http or http-kit on the classpath.
+     * NOTE: requires either clj-http or http-kit on the classpath,
+     * see crux.api/*internal-http-request-fn* for more information.
      *
      * @param url the URL to a Crux HTTP end-point.
      * @return    a remote API client.

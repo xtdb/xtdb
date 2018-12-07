@@ -20,7 +20,8 @@
 
   (t/testing "transaction"
     (let [business-time (Date.)
-          submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} business-time]])]
+          {:keys [crux.tx/tx-time]
+           :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} business-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
 
       (let [status-map (.status f/*api*)]
@@ -28,26 +29,27 @@
         (t/is (= (:crux.tx/tx-time submitted-tx) (:crux.tx-log/tx-time status-map))))
 
       (t/testing "query"
-        (t/is (= #{[:ivan]} (.q (.db f/*api*) '{:find [e]
-                                                :where [[e :name "Ivan"]]})))
-        (t/is (= #{} (.q (.db f/*api* #inst "1999") '{:find [e]
-                                                      :where [[e :name "Ivan"]]})))
+        (t/is (= #{[:ivan]} (.q (.db f/*api* tx-time tx-time)
+                                '{:find [e]
+                                  :where [[e :name "Ivan"]]})))
+        (t/is (= #{} (.q (.db f/*api* #inst "1999" tx-time) '{:find [e]
+                                                              :where [[e :name "Ivan"]]})))
 
         (t/testing "query string"
-          (t/is (= #{[:ivan]} (.q (.db f/*api*) "{:find [e]
-                                                  :where [[e :name \"Ivan\"]]}"))))
+          (t/is (= #{[:ivan]} (.q (.db f/*api* tx-time tx-time)
+                                  "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 
         (t/testing "query vector"
-          (t/is (= #{[:ivan]} (.q (.db f/*api*) '[:find e
-                                                  :where [e :name "Ivan"]]))))
+          (t/is (= #{[:ivan]} (.q (.db f/*api* tx-time tx-time) '[:find e
+                                                                  :where [e :name "Ivan"]]))))
 
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
                                   #"(status 400|Spec assertion failed)"
-                                  (.q (.db f/*api*) '{:find [e]})))))
+                                  (.q (.db f/*api* tx-time tx-time) '{:find [e]})))))
 
       (t/testing "query with streaming result"
-        (let [db (.db f/*api*)]
+        (let [db (.db f/*api* tx-time tx-time)]
           (with-open [snapshot (.newSnapshot db)]
             (let [result (.q db snapshot '{:find [e]
                                            :where [[e :name "Ivan"]]})]
@@ -57,11 +59,11 @@
               (t/is (realized? result))))))
 
       (t/testing "entity"
-        (t/is (= {:crux.db/id :ivan :name "Ivan"} (.entity (.db f/*api*) :ivan)))
-        (t/is (nil? (.entity (.db f/*api* #inst "1999") :ivan))))
+        (t/is (= {:crux.db/id :ivan :name "Ivan"} (.entity (.db f/*api* tx-time tx-time) :ivan)))
+        (t/is (nil? (.entity (.db f/*api* #inst "1999" tx-time) :ivan))))
 
       (t/testing "entity-tx, document and history"
-        (let [entity-tx (.entityTx (.db f/*api*) :ivan)]
+        (let [entity-tx (.entityTx (.db f/*api* tx-time tx-time) :ivan)]
           (t/is (= (merge submitted-tx
                           {:crux.db/id (str (c/new-id :ivan))
                            :crux.db/content-hash (str (c/new-id {:crux.db/id :ivan :name "Ivan"}))
@@ -70,7 +72,7 @@
           (t/is (= {:crux.db/id :ivan :name "Ivan"} (.document f/*api* (:crux.db/content-hash entity-tx))))
           (t/is (= [entity-tx] (.history f/*api* :ivan)))
 
-          (t/is (nil? (.entityTx (.db f/*api* #inst "1999") :ivan)))))
+          (t/is (nil? (.entityTx (.db f/*api* #inst "1999" tx-time) :ivan)))))
 
       (t/testing "tx-log"
         (with-open [ctx (.newTxLogContext f/*api*)]
@@ -78,6 +80,6 @@
             (t/is (instance? LazySeq result))
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
-                              :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) business-time]])]
+                             :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) business-time]])]
                      result))
             (t/is (realized? result))))))))

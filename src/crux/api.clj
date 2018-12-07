@@ -4,6 +4,7 @@
             [clojure.edn :as edn]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.io :as cio]
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -270,10 +271,14 @@
 (defrecord RemoteApiClient [url]
   ICruxSystem
   (db [_]
-    (->RemoteDatasource url nil nil))
+    (throw
+     (UnsupportedOperationException.
+      "Need both business and transaction time when accessing the db remotely.")))
 
   (db [_ business-time]
-    (->RemoteDatasource url business-time nil))
+    (throw
+     (UnsupportedOperationException.
+      "Need both business and transaction time when accessing the db remotely.")))
 
   (db [_ business-time transact-time]
     (->RemoteDatasource url business-time transact-time))
@@ -308,8 +313,11 @@
   (close [_]))
 
 (defn new-api-client
-  "Creates a new remote API client ICruxSystem.
+  "Creates a new remote API client ICruxSystem. The remote client
+  requires business and transaction time to be specified for all calls
+  to ICruxSystem#db.
 
-  NOTE: requires either clj-http or http-kit on the classpath."
+   NOTE: requires either clj-http or http-kit on the classpath, see
+  crux.api/*internal-http-request-fn* for more information."
   ^ICruxSystem [url]
   (->RemoteApiClient url))
