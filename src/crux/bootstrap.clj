@@ -77,12 +77,9 @@
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend]
                                           :as options}]
-  (let [kv-record-class (kv/require-and-ensure-kv-record kv-backend)
-        kv (.invoke (.getMethod kv-record-class "create"
-                                (into-array [clojure.lang.IPersistentMap]))
-                    nil (object-array [{}]))]
-    (-> (lru/new-cache-providing-kv-store kv)
-        (kv/open options))))
+  (-> (kv/new-kv-store options)
+      (lru/new-cache-providing-kv-store)
+      (kv/open options)))
 
 (defn- read-kafka-properties-file [f]
   (when f

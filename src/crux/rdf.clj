@@ -166,6 +166,9 @@
 (defn patch-missing-lang-string [s]
   (str/replace s missing-lang-string ""))
 
+;; TODO: Investigate:
+;; getParserConfig().addNonFatalError(NTriplesParserSettings.FAIL_ON_NTRIPLES_INVALID_LINES);
+;; getParserConfig().addNonFatalError(BasicParserSettings.VERIFY_URI_SYNTAX);
 (defn parse-ntriples-str [s]
   (let [parser (.getParser (NTriplesParserFactory.))
         statements (atom [])]

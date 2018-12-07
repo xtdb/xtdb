@@ -34,3 +34,17 @@
 
 (s/def ::db-dir string?)
 (s/def ::kv-backend require-and-ensure-kv-record)
+
+(s/def ::options (s/keys :req-un [::kv-backend]
+                         :opt-un [::db-dir]))
+
+(defn new-kv-store ^java.io.Closeable [{:keys [db-dir
+                                               kv-backend]
+                                        :as options}]
+  (when (s/invalid? (s/conform ::options options))
+    (throw (IllegalArgumentException.
+            (str "Invalid options: " (s/explain-str ::options options)))))
+  (let [kv-record-class (require-and-ensure-kv-record kv-backend)]
+    (.invoke (.getMethod kv-record-class "create"
+                         (into-array [clojure.lang.IPersistentMap]))
+             nil (object-array [{}]))))

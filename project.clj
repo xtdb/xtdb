@@ -34,6 +34,9 @@
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
                                   [datascript "0.16.9"]
+                                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.2"]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.2"
+                                   :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]]
