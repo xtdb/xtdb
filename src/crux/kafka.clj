@@ -70,6 +70,7 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
+;; TODO: See comment in crux.status to inverse control here.
 (defn zk-active? [bootstrap-servers]
   (try
     (with-open [^KafkaConsumer consumer
@@ -130,10 +131,19 @@
   (keyword "crux.kafka.topic-partition" (str partition)))
 
 (defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
-  (doseq [^TopicPartition partition partitions]
-    (db/store-index-meta indexer
-                         (topic-partition-meta-key partition)
-                         (.position consumer partition))))
+  (let [end-offsets (.endOffsets consumer partitions)]
+    (doseq [^TopicPartition partition partitions
+            :let [position (.position consumer partition)
+                  latest-position (get end-offsets partition)]]
+      ;; TODO: this will log a lot if it's far behind. See crux.status
+      ;; for comment about investigating new status system. Other
+      ;; modules (such as the queries) might want to take action based
+      ;; on this and refuse operation.
+      (when-not (= position latest-position)
+        (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
+      (db/store-index-meta indexer
+                           (topic-partition-meta-key partition)
+                           position))))
 
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (doseq [^TopicPartition partition partitions]
@@ -195,35 +205,36 @@
                 (onPartitionsAssigned [_ partitions]
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
-(defrecord IndexingConsumer [running? ^Thread worker-thread consumer indexer options]
+(defrecord IndexingConsumer [running? ^Thread worker-thread consumer-config indexer options]
   Closeable
   (close [_]
     (reset! running? false)
     (.join worker-thread)))
 
 (defn- indexing-consumer-thread-main-loop
-  [{:keys [running? indexer consumer options]}]
-  (subscribe-from-stored-offsets
-   indexer consumer [(:tx-topic options) (:doc-topic options)])
-  (while @running?
-    (try
-      (consume-and-index-entities
-       {:indexer indexer
-        :consumer consumer
-        :timeout 100
-        :tx-topic (:tx-topic options)
-        :doc-topic (:doc-topic options)})
-      (catch Exception e
-        (log/error e "Error while consuming and indexing from Kafka:")
-        (Thread/sleep 500)))))
+  [{:keys [running? indexer consumer-config options]}]
+  (with-open [consumer (create-consumer consumer-config)]
+    (subscribe-from-stored-offsets
+     indexer consumer [(:tx-topic options) (:doc-topic options)])
+    (while @running?
+      (try
+        (consume-and-index-entities
+         {:indexer indexer
+          :consumer consumer
+          :timeout 100
+          :tx-topic (:tx-topic options)
+          :doc-topic (:doc-topic options)})
+        (catch Exception e
+          (log/error e "Error while consuming and indexing from Kafka:")
+          (Thread/sleep 500))))))
 
 (defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
   (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]
     (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
 (defn start-indexing-consumer
-  ^crux.kafka.IndexingConsumer
-  [admin-client consumer indexer
+  ^java.io.Closeable
+  [admin-client consumer-config indexer
    {:keys [tx-topic
            replication-factor
            doc-partitions
@@ -236,7 +247,7 @@
   (ensure-tx-topic-has-single-partition admin-client tx-topic)
   (let [indexing-consumer (map->IndexingConsumer {:running? (atom true)
                                                   :indexer indexer
-                                                  :consumer consumer
+                                                  :consumer-config consumer-config
                                                   :options options})]
     (assoc
      indexing-consumer

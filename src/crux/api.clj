@@ -15,7 +15,7 @@
 
 ;; Local Node
 
-(defrecord LocalNode [close-promise kv-store tx-log options]
+(defrecord LocalNode [close-promise kv-store tx-log options ^Thread node-thread]
   ICruxSystem
   (db [_]
     (q/db kv-store))
@@ -55,7 +55,8 @@
 
   Closeable
   (close [_]
-    (deliver close-promise true)))
+    (deliver close-promise true)
+    (.join node-thread)))
 
 (defn start-local-node
   "Starts an ICruxSystem query node in local library mode.
@@ -92,7 +93,9 @@
                                           (deliver system-promise system)
                                           @close-promise))
                                        (catch Throwable t
-                                         (deliver error-promise t))))
+                                         (if (realized? system-promise)
+                                           (throw t)
+                                           (deliver error-promise t)))))
                                    "crux.api.local-node-thread")
                       (.start))]
     (while (and (nil? (deref system-promise 100 nil))
@@ -100,7 +103,8 @@
     (when (realized? error-promise)
       (throw @error-promise))
     (map->LocalNode (merge {:close-promise close-promise
-                            :options options}
+                            :options options
+                            :node-thread node-thread}
                            @system-promise))))
 
 ;; Standalone System

@@ -221,7 +221,7 @@
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.LocalNode or its
   dependencies explicitly as arguments."
-  (^crux.http_server.HTTPServer
+  (^java.io.Closeable
    [{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
                                               :or {server-port 3000}
                                               :as options}]

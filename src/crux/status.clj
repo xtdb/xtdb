@@ -5,6 +5,8 @@
             [crux.kafka :as k]
             [crux.kv :as kv]))
 
+;; TODO: Rethink this, creates explicit dependencies on various
+;; subsystems, better if they could report back status themselves.
 (defn status-map [kv bootstrap-servers]
   {:crux.zk/zk-active? (if bootstrap-servers
                          (k/zk-active? bootstrap-servers)

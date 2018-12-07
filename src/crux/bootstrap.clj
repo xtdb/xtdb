@@ -103,16 +103,17 @@
   (log/info "starting system")
   (s/assert ::options options)
   (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
-                            (read-kafka-properties-file kafka-properties-file))]
+                            (read-kafka-properties-file kafka-properties-file))
+        consumer-config (merge {"group.id" (:group-id options)}
+                               kafka-config)]
     (with-open [kv-store (start-kv-store options)
                 producer (k/create-producer kafka-config)
-                consumer (k/create-consumer (merge {"group.id" (:group-id options)}
-                                                   kafka-config))
+                consumer (k/create-consumer consumer-config)
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
                 object-store ^Closeable (idx/->KvObjectStore kv-store)
                 indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-config)
-                indexing-consumer (k/start-indexing-consumer admin-client consumer indexer options)]
+                indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
       (log/info "system started")
       (with-system-fn
         {:kv-store kv-store
