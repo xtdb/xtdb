@@ -10,8 +10,6 @@
 ;; subsystems, better if they could report back status themselves.
 (defn status-map [{:keys [kv-store indexer consumer-config]} {:keys [tx-topic] :as options}]
   (merge
-   {:crux.zk/zk-active? (k/zk-active? consumer-config)
-    :crux.kv/kv-backend (kv/kv-name kv-store)
-    :crux.kv/estimate-num-keys (kv/count-keys kv-store)
-    :crux.kv/size (some-> (kv/db-dir kv-store) (cio/folder-size))}
+   (kv/kv-status kv-store)
+   (k/zk-status consumer-config)
    (k/consumer-status indexer consumer-config tx-topic)))

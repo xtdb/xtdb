@@ -1,6 +1,7 @@
 (ns crux.kv
   "Protocols for KV backend implementations."
-  (:require [clojure.spec.alpha :as s])
+  (:require [clojure.spec.alpha :as s]
+            [crux.io :as cio])
   (:refer-clojure :exclude [next])
   (:import java.io.Closeable
            clojure.lang.IRecord))
@@ -46,3 +47,8 @@
     (.invoke (.getMethod kv-record-class "create"
                          (into-array [clojure.lang.IPersistentMap]))
              nil (object-array [{}]))))
+
+(defn kv-status [kv]
+  {:crux.kv/kv-backend (kv-name kv)
+   :crux.kv/estimate-num-keys (count-keys kv)
+   :crux.kv/size (some-> (db-dir kv) (cio/folder-size))})
