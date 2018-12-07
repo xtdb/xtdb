@@ -1,5 +1,4 @@
 = Crux
-Håkan Råberg, Jon Pither, Malcolm Sparks, Hugo Jacobs
 0.1, 2018-08-10
 :toc: left
 :toclevels: 4
