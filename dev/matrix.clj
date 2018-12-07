@@ -1,8 +1,10 @@
 (ns matrix
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.walk :as w]
             [crux.rdf :as rdf])
-  (:import [org.ejml.data DMatrix DMatrixRMaj
+  (:import java.util.BitSet
+           [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
            [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
@@ -349,3 +351,87 @@
                 :when (.isAssigned m_01 r c)]
           (prn (get id->value r) (get id->value c)))
       m_12))
+
+;; Based on the example-data-artists-with-matrix, but using BitSet and
+;; boolean operations. The idea is to treat the diagonal matrix
+;; multiplications as or over ranges. Not necessarily efficient,
+;; should use something like
+;; https://github.com/RoaringBitmap/RoaringBitmap
+(defn bitset-spike []
+  (let [size 64
+        bit->coord (fn [b]
+                     [(quot b size)
+                      (mod b size)])
+        row->bit (fn ^long [b]
+                   (* size b))
+        coord->bit (fn ^long [[r c]]
+                     (+ c (row->bit r)))
+        set-cell (fn [^BitSet bs cell]
+                   (doto bs
+                     (.set (long (coord->bit cell)))))
+        set-row (fn [^BitSet bs ^long r]
+                  (doto bs
+                    (.set (long (row->bit r))
+                          (long (row->bit (inc r))))))
+        sparse-matrix (fn [cells]
+                        (reduce set-cell (BitSet.) cells))
+        all-cells (fn [^BitSet bs]
+                    ((fn step [i]
+                       (let [i (.nextSetBit bs i)]
+                         (when (not= -1 i)
+                           (cons (bit->coord i)
+                                 (lazy-seq (step (inc i))))))) 0))
+        transpose (fn [bs]
+                    (->> (all-cells bs)
+                         (map reverse)
+                         (sparse-matrix)))
+        matlab-any (fn [bs]
+                     (->> (all-cells bs)
+                          (map second)
+                          (distinct)
+                          (vec)))
+        mult-diag (fn [diag ^BitSet bs-b]
+                    (doto ^BitSet
+                        (reduce (fn [bs-a v]
+                                  (set-row bs-a v))
+                                (BitSet.)
+                                diag)
+                        (.and bs-b)))
+
+        value->id {:http://example.org/Picasso 0
+                   "Pablo" 2
+                   :http://example.org/guernica 6
+                   :http://example.org/VanGogh 21
+                   "Vincent" 23
+                   :http://example.org/potatoEaters 27}
+        id->value (set/map-invert value->id)
+
+        ->ids #(w/postwalk-replace value->id %)
+        <-ids #(w/postwalk-replace id->value %)
+
+        p->so {:http://example.org/creatorOf
+               (-> {:http://example.org/Picasso
+                    :http://example.org/guernica
+                    :http://example.org/VanGogh
+                    :http://example.org/potatoEaters}
+                   (->ids)
+                   (sparse-matrix))
+               :http://xmlns.com/foaf/0.1/firstName
+               (->  {:http://example.org/Picasso
+                     "Pablo"
+                     :http://example.org/VanGogh
+                     "Vincent"}
+                    (->ids)
+                    (sparse-matrix))}
+        p->os (->> (for [[k v] p->so]
+                     [k (transpose v)])
+                   (into {}))]
+
+    (-> (->ids [:http://example.org/guernica
+                :http://example.org/potatoEaters])
+        (mult-diag (p->os :http://example.org/creatorOf))
+        (matlab-any)
+        (mult-diag (p->so :http://xmlns.com/foaf/0.1/firstName))
+        (all-cells)
+        (<-ids)
+        (->> (into {})))))
