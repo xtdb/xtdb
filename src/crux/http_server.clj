@@ -41,6 +41,7 @@
     :else
     (keyword s)))
 
+;; TODO: potentially get rid of this.
 (defn- param
   ([request]
    (param request nil))
@@ -76,7 +77,7 @@
             {"Content-Type" "text/plain"}
             (str
              (.getMessage e) "\n"
-             (ex-data e))))
+             (pr-str (ex-data e)))))
 
 (defn- wrap-exception-handling [handler]
   (fn [request]
@@ -101,12 +102,12 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
+;; TODO: These could use parameters in the path?
 (defn document [^ICruxSystem local-node request]
   (let [content-hash (param request "hash")]
     (success-response
      (.document local-node content-hash))))
 
-;; param must be compatible with index/id->bytes (e.g. keyworded UUID)
 (defn- history [^ICruxSystem local-node request]
   (let [entity (param request "entity")]
     (success-response
@@ -138,27 +139,30 @@
       (.close ctx)
       (throw t))))
 
+;; TODO: Potentially require both business and transaction time sent
+;; by the client?
 (defn- query [^ICruxSystem local-node request]
-  (let [query-map (param request "q")]
+  (let [query-map (param request)]
     (success-response
      (.q (db-for-request local-node query-map)
          (dissoc query-map :business-time :transact-time)))))
 
 (defn- query-stream [^ICruxSystem local-node request]
-  (let [query-map (param request "q")
+  (let [query-map (param request)
         db (db-for-request local-node query-map)
         snapshot (.newSnapshot db)
         result (.q db snapshot (dissoc query-map :business-time :transact-time))]
     (streamed-edn-response snapshot result)))
 
+;; TODO: Could support as-of now via path and GET.
 (defn- entity [^ICruxSystem local-node request]
-  (let [body (param request "entity")]
+  (let [body (param request)]
     (success-response
      (.entity (db-for-request local-node body)
               (:eid body)))))
 
 (defn- entity-tx [^ICruxSystem local-node request]
-  (let [body (param request "entity-tx")]
+  (let [body (param request)]
     (success-response
      (.entityTx (db-for-request local-node body)
                 (:eid body)))))
@@ -168,6 +172,7 @@
     (success-response
      (.submitTx local-node tx-ops))))
 
+;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxSystem local-node request]
   (let [ctx (.newTxLogContext local-node)
         result (.txLog local-node ctx)]
@@ -187,16 +192,16 @@
     (check-path request ["/history"] [:get :post])
     (history local-node request)
 
-    (check-path request ["/query"] [:get :post])
+    (check-path request ["/query"] [:post])
     (query local-node request)
 
-    (check-path request ["/query-stream"] [:get :post])
+    (check-path request ["/query-stream"] [:post])
     (query-stream local-node request)
 
-    (check-path request ["/entity"] [:get :post])
+    (check-path request ["/entity"] [:post])
     (entity local-node request)
 
-    (check-path request ["/entity-tx"] [:get :post])
+    (check-path request ["/entity-tx"] [:post])
     (entity-tx local-node request)
 
     (check-path request ["/tx-log"] [:post])
