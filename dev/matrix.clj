@@ -388,8 +388,7 @@
         matlab-any (fn [bs]
                      (->> (all-cells bs)
                           (map second)
-                          (distinct)
-                          (vec)))
+                          (distinct)))
         mult-diag (fn [diag ^BitSet bs-b]
                     (doto ^BitSet
                         (reduce (fn [bs-a v]
@@ -410,25 +409,21 @@
         <-ids #(w/postwalk-replace id->value %)
 
         p->so {:http://example.org/creatorOf
-               (-> {:http://example.org/Picasso
-                    :http://example.org/guernica
-                    :http://example.org/VanGogh
-                    :http://example.org/potatoEaters}
+               (-> [[:http://example.org/Picasso :http://example.org/guernica]
+                    [:http://example.org/VanGogh :http://example.org/potatoEaters]]
                    (->ids)
                    (sparse-matrix))
                :http://xmlns.com/foaf/0.1/firstName
-               (->  {:http://example.org/Picasso
-                     "Pablo"
-                     :http://example.org/VanGogh
-                     "Vincent"}
+               (->  [[:http://example.org/Picasso "Pablo"]
+                     [:http://example.org/VanGogh "Vincent"]]
                     (->ids)
                     (sparse-matrix))}
         p->os (->> (for [[k v] p->so]
                      [k (transpose v)])
                    (into {}))]
 
-    (-> (->ids [:http://example.org/guernica
-                :http://example.org/potatoEaters])
+    (-> (->ids #{:http://example.org/guernica
+                 :http://example.org/potatoEaters})
         (mult-diag (p->os :http://example.org/creatorOf))
         (matlab-any)
         (mult-diag (p->so :http://xmlns.com/foaf/0.1/firstName))
