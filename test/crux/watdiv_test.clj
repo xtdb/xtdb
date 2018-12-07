@@ -134,8 +134,7 @@
 
 (defn with-sail-repository [f]
   (let [db-dir (str (cio/create-tmpdir "sail-store"))
-        db (SailRepository. (doto (NativeStore. (io/file db-dir))
-                              (.setForceSync true)))]
+        db (SailRepository. (NativeStore. (io/file db-dir)))]
     (try
       (.initialize db)
       (with-open [conn (.getConnection db)]
