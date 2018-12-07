@@ -220,11 +220,11 @@
 (defn start-http-server
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.LocalNode or its
-  dependencies explicitly as arguments."
+  dependencies explicitly as arguments (internal use)."
   (^java.io.Closeable
-   [{:keys [kv-store tx-log] :as local-node} {:keys [server-port]
-                                              :or {server-port 3000}
-                                              :as options}]
+   [local-node {:keys [server-port]
+                :or {server-port 3000}
+                :as options}]
    (s/assert ::options options)
    (let [server (j/run-jetty (-> (partial handler local-node)
                                  (p/wrap-params)
@@ -234,11 +234,11 @@
      (log/info "HTTP server started on port: " server-port)
      (->HTTPServer server options)))
   (^crux.http_server.HTTPServer
-   [kv-store tx-log {:keys [bootstrap-servers
-                            server-port]
-                     :as options}]
-   (start-http-server (api/->LocalNode (promise)
-                                       kv-store
-                                       tx-log
-                                       options)
+   [kv-store tx-log indexer consumer-config {:keys [server-port]
+                                             :as options}]
+   (start-http-server (api/map->LocalNode {:kv-store kv-store
+                                           :tx-log tx-log
+                                           :indexer indexer
+                                           :consumer-config consumer-config
+                                           :options options})
                       options)))

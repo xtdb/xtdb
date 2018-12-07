@@ -15,7 +15,7 @@
 
 ;; Local Node
 
-(defrecord LocalNode [close-promise kv-store tx-log options ^Thread node-thread]
+(defrecord LocalNode [close-promise kv-store tx-log consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
     (q/db kv-store))
@@ -38,8 +38,7 @@
 
   (status [this]
     (require 'crux.status)
-    ((resolve 'crux.status/status-map)
-     kv-store (:bootstrap-servers options)))
+    ((resolve 'crux.status/status-map) this options))
 
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
@@ -55,8 +54,8 @@
 
   Closeable
   (close [_]
-    (deliver close-promise true)
-    (.join node-thread)))
+    (some-> close-promise (deliver true))
+    (some-> node-thread (.join))))
 
 (defn start-local-node
   "Starts an ICruxSystem query node in local library mode.
@@ -159,9 +158,12 @@
   ^ICruxSystem [{:keys [db-dir kv-backend] :as options}]
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)
-        tx-log (tx/->KvTxLog kv-store)]
+        tx-log (tx/->KvTxLog kv-store)
+        object-store (idx/->KvObjectStore kv-store)
+        indexer (tx/->KvIndexer kv-store tx-log object-store)]
     (map->StandaloneSystem {:kv-store kv-store
                             :tx-log tx-log
+                            :indexer indexer
                             :options options})))
 
 ;; Remote API

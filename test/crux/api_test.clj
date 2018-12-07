@@ -15,7 +15,10 @@
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
               :crux.kv/estimate-num-keys 0
-              :crux.tx-log/tx-time nil}
+              :crux.tx-log/lag (when-not (instance? StandaloneSystem f/*api*)
+                                 0)
+              :crux.tx-log/local-time nil
+              :crux.tx-log/remote-time nil}
              (dissoc (.status f/*api*) :crux.kv/size))))
 
   (t/testing "transaction"
@@ -26,7 +29,7 @@
 
       (let [status-map (.status f/*api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (t/is (= (:crux.tx/tx-time submitted-tx) (:crux.tx-log/tx-time status-map))))
+        (t/is (= (:crux.tx/tx-time submitted-tx) (:crux.tx-log/local-time status-map))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db f/*api* tx-time tx-time)

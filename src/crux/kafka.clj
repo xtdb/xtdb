@@ -70,17 +70,17 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
-;; TODO: See comment in crux.status to inverse control here.
-(defn zk-active? [bootstrap-servers]
-  (try
-    (with-open [^KafkaConsumer consumer
-                (create-consumer
-                 {"bootstrap.servers" bootstrap-servers
-                  "default.api.timeout.ms" (int 1000)})]
-      (boolean (.listTopics consumer)))
-    (catch Exception e
-      (log/debug e "Could not list Kafka topics:")
-      false)))
+(defn zk-active? [consumer-config]
+  (if consumer-config
+    (try
+      (with-open [^KafkaConsumer consumer
+                  (create-consumer
+                   (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
+        (boolean (.listTopics consumer)))
+      (catch Exception e
+        (log/debug e "Could not list Kafka topics:")
+        false))
+    false))
 
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx/tx-time (Date. (.timestamp record))
@@ -129,6 +129,31 @@
 
 (defn- topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
+
+(defn consumer-status [indexer consumer-config tx-topic]
+  (->> (if consumer-config
+         (try
+           (with-open [^KafkaConsumer consumer
+                       (create-consumer
+                        (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
+             (let [partition (TopicPartition. tx-topic 0)]
+               (.assign consumer [partition])
+               (let [end-offset (get (.endOffsets consumer [partition]) partition)]
+                 (if (zero? end-offset)
+                   {:crux.tx-log/remote-time nil
+                    :crux.tx-log/lag 0}
+                   (do (.seek consumer partition (dec end-offset))
+                       (let [record ^ConsumerRecord (last (.poll consumer (Duration/ofMillis 1000)))]
+                         {:crux.tx-log/remote-time (.timestamp record)
+                          :crux.tx-log/lag (- (long (.offset record))
+                                              (long (or (db/read-index-meta indexer (topic-partition-meta-key partition)) 0)))}))))))
+           (catch Exception e
+             (log/debug e "Could not query Kafka consumer position:")
+             {:crux.tx-log/remote-time nil
+              :crux.tx-log/lag -1}))
+         {:crux.tx-log/remote-time nil
+          :crux.tx-log/lag nil})
+       (merge {:crux.tx-log/local-time (db/read-index-meta indexer :crux.tx-log/tx-time)})))
 
 (defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
   (let [end-offsets (.endOffsets consumer partitions)]

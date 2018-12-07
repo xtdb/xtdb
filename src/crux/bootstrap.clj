@@ -108,7 +108,6 @@
                                kafka-config)]
     (with-open [kv-store (start-kv-store options)
                 producer (k/create-producer kafka-config)
-                consumer (k/create-consumer consumer-config)
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
                 object-store ^Closeable (idx/->KvObjectStore kv-store)
                 indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
@@ -119,7 +118,7 @@
         {:kv-store kv-store
          :tx-log tx-log
          :producer producer
-         :consumer consumer
+         :consumer-config consumer-config
          :indexer indexer
          :admin-client admin-client
          :indexing-consumer indexing-consumer})
@@ -174,10 +173,10 @@
           (log/info "options:" (options->table options))
           (start-system
            options
-           (fn [{:keys [kv-store tx-log] :as running-system}]
+           (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-system}]
              (require 'crux.http-server)
              (with-open [http-server ^Closeable ((resolve 'crux.http-server/start-http-server)
-                                                 kv-store tx-log options)]
+                                                 kv-store tx-log indexer consumer-config options)]
                @(shutdown-hook-promise))))))))
 
 (Thread/setDefaultUncaughtExceptionHandler

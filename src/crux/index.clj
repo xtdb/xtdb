@@ -348,6 +348,7 @@
 
 (def ^:const default-await-tx-timeout 10000)
 
+;; TODO: This should go via indexer, not directly on kv.
 (defn await-tx-time
   ([kv transact-time]
    (await-tx-time kv transact-time default-await-tx-timeout))
