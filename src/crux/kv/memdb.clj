@@ -10,7 +10,8 @@
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
-    (nippy/freeze-to-file (io/file file "memdb") @db)))
+    (->> (into {} @db)
+         (nippy/freeze-to-file (io/file file "memdb")))))
 
 (defn- restore-db [dir]
   (->> (nippy/thaw-from-file (io/file dir "memdb"))
