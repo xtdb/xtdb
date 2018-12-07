@@ -13,11 +13,9 @@
 
 image::crux-banner.png[]
 
-== Introduction
+include::introduction.adoc[leveloffset=0]
 
-include::introduction.adoc[leveloffset=+1]
-
-include::bitemp.adoc[leveloffset=+1]
+include::bitemp.adoc[leveloffset=0]
 
 include::implementation.adoc[leveloffset=0]
 

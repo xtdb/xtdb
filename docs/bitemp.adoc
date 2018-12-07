@@ -1,6 +1,6 @@
-== Bitemp
+= Bitemp
 
-=== Why?
+== Why?
 
 In Datomic it’s very tempting to try to use the single time line as
 business time, but as one quickly realises, this is false economy.
@@ -48,7 +48,7 @@ inhomogeneously bitemporal data with Datomic and Clojure]
 Versioned Graphs]
 * https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]
 
-=== Business Time
+== Business Time
 
 In Crux, most queries would consider themselves with business time, and
 business time only. Only if you want to ensure repeatable reads or do
@@ -63,7 +63,7 @@ time available, the business time and transaction time take the same
 value. This is like the simple case above when using Datomic’s single
 time line and having control over the data.
 
-=== Transaction Time
+== Transaction Time
 
 As mentioned above, transaction time is just the time the change was
 recorded in the system. It will always exist, but usually not be
@@ -74,7 +74,7 @@ potentially even be stored together with business time in an actual
 https://redis.io/topics/indexes#multi-dimensional-indexes[multi
 dimensional index].
 
-=== Point vs Range
+== Point vs Range
 
 One issue with writing into the past, is that it can be hard to reason
 about what you actually change. If one overwrites an earlier change with
@@ -89,7 +89,7 @@ wouldn’t change, but there might need to be possible to change a range
 of values across business time in a consistent manner. The changes would
 need to be done in a link:transactions.md[transaction].
 
-=== Event Sourcing
+== Event Sourcing
 
 Writing into the past assumes that any downstream system that derives
 state from the transaction log can deal with this. This is not
@@ -98,7 +98,7 @@ are events in their own regard, which raises questions about what we
 actually write into our log, raw assertions or versions of documents, or
 actual events from which these are derived?
 
-=== Event Horizon
+== Event Horizon
 
 What is visible in across the graph when executing a
 link:query.md[query] is a non-trivial problem. The latest version of
@@ -129,14 +129,14 @@ actually remove (or excise in Datomic) data, which will by definition
 break repeatable reads, and also complicate event sourcing and other
 derived views of the system.
 
-=== Implementation
+== Implementation
 
 Given the primacy of business time in Crux, we will name business time
 `ts` and transaction time `tx-ts`.
 
-=== Use cases
+== Use cases
 
-==== Give the latest value of X at a given tx-time
+=== Give the latest value of X at a given tx-time
 
 For audit reasons, we might wish to know with certainty the value of a
 given entity-attribute at a given tx-instant. In this case, we want to

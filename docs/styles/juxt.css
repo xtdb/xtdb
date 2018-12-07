@@ -679,11 +679,13 @@ b.conum * { color: inherit !important; }
 a { color: #d67214; text-decoration: underline; }
 a.fa { text-decoration: none; }
 
-h1 { font-size: 2em; }
+h1 { font-size: 2em; font-weight: 400; }
 
-h2 { font-size: 1.75em; }
+h2 { font-size: 1.75em; font-weight: 400; border-bottom: 1px solid #ddd; }
 
-h3, #toctitle, .sidebarblock > .content > .title { font-size: 1.5em; }
+h3, #toctitle, .sidebarblock > .content > .title { font-size: 1.5em; font-weight: 400; }
+
+.sect1 { border-top: 0px; }
 
 .ulist li, .olist li { margin-left: 2em; }
 
