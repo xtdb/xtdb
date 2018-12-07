@@ -10,6 +10,8 @@
            [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
            org.ejml.generic.GenericMatrixOps_F64))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
 ;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
@@ -359,20 +361,20 @@
 ;; https://github.com/RoaringBitmap/RoaringBitmap
 (defn bitset-spike []
   (let [size 64
-        bit->coord (fn [b]
+        bit->coord (fn [^long b]
                      [(quot b size)
                       (mod b size)])
-        row->bit (fn ^long [b]
+        row->bit (fn ^long [^long b]
                    (* size b))
-        coord->bit (fn ^long [[r c]]
-                     (+ c (row->bit r)))
+        coord->bit (fn ^long [[r ^long c]]
+                     (+ c (long (row->bit r))))
         set-cell (fn [^BitSet bs cell]
                    (doto bs
                      (.set (long (coord->bit cell)))))
         set-row (fn [^BitSet bs ^long r]
-                  (doto bs
-                    (.set (long (row->bit r))
-                          (long (row->bit (inc r))))))
+                  (let [bit (long (row->bit r))]
+                    (doto bs
+                      (.set bit (+ bit size)))))
         sparse-matrix (fn [cells]
                         (reduce set-cell (BitSet.) cells))
         all-cells (fn [^BitSet bs]
@@ -390,12 +392,12 @@
                           (map second)
                           (distinct)))
         mult-diag (fn [diag ^BitSet bs-b]
-                    (doto ^BitSet
-                        (reduce (fn [bs-a v]
-                                  (set-row bs-a v))
-                                (BitSet.)
-                                diag)
-                        (.and bs-b)))
+                    (if (or (empty? diag)
+                            (.isEmpty bs-b))
+                      (BitSet.)
+                      (doto ^BitSet
+                          (reduce set-row (BitSet.) diag)
+                        (.and bs-b))))
 
         value->id {:http://example.org/Picasso 0
                    "Pablo" 2
