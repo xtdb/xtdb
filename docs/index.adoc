@@ -2,8 +2,7 @@
 :toc: left
 :toclevels: 4
 :docinfo: shared
-:sectnums: true
-:sectnumlevels: 2
+:sectnumlevels: 0
 :xrefstyle: short
 :docinfodir: docinfo
 :nofooter:
