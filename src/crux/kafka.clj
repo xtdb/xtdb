@@ -131,7 +131,7 @@
   (keyword "crux.kafka.topic-partition" (str partition)))
 
 (defn consumer-status [indexer consumer-config tx-topic]
-  (->> (if consumer-config
+  (->> (when consumer-config
          (try
            (with-open [^KafkaConsumer consumer
                        (create-consumer
@@ -139,21 +139,21 @@
              (let [partition (TopicPartition. tx-topic 0)]
                (.assign consumer [partition])
                (let [end-offset (get (.endOffsets consumer [partition]) partition)]
-                 (if (zero? end-offset)
-                   {:crux.tx-log/remote-time nil
-                    :crux.tx-log/lag 0}
+                 (if (pos? end-offset)
                    (do (.seek consumer partition (dec end-offset))
-                       (let [record ^ConsumerRecord (last (.poll consumer (Duration/ofMillis 1000)))]
+                       (if-let [record ^ConsumerRecord (last (.poll consumer (Duration/ofMillis 1000)))]
                          {:crux.tx-log/remote-time (.timestamp record)
                           :crux.tx-log/lag (- (long (.offset record))
-                                              (long (or (db/read-index-meta indexer (topic-partition-meta-key partition)) 0)))}))))))
+                                              (long (or (db/read-index-meta indexer (topic-partition-meta-key partition)) 0)))}
+                         (do (log/warn "Timed out fetching most recent record from Kafka.")
+                             {:crux.tx-log/lag -1})))
+                   {:crux.tx-log/lag 0}))))
            (catch Exception e
-             (log/debug e "Could not query Kafka consumer position:")
-             {:crux.tx-log/remote-time nil
-              :crux.tx-log/lag -1}))
-         {:crux.tx-log/remote-time nil
-          :crux.tx-log/lag nil})
-       (merge {:crux.tx-log/local-time (db/read-index-meta indexer :crux.tx-log/tx-time)})))
+             (log/warn e "Could not query Kafka consumer position:")
+             {:crux.tx-log/lag -1})))
+       (merge {:crux.tx-log/remote-time nil
+               :crux.tx-log/lag nil
+               :crux.tx-log/local-time (db/read-index-meta indexer :crux.tx-log/tx-time)})))
 
 (defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
   (let [end-offsets (.endOffsets consumer partitions)]
