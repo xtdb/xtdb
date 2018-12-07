@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as tn]
             [clojure.tools.logging :as log]
+            [clojure.spec.alpha :as s]
             [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]

@@ -104,7 +104,10 @@
                               (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
-(s/def ::query (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by]))
+(declare normalize-query)
+
+(s/def ::query (s/and (s/conformer #'normalize-query)
+                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by])))
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -931,14 +934,14 @@
     (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
                                             (partition-all 2 ))]
                            [k (vec v)]))
-    (string? q) (edn/read-string q)
+    (string? q) (normalize-query (edn/read-string q))
     :else
     q))
 
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)
-         q (normalize-query q)]
+         q (normalize-query (s/assert ::query q))]
      (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
        (let [result-coll-fn (if (:order-by q)
                               (comp vec distinct)
@@ -948,8 +951,7 @@
          (log/debug :query-result-size (count result))
          result))))
   ([{:keys [object-store] :as db} snapshot q]
-   (s/assert ::query q)
-   (let [q (normalize-query q)
+   (let [q (normalize-query (s/assert ::query q))
          {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)]
      (log/debug :query (pr-str q))
      (validate-args args)

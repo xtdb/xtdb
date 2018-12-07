@@ -38,7 +38,7 @@
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
     :default "crux.kv.rocksdb.RocksKv"
-    :validate [kv/require-and-ensure-kv-record "Unknown storage backend"]]
+    :validate [#'kv/require-and-ensure-kv-record "Unknown storage backend"]]
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]

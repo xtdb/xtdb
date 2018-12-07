@@ -28,37 +28,15 @@
 ;; ---------------------------------------------------
 ;; Utils
 
-(defn- read-unknown [s]
-  (cond
-    (c/valid-id? s)
-    (c/new-id s)
+(defn- body->edn [request]
+  (-> request
+      req/body-string
+      edn/read-string))
 
-    (try
-      (edn/read-string s)
-      (catch Exception e))
-    (edn/read-string s)
-
-    :else
-    (keyword s)))
-
-;; TODO: potentially get rid of this.
-(defn- param
-  ([request]
-   (param request nil))
-  ([request param-name]
-   (case (:request-method request)
-     :get (-> request
-              :query-params
-              (get param-name)
-              read-unknown)
-     :post (-> request
-               req/body-string
-               edn/read-string))))
-
-(defn- check-path [request valid-paths valid-methods]
+(defn- check-path [[path-pattern valid-methods] request]
   (let [path (req/path-info request)
         method (:request-method request)]
-    (and (some #{path} valid-paths)
+    (and (re-find path-pattern path)
          (some #{method} valid-methods))))
 
 (defn- response
@@ -102,16 +80,15 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
-;; TODO: These could use parameters in the path?
 (defn document [^ICruxSystem local-node request]
-  (let [content-hash (param request "hash")]
+  (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
     (success-response
-     (.document local-node content-hash))))
+     (.document local-node (c/new-id content-hash)))))
 
 (defn- history [^ICruxSystem local-node request]
-  (let [entity (param request "entity")]
+  (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))]
     (success-response
-     (.history local-node entity))))
+     (.history local-node (c/new-id eid)))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxSystem local-node {:keys [business-time transact-time]}]
   (cond
@@ -139,36 +116,46 @@
       (.close ctx)
       (throw t))))
 
+(s/def ::business-time inst?)
+(s/def ::transact-time inst?)
+
+(s/def ::query-map (s/keys :req-un [:crux.query/query]
+                           :opt-un [::business-time ::transact-time]))
+
 ;; TODO: Potentially require both business and transaction time sent
 ;; by the client?
 (defn- query [^ICruxSystem local-node request]
-  (let [query-map (param request)]
+  (let [query-map (s/assert ::query-map (body->edn request))]
     (success-response
      (.q (db-for-request local-node query-map)
-         (dissoc query-map :business-time :transact-time)))))
+         (:query query-map)))))
 
 (defn- query-stream [^ICruxSystem local-node request]
-  (let [query-map (param request)
+  (let [query-map (s/assert ::query-map (body->edn request))
         db (db-for-request local-node query-map)
         snapshot (.newSnapshot db)
-        result (.q db snapshot (dissoc query-map :business-time :transact-time))]
+        result (.q db snapshot (:query query-map))]
     (streamed-edn-response snapshot result)))
+
+(s/def ::eid c/valid-id?)
+(s/def ::entity-map (s/keys :req-un [::eid]
+                            :opt-un [::business-time ::transact-time]))
 
 ;; TODO: Could support as-of now via path and GET.
 (defn- entity [^ICruxSystem local-node request]
-  (let [body (param request)]
+  (let [body (s/assert ::entity-map (body->edn request))]
     (success-response
      (.entity (db-for-request local-node body)
               (:eid body)))))
 
 (defn- entity-tx [^ICruxSystem local-node request]
-  (let [body (param request)]
+  (let [body (s/assert ::entity-map (body->edn request))]
     (success-response
      (.entityTx (db-for-request local-node body)
                 (:eid body)))))
 
 (defn- transact [^ICruxSystem local-node request]
-  (let [tx-ops (param request)]
+  (let [tx-ops (body->edn request)]
     (success-response
      (.submitTx local-node tx-ops))))
 
@@ -182,35 +169,35 @@
 ;; Jetty server
 
 (defn- handler [local-node request]
-  (cond
-    (check-path request ["/"] [:get])
+  (condp check-path request
+    [#"^/$" [:get]]
     (status local-node)
 
-    (check-path request ["/document"] [:get :post])
+    [#"^/document/.+$" [:get :post]]
     (document local-node request)
 
-    (check-path request ["/history"] [:get :post])
+    [#"^/history/.+$" [:get :post]]
     (history local-node request)
 
-    (check-path request ["/query"] [:post])
+    [#"^/query$" [:post]]
     (query local-node request)
 
-    (check-path request ["/query-stream"] [:post])
+    [#"^/query-stream$" [:post]]
     (query-stream local-node request)
 
-    (check-path request ["/entity"] [:post])
+    [#"^/entity$" [:post]]
     (entity local-node request)
 
-    (check-path request ["/entity-tx"] [:post])
+    [#"^/entity-tx$" [:post]]
     (entity-tx local-node request)
 
-    (check-path request ["/tx-log"] [:post])
+    [#"^/tx-log$" [:post]]
     (transact local-node request)
 
-    (check-path request ["/tx-log"] [:get])
+    [#"^/tx-log$" [:get]]
     (tx-log local-node request)
 
-    (check-path request ["/sparql/"] [:get :post])
+    [#"^/sparql/?$" [:get :post]]
     (sparql-protocol/sparql-query local-node request)
 
     :default

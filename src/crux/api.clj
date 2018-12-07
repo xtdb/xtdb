@@ -236,31 +236,33 @@
 (defn- register-stream-with-remote-stream! [snapshot in]
   (swap! (:streams-state snapshot) conj in))
 
+(defn- as-of-map [{:keys [business-time transact-time] :as datasource}]
+  (cond-> {}
+    business-time (assoc :business-time business-time)
+    transact-time (assoc :transact-time transact-time)))
+
 (defrecord RemoteDatasource [url business-time transact-time]
   ICruxDatasource
   (entity [this eid]
-    (api-request-sync (str url "/entity") {:eid eid
-                                           :business-time business-time
-                                           :transact-time transact-time}))
+    (api-request-sync (str url "/entity")
+                      (assoc (as-of-map this) :eid eid)))
 
   (entityTx [this eid]
-    (api-request-sync (str url "/entity-tx") {:eid eid
-                                              :business-time business-time
-                                              :transact-time transact-time}))
+    (api-request-sync (str url "/entity-tx")
+                      (assoc (as-of-map this) :eid eid)))
 
   (newSnapshot [this]
     (->RemoteApiStream (atom [])))
 
   (q [this q]
-    (api-request-sync (str url "/query") (assoc (q/normalize-query q)
-                                                :business-time business-time
-                                                :transact-time transact-time)))
+    (api-request-sync (str url "/query")
+                      (assoc (as-of-map this)
+                             :query (q/normalize-query q))))
 
   (q [this snapshot q]
     (let [in (api-request-sync (str url "/query-stream")
-                               (assoc (q/normalize-query q)
-                                      :business-time business-time
-                                      :transact-time transact-time)
+                               (assoc (as-of-map this)
+                                      :query (q/normalize-query q))
                                {:as :stream})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in))))
@@ -277,10 +279,10 @@
     (->RemoteDatasource url business-time transact-time))
 
   (document [_ content-hash]
-    (api-request-sync (str url "/document") (str content-hash)))
+    (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
 
   (history [_ eid]
-    (api-request-sync (str url "/history") eid))
+    (api-request-sync (str url "/history/" eid) nil {:method :get}))
 
   (status [_]
     (api-request-sync url nil {:method :get}))
