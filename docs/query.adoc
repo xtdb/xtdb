@@ -117,6 +117,7 @@ which would be a post MVP feature.
 * https://arxiv.org/abs/1707.02769[Compressed Representation of Dynamic Binary Relations with Applications]
 * https://arxiv.org/abs/1707.02759[A succinct data structure for self-indexing ternary relations]
 * http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1q[Compact representation of Web graphs with extended functionality]
+* https://users.dcc.uchile.cl/~gnavarro/ps/kais14.pdf[Compressed Vertical Partitioning for Efficient RDF Management]
 * https://www.cs.cmu.edu/~pavlo/papers/mod601-zhangA-hm.pdf[SuRF: Practical Range Query Filtering with Fast Succinct Tries]
 * https://arxiv.org/abs/1503.02368[EmptyHeaded: A Relational Engine for Graph Processing]
 * http://www.gecode.org/papers/Tack_PhD_2009.pdf[Constraint Propagation - Models, Techniques, Implementation]
