@@ -18,8 +18,8 @@
            java.net.URLDecoder
            javax.xml.datatype.DatatypeConstants
            [org.eclipse.rdf4j.rio RDFHandler]
-           org.eclipse.rdf4j.rio.ntriples.NTriplesParserFactory
-           [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource]
+           [org.eclipse.rdf4j.rio.ntriples NTriplesParserFactory NTriplesUtil]
+           [org.eclipse.rdf4j.model BNode IRI Statement Literal Resource Value]
            org.eclipse.rdf4j.model.datatypes.XMLDatatypeUtil
            [org.eclipse.rdf4j.model.vocabulary RDF XMLSchema]
            org.eclipse.rdf4j.model.util.Literals
@@ -30,7 +30,7 @@
 ;; NOTE: this shifts the parts of the RDF namespace after the first
 ;; slash into the Keyword name.
 (defn iri->kw [^IRI iri]
-  (keyword (URLDecoder/decode (str iri))))
+  (keyword (NTriplesUtil/unescapeString (str iri))))
 
 (defn bnode->kw [^BNode bnode]
   (keyword "_" (.getID bnode)))
@@ -82,16 +82,16 @@
       (= XMLSchema/BOOLEAN dt)
       (.booleanValue literal)
 
+      (= RDF/LANGSTRING dt)
+      (map->Lang
+       {(keyword language)
+        (.stringValue literal)})
+
       (re-find #"^\d+$" (.getLabel literal))
       (.longValue literal)
 
       (re-find #"^\d+\.\d+$" (.getLabel literal))
       (.doubleValue literal)
-
-      (= RDF/LANGSTRING dt)
-      (map->Lang
-       {(keyword language)
-        (.stringValue literal)})
 
       :else
       (.stringValue literal))))
@@ -246,3 +246,24 @@
                               (subs (str x) 1)
                               (str x))))
       (Literals/createLiteral factory x))))
+
+(defn parse-ntriple-line ^org.eclipse.rdf4j.model.Statement [^String line]
+  (let [factory (SimpleValueFactory/getInstance)
+        len (count line)
+        s-end (min (or (str/index-of line \space) len)
+                   (or (str/index-of line \tab) len))
+        s (NTriplesUtil/parseResource (subs line 0 s-end) factory)
+        p-start (loop [i (inc s-end)]
+                  (let [c (.charAt line i)]
+                    (if (or (= c \space)
+                            (= c \tab))
+                      (recur (inc i))
+                      i)))
+        p-end (min (or (str/index-of line \space p-start) len)
+                   (or (str/index-of line \tab p-start) len))
+        p (NTriplesUtil/parseURI (subs line p-start p-end) factory)
+        o-start (inc p-end)
+        o-end (str/last-index-of line \. (max (or (str/last-index-of line \#) len)
+                                              (or (str/last-index-of line \.) len)))
+        o (NTriplesUtil/parseValue (str/trimr (subs line o-start o-end)) factory)]
+    (.createStatement factory ^Resource s ^IRI p ^Value o)))
