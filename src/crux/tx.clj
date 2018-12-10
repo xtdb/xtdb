@@ -186,6 +186,7 @@
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
+      (db/store-index-meta indexer :crux.tx-log/consumer-lag 0)
       (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
       (delay {:crux.tx/tx-id tx-id
               :crux.tx/tx-time transact-time})))

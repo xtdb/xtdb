@@ -355,8 +355,9 @@
   ([kv transact-time ^long timeout]
    (let [timeout-at (+ timeout (System/currentTimeMillis))
          epoch (Date. 0)]
-     (while (pos? (compare transact-time (or (read-meta kv :crux.tx-log/tx-time)
-                                             epoch)))
+     (while (and (pos? (long (or (read-meta kv :crux.tx-log/consumer-lag) Long/MAX_VALUE)))
+                 (pos? (compare transact-time (or (read-meta kv :crux.tx-log/tx-time)
+                                                  epoch))))
        (Thread/sleep 100)
        (when (>= (System/currentTimeMillis) timeout-at)
          (throw (IllegalStateException.
@@ -365,8 +366,6 @@
      (read-meta kv :crux.tx-log/tx-time))))
 
 ;; Entities
-
-(declare ^{:tag 'java.io.Closeable} new-cached-snapshot)
 
 (defn- ^EntityTx enrich-entity-tx [entity-tx content-hash]
   (assoc entity-tx :content-hash (some-> content-hash not-empty c/new-id)))

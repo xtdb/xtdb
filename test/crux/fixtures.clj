@@ -163,8 +163,7 @@
 
 (defn with-standalone-system [f]
   (assert (not (bound? #'*kv*)))
-  (let [server-port (cio/free-port)
-        db-dir (str (cio/create-tmpdir "kv-store"))
+  (let [db-dir (str (cio/create-tmpdir "kv-store"))
         options {:db-dir db-dir
                  :kv-backend *kv-backend*}]
     (try

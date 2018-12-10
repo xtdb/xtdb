@@ -12,4 +12,4 @@
   (merge
    (kv/kv-status kv-store)
    (k/zk-status consumer-config)
-   (k/consumer-status indexer consumer-config tx-topic)))
+   (k/consumer-status indexer)))

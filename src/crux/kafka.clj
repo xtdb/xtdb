@@ -131,45 +131,28 @@
 (defn- topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
 
-(defn consumer-status [indexer consumer-config tx-topic]
-  (->> (when consumer-config
-         (try
-           (with-open [^KafkaConsumer consumer
-                       (create-consumer
-                        (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
-             (let [partition (TopicPartition. tx-topic 0)]
-               (.assign consumer [partition])
-               (let [end-offset (get (.endOffsets consumer [partition]) partition)]
-                 (if (pos? end-offset)
-                   (do (.seek consumer partition (dec end-offset))
-                       (if-let [record ^ConsumerRecord (last (.poll consumer (Duration/ofMillis 1000)))]
-                         {:crux.tx-log/remote-time (.timestamp record)
-                          :crux.tx-log/lag (- (long (.offset record))
-                                              (long (or (db/read-index-meta indexer (topic-partition-meta-key partition)) 0)))}
-                         (do (log/warn "Timed out fetching most recent record from Kafka.")
-                             {:crux.tx-log/lag -1})))
-                   {:crux.tx-log/lag 0}))))
-           (catch Exception e
-             (log/warn e "Could not query Kafka consumer position:")
-             {:crux.tx-log/lag -1})))
-       (merge {:crux.tx-log/remote-time nil
-               :crux.tx-log/lag nil
-               :crux.tx-log/local-time (db/read-index-meta indexer :crux.tx-log/tx-time)})))
+(defn consumer-status [indexer]
+  {:crux.tx-log/consumer-lag (db/read-index-meta indexer :crux.tx-log/consumer-lag)
+   :crux.tx-log/tx-time (db/read-index-meta indexer :crux.tx-log/tx-time)})
 
 (defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
+  (doseq [^TopicPartition partition partitions]
+    (db/store-index-meta indexer
+                         (topic-partition-meta-key partition)
+                         (.position consumer partition))))
+
+;; NOTE: this will log a lot if it's far behind. Only takes max lag
+;; into account across all topics and partitions.
+(defn consumer-lag [^KafkaConsumer consumer partitions]
   (let [end-offsets (.endOffsets consumer partitions)]
-    (doseq [^TopicPartition partition partitions
-            :let [position (.position consumer partition)
-                  latest-position (get end-offsets partition)]]
-      ;; TODO: this will log a lot if it's far behind. See crux.status
-      ;; for comment about investigating new status system. Other
-      ;; modules (such as the queries) might want to take action based
-      ;; on this and refuse operation.
-      (when-not (= position latest-position)
-        (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
-      (db/store-index-meta indexer
-                           (topic-partition-meta-key partition)
-                           position))))
+    (->> (for [partition partitions
+               :let [position (.position consumer partition)
+                     latest-position (get end-offsets partition)
+                     lag (- latest-position position)]]
+           (do (when-not (zero? lag)
+                 (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
+               lag))
+         (reduce max 0))))
 
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (doseq [^TopicPartition partition partitions]
@@ -197,23 +180,27 @@
   (let [records (.poll consumer (Duration/ofMillis timeout))
         {:keys [last-tx-log-time] :as result}
         (reduce
-          (fn [state ^ConsumerRecord record]
-            (condp = (.topic record)
-              tx-topic
-              (do (index-tx-record indexer record)
-                  (-> state
-                      (update :txs inc)
-                      (update :last-tx-log-time max (.timestamp record))))
-              doc-topic
-              (do (index-doc-record indexer record)
-                  (update state :docs inc))
+         (fn [state ^ConsumerRecord record]
+           (condp = (.topic record)
+             tx-topic
+             (do (index-tx-record indexer record)
+                 (-> state
+                     (update :txs inc)
+                     (update :last-tx-log-time max (.timestamp record))))
 
-              (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
-          {:txs 0
-           :docs 0
-           :last-tx-log-time 0}
-          records)]
+             doc-topic
+             (do (index-doc-record indexer record)
+                 (update state :docs inc))
+
+             (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
+         {:txs 0
+          :docs 0
+          :last-tx-log-time 0}
+         records)]
     (store-topic-partition-offsets indexer consumer (.partitions records))
+    (when (seq records)
+      (->> (consumer-lag consumer (.partitions records))
+           (db/store-index-meta indexer :crux.tx-log/consumer-lag)))
     (when (pos? last-tx-log-time)
       (db/store-index-meta indexer :crux.tx-log/tx-time (Date. (long last-tx-log-time))))
     (dissoc result :last-tx-log-time)))
