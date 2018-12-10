@@ -8,6 +8,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
+            [crux.kv :as kv]
             [crux.tx :as tx]
             [crux.lru :as lru]
             [crux.rdf :as rdf]
@@ -96,6 +97,8 @@
 (def ^:dynamic *kw->id*)
 (def ^:dynamic *id->kw*)
 
+(def query-timeout-ms 30000)
+
 (defn entity->datascript [kw->id e]
   (let [id-fn (fn [kw]
                 (get (swap! kw->id update kw (fn [x]
@@ -133,7 +136,7 @@
                  (+ n (count entities)))
                0)))
 
-(def max-sparql-query-time-seconds 30)
+(def max-sparql-query-time-seconds (quot query-timeout-ms 1000))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (doto (.prepareTupleQuery conn q)
@@ -207,13 +210,24 @@
                         (k/consume-and-index-entities
                          (assoc consume-args :timeout 100))))
            (t/is (= 521585 @submit-future))
-           (tx/await-no-consumer-lag indexer 60000))))
+           (tx/await-no-consumer-lag indexer 0 {:crux.tx-log/await-tx-timeout 60000}))))
 
       (binding [*conn* conn
                 *kw->id* @kw->id
                 *id->kw* (set/map-invert @kw->id)]
         (f)))
     (f)))
+
+(defn lazy-count-with-timeout [kv q timeout-ms]
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (let [start-time (System/currentTimeMillis)]
+      (loop [[x & xs] (q/q (q/db kv) snapshot q)
+             n 0]
+        (when (> (- (System/currentTimeMillis) start-time) timeout-ms)
+          (throw (IllegalStateException. "Query timed out.")))
+        (if x
+          (recur xs (inc n))
+          n)))))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository f/with-kv-store with-watdiv-data)
 
@@ -238,8 +252,7 @@
          (when crux-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":crux-results " (pr-str (count (q/q (q/db f/*kv*)
-                                                                           (sparql/sparql->datalog q))))
+                     (.write out (str ":crux-results " (lazy-count-with-timeout f/*kv* (sparql/sparql->datalog q) query-timeout-ms)
                                       "\n"))
                      true
                      (catch Throwable t

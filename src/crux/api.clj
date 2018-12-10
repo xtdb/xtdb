@@ -18,16 +18,16 @@
 (defrecord LocalNode [close-promise kv-store tx-log indexer consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
-    (tx/await-no-consumer-lag indexer (:crux.tx-log/await-tx-timeout options))
+    (tx/await-no-consumer-lag indexer options)
     (q/db kv-store))
 
   (db [_ business-time]
-    (tx/await-no-consumer-lag indexer (:crux.tx-log/await-tx-timeout options))
+    (tx/await-no-consumer-lag indexer options)
     (q/db kv-store business-time))
 
   (db [_ business-time transact-time]
-    (tx/await-tx-time indexer transact-time (:crux.tx-log/await-tx-timeout options))
-    (tx/await-no-consumer-lag indexer (:crux.tx-log/await-tx-timeout options))
+    (tx/await-tx-time indexer transact-time options)
+    (tx/await-no-consumer-lag indexer options)
     (q/db kv-store business-time transact-time))
 
   (document [_ content-hash]
