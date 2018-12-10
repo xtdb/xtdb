@@ -25,6 +25,7 @@
 
 ;; See:
 ;; https://dsg.uwaterloo.ca/watdiv/
+;; https://pdfs.semanticscholar.org/eaed/4750e90109f6efaf01aa9fa914636e9366b5.pdf
 
 ;; Needs the following files downloaded and unpacked under test/watdiv
 ;; in the project root:
