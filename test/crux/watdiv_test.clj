@@ -71,6 +71,15 @@
 ;; Ran 1 tests containing 12401 assertions.
 ;; 0 failures, 0 errors.
 
+;; Forth test run, with waiting for indexing to catch up:
+;; "Elapsed time: 271361.052728 msecs"
+;; du -hs /tmp/kafka-* /tmp/kv-store*
+;; 671M    /tmp/kafka-log14363302893017472464
+;; 1.4G    /tmp/kv-store3281879845440675012
+
+;; First 4 queries match Sail's counts, the 5 times out in Sail (and
+;; takes forever in Crux).
+
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
 (def ^:const watdiv-num-queries nil)
 (def ^:const watdiv-indexes nil)
@@ -197,7 +206,8 @@
            (while (not= {:txs 0 :docs 0}
                         (k/consume-and-index-entities
                          (assoc consume-args :timeout 100))))
-           (t/is (= 521585 @submit-future)))))
+           (t/is (= 521585 @submit-future))
+           (tx/await-no-consumer-lag indexer 60000))))
 
       (binding [*conn* conn
                 *kw->id* @kw->id
