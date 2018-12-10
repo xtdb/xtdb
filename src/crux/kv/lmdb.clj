@@ -26,6 +26,8 @@
 (defn- env-set-mapsize [^long env ^long size]
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
+;; TODO: Note, this has to be done when there are no open
+;; transactions. Also, when file reached 4Gb it crashed.
 (defn- increase-mapsize [env ^long factor]
   (with-open [stack (MemoryStack/stackPush)]
     (let [info (MDBEnvInfo/callocStack stack)]
