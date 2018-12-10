@@ -167,6 +167,7 @@
         indexer (tx/->KvIndexer kv-store tx-log object-store)]
     (map->StandaloneSystem {:kv-store kv-store
                             :tx-log tx-log
+                            :object-store object-store
                             :indexer indexer
                             :options options})))
 

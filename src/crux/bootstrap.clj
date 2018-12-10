@@ -119,6 +119,7 @@
          :tx-log tx-log
          :producer producer
          :consumer-config consumer-config
+         :object-store object-store
          :indexer indexer
          :admin-client admin-client
          :indexing-consumer indexing-consumer})
