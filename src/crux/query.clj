@@ -940,7 +940,7 @@
     :else
     q))
 
-(def default-query-timeout 60000)
+(def default-query-timeout 30000)
 
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
