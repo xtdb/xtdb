@@ -37,6 +37,7 @@
                                   [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.2"]
                                   [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.2"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sparql "2.4.2"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]]

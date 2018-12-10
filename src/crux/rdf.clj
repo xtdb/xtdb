@@ -25,12 +25,15 @@
            org.eclipse.rdf4j.model.util.Literals
            org.eclipse.rdf4j.model.impl.SimpleValueFactory))
 
-;;; Main part, uses RDF4J classes to parse N-Triples.
+(def crux-unqualified-iri-prefix "http://juxt.pro/crux/unqualified/")
 
 ;; NOTE: this shifts the parts of the RDF namespace after the first
 ;; slash into the Keyword name.
 (defn iri->kw [^IRI iri]
-  (keyword (NTriplesUtil/unescapeString (str iri))))
+  (let [iri (NTriplesUtil/unescapeString (str iri))]
+    (if (str/starts-with? iri crux-unqualified-iri-prefix)
+      (keyword (str/replace (str iri) crux-unqualified-iri-prefix ""))
+      (keyword iri))))
 
 (defn bnode->kw [^BNode bnode]
   (keyword "_" (.getID bnode)))
@@ -242,8 +245,9 @@
     (if (c/valid-id? x)
       (if (and (keyword? x) (= "_" (namespace x)))
         (.createBNode factory (name x))
-        (.createIRI factory (if (and (keyword? x) (namespace x))
-                              (subs (str x) 1)
+        (.createIRI factory (if (keyword? x)
+                              (cond->> (subs (str x) 1)
+                                (nil? (namespace x)) (str crux-unqualified-iri-prefix))
                               (str x))))
       (Literals/createLiteral factory x))))
 

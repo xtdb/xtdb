@@ -78,11 +78,11 @@
 (def datascript-tests? false)
 (def sail-tests? false)
 
+(def ^:dynamic *sail-conn*)
+
 (def ^:dynamic *conn*)
 (def ^:dynamic *kw->id*)
 (def ^:dynamic *id->kw*)
-
-(def ^:dynamic *sail-conn*)
 
 (defn entity->datascript [kw->id e]
   (let [id-fn (fn [kw]
@@ -121,7 +121,7 @@
                  (+ n (count entities)))
                0)))
 
-(defn execute-sail-sparql [^RepositoryConnection conn q]
+(defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
     (set ((fn step []
             (when (.hasNext tq)
@@ -227,7 +227,7 @@
          (when sail-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":sail-results " (pr-str (count (execute-sail-sparql *conn* q)))
+                     (.write out (str ":sail-results " (pr-str (count (execute-sparql *conn* q)))
                                       "\n"))
                      true
                      (catch Throwable t
@@ -256,11 +256,13 @@
     (t/is true "skipping")))
 
 (t/deftest sail-sanity-check
-  (with-sail-repository
-    (fn []
-      (with-open [in (io/input-stream (io/resource "crux/example-data-artists.nt"))]
-        (load-rdf-into-sail *sail-conn* in))
-      (t/is (= 2 (count (execute-sail-sparql *sail-conn* "
+  (if (and run-watdiv-tests? sail-tests?)
+    (t/is true "skipping")
+    (with-sail-repository
+      (fn []
+        (with-open [in (io/input-stream (io/resource "crux/example-data-artists.nt"))]
+          (load-rdf-into-sail *sail-conn* in))
+        (t/is (= 2 (count (execute-sparql *sail-conn* "
 PREFIX ex: <http://example.org/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
@@ -269,4 +271,4 @@ WHERE
 {
    ?s a ex:Artist;
      foaf:firstName ?n.
-}")))))))
+}"))))))))

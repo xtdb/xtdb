@@ -17,6 +17,9 @@
             And ArbitraryLengthPath BindingSetAssignment Compare Difference Distinct Extension ExtensionElem Exists
             Filter FunctionCall Join LeftJoin ListMemberOperator MathExpr Not Or Order OrderElem Projection QueryModelNode
             Regex SameTerm Slice StatementPattern TupleExpr Union ValueConstant Var ZeroLengthPath]))
+
+(def crux-sparql-prefix "http://juxt.pro/crux/sparql/")
+
 (defn- str->sparql-var [s]
   (symbol (str "?" s)))
 
@@ -136,7 +139,7 @@
           build-optional-clause (fn [var]
                                   (if (contains? common-vars var)
                                     [(list 'identity var)]
-                                    [(list 'identity ::optional) var]))]
+                                    [(list 'identity :http://juxt.pro/crux/sparql/optional) var]))]
       (conj (rdf/rdf->clj (.getLeftArg this))
             (cons 'or-join (cons or-join-vars
                                  (concat
@@ -258,7 +261,7 @@
   ZeroLengthPath
   (rdf->clj [this]
     [[(rdf/rdf->clj (.getSubjectVar this)) :crux.db/id]
-     [(identity ::zero-matches) (rdf/rdf->clj (.getObjectVar this))]]))
+     ['(identity :http://juxt.pro/crux/sparql/zero-matches) (rdf/rdf->clj (.getObjectVar this))]]))
 
 (defn- collect-args [^TupleExpr tuple-expr]
   (let [args (atom nil)]
@@ -272,7 +275,7 @@
                         (->> (for [bn (.getBindingNames bs)]
                                [(str->sparql-var bn) (if (.hasBinding bs bn)
                                                        (rdf/rdf->clj (.getValue bs bn))
-                                                       ::undefined)])
+                                                       :http://juxt.pro/crux/sparql/undefined)])
                              (into {})))
                       (vec)
                       (reset! args))))
@@ -298,7 +301,7 @@
                                   (arbitrary-length-path-rule-head '?t p o min-length)]]
                           (zero? min-length) (conj [(arbitrary-length-path-rule-head s p o min-length)
                                                     [s :crux.db/id]
-                                                    [(identity ::zero-matches) o]])))))
+                                                    ['(identity :http://juxt.pro/crux/sparql/zero-matches) o]])))))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))
     (some->> (for [[_ rules]  @rule-name->rules

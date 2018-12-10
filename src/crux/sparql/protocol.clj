@@ -1,4 +1,5 @@
 (ns crux.sparql.protocol
+  "See https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.api :as api]
@@ -7,7 +8,6 @@
             [ring.util.request :as req])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]
            crux.api.ICruxSystem))
-
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -20,17 +20,21 @@
       ["bnode" (.getID ^BNode rdf-value)]
 
       (instance? IRI rdf-value)
-      ["iri" (str rdf-value)])))
+      ["uri" (str rdf-value)])))
 
 (defn- unbound-sparql-value? [x]
-  (and (keyword? x) (= "crux.sparql" (namespace x))))
+  (and (keyword? x)
+       (str/starts-with? (subs (str x) 1) sparql/crux-sparql-prefix)))
+
+(defn- strip-qmark [x]
+  (str/replace x #"^\?" ""))
 
 (defn- sparql-xml-response [vars results]
   (str "<?xml version=\"1.0\"?>\n"
        "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">"
        "<head>"
        (str/join (for [var vars]
-                   (format "<variable name=\"%s\"/>" var)))
+                   (format "<variable name=\"%s\"/>" (strip-qmark var))))
        "</head>"
        "<results>"
        (str/join (for [result results]
@@ -39,16 +43,16 @@
                                         :when (not (unbound-sparql-value? value))
                                         :let [[type value dt] (edn->sparql-type+value+dt value)]]
                                     (if dt
-                                      (format "<binding name=\"%s\"/><literal datatype=\"%s\">%s</literal></binding>"
-                                              var dt value)
-                                      (format "<binding name=\"%s\"/><%s>%s</%s></binding>"
-                                              var type value type))))
+                                      (format "<binding name=\"%s\"><literal datatype=\"%s\">%s</literal></binding>"
+                                              (strip-qmark var) dt value)
+                                      (format "<binding name=\"%s\"><%s>%s</%s></binding>"
+                                              (strip-qmark var) type value type))))
                         "</result>")))
        "</results>"
        "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp pr-str str) vars)) "]}, "
+  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp pr-str strip-qmark str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
        (->> (for [result results]
               (str "{"
@@ -57,11 +61,11 @@
                               :let [[type value dt] (edn->sparql-type+value+dt value)]]
                           (if dt
                             (format "\"%s\": {\"type\": \"literal\", \"datatype\": \"%s\",  \"value:\": \"%s\"}"
-                                    var
+                                    (strip-qmark var)
                                     dt
                                     value)
-                            (format "\"%s\": {\"type\": \"%s\", \"value:\": \"%s\"}"
-                                    var
+                            (format "\"%s\": {\"type\": \"%s\", \"value\": \"%s\"}"
+                                    (strip-qmark var)
                                     type
                                     value)))
                         (str/join ", "))
@@ -69,7 +73,6 @@
             (str/join ", " ))
        "]}}"))
 
-;; https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
 (defn sparql-query [^ICruxSystem local-node request]
   (if-let [query (case (:request-method request)
                    :get
@@ -88,18 +91,19 @@
           results (.q (.db local-node) query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
-      (cond (= "application/sparql-results+xml" accept)
-            {:status 200
-             :headers {"Content-Type" accept}
-             :body (sparql-xml-response find results)}
+      (cond
+        (str/index-of accept "application/sparql-results+xml")
+        {:status 200
+         :headers {"Content-Type" "application/sparql-results+xml"}
+         :body (sparql-xml-response find results)}
 
-            (= "application/sparql-results+json" accept)
-            {:status 200
-             :headers {"Content-Type" accept}
-             :body (sparql-json-response find results)}
+        (str/index-of accept "application/sparql-results+json")
+        {:status 200
+         :headers {"Content-Type" "application/sparql-results+json"}
+         :body (sparql-json-response find results)}
 
-            :else
-            {:status 406
-             :headers {"Content-Type" "text/plain"}}))
+        :else
+        {:status 406
+         :headers {"Content-Type" "text/plain"}}))
     {:status 400
      :headers {"Content-Type" "text/plain"}}))

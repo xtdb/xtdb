@@ -2,13 +2,19 @@
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.codec :as c]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
            java.util.Date
-           crux.api.StandaloneSystem))
+           crux.api.StandaloneSystem
+           org.eclipse.rdf4j.repository.sparql.SPARQLRepository
+           org.eclipse.rdf4j.repository.RepositoryConnection
+           org.eclipse.rdf4j.query.Binding))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster)
 (t/use-fixtures :each f/with-each-api-implementation)
+
+(declare execute-sparql)
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
@@ -49,17 +55,27 @@
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
                                   #"(status 400|Spec assertion failed)"
-                                  (.q (.db f/*api*) '{:find [e]})))))
+                                  (.q (.db f/*api*) '{:find [e]}))))
 
-      (t/testing "query with streaming result"
-        (let [db (.db f/*api*)]
-          (with-open [snapshot (.newSnapshot db)]
-            (let [result (.q db snapshot '{:find [e]
-                                           :where [[e :name "Ivan"]]})]
-              (t/is (instance? LazySeq result))
-              (t/is (not (realized? result)))
-              (t/is (= '([:ivan]) result))
-              (t/is (realized? result))))))
+        (t/testing "SPARQL query"
+          (when (bound? #'f/*api-url*)
+            (let [repo (SPARQLRepository. (str f/*api-url* "/sparql"))]
+              (try
+                (.initialize repo)
+                (with-open [conn (.getConnection repo)]
+                  (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
+                (finally
+                  (.shutDown repo))))))
+
+        (t/testing "query with streaming result"
+          (let [db (.db f/*api*)]
+            (with-open [snapshot (.newSnapshot db)]
+              (let [result (.q db snapshot '{:find [e]
+                                             :where [[e :name "Ivan"]]})]
+                (t/is (instance? LazySeq result))
+                (t/is (not (realized? result)))
+                (t/is (= '([:ivan]) result))
+                (t/is (realized? result)))))))
 
       (t/testing "entity"
         (t/is (= {:crux.db/id :ivan :name "Ivan"} (.entity (.db f/*api*) :ivan)))
@@ -86,3 +102,11 @@
                              :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) business-time]])]
                      result))
             (t/is (realized? result))))))))
+
+(defn execute-sparql [^RepositoryConnection conn q]
+  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
+    (set ((fn step []
+            (when (.hasNext tq)
+              (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
+                          (.next tq))
+                    (lazy-seq (step)))))))))
