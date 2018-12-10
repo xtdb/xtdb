@@ -1145,6 +1145,17 @@
                                          :where [[_ :last-name l]]
                                          :limit 2}))))))
 
+;; https://github.com/juxt/crux/issues/93
+
+(t/deftest test-self-join-bug-93
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :friend :ivan :boss :petr}
+                            {:crux.db/id :petr :name "Petr"}])
+
+  (t/is (= #{[:petr]} (q/q (q/db *kv*)
+                           '{:find [b]
+                             :where [[e :friend e]
+                                     [e :boss b]]}))))
+
 (t/deftest test-query-and-cas
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
 
