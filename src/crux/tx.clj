@@ -10,7 +10,8 @@
             [crux.lru :as lru]
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
-           [java.io Closeable Writer]))
+           [java.io Closeable Writer]
+           java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -199,3 +200,23 @@
       (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key) true)]
         (assoc (c/decode-tx-log-key k)
                :crux.tx/tx-ops (nippy/fast-thaw v))))))
+
+(def ^:const default-await-tx-timeout 10000)
+
+(defn await-no-consumer-lag [indexer timeout]
+  (if (cio/wait-while #(pos? (long (or (db/read-index-meta indexer :crux.tx-log/consumer-lag) Long/MAX_VALUE)))
+                      (or timeout default-await-tx-timeout))
+    (db/read-index-meta indexer :crux.tx-log/consumer-lag)
+    (throw (IllegalStateException.
+            (str "Timed out waiting for index to catch up, lag is: "
+                 (db/read-index-meta indexer :crux.tx-log/consumer-lag))))))
+
+(defn await-tx-time [indexer transact-time timeout]
+  (await-no-consumer-lag indexer timeout)
+  (if (cio/wait-while #(pos? (compare transact-time (or (db/read-index-meta indexer :crux.tx-log/tx-time)
+                                                        (Date. 0))))
+                      (or timeout default-await-tx-timeout))
+    (db/read-index-meta indexer :crux.tx-log/tx-time)
+    (throw (IllegalStateException.
+            (str "Timed out waiting for: " transact-time
+                 " index has: " (db/read-index-meta indexer :crux.tx-log/tx-time))))))

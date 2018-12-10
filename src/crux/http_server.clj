@@ -119,8 +119,8 @@
 (s/def ::business-time inst?)
 (s/def ::transact-time inst?)
 
-(s/def ::query-map (s/keys :req-un [:crux.query/query
-                                    ::business-time
+(s/def ::query-map (s/keys :req-un [:crux.query/query]
+                           :opt-un [::business-time
                                     ::transact-time]))
 
 ;; TODO: Potentially require both business and transaction time sent
@@ -139,8 +139,8 @@
     (streamed-edn-response snapshot result)))
 
 (s/def ::eid c/valid-id?)
-(s/def ::entity-map (s/keys :req-un [::eid
-                                     ::business-time
+(s/def ::entity-map (s/keys :req-un [::eid]
+                            :opt-un [::business-time
                                      ::transact-time]))
 
 ;; TODO: Could support as-of now via path and GET.

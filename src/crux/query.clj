@@ -1027,7 +1027,6 @@
                       business-time
                       (cio/next-monotonic-date)))
   ([kv business-time transact-time]
-   (idx/await-tx-time kv transact-time)
    (->QueryDatasource kv
                       (lru/get-named-cache kv ::query-cache default-query-cache-size)
                       (lru/new-cached-object-store kv)

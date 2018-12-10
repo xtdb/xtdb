@@ -86,6 +86,14 @@
     (catch Throwable t
       (log/error t "Could not close:" c))))
 
+(defn wait-while [p timeout]
+  (let [timeout-at (+ timeout (System/currentTimeMillis))]
+    (while (p)
+      (Thread/sleep 100)
+      (when (>= (System/currentTimeMillis) timeout-at)
+        false))
+    true))
+
 ;; External Merge Sort
 
 (defn- new-merge-sort-priority-queue ^PriorityQueue [comp sorted-seqs]

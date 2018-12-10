@@ -346,25 +346,6 @@
          (take-while identity)
          (cons result))))
 
-(def ^:const default-await-tx-timeout 10000)
-
-;; TODO: This should go via indexer, not directly on kv.
-(defn await-tx-time
-  ([kv transact-time]
-   (await-tx-time kv transact-time default-await-tx-timeout))
-  ([kv transact-time ^long timeout]
-   (let [timeout-at (+ timeout (System/currentTimeMillis))
-         epoch (Date. 0)]
-     (while (and (pos? (long (or (read-meta kv :crux.tx-log/consumer-lag) Long/MAX_VALUE)))
-                 (pos? (compare transact-time (or (read-meta kv :crux.tx-log/tx-time)
-                                                  epoch))))
-       (Thread/sleep 100)
-       (when (>= (System/currentTimeMillis) timeout-at)
-         (throw (IllegalStateException.
-                 (str "Timed out waiting for: " transact-time
-                      " index has:" (read-meta kv :crux.tx-log/tx-time))))))
-     (read-meta kv :crux.tx-log/tx-time))))
-
 ;; Entities
 
 (defn- ^EntityTx enrich-entity-tx [entity-tx content-hash]
