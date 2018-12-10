@@ -215,7 +215,7 @@ WHERE   { ?x ns:price ?price .
                 (or-join
                  [?mbox ?x]
                  [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]
-                 (and [(identity :http://juxt.pro/crux/sparql/optional) ?mbox] [(identity ?x)]))]}
+                 (and [(identity :crux.sparql/optional) ?mbox] [(identity ?x)]))]}
              (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -230,7 +230,7 @@ WHERE  { ?x foaf:name  ?name .
                 (or-join
                  [?x ?price]
                  (and [?x :http://example.org/ns#price ?price] [(< ?price 30)])
-                 (and [(identity ?x)] [(identity :http://juxt.pro/crux/sparql/optional) ?price]))]}
+                 (and [(identity ?x)] [(identity :crux.sparql/optional) ?price]))]}
              (sparql/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
@@ -343,7 +343,7 @@ WHERE {
                         (http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?t ?o)]
                        [(http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR ?s ?o)
                         [?s :crux.db/id]
-                        [(identity :http://juxt.pro/crux/sparql/zero-matches) ?o]]]}
+                        [(identity :crux.sparql/zero-matches) ?o]]]}
              (sparql/sparql->datalog "
 PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -373,7 +373,7 @@ SELECT ?person
                :where
                [(or-join [?person]
                          (and [:http://example/x :crux.db/id]
-                              [(identity :http://juxt.pro/crux/sparql/zero-matches) ?person])
+                              [(identity :crux.sparql/zero-matches) ?person])
                          [:http://example/x :http://xmlns.com/foaf/0.1/knows ?person])]}
              (sparql/sparql->datalog "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -422,8 +422,8 @@ SELECT ?book ?title ?price
                [[?book :http://purl.org/dc/elements/1.1/title ?title]
                 [?book :http://example.org/ns#price ?price]],
                :args
-               [{?book :http://juxt.pro/crux/sparql/undefined, ?title "SPARQL Tutorial"}
-                {?book :http://example.org/book/book2, ?title :http://juxt.pro/crux/sparql/undefined}]}
+               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.sparql/undefined}]}
              (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
@@ -442,8 +442,8 @@ SELECT ?book ?title ?price
                [[?book :http://purl.org/dc/elements/1.1/title ?title]
                 [?book :http://example.org/ns#price ?price]],
                :args
-               [{?book :http://juxt.pro/crux/sparql/undefined, ?title "SPARQL Tutorial"}
-                {?book :http://example.org/book/book2, ?title :http://juxt.pro/crux/sparql/undefined}]}
+               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book :http://example.org/book/book2, ?title :crux.sparql/undefined}]}
              (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>

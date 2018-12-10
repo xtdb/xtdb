@@ -24,7 +24,7 @@
 
 (defn- unbound-sparql-value? [x]
   (and (keyword? x)
-       (str/starts-with? (subs (str x) 1) sparql/crux-sparql-prefix)))
+       (= "crux.sparql" (namespace x))))
 
 (defn- strip-qmark [x]
   (str/replace x #"^\?" ""))
