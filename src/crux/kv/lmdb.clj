@@ -130,8 +130,8 @@
             (when-not (= LMDB/MDB_NOTFOUND rc)
               (success? rc))))))))
 
-(def default-env-flags (bit-or LMDB/MDB_NOSYNC
-                               LMDB/MDB_NOMETASYNC
+(def default-env-flags (bit-or LMDB/MDB_WRITEMAP
+                               LMDB/MDB_MAPASYNC
                                LMDB/MDB_NOTLS))
 
 (defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv]

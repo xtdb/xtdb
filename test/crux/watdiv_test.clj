@@ -210,7 +210,7 @@
                         (k/consume-and-index-entities
                          (assoc consume-args :timeout 100))))
            (t/is (= 521585 @submit-future))
-           (tx/await-no-consumer-lag indexer 0 {:crux.tx-log/await-tx-timeout 60000}))))
+           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout (* 10 60000)}))))
 
       (binding [*conn* conn
                 *kw->id* @kw->id
