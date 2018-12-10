@@ -27,6 +27,7 @@
 
   (db [_ business-time transact-time]
     (tx/await-tx-time indexer transact-time (:crux.tx-log/await-tx-timeout options))
+    (tx/await-no-consumer-lag indexer (:crux.tx-log/await-tx-timeout options))
     (q/db kv-store business-time transact-time))
 
   (document [_ content-hash]
@@ -47,7 +48,7 @@
     @(db/submit-tx tx-log tx-ops))
 
   (hasSubmittedTxUpdatedEntity [_ submitted-tx eid]
-    (tx/await-tx-time indexer (:crux.tx-log/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
+    (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
     (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
 
   (newTxLogContext [_]

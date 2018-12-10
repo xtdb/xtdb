@@ -215,8 +215,7 @@
   (if (cio/wait-while #(pos? (compare transact-time (or (db/read-index-meta indexer :crux.tx-log/tx-time)
                                                         (Date. 0))))
                       (or timeout default-await-tx-timeout))
-    (do (await-no-consumer-lag indexer timeout)
-        (db/read-index-meta indexer :crux.tx-log/tx-time))
+    (db/read-index-meta indexer :crux.tx-log/tx-time)
     (throw (IllegalStateException.
             (str "Timed out waiting for: " transact-time
                  " index has: " (db/read-index-meta indexer :crux.tx-log/tx-time))))))

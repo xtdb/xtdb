@@ -29,7 +29,7 @@
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
         (t/is (= {:crux.tx-log/consumer-lag 0
                   :crux.tx-log/tx-time (:crux.tx/tx-time submitted-tx)}
-                 (select-keys  status-map [:crux.tx-log/tx-time :crux.tx-log/consumer-lag]))))
+                 (select-keys status-map [:crux.tx-log/tx-time :crux.tx-log/consumer-lag]))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db f/*api*)
