@@ -104,10 +104,12 @@
                               (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
+(s/def ::timout pos-int?)
+
 (declare normalize-query)
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
-                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by])))
+                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout])))
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -938,18 +940,31 @@
     :else
     q))
 
+(def default-query-timeout 60000)
+
+;; TODO: Move future here to a bounded thread pool.
 (defn q
   ([{:keys [kv] :as db} q]
    (let [start-time (System/currentTimeMillis)
-         q (normalize-query (s/assert ::query q))]
-     (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
-       (let [result-coll-fn (if (:order-by q)
-                              (comp vec distinct)
-                              set)
-             result (result-coll-fn (crux.query/q db snapshot q))]
-         (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
-         (log/debug :query-result-size (count result))
-         result))))
+         q (normalize-query (s/assert ::query q))
+         query-future (future
+                        (try
+                          (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
+                            (let [result-coll-fn (if (:order-by q)
+                                                   (comp vec distinct)
+                                                   set)
+                                  result (result-coll-fn (crux.query/q db snapshot q))]
+                              (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
+                              (log/debug :query-result-size (count result))
+                              result))
+                          (catch Throwable t
+                            t)))
+         result (or (deref query-future (or default-query-timeout (:timeout q)) nil)
+                    (do (future-cancel query-future)
+                        (throw (IllegalStateException. "Query timed out."))))]
+     (if (instance? Throwable result)
+       (throw result)
+       result)))
   ([{:keys [object-store] :as db} snapshot q]
    (let [q (normalize-query (s/assert ::query q))
          {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)]

@@ -152,7 +152,7 @@
            (do (when-not (zero? lag)
                  (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
                lag))
-         (reduce max 0))))
+         (reduce + 0))))
 
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (doseq [^TopicPartition partition partitions]

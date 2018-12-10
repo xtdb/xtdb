@@ -63,7 +63,7 @@
 ;; Ran 1 tests containing 12401 assertions.
 ;; 0 failures, 186 errors.
 
-;; Thrid test run, with -Xmss32M, from lein trampoline:
+;; Thrid test run, with -Xss32M, from lein trampoline:
 ;; lein test crux.watdiv-test
 ;; "Elapsed time: 130545.461865 msecs"
 ;; "Elapsed time: 3729324.4121 msecs"
