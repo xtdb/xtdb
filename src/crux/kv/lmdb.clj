@@ -27,7 +27,9 @@
   (success? (LMDB/mdb_env_set_mapsize env size)))
 
 ;; TODO: Note, this has to be done when there are no open
-;; transactions. Also, when file reached 4Gb it crashed.
+;; transactions. Also, when file reached 4Gb it crashed. MDB_WRITEMAP
+;; and MDB_MAPASYNC might solve this, but doesn't allow nested
+;; transactions. See: https://github.com/dw/py-lmdb/issues/113
 (defn- increase-mapsize [env ^long factor]
   (with-open [stack (MemoryStack/stackPush)]
     (let [info (MDBEnvInfo/callocStack stack)]
