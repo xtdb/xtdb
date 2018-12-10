@@ -136,6 +136,7 @@
                       (Thread. (fn []
                                  (let [shutdown-ms 10000]
                                    (deliver shutdown? true)
+                                   (shutdown-agents)
                                    (.join main-thread shutdown-ms)
                                    (when (.isAlive main-thread)
                                      (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
