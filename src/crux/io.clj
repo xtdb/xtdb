@@ -88,11 +88,13 @@
 
 (defn wait-while [p timeout]
   (let [timeout-at (+ timeout (System/currentTimeMillis))]
-    (while (p)
-      (Thread/sleep 100)
-      (when (>= (System/currentTimeMillis) timeout-at)
-        false))
-    true))
+    (loop []
+      (if (p)
+        (do (Thread/sleep 100)
+            (if (>= (System/currentTimeMillis) timeout-at)
+              false
+              (recur)))
+        true))))
 
 ;; External Merge Sort
 
