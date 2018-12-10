@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.set :as set]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
             [crux.db :as db]
@@ -16,10 +17,11 @@
             [crux.fixtures :as f]
             [datascript.core :as d])
   (:import java.util.Date
-           java.io.InputStream
+           [java.io InputStream StringReader]
            org.eclipse.rdf4j.repository.sail.SailRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.sail.nativerdf.NativeStore
+           org.eclipse.rdf4j.IsolationLevels
            org.eclipse.rdf4j.rio.RDFFormat
            org.eclipse.rdf4j.query.Binding))
 
@@ -122,16 +124,25 @@
                  (+ n (count entities)))
                0)))
 
+(def max-sparql-query-time-seconds 30)
+
 (defn execute-sparql [^RepositoryConnection conn q]
-  (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
+  (with-open [tq (.evaluate (doto (.prepareTupleQuery conn q)
+                              (.setMaxExecutionTime max-sparql-query-time-seconds)))]
     (set ((fn step []
             (when (.hasNext tq)
               (cons (mapv #(rdf/rdf->clj (.getValue ^Binding %))
                           (.next tq))
                     (lazy-seq (step)))))))))
 
-(defn load-rdf-into-sail [conn ^InputStream in]
-  (.add ^RepositoryConnection conn in "" RDFFormat/NTRIPLES rdf/empty-resource-array))
+(def rdf-sail-chunk-size 100000)
+
+(defn load-rdf-into-sail [^RepositoryConnection conn ^InputStream in]
+  (->> (partition-all rdf-sail-chunk-size (line-seq (io/reader in)))
+       (reduce (fn [n chunk]
+                 (.add conn (StringReader. (str/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
+                 (+ n (count chunk)))
+               0)))
 
 (defn with-sail-repository [f]
   (let [db-dir (str (cio/create-tmpdir "sail-store"))
@@ -165,6 +176,7 @@
          (with-open [in (io/input-stream (io/resource watdiv-triples-resource))]
            (submit-ntriples-to-datascript conn kw->id in 1000))))
 
+      ;; "Elapsed time: 305376.165167 msecs" 767Mb
       (when sail-tests?
         (println "Loading into Sail...")
         (time
@@ -228,7 +240,7 @@
          (when sail-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":sail-results " (pr-str (count (execute-sparql *conn* q)))
+                     (.write out (str ":sail-results " (pr-str (count (execute-sparql *sail-conn* q)))
                                       "\n"))
                      true
                      (catch Throwable t
