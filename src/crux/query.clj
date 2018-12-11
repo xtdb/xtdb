@@ -263,8 +263,20 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars]
-  (let [v->clauses (group-by :v triple-clauses)]
+;; TODO: Should probably use dep here already to make better judgement
+;; calls?
+(defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars stats]
+  (let [;; literal-deps (set (for [{:keys [e v]} triple-clauses
+        ;;                         :when (or (literal? e)
+        ;;                                   (literal? v))
+        ;;                         v (filter logic-var? [e v])]
+        ;;                     v))
+        ;; var-stats (->> (for [{:keys [e a v]} triple-clauses
+        ;;                      x [e v]
+        ;;                      :when (logic-var? x)]
+        ;;                  {x (get stats a 0)})
+        ;;                (apply merge-with +))
+        v->clauses (group-by :v triple-clauses)]
     (->> triple-clauses
          (reduce
           (fn [[deps var->joins] {:keys [e a v] :as clause}]
@@ -292,10 +304,12 @@
               [(cond
                  (and (logic-var? v)
                       (or (literal? e)
-                          (contains? arg-vars e)))
+                          (contains? arg-vars e)
+                          #_(contains? literal-deps e)))
                  (conj deps [[e-var] [v-var]])
                  (and (or (literal? v)
-                          (contains? arg-vars v))
+                          (contains? arg-vars v)
+                          #_(contains? literal-deps v))
                       (logic-var? e))
                  (conj deps [[v-var] [e-var]])
                  v-is-leaf?
@@ -305,7 +319,11 @@
                  ;; as they're a pair, calculate-join-order needs this
                  ;; for or and predicates, so we pick this order.
                  :else
-                 (conj deps [[v-var] [e-var]]))
+                 (conj deps [[v-var] [e-var]])
+                 #_(if (>= (long (get var-stats e-var 0))
+                           (long (get var-stats v-var 0)))
+                     (conj deps [[v-var] [e-var]])
+                     (conj deps [[e-var] [v-var]])))
                var->joins]))
           [[] var->joins]))))
 
@@ -544,7 +562,7 @@
 ;; sequence and reuse it, somehow detecting if it loops.
 (defn- build-or-constraints
   [rule-name->rules or-clause+idx-id+or-branches
-   var->bindings vars-in-join-order v-var->range-constraints]
+   var->bindings vars-in-join-order v-var->range-constraints stats]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
@@ -576,7 +594,7 @@
                                                                     (assoc *recursion-table* cache-key [])
                                                                     *recursion-table*)]
                                         (let [{:keys [n-ary-join
-                                                      var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                                                      var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
                                           (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                             (if has-free-vars?
                                               (vec (for [[join-keys join-results] idx-seq]
@@ -618,7 +636,7 @@
                      != (empty? (apply set/intersection values)))
                join-results)))})))
 
-(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
+(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings stats]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -636,7 +654,7 @@
                           [(->> (for [var not-vars]
                                   (:value (bound-results-for-var snapshot object-store var->bindings join-keys join-results var)))
                                 (zipmap not-vars))])
-                   {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules)]
+                   {:keys [n-ary-join]} (build-sub-query snapshot db not-clause args rule-name->rules stats)]
                (when (empty? (idx/layered-idx->seq n-ary-join))
                  join-results))))})))
 
@@ -764,7 +782,7 @@
       new-known-vars
       (recur new-known-vars pred-clauses))))
 
-(defn- compile-sub-query [where arg-vars rule-name->rules]
+(defn- compile-sub-query [where arg-vars rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
          range-clauses :range
@@ -791,7 +809,8 @@
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
                                                     non-leaf-vars
-                                                    arg-vars)
+                                                    arg-vars
+                                                    stats)
         [args-idx-id var->joins] (arg-joins arg-vars
                                             e-vars
                                             var->joins)
@@ -831,11 +850,11 @@
                                                  join-depth
                                                  (keys var->attr)))
         unification-constraints (build-unification-constraints unify-clauses var->bindings)
-        not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
-        not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
+        not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
+        not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
         pred-constraints (build-pred-constraints pred-clause+idx-ids var->bindings)
         or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                             var->bindings vars-in-join-order v-var->range-constraints)
+                                             var->bindings vars-in-join-order v-var->range-constraints stats)
         depth->constraints (->> (concat unification-constraints
                                         pred-constraints
                                         not-constraints
@@ -865,7 +884,7 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [snapshot {:keys [kv query-cache object-store business-time transact-time] :as db} where args rule-name->rules]
+(defn- build-sub-query [snapshot {:keys [kv query-cache object-store business-time transact-time] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
@@ -879,7 +898,7 @@
                                query-cache
                                [where arg-vars rule-name->rules]
                                (fn [_]
-                                 (compile-sub-query where arg-vars rule-name->rules)))
+                                 (compile-sub-query where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
                               (constrain-join-result-by-constraints snapshot db idx-id->idx depth->constraints join-keys join-results))
@@ -939,10 +958,13 @@
     :else
     q))
 
-(defn query-plan-for [q]
-  (s/assert ::query q)
-  (let [{:keys [where args rules]} (s/conform ::query q)]
-    (compile-sub-query where (arg-vars args) (rule-name->rules rules))))
+(defn query-plan-for
+  ([q]
+   (query-plan-for q {}))
+  ([q stats]
+   (s/assert ::query q)
+   (let [{:keys [where args rules]} (s/conform ::query q)]
+     (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
 (def default-query-timeout 30000)
 
@@ -970,14 +992,15 @@
      (if (instance? Throwable result)
        (throw result)
        result)))
-  ([{:keys [object-store] :as db} snapshot q]
+  ([{:keys [object-store kv] :as db} snapshot q]
    (let [q (normalize-query (s/assert ::query q))
-         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)]
+         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)
+         stats (idx/read-meta kv :crux.kv/stats)]
      (log/debug :query (pr-str q))
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
            {:keys [n-ary-join
-                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
+                   var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
        (doseq [var find
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.

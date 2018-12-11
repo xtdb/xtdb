@@ -252,6 +252,20 @@
     (range-constraints idx)
     idx))
 
+;; Meta
+
+(defn store-meta [kv k v]
+  (kv/store kv [[(c/encode-meta-key (c/id->bytes k))
+                 (nippy/fast-freeze v)]]))
+
+(defn read-meta [kv k]
+  (let [seek-k (c/encode-meta-key (c/id->bytes k))]
+    (with-open [snapshot (kv/new-snapshot kv)
+                i (kv/new-iterator snapshot)]
+      (when-let [k (kv/seek i seek-k)]
+        (when (bu/bytes=? seek-k k)
+          (nippy/fast-thaw (kv/value i)))))))
+
 ;; Object Store
 
 (defn normalize-value [v]
@@ -261,7 +275,10 @@
 
 (defn index-doc [kv content-hash doc]
   (let [id (c/id->bytes (:crux.db/id doc))
-        content-hash (c/id->bytes content-hash)]
+        content-hash (c/id->bytes content-hash)
+        stats (->> (for [[k v] doc]
+                     [k (count (normalize-value v))])
+                   (into {}))]
     (kv/store kv (->> (for [[k v] doc
                             v (normalize-value v)
                             :let [k (c/id->bytes k)
@@ -271,11 +288,16 @@
                           c/empty-byte-array]
                          [(c/encode-attribute+entity+value+content-hash-key k id v content-hash)
                           c/empty-byte-array]])
-                      (reduce into [])))))
+                      (reduce into [])))
+    (locking kv
+      (store-meta kv :crux.kv/stats (merge-with + (read-meta kv :crux.kv/stats) stats)))))
 
 (defn delete-doc-from-index [kv content-hash doc]
   (let [id (c/id->bytes (:crux.db/id doc))
-        content-hash (c/id->bytes content-hash)]
+        content-hash (c/id->bytes content-hash)
+        stats (->> (for [[k v] doc]
+                     [k (count (normalize-value v))])
+                   (into {}))]
     (kv/delete kv (->> (for [[k v] doc
                              v (normalize-value v)
                              :let [k (c/id->bytes k)
@@ -283,7 +305,9 @@
                              :when (seq v)]
                          [(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           (c/encode-attribute+entity+value+content-hash-key k id v content-hash)])
-                       (reduce into [])))))
+                       (reduce into [])))
+    (locking kv
+      (store-meta kv :crux.kv/stats (merge-with - (read-meta kv :crux.kv/stats) stats)))))
 
 (defrecord KvObjectStore [kv]
   Closeable
@@ -310,20 +334,6 @@
 
   Closeable
   (close [_]))
-
-;; Meta
-
-(defn store-meta [kv k v]
-  (kv/store kv [[(c/encode-meta-key (c/id->bytes k))
-                 (nippy/fast-freeze v)]]))
-
-(defn read-meta [kv k]
-  (let [seek-k (c/encode-meta-key (c/id->bytes k))]
-    (with-open [snapshot (kv/new-snapshot kv)
-                i (kv/new-iterator snapshot)]
-      (when-let [k (kv/seek i seek-k)]
-        (when (bu/bytes=? seek-k k)
-          (nippy/fast-thaw (kv/value i)))))))
 
 ;; Utils
 

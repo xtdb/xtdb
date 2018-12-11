@@ -85,7 +85,8 @@
 (def ^:const watdiv-num-queries nil)
 (def ^:const watdiv-indexes nil)
 
-(def run-watdiv-tests? (and false (boolean (io/resource watdiv-triples-resource))))
+(def run-watdiv-tests? (and (boolean (System/getenv "CRUX_WATDIV"))
+                            (boolean (io/resource watdiv-triples-resource))))
 
 (def crux-tests? true)
 (def datascript-tests? false)
@@ -210,7 +211,12 @@
                         (k/consume-and-index-entities
                          (assoc consume-args :timeout 100))))
            (t/is (= 521585 @submit-future))
-           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))))
+           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000})
+
+           (spit (io/file "target/watdiv_population_stats.edn")
+                 (pr-str (->> (for [[k v] (idx/read-meta f/*kv* :crux.kv/stats)]
+                                [(str k) v])
+                              (into {})))))))
 
       (binding [*conn* conn
                 *kw->id* @kw->id
