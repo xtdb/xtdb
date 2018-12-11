@@ -170,7 +170,7 @@
   (close [_]
     (.close tx)))
 
-(s/def ::env-flags pos-int?)
+(s/def ::env-flags nat-int?)
 
 (s/def ::options (s/keys :req-un [:crux.kv/db-dir]
                          :opt [::env-flags]))

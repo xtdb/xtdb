@@ -97,14 +97,14 @@
                                 (s/cat :head ::rule-head
                                        :body (s/+ ::term))))
 (s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
-(s/def ::offset pos-int?)
-(s/def ::limit pos-int?)
+(s/def ::offset nat-int?)
+(s/def ::limit nat-int?)
 
 (s/def ::order-element (s/and vector?
                               (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
 (s/def ::order-by (s/coll-of ::order-element :kind vector?))
 
-(s/def ::timout pos-int?)
+(s/def ::timout nat-int?)
 
 (declare normalize-query)
 

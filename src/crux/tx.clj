@@ -203,8 +203,8 @@
 
 (def ^:const default-await-tx-timeout 10000)
 
-(s/def :crux.tx-log/consumer-lag-threshold pos-int?)
-(s/def :crux.tx-log/await-tx-timeout pos-int?)
+(s/def :crux.tx-log/consumer-lag-threshold nat-int?)
+(s/def :crux.tx-log/await-tx-timeout nat-int?)
 
 (defn await-no-consumer-lag [indexer {:crux.tx-log/keys [consumer-lag-threshold
                                                          await-tx-timeout]
