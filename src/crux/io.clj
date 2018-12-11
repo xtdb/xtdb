@@ -54,8 +54,7 @@
   (with-open [s (ServerSocket. 0)]
     (.getLocalPort s)))
 
-(defn create-tmpdir ^java.io.File [dir-name]
-  (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0))))
+(def ^:private files-to-delete (atom []))
 
 (def file-deletion-visitor
   (proxy [SimpleFileVisitor] []
@@ -71,6 +70,19 @@
   (let [dir (io/file dir)]
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
+
+(defn create-tmpdir ^java.io.File [dir-name]
+  (let [f (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0)))]
+    (locking files-to-delete
+      (when (empty? @files-to-delete)
+        (.addShutdownHook
+         (Runtime/getRuntime)
+         (Thread. (fn []
+                    (doseq [f @files-to-delete]
+                      (delete-dir f)))
+                  "crux.io.shutdown-hook-thread")))
+      (swap! files-to-delete conj f))
+    f))
 
 (defn folder-size
   "Total size of a file or folder in bytes"
