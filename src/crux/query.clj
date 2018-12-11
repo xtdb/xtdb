@@ -322,19 +322,21 @@
            (symbol (name k))))))
 
 (defn- arg-joins [arg-vars e-vars var->joins]
-  (let [idx-id (gensym "args")
-        join {:id idx-id
-              :idx-fn #(idx/new-relation-virtual-index idx-id
-                                                       []
-                                                       (count arg-vars))}]
-    [idx-id
-     (->> arg-vars
-          (reduce
-           (fn [var->joins arg-var]
-             (->> {arg-var
-                   [(assoc join :name (symbol "crux.query.value" (name arg-var)))]}
-                  (merge-with into var->joins)))
-           var->joins))]))
+  (if (seq arg-vars)
+    (let [idx-id (gensym "args")
+          join {:id idx-id
+                :idx-fn #(idx/new-relation-virtual-index idx-id
+                                                         []
+                                                         (count arg-vars))}]
+      [idx-id
+       (->> arg-vars
+            (reduce
+             (fn [var->joins arg-var]
+               (->> {arg-var
+                     [(assoc join :name (symbol "crux.query.value" (name arg-var)))]}
+                    (merge-with into var->joins)))
+             var->joins))])
+    [nil var->joins]))
 
 (defn- pred-joins [pred-clauses v-var->range-constraints var->joins]
   (->> pred-clauses
@@ -933,6 +935,10 @@
     (string? q) (normalize-query (edn/read-string q))
     :else
     q))
+
+(defn query-plan-for [q]
+  (s/assert ::query q)
+  (compile-sub-query (:where (s/conform ::query q)) [] {}))
 
 (def default-query-timeout 30000)
 
