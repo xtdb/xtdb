@@ -689,6 +689,9 @@
         join-order (dep/topo-sort g)]
     (vec (remove #{::root} join-order))))
 
+(defn- rule-name->rules [rules]
+  (group-by (comp :name :head) rules))
+
 (defn- expand-rules [where rule-name->rules recursion-cache]
   (->> (for [[type clause :as sub-clause] where]
          (if (= :rule type)
@@ -938,7 +941,8 @@
 
 (defn query-plan-for [q]
   (s/assert ::query q)
-  (compile-sub-query (:where (s/conform ::query q)) [] {}))
+  (let [{:keys [where args rules]} (s/conform ::query q)]
+    (compile-sub-query where (arg-vars args) (rule-name->rules rules))))
 
 (def default-query-timeout 30000)
 
@@ -971,7 +975,7 @@
          {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)]
      (log/debug :query (pr-str q))
      (validate-args args)
-     (let [rule-name->rules (group-by (comp :name :head) rules)
+     (let [rule-name->rules (rule-name->rules rules)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules)]
        (doseq [var find
