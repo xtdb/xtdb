@@ -650,6 +650,8 @@
                                    :when leaf-key]
                                [leaf-key (last result)]))
         step (fn step [max-ks ^long depth needs-seek?]
+               (when (Thread/interrupted)
+                 (throw (InterruptedException.)))
                (let [close-level (fn []
                                    (when (pos? depth)
                                      (db/close-level idx)

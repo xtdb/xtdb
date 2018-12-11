@@ -97,7 +97,7 @@
 (def ^:dynamic *kw->id*)
 (def ^:dynamic *id->kw*)
 
-(def query-timeout-ms 60000)
+(def query-timeout-ms 15000)
 
 (defn entity->datascript [kw->id e]
   (let [id-fn (fn [kw]
@@ -220,17 +220,11 @@
 
 (defn lazy-count-with-timeout [kv q timeout-ms]
   (let [query-future (future
-                       (try
-                         (with-open [snapshot (kv/new-snapshot kv)]
-                           (count (q/q (q/db kv) snapshot q)))
-                         (catch Throwable t
-                           t)))
-        result (or (deref query-future timeout-ms nil)
-                   (do (future-cancel query-future)
-                       (throw (IllegalStateException. "Query timed out."))))]
-    (if (instance? Throwable result)
-      (throw result)
-      result)))
+                       (with-open [snapshot (kv/new-snapshot kv)]
+                         (count (q/q (q/db kv) snapshot q))))]
+    (or (deref query-future timeout-ms nil)
+        (do (future-cancel query-future)
+            (throw (IllegalStateException. "Query timed out."))))))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository f/with-kv-store with-watdiv-data)
 

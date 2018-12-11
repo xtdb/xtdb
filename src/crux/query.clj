@@ -139,17 +139,10 @@
                                       > <=
                                       >= <})
 
-;; NOTE: This could be optimised if the binary join had a mechanism to
-;; propagate the value the first occurrence to the second. This would
-;; avoid having to scan the entire second var to find the value we
-;; already know we're looking for. This could be implemented as a
-;; relation that gets updated once we know the first value. In the
-;; more generic case, unification constraints could propagate
-;; knowledge of the first bound value from one join to another.
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym v)]
     {:triple [(assoc triple :v v-var)]
-     :unify [{:op '== :args [v-var e]}]}))
+     :pred [{:pred {:pred-fn = :args [v-var e]}}]}))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
@@ -961,7 +954,8 @@
                           (catch Throwable t
                             t)))
          result (or (deref query-future (or default-query-timeout (:timeout q)) nil)
-                    (do (future-cancel query-future)
+                    (do (when-not (future-cancel query-future)
+                          (throw (IllegalStateException. "Could not cancel query.")))
                         (throw (IllegalStateException. "Query timed out."))))]
      (if (instance? Throwable result)
        (throw result)
