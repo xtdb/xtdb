@@ -97,7 +97,7 @@
 (def ^:dynamic *kw->id*)
 (def ^:dynamic *id->kw*)
 
-(def query-timeout-ms 30000)
+(def query-timeout-ms 60000)
 
 (defn entity->datascript [kw->id e]
   (let [id-fn (fn [kw]
@@ -210,7 +210,7 @@
                         (k/consume-and-index-entities
                          (assoc consume-args :timeout 100))))
            (t/is (= 521585 @submit-future))
-           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout (* 10 60000)}))))
+           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))))
 
       (binding [*conn* conn
                 *kw->id* @kw->id
@@ -219,15 +219,18 @@
     (f)))
 
 (defn lazy-count-with-timeout [kv q timeout-ms]
-  (with-open [snapshot (kv/new-snapshot kv)]
-    (let [start-time (System/currentTimeMillis)]
-      (loop [[x & xs] (q/q (q/db kv) snapshot q)
-             n 0]
-        (when (> (- (System/currentTimeMillis) start-time) timeout-ms)
-          (throw (IllegalStateException. "Query timed out.")))
-        (if x
-          (recur xs (inc n))
-          n)))))
+  (let [query-future (future
+                       (try
+                         (with-open [snapshot (kv/new-snapshot kv)]
+                           (count (q/q (q/db kv) snapshot q)))
+                         (catch Throwable t
+                           t)))
+        result (or (deref query-future timeout-ms nil)
+                   (do (future-cancel query-future)
+                       (throw (IllegalStateException. "Query timed out."))))]
+    (if (instance? Throwable result)
+      (throw result)
+      result)))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository f/with-kv-store with-watdiv-data)
 
@@ -257,7 +260,8 @@
                      true
                      (catch Throwable t
                        (.write out (str ":crux-error " (pr-str (str t)) "\n"))
-                       (throw t))))
+                       (throw t)))
+                   idx)
              (.write out (str ":crux-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
 
          (when sail-tests?
@@ -268,7 +272,8 @@
                      true
                      (catch Throwable t
                        (.write out (str ":sail-error " (pr-str (str t)) "\n"))
-                       (throw t))))
+                       (throw t)))
+                   idx)
              (.write out (str ":sail-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
 
          (when datascript-tests?
@@ -284,7 +289,8 @@
                      true
                      (catch Throwable t
                        (.write out (str ":datascript-error " (pr-str (str t)) "\n"))
-                       (throw t))))
+                       (throw t)))
+                   idx)
              (.write out (str ":datascript-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
          (.write out "}\n")
          (.flush out))
