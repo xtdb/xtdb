@@ -42,6 +42,12 @@
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
+   ["-l" "--consumer-lag-threshold THRESHOLD" "Above this queries will start blocking."
+    :default 0
+    :parse-fn #(Long/parseLong %)]
+   ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query."
+    :default 10000
+    :parse-fn #(Long/parseLong %)]
 
    ["-h" "--help"]])
 
@@ -58,7 +64,9 @@
                                   :crux.kafka/replication-factor
                                   :crux.kv/db-dir
                                   :crux.kv/kv-backend
-                                  :crux.http-server/server-port]))
+                                  :crux.http-server/server-port
+                                  :crux.tx-log/consumer-lag-threshold
+                                  :crux.tx-log/await-tx-timeout]))
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
 
