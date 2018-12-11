@@ -654,8 +654,9 @@
                  (throw (InterruptedException.)))
                (let [close-level (fn []
                                    (when (pos? depth)
-                                     (db/close-level idx)
-                                     (step (pop max-ks) (dec depth) false)))
+                                     (lazy-seq
+                                      (db/close-level idx)
+                                      (step (pop max-ks) (dec depth) false))))
                      open-level (fn [result]
                                   (db/open-level idx)
                                   (if-let [max-ks (build-result max-ks result)]
@@ -664,8 +665,7 @@
                                         (step max-ks depth false))))]
                  (if (= depth (dec max-depth))
                    (concat (build-leaf-results max-ks idx)
-                           (lazy-seq
-                            (close-level)))
+                           (close-level))
                    (if-let [result (if needs-seek?
                                      (db/seek-values idx nil)
                                      (db/next-values idx))]
