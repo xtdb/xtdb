@@ -184,7 +184,7 @@
           tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
           object-store (lru/new-cached-object-store f/*kv*)
           indexer (tx/->KvIndexer f/*kv* tx-log object-store)
-          datascript-conn (d/create-conn (datomic-schema->datascript-schema datomic-schema))
+          datascript-conn (d/create-conn (datomic-schema->datascript-schema datomic-watdiv-schema))
           kw->id (atom {})]
 
       (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
