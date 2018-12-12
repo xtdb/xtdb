@@ -80,8 +80,11 @@
 ;; takes forever in Crux).
 
 (def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
-(def ^:const watdiv-num-queries nil)
-(def ^:const watdiv-indexes nil)
+(def ^:const watdiv-num-queries (System/getenv "CRUX_WATDIV_NUM_QUERIES"))
+(def ^:const watdiv-indexes (some-> (System/getenv "CRUX_WATDIV_IDS")
+                                    (str/split #"\s*,\s+")
+                                    (->> (map #(Long/parseLong %))
+                                         (into #{}))))
 
 (def run-watdiv-tests? (and (boolean (System/getenv "CRUX_WATDIV"))
                             (boolean (io/resource watdiv-triples-resource))))
