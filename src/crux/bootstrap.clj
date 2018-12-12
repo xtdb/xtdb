@@ -200,7 +200,8 @@
                                                  kv-store tx-log indexer consumer-config options)]
                @(shutdown-hook-promise))))))))
 
-(Thread/setDefaultUncaughtExceptionHandler
- (reify Thread$UncaughtExceptionHandler
-   (uncaughtException [_ thread throwable]
-     (log/error throwable "Uncaught exception:"))))
+(when-not (Thread/getDefaultUncaughtExceptionHandler)
+  (Thread/setDefaultUncaughtExceptionHandler
+   (reify Thread$UncaughtExceptionHandler
+     (uncaughtException [_ thread throwable]
+       (log/error throwable "Uncaught exception:")))))
