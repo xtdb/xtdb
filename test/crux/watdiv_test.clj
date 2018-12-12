@@ -94,16 +94,17 @@
 
 (def ^:dynamic *sail-conn*)
 
-(def ^:dynamic *conn*)
+(def ^:dynamic *datascript-conn*)
 (def ^:dynamic *kw->id*)
 (def ^:dynamic *id->kw*)
+(def datascript-id-start 100000)
 
 (def query-timeout-ms 15000)
 
 (defn entity->datascript [kw->id e]
   (let [id-fn (fn [kw]
                 (get (swap! kw->id update kw (fn [x]
-                                               (or x (inc (count @kw->id)))))
+                                               (or x (inc (+ datascript-id-start (count @kw->id))))))
                      kw))
         id (id-fn (:crux.db/id e))
         tx-op-fn (fn tx-op-fn [k v]
@@ -169,6 +170,13 @@
         (.shutDown db)
         (cio/delete-dir db-dir)))))
 
+(declare datomic-watdiv-schema)
+
+(defn datomic-schema->datascript-schema [schema]
+  (->> (for [{:keys [db/id] :as s} datomic-schema]
+         [id (dissoc s :db/id)])
+       (into {})))
+
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
     (let [tx-topic "test-can-run-watdiv-tx-queries"
@@ -176,7 +184,7 @@
           tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
           object-store (lru/new-cached-object-store f/*kv*)
           indexer (tx/->KvIndexer f/*kv* tx-log object-store)
-          conn (d/create-conn)
+          datascript-conn (d/create-conn (datomic-schema->datascript-schema datomic-schema))
           kw->id (atom {})]
 
       (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -187,7 +195,7 @@
         (println "Loading into Datascript...")
         (time
          (with-open [in (io/input-stream (io/resource watdiv-triples-resource))]
-           (submit-ntriples-to-datascript conn kw->id in 1000))))
+           (submit-ntriples-to-datascript datascript-conn kw->id in 1000))))
 
       ;; "Elapsed time: 305376.165167 msecs" 767Mb
       (when sail-tests?
@@ -218,7 +226,7 @@
                                 [(str k) v])
                               (into {})))))))
 
-      (binding [*conn* conn
+      (binding [*datascript-conn* datascript-conn
                 *kw->id* @kw->id
                 *id->kw* (set/map-invert @kw->id)]
         (f)))
@@ -284,7 +292,7 @@
                                                                              (d/q (w/postwalk-replace
                                                                                    *kw->id*
                                                                                    (sparql/sparql->datalog q))
-                                                                                  @*conn*))))
+                                                                                  @*datascript-conn*))))
                                       "\n"))
                      true
                      (catch Throwable t
@@ -318,7 +326,7 @@ WHERE
 ;; TODO: Not used or verified yet. See:
 ;; https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; [com.datomic/datomic-free "0.9.5697"]
-(def datomic-schema
+(def datomic-watdiv-schema
   [#:db{:valueType :db.type/string, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/composer")}
    #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/follows")}
    #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/friendOf")}
