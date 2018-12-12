@@ -19,16 +19,16 @@
   ICruxSystem
   (db [_]
     (tx/await-no-consumer-lag indexer options)
-    (q/db kv-store))
+    (q/db kv-store nil nil options))
 
   (db [_ business-time]
     (tx/await-no-consumer-lag indexer options)
-    (q/db kv-store business-time))
+    (q/db kv-store business-time nil options))
 
   (db [_ business-time transact-time]
     (tx/await-tx-time indexer transact-time options)
     (tx/await-no-consumer-lag indexer options)
-    (q/db kv-store business-time transact-time))
+    (q/db kv-store business-time transact-time options))
 
   (document [_ content-hash]
     (let [object-store (idx/->KvObjectStore kv-store)

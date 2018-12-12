@@ -48,6 +48,9 @@
    ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query."
     :default 10000
     :parse-fn #(Long/parseLong %)]
+   ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache."
+    :default 10240
+    :parse-fn #(Long/parseLong %)]
 
    ["-h" "--help"]])
 
@@ -66,7 +69,8 @@
                                   :crux.kv/kv-backend
                                   :crux.http-server/server-port
                                   :crux.tx-log/consumer-lag-threshold
-                                  :crux.tx-log/await-tx-timeout]))
+                                  :crux.tx-log/await-tx-timeout
+                                  :crux.lru/doc-cache-size]))
 
 (def default-options (:options (cli/parse-opts [] cli-options)))
 

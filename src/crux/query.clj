@@ -1060,26 +1060,30 @@
 
 (def ^:const default-query-cache-size 10240)
 
+(s/def ::query-cache-size nat-int?)
+
+(s/def ::db-options (s/keys :opt [::query-cache-size]
+                            :opt-un [:crux.lru/doc-cache-size]))
+
 (defn db
   ([kv]
-   (let [business-time (cio/next-monotonic-date)]
-     (->QueryDatasource kv
-                        (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                        (lru/new-cached-object-store kv)
-                        business-time
-                        business-time)))
+   (db kv nil nil {}))
   ([kv business-time]
-   (->QueryDatasource kv
-                      (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (lru/new-cached-object-store kv)
-                      business-time
-                      (cio/next-monotonic-date)))
+   (db kv business-time nil {}))
   ([kv business-time transact-time]
-   (->QueryDatasource kv
-                      (lru/get-named-cache kv ::query-cache default-query-cache-size)
-                      (lru/new-cached-object-store kv)
-                      business-time
-                      transact-time)))
+   (db kv business-time transact-time {}))
+  ([kv business-time transact-time {:keys [crux.query/query-cache-size
+                                           doc-cache-size]
+                                    :or {query-cache-size default-query-cache-size
+                                         doc-cache-size lru/default-doc-cache-size}
+                                    :as options}]
+   (s/assert ::db-options options)
+   (let [now (cio/next-monotonic-date)]
+     (->QueryDatasource kv
+                        (lru/get-named-cache kv ::query-cache query-cache-size)
+                        (lru/new-cached-object-store kv doc-cache-size)
+                        (or business-time now)
+                        (or transact-time now)))))
 
 (defn submitted-tx-updated-entity? [kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} eid]
   (= tx-id (:tx-id (entity-tx (db kv tx-time tx-time) eid))))

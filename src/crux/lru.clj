@@ -1,5 +1,6 @@
 (ns crux.lru
-  (:require [crux.db :as db]
+  (:require [clojure.spec.alpha :as s]
+            [crux.db :as db]
             [crux.index :as idx]
             [crux.kv :as kv])
   (:import java.io.Closeable
@@ -156,11 +157,13 @@
     kv
     (->CacheProvidingKvStore kv (atom {}))))
 
+(s/def ::doc-cache-size nat-int?)
+
 (def ^:const default-doc-cache-size 10240)
 
 (defn new-cached-object-store
   ([kv]
    (new-cached-object-store kv default-doc-cache-size))
   ([kv cache-size]
-   (->CachedObjectStore (get-named-cache kv ::doc-cache cache-size)
+   (->CachedObjectStore (get-named-cache kv ::doc-cache (or cache-size default-doc-cache-size))
                         (idx/->KvObjectStore kv))))
