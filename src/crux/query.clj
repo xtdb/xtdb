@@ -263,69 +263,75 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-;; TODO: Should probably use dep here already to make better judgement
-;; calls?
 (defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars stats]
-  (let [;; literal-deps (set (for [{:keys [e v]} triple-clauses
-        ;;                         :when (or (literal? e)
-        ;;                                   (literal? v))
-        ;;                         v (filter logic-var? [e v])]
-        ;;                     v))
-        ;; var-stats (->> (for [{:keys [e a v]} triple-clauses
-        ;;                      x [e v]
-        ;;                      :when (logic-var? x)]
-        ;;                  {x (get stats a 0)})
-        ;;                (apply merge-with +))
-        v->clauses (group-by :v triple-clauses)]
-    (->> triple-clauses
-         (reduce
-          (fn [[deps var->joins] {:keys [e a v] :as clause}]
-            (let [e-var e
-                  v-var (if (logic-var? v)
-                          v
-                          (gensym (str "literal_" v "_")))
-                  join {:id (gensym "triple")
-                        :name e-var
-                        :idx-fn #(-> (idx/new-binary-join-virtual-index)
-                                     (with-meta {:clause clause
-                                                 :names {:e e-var
-                                                         :v v-var}}))}
-                  var->joins (merge-with into var->joins {v-var [join]
-                                                          e-var [join]})
-                  var->joins (if (literal? e)
-                               (merge-with into var->joins {e-var [{:idx-fn #(idx/new-relation-virtual-index e-var [[e]] 1)}]})
-                               var->joins)
-                  var->joins (if (literal? v)
-                               (merge-with into var->joins {v-var [{:idx-fn #(idx/new-relation-virtual-index v-var [[v]] 1)}]})
-                               var->joins)
-                  v-is-leaf? (and (logic-var? v)
-                                  (= 1 (count (get v->clauses v)))
-                                  (not (contains? non-leaf-vars v)))]
-              [(cond
-                 (and (logic-var? v)
-                      (or (literal? e)
-                          (contains? arg-vars e)
-                          #_(contains? literal-deps e)))
-                 (conj deps [[e-var] [v-var]])
-                 (and (or (literal? v)
-                          (contains? arg-vars v)
-                          #_(contains? literal-deps v))
-                      (logic-var? e))
-                 (conj deps [[v-var] [e-var]])
-                 v-is-leaf?
-                 (conj deps [[e-var] [v-var]])
-                 ;; NOTE: This is to default join order to ave as it
-                 ;; used to be. The vars have to depend on each other
-                 ;; as they're a pair, calculate-join-order needs this
-                 ;; for or and predicates, so we pick this order.
-                 :else
-                 (conj deps [[v-var] [e-var]])
-                 #_(if (>= (long (get var-stats e-var 0))
-                           (long (get var-stats v-var 0)))
-                     (conj deps [[v-var] [e-var]])
-                     (conj deps [[e-var] [v-var]])))
-               var->joins]))
-          [[] var->joins]))))
+  (let [triple-clauses (sort-by (comp stats :a) triple-clauses)
+        literal-clauses (for [{:keys [e v] :as clause} triple-clauses
+                              :when (or (literal? e)
+                                        (literal? v))]
+                          clause)
+        v->clauses (group-by :v triple-clauses)
+        v-is-leaf? (fn [v]
+                     (and (logic-var? v)
+                          (= 1 (count (get v->clauses v)))
+                          (not (contains? non-leaf-vars v))))
+        leaf-clauses (filter (comp v-is-leaf? :v) triple-clauses)
+        literal->var (->> (for [{:keys [e v]} (sort-by (comp stats :a) literal-clauses)
+                                :when (literal? v)]
+                            [v (gensym (str "literal_" v "_"))])
+                          (into {}))
+        literal-join-order (concat (for [{:keys [e v]} literal-clauses]
+                                     (if (literal? v)
+                                       (get literal->var v)
+                                       e))
+                                   (for [{:keys [e v]} literal-clauses]
+                                     (if (literal? v)
+                                       e
+                                       v)))
+        join-order (loop [join-order (concat literal-join-order arg-vars)
+                          clauses (->> triple-clauses
+                                       (remove (set leaf-clauses))
+                                       (remove (set literal-clauses)))]
+                     (let [join-order-set (set join-order)
+                           clause (first (or (seq (for [{:keys [e v] :as clause} clauses
+                                                        :when (or (contains? join-order-set e)
+                                                                  (contains? join-order-set v))]
+                                                    clause))
+                                             clauses))]
+                       (if-let [{:keys [e a v]} clause]
+                         (recur (concat join-order [v e])
+                                (remove #{clause} clauses))
+                         join-order)))
+        join-order (->> (mapcat (juxt :e :v) leaf-clauses)
+                        (concat join-order)
+                        (distinct))]
+    [(->> (partition 2 1 join-order)
+          (reduce
+           (fn [g [a b]]
+             (dep/depend g b a))
+           (dep/graph)))
+     (->> triple-clauses
+          (reduce
+           (fn [var->joins {:keys [e a v] :as clause}]
+             (let [e-var e
+                   v-var (if (logic-var? v)
+                           v
+                           (get literal->var v))
+                   join {:id (gensym "triple")
+                         :name e-var
+                         :idx-fn #(-> (idx/new-binary-join-virtual-index)
+                                      (with-meta {:clause clause
+                                                  :names {:e e-var
+                                                          :v v-var}}))}
+                   var->joins (merge-with into var->joins {v-var [join]
+                                                           e-var [join]})
+                   var->joins (if (literal? e)
+                                (merge-with into var->joins {e-var [{:idx-fn #(idx/new-relation-virtual-index e-var [[e]] 1)}]})
+                                var->joins)
+                   var->joins (if (literal? v)
+                                (merge-with into var->joins {v-var [{:idx-fn #(idx/new-relation-virtual-index v-var [[v]] 1)}]})
+                                var->joins)]
+               var->joins))
+           var->joins))]))
 
 (defn- validate-args [args]
   (let [ks (keys (first args))]
@@ -671,39 +677,38 @@
         pair-var (dep/transitive-dependents g var)]
     pair-var))
 
-(defn- add-all-dependencies [g deps]
-  (->> deps
-       (reduce
-        (fn [g [dependencies dependents]]
-          (->> dependencies
-               (reduce
-                (fn [g dependency]
-                  (->> dependents
-                       (reduce
-                        (fn [g dependent]
-                          (dep/depend g dependent dependency))
-                        g)))
-                g)))
-        g)))
-
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps]
-  (let [g (dep/graph)
-        g (->> (keys var->joins)
+  (let [g (->> (keys var->joins)
                (reduce
                 (fn [g v]
                   (dep/depend g v ::root))
-                g))
-        g (add-all-dependencies g triple-join-deps)
-        pred-deps (for [{:keys [pred return] :as pred-clause} pred-clauses
-                        :let [pred-vars (filter logic-var? (:args pred))]]
-                    [(into pred-vars (potential-bpg-pair-vars g pred-vars))
-                     (if return
-                       [return]
-                       [])])
-        or-deps (for [[_ _ [{:keys [free-vars bound-vars]}]] or-clause+idx-id+or-branches]
-                  [(into bound-vars (potential-bpg-pair-vars g bound-vars))
-                   free-vars])
-        g (add-all-dependencies g (concat pred-deps or-deps))
+                triple-join-deps))
+        g (reduce
+           (fn [g {:keys [pred return] :as pred-clause}]
+             (let [pred-vars (filter logic-var? (:args pred))
+                   pred-vars (into pred-vars (potential-bpg-pair-vars triple-join-deps pred-vars))]
+               (->> (for [pred-var pred-vars
+                          :when return
+                          return [return]]
+                      [return pred-var])
+                    (reduce
+                     (fn [g [r a]]
+                       (dep/depend g r a))
+                     g))))
+           g
+           pred-clauses)
+        g (reduce
+           (fn [g [_ _ [{:keys [free-vars bound-vars]}]]]
+             (let [bound-vars (into bound-vars (potential-bpg-pair-vars triple-join-deps bound-vars))]
+               (->> (for [bound-var bound-vars
+                          free-var free-vars]
+                      [free-var bound-var])
+                    (reduce
+                     (fn [g [f b]]
+                       (dep/depend g f b))
+                     g))))
+           g
+           or-clause+idx-id+or-branches)
         join-order (dep/topo-sort g)]
     (vec (remove #{::root} join-order))))
 
