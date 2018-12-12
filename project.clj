@@ -33,7 +33,8 @@
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
-                                  [datascript "0.16.9"]
+                                  [com.datomic/datomic-free "0.9.5697"
+                                   :exclusions [org.slf4j/slf4j-nop]]
                                   [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.2"]
                                   [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.2"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]

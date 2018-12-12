@@ -16,13 +16,11 @@
             [crux.sparql :as sparql]
             [crux.kafka :as k]
             [crux.fixtures :as f]
-            [datascript.core :as d])
-  (:import java.util.Date
-           [java.io InputStream StringReader]
+            [datomic.api :as d])
+  (:import java.io.StringReader
            org.eclipse.rdf4j.repository.sail.SailRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.sail.nativerdf.NativeStore
-           org.eclipse.rdf4j.IsolationLevels
            org.eclipse.rdf4j.rio.RDFFormat
            org.eclipse.rdf4j.query.Binding))
 
@@ -88,55 +86,68 @@
 (def run-watdiv-tests? (and (boolean (System/getenv "CRUX_WATDIV"))
                             (boolean (io/resource watdiv-triples-resource))))
 
-(def crux-tests? true)
-(def datascript-tests? false)
-(def sail-tests? false)
-
-(def ^:dynamic *sail-conn*)
-
-(def ^:dynamic *datascript-conn*)
-(def ^:dynamic *kw->id*)
-(def ^:dynamic *id->kw*)
-(def datascript-id-start 100000)
+(def crux-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_CRUX")))
+(def datomic-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_DATOMIC")))
+(def sail-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_SAIL")))
 
 (def query-timeout-ms 15000)
 
-(defn entity->datascript [kw->id e]
-  (let [id-fn (fn [kw]
-                (get (swap! kw->id update kw (fn [x]
-                                               (or x (inc (+ datascript-id-start (count @kw->id))))))
-                     kw))
-        id (id-fn (:crux.db/id e))
+;; Datomic
+
+(defn entity->datomic [e]
+  (let [id (:crux.db/id e)
         tx-op-fn (fn tx-op-fn [k v]
-                   (cond
-                     (keyword? v)
-                     [[:db/add id k (id-fn v)]]
-
-                     (set? v)
+                   (if (set? v)
                      (vec (mapcat #(tx-op-fn k %) v))
-
-                     :else
                      [[:db/add id k v]]))]
     (->> (for [[k v] (dissoc e :crux.db/id)]
            (tx-op-fn k v))
          (apply concat)
          (vec))))
 
-(defn submit-ntriples-to-datascript [conn kw->id in tx-size]
-  (->> (rdf/ntriples-seq in)
-       (rdf/statements->maps)
-       (map #(rdf/use-default-language % rdf/*default-language*))
-       (partition-all tx-size)
-       (reduce (fn [^long n entities]
-                 (when (zero? (long (mod n rdf/*ntriples-log-size*)))
-                   (log/debug "submitted" n))
-                 (let [tx-ops (->> (for [entity entities]
-                                     (entity->datascript kw->id entity))
-                                   (apply concat)
-                                   (vec))]
-                   (d/transact! conn tx-ops))
-                 (+ n (count entities)))
-               0)))
+(defn entity->idents [e]
+  (cons
+   {:db/ident (:crux.db/id e)}
+   (for [[_ v] e
+         v (idx/normalize-value v)
+         :when (keyword? v)]
+     {:db/ident v})))
+
+(def datomic-tx-size 100)
+
+(defn load-rdf-into-datomic [conn resource]
+  (with-open [in (io/input-stream (io/resource resource))]
+    (->> (rdf/ntriples-seq in)
+         (rdf/statements->maps)
+         (map #(rdf/use-default-language % rdf/*default-language*))
+         (partition-all datomic-tx-size)
+         (reduce (fn [^long n entities]
+                   (when (zero? (long (mod n rdf/*ntriples-log-size*)))
+                     (log/debug "submitted" n))
+                   @(d/transact conn (mapcat entity->idents entities))
+                   @(d/transact conn (->> (map entity->datomic entities)
+                                          (apply concat)
+                                          (vec)))
+                   (+ n (count entities)))
+                 0))))
+
+(declare datomic-watdiv-schema)
+
+(def datomic-uri-base (or (System/getenv "CRUX_WATDIV_DATOMIC_URI") "datomic:mem://"))
+(def ^:dynamic *datomic-conn*)
+
+(defn with-datomic [f]
+  (let [uri (str datomic-uri-base (d/squuid))]
+    (try
+      (d/delete-database uri)
+      (d/create-database uri)
+      (binding [*datomic-conn* (d/connect uri)]
+        @(d/transact *datomic-conn* datomic-watdiv-schema)
+        (f))
+      (finally
+        (d/delete-database uri)))))
+
+;; Sail
 
 (def max-sparql-query-time-seconds (quot query-timeout-ms 1000))
 
@@ -149,14 +160,16 @@
                           (.next tq))
                     (lazy-seq (step)))))))))
 
-(def rdf-sail-chunk-size 100000)
+(defn load-rdf-into-sail [^RepositoryConnection conn resource]
+  (with-open [in (io/input-stream (io/resource resource))]
+    (->> (partition-all rdf/*ntriples-log-size* (line-seq (io/reader in)))
+         (reduce (fn [n chunk]
+                   (log/debug "submitted" n)
+                   (.add conn (StringReader. (str/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
+                   (+ n (count chunk)))
+                 0))))
 
-(defn load-rdf-into-sail [^RepositoryConnection conn ^InputStream in]
-  (->> (partition-all rdf-sail-chunk-size (line-seq (io/reader in)))
-       (reduce (fn [n chunk]
-                 (.add conn (StringReader. (str/join "\n" chunk)) "" RDFFormat/NTRIPLES rdf/empty-resource-array)
-                 (+ n (count chunk)))
-               0)))
+(def ^:dynamic *sail-conn*)
 
 (defn with-sail-repository [f]
   (let [db-dir (str (cio/create-tmpdir "sail-store"))
@@ -170,66 +183,51 @@
         (.shutDown db)
         (cio/delete-dir db-dir)))))
 
-(declare datomic-watdiv-schema)
+;; Crux
 
-(defn datomic-schema->datascript-schema [schema]
-  (->> (for [{:keys [db/id] :as s} schema]
-         [id (dissoc s :db/id)])
-       (into {})))
+(defn load-rdf-into-crux [resource]
+  (let [tx-topic "test-can-run-watdiv-tx-queries"
+        doc-topic "test-can-run-watdiv-doc-queries"
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
+        object-store (lru/new-cached-object-store f/*kv*)
+        indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
+
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
+    (let [submit-future (future
+                          (with-open [in (io/input-stream (io/resource resource))]
+                            (rdf/submit-ntriples tx-log in 1000)))
+          consume-args {:indexer indexer
+                        :consumer f/*consumer*
+                        :tx-topic tx-topic
+                        :doc-topic doc-topic}]
+      (k/consume-and-index-entities consume-args)
+      (while (not= {:txs 0 :docs 0}
+                   (k/consume-and-index-entities
+                    (assoc consume-args :timeout 100))))
+      (t/is (= 521585 @submit-future))
+      (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))))
 
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
-    (let [tx-topic "test-can-run-watdiv-tx-queries"
-          doc-topic "test-can-run-watdiv-doc-queries"
-          tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-          object-store (lru/new-cached-object-store f/*kv*)
-          indexer (tx/->KvIndexer f/*kv* tx-log object-store)
-          datascript-conn (d/create-conn (datomic-schema->datascript-schema datomic-watdiv-schema))
-          kw->id (atom {})]
+    (do (when datomic-tests?
+          (println "Loading into Datomic...")
+          (time
+           (load-rdf-into-datomic *datomic-conn* watdiv-triples-resource)))
 
-      (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
-      (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
-      (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
+        ;; "Elapsed time: 305376.165167 msecs" 767Mb
+        (when sail-tests?
+          (println "Loading into Sail...")
+          (time
+           (load-rdf-into-sail *sail-conn* watdiv-triples-resource)))
 
-      (when datascript-tests?
-        (println "Loading into Datascript...")
-        (time
-         (with-open [in (io/input-stream (io/resource watdiv-triples-resource))]
-           (submit-ntriples-to-datascript datascript-conn kw->id in 1000))))
+        (when crux-tests?
+          (println "Loading into Crux...")
+          (time
+           (load-rdf-into-crux watdiv-triples-resource)))
 
-      ;; "Elapsed time: 305376.165167 msecs" 767Mb
-      (when sail-tests?
-        (println "Loading into Sail...")
-        (time
-         (with-open [in (io/input-stream (io/resource watdiv-triples-resource))]
-           (load-rdf-into-sail *sail-conn* in))))
-
-      (when crux-tests?
-        (println "Loading into Crux...")
-        (time
-         (let [submit-future (future
-                               (with-open [in (io/input-stream (io/resource watdiv-triples-resource))]
-                                 (rdf/submit-ntriples tx-log in 1000)))
-               consume-args {:indexer indexer
-                             :consumer f/*consumer*
-                             :tx-topic tx-topic
-                             :doc-topic doc-topic}]
-           (k/consume-and-index-entities consume-args)
-           (while (not= {:txs 0 :docs 0}
-                        (k/consume-and-index-entities
-                         (assoc consume-args :timeout 100))))
-           (t/is (= 521585 @submit-future))
-           (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000})
-
-           (spit (io/file "target/watdiv_population_stats.edn")
-                 (pr-str (->> (for [[k v] (idx/read-meta f/*kv* :crux.kv/stats)]
-                                [(str k) v])
-                              (into {})))))))
-
-      (binding [*datascript-conn* datascript-conn
-                *kw->id* @kw->id
-                *id->kw* (set/map-invert @kw->id)]
-        (f)))
+        (f))
     (f)))
 
 (defn lazy-count-with-timeout [kv q timeout-ms]
@@ -240,7 +238,7 @@
         (do (future-cancel query-future)
             (throw (IllegalStateException. "Query timed out."))))))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository f/with-kv-store with-watdiv-data)
+(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic f/with-kv-store with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
@@ -284,22 +282,20 @@
                    idx)
              (.write out (str ":sail-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
 
-         (when datascript-tests?
+         (when datomic-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":datascript-results " (pr-str (count (w/postwalk-replace
-                                                                             *id->kw*
-                                                                             (d/q (w/postwalk-replace
-                                                                                   *kw->id*
-                                                                                   (sparql/sparql->datalog q))
-                                                                                  @*datascript-conn*))))
+                     (.write out (str ":datomic-results " (pr-str (count (d/q (assoc (sparql/sparql->datalog q)
+                                                                                     :timeout query-timeout-ms)
+                                                                              (d/db *datomic-conn*))))
                                       "\n"))
                      true
                      (catch Throwable t
-                       (.write out (str ":datascript-error " (pr-str (str t)) "\n"))
+                       (.write out (str ":datomic-error " (pr-str (str t)) "\n"))
                        (throw t)))
                    idx)
-             (.write out (str ":datascript-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+             (.write out (str ":datomic-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+
          (.write out "}\n")
          (.flush out))
        (.write out "]")))
@@ -310,8 +306,7 @@
     (t/is true "skipping")
     (with-sail-repository
       (fn []
-        (with-open [in (io/input-stream (io/resource "crux/example-data-artists.nt"))]
-          (load-rdf-into-sail *sail-conn* in))
+        (load-rdf-into-sail *sail-conn* "crux/example-data-artists.nt")
         (t/is (= 2 (count (execute-sparql *sail-conn* "
 PREFIX ex: <http://example.org/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -323,93 +318,264 @@ WHERE
      foaf:firstName ?n.
 }"))))))))
 
-;; TODO: Not used or verified yet. See:
-;; https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
-;; [com.datomic/datomic-free "0.9.5697"]
+;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
+;; Some things like dates are strings in the actual data.
 (def datomic-watdiv-schema
-  [#:db{:valueType :db.type/string, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/composer")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/follows")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/friendOf")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/gender")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hits")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/likes")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/subscribes")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/userId")}
-   #:db{:valueType :db.type/ref :ident (keyword "http://ogp.me/ns#tag")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://ogp.me/ns#title")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/dc/terms/Location")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/goodrelations/description")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/goodrelations/includes")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/goodrelations/name")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/goodrelations/offers")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/goodrelations/price")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/goodrelations/serialNumber")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://purl.org/goodrelations/validFrom")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://purl.org/goodrelations/validThrough")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/ontology/mo/artist")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/ontology/mo/conductor")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/ontology/mo/movement")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/ontology/mo/opus")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/ontology/mo/performed_in")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/ontology/mo/performer")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/ontology/mo/producer")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/ontology/mo/record_number")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://purl.org/ontology/mo/release")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/stuff/rev#hasReview")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/stuff/rev#rating")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://purl.org/stuff/rev#reviewer")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/stuff/rev#text")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://purl.org/stuff/rev#title")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://purl.org/stuff/rev#totalVotes")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/actor")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/aggregateRating")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/author")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/award")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://schema.org/birthDate")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/bookEdition")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/caption")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/contactPoint")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/contentRating")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/contentSize")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://schema.org/datePublished")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/description")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/director")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/duration")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/editor")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/eligibleQuantity")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/eligibleRegion")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/email")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/employee")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://schema.org/expires")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/faxNumber")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/isbn")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/jobTitle")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/keywords")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/language")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/legalName")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/nationality")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/numberOfPages")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/openingHours")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/paymentAccepted")}
-   #:db{:valueType :db.type/instant, :ident (keyword "http://schema.org/priceValidUntil")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/printColumn")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/printEdition")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/printPage")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/printSection")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/producer")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/publisher")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/telephone")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/text")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://schema.org/trailer")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://schema.org/url")}
-   #:db{:valueType :db.type/long, :ident (keyword "http://schema.org/wordCount")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://www.geonames.org/ontology#parentCountry")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://xmlns.com/foaf/age")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://xmlns.com/foaf/familyName")}
-   #:db{:valueType :db.type/string, :ident (keyword "http://xmlns.com/foaf/givenName")}
-   #:db{:valueType :db.type/ref, :ident (keyword "http://xmlns.com/foaf/homepage")}])
+  [#:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/composer")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/follows")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/friendOf")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/gender")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hits")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/likes")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/subscribes")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/userId")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://ogp.me/ns#tag")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://ogp.me/ns#title")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/dc/terms/Location")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/description")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/includes")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/name")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://purl.org/goodrelations/offers")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/price")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/serialNumber")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/validFrom")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/goodrelations/validThrough")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/artist")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/conductor")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/movement")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/opus")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/performed_in")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/performer")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/producer")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/record_number")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/ontology/mo/release")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://purl.org/stuff/rev#hasReview")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/stuff/rev#rating")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/stuff/rev#reviewer")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/stuff/rev#text")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/stuff/rev#title")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://purl.org/stuff/rev#totalVotes")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/actor")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/aggregateRating")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/author")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/award")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/birthDate")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/bookEdition")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/caption")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/contactPoint")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/contentRating")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/contentSize")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/datePublished")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/description")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/director")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/duration")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/editor")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/eligibleQuantity")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/eligibleRegion")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/email")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/employee")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/expires")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/faxNumber")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/isbn")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/jobTitle")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/keywords")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/language")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/legalName")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/nationality")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/numberOfPages")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/openingHours")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/paymentAccepted")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/priceValidUntil")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/printColumn")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/printEdition")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/printPage")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/printSection")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/producer")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/publisher")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/telephone")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/text")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://schema.org/trailer")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/url")}
+   #:db{:valueType :db.type/long
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://schema.org/wordCount")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://www.geonames.org/ontology#parentCountry")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/many
+        :ident (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://xmlns.com/foaf/age")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://xmlns.com/foaf/familyName")}
+   #:db{:valueType :db.type/string
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://xmlns.com/foaf/givenName")}
+   #:db{:valueType :db.type/ref
+        :cardinality :db.cardinality/one
+        :ident (keyword "http://xmlns.com/foaf/homepage")}])
