@@ -17,7 +17,8 @@
            java.util.Properties))
 
 (def cli-options
-  [["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
+  [;; Kafka
+   ["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
     :default "localhost:9092"]
    [nil "--kafka-properties-file KAFKA_PROPERTIES_FILE" "Kafka properties file for shared connection properties"]
    ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
@@ -34,21 +35,27 @@
    ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
     :default 1
     :parse-fn #(Long/parseLong %)]
+
+   ;; KV
    ["-d" "--db-dir DB_DIR" "KV storage directory"
     :default "data"]
    ["-k" "--kv-backend KV_BACKEND" "KV storage backend: crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
     :default "crux.kv.rocksdb.RocksKv"
     :validate [#'kv/require-and-ensure-kv-record "Unknown storage backend"]]
+
+   ;; HTTP
    ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
     :default 3000
     :parse-fn #(Long/parseLong %)]
-   ["-l" "--consumer-lag-threshold THRESHOLD" "Above this queries will start blocking."
+
+   ;; Query
+   ["-l" "--consumer-lag-threshold THRESHOLD" "Above this queries will start blocking"
     :default 0
     :parse-fn #(Long/parseLong %)]
-   ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query."
+   ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query"
     :default 10000
     :parse-fn #(Long/parseLong %)]
-   ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache."
+   ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
     :default 10240
     :parse-fn #(Long/parseLong %)]
 
