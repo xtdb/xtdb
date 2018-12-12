@@ -990,7 +990,7 @@
                               result))
                           (catch Throwable t
                             t)))
-         result (or (deref query-future (or default-query-timeout (:timeout q)) nil)
+         result (or (deref query-future (or (:timeout q) default-query-timeout) nil)
                     (do (when-not (future-cancel query-future)
                           (throw (IllegalStateException. "Could not cancel query.")))
                         (throw (IllegalStateException. "Query timed out."))))]
