@@ -185,6 +185,12 @@
 
 ;; Crux
 
+;; TODO: This query returns 0 results in Crux, should return 117:
+;; {:idx 91
+;; :query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v5 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://purl.org/ontology/mo/performed_in> ?v1 .  }"
+;; :crux-results 0
+;; :crux-time 40078}
+
 (defn load-rdf-into-crux [resource]
   (let [tx-topic "test-can-run-watdiv-tx-queries"
         doc-topic "test-can-run-watdiv-doc-queries"
