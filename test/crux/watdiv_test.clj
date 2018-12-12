@@ -88,8 +88,8 @@
 (def run-watdiv-tests? (and (boolean (System/getenv "CRUX_WATDIV"))
                             (boolean (io/resource watdiv-triples-resource))))
 
-(def crux-tests? false)
-(def datascript-tests? true)
+(def crux-tests? true)
+(def datascript-tests? false)
 (def sail-tests? false)
 
 (def ^:dynamic *sail-conn*)
