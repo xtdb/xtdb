@@ -5,6 +5,7 @@
             [crux.kv :as kv])
   (:import java.io.Closeable
            [java.util Collections LinkedHashMap]
+           java.util.concurrent.locks.StampedLock
            java.util.function.Function))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -53,34 +54,50 @@
   (when @closed-state
     (throw (IllegalStateException. "Iterator closed."))))
 
-(defrecord CachedIterator [i closed-state]
+(defrecord CachedIterator [i ^StampedLock lock closed-state]
   kv/KvIterator
   (seek [_ k]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/seek i k)))
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (kv/seek i k)
+        (finally
+          (.unlock lock stamp)))))
 
   (next [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/next i)))
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (kv/next i)
+        (finally
+          (.unlock lock stamp)))))
 
   (value [_]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (kv/value i)))
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (kv/value i)
+        (finally
+          (.unlock lock stamp)))))
 
   (refresh [this]
-    (locking i
-      (ensure-iterator-open closed-state)
-      (assoc this :i (kv/refresh i))))
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (assoc this :i (kv/refresh i))
+        (finally
+          (.unlock lock stamp)))))
 
   Closeable
   (close [_]
-    (ensure-iterator-open closed-state)
-    (reset! closed-state true)))
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (reset! closed-state true)
+        (finally
+          (.unlock lock stamp))))))
 
-(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? iterators-state]
+(defrecord CachedSnapshot [^Closeable snapshot close-snapshot? ^StampedLock lock iterators-state]
   kv/KvSnapshot
   (new-iterator [_]
     (if-let [i (->> @iterators-state
@@ -89,21 +106,24 @@
       (if (compare-and-set! (:closed-state i) true false)
         (kv/refresh i)
         (recur))
-      (let [i (->CachedIterator (kv/new-iterator snapshot) (atom false))]
+      (let [i (->CachedIterator (kv/new-iterator snapshot) lock (atom false))]
         (swap! iterators-state conj i)
         i)))
 
   Closeable
   (close [_]
     (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
-      (locking i
-        (reset! closed-state true)
-        (.close i)))
+      (let [stamp (.writeLock lock)]
+        (try
+          (reset! closed-state true)
+          (.close i)
+          (finally
+            (.unlock lock stamp)))))
     (when close-snapshot?
       (.close snapshot))))
 
 (defn new-cached-snapshot ^crux.lru.CachedSnapshot [snapshot close-snapshot?]
-  (->CachedSnapshot snapshot close-snapshot? (atom #{})))
+  (->CachedSnapshot snapshot close-snapshot? (StampedLock.) (atom #{})))
 
 (defprotocol CacheProvider
   (get-named-cache [this cache-name cache-size]))

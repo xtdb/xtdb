@@ -273,14 +273,28 @@
     (not (or (vector? v)
              (set? v))) (vector)))
 
+(defn- normalize-doc [doc]
+  (->> (for [[k v] doc]
+         [k (normalize-value v)])
+       (into {})))
+
+(defn- doc-predicate-stats [normalized-doc]
+  (->> (for [[k v] normalized-doc]
+         [k (count v)])
+       (into {})))
+
+(defn- update-predicate-stats [kv f normalized-doc]
+  (locking kv
+    (->> (doc-predicate-stats normalized-doc)
+         (merge-with f (read-meta kv :crux.kv/stats))
+         (store-meta kv :crux.kv/stats))))
+
 (defn index-doc [kv content-hash doc]
   (let [id (c/id->bytes (:crux.db/id doc))
         content-hash (c/id->bytes content-hash)
-        stats (->> (for [[k v] doc]
-                     [k (count (normalize-value v))])
-                   (into {}))]
-    (kv/store kv (->> (for [[k v] doc
-                            v (normalize-value v)
+        normalized-doc (normalize-doc doc)]
+    (kv/store kv (->> (for [[k v] normalized-doc
+                            v v
                             :let [k (c/id->bytes k)
                                   v (c/value->bytes v)]
                             :when (seq v)]
@@ -289,25 +303,21 @@
                          [(c/encode-attribute+entity+value+content-hash-key k id v content-hash)
                           c/empty-byte-array]])
                       (reduce into [])))
-    (locking kv
-      (store-meta kv :crux.kv/stats (merge-with + (read-meta kv :crux.kv/stats) stats)))))
+    (update-predicate-stats kv + normalized-doc)))
 
 (defn delete-doc-from-index [kv content-hash doc]
   (let [id (c/id->bytes (:crux.db/id doc))
         content-hash (c/id->bytes content-hash)
-        stats (->> (for [[k v] doc]
-                     [k (count (normalize-value v))])
-                   (into {}))]
-    (kv/delete kv (->> (for [[k v] doc
-                             v (normalize-value v)
+        normalized-doc (normalize-doc doc)]
+    (kv/delete kv (->> (for [[k v] normalized-doc
+                             v v
                              :let [k (c/id->bytes k)
                                    v (c/value->bytes v)]
                              :when (seq v)]
                          [(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           (c/encode-attribute+entity+value+content-hash-key k id v content-hash)])
                        (reduce into [])))
-    (locking kv
-      (store-meta kv :crux.kv/stats (merge-with - (read-meta kv :crux.kv/stats) stats)))))
+    (update-predicate-stats kv - normalized-doc)))
 
 (defrecord KvObjectStore [kv]
   Closeable
