@@ -285,9 +285,9 @@
          (when datomic-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":datomic-results " (pr-str (count (d/q (assoc (sparql/sparql->datalog q)
-                                                                                     :timeout query-timeout-ms)
-                                                                              (d/db *datomic-conn*))))
+                     (.write out (str ":datomic-results " (pr-str (count (d/query {:query (sparql/sparql->datalog q)
+                                                                                   :timeout query-timeout-ms
+                                                                                   :args [(d/db *datomic-conn*)]})))
                                       "\n"))
                      true
                      (catch Throwable t
