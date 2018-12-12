@@ -30,6 +30,7 @@
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (+ (.getDigestLength (MessageDigest/getInstance id-hash-algorithm))
                         value-type-id-size))
+(def ^:private ^MessageDigest id-digest-prototype (MessageDigest/getInstance id-hash-algorithm))
 
 (def empty-byte-array (byte-array 0))
 
@@ -59,8 +60,12 @@
     bs-with-type-id))
 
 (defn id-function ^bytes [^bytes bytes]
-  (-> (.digest (MessageDigest/getInstance id-hash-algorithm) bytes)
-      (prepend-value-type-id id-value-type-id)))
+  (let [md (try
+             (.clone id-digest-prototype)
+             (catch CloneNotSupportedException e
+               (MessageDigest/getInstance id-hash-algorithm)))]
+    (-> (.digest ^MessageDigest md bytes)
+        (prepend-value-type-id id-value-type-id))))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBytes
@@ -128,7 +133,19 @@
 
   nil
   (value->bytes [this]
-    nil-id-bytes)
+    (id->bytes this))
+
+  Keyword
+  (value->bytes [this]
+    (id->bytes this))
+
+  UUID
+  (value->bytes [this]
+    (id->bytes this))
+
+  URI
+  (value->bytes [this]
+    (id->bytes this))
 
   Object
   (value->bytes [this]
