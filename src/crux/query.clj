@@ -801,6 +801,7 @@
         {:keys [e-vars
                 v-vars
                 unification-vars
+                pred-vars
                 pred-return-vars]} (collect-vars type->clauses)
         v-var->e (->> (for [{:keys [e v] :as clause} triple-clauses
                             :when (logic-var? v)]
@@ -810,7 +811,7 @@
         var->joins {}
         v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constraints))
-        non-leaf-vars (set/union e-vars arg-vars v-range-vars unification-vars)
+        non-leaf-vars (set/union e-vars arg-vars v-range-vars unification-vars pred-vars)
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
                                                     non-leaf-vars
@@ -990,7 +991,11 @@
                               result))
                           (catch Throwable t
                             t)))
-         result (or (deref query-future (or (:timeout q) default-query-timeout) nil)
+         result (or (try
+                      (deref query-future (or (:timeout q) default-query-timeout) nil)
+                      (catch InterruptedException e
+                        (future-cancel query-future)
+                        (throw e)))
                     (do (when-not (future-cancel query-future)
                           (throw (IllegalStateException. "Could not cancel query.")))
                         (throw (IllegalStateException. "Query timed out."))))]
