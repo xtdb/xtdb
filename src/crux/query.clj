@@ -486,7 +486,7 @@
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
         (let [value-bytes (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
-              doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)
+              doc (db/get-single-object object-store snapshot content-hash)
               values (idx/normalize-value (get doc (.attr binding)))
               value (if (or (nil? value-bytes)
                             (= (count values) 1))

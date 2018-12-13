@@ -329,6 +329,14 @@
   (close [_])
 
   db/ObjectStore
+  (get-single-object [this snapshot k]
+    (with-open [i (kv/new-iterator snapshot)]
+      (let [doc-key (c/id->bytes k)
+            seek-k (c/encode-doc-key doc-key)
+            k (kv/seek i seek-k)]
+        (when (and k (bu/bytes=? seek-k k))
+          (nippy/fast-thaw (kv/value i))))))
+
   (get-objects [this snapshot ks]
     (with-open [i (kv/new-iterator snapshot)]
       (->> (for [seek-k (->> (map (comp c/encode-doc-key c/id->bytes) ks)

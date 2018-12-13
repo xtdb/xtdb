@@ -124,7 +124,7 @@
     (with-open [kv-store (start-kv-store options)
                 producer (k/create-producer kafka-config)
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                object-store ^Closeable (idx/->KvObjectStore kv-store)
+                object-store ^Closeable (lru/new-cached-object-store kv-store)
                 indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-config)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]

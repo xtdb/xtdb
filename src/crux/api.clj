@@ -15,7 +15,7 @@
 
 ;; Local Node
 
-(defrecord LocalNode [close-promise kv-store tx-log indexer consumer-config options ^Thread node-thread]
+(defrecord LocalNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
     (let [tx-time (tx/latest-completed-tx-time indexer)]
@@ -30,10 +30,8 @@
     (q/db kv-store business-time transact-time options))
 
   (document [_ content-hash]
-    (let [object-store (idx/->KvObjectStore kv-store)
-          content-hash (c/new-id content-hash)]
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (get (db/get-objects object-store snapshot [content-hash]) content-hash))))
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (db/get-single-object object-store snapshot (c/new-id content-hash))))
 
   (history [_ eid]
     (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -169,7 +167,7 @@
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)
         tx-log (tx/->KvTxLog kv-store)
-        object-store (idx/->KvObjectStore kv-store)
+        object-store (lru/new-cached-object-store kv-store)
         indexer (tx/->KvIndexer kv-store tx-log object-store)]
     (map->StandaloneSystem {:kv-store kv-store
                             :tx-log tx-log

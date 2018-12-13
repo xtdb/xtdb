@@ -106,7 +106,7 @@
                         (doseq [^EntityTx entity-tx history-descending
                                 :let [content-hash (.content-hash entity-tx)]
                                 :when (and ((in-range-pred start-business-time end-business-time) (.bt entity-tx))
-                                           (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
+                                           (db/get-single-object object-store snapshot content-hash))]
                           (db/submit-doc tx-log content-hash nil)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
              (c/id->bytes eid)
@@ -126,7 +126,7 @@
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
           existing-doc (with-open [snapshot (kv/new-snapshot kv)]
-                         (get (db/get-objects object-store snapshot [content-hash]) content-hash))]
+                         (db/get-single-object object-store snapshot content-hash))]
       (cond
         (and doc (nil? existing-doc))
         (do (db/put-objects object-store [[content-hash doc]])

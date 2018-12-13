@@ -27,6 +27,7 @@
 ;; object store could choose to ignore it, but it would be nice to
 ;; hide it.
 (defprotocol ObjectStore
+  (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
   (put-objects [this kvs])
   (delete-objects [this kvs]))

@@ -31,6 +31,12 @@
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
+  (get-single-object [this snapshot k]
+    (compute-if-absent
+     cache
+     k
+     #(db/get-single-object object-store snapshot %)))
+
   (get-objects [this snapshot ks]
     (->> (for [k ks]
            [k (compute-if-absent
