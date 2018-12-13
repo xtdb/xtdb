@@ -249,7 +249,7 @@
 (defn new-id ^crux.codec.Id [id]
   (let [bs (id->bytes id)]
     (assert (= id-size (alength bs)))
-    (->Id bs 0)))
+    (Id. bs 0)))
 
 (defn valid-id? [x]
   (try
@@ -267,8 +267,9 @@
 (nippy/extend-thaw
  :crux.codec/id
  [data-input]
- (new-id (doto (byte-array id-size)
-           (->> (.readFully data-input)))))
+ (Id. (doto (byte-array id-size)
+        (->> (.readFully data-input)))
+      0))
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
   (assert (= id-size (alength content-hash)))
@@ -279,10 +280,12 @@
 
 (defn decode-doc-key ^bytes [^bytes doc-key]
   (assert (= (+ index-id-size id-size) (alength doc-key)))
-  (let [buffer (ByteBuffer/wrap doc-key)]
-    (assert (= content-hash->doc-index-id (.get buffer)))
-    (new-id (doto (byte-array id-size)
-              (->> (.get buffer))))))
+  (let [buffer (ByteBuffer/wrap doc-key)
+        index-id (.get buffer)]
+    (assert (= content-hash->doc-index-id index-id))
+    (Id. (doto (byte-array id-size)
+           (->> (.get buffer)))
+         0)))
 
 (defn encode-attribute+value+entity+content-hash-key
   (^bytes [^bytes attr]
@@ -307,15 +310,18 @@
 
 (defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash ^crux.codec.Id [^bytes k]
   (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
-  (let [buffer (ByteBuffer/wrap k)]
-    (assert (= attribute+value+entity+content-hash-index-id (.get buffer)))
+  (let [buffer (ByteBuffer/wrap k)
+        index-id (.get buffer)]
+    (assert (= attribute+value+entity+content-hash-index-id index-id))
     (.position buffer (+ index-id-size id-size))
     [(doto (byte-array (- (.remaining buffer) id-size id-size))
        (->> (.get buffer)))
-     (new-id (doto (byte-array id-size)
-               (->> (.get buffer))))
-     (new-id (doto (byte-array id-size)
-               (->> (.get buffer))))]))
+     (Id. (doto (byte-array id-size)
+            (->> (.get buffer)))
+          0)
+     (Id. (doto (byte-array id-size)
+            (->> (.get buffer)))
+          0)]))
 
 (defn encode-attribute+entity+value+content-hash-key
   (^bytes [^bytes attr]
@@ -340,15 +346,18 @@
 
 (defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash ^crux.codec.Id [^bytes k]
   (assert (<= (+ index-id-size id-size id-size) (alength k)))
-  (let [buffer (ByteBuffer/wrap k)]
-    (assert (= attribute+entity+value+content-hash-index-id (.get buffer)))
+  (let [buffer (ByteBuffer/wrap k)
+        index-id (.get buffer)]
+    (assert (= attribute+entity+value+content-hash-index-id index-id))
     (.position buffer (+ index-id-size id-size))
-    [(new-id (doto (byte-array id-size)
-               (->> (.get buffer))))
+    [(Id. (doto (byte-array id-size)
+            (->> (.get buffer)))
+          0)
      (doto (byte-array (- (.remaining buffer) id-size))
        (->> (.get buffer)))
-     (new-id (doto (byte-array id-size)
-               (->> (.get buffer))))]))
+     (Id. (doto (byte-array id-size)
+            (->> (.get buffer)))
+          0)]))
 
 (defn encode-meta-key ^bytes [^bytes k]
   (-> (ByteBuffer/allocate (+ index-id-size id-size))
@@ -406,10 +415,12 @@
 
 (defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes key]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
-  (let [buffer (ByteBuffer/wrap key)]
-    (assert (= entity+bt+tt+tx-id->content-hash-index-id (.get buffer)))
-    (->EntityTx (new-id (doto (byte-array id-size)
-                          (->> (.get buffer))))
+  (let [buffer (ByteBuffer/wrap key)
+        index-id (.get buffer)]
+    (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
+    (->EntityTx (Id. (doto (byte-array id-size)
+                       (->> (.get buffer)))
+                     0)
                 (reverse-time-ms->date (.getLong buffer))
                 (reverse-time-ms->date (.getLong buffer))
                 (.getLong buffer)
@@ -435,7 +446,8 @@
 
 (defn decode-tx-log-key [^bytes key]
   (assert (= (+ index-id-size Long/BYTES Long/BYTES) (alength key)))
-  (let [buffer (ByteBuffer/wrap key)]
-    (assert (= tx-id->tx-index-id (.get buffer)))
+  (let [buffer (ByteBuffer/wrap key)
+        index-id (.get buffer)]
+    (assert (= tx-id->tx-index-id index-id))
     {:crux.tx/tx-id (.getLong buffer)
      :crux.tx/tx-time (Date. (.getLong buffer))}))
