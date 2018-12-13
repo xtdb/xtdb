@@ -18,16 +18,15 @@
 (defrecord LocalNode [close-promise kv-store tx-log indexer consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
-    (tx/await-no-consumer-lag indexer options)
-    (q/db kv-store nil nil options))
+    (let [tx-time (tx/latest-completed-tx-time indexer)]
+      (q/db kv-store tx-time tx-time options)))
 
   (db [_ business-time]
-    (tx/await-no-consumer-lag indexer options)
-    (q/db kv-store business-time nil options))
+    (let [tx-time (tx/latest-completed-tx-time indexer)]
+      (q/db kv-store business-time tx-time options)))
 
   (db [_ business-time transact-time]
     (tx/await-tx-time indexer transact-time options)
-    (tx/await-no-consumer-lag indexer options)
     (q/db kv-store business-time transact-time options))
 
   (document [_ content-hash]
@@ -56,6 +55,9 @@
 
   (txLog [_ tx-log-context]
     (db/tx-log tx-log tx-log-context))
+
+  (sync [_ timeout]
+    (tx/await-no-consumer-lag indexer (or timeout (:crux.tx-log/await-tx-timeout options))))
 
   Closeable
   (close [_]
@@ -145,6 +147,9 @@
 
   (txLog [this tx-log-context]
     (.txLog ^LocalNode (map->LocalNode this) tx-log-context))
+
+  (sync [this timeout]
+    (.sync ^LocalNode (map->LocalNode this) timeout))
 
   Closeable
   (close [_]
@@ -316,6 +321,9 @@
                                 :as :stream})]
       (register-stream-with-remote-stream! tx-log-context in)
       (edn-list->lazy-seq in)))
+
+  (sync [_ timeout]
+    (api-request-sync (str url "/sync?timeout=" timeout) nil {:method :get}))
 
   Closeable
   (close [_]))

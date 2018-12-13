@@ -81,7 +81,7 @@
 
   NOTE: requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
-  ^crux.kafka.embedded.EmbeddedKafka
+  ^java.io.Closeable
   [{:crux.kafka.embedded/keys [zookeeper-data-dir zookeeper-port kafka-log-dir kafka-port broker-config]
     :or {zookeeper-port default-zookeeper-port
          kafka-port default-kafka-port}

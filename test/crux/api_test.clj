@@ -21,8 +21,7 @@
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
               :crux.kv/estimate-num-keys 0
-              :crux.tx-log/consumer-lag nil
-              :crux.tx-log/tx-time nil}
+              :crux.tx-log/consumer-state nil}
              (dissoc (.status f/*api*) :crux.kv/size))))
 
   (t/testing "transaction"
@@ -30,12 +29,27 @@
           {:keys [crux.tx/tx-time]
            :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} business-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
+      (t/is (= tx-time (.sync f/*api* 1000)))
 
       (let [status-map (.status f/*api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
-        (t/is (= {:crux.tx-log/consumer-lag 0
-                  :crux.tx-log/tx-time (:crux.tx/tx-time submitted-tx)}
-                 (select-keys status-map [:crux.tx-log/tx-time :crux.tx-log/consumer-lag]))))
+        (if (instance? StandaloneSystem f/*api*)
+          (t/is (= {:crux.kv.topic-partition/tx-log-0 {:lag 0
+                                                       :time tx-time}}
+                   (:crux.tx-log/consumer-state status-map)))
+          (let [tx-topic-key (keyword "crux.kafka.topic-partition"
+                                      (str (get-in f/*local-node* [:options :tx-topic]) "-0"))
+                doc-topic-key (keyword "crux.kafka.topic-partition"
+                                       (str (get-in f/*local-node* [:options :doc-topic]) "-0"))]
+            (t/is (= {:lag 0
+                      :offset 1
+                      :time tx-time}
+                     (get-in status-map [:crux.tx-log/consumer-state tx-topic-key])))
+            (t/is (= {:lag 0
+                      :offset 1}
+                     (-> status-map
+                         (get-in [:crux.tx-log/consumer-state doc-topic-key])
+                         (dissoc :time)))))))
 
       (t/testing "query"
         (t/is (= #{[:ivan]} (.q (.db f/*api*)

@@ -49,9 +49,6 @@
     :parse-fn #(Long/parseLong %)]
 
    ;; Query
-   ["-l" "--consumer-lag-threshold THRESHOLD" "Above this queries will start blocking"
-    :default 0
-    :parse-fn #(Long/parseLong %)]
    ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query"
     :default 10000
     :parse-fn #(Long/parseLong %)]
@@ -75,7 +72,6 @@
                                   :crux.kv/db-dir
                                   :crux.kv/kv-backend
                                   :crux.http-server/server-port
-                                  :crux.tx-log/consumer-lag-threshold
                                   :crux.tx-log/await-tx-timeout
                                   :crux.lru/doc-cache-size]))
 

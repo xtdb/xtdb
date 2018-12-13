@@ -10,14 +10,17 @@ import java.util.Map;
  */
 public interface ICruxSystem extends Closeable {
     /**
-     * Returns a db as of now.
+     * Returns a db as of now. Will return the latest consistent
+     * snapshot of the db currently known. Does not block.
      *
      * @return the database.
      */
     public ICruxDatasource db();
 
     /**
-     * Returns a db as of business time.
+     * Returns a db as of business time. Will return the latest
+     * consistent snapshot of the db currently known, but does not
+     * wait for business time to be current. Does not block.
      *
      * @param businessTime the business time.
      * @return             the database.
@@ -25,7 +28,8 @@ public interface ICruxSystem extends Closeable {
     public ICruxDatasource db(Date businessTime);
 
     /**
-     * Returns a db as of business and transaction time time.
+     * Returns a db as of business and transaction time time. Will
+     * block until the transaction time is present in the index.
      *
      * @param businessTime    the business time.
      * @param transactionTime the transaction time.
@@ -85,6 +89,18 @@ public interface ICruxSystem extends Closeable {
      * @return an implementation specific snapshot
      */
     public Closeable newTxLogContext();
+
+    /**
+     * Blocks until the node has caught up indexing. Will throw an
+     * exception on timeout. The returned date is the latest index
+     * time when this node has caught up as of this call. This can be
+     * used as the second parameter in {@llink #db(Date businessTime,
+     * transactionTime Date)} for consistent reads.
+     *
+     * @param timeout amount of max time to wait in milliseconds.
+     * @return        the latest known transaction time.
+     */
+    public Date sync(int timeout);
 
     /**
      * Reads the transaction log lazily.

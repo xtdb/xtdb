@@ -187,8 +187,11 @@
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer conformed-tx-ops transact-time tx-id)
-      (db/store-index-meta indexer :crux.tx-log/consumer-lag 0)
-      (db/store-index-meta indexer :crux.tx-log/tx-time transact-time)
+      (db/store-index-meta indexer
+                           :crux.tx-log/consumer-state
+                           {:crux.kv.topic-partition/tx-log-0
+                            {:lag 0
+                             :time transact-time}})
       (delay {:crux.tx/tx-id tx-id
               :crux.tx/tx-time transact-time})))
 
@@ -203,27 +206,37 @@
 
 (def ^:const default-await-tx-timeout 10000)
 
-(s/def :crux.tx-log/consumer-lag-threshold nat-int?)
 (s/def :crux.tx-log/await-tx-timeout nat-int?)
 
-(defn await-no-consumer-lag [indexer {:crux.tx-log/keys [consumer-lag-threshold
-                                                         await-tx-timeout]
-                                      :or {await-tx-timeout default-await-tx-timeout
-                                           consumer-lag-threshold 0}}]
-  (if (cio/wait-while #(> (long (or (db/read-index-meta indexer :crux.tx-log/consumer-lag) Long/MAX_VALUE))
-                          (long consumer-lag-threshold))
-                      await-tx-timeout)
-    (db/read-index-meta indexer :crux.tx-log/consumer-lag)
-    (throw (IllegalStateException.
-            (str "Timed out waiting for index to catch up, lag is: "
-                 (db/read-index-meta indexer :crux.tx-log/consumer-lag))))))
+(defn latest-completed-tx-time [indexer]
+  (let [consumer-states (->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
+                             (vals)
+                             (sort-by :time))
+        consumer-states-without-lag (filter (comp zero? :lag) consumer-states)]
+    (if (= consumer-states consumer-states-without-lag)
+      (:time (last consumer-states))
+      (:time (first consumer-states-without-lag)))))
+
+(defn await-no-consumer-lag [indexer {:crux.tx-log/keys [await-tx-timeout]
+                                      :or {await-tx-timeout default-await-tx-timeout}}]
+  (let [max-lag-fn #(some->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
+                             (vals)
+                             (seq)
+                             (map :lag)
+                             (reduce max 0))]
+    (if (cio/wait-while #(pos? (or (long (max-lag-fn)) Long/MAX_VALUE))
+                        await-tx-timeout)
+      (latest-completed-tx-time indexer)
+      (throw (IllegalStateException.
+              (str "Timed out waiting for index to catch up, lag is: " (max-lag-fn)))))))
 
 (defn await-tx-time [indexer transact-time {:crux.tx-log/keys [await-tx-timeout]
                                             :or {await-tx-timeout default-await-tx-timeout}}]
-  (if (cio/wait-while #(pos? (compare transact-time (or (db/read-index-meta indexer :crux.tx-log/tx-time)
-                                                        (Date. 0))))
+  (if (cio/wait-while #(pos? (compare transact-time
+                                      (or (latest-completed-tx-time indexer)
+                                          (Date. 0))))
                       await-tx-timeout)
-    (db/read-index-meta indexer :crux.tx-log/tx-time)
+    (latest-completed-tx-time indexer)
     (throw (IllegalStateException.
             (str "Timed out waiting for: " transact-time
-                 " index has: " (db/read-index-meta indexer :crux.tx-log/tx-time))))))
+                 " index has: " (latest-completed-tx-time indexer))))))

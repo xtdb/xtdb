@@ -167,6 +167,11 @@
         result (.txLog local-node ctx)]
     (streamed-edn-response ctx result)))
 
+(defn- sync-handler [^ICruxSystem local-node request]
+  (let [timeout (Long/parseLong (get-in request [:query-params "timeout"] "0"))]
+    (success-response
+     (.sync local-node timeout))))
+
 ;; ---------------------------------------------------
 ;; Jetty server
 
@@ -198,6 +203,9 @@
 
     [#"^/tx-log$" [:get]]
     (tx-log local-node request)
+
+    [#"^/sync$" [:get]]
+    (sync-handler local-node request)
 
     [#"^/sparql/?$" [:get :post]]
     (sparql-protocol/sparql-query local-node request)

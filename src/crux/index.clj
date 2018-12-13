@@ -284,10 +284,9 @@
        (into {})))
 
 (defn- update-predicate-stats [kv f normalized-doc]
-  (locking kv
-    (->> (doc-predicate-stats normalized-doc)
-         (merge-with f (read-meta kv :crux.kv/stats))
-         (store-meta kv :crux.kv/stats))))
+  (->> (doc-predicate-stats normalized-doc)
+       (merge-with f (read-meta kv :crux.kv/stats))
+       (store-meta kv :crux.kv/stats)))
 
 (defn index-doc [kv content-hash doc]
   (let [id (c/id->bytes (:crux.db/id doc))

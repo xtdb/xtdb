@@ -137,6 +137,7 @@
 
 (def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxSystem *api*)
+(def ^:dynamic ^ICruxSystem *local-node*)
 
 (defn with-local-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
@@ -155,7 +156,8 @@
     (try
       (with-open [local-node (Crux/startLocalNode options)
                   http-server (srv/start-http-server local-node options)]
-        (binding [*api* local-node
+        (binding [*local-node* local-node
+                  *api* local-node
                   *api-url* (str "http://" ek/*host* ":" server-port)]
           (f)))
       (finally

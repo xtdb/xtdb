@@ -10,7 +10,7 @@
            [java.util Date List Map]
            java.util.concurrent.ExecutionException
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
-           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
+           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord ConsumerRecords KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            org.apache.kafka.common.errors.TopicExistsException
            org.apache.kafka.common.TopicPartition))
@@ -132,33 +132,42 @@
   (keyword "crux.kafka.topic-partition" (str partition)))
 
 (defn consumer-status [indexer]
-  {:crux.tx-log/consumer-lag (db/read-index-meta indexer :crux.tx-log/consumer-lag)
-   :crux.tx-log/tx-time (db/read-index-meta indexer :crux.tx-log/tx-time)})
+  {:crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)})
 
-(defn store-topic-partition-offsets [indexer ^KafkaConsumer consumer partitions]
-  (doseq [^TopicPartition partition partitions]
-    (db/store-index-meta indexer
-                         (topic-partition-meta-key partition)
-                         (.position consumer partition))))
+(defn- update-stored-consumer-state [indexer ^KafkaConsumer consumer ^ConsumerRecords records]
+  (let [partitions (.partitions records)
+        end-offsets (.endOffsets consumer partitions)
+        stored-consumer-state (or (db/read-index-meta indexer :crux.tx-log/consumer-state) {})
+        consumer-state (->> (for [^TopicPartition partition partitions
+                                  :let [position (.position consumer partition)
+                                        latest-position (get end-offsets partition)
+                                        lag (- latest-position position)]]
+                              (do (when-not (zero? lag)
+                                    (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
+                                  [(topic-partition-meta-key partition)
+                                   {:offset position
+                                    :time (->>  (.records records partition)
+                                                (map #(.timestamp ^ConsumerRecord %))
+                                                (reduce max)
+                                                (long)
+                                                (Date.))
+                                    :lag lag}]))
+                            (into stored-consumer-state))]
+    (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))
 
-;; NOTE: this will log a lot if it's far behind. Only takes max lag
-;; into account across all topics and partitions.
-(defn consumer-lag [^KafkaConsumer consumer partitions]
-  (let [end-offsets (.endOffsets consumer partitions)]
-    (->> (for [partition partitions
-               :let [position (.position consumer partition)
-                     latest-position (get end-offsets partition)
-                     lag (- latest-position position)]]
-           (do (when-not (zero? lag)
-                 (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
-               lag))
-         (reduce + 0))))
+(defn- prune-consumer-state [indexer ^KafkaConsumer consumer partitions]
+  (when-let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
+    (->> (for [^TopicPartition partition partitions]
+           (topic-partition-meta-key partition))
+         (select-keys consumer-state)
+         (db/store-index-meta indexer :crux.tx-log/consumer-state))))
 
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
-  (doseq [^TopicPartition partition partitions]
-    (if-let [offset (db/read-index-meta indexer (topic-partition-meta-key partition))]
-      (.seek consumer partition offset)
-      (.seekToBeginning consumer [partition]))))
+  (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
+    (doseq [^TopicPartition partition partitions]
+      (if-let [offset (get-in consumer-state [(topic-partition-meta-key partition) :offset])]
+        (.seek consumer partition offset)
+        (.seekToBeginning consumer [partition])))))
 
 (defn- index-doc-record [indexer ^ConsumerRecord record]
   (let [content-hash (.key record)
@@ -178,15 +187,13 @@
            follower timeout tx-topic doc-topic]
     :or   {timeout 10000}}]
   (let [records (.poll consumer (Duration/ofMillis timeout))
-        {:keys [last-tx-log-time] :as result}
+        result
         (reduce
          (fn [state ^ConsumerRecord record]
            (condp = (.topic record)
              tx-topic
              (do (index-tx-record indexer record)
-                 (-> state
-                     (update :txs inc)
-                     (update :last-tx-log-time max (.timestamp record))))
+                 (update state :txs inc))
 
              doc-topic
              (do (index-doc-record indexer record)
@@ -194,16 +201,11 @@
 
              (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
          {:txs 0
-          :docs 0
-          :last-tx-log-time 0}
+          :docs 0}
          records)]
-    (store-topic-partition-offsets indexer consumer (.partitions records))
     (when (seq records)
-      (->> (consumer-lag consumer (.partitions records))
-           (db/store-index-meta indexer :crux.tx-log/consumer-lag)))
-    (when (pos? last-tx-log-time)
-      (db/store-index-meta indexer :crux.tx-log/tx-time (Date. (long last-tx-log-time))))
-    (dissoc result :last-tx-log-time)))
+      (update-stored-consumer-state indexer consumer records))
+    result))
 
 ;; TODO: This works as long as each node has a unique consumer group
 ;; id, if not the node will only get a subset of the doc-topic. The
@@ -214,7 +216,7 @@
               topics
               (reify ConsumerRebalanceListener
                 (onPartitionsRevoked [_ partitions]
-                  (store-topic-partition-offsets indexer consumer partitions))
+                  (prune-consumer-state indexer consumer partitions))
                 (onPartitionsAssigned [_ partitions]
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
