@@ -79,8 +79,8 @@
         (when-let [k (some->> @peek-state (kv/seek i))]
           (recur k)))))
 
-(defn- attribute-value-value+prefix-iterator [i value-entity-value-idx attr]
-  (let [{:keys [value]} @(:peek-state value-entity-value-idx)
+(defn- attribute-value-value+prefix-iterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr]
+  (let [{:keys [value]} @(.peek-state value-entity-value-idx)
         prefix (c/encode-attribute+value+entity+content-hash-key (c/id->bytes attr) value)]
     [value (new-prefix-kv-iterator i prefix)]))
 
@@ -158,8 +158,8 @@
           (when-let [k (some->> @peek-state (kv/seek i))]
             (recur k))))))
 
-(defn- attribute-value-entity-tx+prefix-iterator [i entity-value-entity-idx attr]
-  (let [{:keys [^EntityTx entity-tx]} @(:peek-state entity-value-entity-idx)
+(defn- attribute-value-entity-tx+prefix-iterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr]
+  (let [{:keys [^EntityTx entity-tx]} @(.peek-state entity-value-entity-idx)
         prefix (c/encode-attribute+entity+value+content-hash-key (c/id->bytes attr) (c/id->bytes (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 

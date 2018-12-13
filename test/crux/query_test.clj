@@ -1234,8 +1234,7 @@
                                                 :where [[:ivan :name n]]})))
 
             (t/testing "earlier submitted txs can still be checked"
-              (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan))))
-            ))))))
+              (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan))))))))))
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
