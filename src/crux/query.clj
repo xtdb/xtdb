@@ -487,12 +487,14 @@
               content-hash (.content-hash entity-tx)
               doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)
               values (idx/normalize-value (get doc attr))
-              value (first (if (or (nil? value-bytes)
-                                   (= (count values) 1))
-                             values
-                             (for [value values
-                                   :when (bu/bytes=? value-bytes (c/value->bytes value))]
-                               value)))]
+              value (if (or (nil? value-bytes)
+                            (= (count values) 1))
+                      (first values)
+                      (loop [[x & xs] values]
+                        (if (bu/bytes=? value-bytes (c/value->bytes x))
+                          x
+                          (when xs
+                            (recur xs)))))]
           (merge binding {:value value
                           :entity entity-tx
                           :doc doc}))))))

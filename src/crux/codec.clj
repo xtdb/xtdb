@@ -53,7 +53,7 @@
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
 
-(defn- prepend-value-type-id [^bytes bs type-id]
+(defn- prepend-value-type-id ^bytes [^bytes bs ^long type-id]
   (let [bs-with-type-id (doto (byte-array (+ (alength bs) value-type-id-size))
                           (aset 0 (byte type-id)))]
     (System/arraycopy bs 0 bs-with-type-id value-type-id-size (alength bs))
