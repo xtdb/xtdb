@@ -12,7 +12,7 @@
 
 ;; Indexes
 
-(def ^{:tag 'long} index-id-size Byte/BYTES)
+(def ^:const index-id-size Byte/BYTES)
 
 (def ^:const ^:private content-hash->doc-index-id 0)
 
@@ -25,7 +25,7 @@
 
 (def ^:const ^:private tx-id->tx-index-id 5)
 
-(def ^:private ^{:tag 'long} value-type-id-size Byte/BYTES)
+(def ^:const ^:private value-type-id-size Byte/BYTES)
 
 (def ^:const ^:private id-hash-algorithm "SHA-1")
 (def ^:const id-size (+ (.getDigestLength (MessageDigest/getInstance id-hash-algorithm))
