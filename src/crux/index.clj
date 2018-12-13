@@ -39,7 +39,7 @@
 ;; AVE
 
 (defn- attribute-value+placeholder [k peek-state]
-  (let [[value] (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)]
+  (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k))]
     (reset! peek-state {:last-k k :value value})
     [value :crux.index.binary-placeholder/value]))
 
@@ -66,7 +66,7 @@
 (defn- attribute-value-entity-entity+value [i ^bytes current-k attr-bytes value entity-as-of-idx peek-state]
   (loop [k current-k]
     (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) c/id-size))))
-    (or (let [[_ eid] (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k)
+    (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash k))
               eid-bytes (c/id->bytes eid)
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-bytes)]
           (when entity-tx
@@ -110,7 +110,7 @@
 ;; AEV
 
 (defn- attribute-entity+placeholder [k attr-bytes entity-as-of-idx peek-state]
-  (let [[eid] (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)
+  (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k))
         eid-bytes (c/id->bytes eid)
         [_ entity-tx] (db/seek-values entity-as-of-idx eid-bytes)]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
@@ -152,7 +152,7 @@
           content-hash-bytes (c/id->bytes (.content-hash entity-tx))]
       (loop [k current-k]
         (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) c/id-size))))
-        (or (let [[_ value] (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k)]
+        (or (let [value (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k))]
               (let [version-k (c/encode-attribute+entity+value+content-hash-key
                                attr-bytes
                                eid-bytes

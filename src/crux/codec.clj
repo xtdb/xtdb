@@ -278,7 +278,7 @@
       (.put content-hash)
       (.array)))
 
-(defn decode-doc-key ^bytes [^bytes doc-key]
+(defn decode-doc-key ^crux.codec.Id [^bytes doc-key]
   (assert (= (+ index-id-size id-size) (alength doc-key)))
   (let [buffer (ByteBuffer/wrap doc-key)
         index-id (.get buffer)]
@@ -308,20 +308,24 @@
        (.put content-hash)
        (.array))))
 
-(defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash ^crux.codec.Id [^bytes k]
+(defrecord EntityValueContentHash [eid value content-hash])
+
+(defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash
+  ^crux.codec.EntityValueContentHash [^bytes k]
   (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)
         index-id (.get buffer)]
     (assert (= attribute+value+entity+content-hash-index-id index-id))
     (.position buffer (+ index-id-size id-size))
-    [(doto (byte-array (- (.remaining buffer) id-size id-size))
-       (->> (.get buffer)))
-     (Id. (doto (byte-array id-size)
-            (->> (.get buffer)))
-          0)
-     (Id. (doto (byte-array id-size)
-            (->> (.get buffer)))
-          0)]))
+    (let [value (doto (byte-array (- (.remaining buffer) id-size id-size))
+                  (->> (.get buffer)))
+          entity (Id. (doto (byte-array id-size)
+                        (->> (.get buffer)))
+                      0)
+          content-hash (Id. (doto (byte-array id-size)
+                              (->> (.get buffer)))
+                            0)]
+      (->EntityValueContentHash entity value content-hash))))
 
 (defn encode-attribute+entity+value+content-hash-key
   (^bytes [^bytes attr]
@@ -344,20 +348,22 @@
        (.put content-hash)
        (.array))))
 
-(defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash ^crux.codec.Id [^bytes k]
+(defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash
+  ^crux.codec.EntityValueContentHash [^bytes k]
   (assert (<= (+ index-id-size id-size id-size) (alength k)))
   (let [buffer (ByteBuffer/wrap k)
         index-id (.get buffer)]
     (assert (= attribute+entity+value+content-hash-index-id index-id))
     (.position buffer (+ index-id-size id-size))
-    [(Id. (doto (byte-array id-size)
-            (->> (.get buffer)))
-          0)
-     (doto (byte-array (- (.remaining buffer) id-size))
-       (->> (.get buffer)))
-     (Id. (doto (byte-array id-size)
-            (->> (.get buffer)))
-          0)]))
+    (let [entity (Id. (doto (byte-array id-size)
+                        (->> (.get buffer)))
+                      0)
+          value (doto (byte-array (- (.remaining buffer) id-size))
+                  (->> (.get buffer)))
+          content-hash (Id. (doto (byte-array id-size)
+                              (->> (.get buffer)))
+                            0)]
+      (->EntityValueContentHash entity value content-hash))))
 
 (defn encode-meta-key ^bytes [^bytes k]
   (-> (ByteBuffer/allocate (+ index-id-size id-size))
@@ -368,7 +374,7 @@
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
 
-(defn- ^Date reverse-time-ms->date [^long reverse-time-ms]
+(defn- reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
 (defn encode-entity+bt+tt+tx-id-key
