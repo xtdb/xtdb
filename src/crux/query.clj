@@ -428,6 +428,8 @@
                                                  {v [(assoc join :name (symbol "crux.query.value" (name v)))]}))]))
         [[] known-vars var->joins])))
 
+(defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
+
 (defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
@@ -435,23 +437,25 @@
                                        (long (get var->values-result-index (get e->v-var e) -1)))
                                   (dec (long join-depth)))
                    result-index (get var->values-result-index var)]]
-         [var {:e-var e
-               :var var
-               :attr (get var->attr var)
-               :result-index result-index
-               :join-depth join-depth
-               :result-name e
-               :type :entity
-               :value? false}])
+         [var (map->VarBinding
+               {:e-var e
+                :var var
+                :attr (get var->attr var)
+                :result-index result-index
+                :join-depth join-depth
+                :result-name e
+                :type :entity
+                :value? false})])
        (into {})))
 
 (defn- value-var-binding [var result-index type]
-  {:var var
-   :result-name (symbol "crux.query.value" (name var))
-   :result-index result-index
-   :join-depth result-index
-   :type type
-   :value? true})
+  (map->VarBinding
+   {:var var
+    :result-name (symbol "crux.query.value" (name var))
+    :result-index result-index
+    :join-depth result-index
+    :type type
+    :value? true}))
 
 (defn- build-arg-var-bindings [var->values-result-index arg-vars]
   (->> (for [var arg-vars
@@ -476,14 +480,14 @@
 (defrecord BoundResult [var value ^EntityTx entity-tx doc])
 
 (defn- bound-result-for-var ^crux.query.BoundResult [snapshot object-store var->bindings join-keys join-results var]
-  (let [{:keys [e-var var attr result-index result-name type value?] :as binding} (get var->bindings var)]
-    (if value?
-      (BoundResult. var (get join-results result-name) nil nil)
-      (when-let [^EntityTx entity-tx (get join-results e-var)]
-        (let [value-bytes (get join-keys result-index)
+  (let [binding ^VarBinding (get var->bindings var)]
+    (if (.value? binding)
+      (BoundResult. var (get join-results (.result-name binding)) nil nil)
+      (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
+        (let [value-bytes (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
               doc (get (db/get-objects object-store snapshot [content-hash]) content-hash)
-              values (idx/normalize-value (get doc attr))
+              values (idx/normalize-value (get doc (.attr binding)))
               value (if (or (nil? value-bytes)
                             (= (count values) 1))
                       (first values)
