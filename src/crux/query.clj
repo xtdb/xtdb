@@ -812,7 +812,7 @@
         var->joins {}
         v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constraints))
-        non-leaf-vars (set/union e-vars arg-vars v-range-vars unification-vars pred-vars)
+        non-leaf-vars (set/union e-vars arg-vars v-range-vars unification-vars)
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
                                                     non-leaf-vars
