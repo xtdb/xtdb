@@ -215,9 +215,9 @@
   (.subscribe consumer
               topics
               (reify ConsumerRebalanceListener
-                (onPartitionsRevoked [_ partitions]
-                  (prune-consumer-state indexer consumer partitions))
+                (onPartitionsRevoked [_ partitions])
                 (onPartitionsAssigned [_ partitions]
+                  (prune-consumer-state indexer consumer partitions)
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
 (defrecord IndexingConsumer [running? ^Thread worker-thread consumer-config indexer options]
