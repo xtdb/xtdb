@@ -1,6 +1,7 @@
 package crux.api;
 
 import java.io.Closeable;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,4 +52,14 @@ public interface ICruxDatasource {
      * @return         a lazy sequence of result tuples.
      */
     public Iterable<List> q(Closeable snapshot, Object query);
+
+    /**
+     * @return the business time of this db.
+     */
+    public Date businessTime();
+
+    /**
+     * @return the transaction time of this db.
+     */
+    public Date transactionTime();
 }

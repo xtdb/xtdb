@@ -48,7 +48,8 @@ public interface ICruxSystem extends Closeable {
     public Map document(Object contentHash);
 
     /**
-     * Returns the transaction history of an entity.
+     * Returns the transaction history of an entity, in reverse
+     * chronological order.
      *
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.

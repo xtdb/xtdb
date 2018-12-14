@@ -1062,7 +1062,13 @@
     (crux.query/q this q))
 
   (q [this snapshot q]
-    (crux.query/q this snapshot q)))
+    (crux.query/q this snapshot q))
+
+  (businessTime [_]
+    business-time)
+
+  (transactionTime [_]
+    transact-time))
 
 (def ^:const default-query-cache-size 10240)
 

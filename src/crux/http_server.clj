@@ -15,10 +15,12 @@
             [crux.codec :as c]
             [crux.io]
             [crux.kafka]
+            [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.request :as req]
-            [ring.util.io :as rio])
+            [ring.util.io :as rio]
+            [ring.util.time :as rt])
   (:import [java.io Closeable IOException]
            java.time.Duration
            java.util.UUID
@@ -46,7 +48,9 @@
     :body body}))
 
 (defn- success-response [m]
-  (response 200
+  (response (if m
+              200
+              404)
             {"Content-Type" "application/edn"}
             (pr-str m)))
 
@@ -80,15 +84,17 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
-(defn document [^ICruxSystem local-node request]
+(defn- document [^ICruxSystem local-node request]
   (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
     (success-response
      (.document local-node (c/new-id content-hash)))))
 
 (defn- history [^ICruxSystem local-node request]
-  (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))]
-    (success-response
-     (.history local-node (c/new-id eid)))))
+  (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
+        history (.history local-node (c/new-id eid))]
+    (-> (success-response history)
+        (assoc-in [:headers "Last-Modified"]
+                  (rt/format-date (:crux.tx/tx-time (first history)))))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxSystem local-node {:keys [business-time transact-time]}]
   (cond
@@ -100,6 +106,12 @@
 
     :else
     (.db local-node)))
+
+(defn- add-last-modified [response date]
+  (if date
+    (->> (rt/format-date date)
+         (assoc-in response [:headers "Last-Modified"]))
+    response))
 
 (defn- streamed-edn-response [^Closeable ctx edn]
   (try
@@ -126,17 +138,19 @@
 ;; TODO: Potentially require both business and transaction time sent
 ;; by the client?
 (defn- query [^ICruxSystem local-node request]
-  (let [query-map (s/assert ::query-map (body->edn request))]
-    (success-response
-     (.q (db-for-request local-node query-map)
-         (:query query-map)))))
+  (let [query-map (s/assert ::query-map (body->edn request))
+        db (db-for-request local-node query-map)]
+    (-> (success-response
+         (.q db (:query query-map)))
+        (add-last-modified (.transactionTime db)))))
 
 (defn- query-stream [^ICruxSystem local-node request]
   (let [query-map (s/assert ::query-map (body->edn request))
         db (db-for-request local-node query-map)
         snapshot (.newSnapshot db)
         result (.q db snapshot (:query query-map))]
-    (streamed-edn-response snapshot result)))
+    (-> (streamed-edn-response snapshot result)
+        (add-last-modified (.transactionTime db)))))
 
 (s/def ::eid c/valid-id?)
 (s/def ::entity-map (s/keys :req-un [::eid]
@@ -145,32 +159,38 @@
 
 ;; TODO: Could support as-of now via path and GET.
 (defn- entity [^ICruxSystem local-node request]
-  (let [body (s/assert ::entity-map (body->edn request))]
-    (success-response
-     (.entity (db-for-request local-node body)
-              (:eid body)))))
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+        db (db-for-request local-node body)
+        {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
+    (-> (success-response (.entity db eid))
+        (add-last-modified tx-time))))
 
 (defn- entity-tx [^ICruxSystem local-node request]
-  (let [body (s/assert ::entity-map (body->edn request))]
-    (success-response
-     (.entityTx (db-for-request local-node body)
-                (:eid body)))))
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+        db (db-for-request local-node body)
+        {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
+    (-> (success-response entity-tx)
+        (add-last-modified tx-time))))
 
 (defn- transact [^ICruxSystem local-node request]
-  (let [tx-ops (body->edn request)]
-    (success-response
-     (.submitTx local-node tx-ops))))
+  (let [tx-ops (body->edn request)
+        {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx local-node tx-ops)]
+    (-> (success-response submitted-tx)
+        (assoc :status 202)
+        (add-last-modified tx-time))))
 
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxSystem local-node request]
   (let [ctx (.newTxLogContext local-node)
         result (.txLog local-node ctx)]
-    (streamed-edn-response ctx result)))
+    (-> (streamed-edn-response ctx result)
+        (add-last-modified (tx/latest-completed-tx-time (:indexer local-node))))))
 
 (defn- sync-handler [^ICruxSystem local-node request]
-  (let [timeout (Long/parseLong (get-in request [:query-params "timeout"] "0"))]
-    (success-response
-     (.sync local-node timeout))))
+  (let [timeout (Long/parseLong (get-in request [:query-params "timeout"] "0"))
+        last-modified (.sync local-node timeout)]
+    (-> (success-response last-modified)
+        (add-last-modified last-modified))))
 
 (def ^:private sparql-available? (try
                                    (require 'crux.sparql.protocol)

@@ -199,7 +199,8 @@
   Will be called with :url, :method, :body, :headers and
   optionally :as with the value :stream.
 
-  Expects :body, :status, :error and :headers in the response map.
+  Expects :body, :status and :headers in the response map. Should not
+  throw exceptions based on status codes of completed requests.
 
   Defaults to using clj-http or http-kit if available."
        :dynamic true}
@@ -208,13 +209,16 @@
         (require 'clj-http.client)
         (let [f (resolve 'clj-http.client/request)]
           (fn [opts]
-            (f (merge {:as "UTF-8"} opts))))
+            (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
         (catch IOException not-found))
       (try
         (require 'org.httpkit.client)
         (let [f (resolve 'org.httpkit.client/request)]
           (fn [opts]
-            @(f (merge {:as :text} opts))))
+            (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
+              (if error
+                (throw error)
+                result))))
         (catch IOException not-found))
       (fn [_]
         (throw (IllegalStateException. "No supported HTTP client found.")))))
@@ -223,7 +227,7 @@
   ([url body]
    (api-request-sync url body {}))
   ([url body opts]
-   (let [{:keys [body error status headers]
+   (let [{:keys [body status headers]
           :as result}
          (*internal-http-request-fn* (merge {:url url
                                              :method :post
@@ -232,8 +236,8 @@
                                              :body (some-> body pr-str)}
                                             opts))]
      (cond
-       error
-       (throw error)
+       (= 404 status)
+       nil
 
        (= "application/edn" (:content-type headers))
        (if (string? body)
@@ -281,7 +285,13 @@
                                       :query (q/normalize-query q))
                                {:as :stream})]
       (register-stream-with-remote-stream! snapshot in)
-      (edn-list->lazy-seq in))))
+      (edn-list->lazy-seq in)))
+
+  (businessTime [_]
+    business-time)
+
+  (transactionTime [_]
+    transact-time))
 
 (defrecord RemoteApiClient [url]
   ICruxSystem

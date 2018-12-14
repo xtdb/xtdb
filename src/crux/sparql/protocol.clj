@@ -8,7 +8,8 @@
             [crux.api :as api]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
-            [ring.util.request :as req])
+            [ring.util.request :as req]
+            [ring.util.time :as rt])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]
            crux.api.ICruxSystem))
 
@@ -91,18 +92,21 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          results (.q (.db local-node) query-map)]
+          db (.db local-node)
+          results (.q db query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond
         (str/index-of accept "application/sparql-results+xml")
         {:status 200
-         :headers {"Content-Type" "application/sparql-results+xml"}
+         :headers {"Content-Type" "application/sparql-results+xml"
+                   "Last-Modified" (rt/format-date (.transactionTime db))}
          :body (sparql-xml-response find results)}
 
         (str/index-of accept "application/sparql-results+json")
         {:status 200
-         :headers {"Content-Type" "application/sparql-results+json"}
+         :headers {"Content-Type" "application/sparql-results+json"
+                   "Last-Modified" (rt/format-date (.transactionTime db))}
          :body (sparql-json-response find results)}
 
         :else
