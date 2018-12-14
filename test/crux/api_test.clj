@@ -24,6 +24,9 @@
               :crux.tx-log/consumer-state nil}
              (dissoc (.status f/*api*) :crux.kv/size))))
 
+  (t/testing "empty db"
+    (t/is (.db f/*api*)))
+
   (t/testing "transaction"
     (let [business-time (Date.)
           {:keys [crux.tx/tx-time]
@@ -71,16 +74,6 @@
                                   #"(status 400|Spec assertion failed)"
                                   (.q (.db f/*api*) '{:find [e]}))))
 
-        (t/testing "SPARQL query"
-          (when (bound? #'f/*api-url*)
-            (let [repo (SPARQLRepository. (str f/*api-url* "/sparql"))]
-              (try
-                (.initialize repo)
-                (with-open [conn (.getConnection repo)]
-                  (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
-                (finally
-                  (.shutDown repo))))))
-
         (t/testing "query with streaming result"
           (let [db (.db f/*api*)]
             (with-open [snapshot (.newSnapshot db)]
@@ -89,7 +82,17 @@
                 (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
                 (t/is (= '([:ivan]) result))
-                (t/is (realized? result)))))))
+                (t/is (realized? result))))))
+
+        (t/testing "SPARQL query"
+          (when (bound? #'f/*api-url*)
+            (let [repo (SPARQLRepository. (str f/*api-url* "/sparql"))]
+              (try
+                (.initialize repo)
+                (with-open [conn (.getConnection repo)]
+                  (t/is (= #{[:ivan]} (execute-sparql conn "SELECT ?e WHERE { ?e <http://juxt.pro/crux/unqualified/name> \"Ivan\" }"))))
+                (finally
+                  (.shutDown repo)))))))
 
       (t/testing "entity"
         (t/is (= {:crux.db/id :ivan :name "Ivan"} (.entity (.db f/*api*) :ivan)))
