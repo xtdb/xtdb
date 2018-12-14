@@ -6,6 +6,7 @@
             [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
            java.util.Date
+           java.time.Duration
            crux.api.StandaloneSystem
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
@@ -32,7 +33,8 @@
           {:keys [crux.tx/tx-time]
            :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} business-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
-      (t/is (= tx-time (.sync f/*api* 1000)))
+      (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
+      (t/is (= tx-time (.sync f/*api* nil)))
 
       (let [status-map (.status f/*api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))

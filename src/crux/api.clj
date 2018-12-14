@@ -11,6 +11,7 @@
             [crux.query :as q]
             [crux.tx :as tx])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
+           java.time.Duration
            [crux.api Crux ICruxSystem ICruxDatasource]))
 
 ;; Local Node
@@ -55,7 +56,8 @@
     (db/tx-log tx-log tx-log-context))
 
   (sync [_ timeout]
-    (tx/await-no-consumer-lag indexer (or timeout (:crux.tx-log/await-tx-timeout options))))
+    (tx/await-no-consumer-lag indexer (or (some-> timeout (.toMillis))
+                                          (:crux.tx-log/await-tx-timeout options))))
 
   Closeable
   (close [_]
@@ -331,7 +333,8 @@
       (edn-list->lazy-seq in)))
 
   (sync [_ timeout]
-    (api-request-sync (str url "/sync?timeout=" timeout) nil {:method :get}))
+    (api-request-sync (cond-> (str url "/sync")
+                        timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
 
   Closeable
   (close [_]))

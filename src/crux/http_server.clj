@@ -187,7 +187,9 @@
         (add-last-modified (tx/latest-completed-tx-time (:indexer local-node))))))
 
 (defn- sync-handler [^ICruxSystem local-node request]
-  (let [timeout (Long/parseLong (get-in request [:query-params "timeout"] "0"))
+  (let [timeout (some->> (get-in request [:query-params "timeout"])
+                         (Long/parseLong)
+                         (Duration/ofMillis))
         last-modified (.sync local-node timeout)]
     (-> (success-response last-modified)
         (add-last-modified last-modified))))

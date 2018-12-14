@@ -4,6 +4,7 @@ import java.io.Closeable;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.time.Duration;
 
 /**
  *  Provides API access to Crux.
@@ -98,10 +99,10 @@ public interface ICruxSystem extends Closeable {
      * used as the second parameter in {@llink #db(Date businessTime,
      * transactionTime Date)} for consistent reads.
      *
-     * @param timeout amount of max time to wait in milliseconds.
+     * @param timeout max time to wait, can be null for the default.
      * @return        the latest known transaction time.
      */
-    public Date sync(int timeout);
+    public Date sync(Duration timeout);
 
     /**
      * Reads the transaction log lazily.
