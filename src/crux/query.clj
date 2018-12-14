@@ -13,6 +13,8 @@
             [crux.kv :as kv]
             [crux.db :as db])
   (:import java.util.Comparator
+           java.util.concurrent.TimeoutException
+           clojure.lang.ExceptionInfo
            crux.index.BinaryJoinLayeredVirtualIndex
            crux.codec.EntityTx
            crux.api.ICruxDatasource))
@@ -990,7 +992,12 @@
                               (log/debug :query-time-ms (- (System/currentTimeMillis) start-time))
                               (log/debug :query-result-size (count result))
                               result))
+                          (catch ExceptionInfo e
+                            e)
+                          (catch IllegalArgumentException e
+                            e)
                           (catch Throwable t
+                            (log/error t "Exception caught while executing query.")
                             t)))
          result (or (try
                       (deref query-future (or (:timeout q) default-query-timeout) nil)
@@ -999,7 +1006,7 @@
                         (throw e)))
                     (do (when-not (future-cancel query-future)
                           (throw (IllegalStateException. "Could not cancel query.")))
-                        (throw (IllegalStateException. "Query timed out."))))]
+                        (throw (TimeoutException. "Query timed out."))))]
      (if (instance? Throwable result)
        (throw result)
        result)))

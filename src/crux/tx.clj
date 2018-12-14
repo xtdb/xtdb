@@ -11,6 +11,7 @@
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
            [java.io Closeable Writer]
+           java.util.concurrent.TimeoutException
            java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -227,7 +228,7 @@
     (if (cio/wait-while #(pos? (or (long (max-lag-fn)) Long/MAX_VALUE))
                         await-tx-timeout)
       (latest-completed-tx-time indexer)
-      (throw (IllegalStateException.
+      (throw (TimeoutException.
               (str "Timed out waiting for index to catch up, lag is: " (max-lag-fn)))))))
 
 (defn await-tx-time [indexer transact-time {:crux.tx-log/keys [await-tx-timeout]
@@ -237,6 +238,6 @@
                                           (Date. 0))))
                       await-tx-timeout)
     (latest-completed-tx-time indexer)
-    (throw (IllegalStateException.
+    (throw (TimeoutException.
             (str "Timed out waiting for: " transact-time
                  " index has: " (latest-completed-tx-time indexer))))))

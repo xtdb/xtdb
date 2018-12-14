@@ -241,7 +241,8 @@
        (= 404 status)
        nil
 
-       (= "application/edn" (:content-type headers))
+       (and (<= 200 status) (< status 400)
+            (= "application/edn" (:content-type headers)))
        (if (string? body)
          (edn/read-string body)
          body)

@@ -24,7 +24,7 @@
         (when-let [cleanup-action (.remove ref->cleanup-action ref)]
           (cleanup-action))
         (catch Exception e
-          (log/error "Error while running cleaner:" e)))
+          (log/error e "Error while running cleaner:")))
       (recur (.remove reference-queue)))
     (catch InterruptedException _)))
 

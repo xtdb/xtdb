@@ -9,6 +9,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
@@ -56,10 +57,9 @@
 
 (defn- exception-response [status ^Exception e]
   (response status
-            {"Content-Type" "text/plain"}
-            (str
-             (.getMessage e) "\n"
-             (pr-str (ex-data e)))))
+            {"Content-Type" "application/edn"}
+            (with-out-str
+              (pp/pprint (Throwable->map e)))))
 
 (defn- wrap-exception-handling [handler]
   (fn [request]
@@ -69,7 +69,8 @@
         (catch Exception e
           (if (str/starts-with? (.getMessage e) "Spec assertion failed")
             (exception-response 400 e) ;; Valid edn, invalid content
-            (exception-response 500 e)))) ;; Valid content; something internal failed, or content validity is not properly checked
+            (do (log/error e "Exception while handling request:" (pr-str request))
+                (exception-response 500 e))))) ;; Valid content; something internal failed, or content validity is not properly checked
       (catch Exception e
         (exception-response 400 e))))) ;;Invalid edn
 
@@ -197,7 +198,7 @@
 (def ^:private sparql-available? (try
                                    (require 'crux.sparql.protocol)
                                    true
-                                   (catch IOException ignore
+                                   (catch IOException _
                                      false)))
 
 ;; ---------------------------------------------------
