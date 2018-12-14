@@ -15,7 +15,6 @@
             [crux.codec :as c]
             [crux.io]
             [crux.kafka]
-            [crux.rdf :as rdf]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.request :as req]
