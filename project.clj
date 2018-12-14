@@ -8,6 +8,7 @@
                  [org.clojure/tools.cli "0.4.1"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
+                 [org.agrona/agrona "0.9.27"]
                  ;; Provided dependencies included in uberjar.
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
                  [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]

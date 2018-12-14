@@ -4,9 +4,10 @@
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
            [java.io Closeable Writer]
            java.net.URI
-           java.nio.ByteBuffer
+           [java.nio ByteOrder ByteBuffer]
            java.security.MessageDigest
-           [java.util Arrays Date UUID]))
+           [java.util Arrays Date UUID]
+           org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -54,10 +55,10 @@
                     (aset 0 (byte id-value-type-id))))
 
 (defn- prepend-value-type-id ^bytes [^bytes bs ^long type-id]
-  (let [bs-with-type-id (doto (byte-array (+ (alength bs) value-type-id-size))
-                          (aset 0 (byte type-id)))]
-    (System/arraycopy bs 0 bs-with-type-id value-type-id-size (alength bs))
-    bs-with-type-id))
+  (let [ub (UnsafeBuffer. (byte-array (+ (alength bs) value-type-id-size)))]
+    (.putByte ub 0 type-id)
+    (.putBytes ub 1 bs)
+    (.byteArray ub)))
 
 (defn id-function ^bytes [^bytes bytes]
   (let [md (try
@@ -87,10 +88,10 @@
 
   Long
   (value->bytes [this]
-    (-> (ByteBuffer/allocate (+ Long/BYTES value-type-id-size))
-        (.put (byte long-value-type-id))
-        (.putLong (bit-xor ^long this Long/MIN_VALUE))
-        (.array)))
+    (let [ub (UnsafeBuffer. (byte-array (+ Long/BYTES value-type-id-size)))]
+      (.putByte ub 0 long-value-type-id)
+      (.putLong ub value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN)
+      (.byteArray ub)))
 
   Float
   (value->bytes [this]
@@ -99,11 +100,11 @@
   Double
   (value->bytes [this]
     (let [l (Double/doubleToLongBits this)
-          l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (-> (ByteBuffer/allocate (+ Long/BYTES value-type-id-size))
-          (.put (byte double-value-type-id))
-          (.putLong l)
-          (.array))))
+          l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))
+          ub (UnsafeBuffer. (byte-array (+ Long/BYTES value-type-id-size)))]
+      (.putByte ub 0 double-value-type-id)
+      (.putLong ub value-type-id-size l)
+      (.byteArray ub)))
 
   Date
   (value->bytes [this]
@@ -120,16 +121,19 @@
       (doto (id-function (nippy/fast-freeze this))
         (aset 0 (byte object-value-type-id)))
       (let [terminate-mark (byte 1)
-            offset (byte 2)]
-        (let [s this
-              bs (.getBytes s "UTF-8")
-              buffer (ByteBuffer/allocate (+ (inc (alength bs)) value-type-id-size))]
-          (.put buffer (byte string-value-type-id))
-          (doseq [^byte b bs]
-            (.put buffer (byte (+ offset b))))
-          (-> buffer
-              (.put terminate-mark)
-              (.array))))))
+            terminate-mark-size Byte/BYTES
+            offset (byte 2)
+            ub-in (UnsafeBuffer. (.getBytes this "UTF-8"))
+            length (.capacity ub-in)
+            ub-out (UnsafeBuffer. (byte-array (+ value-type-id-size length terminate-mark-size)))]
+        (.putByte ub-out 0 string-value-type-id)
+        (loop [idx 0]
+          (if (= idx length)
+            (do (.putByte ub-out (inc idx) terminate-mark)
+                (.byteArray ub-out))
+            (let [b (.getByte ub-in idx)]
+              (.putByte ub-out (inc idx) (byte (+ offset b)))
+              (recur (inc idx))))))))
 
   nil
   (value->bytes [this]
@@ -273,18 +277,18 @@
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
   (assert (= id-size (alength content-hash)))
-  (-> (ByteBuffer/allocate (+ index-id-size id-size))
-      (.put (byte content-hash->doc-index-id))
-      (.put content-hash)
-      (.array)))
+  (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
+    (.putByte ub 0 content-hash->doc-index-id)
+    (.putBytes ub index-id-size content-hash)
+    (.byteArray ub)))
 
-(defn decode-doc-key ^crux.codec.Id [^bytes doc-key]
-  (assert (= (+ index-id-size id-size) (alength doc-key)))
-  (let [buffer (ByteBuffer/wrap doc-key)
-        index-id (.get buffer)]
+(defn decode-doc-key ^crux.codec.Id [^bytes k]
+  (assert (= (+ index-id-size id-size) (alength k)))
+  (let [ub (UnsafeBuffer. k)
+        index-id (.getByte ub 0)]
     (assert (= content-hash->doc-index-id index-id))
     (Id. (doto (byte-array id-size)
-           (->> (.get buffer)))
+           (->> (.getBytes ub index-id-size)))
          0)))
 
 (defn encode-attribute+value+entity+content-hash-key
@@ -300,30 +304,30 @@
                (zero? (alength entity))))
    (assert (or (= id-size (alength content-hash))
                (zero? (alength content-hash))))
-   (-> (ByteBuffer/allocate (+ index-id-size id-size (alength v) (alength entity) (alength content-hash)))
-       (.put (byte attribute+value+entity+content-hash-index-id))
-       (.put attr)
-       (.put v)
-       (.put entity)
-       (.put content-hash)
-       (.array))))
+   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength v) (alength entity) (alength content-hash))))]
+     (.putByte ub 0 attribute+value+entity+content-hash-index-id)
+     (.putBytes ub index-id-size attr)
+     (.putBytes ub (+ index-id-size id-size) v)
+     (.putBytes ub (+ index-id-size id-size (alength v)) entity)
+     (.putBytes ub (+ index-id-size id-size (alength v) (alength entity)) content-hash)
+     (.byteArray ub))))
 
 (defrecord EntityValueContentHash [eid value content-hash])
 
 (defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash
   ^crux.codec.EntityValueContentHash [^bytes k]
   (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
-  (let [buffer (ByteBuffer/wrap k)
-        index-id (.get buffer)]
+  (let [ub (UnsafeBuffer. k)
+        index-id (.getByte ub 0)]
     (assert (= attribute+value+entity+content-hash-index-id index-id))
-    (.position buffer (+ index-id-size id-size))
-    (let [value (doto (byte-array (- (.remaining buffer) id-size id-size))
-                  (->> (.get buffer)))
+    (let [value-size (- (alength k) id-size id-size id-size index-id-size)
+          value (doto (byte-array value-size)
+                  (->> (.getBytes ub (+ index-id-size id-size))))
           entity (Id. (doto (byte-array id-size)
-                        (->> (.get buffer)))
+                        (->> (.getBytes ub (+ index-id-size id-size value-size))))
                       0)
           content-hash (Id. (doto (byte-array id-size)
-                              (->> (.get buffer)))
+                              (->> (.getBytes ub (+ index-id-size id-size value-size id-size))))
                             0)]
       (->EntityValueContentHash entity value content-hash))))
 
@@ -340,36 +344,36 @@
                (zero? (alength entity))))
    (assert (or (= id-size (alength content-hash))
                (zero? (alength content-hash))))
-   (-> (ByteBuffer/allocate (+ index-id-size id-size (alength entity) (alength v) (alength content-hash)))
-       (.put (byte attribute+entity+value+content-hash-index-id))
-       (.put attr)
-       (.put entity)
-       (.put v)
-       (.put content-hash)
-       (.array))))
+   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength entity) (alength v) (alength content-hash))))]
+     (.putByte ub 0 attribute+entity+value+content-hash-index-id)
+     (.putBytes ub index-id-size attr)
+     (.putBytes ub (+ index-id-size id-size) entity)
+     (.putBytes ub (+ index-id-size id-size (alength entity)) v)
+     (.putBytes ub (+ index-id-size id-size (alength entity) (alength v)) content-hash)
+     (.byteArray ub))))
 
 (defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash
   ^crux.codec.EntityValueContentHash [^bytes k]
   (assert (<= (+ index-id-size id-size id-size) (alength k)))
-  (let [buffer (ByteBuffer/wrap k)
-        index-id (.get buffer)]
+  (let [ub (UnsafeBuffer. k)
+        index-id (.getByte ub 0)]
     (assert (= attribute+entity+value+content-hash-index-id index-id))
-    (.position buffer (+ index-id-size id-size))
-    (let [entity (Id. (doto (byte-array id-size)
-                        (->> (.get buffer)))
+    (let [value-size (- (alength k) id-size id-size id-size index-id-size)
+          entity (Id. (doto (byte-array id-size)
+                        (->> (.getBytes ub (+ index-id-size id-size))))
                       0)
-          value (doto (byte-array (- (.remaining buffer) id-size))
-                  (->> (.get buffer)))
+          value (doto (byte-array value-size)
+                  (->> (.getBytes ub (+ index-id-size id-size id-size))))
           content-hash (Id. (doto (byte-array id-size)
-                              (->> (.get buffer)))
+                              (->> (.getBytes ub (+ index-id-size id-size id-size value-size))))
                             0)]
       (->EntityValueContentHash entity value content-hash))))
 
 (defn encode-meta-key ^bytes [^bytes k]
-  (-> (ByteBuffer/allocate (+ index-id-size id-size))
-      (.put (byte meta-key->value-index-id))
-      (.put k)
-      (.array)))
+  (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
+    (.putByte ub 0 meta-key->value-index-id)
+    (.putBytes ub index-id-size k)
+    (.byteArray ub)))
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -379,27 +383,28 @@
 
 (defn encode-entity+bt+tt+tx-id-key
   (^bytes []
-   (-> (ByteBuffer/allocate index-id-size)
-       (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
-       (.array)))
+   (let [ub (UnsafeBuffer. (byte-array index-id-size))]
+     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.byteArray ub)))
   (^bytes [^bytes entity]
    (assert (= id-size (alength entity)))
-   (-> (ByteBuffer/allocate (+ index-id-size id-size))
-       (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
-       (.put entity)
-       (.array)))
+   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
+     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.putBytes ub index-id-size entity)
+     (.byteArray ub)))
   (^bytes [entity business-time transact-time]
    (encode-entity+bt+tt+tx-id-key entity business-time transact-time nil))
   (^bytes [^bytes entity ^Date business-time ^Date transact-time ^Long tx-id]
    (assert (= id-size (alength entity)))
-   (cond-> (ByteBuffer/allocate (cond-> (+ index-id-size id-size Long/BYTES Long/BYTES)
-                                  tx-id (+ Long/BYTES)))
-     true (-> (.put (byte entity+bt+tt+tx-id->content-hash-index-id))
-              (.put entity)
-              (.putLong (date->reverse-time-ms business-time))
-              (.putLong (date->reverse-time-ms transact-time)))
-     tx-id (.putLong tx-id)
-     true (.array))))
+   (let [ub (UnsafeBuffer. (byte-array (cond-> (+ index-id-size id-size Long/BYTES Long/BYTES)
+                                         tx-id (+ Long/BYTES))))]
+     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.putBytes ub index-id-size entity)
+     (.putLong ub (+ index-id-size id-size) (date->reverse-time-ms business-time) ByteOrder/BIG_ENDIAN)
+     (.putLong ub (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN)
+     (when tx-id
+       (.putLong ub (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
+     (.byteArray ub))))
 
 (defrecord EntityTx [eid bt tt tx-id content-hash]
   IdToBytes
@@ -419,18 +424,18 @@
  [data-input]
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
-(defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes key]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength key)))
-  (let [buffer (ByteBuffer/wrap key)
-        index-id (.get buffer)]
+(defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes k]
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength k)))
+  (let [ub (UnsafeBuffer. k)
+        index-id (.getByte ub 0)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
-    (->EntityTx (Id. (doto (byte-array id-size)
-                       (->> (.get buffer)))
-                     0)
-                (reverse-time-ms->date (.getLong buffer))
-                (reverse-time-ms->date (.getLong buffer))
-                (.getLong buffer)
-                nil)))
+    (let [entity (Id. (doto (byte-array id-size)
+                        (->> (.getBytes ub index-id-size)))
+                      0)
+          business-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
+          transact-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
+          tx-id (.getLong ub (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+      (->EntityTx entity business-time transact-time tx-id nil))))
 
 (defn entity-tx->edn [{:keys [eid bt tt tx-id content-hash] :as entity-tx}]
   (when entity-tx
@@ -440,20 +445,20 @@
      :crux.tx/tx-id tx-id
      :crux.tx/tx-time tt}))
 
-(defn encode-tx-log-key ^bytes
-  ([]
+(defn encode-tx-log-key
+  (^bytes []
    (byte-array [tx-id->tx-index-id]))
-  ([^long tx-id ^Date tx-time]
-   (-> (ByteBuffer/allocate (+ index-id-size Long/BYTES Long/BYTES))
-       (.put (byte tx-id->tx-index-id))
-       (.putLong tx-id)
-       (.putLong (.getTime tx-time))
-       (.array))))
+  (^bytes [^long tx-id ^Date tx-time]
+   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size Long/BYTES Long/BYTES)))]
+     (.putByte ub 0 tx-id->tx-index-id)
+     (.putLong ub index-id-size tx-id ByteOrder/BIG_ENDIAN)
+     (.putLong ub (+ index-id-size Long/BYTES) (.getTime tx-time) ByteOrder/BIG_ENDIAN)
+     (.byteArray ub))))
 
-(defn decode-tx-log-key [^bytes key]
-  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (alength key)))
-  (let [buffer (ByteBuffer/wrap key)
-        index-id (.get buffer)]
+(defn decode-tx-log-key [^bytes k]
+  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (alength k)))
+  (let [ub (UnsafeBuffer. k)
+        index-id (.getByte ub 0)]
     (assert (= tx-id->tx-index-id index-id))
-    {:crux.tx/tx-id (.getLong buffer)
-     :crux.tx/tx-time (Date. (.getLong buffer))}))
+    {:crux.tx/tx-id (.getLong ub index-id-size ByteOrder/BIG_ENDIAN)
+     :crux.tx/tx-time (Date. (.getLong ub (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))

@@ -1,21 +1,20 @@
 (ns crux.byte-utils
-  (:import java.nio.ByteBuffer
+  (:import [java.nio ByteBuffer ByteOrder]
            java.security.MessageDigest
            [java.util Arrays Comparator]
+           org.agrona.concurrent.UnsafeBuffer
            crux.ByteUtils))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn long->bytes ^bytes [l]
-  (-> (ByteBuffer/allocate Long/BYTES)
-      (.putLong l)
-      (.array)))
+(defn long->bytes ^bytes [^long l]
+  (let [ub (UnsafeBuffer. (byte-array Long/BYTES))]
+    (.putLong ub 0 l ByteOrder/BIG_ENDIAN)
+    (.byteArray ub)))
 
-(defn bytes->long ^long [data]
-  (-> (ByteBuffer/allocate Long/BYTES)
-      (.put data 0 Long/BYTES)
-      ^ByteBuffer (.flip)
-      (.getLong)))
+(defn bytes->long ^long [^bytes data]
+  (let [ub (UnsafeBuffer. data)]
+    (.getLong ub 0 ByteOrder/BIG_ENDIAN)))
 
 (defn sha1 ^bytes [^bytes bytes]
   (.digest (MessageDigest/getInstance "SHA-1") bytes))
