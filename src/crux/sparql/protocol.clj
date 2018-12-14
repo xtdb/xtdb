@@ -1,5 +1,8 @@
 (ns crux.sparql.protocol
-  "See https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"
+  "See https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/
+
+  Requires org.eclipse.rdf4j/rdf4j-queryparser-sparql on the
+  classpath."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.api :as api]

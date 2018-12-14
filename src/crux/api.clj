@@ -77,7 +77,7 @@
   crux.memdb.MemKv KV backend works without additional dependencies.
 
   The HTTP API can be started by passing the LocalNode to
-  crux.http-server/start-http-server.  This will require further
+  crux.http-server/start-http-server. This will require further
   dependencies on the classpath, see crux.http-server for details.
 
   See also crux.kafka.embedded or crux.api/new-standalone-system for

@@ -1,9 +1,11 @@
 (ns crux.http-server
   "HTTP API for Crux.
 
-  Requires ring/ring-core, ring/ring-jetty-adapter,
-  org.apache.kafka/kafka-clients and
-  org.eclipse.rdf4j/rdf4j-queryparser-sparql on the classpath"
+  Requires ring/ring-core, ring/ring-jetty-adapter and
+  org.apache.kafka/kafka-clients on the classpath.
+
+  The optional SPARQL handler requires further dependencies on the
+  classpath, see crux.sparql.protocol for details."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -14,12 +16,11 @@
             [crux.io]
             [crux.kafka]
             [crux.rdf :as rdf]
-            [crux.sparql.protocol :as sparql-protocol]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.request :as req]
             [ring.util.io :as rio])
-  (:import java.io.Closeable
+  (:import [java.io Closeable IOException]
            java.time.Duration
            java.util.UUID
            org.eclipse.jetty.server.Server
@@ -172,6 +173,12 @@
     (success-response
      (.sync local-node timeout))))
 
+(def ^:private sparql-available? (try
+                                   (require 'crux.sparql.protocol)
+                                   true
+                                   (catch IOException ignore
+                                     false)))
+
 ;; ---------------------------------------------------
 ;; Jetty server
 
@@ -207,13 +214,12 @@
     [#"^/sync$" [:get]]
     (sync-handler local-node request)
 
-    [#"^/sparql/?$" [:get :post]]
-    (sparql-protocol/sparql-query local-node request)
-
-    :default
-    {:status 400
-     :headers {"Content-Type" "text/plain"}
-     :body "Unsupported method on this address."}))
+    (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
+             sparql-available? )
+      ((resolve 'crux.sparql.protocol/sparql-query) local-node request)
+      {:status 400
+       :headers {"Content-Type" "text/plain"}
+       :body "Unsupported method on this address."})))
 
 (s/def ::server-port :crux.io/port)
 
