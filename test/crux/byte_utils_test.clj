@@ -22,12 +22,12 @@
 
 (t/deftest test-unsigned-bytes-comparator
   (t/is (neg? (.compare bu/bytes-comparator
-               (bu/hex->bytes "00018d44296f8cff6850a017541a35d73ffa3bc038ef5263646e71017f32a1601522d913918ae3e61ac5d0d029b5f016")
-               (bu/hex->bytes "0001a86185daa0c4e116a65f0f037b2ddc192c7aaa856f636e67017f32a1601522d913918ae3e61ac5d0d029b5f016"))))
+                        (bu/hex->bytes "00018d44296f8cff6850a017541a35d73ffa3bc038ef5263646e71017f32a1601522d913918ae3e61ac5d0d029b5f016")
+                        (bu/hex->bytes "0001a86185daa0c4e116a65f0f037b2ddc192c7aaa856f636e67017f32a1601522d913918ae3e61ac5d0d029b5f016"))))
 
   (t/is (pos? (.compare bu/bytes-comparator
-               (bu/hex->bytes "00007f32a1601522d913918ae3e61ac5d0d029b5f016")
-               (bu/hex->bytes "00003e25db88c4ecae5e979af0b2e6d30fcb3a0da1ef")))))
+                        (bu/hex->bytes "00007f32a1601522d913918ae3e61ac5d0d029b5f016")
+                        (bu/hex->bytes "00003e25db88c4ecae5e979af0b2e6d30fcb3a0da1ef")))))
 
 (t/deftest test-inc-unsigned-bytes
   (t/is (bu/bytes=? (byte-array [1])
