@@ -14,8 +14,8 @@
             [crux.query :as q]
             [crux.fixtures :as f]
             [taoensso.nippy :as nippy])
-  (:import [java.util Date]
-           [java.nio ByteBuffer]))
+  (:import java.util.Date
+           java.nio.ByteBuffer))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 

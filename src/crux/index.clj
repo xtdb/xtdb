@@ -152,15 +152,15 @@
           content-hash-bytes (c/id->bytes (.content-hash entity-tx))]
       (loop [k current-k]
         (reset! peek-state (bu/inc-unsigned-bytes! (Arrays/copyOf k (- (alength k) c/id-size))))
-        (or (let [value (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k))]
-              (let [version-k (c/encode-attribute+entity+value+content-hash-key
-                               attr-bytes
-                               eid-bytes
-                               value
-                               content-hash-bytes)]
-                (when-let [found-k (kv/seek i version-k)]
-                  (when (bu/bytes=? version-k found-k)
-                    [value entity-tx]))))
+        (or (let [value (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash k))
+                  version-k (c/encode-attribute+entity+value+content-hash-key
+                             attr-bytes
+                             eid-bytes
+                             value
+                             content-hash-bytes)]
+              (when-let [found-k (kv/seek i version-k)]
+                (when (bu/bytes=? version-k found-k)
+                  [value entity-tx])))
             (when-let [k (some->> @peek-state (kv/seek i))]
               (recur k)))))))
 
@@ -395,11 +395,11 @@
       (loop [k (kv/seek i seek-k)]
         (when (and k (bu/bytes=? seek-k k prefix-size))
           (let [v (kv/value i)
-                entity-tx (-> (c/decode-entity+bt+tt+tx-id-key k)
-                              (enrich-entity-tx v))]
+                entity-tx (c/decode-entity+bt+tt+tx-id-key k)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (bu/bytes=? c/nil-id-bytes v)
-                [(c/id->bytes (.eid entity-tx)) entity-tx])
+                [(c/id->bytes (.eid entity-tx))
+                 (enrich-entity-tx entity-tx v)])
               (recur (kv/next i))))))))
 
   (db/next-values [this]

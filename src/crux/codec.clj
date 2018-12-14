@@ -217,23 +217,26 @@
   (id->bytes [this]
     nil-id-bytes))
 
-(deftype Id [^bytes bytes ^:unsynchronized-mutable ^int hash-code]
+(deftype Id [^bytes bytes ^long offset ^:unsynchronized-mutable ^int hash-code]
   IdToBytes
   (id->bytes [this]
-    bytes)
+    (if (= id-size (alength bytes))
+      bytes
+      (Arrays/copyOfRange bytes offset (+ offset id-size))))
 
   Object
   (toString [this]
-    (bu/bytes->hex (Arrays/copyOfRange bytes value-type-id-size id-size)))
+    (bu/bytes->hex
+     (Arrays/copyOfRange bytes (+ value-type-id-size offset) (+ offset id-size))))
 
   (equals [this that]
     (or (identical? this that)
         (and (satisfies? IdToBytes that)
-             (bu/bytes=? bytes (id->bytes that)))))
+             (bu/bytes=? (id->bytes this) (id->bytes that)))))
 
   (hashCode [this]
     (when (zero? hash-code)
-      (set! hash-code (Arrays/hashCode bytes)))
+      (set! hash-code (Arrays/hashCode (id->bytes this))))
     hash-code)
 
   IHashEq
@@ -244,16 +247,18 @@
   (compareTo [this that]
     (if (identical? this that)
       0
-      (bu/compare-bytes bytes (id->bytes that)))))
+      (bu/compare-bytes (id->bytes this) (id->bytes that)))))
 
 (defmethod print-method Id [id ^Writer w]
   (.write w "#crux/id ")
   (print-method (str id) w))
 
 (defn new-id ^crux.codec.Id [id]
-  (let [bs (id->bytes id)]
-    (assert (= id-size (alength bs)))
-    (Id. bs 0)))
+  (if (instance? Id id)
+    id
+    (let [bs (id->bytes id)]
+      (assert (= id-size (alength bs)))
+      (Id. bs 0 0))))
 
 (defn valid-id? [x]
   (try
@@ -273,6 +278,7 @@
  [data-input]
  (Id. (doto (byte-array id-size)
         (->> (.readFully data-input)))
+      0
       0))
 
 (defn encode-doc-key ^bytes [^bytes content-hash]
@@ -287,9 +293,7 @@
   (let [ub (UnsafeBuffer. k)
         index-id (.getByte ub 0)]
     (assert (= content-hash->doc-index-id index-id))
-    (Id. (doto (byte-array id-size)
-           (->> (.getBytes ub index-id-size)))
-         0)))
+    (Id. k index-id-size 0)))
 
 (defn encode-attribute+value+entity+content-hash-key
   (^bytes [^bytes attr]
@@ -323,12 +327,8 @@
     (let [value-size (- (alength k) id-size id-size id-size index-id-size)
           value (doto (byte-array value-size)
                   (->> (.getBytes ub (+ index-id-size id-size))))
-          entity (Id. (doto (byte-array id-size)
-                        (->> (.getBytes ub (+ index-id-size id-size value-size))))
-                      0)
-          content-hash (Id. (doto (byte-array id-size)
-                              (->> (.getBytes ub (+ index-id-size id-size value-size id-size))))
-                            0)]
+          entity (Id. k (+ index-id-size id-size value-size) 0)
+          content-hash (Id. k (+ index-id-size id-size value-size id-size) 0)]
       (->EntityValueContentHash entity value content-hash))))
 
 (defn encode-attribute+entity+value+content-hash-key
@@ -359,14 +359,10 @@
         index-id (.getByte ub 0)]
     (assert (= attribute+entity+value+content-hash-index-id index-id))
     (let [value-size (- (alength k) id-size id-size id-size index-id-size)
-          entity (Id. (doto (byte-array id-size)
-                        (->> (.getBytes ub (+ index-id-size id-size))))
-                      0)
+          entity (Id. k (+ index-id-size id-size) 0)
           value (doto (byte-array value-size)
                   (->> (.getBytes ub (+ index-id-size id-size id-size))))
-          content-hash (Id. (doto (byte-array id-size)
-                              (->> (.getBytes ub (+ index-id-size id-size id-size value-size))))
-                            0)]
+          content-hash (Id. k (+ index-id-size id-size id-size value-size) 0)]
       (->EntityValueContentHash entity value content-hash))))
 
 (defn encode-meta-key ^bytes [^bytes k]
@@ -429,9 +425,7 @@
   (let [ub (UnsafeBuffer. k)
         index-id (.getByte ub 0)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. (doto (byte-array id-size)
-                        (->> (.getBytes ub index-id-size)))
-                      0)
+    (let [entity (Id. k index-id-size 0)
           business-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
           transact-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
           tx-id (.getLong ub (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
