@@ -215,7 +215,8 @@
   (.subscribe consumer
               topics
               (reify ConsumerRebalanceListener
-                (onPartitionsRevoked [_ partitions])
+                (onPartitionsRevoked [_ partitions]
+                  (log/info "Partitions revoked:" (str partitions)))
                 (onPartitionsAssigned [_ partitions]
                   (log/info "Partitions assigned:" (str partitions))
                   (prune-consumer-state indexer consumer partitions)
