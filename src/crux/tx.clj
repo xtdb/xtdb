@@ -216,7 +216,7 @@
         consumer-states-without-lag (filter (comp zero? :lag) consumer-states)]
     (if (= consumer-states consumer-states-without-lag)
       (:time (last consumer-states))
-      (:time (first consumer-states-without-lag)))))
+      (:time (first consumer-states)))))
 
 (defn await-no-consumer-lag [indexer {:crux.tx-log/keys [await-tx-timeout]
                                       :or {await-tx-timeout default-await-tx-timeout}}]
