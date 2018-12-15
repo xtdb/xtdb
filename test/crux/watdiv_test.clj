@@ -247,7 +247,12 @@
         (do (future-cancel query-future)
             (throw (IllegalStateException. "Query timed out."))))))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic f/with-kv-store with-watdiv-data)
+(defn with-kv-backend-from-env [f]
+  (binding [f/*kv-backend* (or (System/getenv "CRUX_WATDIV_KV_BACKEND") f/*kv-backend*)]
+    (println "Using KV backend:" f/*kv-backend*)
+    (f)))
+
+(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic with-kv-backend-from-env f/with-kv-store with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
