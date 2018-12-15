@@ -132,7 +132,8 @@
 
 (def default-env-flags (bit-or LMDB/MDB_WRITEMAP
                                LMDB/MDB_MAPASYNC
-                               LMDB/MDB_NOTLS))
+                               LMDB/MDB_NOTLS
+                               LMDB/MDB_NORDAHEAD))
 
 (defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv]
   kv/KvIterator
