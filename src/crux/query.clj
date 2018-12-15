@@ -1025,7 +1025,7 @@
                  (str "Find refers to unknown variable: " var))))
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
-                                                (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
+                                                 (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (with-meta
                     (mapv #(.value ^BoundResult %) bound-result-tuple)
                     (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple)))
