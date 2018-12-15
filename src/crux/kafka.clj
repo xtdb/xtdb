@@ -217,6 +217,7 @@
               (reify ConsumerRebalanceListener
                 (onPartitionsRevoked [_ partitions])
                 (onPartitionsAssigned [_ partitions]
+                  (log/info "Partitions assigned:" partitions)
                   (prune-consumer-state indexer consumer partitions)
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
