@@ -7,7 +7,7 @@
             [crux.db :as db]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable
-           [java.util Arrays Collections Comparator Date]
+           [java.util Arrays Collections Comparator]
            crux.codec.EntityTx))
 
 (set! *unchecked-math* :warn-on-boxed)
