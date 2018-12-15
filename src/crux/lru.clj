@@ -185,7 +185,7 @@
 
 (s/def ::doc-cache-size nat-int?)
 
-(def ^:const default-doc-cache-size 10240)
+(def ^:const default-doc-cache-size (* 128 1024))
 
 (defn new-cached-object-store
   ([kv]

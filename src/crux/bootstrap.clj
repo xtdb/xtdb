@@ -53,7 +53,7 @@
     :default 10000
     :parse-fn #(Long/parseLong %)]
    ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
-    :default 10240
+    :default (* 128 1024)
     :parse-fn #(Long/parseLong %)]
 
    ["-h" "--help"]])
