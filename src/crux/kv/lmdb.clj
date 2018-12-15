@@ -98,7 +98,7 @@
 
 (defn- cursor->key [cursor ^MDBVal kv ^MDBVal dv flags]
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
-    (when (not=  LMDB/MDB_NOTFOUND rc)
+    (when (not= LMDB/MDB_NOTFOUND rc)
       (success? rc)
       (bu/byte-buffer->bytes (.mv_data kv)))))
 
