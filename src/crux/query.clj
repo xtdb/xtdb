@@ -996,6 +996,8 @@
                             e)
                           (catch IllegalArgumentException e
                             e)
+                          (catch InterruptedException e
+                            e)
                           (catch Throwable t
                             (log/error t "Exception caught while executing query.")
                             t)))
