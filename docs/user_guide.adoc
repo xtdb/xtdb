@@ -14,3 +14,7 @@ features.
 Crux can also be run on a single node without Kafka as a pure library.
 One aim is to be able to use the same library at vastly different sizes
 of deployments.
+
+== K/V Store
+
+Supported KV stores are RocksDB, LMDB and an in-memory store.

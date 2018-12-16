@@ -106,6 +106,13 @@ made to reconstruct the external IDs when returning data.
 
 == Query Engine
 
+Crux uses a Datalog dialect that’s a subset of Datomic/Datascript’s
+with some extensions. The results of Crux queries can be consumed
+lazily (partial results must at times be sorted in memory) and Crux is
+declarative in the sense that clause order doesn’t affect the query
+execution (there are some cases where this isn’t true if one relies on
+the internals).
+
 The query engine is built using the concept of ``virtual indexes'',
 which bottom out to a combination of the above physical indexes on disk
 or data directly in-memory. The actual queries are represented as a

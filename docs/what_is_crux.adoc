@@ -15,3 +15,18 @@ database. It's a database turned inside out, using:
 Crux is a bitemporal database, storing both business and
 transaction time. This enables corrections in business time at a later
 transaction time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
+
+== Query
+
+Crux supports a Datalog query interface for reads. Queries are
+executed so that the results are lazily streamed from the underlying
+indices.
+
+== Eviction
+
+Crux supports eviction of past data, to play nicely with GDRP and
+similar concerns.
+
+The main transaction log contains only hashes and is immutable. The
+content data itself is stored in a secondary document topic that can
+be evicted by compaction.

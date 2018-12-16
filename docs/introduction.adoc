@@ -23,21 +23,6 @@ queries. Crux does not use a schema for the documents. One reason for
 this is that the document data might come from many different places,
 and not ultimately be owned by the system using Crux to query the data.
 
-On the query side, Crux uses a Datalog dialect that’s a subset of
-Datomic/Datascript’s with some extensions. The results of Crux queries
-can be consumed lazily (partial results must at times be sorted in
-memory) and Crux is declarative in the sense that clause order doesn’t
-affect the query execution (there are some cases where this isn’t true
-if one relies on the internals).
-
-Crux also supports eviction of past data, to play nicely with GDRP and
-similar concerns. The main transaction log topic contains only hashes,
-and is never deleted. The data itself is stored in a secondary document
-topic where data can be evicted by compaction. Evicted data is also
-deleted from the node indexes on eviction.
-
-Supported KV stores are RocksDB, LMDB and an in-memory store.
-
 == What can Crux currently do?
 
 Crux can be used either as a library, usually together with Kafka, or
