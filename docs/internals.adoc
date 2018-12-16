@@ -5,8 +5,6 @@ details and design.
 
 === Indexing
 
-==== Proposal A:
-
 We have 5 indexes, spread across a few logical stores:
 
 _Document Store_
@@ -147,84 +145,6 @@ eid/business-time/transact-time/tx-id index key so it can be accessed
 regardless, and entities could optionally be enriched with this meta
 data on read, see above.
 
-==== Proposal B:
-
-This is the initially implemented approach.
-
-* ident -> ident-id
-* ident-id > ident
-* AV: attribute-id/content -> entity-id
-* EAT: entity-id/attribute-id/business-time/transact-time -> attribute
-value
-
-Note that the current implementation differs slightly from the above:
-
-* AV contains business time, which should be considered to remove
-* AV also contains entity ID, which may stay, so that the look-up of the
-value is not required.
-
-Querying works by:
-
-1.  Looking up the attribute and value in the AV indes, and resolving
-the resulting content hash into a set of entity ids which have at any
-point in time had this value.
-2.  These entity attribute values are then resolved again using the
-eid/aid/business/time/transact-time index, and kept if the query
-predicate evaluates to true.
-
-Pros:
-
-* Less storage needed compared to proposal A - only datoms that change
-need to be stored.
-* Less deserialisation needed of data (typically)
-
-Cons:
-
-* More jumps are needed. In A you always have the full document on hand,
-where-as in B you need to look-up each value that is needed.
-* Proposal A ships a document store as part of the implementation. B
-will need a document store if all the data pertaining to an entity isn’t
-going to be indexed (this leads on to proposal B2). This disadvantage of
-a lack of functionality could be seen as an advantage with a nod towards
-the `unbundled' nature of Crux - i.e. B does one thing and does it
-(hopefully) well.
-
-Further analysis/work needed:
-
-* How do we compact/evict stale data from the AV index?
-* Work is needed to bring B up to compatibility status with Datasource.
-
-==== Proposal B2
-
-An iteration of proposal B, where the `doc store' is split out from the
-indexing layer.
-
-The rationale for this iteration:
-
-1.  The actual content (docs) can fed into the system via a different
-ingestion topic, that can then be compacted, for example to remove
-duplicate docs (docs are keyed by content hash).
-2.  Transactions are necessary to keep immutable, which would reside on
-their own topic / indices. The content topic can otherwise then be
-subject to excision, which is necessary for offering data retention
-strategies (for compliance, i.e. GDPR).
-3.  It’s desirable to keep documents in Crux in a way that doesn’t
-necessarily subject them to a full index (triplet style), and then make
-them relatively expensive to stitch back together.
-
-The initial strategy for B2 is have the indexer lag behind the
-transaction log. The indexer will only index the data presiding from a
-transaction when the corresponding document is available in the
-doc-store.
-
-This does present some difficulties, i.e. a user might store a
-transaction, but this no longer means it is actually indexed.
-
-An advantage of this approach is that the doc-store should be pluggable
-- users might want to store their own documents in S3 or some other
-store. In this case there is further analysis on where a caching layer
-would belong, that would be necessary for performance.
-
 === System of Record / Log
 
 ==== Proposal A: Immutable Log (Kafka)
@@ -273,8 +193,6 @@ immutable log that has to be worked around.
 
 === Identifiers
 
-==== Proposal A: Use external IDs
-
 It’s up to the users to supply their own IDs, such as UUIDs.
 
 The advantage of this approach are:
@@ -297,36 +215,6 @@ data goes in and out.
 This could be mitigated by using MD5s rather than numerical IDs
 internally (albeit at a higher cost), but a mapping will still to be
 made to reconstruct the external IDs when returning data.
-
-==== Proposal B: Use Crux IDs.
-
-Crux assigns and returns it’s own IDs.
-
-The advantage of this approach is that the same constant IDs are used
-throughout all interactions with Crux, meaning there is no need for
-mapping or hashing, which may hamper performance, which may then elicit
-the need for a cache of sorts to mitigate.
-
-In this approach we would need to use the idea of temp-IDs to help users
-insert data for two reasons:
-
-1.  Users can get a handle on the data they are inserting, for later
-use.
-2.  We may insert data that refers to a part of itself; a temporary ID
-will be needed to join the data inside of the transaction together.
-
-==== A vs B
-
-There are pros and cons of both approaches. It might be possible to
-offset the performance implications of A, and the current rationale is
-that we should prioritise superior design and user experience over
-prematurely worrying about performance.
-
-Allowing users to work with their own IDs is a desirable feature,
-helping users to import data and allowing them to not worry about
-managing multiple IDs across their systems and datasets.
-
-If we choose A first, we can always fall back to B.
 
 === Eviction
 
