@@ -147,70 +147,7 @@ anonymous rules. `not` is a sub query which executes when all required
 variables are bound, acting as a predicate which returns false if there
 are any sub query results, filtering the parent results.
 
-== Transactions
-
-The four transaction (write) operations are as follows:
-
-[source,clojure]
-----
-[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-#inst "2018-05-18T09:20:27.966-00:00"]
-
-[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-"048ebba27e1da223ce97dded59d46e069ddf921b"
-#inst "2018-05-18T09:21:31.846-00:00"]
-
-[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
-
-[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
-----
-
-The business time is optional and defaults to transaction time, which is
-taken from the Kafka log. Crux currently writes into the past at a
-single point, so to overwrite several versions or a range in time, one
-is required to submit a transaction containing several operations.
-Eviction works a bit differently, and all versions at or before the
-provided business time are evicted.
-
-The hashes are the SHA-1 content hash of the documents. Crux uses an
-attribute `:crux.db/id` on the documents that has to line up with the id
-it is submitted under.
-
-A document looks like this:
-
-[source,clj]
-----
-{:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
- :name "Pablo"
- :last-name "Picasso"}
-----
-
-In practice when using Crux, one calls `crux.db/submit-tx` with a set of
-transaction operations as above, where the hashes are replaced with
-actual documents:
-
-[source,clj]
-----
-[[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
- {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
-  :name "Pablo"
-  :last-name "Picasso"}
- #inst "2018-05-18T09:20:27.966-00:00"]]
-----
-
-For each operation the id and the document are hashed, and this version
-is submitted to the `tx-topic` in Kafka. The document itself is
-submitted to the `doc-topic`, using its content hash as key. This latter
-topic is compacted, which enables later deletion of documents.
-
-If the transaction contains CAS operations, all CAS operations must pass
-their pre-condition check or the entire transaction is aborted. This
-happens at the query node during indexing, and not when submitting the
-transaction.
+== Data Storage
 
 Crux stores ``entities'', each having a stable id, and a set of EDN
 documents making up its history. Apart from EDN, there’s no schema of
