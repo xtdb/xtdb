@@ -1,17 +1,17 @@
-== What is Crux?
+= What is Crux?
 
 Crux is an unbundled bi-temporal graph database.
 
-=== Unbundled
+== Unbundled
 
-* Apache Kafka is used as the primary store and semi-immutable log.
-* Local Key/Value store such as RocksDB and LMDB is used to host
-indices for rich query support.
+Crux - to use Martin Kleppmann’s phrase -is is an _unbundled_
+database. It's a database turned inside out, using:
 
-=== Bitemporality
+* Apache Kafka for the primary store and semi-immutable log.
+* RocksDB or LMDB to host indices for rich query support.
 
-Crux is also a bitemporal database, storing both business and
+== Bitemporality
+
+Crux is a bitemporal database, storing both business and
 transaction time. This enables corrections in business time at a later
-transaction time.
-
-<<bitemp.adoc#,Read more about Bitemporality>>
+transaction time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
