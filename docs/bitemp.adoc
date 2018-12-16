@@ -4,30 +4,72 @@
 
 One inherent question of using a temporal database, is how to model
 time. A baseline notion of time that is always available is
-*transaction time*; the point at which data is transacted into the
-database.
+*transaction-time*; the point at which data is transacted into the
+database. Bitemporality comes in when we also need the concept of
+*business-time*.
 
-*transaction time* gives numerous benefits such as time-travelling
-queries for data insight, an audit trail, and the technical basis for
-an event sourced architecture.
+.Time Axes
+[#table-conversion%header,cols="d,d"]
+|===
+|Time|Purpose
+|`transaction-time`|Used for audit purposes, technical requirements such as event sourcing.
+|`business-time`|Used for querying data across time, historical analysis.
+|===
 
-In any situation where your database isn’t the ultimate owner of the
+*transaction-time* represents the point at which data arrives into the
+database. This gives us an audit trail and we can use transaction-time
+to see what the state of the database was at a particular point in
+time. You cannot write a new transaction with a transaction-time that
+is in the past. This forms the basis of an immutable data-model and an
+event sourced architecture.
+
+*business-time* is an arbitrary time that can originate from an
+ upstream system, or by default is set to transaction-time. Business
+ time is what users will typically use for query purposes.
+
+****
+Writes can be made in the past of business-time. Users will normally
+ask 'what is the value of this entity at business-time? regardless if
+this history has been rewritten several times at multiple
+transaction-times.
+
+Only if you want to ensure repeatable reads or to do auditing queries,
+would you need to consider both transaction-time and business-time.
+****
+
+NOTE: transaction-time is simply _now_ for most normal queries.
+
+NOTE: When writing data, in case there isn’t any specific
+business-time available, business-time and transaction-time take the
+same value.
+
+== Example: Business Time
+
+In any situation where your database isn't the ultimate owner of the
 data and where corrections to data can flow in from various sources,
-and at various times, then relying always on *transaction time* time
-does not work. We still want the ability the ability query across
-time, but we want to go beyond *transaction time*. We need _business
-time_.
+and at various times, then *transaction-time* isn't always suitable
+for historical queries.
 
-In Crux, most queries would consider themselves with *business time*,
-and *business time* only. You will normally ask, what is the value of this
-entity at *business time*, regardless if this history has been
-rewritten several times from at multiple _transaction times_.
+Imagine you have a financial trading system and you want to perform
+calculations based on the official 'end of day', that occurs each day
+at 17:00 hours. Does all the data arrive into your database at exactly
+17:00? Or does the data arrive in fact arrive from an upstream source,
+and we have to allow for some data to arrive out of order, and some
+might just arrive after 17:00?
 
-Only if you want to ensure repeatable reads or do auditing queries,
-would you need to consider both *transaction time* and _business
-time_.
+This can often be the case with high throughput systems where there
+are clusters of processing nodes, enriching the data before it gets to
+our store.
 
-.Why Business Time?
+In this example, we want our queries to include the straggling bits of
+data for our calculation purposes, and this is where *business-time*
+comes in. When data arrives into our database, it can come with an
+arbitrary time-stamp that we can use for querying purposes.
+
+Therefore we're not completely dependent on transaction-time, and we
+can tolerate data arriving out of order.
+
+.Why Business-Time?
 ****
 In a ecosystem of many systems, where one cannot control
 the ultimate time line, or other systems abilities to write into the
@@ -35,39 +77,29 @@ past, one needs bitemporality to ensure evolving but consistent views
 of the data.
 ****
 
-== Notes:
-
-*transaction time* is simply _now_ for most normal queries.
-
-Similarly, when writing data, in case there isn’t any specific
-*business time* available, *business time* and *transaction time* take
-the same value.
-
-== Use cases
-
-=== Give the latest value of X at a given tx-time
+== Example: Transaction Time
 
 For audit reasons, we might wish to know with certainty the value of a
 given entity-attribute at a given tx-instant. In this case, we want to
 exclude the possibility of the business past being amended, so we need a
 pre-correction view of the data, relying on tx-instant.
 
-To achieve this we will use an as-of using ts (business time) and tx-ts
-(transaction time).
+To achieve this we will use an as-of using ts (business-time) and tx-ts
+(transaction-time).
 
 == Point vs Range)
 
 One issue with writing into the past, is that it can be hard to reason
 about what you actually change. If one overwrites an earlier change with
-exactly the same business time, one would effectively correct this
-value. But if one writes a value into the past at a business time
+exactly the same business-time, one would effectively correct this
+value. But if one writes a value into the past at a business-time
 without a previous value, one would effectively insert a new version of
 the entity into the past.
 
 When overwriting one value in the past, the system needs to be
 predictable about what happens to the next value. By default this value
 wouldn’t change, but there might need to be possible to change a range
-of values across business time in a consistent manner. The changes would
+of values across business-time in a consistent manner. The changes would
 need to be done in a link:transactions.md[transaction].
 
 == Event Sourcing
@@ -89,13 +121,13 @@ never change, others change several times a second. Datomic’s as-of
 functionality abstracts this problem away from the user for transaction
 time. Our aim it to allow Crux do the same in a bitemp fashion.
 
-As mentioned above, the transaction time is usually not used when doing
+As mentioned above, the transaction-time is usually not used when doing
 historical queries, so for most cases one only has to find the latest
-version as of a specific business time. This is different from how
+version as of a specific business-time. This is different from how
 Datomic works, as Datomic will, by definition, always use transaction
-time. When transaction time is also used for full bitemporal queries,
+time. When transaction-time is also used for full bitemporal queries,
 the result will be further limited to the latest version as of a
-specific transaction time as well. Both these filters might end up
+specific transaction-time as well. Both these filters might end up
 returning nothing.
 
 The visibility of the event horizon gets further complicated in the case
