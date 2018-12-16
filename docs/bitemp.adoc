@@ -33,8 +33,9 @@ ask 'what is the value of this entity at business-time?' regardless if
 this history has been rewritten several times at multiple
 transaction-times.
 
-Only if you want to ensure repeatable reads or to do auditing queries,
-would you need to consider both transaction-time and business-time.
+Only if you want to ensure consistent reads across nodes or to do
+auditing queries, would you need to consider both transaction-time and
+business-time.
 ****
 
 NOTE: transaction-time is simply _now_ for most normal queries.
@@ -42,6 +43,9 @@ NOTE: transaction-time is simply _now_ for most normal queries.
 NOTE: When writing data, in case there isn’t any specific
 business-time available, business-time and transaction-time take the
 same value.
+
+NODE: Queries can use both times to get consistent reads, as long as
+the data hasn’t been evicted.
 
 == Examples
 

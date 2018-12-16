@@ -2,15 +2,4 @@
 
 image::crux-banner.png[]
 
-== What is Crux?
-
-Crux is an unbundled bitemporal graph database:
-
-* Apache Kafka is used as the primary store and semi-immutable log.
-* Local Key/Value store such as RocksDB and LMDB is used to host
-indices for rich query support.
-
-////
-The above isn't strictly true, as Kafka can be swapped out in a local
-node setup.
-////
+include::what_is_crux.adoc[]

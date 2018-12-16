@@ -12,7 +12,7 @@
 :source-highlighter: highlightjs
 :notitle:
 
-include::home.adoc[leveloffset=0]
+include::what-is-crux.adoc[leveloffset=0]
 
 include::introduction.adoc[leveloffset=0]
 

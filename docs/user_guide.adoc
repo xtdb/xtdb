@@ -1,0 +1,16 @@
+= User Guide
+
+== Setup
+
+=== REST API
+
+Crux currently has a small REST API that allows one to use Crux in a
+more conventional SaaS way, deploying Kafka and query nodes into AWS
+and interact with Crux over HTTP. This mode does not support all
+features.
+
+=== Single Node
+
+Crux can also be run on a single node without Kafka as a pure library.
+One aim is to be able to use the same library at vastly different sizes
+of deployments.

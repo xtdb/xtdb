@@ -1,4 +1,6 @@
 * <<index.adoc#,Home>>
 * <<introduction.adoc#,Introduction>>
 * <<bitemp.adoc#,Bitemporality>>
+* <<user_guide.adoc#,User Guide>>
+* <<design.adoc#,Design>>
 * <<faq.adoc#,FAQ>>

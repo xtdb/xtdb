@@ -30,28 +30,11 @@ memory) and Crux is declarative in the sense that clause order doesn’t
 affect the query execution (there are some cases where this isn’t true
 if one relies on the internals).
 
-Crux is also a bi-temporal database, storing both business and
-transaction time. This enables corrections at past business time at a
-later transaction time. Queries can use both times to get consistent
-reads, as long as the data hasn’t been evicted. Like the schema, Crux
-isn’t assumed to own a single business time line, and different source
-systems might have their own definition of business time which does not
-align with the Crux transaction time.
-
 Crux also supports eviction of past data, to play nicely with GDRP and
 similar concerns. The main transaction log topic contains only hashes,
 and is never deleted. The data itself is stored in a secondary document
 topic where data can be evicted by compaction. Evicted data is also
 deleted from the node indexes on eviction.
-
-Additonally, Crux currently has a small REST API that allows one to use
-Crux in a more conventional SaaS way, deploying Kafka and query nodes
-into AWS and interact with Crux over HTTP. This mode does not support
-all features.
-
-Crux can also be run on a single node without Kafka as a pure library.
-One aim is to be able to use the same library at vastly different sizes
-of deployments.
 
 Supported KV stores are RocksDB, LMDB and an in-memory store.
 
