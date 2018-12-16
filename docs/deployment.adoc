@@ -1,0 +1,29 @@
+= Deployment
+
+== REST API
+
+Crux currently has a small REST API that allows one to use Crux in a
+more conventional SaaS way, deploying Kafka and query nodes into AWS
+and interact with Crux over HTTP. This mode does not support all
+features.
+
+The REST API provides the following paths: `/document`, `/history`,
+`/query` for reads and `/tx-log` for writes. When using the REST API the
+user doesn’t interact directly with Kafka, but calls one of the query
+nodes (potentially behind a load balancer) over HTTP to interact with
+Crux. As the query nodes might be at different points in the index, and
+different queries might go to differnet nodes, there are currently some
+read consistency issues that can arise here.
+
+The REST API also provides an experimental end point for SPARQL 1.1
+Protocol queries under `/sparql/`. Only a small subset of SPARQL is
+supported, and is working by rewriting the query into the Crux datalog
+dialect and there are no further RDF features by using this.
+
+== Single Node
+
+Crux can also be run on a single node without Kafka as a pure library.
+One aim is to be able to use the same library at vastly different sizes
+of deployments.
+
+TODO: Document this.

@@ -1,31 +1,41 @@
 = User Guide
 
-== REST API
+== Query
 
-Crux currently has a small REST API that allows one to use Crux in a
-more conventional SaaS way, deploying Kafka and query nodes into AWS
-and interact with Crux over HTTP. This mode does not support all
-features.
+Crux query capability is easiest summarized via an example:
 
-The REST API provides the following paths: `/document`, `/history`,
-`/query` for reads and `/tx-log` for writes. When using the REST API the
-user doesn’t interact directly with Kafka, but calls one of the query
-nodes (potentially behind a load balancer) over HTTP to interact with
-Crux. As the query nodes might be at different points in the index, and
-different queries might go to differnet nodes, there are currently some
-read consistency issues that can arise here.
+[source,clj]
+----
+(q/q db
+    '{:find  [?e2]
+      :where [(follow ?e1 ?e2)]
+      :args [{:?e1 :1}]
+      :rules [[(follow ?e1 ?e2)
+              [?e1 :follow ?e2]]
+             [(follow ?e1 ?e2)
+              [?e1 :follow ?t]
+              (follow ?t ?e2)]]})
+----
 
-The REST API also provides an experimental end point for SPARQL 1.1
-Protocol queries under `/sparql/`. Only a small subset of SPARQL is
-supported, and is working by rewriting the query into the Crux datalog
-dialect and there are no further RDF features by using this.
+The `db` is retrieved via a call to `crux.query/db` which optionally
+takes business and transaction time. The call will block until the local
+index has seen the transaction time, if provided. The `crux.query/q`
+takes 2 or 3 arguments, `db` and `q` but also optionally a `snapshot`
+which is already opened and managed by the caller (using `with-open` for
+example). This version of the call returns a lazy sequence of the
+results, while the other verision provides a set. A snapshot can be
+retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
 
-=== Single Node
+The `:args` key contains a relation where each map is expected to have
+the same keys. These keys are turned into logic variable symbols and the
+relation is joined with the rest of the query. The elements must
+implement `Comparable`.
 
-Crux can also be run on a single node without Kafka as a pure library.
-One aim is to be able to use the same library at vastly different sizes
-of deployments.
+Crux does not support variables in the attribute position. The entity
+position is hard coded to mean the `:crux.db/id` field.
 
-== K/V Store
+== Configuration
+
+=== K/V Store
 
 Supported KV stores are RocksDB, LMDB and an in-memory store.
