@@ -103,3 +103,37 @@ data goes in and out.
 This could be mitigated by using MD5s rather than numerical IDs
 internally (albeit at a higher cost), but a mapping will still to be
 made to reconstruct the external IDs when returning data.
+
+== Query Engine
+
+The query engine is built using the concept of ``virtual indexes'',
+which bottom out to a combination of the above physical indexes on disk
+or data directly in-memory. The actual queries are represented as a
+composition and combination of these indexes. Things like range
+constraints are applied as decorators on the lower level indexes. The
+query engine itself never concerns itself with time, as this is hidden
+by the lower indexes.
+
+The query is itself ultimately represented as a single n-ary join across
+variables, each potentially represented by several indexes, and combined
+via an unary join across them. As the resulting tree is walked the query
+engine further has a concept of constraints, which are applied to the
+results as the joins between the indexes are performed. Things like
+predicates and sub queries are implemented using such constraints.
+Nested expressions, such as `not`, `or` and rules are executed several
+times as separate sub queries on the partial results as the tree is
+walked. All indexes participating in a unary join must be sorted in the
+same order. All n-ary indexes (relations) participating in the parent
+n-ary join must have the same variable order.
+
+Conceptually the execution model is a combination of an n-ary worst case
+optimal join and Query-Subquery (QSQ) evaluation of Datalog. The worst
+case optimal join algorithm binds free variables which then are used as
+arguments in QSQ. The results of the sub query are then injected an
+n-ary index (relation) into the parent query, binding further variables
+in the current parent query sub tree (``sideways information passing'').
+Rules are evaluated via a combination of eager expansion of the rule
+bodies into the parent query and QSQ recursion. `or` and `or-join` are
+anonymous rules. `not` is a sub query which executes when all required
+variables are bound, acting as a predicate which returns false if there
+are any sub query results, filtering the parent results.
