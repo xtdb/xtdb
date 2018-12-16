@@ -1,7 +1,5 @@
 = Design
 
-== Schemaless
-
 == Indexing
 
 We have 4 indexes, spread across a few logical stores:

@@ -1,62 +1,6 @@
 = Internals
 
-This document discusses and suggests different internal implementation
-details and design.
-
-==== Transaction Log Format
-
-The transactions could look something like this, the time is business
-time:
-
-[source,clj]
-----
-[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-#inst "2018-05-18T09:20:27.966-00:00"]
-
-[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-"048ebba27e1da223ce97dded59d46e069ddf921b"
-#inst "2018-05-18T09:21:31.846-00:00"]
-
-[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
-----
-
-In this model, upserts or merging can be implemented via CAS on the
-client, first fetching the document then merging it. It could
-potentially be done by Crux itself, but it complicates the ingestion, as
-a new resulting document would be generated and indexed.
-
-The key itself could also be hashed if necessary if we wish to hide it
-from the transaction log, in which case you would have:
-
-[source,clj]
-----
-[:crux.tx/put "9049023351ca330419c5c5072948a305343c8d91"
-"090622a35d4b579d2fcfebf823821298711d3867"
-#inst "2018-05-18T09:20:27.966-00:00"]
-----
-
-Where 9049023351ca330419c5c5072948a305343c8d91 is the SHA1 of the
-:http://dbpedia.org/resource/Pablo_Picasso keyword.
-
-Omitting business time defaults it to the transaction time, which is
-always taken from the message itself:
-
-[source,clj]
-----
-[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"]
-----
-
-While the business time often might stored as a field inside the entity
-itself, this is not always the case and not mandatory, and the content
-hash would change simply by updating a document even without any other
-``real'' changes. This information is stored in the
-eid/business-time/transact-time/tx-id index key so it can be accessed
-regardless, and entities could optionally be enriched with this meta
-data on read, see above.
+This document discusses internal implementation details and design.
 
 == System of Record / Log
 
