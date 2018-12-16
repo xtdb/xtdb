@@ -1,0 +1,11 @@
+== Bitempt
+
+* https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
+* https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
+* https://wiki.postgresql.org/images/6/64/Fosdem20150130PostgresqlTemporal.pdf[Temporal
+Data & Time Travel in PostgreSQL]
+* http://blog.podsnap.com/bitemp.html[Sign of the Times - Managing
+inhomogeneously bitemporal data with Datomic and Clojure]
+* https://iansrobinson.com/2014/05/13/time-based-versioned-graphs/[Time-Based
+Versioned Graphs]
+* https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]

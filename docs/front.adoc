@@ -1,3 +1,5 @@
+= Home
+
 image::crux-banner.png[]
 
 == What is Crux?
