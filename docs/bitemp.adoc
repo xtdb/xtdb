@@ -4,43 +4,43 @@
 
 One inherent question of using a temporal database, is how to model
 time. A baseline notion of time that is always available is
-'_transaction time_'; the point at which data is transacted into the
+*transaction time*; the point at which data is transacted into the
 database.
 
-_transaction time_ gives numerous benefits such as time-travelling
+*transaction time* gives numerous benefits such as time-travelling
 queries for data insight, an audit trail, and the technical basis for
 an event sourced architecture.
 
 In any situation where your database isn’t the ultimate owner of the
 data and where corrections to data can flow in from various sources,
-and at various times, then relying always on _transaction time_ time
+and at various times, then relying always on *transaction time* time
 does not work. We still want the ability the ability query across
-time, but we want to go beyond _transaction time_. We need _business
+time, but we want to go beyond *transaction time*. We need _business
 time_.
 
-In Crux, most queries would consider themselves with _business time_,
-and _business time_ only. You will normally ask, what is the value of this
-entity at _business time_, regardless if this history has been
+In Crux, most queries would consider themselves with *business time*,
+and *business time* only. You will normally ask, what is the value of this
+entity at *business time*, regardless if this history has been
 rewritten several times from at multiple _transaction times_.
 
 Only if you want to ensure repeatable reads or do auditing queries,
-would you need to consider both _transaction time_ and _business
+would you need to consider both *transaction time* and _business
 time_.
 
-*In a ecosystem of many systems, where one cannot control the ultimate
-time line, or other systems abilities to write into the past, one needs
-bitemporality to ensure evolving but consistent views of the data.*
-
-* https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
-* https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
-* https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]
+.Why Business Time?
+****
+In a ecosystem of many systems, where one cannot control
+the ultimate time line, or other systems abilities to write into the
+past, one needs bitemporality to ensure evolving but consistent views
+of the data.
+****
 
 == Notes:
 
-_transaction time_ is simply _now_ for most normal queries.
+*transaction time* is simply _now_ for most normal queries.
 
 Similarly, when writing data, in case there isn’t any specific
-_business time_ available, _business time_ and _transaction time_ take
+*business time* available, *business time* and *transaction time* take
 the same value.
 
 == Use cases
@@ -109,3 +109,9 @@ which allow bitemporal queries for repeatable reads, retention might
 actually remove (or excise in Datomic) data, which will by definition
 break repeatable reads, and also complicate event sourcing and other
 derived views of the system.
+
+== References
+
+* https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
+* https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
+* https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]
