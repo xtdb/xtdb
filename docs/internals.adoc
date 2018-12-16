@@ -1,9 +1,9 @@
-== Internals
+= Internals
 
 This document discusses and suggests different internal implementation
 details and design.
 
-=== Indexing
+== Indexing
 
 We have 5 indexes, spread across a few logical stores:
 
@@ -90,7 +90,7 @@ changes. This is likely better dealt with via index migrations, where
 the simplest case is to simply retire nodes using an old index formats,
 and hence deleting their indexes.
 
-===== Transaction Log Format
+==== Transaction Log Format
 
 The transactions could look something like this, the time is business
 time:
@@ -145,9 +145,9 @@ eid/business-time/transact-time/tx-id index key so it can be accessed
 regardless, and entities could optionally be enriched with this meta
 data on read, see above.
 
-=== System of Record / Log
+== System of Record / Log
 
-==== Proposal A: Immutable Log (Kafka)
+=== Proposal A: Immutable Log (Kafka)
 
 The initial plan has been to store the transaction log in an immutable
 log, such as Kafka. This is discussed in link:retention.md[retention].
@@ -160,7 +160,7 @@ The messages in this log can either be individual entities, grouped into
 transactions, or transactions themselves. There are some pros and cons
 of both approaches:
 
-===== Proposal Aa: Messages are Entities
+==== Proposal Aa: Messages are Entities
 
 Pros: + Messages can have meaningful keys. + Can potentially use
 compaction. + Can potentially use Kafka transactions across topics.
@@ -170,7 +170,7 @@ support transactional reads. + Cannot use LogAppend time in Kafka for
 transaction wall time, at least not without additional logic, related to
 above.
 
-===== Proposal Ab: Messages are Transactions
+==== Proposal Ab: Messages are Transactions
 
 Pros: + Clear transaction boundaries. + Can use LogAppend time for
 transaction wall time.
@@ -191,7 +191,7 @@ As this can be a multi-master setup, it’s likely to be more scalable and
 it’s also a bit more forward looking design than the idealisation of an
 immutable log that has to be worked around.
 
-=== Identifiers
+== Identifiers
 
 It’s up to the users to supply their own IDs, such as UUIDs.
 
@@ -216,9 +216,9 @@ This could be mitigated by using MD5s rather than numerical IDs
 internally (albeit at a higher cost), but a mapping will still to be
 made to reconstruct the external IDs when returning data.
 
-=== Eviction
+== Eviction
 
-==== Proposal A: Evict Content History of Entity
+=== Proposal A: Evict Content History of Entity
 
 In the simplest case, we can evict the content of the history of an
 entity in the log before the transaction time:
@@ -256,7 +256,7 @@ happening later, which might be totally valid. An alternative is to do a
 hard eviction, that stops new versions of an entity be able to written
 in the future.
 
-==== Proposal B: Evict Content Directly
+=== Proposal B: Evict Content Directly
 
 Another approach is that instead of evicting a specific entity, the user
 could provide a list of content hashes to explicitly evict. Any logic or
