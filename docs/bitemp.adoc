@@ -29,7 +29,7 @@ event sourced architecture.
 
 ****
 Writes can be made in the past of business-time. Users will normally
-ask 'what is the value of this entity at business-time? regardless if
+ask 'what is the value of this entity at business-time?' regardless if
 this history has been rewritten several times at multiple
 transaction-times.
 
