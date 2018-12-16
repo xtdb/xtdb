@@ -5,7 +5,8 @@
             [crux.byte-utils :as bu]
             [crux.kv :as kv]
             [taoensso.nippy :as nippy])
-  (:import java.io.Closeable))
+  (:import java.io.Closeable
+           clojure.lang.Box))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
@@ -17,10 +18,12 @@
   (->> (nippy/thaw-from-file (io/file dir "memdb"))
        (into (sorted-map-by bu/bytes-comparator))))
 
-(defrecord MemKvIterator [db cursor]
+;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
+;; unusable in practice.
+(defrecord MemKvIterator [^Box db cursor]
   kv/KvIterator
   (kv/seek [this k]
-    (let [[x & xs] (subseq db >= k)]
+    (let [[x & xs] (subseq (.val db) >= k)]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
@@ -43,7 +46,7 @@
 (defrecord MemKvSnapshot [db]
   kv/KvSnapshot
   (new-iterator [_]
-    (->MemKvIterator db (atom {:rest (seq db)})))
+    (->MemKvIterator (Box. db) (atom {:rest (seq db)})))
 
   Closeable
   (close [_]))

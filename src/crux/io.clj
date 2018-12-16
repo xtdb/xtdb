@@ -88,6 +88,7 @@
   "Total size of a file or folder in bytes"
   [^java.io.File f]
   (cond
+    (nil? f) 0
     (string? f) (folder-size (io/file f))
     (.isDirectory f) (apply + (map folder-size (.listFiles f)))
     :else (.length f)))
