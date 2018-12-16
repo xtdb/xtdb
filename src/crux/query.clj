@@ -142,9 +142,9 @@
                                       >= <})
 
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
-  (let [v-var (gensym v)]
+  (let [v-var (gensym (str "self-join_" v "_"))]
     {:triple [(assoc triple :v v-var)]
-     :pred [{:pred {:pred-fn = :args [v-var e]}}]}))
+     :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
   (->> (for [[type clause] clauses]
@@ -265,19 +265,13 @@
         (log/debug :join-order :aev e (pr-str v) (pr-str clause))
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
-(defn- triple-joins [triple-clauses var->joins non-leaf-vars arg-vars stats]
+(defn- triple-joins [triple-clauses var->joins arg-vars stats]
   (let [triple-clauses (sort-by (comp stats :a) triple-clauses)
         literal-clauses (for [{:keys [e v] :as clause} triple-clauses
                               :when (or (literal? e)
                                         (literal? v))]
                           clause)
-        v->clauses (group-by :v triple-clauses)
-        v-is-leaf? (fn [v]
-                     (and (logic-var? v)
-                          (= 1 (count (get v->clauses v)))
-                          (not (contains? non-leaf-vars v))))
-        leaf-clauses (filter (comp v-is-leaf? :v) triple-clauses)
-        literal->var (->> (for [{:keys [e v]} (sort-by (comp stats :a) literal-clauses)
+        literal->var (->> (for [{:keys [e v]} literal-clauses
                                 :when (literal? v)]
                             [v (gensym (str "literal_" v "_"))])
                           (into {}))
@@ -291,7 +285,6 @@
                                        v)))
         join-order (loop [join-order (concat literal-join-order arg-vars)
                           clauses (->> triple-clauses
-                                       (remove (set leaf-clauses))
                                        (remove (set literal-clauses)))]
                      (let [join-order-set (set join-order)
                            clause (first (or (seq (for [{:keys [e v] :as clause} clauses
@@ -302,11 +295,10 @@
                        (if-let [{:keys [e a v]} clause]
                          (recur (concat join-order [v e])
                                 (remove #{clause} clauses))
-                         join-order)))
-        join-order (->> (mapcat (juxt :e :v) leaf-clauses)
-                        (concat join-order)
-                        (distinct))]
-    [(->> (partition 2 1 join-order)
+                         join-order)))]
+    [(->> join-order
+          (distinct)
+          (partition 2 1)
           (reduce
            (fn [g [a b]]
              (dep/depend g b a))
@@ -502,12 +494,15 @@
 
 (declare build-sub-query)
 
-(defn- calculate-constraint-join-depth [var->bindings vars]
-  (->> (for [var vars]
-         (get-in var->bindings [var :join-depth] -1))
-       (apply max -1)
-       (long)
-       (inc)))
+(defn- calculate-constraint-join-depth
+  ([var->bindings vars]
+   (calculate-constraint-join-depth var->bindings vars :join-depth))
+  ([var->bindings vars var-k]
+   (->> (for [var vars]
+          (get-in var->bindings [var var-k] -1))
+        (apply max -1)
+        (long)
+        (inc))))
 
 (defn- validate-existing-vars [var->bindings clause vars]
   (doseq [var vars
@@ -628,7 +623,7 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars)]]
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)]]
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
@@ -814,10 +809,8 @@
         var->joins {}
         v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constraints))
-        non-leaf-vars (set/union e-vars arg-vars v-range-vars unification-vars)
         [triple-join-deps var->joins] (triple-joins triple-clauses
                                                     var->joins
-                                                    non-leaf-vars
                                                     arg-vars
                                                     stats)
         [args-idx-id var->joins] (arg-joins arg-vars
@@ -879,7 +872,8 @@
      :var->joins var->joins
      :var->bindings var->bindings
      :arg-vars-in-join-order arg-vars-in-join-order
-     :args-idx-id args-idx-id}))
+     :args-idx-id args-idx-id
+     :attr-stats (select-keys stats (vals var->attr))}))
 
 (defn- build-idx-id->idx [var->joins]
   (->> (for [[_ joins] var->joins
@@ -903,11 +897,12 @@
                 var->joins
                 var->bindings
                 arg-vars-in-join-order
-                args-idx-id]} (lru/compute-if-absent
-                               query-cache
-                               [where arg-vars rule-name->rules]
-                               (fn [_]
-                                 (compile-sub-query where arg-vars rule-name->rules stats)))
+                args-idx-id
+                attr-stats]} (lru/compute-if-absent
+                              query-cache
+                              [where arg-vars rule-name->rules]
+                              (fn [_]
+                                (compile-sub-query where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx var->joins)
         constrain-result-fn (fn [join-keys join-results]
                               (constrain-join-result-by-constraints snapshot db idx-id->idx depth->constraints join-keys join-results))
@@ -924,6 +919,7 @@
                                           (mapv v-var->range-constraints arg-vars-in-join-order)))
     (log/debug :where (pr-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
+    (log/debug :attr-stats (pr-str attr-stats))
     (log/debug :var->bindings (pr-str var->bindings))
     (constrain-result-fn [] [])
     {:n-ary-join (-> (mapv idx/new-unary-join-virtual-index unary-join-index-groups)
