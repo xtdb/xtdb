@@ -169,7 +169,7 @@
         options {:db-dir db-dir
                  :kv-backend *kv-backend*}]
     (try
-      (with-open [standalone-system (Crux/newStandaloneSystem options)]
+      (with-open [standalone-system (Crux/startStandaloneSystem options)]
         (binding [*api* standalone-system]
           (f)))
       (finally

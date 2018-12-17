@@ -155,7 +155,7 @@
   (close [_]
     (.close ^Closeable kv-store)))
 
-(defn new-standalone-system
+(defn start-standalone-system
   "Creates a minimal standalone system writing the transaction log into
   its local KV store without relying on Kafka.
 

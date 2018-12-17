@@ -52,8 +52,8 @@ public class Crux {
      * @param options see crux.bootstrap/start-kv-store.
      * @return        a standalone system.
      */
-    public static ICruxSystem newStandaloneSystem(Map options) {
-        return (ICruxSystem) Clojure.var("crux.api/new-standalone-system").invoke(options);
+    public static ICruxSystem startStandaloneSystem(Map options) {
+        return (ICruxSystem) Clojure.var("crux.api/start-standalone-system").invoke(options);
     }
 
     /**
