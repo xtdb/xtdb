@@ -6,9 +6,11 @@ Crux is an unbundled, distributed, bitemporal graph database, currently sitting 
 
 ## Manual
 
-[Read the manual](https://juxt.pro/crux/docs/index.html).
+Please visit and read our [manual](https://juxt.pro/crux/docs/index.html).
 
-Username is `crux` password is `advisor`. Feedback welcome.
+Until Crux is publicly released, you will need credentials; userame `crux`, password `advisor`.
+
+Please give us your feedback, and enjoy Crux.
 
 ## Roadmap
 
@@ -18,7 +20,7 @@ Username is `crux` password is `advisor`. Feedback welcome.
 
 ``` sh
 lein uberjar
-java -jar target/crux-*-standalone.jar --help
+java -jar target/crux-*-standalone.jar --hel1p
 ```
 
 ## Developing
