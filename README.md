@@ -29,7 +29,6 @@ The documents above contain many references.
 
 ## Business Model
 
-+ [Business Model](docs/business_model.adoc)
 + [Competitors](docs/competitors.adoc)
 
 ## Building
