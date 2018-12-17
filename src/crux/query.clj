@@ -141,9 +141,12 @@
                                       > <=
                                       >= <})
 
+;; TODO: Not sure why, but using both a predicate and unification here
+;; is faster in general, guess it fires slightly differently.
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
     {:triple [(assoc triple :v v-var)]
+     :pred [{:pred {:pred-fn identical? :args [v-var e]}}]
      :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
@@ -615,10 +618,9 @@
                join-results)))})))
 
 ;; TODO: Unification could be improved by using dynamic relations
-;; propagating knowledge from the first var to the next. See comment
-;; about this at rewrite-self-join-triple-clause. Currently unification
-;; has to scan the values and check them as they get bound and doesn't
-;; fully carry its weight compared to normal predicates.
+;; propagating knowledge from the first var to the next. Currently
+;; unification has to scan the values and check them as they get bound
+;; and doesn't fully carry its weight compared to normal predicates.
 (defn- build-unification-constraints [unify-clauses var->bindings]
   (for [{:keys [op args]
          :as clause} unify-clauses
