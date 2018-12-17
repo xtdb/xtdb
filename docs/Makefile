@@ -13,8 +13,5 @@ docs.zip: index.html
 crux.epub:	index.html
 	pandoc $< -o $@
 
-deploy: docs.zip
-	scp docs.zip "prod@juxt.pro:/srv/website-static/crux/$$(date +%s).zip"
-
 clean:
 	rm index.html
