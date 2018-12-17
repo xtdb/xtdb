@@ -1,4 +1,6 @@
 (ns dev
+  "Internal development namespace for Crux. For end-user usage, see
+  examples.clj"
   (:require [clojure.java.io :as io]
             [clojure.tools.namespace.repl :as tn]
             [clojure.tools.logging :as log]
