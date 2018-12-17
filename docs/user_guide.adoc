@@ -1,5 +1,48 @@
 = User Guide
 
+== Development Setup
+
+=== Get Crux
+
+As Crux is in development, the best route is to clone the https://github.com/juxt/crux[GitHub repo]. Once in the repo, run
+
+----
+lein install
+----
+
+For development purposes, we will run Crux entirely in 'embedded'
+mode. This means that we will run components such as Kafka and RocksDB
+in process.
+
+Add these dependencies to your project, for example in `deps.edn`.
+
+[source,clj,subs="normal"]
+----
+juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
+
+org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
+org.rocksdb/rocksdbjni {:mvn/version "5.17.2"} <1>
+----
+<1> We are using RocksDB for the purposes of getting you up and
+running. To switch out to another KV store, see TODO.
+
+=== Start Crux
+
+First we define the following configuration:
+
+[source,clj]
+----
+include::../dev/dev.clj[tags=dev-options]
+----
+
+This is sample code to start Crux, found in `dev/dev.clj`.
+
+[source,clj]
+----
+include::../dev/dev.clj[tags=dev-system]
+----
+<1> You could modify this, if you want to run Kafka outside the local process.
+
 == Query
 
 Crux query capability is easiest summarized via an example:

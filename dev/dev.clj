@@ -18,6 +18,7 @@
            org.slf4j.LoggerFactory
            java.io.Closeable))
 
+; tag::dev-options[]
 (def storage-dir "dev-storage")
 (def dev-options {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
                   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
@@ -27,13 +28,15 @@
                   :db-dir (str storage-dir "/data")
                   :bootstrap-servers "localhost:9092"
                   :server-port 3000})
+; end::dev-options[]
 
 (def ^ICruxSystem system)
 
+; tag::dev-system[]
 (defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server?] :as options}]
   (let [started (atom [])]
     (try
-      (let [embedded-kafka (when embed-kafka?
+      (let [embedded-kafka (when embed-kafka? ;;<1>
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
             local-node (doto (api/start-local-node options)
@@ -47,6 +50,7 @@
         (doseq [c (reverse @started)]
           (cio/try-close c))
         (throw t)))))
+; end::dev-system[]
 
 (defn stop-dev-system ^crux.api.LocalNode [{:keys [http-server embedded-kafka] :as system}]
   (doseq [c [http-server system embedded-kafka]]
