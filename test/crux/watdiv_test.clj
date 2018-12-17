@@ -249,7 +249,8 @@
 
 (defn with-kv-backend-from-env [f]
   (binding [f/*kv-backend* (or (System/getenv "CRUX_WATDIV_KV_BACKEND") f/*kv-backend*)]
-    (println "Using KV backend:" f/*kv-backend*)
+    (when run-watdiv-tests?
+      (println "Using KV backend:" f/*kv-backend*))
     (f)))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic with-kv-backend-from-env f/with-kv-store with-watdiv-data)
