@@ -46,6 +46,7 @@
                                    :exclusions [com.google.code.findbugs/jsr305]]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
+  :aliases {"javadoc" ["run" "-m" "javadoc"  "website/javadoc"]}
   :java-source-paths ["src"]
   :javac-options ["-XDignore.symbol.file"]
   :aot [crux.kafka.nippy

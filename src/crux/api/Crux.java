@@ -5,7 +5,7 @@ import java.util.Map;
 import clojure.java.api.Clojure;
 
 /**
- * Public API entry point for starting a {@link #ICruxSystem}.
+ * Public API entry point for starting a {@link ICruxSystem}.
  */
 public class Crux {
     /**

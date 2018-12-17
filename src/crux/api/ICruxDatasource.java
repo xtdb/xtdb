@@ -30,7 +30,7 @@ public interface ICruxDatasource {
     /**
      * Returns a new snapshot allowing for lazy query results in a
      * try-with-resources block using {@link #q(Closeable snapshot,
-     * Map query)}.
+     * Object query)}.
      *
      * @return an implementation specific snapshot
      */
@@ -47,7 +47,7 @@ public interface ICruxDatasource {
     /**
      * Queries the db lazily.
      *
-     * @param snapshot a snapshot from {@link #newSnapshot()]}.
+     * @param snapshot a snapshot from {@link #newSnapshot()}.
      * @param query    the query in map, vector or string form.
      * @return         a lazy sequence of result tuples.
      */

@@ -76,7 +76,7 @@ public interface ICruxSystem extends Closeable {
      * Checks if a submitted tx did update an entity.
      *
      * @param submittedTx must be a map returned from {@link
-     * #submitTx(List<List> txOps)}.
+     * #submitTx(List txOps)}.
      * @param eid         an object that can be coerced into an entity id.
      * @return            true if the entity was updated in this transaction.
      */
@@ -88,7 +88,7 @@ public interface ICruxSystem extends Closeable {
      * of the transaction log in a try-with-resources block using
      * {@link #txLog(Closeable txLogContext)}.
      *
-     * @return an implementation specific snapshot
+     * @return an implementation specific context.
      */
     public Closeable newTxLogContext();
 
@@ -96,8 +96,8 @@ public interface ICruxSystem extends Closeable {
      * Blocks until the node has caught up indexing. Will throw an
      * exception on timeout. The returned date is the latest index
      * time when this node has caught up as of this call. This can be
-     * used as the second parameter in {@llink #db(Date businessTime,
-     * transactionTime Date)} for consistent reads.
+     * used as the second parameter in {@link #db(Date businessTime,
+     * Date transactionTime)} for consistent reads.
      *
      * @param timeout max time to wait, can be null for the default.
      * @return        the latest known transaction time.
@@ -107,8 +107,8 @@ public interface ICruxSystem extends Closeable {
     /**
      * Reads the transaction log lazily.
      *
-     * @param snapshot a snapshot from {@link #newSnapshot()]}.
-     * @return         a lazy sequence of the transaction log.
+     * @param txLogContext a context from {@link #newTxLogContext()}.
+     * @return             a lazy sequence of the transaction log.
      */
     public Iterable<List> txLog(Closeable txLogContext);
 }
