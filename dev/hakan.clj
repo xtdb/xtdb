@@ -1193,3 +1193,27 @@
 ;;     (.rocksdb_close rocksdb db)
 ;;     (.rocksdb_options_destroy rocksdb options)
 ;;     (.rocksdb_writeoptions_destroy rocksdb write-options)))
+
+
+;; WatDiv analysis helpers:
+
+(comment
+  (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
+  (swap! (:cache-state (:kv-store system)) empty)
+  (doseq [{:keys [idx query crux-results crux-time]} (remove #(> 1000 (:crux-time %)) (remove :crux-error c))]
+    (prn :idx idx)
+    (prn query)
+    (prn :previous-results crux-results)
+    (prn :prevous-time crux-time)
+    (dotimes [n 3]
+      (let [start (System/currentTimeMillis)]
+        (assert (= crux-results
+                   (count (.q (.db system)
+                              (crux.sparql/sparql->datalog query)))))
+        (prn :run n (- (System/currentTimeMillis) start)))))
+
+  (swap! (:cache-state (:kv-store system)) empty)
+
+  (crux.query/query-plan-for (crux.sparql/sparql->datalog
+                              "")
+                             (crux.index/read-meta (:kv-store system) :crux.kv/stats)))
