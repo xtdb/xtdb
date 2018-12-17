@@ -28,8 +28,8 @@
 (defn require-and-ensure-kv-record ^Class [record-class-name]
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))
-    (let [record-class ^Class (resolve (symbol record-class-name))]
-      (when (and (extends? @#'KvStore record-class)
+    (let [record-class ^Class (eval (symbol record-class-name))]
+      (when (and (extends? (eval 'crux.kv/KvStore) record-class)
                  (.isAssignableFrom ^Class IRecord record-class))
         record-class))))
 
