@@ -7,7 +7,7 @@
   )
 
 ;; tag::start-system[]
-(def system (api/new-standalone-system {:kv-backend "crux.kv.memdb.MemKv"}))
+(def system (api/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"}))
 ;; end::start-system[]
 
 ;; tag::submit-tx[]
