@@ -19,13 +19,3 @@ include::bitemp.adoc[]
 include::design.adoc[]
 include::faq.adoc[]
 include::roadmap.adoc[]
-
-////
-The following need to be worked through, to see what is worth porting
-////
-
-include::query.adoc[leveloffset=+1]
-include::schema.adoc[leveloffset=+1]
-include::retention.adoc[leveloffset=+1]
-include::transactions.adoc[leveloffset=+1]
-include::competitors.adoc[leveloffset=0]
