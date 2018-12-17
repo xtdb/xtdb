@@ -34,9 +34,9 @@
 
 ; tag::dev-system[]
 (defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server?] :as options}]
-  (let [started (atom [])]
+  (let [started (atom [])] ;;<1>
     (try
-      (let [embedded-kafka (when embed-kafka? ;;<1>
+      (let [embedded-kafka (when embed-kafka? ;;<2>
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
             local-node (doto (api/start-local-node options)

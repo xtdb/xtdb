@@ -41,7 +41,8 @@ This is sample code to start Crux, found in `dev/dev.clj`.
 ----
 include::../dev/dev.clj[tags=dev-system]
 ----
-<1> You could modify this, if you want to run Kafka outside the local process.
+<1> The Crux components being started all implement `java.io.Closeable`. The code above contains rudimentrary setup for managing life-cycled components - it should be straightforward to make use of a library such as https://github.com/stuartsierra/component[Component] or https://github.com/weavejester/integrant[Integrant].
+<2> You could modify this, if you want to run Kafka outside the local process.
 
 == Query
 
