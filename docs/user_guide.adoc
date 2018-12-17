@@ -1,18 +1,67 @@
 = User Guide
 
-== Development Setup
+== Hello World
 
-=== Get Crux
+This guide contains for steps for a simple Hello World with Crux.
 
-As Crux is in development, the best route is to clone the https://github.com/juxt/crux[GitHub repo]. Once in the repo, run
+==== Start a REPL
+
+Clone the https://github.com/juxt/crux[repo] and fire up a REPL in the
+project.
+
+==== Do the necessary requires:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=require]
+----
+
+==== Start the standalone system:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=start-system]
+----
+
+For the purposes of this Hello World, we are using the simplest
+configuration of Crux, where all the pluggable components are
+in-memory constituents. There is no Kafka or RocksDB to worry about.
+
+==== Write a transaction:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=submit-tx]
+----
+
+==== Make a query:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=query]
+----
+
+You should get:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=should-get]
+----
+
+== Project Dependency
+
+As Crux is in development, the best route is to clone the
+https://github.com/juxt/crux[GitHub repo]. Once in the repo, run
 
 ----
 lein install
 ----
 
-For development purposes, we will run Crux entirely in 'embedded'
-mode. This means that we will run components such as Kafka and RocksDB
-in process.
+== Embedded Mode.
+
+We can Crux entirely in 'embedded' mode. This means that we will run
+components such as Kafka and RocksDB in process, with data stored on
+disk.
 
 Add these dependencies to your project, for example in `deps.edn`.
 
