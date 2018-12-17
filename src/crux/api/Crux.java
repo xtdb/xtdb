@@ -8,6 +8,9 @@ import clojure.java.api.Clojure;
  * Public API entry point for starting a {@link ICruxSystem}.
  */
 public class Crux {
+    private Crux() {
+    }
+
     /**
      * Starts a query node in local library mode.
      *
