@@ -29,7 +29,7 @@
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))
     (let [record-class ^Class (resolve (symbol record-class-name))]
-      (when (and (extends? KvStore record-class)
+      (when (and (extends? @#'KvStore record-class)
                  (.isAssignableFrom ^Class IRecord record-class))
         record-class))))
 
