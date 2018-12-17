@@ -22,8 +22,6 @@ include::known_issues.adoc[leveloffset=0]
 
 include::roadmap.adoc[leveloffset=0]
 
-include::todos.adoc[leveloffset=0]
-
 == Background
 
 Motivation: a database with the following characteristics:
