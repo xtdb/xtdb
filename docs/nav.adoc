@@ -2,5 +2,4 @@
 * <<user_guide.adoc#,User Guide>>
 * <<deployment.adoc#,Deployment>>
 * <<bitemp.adoc#,Bitemporality>>
-* <<design.adoc#,Design>>
 * <<faq.adoc#,FAQ>>
