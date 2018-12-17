@@ -76,7 +76,7 @@
   close.
 
   NOTE: requires any KV store dependencies on the classpath. The
-  crux.memdb.MemKv KV backend works without additional dependencies.
+  crux.kv.memdb.MemKv KV backend works without additional dependencies.
 
   The HTTP API can be started by passing the LocalNode to
   crux.http-server/start-http-server. This will require further
@@ -164,7 +164,7 @@
   close.
 
   NOTE: requires any KV store dependencies on the classpath. The
-  crux.memdb.MemKv KV backend works without additional dependencies."
+  crux.kv.memdb.MemKv KV backend works without additional dependencies."
   ^ICruxSystem [{:keys [db-dir kv-backend] :as options}]
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)

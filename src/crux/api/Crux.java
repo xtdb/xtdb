@@ -23,7 +23,7 @@ public class Crux {
      * calling close.
      *
      * NOTE: requires any KV store dependencies on the classpath. The
-     * crux.memdb.MemKv KV backend works without additional
+     * crux.kv.memdb.MemKv KV backend works without additional
      * dependencies.
      *
      * The HTTP API can be started by passing the LocalNode to
@@ -51,7 +51,7 @@ public class Crux {
      * calling close.
 
      * NOTE: requires any KV store dependencies on the classpath. The
-     * crux.memdb.MemKv KV backend works without additional dependencies.
+     * crux.kv.memdb.MemKv KV backend works without additional dependencies.
      *
      * @param options see crux.bootstrap/start-kv-store.
      * @return        a standalone system.
