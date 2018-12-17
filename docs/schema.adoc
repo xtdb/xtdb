@@ -1,11 +1,11 @@
-== Schema
+= Schema
 
 *Note: in
 https://en.wikipedia.org/wiki/Resource_Description_Framework[RDF], a
 triple is made up of Subject Predicate Object, in Datomic the same thing
 is called Entity Attribute Value.*
 
-=== Triples, Documents and Property Graphs
+== Triples, Documents and Property Graphs
 
 Crux will deal with entities as either a triples or documents. The
 identifier in the subject position in the triple represents its entity.
@@ -72,7 +72,7 @@ Document Store]
 * https://neo4j.com/blog/rdf-triple-store-vs-labeled-property-graph-difference/[RDF
 Triple Stores vs. Labeled Property Graphs: What’s the Difference?]
 
-=== Scalar Types and Indexing
+== Scalar Types and Indexing
 
 The scalar types can be assumed to be normal values or references to
 other entities. References to entities outside the store could also be
@@ -94,7 +94,7 @@ Most likely we want to keep the core data binary and the way its dealt
 with and indexed handled by an extensible interface so the user can add
 their own types.
 
-=== Non-scalar Types
+== Non-scalar Types
 
 In Datomic one can have an attribute with cardinality many, which
 effectively makes it behave like a set, allowing multiple triples at the
@@ -117,7 +117,7 @@ same time. This can be mitigated by explicitly adding explicit
 retractions to the index but this can double the index size, see
 link:bitemp.md[bitemp] for more about this.
 
-=== CRDTs
+== CRDTs
 
 One option is to allow the underlying store directly support
 https://en.wikipedia.org/wiki/Conflict-free_replicated_data_type[conflict-free
@@ -137,7 +137,7 @@ merged again automatically.]
 * https://arxiv.org/abs/1710.04469[Pure Operation-Based Replicated Data
 Types]
 
-=== Additive Schema
+== Additive Schema
 
 One option, is to like MongoDB or Elasticsearch, allow usage without
 having to explicitly define the schema upfront. In Mongo one still needs
@@ -157,7 +157,7 @@ matters, as this itself then also needs to evolve, vast data migrated
 etc. For these reasons, one needs either a write once, additive only,
 schema, or make the schema implicit.
 
-=== Implicit Indexes
+== Implicit Indexes
 
 The schema exists for two different reasons, to allow the user reason
 about the data, and ensure it adheres to the type system, but also

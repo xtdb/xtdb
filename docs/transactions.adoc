@@ -1,9 +1,9 @@
-== Transactions
+= Transactions
 
 *In this document we assume that the log is Kafka-like, with topics
 divided into partitions.*
 
-=== Write Transactions
+== Write Transactions
 
 In the simplest case, the message in the log is either an entity, more
 than one entity, or a set of assertions and retractions. There is in the
@@ -19,14 +19,14 @@ Exactly how this would really work when using more than one topic and
 partition is beyond the MVP, but some thinking around this is best done
 sooner rather than later.
 
-=== Reading Your Writes
+== Reading Your Writes
 
 As discussed in the link:query.md[query] document, reading your own
 writes could be achieved by using the time of the committed transaction
 and ensure the query node has caught up. This ability would be provided
 via a Crux query API.
 
-=== Global Lock
+== Global Lock
 
 In Datomic there’s a single transactor, which also has the ability to
 execute transactor functions. The easiest replacement for this is to
@@ -56,7 +56,7 @@ be one size that fits all.
 Systems]
 * https://github.com/jepsen-io/jepsen[Jepsen]
 
-=== Throughput
+== Throughput
 
 Committing a transaction and ingesting data into the system should be
 vastly faster than in Datomic. This is one of the selling points of

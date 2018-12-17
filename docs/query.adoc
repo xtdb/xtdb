@@ -1,6 +1,6 @@
-== Graph Query
+= Graph Query
 
-=== Basic Graph Queries
+== Basic Graph Queries
 
 Crux needs to resolve and join entities as of a certain point in
 bitemporal time efficiently. This is the main feature of Crux. Secondary
@@ -41,7 +41,7 @@ Graph Databases? Benchmarking Real-Time Social Networking Applications]
 Knowledge Base Systems]
 * http://swat.cse.lehigh.edu/projects/lubm/[LUBM]
 
-=== Indexes
+== Indexes
 
 The main complication in Crux is link:bitemp.md[bitemporality]. The
 as-of view should be resolved for both business and transaction time,
@@ -131,7 +131,7 @@ which would be a post MVP feature.
 * https://spcl.inf.ethz.ch/Research/Performance/LogGraph/loggraph_full.pdf[Log(Graph): A Near-Optimal High-Performance Graph Representation]
 * http://www.cs.ucsb.edu/~ravenben/temp/rigel.pdf[Fast and Scalable Analysis of Massive Social Graphs]
 
-=== Retention
+== Retention
 
 The indexes need to respect the link:retention.md[retention] rules setup
 for the data itself. As the indexes will contain the decrypted values of
@@ -148,7 +148,7 @@ link:schema.md[schema].
 
 Different query nodes could have different retention strategies.
 
-=== Query Language
+== Query Language
 
 *Crux ability to query the graph is separate from the syntax of doing
 so.*

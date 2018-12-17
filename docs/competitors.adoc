@@ -1,11 +1,11 @@
-== Competitors
+= Competitors
 
 Non-exhaustive list. Apart from Datomic none of these support temporal
 queries.
 
-=== Graph
+== Graph
 
-==== https://neo4j.com/[Neo4J]
+=== https://neo4j.com/[Neo4J]
 
 _World’s leading graph database, with native graph storage and
 processing._
@@ -24,7 +24,7 @@ https://www.opencypher.org/[openCypher] standard.
 
 https://db-engines.com/en/system/Neo4j
 
-==== https://en.wikipedia.org/wiki/DataStax[DataStax]
+=== https://en.wikipedia.org/wiki/DataStax[DataStax]
 
 _DataStax Enterprise: The always-on data platform, powered by the best
 distribution of Apache Cassandra._
@@ -50,7 +50,7 @@ https://db-engines.com/en/system/Datastax+Enterprise
 
 https://db-engines.com/en/system/Cassandra
 
-==== https://github.com/dgraph-io/dgraph[Dgraph]
+=== https://github.com/dgraph-io/dgraph[Dgraph]
 
 _Dgraph - a low latency, high throughput, native and distributed graph
 database._
@@ -78,7 +78,7 @@ https://docs.dgraph.io/design-concepts/[Dgraph Design Concepts].
 
 https://db-engines.com/en/system/Dgraph
 
-==== https://github.com/cayleygraph/cayley[Cayley]
+=== https://github.com/cayleygraph/cayley[Cayley]
 
 _Cayley is an open-source graph inspired by the graph database behind
 Freebase and Google’s Knowledge Graph._
@@ -86,9 +86,9 @@ Freebase and Google’s Knowledge Graph._
 Cayley is written in Go. It has GraphQL and Gremlin inspired query
 languages. Some RDF support.
 
-=== Datalog
+== Datalog
 
-==== https://www.datomic.com/[Datomic]
+=== https://www.datomic.com/[Datomic]
 
 _A transactional database with a flexible data model, elastic scaling,
 and rich queries._
@@ -105,7 +105,7 @@ Datomic is written in Clojure.
 
 https://db-engines.com/en/system/Datomic
 
-==== https://github.com/replikativ/datahike[datahike]
+=== https://github.com/replikativ/datahike[datahike]
 
 _A durable datalog implementation adaptable for distribution._
 
@@ -121,7 +121,7 @@ mechanism, e.g. Apache Kafka.
 
 Datahike is written in Clojure.
 
-==== https://github.com/mozilla/mentat[Mentat]
+=== https://github.com/mozilla/mentat[Mentat]
 
 _Project Mentat is a persistent, embedded knowledge base. It draws
 heavily on DataScript and Datomic._
@@ -136,7 +136,7 @@ use, embeddability, and good performance — while building a more
 relaxed, reusable, and expressive data model on top.
 ....
 
-==== http://www.logicblox.com/[LogicBlox]
+=== http://www.logicblox.com/[LogicBlox]
 
 _LogicBlox is a smart database that combines transactions, analytics,
 planning and business logic, powering a new class of smart enterprise
@@ -149,7 +149,7 @@ See the
 http://www.cs.ox.ac.uk/dan.olteanu/papers/logicblox-sigmod15.pdf[Design
 and Implementation of the LogicBlox System].
 
-==== https://github.com/threatgrid/naga[Naga]
+=== https://github.com/threatgrid/naga[Naga]
 
 _Datalog based rules engine._
 
@@ -161,9 +161,9 @@ also have a HTTP based https://github.com/threatgrid/naga-http[query
 server] that consumes data from Kafka. Naga is EPL, and seems affiliated
 with Cisco.
 
-=== RDF
+== RDF
 
-==== https://aws.amazon.com/neptune/[Amazon Neptune]
+=== https://aws.amazon.com/neptune/[Amazon Neptune]
 
 _Amazon Neptune is a fast, reliable, fully-managed graph database
 service that makes it easy to build and run applications that work with
@@ -189,7 +189,7 @@ Neptune is currently in limited preview, requiring sign up.
 
 https://db-engines.com/en/system/Amazon+Neptune
 
-==== https://www.stardog.com/[Stardog]
+=== https://www.stardog.com/[Stardog]
 
 _Stardog makes it fast and easy to turn enterprise data into knowledge._
 
@@ -198,7 +198,7 @@ and has a GraphQL front-end. Also supports TinkerPop.
 
 https://db-engines.com/en/system/Stardog
 
-==== https://jena.apache.org/[Jena]
+=== https://jena.apache.org/[Jena]
 
 _A free and open source Java framework for building Semantic Web and
 Linked Data applications._
@@ -207,7 +207,7 @@ While Jena itself is a framework, it also provides a SPARQL server
 called https://jena.apache.org/documentation/fuseki2/[Fuseki]. Also
 supports OWL reasoning.
 
-=== Streaming
+== Streaming
 
 Streaming platforms in general are not direct competitors as such, but
 might be used, as we will likely be using it, to build and piece
@@ -221,7 +221,7 @@ Kafka To Use: A Practical Guide to Building a Streaming Platform (Part
 How to pick between Apache’s different streaming platform like Kafka,
 Flink and Spark isn’t obvious.
 
-==== https://kafka.apache.org/documentation/streams/[Kafka Streams]
+=== https://kafka.apache.org/documentation/streams/[Kafka Streams]
 
 _Kafka Streams is a client library for building applications and
 microservices, where the input and output data are stored in Kafka
@@ -230,7 +230,7 @@ clusters._
 Uses RocksDB for local KTable state. If we use Kafka for our log, we
 might also use Kafka Streams as the end-to-end framework.
 
-==== https://flink.apache.org/[Apache Flink]
+=== https://flink.apache.org/[Apache Flink]
 
 _Apache Flink® is an open-source stream processing framework for
 distributed, high-performing, always-available, and accurate data
@@ -240,7 +240,7 @@ It’s API is based around the concepts DataSet and DataStream. Also has a
 graph API called
 https://ci.apache.org/projects/flink/flink-docs-release-1.4/dev/libs/gelly/[gelly].
 
-==== https://spark.apache.org/[Apache Spark]
+=== https://spark.apache.org/[Apache Spark]
 
 _Apache Spark™ is a unified analytics engine for large-scale data
 processing._

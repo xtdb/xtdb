@@ -1,6 +1,6 @@
-== Data Retention
+= Data Retention
 
-=== GDPR and Datensparsamkeit
+== GDPR and Datensparsamkeit
 
 Many systems today will be built with
 https://en.wikipedia.org/wiki/General_Data_Protection_Regulation[GDPR]
@@ -28,7 +28,7 @@ Compliance: The Challenges and Problems with Personal Data]
 * https://blog.acolyer.org/2017/06/26/sok-cryptographically-protected-database-search/[SoK:
 Cryptographically protected database search]
 
-=== Event Sourcing
+== Event Sourcing
 
 The immutable log is a powerful and clean functional model of a system.
 By definition, mandatory deletions will force a rethink of this model.
@@ -45,7 +45,7 @@ unifying abstraction]
 * https://www.confluent.io/blog/data-dichotomy-rethinking-the-way-we-treat-data-and-services/[The
 Data Dichotomy: Rethinking the Way We Treat Data and Services]
 
-=== Provenance
+== Provenance
 
 Data will always come from somewhere, and the retention rules might be
 defined upstream. Most likely other downstream systems, if nothing else,
@@ -61,7 +61,7 @@ necessarily need this fine grained level of provenance.
 * http://cidrdb.org/cidr2017/papers/p111-hellerstein-cidr17.pdf[Ground:
 A Data Context Service]
 
-=== Log Compaction
+== Log Compaction
 
 There are other (at times related) reasons why one would want to delete
 or compact the log in various ways. Maybe no data older than a year
@@ -102,7 +102,7 @@ CRDT section in link:schema.md[schema]. This approach would lead to a
 strongly, eventually consistent time-line, but not allow for repeatable
 reads.
 
-=== Log Replay
+== Log Replay
 
 If downstream systems, especially Crux own indexes, depend on a
 immutable log, replaying this from start might eventually become

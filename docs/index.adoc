@@ -12,26 +12,20 @@
 :source-highlighter: highlightjs
 :notitle:
 
-include::what-is-crux.adoc[leveloffset=0]
+include::what_is_crux.adoc[]
+include::user_guide.adoc[]
+include::deployment.adoc[]
+include::bitemp.adoc[]
+include::design.adoc[]
+include::faq.adoc[]
+include::roadmap.adoc[]
 
-include::bitemp.adoc[leveloffset=0]
-
-include::faq.adoc[leveloffset=0]
-
-include::known_issues.adoc[leveloffset=0]
-
-include::roadmap.adoc[leveloffset=0]
-
-== Background
-
-Motivation: a database with the following characteristics:
+////
+The following need to be worked through, to see what is worth porting
+////
 
 include::query.adoc[leveloffset=+1]
-
 include::schema.adoc[leveloffset=+1]
-
 include::retention.adoc[leveloffset=+1]
-
 include::transactions.adoc[leveloffset=+1]
-
 include::competitors.adoc[leveloffset=0]
