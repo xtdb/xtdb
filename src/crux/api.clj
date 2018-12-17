@@ -206,24 +206,27 @@
 
   Defaults to using clj-http or http-kit if available."
        :dynamic true}
-  *internal-http-request-fn*
-  (or (try
-        (require 'clj-http.client)
-        (let [f (resolve 'clj-http.client/request)]
-          (fn [opts]
-            (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
-        (catch IOException not-found))
-      (try
-        (require 'org.httpkit.client)
-        (let [f (resolve 'org.httpkit.client/request)]
-          (fn [opts]
-            (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
-              (if error
-                (throw error)
-                result))))
-        (catch IOException not-found))
-      (fn [_]
-        (throw (IllegalStateException. "No supported HTTP client found.")))))
+  *internal-http-request-fn*)
+
+(defn- init-intrnal-http-request-fn []
+  (when (not (bound? #'*internal-http-request-fn*))
+    (or (try
+          (require 'clj-http.client)
+          (let [f (resolve 'clj-http.client/request)]
+            (fn [opts]
+              (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
+          (catch IOException not-found))
+        (try
+          (require 'org.httpkit.client)
+          (let [f (resolve 'org.httpkit.client/request)]
+            (fn [opts]
+              (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
+                (if error
+                  (throw error)
+                  result))))
+          (catch IOException not-found))
+        (fn [_]
+          (throw (IllegalStateException. "No supported HTTP client found."))))))
 
 (defn- api-request-sync
   ([url body]
@@ -348,4 +351,5 @@
    NOTE: requires either clj-http or http-kit on the classpath, see
   crux.api/*internal-http-request-fn* for more information."
   ^ICruxSystem [url]
+  (init-intrnal-http-request-fn)
   (->RemoteApiClient url))
