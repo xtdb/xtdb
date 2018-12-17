@@ -28,8 +28,9 @@ public class Crux {
      * dependencies on the classpath, see crux.http-server for
      * details.
      *
-     * See also crux.kafka.embedded or {@link #newStandaloneSystem(Map
-     * options)} for self-contained deployments.
+     * See also crux.kafka.embedded or {@link
+     * #startStandaloneSystem(Map options)} for self-contained
+     * deployments.
      *
      * @param options see crux.bootstrap/cli-options.
      * @return        the started local node.
