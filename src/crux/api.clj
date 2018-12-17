@@ -210,23 +210,26 @@
 
 (defn- init-intrnal-http-request-fn []
   (when (not (bound? #'*internal-http-request-fn*))
-    (or (try
-          (require 'clj-http.client)
-          (let [f (resolve 'clj-http.client/request)]
-            (fn [opts]
-              (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
-          (catch IOException not-found))
-        (try
-          (require 'org.httpkit.client)
-          (let [f (resolve 'org.httpkit.client/request)]
-            (fn [opts]
-              (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
-                (if error
-                  (throw error)
-                  result))))
-          (catch IOException not-found))
-        (fn [_]
-          (throw (IllegalStateException. "No supported HTTP client found."))))))
+    (alter-var-root
+     #'*internal-http-request-fn*
+     (constantly
+      (or (try
+            (require 'clj-http.client)
+            (let [f (resolve 'clj-http.client/request)]
+              (fn [opts]
+                (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
+            (catch IOException not-found))
+          (try
+            (require 'org.httpkit.client)
+            (let [f (resolve 'org.httpkit.client/request)]
+              (fn [opts]
+                (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
+                  (if error
+                    (throw error)
+                    result))))
+            (catch IOException not-found))
+          (fn [_]
+            (throw (IllegalStateException. "No supported HTTP client found."))))))))
 
 (defn- api-request-sync
   ([url body]
