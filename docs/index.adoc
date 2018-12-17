@@ -18,8 +18,6 @@ include::bitemp.adoc[leveloffset=0]
 
 include::implementation.adoc[leveloffset=0]
 
-include::internals.adoc[leveloffset=0]
-
 include::faq.adoc[leveloffset=0]
 
 include::known_issues.adoc[leveloffset=0]
