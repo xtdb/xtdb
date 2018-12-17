@@ -54,11 +54,15 @@ public interface ICruxDatasource {
     public Iterable<List> q(Closeable snapshot, Object query);
 
     /**
+     * The business time of this db.
+     *
      * @return the business time of this db.
      */
     public Date businessTime();
 
     /**
+     * The transaction time of this db.
+     *
      * @return the transaction time of this db.
      */
     public Date transactionTime();
