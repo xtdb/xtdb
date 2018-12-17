@@ -1,8 +1,5 @@
 == Crux Implementation Notes
 
-See the link:mvp.md[MVP Summary] for the background and motivation
-behind Crux.
-
 The document link:internals.md[Internals] (and the other docs in this
 folder) discusses our ideas _before_ we wrote the MVP, while this
 document aims to explain how it actually works _after_ we wrote the MVP.

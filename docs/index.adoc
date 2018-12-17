@@ -14,8 +14,6 @@
 
 include::what-is-crux.adoc[leveloffset=0]
 
-include::introduction.adoc[leveloffset=0]
-
 include::bitemp.adoc[leveloffset=0]
 
 include::implementation.adoc[leveloffset=0]
