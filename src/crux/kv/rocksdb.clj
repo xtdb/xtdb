@@ -108,7 +108,8 @@
       (.write db write-options wb)))
 
   (backup [{:keys [^RocksDB db]} dir]
-    (.createCheckpoint (Checkpoint/create db) (.getAbsolutePath (io/file dir))))
+    (with-open [checkpoint (Checkpoint/create db)]
+      (.createCheckpoint checkpoint (.getAbsolutePath (io/file dir)))))
 
   (count-keys [{:keys [^RocksDB db]}]
     (-> (.getProperty db "rocksdb.estimate-num-keys")
