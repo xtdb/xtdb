@@ -982,6 +982,8 @@
 ;;             [crux.io :as cio]
 ;;             [crux.kv :as kv])
 ;;   (:import java.io.Closeable
+;;            [java.nio ByteOrder ByteBuffer]
+;;            org.agrona.concurrent.UnsafeBuffer
 ;;            org.rocksdb.util.Environment
 ;;            [jnr.ffi LibraryLoader Memory Pointer]))
 
@@ -1020,11 +1022,11 @@
 ;;   (^void rocksdb_readoptions_destroy [^jnr.ffi.Pointer opt])
 
 ;;   (^jnr.ffi.Pointer rocksdb_create_iterator [^jnr.ffi.Pointer db ^jnr.ffi.Pointer options])
-;;   (^byte rocksdb_iter_valid [^jnr.ffi.Pointer iter])
-;;   (^void rocksdb_iter_next [^jnr.ffi.Pointer iter])
-;;   (^void rocksdb_iter_seek [^jnr.ffi.Pointer iter ^{jnr.ffi.annotations.Pinned true jnr.ffi.annotations.In true :tag bytes} k ^{jnr.ffi.types.size_t true :tag long} klen])
-;;   (^jnr.ffi.Pointer rocksdb_iter_key [^jnr.ffi.Pointer iter ^{jnr.ffi.annotations.Out true :tag longs} klen])
-;;   (^jnr.ffi.Pointer rocksdb_iter_value [^jnr.ffi.Pointer iter ^{jnr.ffi.annotations.Out true :tag longs} vlen])
+;;   (^byte rocksdb_iter_valid [^{jnr.ffi.annotations.In true :tag long} iter])
+;;   (^void rocksdb_iter_next [^{jnr.ffi.annotations.In true :tag long} iter])
+;;   (^void rocksdb_iter_seek [^{jnr.ffi.annotations.In true :tag long} iter ^{jnr.ffi.annotations.In true :tag long} k ^{:jnr.ffi.annotations.In true :tag long} klen])
+;;   (^long rocksdb_iter_key [^{jnr.ffi.annotations.In true :tag long} iter ^{jnr.ffi.annotations.In true :tag long} klen])
+;;   (^long rocksdb_iter_value [^{jnr.ffi.annotations.In true :tag long} iter ^{jnr.ffi.annotations.In true :tag long} vlen])
 ;;   (^void rocksdb_iter_get_error [^jnr.ffi.Pointer iter ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
 ;;   (^void rocksdb_iter_destroy [^jnr.ffi.Pointer iter]))
 
@@ -1053,34 +1055,45 @@
 ;;     (.rocksdb_iter_get_error rocksdb i errptr)
 ;;     (check-error errptr)))
 
+;; (def ^UnsafeBuffer ub-len (UnsafeBuffer. (ByteBuffer/allocateDirect Long/BYTES)))
+;; (def ^UnsafeBuffer ub-key (UnsafeBuffer. (ByteBuffer/allocateDirect 20)))
+;; (def ^{:tag 'bytes} ub-key-bs (byte-array (.capacity ub-key)))
+
 ;; (defn- iterator->key [^Pointer i]
-;;   (when (= 1 (.rocksdb_iter_valid rocksdb i))
-;;     (let [klen (long-array 1)
-;;           k (.rocksdb_iter_key rocksdb i klen)
+;;   (when (= 1 (.rocksdb_iter_valid rocksdb (.address i)))
+;;     (let [ ;;ub-klen (UnsafeBuffer. (ByteBuffer/allocateDirect Long/BYTES))
+;;           k (.rocksdb_iter_key rocksdb (.address i) (.addressOffset ub-len))
 ;;           ;; _ (check-iterator-error i)
-;;           kb (byte-array (aget klen 0))]
-;;       (.get k 0 kb 0 (alength kb))
+;;           kl (.getInt ub-len 0)
+;;           kb (byte-array kl)
+;;           k-ub (UnsafeBuffer. k kl)]
+;;       (.getBytes k-ub 0 kb)
 ;;       kb)))
 
 ;; (defrecord RocksJNRKvIterator [^Pointer i]
 ;;   kv/KvIterator
 ;;   (seek [this k]
-;;     (.rocksdb_iter_seek rocksdb i ^bytes k (alength ^bytes k))
-;;     ;;(check-iterator-error i)
-;;     (iterator->key i))
+;;     (let [ ;ub-k (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes k)))
+;;           ]
+;;       (.putBytes ub-key 0 k)
+;;       (.rocksdb_iter_seek rocksdb (.address i) (.addressOffset ub-key) (.capacity ub-key))
+;;       ;;(check-iterator-error i)
+;;       (iterator->key i)))
 
 ;;   (next [this]
-;;     (.rocksdb_iter_next rocksdb i)
+;;     (.rocksdb_iter_next rocksdb (.address i))
 ;;     ;;(check-iterator-error i)
 ;;     (iterator->key i))
 
 ;;   (value [this]
-;;     (let [vlen (long-array 1)
-;;           v (.rocksdb_iter_value rocksdb i vlen)
-;;           ;; _ (check-iterator-error i)
-;;           vb (byte-array (aget vlen 0))]
-;;       (.get v 0 vb 0 (alength vb))
-;;       vb))
+;;     (let [ ;;ub-vlen (UnsafeBuffer. (ByteBuffer/allocateDirect Long/BYTES))
+;;             v (.rocksdb_iter_value rocksdb (.address i) (.addressOffset ub-len))
+;;             ;; _ (check-iterator-error i)
+;;             vl (.getInt ub-len 0)
+;;             vb (byte-array vl)
+;;             v-ub (UnsafeBuffer. v vl)]
+;;         (.getBytes v-ub 0 vb)
+;;         vb))
 
 ;;   (kv/refresh [this]
 ;;     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
@@ -1194,6 +1207,28 @@
 ;;     (.rocksdb_options_destroy rocksdb options)
 ;;     (.rocksdb_writeoptions_destroy rocksdb write-options)))
 
+;; (t/deftest test-performance
+;;   (when-not (= "crux.kv.memdb.MemKv"  f/*kv-backend*)
+;;     (prn f/*kv-backend*)
+;;     (let [n 1000000
+;;           ks (vec (for [n (range n)]
+;;                     (.getBytes (format "%020x" n))))]
+;;       (t/is (= n (count ks)))
+;;       (time
+;;        (kv/store f/*kv* (for [k ks]
+;;                           [k k])))
+
+;;       (dotimes [_ 3]
+;;         (time
+;;          (with-open [snapshot (kv/new-snapshot f/*kv*)
+;;                      i (kv/new-iterator snapshot)]
+;;            (dotimes [idx n]
+;;              (let [idx (- (dec n) idx)
+;;                    k (get ks idx)]
+;;                (kv/seek i k)
+;;                (kv/value i)
+;;                #_(assert (bu/bytes=? k (kv/seek i k)))
+;;                #_(assert (bu/bytes=? k (kv/value i)))))))))))
 
 ;; WatDiv analysis helpers:
 
