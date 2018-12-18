@@ -12,6 +12,7 @@
                  [org.agrona/agrona "0.9.28"]
                  ;; Provided dependencies included in uberjar.
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
+                 [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]
                  [org.lwjgl/lwjgl "3.2.1" :classifier "natives-linux" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.1" :classifier "natives-linux" :native-prefix "" :scope "provided"]

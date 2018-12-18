@@ -80,13 +80,18 @@
     (t/testing "RocksDB"
       (f))))
 
+(defn with-rocksdb-jnr [f]
+  (binding [*kv-backend* "crux.kv.rocksdb.jnr.RocksJNRKv"]
+    (t/testing "RocksJNRDB"
+      (f))))
+
 (defn with-lmdb [f]
   (binding [*kv-backend* "crux.kv.lmdb.LMDBKv"]
     (t/testing "LMDB"
       (f))))
 
 (defn with-each-kv-store-implementation [f]
-  (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-lmdb]]
+  (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-rocksdb-jnr with-lmdb]]
     (with-kv-store-implementation f)))
 
 (def ^:dynamic *kafka-bootstrap-servers*)

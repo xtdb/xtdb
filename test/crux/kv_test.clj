@@ -116,3 +116,28 @@
         (recur (conj! acc [k (kv/value i)])
                (kv/next i))
         (persistent! acc)))))
+
+(t/deftest test-performance
+  (if (System/getenv "CRUX_RUN_KV_PERFORMANCE")
+    (when-not (= "crux.kv.memdb.MemKv"  f/*kv-backend*)
+      (prn f/*kv-backend*)
+      (let [n 1000000
+            ks (vec (for [n (range n)]
+                      (.getBytes (format "%020x" n))))]
+        (t/is (= n (count ks)))
+        (time
+         (kv/store f/*kv* (for [k ks]
+                            [k k])))
+
+        (dotimes [_ 3]
+          (time
+           (with-open [snapshot (kv/new-snapshot f/*kv*)
+                       i (kv/new-iterator snapshot)]
+             (dotimes [idx n]
+               (let [idx (- (dec n) idx)
+                     k (get ks idx)]
+                 (kv/seek i k)
+                 (kv/value i)
+                 #_(assert (bu/bytes=? k (kv/seek i k)))
+                 #_(assert (bu/bytes=? k (kv/value i))))))))))
+    (t/is true)))
