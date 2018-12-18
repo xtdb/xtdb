@@ -175,16 +175,16 @@
           _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
           errptr (make-array String 1)
           db (try
-               (.rocksdb_open rocksdb
-                              opts
-                              (.getAbsolutePath (doto (io/file db-dir)
-                                                  (.mkdirs)))
-                              errptr)
+               (let [db (.rocksdb_open rocksdb
+                                       opts
+                                       (.getAbsolutePath (doto (io/file db-dir)
+                                                           (.mkdirs)))
+                                       errptr)]
+                 (check-error errptr)
+                 db)
                (catch Throwable t
                  (.rocksdb_options_destroy rocksdb opts)
-                 (throw t))
-               (finally
-                 (check-error errptr)))
+                 (throw t)))
           write-options (.rocksdb_writeoptions_create rocksdb)]
       (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1)
       (assoc this
@@ -233,8 +233,8 @@
       (try
         (.rocksdb_checkpoint_create rocksdb checkpoint (str dir) 0 errptr)
         (finally
-          (check-error errptr)))
-      (.rocksdb_checkpoint_object_destroy rocksdb checkpoint)))
+          (.rocksdb_checkpoint_object_destroy rocksdb checkpoint)
+          (check-error errptr)))))
 
   (count-keys [{:keys [^Pointer db]}]
     (-> (.rocksdb_property_value rocksdb db "rocksdb.estimate-num-keys")
