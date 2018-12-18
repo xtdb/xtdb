@@ -176,6 +176,9 @@
 (s/def ::options (s/keys :req-un [:crux.kv/db-dir]
                          :opt [::env-flags]))
 
+(def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
+(def ^:const max-mapsize-increase-factor 32)
+
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
   (open [this {:keys [db-dir crux.kv.lmdb/env-flags] :as options}]
@@ -198,13 +201,16 @@
       (let [tx (new-transaction stack env LMDB/MDB_RDONLY)]
         (->LMDBKvSnapshot env dbi tx))))
 
-  (store [_ kvs]
+  (store [this kvs]
     (try
       (cursor-put env dbi kvs)
       (catch ExceptionInfo e
         (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
-          (do (increase-mapsize env 2)
-              (cursor-put env dbi kvs))
+          (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
+            (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
+              (throw (IllegalStateException. "Too many key values to store.")))
+            (increase-mapsize env *mapsize-increase-factor*)
+            (kv/store this kvs))
           (throw e)))))
 
   (delete [_ ks]
