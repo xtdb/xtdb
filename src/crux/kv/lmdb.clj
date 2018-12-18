@@ -107,9 +107,9 @@
               tx (new-transaction stack env 0)
               cursor (new-cursor stack dbi (:txn tx))]
     (let [{:keys [cursor]} cursor
-          kv (MDBVal/callocStack stack)
-          dv (MDBVal/callocStack stack)]
-      (doseq [[^bytes k ^bytes v] (sort-by first bu/bytes-comparator kvs)]
+          kv (MDBVal/mallocStack stack)
+          dv (MDBVal/mallocStack stack)]
+      (doseq [[^bytes k ^bytes v] kvs]
         (with-open [stack (.push stack)]
           (let [kb (.flip (.put (.malloc stack (alength k)) k))
                 kv (.mv_data kv kb)
