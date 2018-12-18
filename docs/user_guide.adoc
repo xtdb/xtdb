@@ -133,11 +133,29 @@ As per usual, you can close the local node when you're finished:
 include::./examples.clj[tags=ln-close]
 ----
 
-
-
-
 NOTE: TODO: show how you'd use the in-mem KV to skip rocks, provide a
 link in this intro.
+
+== Http Server
+
+Crux can be used programmatically as a library, but Crux also ships
+with an embedded http server, that allows clients to use the API
+remotely via REST.
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=http-setup]
+----
+
+NOTE: TODO, get some examples of calling the HTTP server.
+
+Close the server:
+
+[source,clj]
+----
+include::../dev/examples.clj[tags=http-close]
+----
+
 
 == Embedded Crux
 
