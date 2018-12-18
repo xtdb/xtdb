@@ -208,7 +208,7 @@
         (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
           (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
             (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
-              (throw (IllegalStateException. "Too many key values to store.")))
+              (throw (IllegalStateException. "Too large size of key values to store at once.")))
             (increase-mapsize env *mapsize-increase-factor*)
             (kv/store this kvs))
           (throw e)))))
