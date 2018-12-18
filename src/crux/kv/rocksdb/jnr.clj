@@ -9,10 +9,10 @@
             [crux.io :as cio]
             [crux.kv :as kv])
   (:import java.io.Closeable
-           [java.nio ByteOrder ByteBuffer]
+           java.util.function.Supplier
            org.agrona.concurrent.UnsafeBuffer
            org.rocksdb.util.Environment
-           [jnr.ffi LibraryLoader Memory NativeType Pointer]))
+           [jnr.ffi LibraryLoader Memory Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -83,36 +83,62 @@
     (.rocksdb_iter_get_error rocksdb i errptr)
     (check-error errptr)))
 
+(def ^:private ^ThreadLocal pointer-to-pointer (ThreadLocal/withInitial
+                                                (reify Supplier
+                                                  (get [_]
+                                                    (Memory/allocateDirect rt Long/BYTES)))))
+
+(defn- allocate-pointer-to-pointer ^Pointer []
+  (.get pointer-to-pointer))
+
+(def ^:private ^ThreadLocal buffer-pool (ThreadLocal/withInitial
+                                         (reify Supplier
+                                           (get [_]
+                                             (Memory/allocateDirect rt 32)))))
+
+(defn- allocate-buffer ^Pointer [^long size]
+  (let [buffer ^Pointer (.get buffer-pool)]
+    (if (and buffer (>= (.size buffer) size))
+      buffer
+      (let [buffer (Memory/allocateDirect rt (* (.size buffer) 2))]
+        (.set buffer-pool buffer)
+        (recur size)))))
+
+(defn- deallocate-buffer [^Pointer buffer])
+
+(defn- pointer+len->bytes [^Pointer address ^Pointer len]
+  (let [len (.getInt len 0)
+        b (byte-array len)]
+    (.getBytes (UnsafeBuffer. (.address address) len) 0 b)
+    b))
+
 (defn- iterator->key [^Pointer i]
   (when (= 1 (.rocksdb_iter_valid rocksdb i))
-    (let [p-len (Memory/allocateTemporary rt NativeType/ULONG)
-          p-k (.rocksdb_iter_key rocksdb i p-len)
-          klen (.getInt p-len 0)
-          k (byte-array klen)]
-      (.getBytes (UnsafeBuffer. (.address p-k) klen) 0 k)
-      k)))
+    (let [p-len ^Pointer (allocate-pointer-to-pointer)
+          p-k (.rocksdb_iter_key rocksdb i p-len)]
+      (pointer+len->bytes p-k p-len))))
 
 (defrecord RocksJNRKvIterator [^Pointer i]
   kv/KvIterator
   (seek [this k]
     (let [k ^bytes k
           klen (alength k)
-          p-key (Memory/allocateDirect rt klen)]
-      (.putBytes (UnsafeBuffer. (.address p-key) klen) 0 k)
-      (.rocksdb_iter_seek rocksdb i p-key klen)
-      (iterator->key i)))
+          p-key ^Pointer (allocate-buffer klen)]
+      (try
+        (.putBytes (UnsafeBuffer. (.address p-key) klen) 0 k)
+        (.rocksdb_iter_seek rocksdb i p-key klen)
+        (iterator->key i)
+        (finally
+          (deallocate-buffer p-key)))))
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
     (iterator->key i))
 
   (value [this]
-    (let [p-len (Memory/allocateTemporary rt NativeType/ULONG)
-          p-v (.rocksdb_iter_value rocksdb i p-len)
-          vlen (.getInt p-len 0)
-          v (byte-array vlen)]
-      (.getBytes (UnsafeBuffer. (.address p-v) vlen) 0 v)
-      v))
+    (let [p-len ^Pointer (allocate-pointer-to-pointer)
+          p-v (.rocksdb_iter_value rocksdb i p-len)]
+      (pointer+len->bytes p-v p-len)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465

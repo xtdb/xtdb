@@ -125,19 +125,20 @@
             ks (vec (for [n (range n)]
                       (.getBytes (format "%020x" n))))]
         (t/is (= n (count ks)))
+        (println "Writing")
         (time
          (kv/store f/*kv* (for [k ks]
                             [k k])))
 
-        (dotimes [_ 3]
-          (time
-           (with-open [snapshot (kv/new-snapshot f/*kv*)
-                       i (kv/new-iterator snapshot)]
-             (dotimes [idx n]
-               (let [idx (- (dec n) idx)
-                     k (get ks idx)]
-                 (kv/seek i k)
-                 (kv/value i)
-                 #_(assert (bu/bytes=? k (kv/seek i k)))
-                 #_(assert (bu/bytes=? k (kv/value i))))))))))
+        (println "Reading")
+        (time
+         (dotimes [_ 10]
+           (time
+            (with-open [snapshot (kv/new-snapshot f/*kv*)
+                        i (kv/new-iterator snapshot)]
+              (dotimes [idx n]
+                (let [idx (- (dec n) idx)
+                      k (get ks idx)]
+                  (assert (bu/bytes=? k (kv/seek i k)))
+                  (assert (bu/bytes=? k (kv/value i)))))))))))
     (t/is true)))
