@@ -1,5 +1,6 @@
 * <<index.adoc#,Home>>
 * <<user_guide.adoc#,User Guide>>
 * <<deployment.adoc#,Deployment>>
+* <<query.adoc#,Query>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<faq.adoc#,FAQ>>

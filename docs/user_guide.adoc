@@ -1,4 +1,4 @@
-= User Guide
+= Getting Started
 
 == Project Dependency
 
@@ -22,9 +22,9 @@ juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
 Note, that depending on your setup, other dependencies will be
 required as described in this guide.
 
-== Hello World
+== Standalone
 
-This guide contains for steps for a simple Hello World with Crux.
+Using Crux standalone is the best way to get started. This guide contains simple steps transacting some data and running a simple query.
 
 === Start a REPL
 
@@ -178,40 +178,6 @@ include::../dev/dev.clj[tags=dev-system]
 ----
 <1> The Crux components being started all implement `java.io.Closeable`. The code above contains rudimentrary setup for managing life-cycled components - it should be straightforward to make use of a library such as https://github.com/stuartsierra/component[Component] or https://github.com/weavejester/integrant[Integrant].
 <2> You could modify this, if you want to run Kafka outside the local process.
-
-== Query
-
-Crux query capability is easiest summarized via an example:
-
-[source,clj]
-----
-(q/q db
-    '{:find  [?e2]
-      :where [(follow ?e1 ?e2)]
-      :args [{:?e1 :1}]
-      :rules [[(follow ?e1 ?e2)
-              [?e1 :follow ?e2]]
-             [(follow ?e1 ?e2)
-              [?e1 :follow ?t]
-              (follow ?t ?e2)]]})
-----
-
-The `db` is retrieved via a call to `crux.query/db` which optionally
-takes business and transaction time. The call will block until the local
-index has seen the transaction time, if provided. The `crux.query/q`
-takes 2 or 3 arguments, `db` and `q` but also optionally a `snapshot`
-which is already opened and managed by the caller (using `with-open` for
-example). This version of the call returns a lazy sequence of the
-results, while the other verision provides a set. A snapshot can be
-retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
-
-The `:args` key contains a relation where each map is expected to have
-the same keys. These keys are turned into logic variable symbols and the
-relation is joined with the rest of the query. The elements must
-implement `Comparable`.
-
-Crux does not support variables in the attribute position. The entity
-position is hard coded to mean the `:crux.db/id` field.
 
 == Transactions
 
