@@ -119,26 +119,28 @@
 
 (t/deftest test-performance
   (if (System/getenv "CRUX_RUN_KV_PERFORMANCE")
-    (when-not (= "crux.kv.memdb.MemKv"  f/*kv-backend*)
-      (prn f/*kv-backend*)
-      (let [n 1000000
-            ks (vec (for [n (range n)]
-                      (.getBytes (format "%020x" n))))]
-        (t/is (= n (count ks)))
-        (println "Writing")
-        (time
-         (kv/store f/*kv* (for [k ks]
-                            [k k])))
+    (let [n 1000000
+          ks (vec (for [n (range n)]
+                    (.getBytes (format "%020x" n))))]
+      (t/is (= n (count ks)))
+      (println f/*kv-backend*)
 
-        (println "Reading")
-        (time
-         (dotimes [_ 10]
-           (time
-            (with-open [snapshot (kv/new-snapshot f/*kv*)
-                        i (kv/new-iterator snapshot)]
-              (dotimes [idx n]
-                (let [idx (- (dec n) idx)
-                      k (get ks idx)]
-                  (assert (bu/bytes=? k (kv/seek i k)))
-                  (assert (bu/bytes=? k (kv/value i)))))))))))
+      (System/gc)
+      (println "Writing")
+      (time
+       (kv/store f/*kv* (for [k ks]
+                          [k k])))
+
+      (System/gc)
+      (println "Reading")
+      (time
+       (dotimes [_ 10]
+         (time
+          (with-open [snapshot (kv/new-snapshot f/*kv*)
+                      i (kv/new-iterator snapshot)]
+            (dotimes [idx n]
+              (let [idx (- (dec n) idx)
+                    k (get ks idx)]
+                (assert (bu/bytes=? k (kv/seek i k)))
+                (assert (bu/bytes=? k (kv/value i))))))))))
     (t/is true)))
