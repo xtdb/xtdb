@@ -6,7 +6,9 @@
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
 
-  (->off-heap ^DirectBuffer [this]))
+  (->off-heap ^DirectBuffer [this])
+
+  (off-heap? [this]))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))
@@ -17,6 +19,9 @@
     (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
       (.putBytes b 0 this)
       b))
+
+  (off-heap? [this]
+    false)
 
   DirectBuffer
   (->on-heap [this]
@@ -29,11 +34,14 @@
         bytes)))
 
   (->off-heap [this]
-    (if (or (some-> (.byteBuffer this) (.isDirect))
-            (and (nil? (.byteArray this))
-                 (nil? (.byteBuffer this))))
+    (if (off-heap? this)
       this
       (->off-heap (->on-heap this))))
+
+  (off-heap? [this]
+    (or (some-> (.byteBuffer this) (.isDirect))
+        (and (nil? (.byteArray this))
+             (nil? (.byteBuffer this)))))
 
   ByteBuffer
   (->on-heap [this]
@@ -47,4 +55,7 @@
   (->off-heap [this]
     (if (.isDirect this)
       (UnsafeBuffer. this (.position this) (.remaining this))
-      (->off-heap (->on-heap this)))))
+      (->off-heap (->on-heap this))))
+
+  (off-heap? [this]
+    (.isDirect this)))
