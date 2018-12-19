@@ -4,7 +4,8 @@
             [crux.byte-utils :as bu]
             [crux.fixtures :as f]
             [crux.kv :as kv]
-            [crux.io :as cio])
+            [crux.io :as cio]
+            [criterium.core :as crit])
   (:import [java.io Closeable]))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
@@ -125,13 +126,13 @@
       (t/is (= n (count ks)))
       (println f/*kv-backend*)
 
-      (System/gc)
+      (crit/force-gc)
       (println "Writing")
       (time
        (kv/store f/*kv* (for [k ks]
                           [k k])))
 
-      (System/gc)
+      (crit/force-gc)
       (println "Reading")
       (time
        (dotimes [_ 10]
