@@ -6,7 +6,9 @@
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
 
-  (->off-heap ^DirectBuffer [this])
+  (->off-heap
+    ^MutableDirectBuffer [this]
+    ^MutableDirectBuffer [this ^MutableDirectBuffer to])
 
   (off-heap? [this]))
 
@@ -17,8 +19,11 @@
 
   (->off-heap [this]
     (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
-      (.putBytes b 0 this)
-      b))
+      (->off-heap this b)))
+
+  (->off-heap [this ^MutableDirectBuffer to]
+    (doto to
+      (.putBytes 0 this)))
 
   (off-heap? [this]
     false)
@@ -36,9 +41,11 @@
   (->off-heap [this]
     (if (off-heap? this)
       this
-      (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
-        (.putBytes b 0 this 0 (.capacity this))
-        b)))
+      (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this))))))
+
+  (->off-heap [this ^MutableDirectBuffer to]
+    (doto to
+      (.putBytes 0 this 0 (.capacity this))))
 
   (off-heap? [this]
     (or (some-> (.byteBuffer this) (.isDirect))
@@ -57,8 +64,11 @@
   (->off-heap [this]
     (if (.isDirect this)
       (UnsafeBuffer. this (.position this) (.remaining this))
-      (doto (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this)))
-        (.putBytes 0 this (.position this) (.remaining this)))))
+      (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this))))))
+
+  (->off-heap [this ^MutableDirectBuffer to]
+    (doto to
+      (.putBytes 0 this (.position this) (.remaining this))))
 
   (off-heap? [this]
     (.isDirect this)))
