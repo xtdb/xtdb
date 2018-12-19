@@ -23,7 +23,7 @@
 ;; end::submit-tx[]
 
 ;; tag::query[]
-(require '[crux.query :as query])
+(require '[crux.query :as q])
 
 (q/q (q/db (:kv-store system))
      '{:find [e]

@@ -38,7 +38,7 @@ NOTE: TODO: rewrite this bit to use the Java API via Clojure interop
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=start-system]
+include::./examples.clj[tags=start-system]
 ----
 
 For the purposes of this Hello World, we are using the simplest
@@ -49,28 +49,28 @@ You can later stop the system if you wish:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=close-system]
+include::./examples.clj[tags=close-system]
 ----
 
 === Write a transaction:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=submit-tx]
+include::./examples.clj[tags=submit-tx]
 ----
 
 === Make a query:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=query]
+include::./examples.clj[tags=query]
 ----
 
 You should get:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=should-get]
+include::./examples.clj[tags=should-get]
 ----
 
 == Setup Kafka
@@ -99,14 +99,14 @@ See the below example code:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=ek-example]
+include::./examples.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=ek-close]
+include::./examples.clj[tags=ek-close]
 ----
 
 == Crux Node
@@ -123,14 +123,14 @@ org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=ln-example]
+include::./examples.clj[tags=ln-example]
 ----
 
 As per usual, you can close the local node when you're finished:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=ln-close]
+include::./examples.clj[tags=ln-close]
 ----
 
 
