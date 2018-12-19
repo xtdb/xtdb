@@ -10,7 +10,9 @@
     ^MutableDirectBuffer [this]
     ^MutableDirectBuffer [this ^MutableDirectBuffer to])
 
-  (off-heap? [this]))
+  (off-heap? [this])
+
+  (capacity [this]))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))
@@ -23,10 +25,13 @@
 
   (->off-heap [this ^MutableDirectBuffer to]
     (doto to
-      (.putBytes 0 this)))
+      (.putBytes 0 ^bytes this)))
 
   (off-heap? [this]
     false)
+
+  (capacity [this]
+    (alength ^bytes this))
 
   DirectBuffer
   (->on-heap [this]
@@ -52,6 +57,9 @@
         (and (nil? (.byteArray this))
              (nil? (.byteBuffer this)))))
 
+  (capacity [this]
+    (.capacity this))
+
   ByteBuffer
   (->on-heap [this]
     (if (and (.hasArray this)
@@ -71,4 +79,7 @@
       (.putBytes 0 this (.position this) (.remaining this))))
 
   (off-heap? [this]
-    (.isDirect this)))
+    (.isDirect this))
+
+  (capacity [this]
+    (.remaining this)))
