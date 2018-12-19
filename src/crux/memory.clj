@@ -36,7 +36,9 @@
   (->off-heap [this]
     (if (off-heap? this)
       this
-      (->off-heap (->on-heap this))))
+      (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
+        (.putBytes b 0 this 0 (.capacity this))
+        b)))
 
   (off-heap? [this]
     (or (some-> (.byteBuffer this) (.isDirect))
@@ -49,13 +51,14 @@
              (= (.remaining this)
                 (alength (.array this))))
       (.array this)
-      (doto (byte-array (.remaining this))
+     (doto (byte-array (.remaining this))
         (->> (.get this)))))
 
   (->off-heap [this]
     (if (.isDirect this)
       (UnsafeBuffer. this (.position this) (.remaining this))
-      (->off-heap (->on-heap this))))
+      (doto (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this)))
+        (.putBytes 0 this (.position this) (.remaining this)))))
 
   (off-heap? [this]
     (.isDirect this)))
