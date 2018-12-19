@@ -427,12 +427,19 @@
 
 (defrecord VarBinding [e-var var attr result-index join-depth result-name type value?])
 
-(defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index join-depth vars]
+;; NOTE: result-index is the index into join keys, it's the var's
+;; position into vars-in-join-order. The join-depth is the depth at
+;; which the var can first be accessed, that is, its e-var have had at
+;; least one participating clause fully joined and is part of the
+;; active result tuple. That is, its v-var, not necessarily this var,
+;; has been joined as well. There are subtleties to this, so take this
+;; explanation with a grain of salt.
+(defn- build-var-bindings [var->attr v-var->e e->v-var var->values-result-index max-join-depth vars]
   (->> (for [var vars
              :let [e (get v-var->e var var)
                    join-depth (or (max (long (get var->values-result-index e -1))
                                        (long (get var->values-result-index (get e->v-var e) -1)))
-                                  (dec (long join-depth)))
+                                  (dec (long max-join-depth)))
                    result-index (get var->values-result-index var)]]
          [var (map->VarBinding
                {:e-var e
