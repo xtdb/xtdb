@@ -9,7 +9,7 @@
             [crux.io :as cio]
             [crux.kv :as kv])
   (:import java.io.Closeable
-           org.agrona.ExpandableDirectByteBuffer
+           [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
            org.rocksdb.util.Environment
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
@@ -54,12 +54,12 @@
 
   (^jnr.ffi.Pointer rocksdb_writebatch_create [])
   (^void rocksdb_writebatch_put [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} b
-                                 ^{jnr.ffi.annotations.In true :tag bytes} key
+                                 ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} key
                                  ^{jnr.ffi.types.size_t true :tag long} klen
-                                 ^{jnr.ffi.annotations.In true  :tag bytes} val
+                                 ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} val
                                  ^{jnr.ffi.types.size_t true :tag long} vlen])
   (^void rocksdb_writebatch_delete [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} b
-                                    ^{jnr.ffi.annotations.In true :tag bytes} key
+                                    ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} key
                                     ^{jnr.ffi.types.size_t true :tag long} klen])
   (^void rocksdb_writebatch_destroy [^jnr.ffi.Pointer opt])
 
@@ -102,7 +102,7 @@
 (def ^:private ^RocksDB rocksdb)
 (def ^:private ^jnr.ffi.Runtime rt)
 
-(defn- init-rockdb-jnr! []
+(defn- init-rocksdb-jnr! []
   (when-not (bound? #'rocksdb)
     (alter-var-root #'rocksdb (constantly
                                 (load-rocksdb-native-lib)))
@@ -118,27 +118,26 @@
     (.rocksdb_iter_get_error rocksdb i errptr)
     (check-error errptr)))
 
-(defn- pointer+len->bytes [^Pointer address ^Pointer len-out]
+(defn- pointer+len->bytes ^bytes [^Pointer address ^Pointer len-out]
   (let [len (.getInt len-out 0)
         b (byte-array len)]
     (.getBytes (UnsafeBuffer. (.address address) len) 0 b)
     b))
 
-(defn- iterator->key [^Pointer i ^Pointer len-out]
+(defn- iterator->key ^bytes [^Pointer i ^Pointer len-out]
   (when (= 1 (.rocksdb_iter_valid rocksdb i))
     (let [p-k (.rocksdb_iter_key rocksdb i len-out)]
       (pointer+len->bytes p-k len-out))))
 
+(defn- bytes->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b ^bytes bs]
+  (.putBytes b 0 bs)
+  (Pointer/wrap rt (.addressOffset b) (alength bs)))
+
 (defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
   (seek [this k]
-    (let [k ^bytes k
-          klen (alength k)
-          k-b (doto eb
-                (.putBytes 0 k))
-          p-k (Pointer/wrap rt (.addressOffset k-b) (.capacity k-b))]
-      (.rocksdb_iter_seek rocksdb i p-k klen)
-      (iterator->key i len-out)))
+    (.rocksdb_iter_seek rocksdb i (bytes->pointer eb k) (alength ^bytes k))
+    (iterator->key i len-out))
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
@@ -179,7 +178,7 @@
   kv/KvStore
   (open [this {:keys [db-dir
                       crux.kv.rocksdb.jnr/db-options] :as options}]
-    (init-rockdb-jnr!)
+    (init-rocksdb-jnr!)
     (s/assert ::options options)
     (let [opts (.rocksdb_options_create rocksdb)
           _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
@@ -215,10 +214,12 @@
 
   (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
     (let [wb (.rocksdb_writebatch_create rocksdb)
-          errptr-out (make-array String 1)]
+          errptr-out (make-array String 1)
+          kb (ExpandableDirectByteBuffer.)
+          vb (ExpandableDirectByteBuffer.)]
       (try
         (doseq [[^bytes k ^bytes v] kvs]
-          (.rocksdb_writebatch_put rocksdb wb k (alength k) v (alength v)))
+          (.rocksdb_writebatch_put rocksdb wb (bytes->pointer kb k) (alength k) (bytes->pointer vb v) (alength v)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
@@ -226,10 +227,11 @@
 
   (delete [{:keys [^Pointer db ^Pointer write-options]} ks]
     (let [wb (.rocksdb_writebatch_create rocksdb)
-          errptr-out (make-array String 1)]
+          errptr-out (make-array String 1)
+          kb (ExpandableDirectByteBuffer.)]
       (try
         (doseq [^bytes k ks]
-          (.rocksdb_writebatch_delete rocksdb wb k (alength k)))
+          (.rocksdb_writebatch_delete rocksdb wb (bytes->pointer kb k) (alength k)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
