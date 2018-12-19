@@ -9,53 +9,81 @@
             [crux.io :as cio]
             [crux.kv :as kv])
   (:import java.io.Closeable
-           java.util.function.Supplier
+           org.agrona.ExpandableDirectByteBuffer
            org.agrona.concurrent.UnsafeBuffer
            org.rocksdb.util.Environment
-           [jnr.ffi LibraryLoader Memory Pointer]))
+           [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface RocksDB
   (^jnr.ffi.Pointer rocksdb_options_create [])
-  (^void rocksdb_options_set_create_if_missing [^jnr.ffi.Pointer opt ^byte v])
-  (^void rocksdb_options_set_compression [^jnr.ffi.Pointer opt ^int t])
-  (^void rocksdb_options_destroy [^jnr.ffi.Pointer opt])
+  (^void rocksdb_options_set_create_if_missing [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                                ^byte v])
+  (^void rocksdb_options_set_compression [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                          ^int t])
+  (^void rocksdb_options_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
 
   (^jnr.ffi.Pointer rocksdb_writeoptions_create [])
-  (^void rocksdb_writeoptions_disable_WAL [^jnr.ffi.Pointer opt ^byte disable])
-  (^void rocksdb_writeoptions_destroy [^jnr.ffi.Pointer opt])
+  (^void rocksdb_writeoptions_disable_WAL [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                           ^byte disable])
+  (^void rocksdb_writeoptions_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
 
-  (^jnr.ffi.Pointer rocksdb_open [^jnr.ffi.Pointer options ^String name ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
-  (^String rocksdb_property_value [^jnr.ffi.Pointer db ^String propname])
-  (^void rocksdb_write [^jnr.ffi.Pointer db ^jnr.ffi.Pointer options ^jnr.ffi.Pointer batch ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^jnr.ffi.Pointer rocksdb_open [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
+                                  ^{jnr.ffi.annotations.In true :tag String} name
+                                  ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^String rocksdb_property_value [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                                   ^{jnr.ffi.annotations.In true :tag String} propname])
+  (^void rocksdb_write [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
+                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} batch
+                        ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_close [^jnr.ffi.Pointer db])
 
-  (^jnr.ffi.Pointer rocksdb_checkpoint_object_create [^jnr.ffi.Pointer db ^"[Ljava.lang.String;" errptr])
-  (^void rocksdb_checkpoint_create [^jnr.ffi.Pointer checkpoint ^String checkpoint_dir ^{jnr.ffi.types.u_int64_t true :tag long} log_size_for_flush ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^jnr.ffi.Pointer rocksdb_checkpoint_object_create [^jnr.ffi.Pointer db
+                                                      ^"[Ljava.lang.String;" errptr])
+  (^void rocksdb_checkpoint_create [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} checkpoint
+                                    ^{jnr.ffi.annotations.In true :tag String} checkpoint_dir
+                                    ^{jnr.ffi.types.u_int64_t true :tag long} log_size_for_flush
+                                    ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_checkpoint_object_destroy [^jnr.ffi.Pointer checkpoint])
 
   (^jnr.ffi.Pointer rocksdb_create_snapshot [^jnr.ffi.Pointer db])
-  (^void rocksdb_release_snapshot [^jnr.ffi.Pointer db ^jnr.ffi.Pointer snapshot])
+  (^void rocksdb_release_snapshot [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                                   ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} snapshot])
 
   (^jnr.ffi.Pointer rocksdb_writebatch_create [])
-  (^void rocksdb_writebatch_put [^jnr.ffi.Pointer b ^{jnr.ffi.annotations.In true :tag bytes} key ^{jnr.ffi.types.size_t true :tag long} klen ^{jnr.ffi.annotations.In true  :tag bytes} val ^{jnr.ffi.types.size_t true :tag long} vlen])
-  (^void rocksdb_writebatch_delete [^jnr.ffi.Pointer b ^{jnr.ffi.annotations.In true :tag bytes} key ^{jnr.ffi.types.size_t true :tag long} klen])
+  (^void rocksdb_writebatch_put [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} b
+                                 ^{jnr.ffi.annotations.In true :tag bytes} key
+                                 ^{jnr.ffi.types.size_t true :tag long} klen
+                                 ^{jnr.ffi.annotations.In true  :tag bytes} val
+                                 ^{jnr.ffi.types.size_t true :tag long} vlen])
+  (^void rocksdb_writebatch_delete [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} b
+                                    ^{jnr.ffi.annotations.In true :tag bytes} key
+                                    ^{jnr.ffi.types.size_t true :tag long} klen])
   (^void rocksdb_writebatch_destroy [^jnr.ffi.Pointer opt])
 
   (^jnr.ffi.Pointer rocksdb_readoptions_create [])
-  (^void rocksdb_readoptions_set_snapshot [^jnr.ffi.Pointer opt ^jnr.ffi.Pointer snap])
-  (^void rocksdb_readoptions_set_pin_data [^jnr.ffi.Pointer opt ^byte v])
-  (^void rocksdb_readoptions_destroy [^jnr.ffi.Pointer opt])
+  (^void rocksdb_readoptions_set_snapshot [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                           ^jnr.ffi.Pointer snap])
+  (^void rocksdb_readoptions_set_pin_data [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                           ^byte v])
+  (^void rocksdb_readoptions_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
 
-  (^jnr.ffi.Pointer rocksdb_create_iterator [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options])
+  (^jnr.ffi.Pointer rocksdb_create_iterator [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                                             ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options])
   (^byte rocksdb_iter_valid [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter])
   (^void rocksdb_iter_next [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter])
-  (^void rocksdb_iter_seek [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} k ^{jnr.ffi.types.size_t true  :tag long} klen])
-  (^jnr.ffi.Pointer rocksdb_iter_key [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} klen])
-  (^jnr.ffi.Pointer rocksdb_iter_value [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} vlen])
-  (^void rocksdb_iter_get_error [^jnr.ffi.Pointer iter ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
-  (^void rocksdb_iter_destroy [^jnr.ffi.Pointer iter]))
+  (^void rocksdb_iter_seek [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter
+                            ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} k
+                            ^{jnr.ffi.types.size_t true  :tag long} klen])
+  (^jnr.ffi.Pointer rocksdb_iter_key [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter
+                                      ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} klen])
+  (^jnr.ffi.Pointer rocksdb_iter_value [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter
+                                        ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} vlen])
+  (^void rocksdb_iter_get_error [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter
+                                 ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^void rocksdb_iter_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter]))
 
 (defn- extract-rocksdb-native-lib [to-dir]
   (let [lib-name (Environment/getJniLibraryFileName "rocksdb")
@@ -71,74 +99,54 @@
         f (extract-rocksdb-native-lib tmp)]
     (.load (LibraryLoader/create RocksDB) (str f))))
 
-(defn- check-error [errptr]
-  (when-let [error (first errptr)]
-    (throw (RuntimeException. (str error)))))
+(def ^:private ^RocksDB rocksdb)
+(def ^:private ^jnr.ffi.Runtime rt)
 
-(def ^RocksDB rocksdb (load-rocksdb-native-lib))
-(def ^jnr.ffi.Runtime rt (jnr.ffi.Runtime/getRuntime rocksdb))
+(defn- init-rockdb-jnr! []
+  (when-not (bound? #'rocksdb)
+    (alter-var-root #'rocksdb (constantly
+                                (load-rocksdb-native-lib)))
+    (alter-var-root #'rt (constantly
+                           (jnr.ffi.Runtime/getRuntime rocksdb)))))
+
+(defn- check-error [errptr-out]
+  (when-let [error (first errptr-out)]
+    (throw (RuntimeException. (str error)))))
 
 (defn- check-iterator-error [^Pointer i]
   (let [errptr (make-array String 1)]
     (.rocksdb_iter_get_error rocksdb i errptr)
     (check-error errptr)))
 
-(def ^:private ^ThreadLocal pointer-to-pointer (ThreadLocal/withInitial
-                                                (reify Supplier
-                                                  (get [_]
-                                                    (Memory/allocateDirect rt Long/BYTES)))))
-
-(defn- allocate-pointer-to-pointer ^Pointer []
-  (.get pointer-to-pointer))
-
-(def ^:private ^ThreadLocal buffer-pool (ThreadLocal/withInitial
-                                         (reify Supplier
-                                           (get [_]
-                                             (Memory/allocateDirect rt 32)))))
-
-(defn- allocate-buffer ^Pointer [^long size]
-  (let [buffer ^Pointer (.get buffer-pool)]
-    (if (and buffer (>= (.size buffer) size))
-      buffer
-      (let [buffer (Memory/allocateDirect rt (* (.size buffer) 2))]
-        (.set buffer-pool buffer)
-        (recur size)))))
-
-(defn- deallocate-buffer [^Pointer buffer])
-
-(defn- pointer+len->bytes [^Pointer address ^Pointer len]
-  (let [len (.getInt len 0)
+(defn- pointer+len->bytes [^Pointer address ^Pointer len-out]
+  (let [len (.getInt len-out 0)
         b (byte-array len)]
     (.getBytes (UnsafeBuffer. (.address address) len) 0 b)
     b))
 
-(defn- iterator->key [^Pointer i]
+(defn- iterator->key [^Pointer i ^Pointer len-out]
   (when (= 1 (.rocksdb_iter_valid rocksdb i))
-    (let [p-len ^Pointer (allocate-pointer-to-pointer)
-          p-k (.rocksdb_iter_key rocksdb i p-len)]
-      (pointer+len->bytes p-k p-len))))
+    (let [p-k (.rocksdb_iter_key rocksdb i len-out)]
+      (pointer+len->bytes p-k len-out))))
 
-(defrecord RocksJNRKvIterator [^Pointer i]
+(defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
   (seek [this k]
     (let [k ^bytes k
           klen (alength k)
-          p-key ^Pointer (allocate-buffer klen)]
-      (try
-        (.putBytes (UnsafeBuffer. (.address p-key) klen) 0 k)
-        (.rocksdb_iter_seek rocksdb i p-key klen)
-        (iterator->key i)
-        (finally
-          (deallocate-buffer p-key)))))
+          k-b (doto eb
+                (.putBytes 0 k))
+          p-k (Pointer/wrap rt (.addressOffset k-b) (.capacity k-b))]
+      (.rocksdb_iter_seek rocksdb i p-k klen)
+      (iterator->key i len-out)))
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
-    (iterator->key i))
+    (iterator->key i len-out))
 
   (value [this]
-    (let [p-len ^Pointer (allocate-pointer-to-pointer)
-          p-v (.rocksdb_iter_value rocksdb i p-len)]
-      (pointer+len->bytes p-v p-len)))
+    (let [p-v (.rocksdb_iter_value rocksdb i len-out)]
+      (pointer+len->bytes p-v len-out)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
@@ -151,7 +159,9 @@
 (defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot]
   kv/KvSnapshot
   (new-iterator [this]
-    (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)))
+    (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
+                          (ExpandableDirectByteBuffer.)
+                          (Memory/allocateTemporary rt NativeType/ULONG)))
 
   Closeable
   (close [_]
@@ -169,18 +179,19 @@
   kv/KvStore
   (open [this {:keys [db-dir
                       crux.kv.rocksdb.jnr/db-options] :as options}]
+    (init-rockdb-jnr!)
     (s/assert ::options options)
     (let [opts (.rocksdb_options_create rocksdb)
           _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
           _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
-          errptr (make-array String 1)
+          errptr-out (make-array String 1)
           db (try
                (let [db (.rocksdb_open rocksdb
                                        opts
                                        (.getAbsolutePath (doto (io/file db-dir)
                                                            (.mkdirs)))
-                                       errptr)]
-                 (check-error errptr)
+                                       errptr-out)]
+                 (check-error errptr-out)
                  db)
                (catch Throwable t
                  (.rocksdb_options_destroy rocksdb opts)
@@ -204,37 +215,37 @@
 
   (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
     (let [wb (.rocksdb_writebatch_create rocksdb)
-          errptr (make-array String 1)]
+          errptr-out (make-array String 1)]
       (try
         (doseq [[^bytes k ^bytes v] kvs]
           (.rocksdb_writebatch_put rocksdb wb k (alength k) v (alength v)))
-        (.rocksdb_write rocksdb db write-options wb errptr)
+        (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
-          (check-error errptr)))))
+          (check-error errptr-out)))))
 
   (delete [{:keys [^Pointer db ^Pointer write-options]} ks]
     (let [wb (.rocksdb_writebatch_create rocksdb)
-          errptr (make-array String 1)]
+          errptr-out (make-array String 1)]
       (try
         (doseq [^bytes k ks]
           (.rocksdb_writebatch_delete rocksdb wb k (alength k)))
-        (.rocksdb_write rocksdb db write-options wb errptr)
+        (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
-          (check-error errptr)))))
+          (check-error errptr-out)))))
 
   (backup [{:keys [^Pointer db]} dir]
-    (let [errptr (make-array String 1)
+    (let [errptr-out (make-array String 1)
           checkpoint (try
-                       (.rocksdb_checkpoint_object_create rocksdb db errptr)
+                       (.rocksdb_checkpoint_object_create rocksdb db errptr-out)
                        (finally
-                         (check-error errptr)))]
+                         (check-error errptr-out)))]
       (try
-        (.rocksdb_checkpoint_create rocksdb checkpoint (str dir) 0 errptr)
+        (.rocksdb_checkpoint_create rocksdb checkpoint (str dir) 0 errptr-out)
         (finally
           (.rocksdb_checkpoint_object_destroy rocksdb checkpoint)
-          (check-error errptr)))))
+          (check-error errptr-out)))))
 
   (count-keys [{:keys [^Pointer db]}]
     (-> (.rocksdb_property_value rocksdb db "rocksdb.estimate-num-keys")
