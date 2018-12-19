@@ -119,8 +119,8 @@
         (persistent! acc)))))
 
 (t/deftest test-performance
-  (if (and (System/getenv "CRUX_RUN_KV_PERFORMANCE")
-           (if-let [backend (System/getenv "CRUX_RUN_KV_PERFORMANCE_BACKEND")]
+  (if (and (System/getenv "CRUX_KV_PERFORMANCE")
+           (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
              (=  backend f/*kv-backend*)
              true))
     (let [n 1000000
