@@ -245,8 +245,8 @@
 
 (s/def ::server-port :crux.io/port)
 
-(s/def ::options (s/keys :req-un [:crux.kafka/bootstrap-servers
-                                  ::server-port]))
+(s/def ::options (s/keys :req-un [::server-port]
+                         :opt-un [:crux.kafka/bootstrap-servers]))
 
 (defrecord HTTPServer [^Server server options]
   Closeable
