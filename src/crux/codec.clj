@@ -1,5 +1,6 @@
 (ns crux.codec
   (:require [crux.byte-utils :as bu]
+            [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
            [java.io Closeable Writer]
@@ -218,15 +219,10 @@
   (id->bytes [this]
     nil-id-bytes))
 
-(defn- direct-buffer->bytes ^bytes [^DirectBuffer b]
-  (let [bytes (byte-array (.capacity b))]
-    (.getBytes b 0 bytes)
-    bytes))
-
 (deftype Id [^DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBytes
   (id->bytes [this]
-    (direct-buffer->bytes buffer))
+    (mem/->on-heap buffer))
 
   Object
   (toString [this]
