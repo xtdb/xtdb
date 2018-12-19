@@ -146,7 +146,7 @@
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
     {:triple [(assoc triple :v v-var)]
-     :pred [{:pred {:pred-fn identical? :args [v-var e]}}]
+     :pred [{:pred {:pred-fn = :args [v-var e]}}]
      :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
