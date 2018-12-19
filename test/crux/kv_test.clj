@@ -135,13 +135,15 @@
       (crit/force-gc)
       (println "Reading")
       (time
-       (dotimes [_ 10]
-         (time
-          (with-open [snapshot (kv/new-snapshot f/*kv*)
-                      i (kv/new-iterator snapshot)]
-            (dotimes [idx n]
-              (let [idx (- (dec n) idx)
-                    k (get ks idx)]
-                (assert (bu/bytes=? k (kv/seek i k)))
-                (assert (bu/bytes=? k (kv/value i))))))))))
+       (do (dotimes [_ 10]
+             (time
+              (with-open [snapshot (kv/new-snapshot f/*kv*)
+                          i (kv/new-iterator snapshot)]
+                (dotimes [idx n]
+                  (let [idx (- (dec n) idx)
+                        k (get ks idx)]
+                    (assert (bu/bytes=? k (kv/seek i k)))
+                    (assert (bu/bytes=? k (kv/value i))))))))
+           (println "Done")))
+      (println))
     (t/is true)))
