@@ -162,6 +162,9 @@ To see an example of a wired up embedded Crux, see an
 https://github.com/juxt/crux/blob/master/docs/example_system.clj[example
 Integrant system].
 
+NOTE: TODO, show how to actually use this system (transact and run
+queries).
+
 == Transactions
 
 The four transaction (write) operations are as follows:
