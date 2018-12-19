@@ -141,12 +141,11 @@
                                       > <=
                                       >= <})
 
-;; TODO: Not sure why, but using both a predicate and unification here
-;; is faster in general, guess it fires slightly differently.
 (defn- rewrite-self-join-triple-clause [{:keys [e v] :as triple}]
   (let [v-var (gensym (str "self-join_" v "_"))]
-    {:triple [(assoc triple :v v-var)]
-     :pred [{:pred {:pred-fn = :args [v-var e]}}]
+    {:triple [(with-meta
+                (assoc triple :v v-var)
+                {:self-join? true})]
      :unify [{:op '== :args [v-var e]}]}))
 
 (defn- normalize-clauses [clauses]
@@ -286,8 +285,11 @@
                                      (if (literal? v)
                                        e
                                        v)))
-        join-order (loop [join-order (concat literal-join-order arg-vars)
+        self-join-clauses (filter (comp :self-join? meta) triple-clauses)
+        self-join-vars (map :v self-join-clauses)
+        join-order (loop [join-order (concat literal-join-order arg-vars self-join-vars)
                           clauses (->> triple-clauses
+                                       (remove (set self-join-clauses))
                                        (remove (set literal-clauses)))]
                      (let [join-order-set (set join-order)
                            clause (first (or (seq (for [{:keys [e v] :as clause} clauses
@@ -794,6 +796,13 @@
       new-known-vars
       (recur new-known-vars pred-clauses))))
 
+(defn- build-v-var->e [triple-clauses var->values-result-index]
+  (->> (for [{:keys [e v] :as clause} triple-clauses
+             :when (logic-var? v)]
+         [v e])
+       (sort-by (comp var->values-result-index second))
+       (into {})))
+
 (defn- compile-sub-query [where arg-vars rule-name->rules stats]
   (let [where (expand-rules where rule-name->rules {})
         {triple-clauses :triple
@@ -810,11 +819,6 @@
                 unification-vars
                 pred-vars
                 pred-return-vars]} (collect-vars type->clauses)
-        v-var->e (->> (for [{:keys [e v] :as clause} triple-clauses
-                            :when (logic-var? v)]
-                        [v e])
-                      (into {}))
-        e->v-var (set/map-invert v-var->e)
         var->joins {}
         v-var->range-constraints (build-v-var-range-constraints e-vars range-clauses)
         v-range-vars (set (keys v-var->range-constraints))
@@ -840,6 +844,12 @@
                                                                             known-vars)
         or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
                                              or-join-clause+idx-id+or-branches)
+        join-depth (count var->joins)
+        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps)
+        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
+        var->values-result-index (zipmap vars-in-join-order (range))
+        v-var->e (build-v-var->e triple-clauses var->values-result-index)
+        e->v-var (set/map-invert v-var->e)
         v-var->attr (->> (for [{:keys [e a v]} triple-clauses
                                :when (and (logic-var? v)
                                           (= e (get v-var->e v)))]
@@ -847,10 +857,6 @@
                          (into {}))
         e-var->attr (zipmap e-vars (repeat :crux.db/id))
         var->attr (merge e-var->attr v-var->attr)
-        join-depth (count var->joins)
-        vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins arg-vars triple-join-deps)
-        arg-vars-in-join-order (filter (set arg-vars) vars-in-join-order)
-        var->values-result-index (zipmap vars-in-join-order (range))
         var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
                              (build-pred-return-var-bindings var->values-result-index pred-clauses)
                              (build-arg-var-bindings var->values-result-index arg-vars)
