@@ -7,6 +7,7 @@
            [java.nio ByteOrder ByteBuffer]
            java.security.MessageDigest
            [java.util Arrays Date UUID]
+           [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -217,17 +218,22 @@
   (id->bytes [this]
     nil-id-bytes))
 
-(deftype Id [^bytes bytes ^long offset ^:unsynchronized-mutable ^int hash-code]
+(defn- direct-buffer->bytes ^bytes [^DirectBuffer b]
+  (let [bytes (byte-array (.capacity b))]
+    (.getBytes b 0 bytes)
+    bytes))
+
+(deftype Id [^DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBytes
   (id->bytes [this]
-    (if (= id-size (alength bytes))
-      bytes
-      (Arrays/copyOfRange bytes offset (+ offset id-size))))
+    (direct-buffer->bytes buffer))
 
   Object
   (toString [this]
     (bu/bytes->hex
-     (Arrays/copyOfRange bytes (+ value-type-id-size offset) (+ offset id-size))))
+     (let [bytes (byte-array (- id-size value-type-id-size))]
+       (.getBytes buffer 1 bytes)
+       bytes)))
 
   (equals [this that]
     (or (identical? this that)
@@ -258,7 +264,7 @@
     id
     (let [bs (id->bytes id)]
       (assert (= id-size (alength bs)))
-      (Id. bs 0 0))))
+      (Id. (UnsafeBuffer. bs) 0))))
 
 (defn valid-id? [x]
   (try
@@ -276,24 +282,44 @@
 (nippy/extend-thaw
  :crux.codec/id
  [data-input]
- (Id. (doto (byte-array id-size)
-        (->> (.readFully data-input)))
-      0
+ (Id. (UnsafeBuffer.
+       (doto (byte-array id-size)
+         (->> (.readFully data-input))))
       0))
 
+(defn encode-doc-key-to ^MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
+  (assert (= id-size (.capacity content-hash)))
+  (doto b
+    (.putByte 0 content-hash->doc-index-id)
+    (.putBytes index-id-size content-hash 0 (.capacity content-hash))))
+
 (defn encode-doc-key ^bytes [^bytes content-hash]
-  (assert (= id-size (alength content-hash)))
-  (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
-    (.putByte ub 0 content-hash->doc-index-id)
-    (.putBytes ub index-id-size content-hash)
-    (.byteArray ub)))
+  (.byteArray (encode-doc-key-to (UnsafeBuffer. (byte-array (+ index-id-size id-size)))
+                                 (UnsafeBuffer. content-hash))))
+
+(defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
+  (assert (= (+ index-id-size id-size) (.capacity k)))
+  (let [index-id (.getByte k 0)]
+    (assert (= content-hash->doc-index-id index-id))
+    (Id. (UnsafeBuffer. k index-id-size id-size) 0)))
 
 (defn decode-doc-key ^crux.codec.Id [^bytes k]
-  (assert (= (+ index-id-size id-size) (alength k)))
-  (let [ub (UnsafeBuffer. k)
-        index-id (.getByte ub 0)]
-    (assert (= content-hash->doc-index-id index-id))
-    (Id. k index-id-size 0)))
+  (decode-doc-key-from (UnsafeBuffer. k)))
+
+(defn encode-attribute+value+entity+content-hash-key-to
+  ^org.agrona.MutableDirectBuffer
+  [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
+  (assert (= id-size (.capacity attr)))
+  (assert (or (= id-size (.capacity entity))
+              (zero? (.capacity entity))))
+  (assert (or (= id-size (.capacity content-hash))
+              (zero? (.capacity content-hash))))
+  (doto b
+    (.putByte 0 attribute+value+entity+content-hash-index-id)
+    (.putBytes index-id-size attr 0 (.capacity attr))
+    (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
+    (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
+    (.putBytes (+ index-id-size id-size (.capacity v) (.capacity entity)) content-hash 0 (.capacity content-hash))))
 
 (defn encode-attribute+value+entity+content-hash-key
   (^bytes [^bytes attr]
@@ -303,33 +329,41 @@
   (^bytes [^bytes attr ^bytes v ^bytes entity]
    (encode-attribute+value+entity+content-hash-key attr v entity empty-byte-array))
   (^bytes [^bytes attr ^bytes v ^bytes entity ^bytes content-hash]
-   (assert (= id-size (alength attr)))
-   (assert (or (= id-size (alength entity))
-               (zero? (alength entity))))
-   (assert (or (= id-size (alength content-hash))
-               (zero? (alength content-hash))))
-   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength v) (alength entity) (alength content-hash))))]
-     (.putByte ub 0 attribute+value+entity+content-hash-index-id)
-     (.putBytes ub index-id-size attr)
-     (.putBytes ub (+ index-id-size id-size) v)
-     (.putBytes ub (+ index-id-size id-size (alength v)) entity)
-     (.putBytes ub (+ index-id-size id-size (alength v) (alength entity)) content-hash)
-     (.byteArray ub))))
+   (.byteArray (encode-attribute+value+entity+content-hash-key-to
+                (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength v) (alength entity) (alength content-hash))))
+                (UnsafeBuffer. attr) (UnsafeBuffer. v) (UnsafeBuffer. entity) (UnsafeBuffer. content-hash)))))
 
 (defrecord EntityValueContentHash [eid value content-hash])
 
+(defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from
+  ^crux.codec.EntityValueContentHash [^DirectBuffer k]
+  (assert (<= (+ index-id-size id-size id-size id-size) (.capacity k)))
+  (let [index-id (.getByte k 0)]
+    (assert (= attribute+value+entity+content-hash-index-id index-id))
+    (let [value-size (- (.capacity k) id-size id-size id-size index-id-size)
+          value (doto (byte-array value-size)
+                  (->> (.getBytes k (+ index-id-size id-size))))
+          entity (Id. (UnsafeBuffer. k (+ index-id-size id-size value-size) id-size) 0)
+          content-hash (Id. (UnsafeBuffer. k (+ index-id-size id-size value-size id-size) id-size) 0)]
+      (->EntityValueContentHash entity value content-hash))))
+
 (defn decode-attribute+value+entity+content-hash-key->value+entity+content-hash
   ^crux.codec.EntityValueContentHash [^bytes k]
-  (assert (<= (+ index-id-size id-size id-size id-size) (alength k)))
-  (let [ub (UnsafeBuffer. k)
-        index-id (.getByte ub 0)]
-    (assert (= attribute+value+entity+content-hash-index-id index-id))
-    (let [value-size (- (alength k) id-size id-size id-size index-id-size)
-          value (doto (byte-array value-size)
-                  (->> (.getBytes ub (+ index-id-size id-size))))
-          entity (Id. k (+ index-id-size id-size value-size) 0)
-          content-hash (Id. k (+ index-id-size id-size value-size id-size) 0)]
-      (->EntityValueContentHash entity value content-hash))))
+  (decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from (UnsafeBuffer. k)))
+
+(defn encode-attribute+entity+value+content-hash-key-to
+  ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer v ^DirectBuffer content-hash]
+  (assert (= id-size (.capacity attr)))
+  (assert (or (= id-size (.capacity entity))
+              (zero? (.capacity entity))))
+  (assert (or (= id-size (.capacity content-hash))
+              (zero? (.capacity content-hash))))
+  (doto b
+    (.putByte 0 attribute+entity+value+content-hash-index-id)
+    (.putBytes index-id-size attr 0 (.capacity attr))
+    (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
+    (.putBytes (+ index-id-size id-size (.capacity entity)) v 0 (.capacity v))
+    (.putBytes  (+ index-id-size id-size (.capacity entity) (.capacity v)) content-hash 0 (.capacity content-hash))))
 
 (defn encode-attribute+entity+value+content-hash-key
   (^bytes [^bytes attr]
@@ -339,37 +373,35 @@
   (^bytes [^bytes attr ^bytes entity ^bytes v]
    (encode-attribute+entity+value+content-hash-key attr entity v empty-byte-array))
   (^bytes [^bytes attr ^bytes entity ^bytes v ^bytes content-hash]
-   (assert (= id-size (alength attr)))
-   (assert (or (= id-size (alength entity))
-               (zero? (alength entity))))
-   (assert (or (= id-size (alength content-hash))
-               (zero? (alength content-hash))))
-   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength entity) (alength v) (alength content-hash))))]
-     (.putByte ub 0 attribute+entity+value+content-hash-index-id)
-     (.putBytes ub index-id-size attr)
-     (.putBytes ub (+ index-id-size id-size) entity)
-     (.putBytes ub (+ index-id-size id-size (alength entity)) v)
-     (.putBytes ub (+ index-id-size id-size (alength entity) (alength v)) content-hash)
-     (.byteArray ub))))
+   (.byteArray (encode-attribute+entity+value+content-hash-key-to
+                (UnsafeBuffer. (byte-array (+ index-id-size id-size (alength entity) (alength v) (alength content-hash))))
+                (UnsafeBuffer. attr) (UnsafeBuffer. entity) (UnsafeBuffer. v) (UnsafeBuffer. content-hash)))))
+
+(defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from
+  ^crux.codec.EntityValueContentHash [^DirectBuffer k]
+  (assert (<= (+ index-id-size id-size id-size) (.capacity k)))
+  (let [index-id (.getByte k 0)]
+    (assert (= attribute+entity+value+content-hash-index-id index-id))
+    (let [value-size (- (.capacity k) id-size id-size id-size index-id-size)
+          entity (Id. (UnsafeBuffer. k (+ index-id-size id-size) id-size) 0)
+          value (doto (byte-array value-size)
+                  (->> (.getBytes k (+ index-id-size id-size id-size))))
+          content-hash (Id. (UnsafeBuffer. k (+ index-id-size id-size id-size value-size) id-size) 0)]
+      (->EntityValueContentHash entity value content-hash))))
 
 (defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash
   ^crux.codec.EntityValueContentHash [^bytes k]
-  (assert (<= (+ index-id-size id-size id-size) (alength k)))
-  (let [ub (UnsafeBuffer. k)
-        index-id (.getByte ub 0)]
-    (assert (= attribute+entity+value+content-hash-index-id index-id))
-    (let [value-size (- (alength k) id-size id-size id-size index-id-size)
-          entity (Id. k (+ index-id-size id-size) 0)
-          value (doto (byte-array value-size)
-                  (->> (.getBytes ub (+ index-id-size id-size id-size))))
-          content-hash (Id. k (+ index-id-size id-size id-size value-size) 0)]
-      (->EntityValueContentHash entity value content-hash))))
+  (decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from (UnsafeBuffer. k)))
+
+(defn encode-meta-key-to ^MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
+  (assert (= id-size (.capacity k)))
+  (doto b
+    (.putByte 0 meta-key->value-index-id)
+    (.putBytes index-id-size k 0 (.capacity k))))
 
 (defn encode-meta-key ^bytes [^bytes k]
-  (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
-    (.putByte ub 0 meta-key->value-index-id)
-    (.putBytes ub index-id-size k)
-    (.byteArray ub)))
+  (.byteArray (encode-meta-key-to (UnsafeBuffer. (byte-array (+ index-id-size id-size)))
+                                  (UnsafeBuffer. k))))
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -377,30 +409,45 @@
 (defn- reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
+(defn encode-entity+bt+tt+tx-id-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (doto b
+     (.putByte 0 entity+bt+tt+tx-id->content-hash-index-id)))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity]
+   (assert (= id-size (.capacity entity)))
+   (doto b
+     (.putByte 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.putBytes index-id-size entity 0 (.capacity entity))))
+  (^org.agrona.MutableDirectBuffer [b entity business-time transact-time]
+   (encode-entity+bt+tt+tx-id-key-to entity business-time transact-time nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date business-time ^Date transact-time ^Long tx-id]
+   (assert (= id-size (.capacity entity)))
+   (doto b
+     (.putByte 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.putBytes index-id-size entity 0 (.capacity entity))
+     (.putLong (+ index-id-size id-size) (date->reverse-time-ms business-time) ByteOrder/BIG_ENDIAN)
+     (.putLong (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN))
+   (when tx-id
+     (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
+   b))
+
 (defn encode-entity+bt+tt+tx-id-key
   (^bytes []
-   (let [ub (UnsafeBuffer. (byte-array index-id-size))]
-     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
-     (.byteArray ub)))
+   (.byteArray (encode-entity+bt+tt+tx-id-key-to (UnsafeBuffer. (byte-array index-id-size)))))
   (^bytes [^bytes entity]
-   (assert (= id-size (alength entity)))
-   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size id-size)))]
-     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
-     (.putBytes ub index-id-size entity)
-     (.byteArray ub)))
+   (.byteArray (encode-entity+bt+tt+tx-id-key-to
+                (UnsafeBuffer. (byte-array (+ index-id-size id-size)))
+                (UnsafeBuffer. entity))))
   (^bytes [entity business-time transact-time]
    (encode-entity+bt+tt+tx-id-key entity business-time transact-time nil))
   (^bytes [^bytes entity ^Date business-time ^Date transact-time ^Long tx-id]
-   (assert (= id-size (alength entity)))
-   (let [ub (UnsafeBuffer. (byte-array (cond-> (+ index-id-size id-size Long/BYTES Long/BYTES)
-                                         tx-id (+ Long/BYTES))))]
-     (.putByte ub 0 entity+bt+tt+tx-id->content-hash-index-id)
-     (.putBytes ub index-id-size entity)
-     (.putLong ub (+ index-id-size id-size) (date->reverse-time-ms business-time) ByteOrder/BIG_ENDIAN)
-     (.putLong ub (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN)
-     (when tx-id
-       (.putLong ub (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
-     (.byteArray ub))))
+   (.byteArray (encode-entity+bt+tt+tx-id-key-to
+                (UnsafeBuffer. (byte-array (cond-> (+ index-id-size id-size Long/BYTES Long/BYTES)
+                                             tx-id (+ Long/BYTES))))
+                (UnsafeBuffer. entity)
+                business-time
+                transact-time
+                tx-id))))
 
 (defrecord EntityTx [eid bt tt tx-id content-hash]
   IdToBytes
@@ -420,16 +467,18 @@
  [data-input]
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
-(defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes k]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (alength k)))
-  (let [ub (UnsafeBuffer. k)
-        index-id (.getByte ub 0)]
+(defn decode-entity+bt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)))
+  (let [index-id (.getByte k 0)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. k index-id-size 0)
-          business-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
-          transact-time (reverse-time-ms->date (.getLong ub (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
-          tx-id (.getLong ub (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+    (let [entity (Id. (UnsafeBuffer. k index-id-size id-size) 0)
+          business-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
+          transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
+          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
       (->EntityTx entity business-time transact-time tx-id nil))))
+
+(defn decode-entity+bt+tt+tx-id-key ^crux.codec.EntityTx [^bytes k]
+  (decode-entity+bt+tt+tx-id-key-from (UnsafeBuffer. k)))
 
 (defn entity-tx->edn [{:keys [eid bt tt tx-id content-hash] :as entity-tx}]
   (when entity-tx
@@ -439,20 +488,32 @@
      :crux.tx/tx-id tx-id
      :crux.tx/tx-time tt}))
 
+(defn encode-tx-log-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (doto b
+    (.putByte 0 tx-id->tx-index-id)))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^long tx-id ^Date tx-time]
+   (doto b
+     (.putByte 0 tx-id->tx-index-id)
+     (.putLong index-id-size tx-id ByteOrder/BIG_ENDIAN)
+     (.putLong (+ index-id-size Long/BYTES) (.getTime tx-time) ByteOrder/BIG_ENDIAN))))
+
 (defn encode-tx-log-key
   (^bytes []
-   (byte-array [tx-id->tx-index-id]))
+   (.byteArray (encode-tx-log-key-to (UnsafeBuffer. (byte-array index-id-size)))))
   (^bytes [^long tx-id ^Date tx-time]
-   (let [ub (UnsafeBuffer. (byte-array (+ index-id-size Long/BYTES Long/BYTES)))]
-     (.putByte ub 0 tx-id->tx-index-id)
-     (.putLong ub index-id-size tx-id ByteOrder/BIG_ENDIAN)
-     (.putLong ub (+ index-id-size Long/BYTES) (.getTime tx-time) ByteOrder/BIG_ENDIAN)
-     (.byteArray ub))))
+   (.byteArray ^MutableDirectBuffer
+               (encode-tx-log-key-to
+                (UnsafeBuffer. (byte-array (+ index-id-size Long/BYTES Long/BYTES)))
+                tx-id
+                tx-time))))
+
+(defn decode-tx-log-key-from [^DirectBuffer k]
+  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)))
+  (let [index-id (.getByte k 0)]
+    (assert (= tx-id->tx-index-id index-id))
+    {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
+     :crux.tx/tx-time (Date. (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))
 
 (defn decode-tx-log-key [^bytes k]
-  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (alength k)))
-  (let [ub (UnsafeBuffer. k)
-        index-id (.getByte ub 0)]
-    (assert (= tx-id->tx-index-id index-id))
-    {:crux.tx/tx-id (.getLong ub index-id-size ByteOrder/BIG_ENDIAN)
-     :crux.tx/tx-time (Date. (.getLong ub (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))
+  (decode-tx-log-key-from (UnsafeBuffer. k)))
