@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.util.Comparator;
 import java.nio.ByteOrder;
 import org.agrona.DirectBuffer;
+import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 @SuppressWarnings("deprecation")
@@ -37,20 +38,26 @@ public class ByteUtils {
     }
 
     public static String bytesToHex(final byte[] bytes) {
-        final int maxOffset = bytes.length + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-        final char[] acc = new char[bytes.length << 1];
-        for (int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET,
+        return bufferToHex(new UnsafeBuffer(bytes));
+    }
+
+    public static String bufferToHex(final DirectBuffer buffer) {
+        final int maxOffset = buffer.capacity();
+        final long bufferOffset = buffer.addressOffset();
+        final byte[] byteArray = buffer.byteArray();
+        final char[] acc = new char[maxOffset << 1];
+        for (int i = 0,
                  j = sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
              i < maxOffset;
              i += Short.BYTES, j += Long.BYTES) {
             if (i == maxOffset - 1) {
-                final int b = UNSAFE.getByte(bytes, i);
+                final int b = UNSAFE.getByte(byteArray, i + bufferOffset);
                 UNSAFE.putInt(acc, j, UNSAFE.getInt(TWO_BYTES_TO_HEX,
                                                     ((b & 0xFF) << 3)
                                                     + (Character.BYTES << 1)
                                                     + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
             } else {
-                short s = UNSAFE.getShort(bytes, i);
+                short s = UNSAFE.getShort(byteArray, i + bufferOffset);
                 s = IS_LITTLE_ENDIAN ? Short.reverseBytes(s) : s;
                 UNSAFE.putLong(acc, j, UNSAFE.getLong(TWO_BYTES_TO_HEX,
                                                       ((s & 0xFFFF) << 3)
@@ -70,16 +77,22 @@ public class ByteUtils {
     }
 
     public static byte[] hexToBytes(final String s) {
+        return hexToBuffer(s, new UnsafeBuffer(new byte[s.length() >> 1])).byteArray();
+    }
+
+    public static MutableDirectBuffer hexToBuffer(final String s, MutableDirectBuffer buffer) {
         final int len = s.length();
-        final byte[] acc = new byte[len >> 1];
+        final byte[] acc = buffer.byteArray();
+        final long accOffset = buffer.addressOffset();
+
         for (int i = 0,
-                 j = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+                 j = 0;
              i < len;
              i += 2, j++) {
-            UNSAFE.putByte(acc, j, (byte) ((HEX_TO_NIBBLE[s.charAt(i)] << 4)
-                                           | HEX_TO_NIBBLE[s.charAt(i + 1)]));
+            UNSAFE.putByte(acc, accOffset + j, (byte) ((HEX_TO_NIBBLE[s.charAt(i)] << 4)
+                                                       | HEX_TO_NIBBLE[s.charAt(i + 1)]));
         }
-        return acc;
+        return buffer;
     }
 
     public static int compareBytes(final byte[] a, final byte[] b, final int maxLength) {
