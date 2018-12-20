@@ -8,7 +8,7 @@
            [java.nio ByteOrder ByteBuffer]
            java.security.MessageDigest
            [java.util Arrays Date UUID]
-           [org.agrona DirectBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableArrayBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -45,6 +45,13 @@
 (defprotocol ValueToBytes
   (value->bytes ^bytes [this]))
 
+(defprotocol IdToBuffer
+  (id->buffer ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to]))
+
+(defprotocol ValueToBuffer
+  (value->buffer ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to]))
+
+
 (def ^:private id-value-type-id 0)
 (def ^:private long-value-type-id 1)
 (def ^:private double-value-type-id 2)
@@ -71,94 +78,114 @@
         (prepend-value-type-id id-value-type-id))))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
-(extend-protocol ValueToBytes
+(extend-protocol ValueToBuffer
   (class (byte-array 0))
-  (value->bytes [this]
+  (value->buffer [this to]
     (throw (UnsupportedOperationException. "Byte arrays as values is not supported.")))
 
   Byte
-  (value->bytes [this]
-    (value->bytes (long this)))
+  (value->buffer [this to]
+    (value->buffer (long this) to))
 
   Short
-  (value->bytes [this]
-    (value->bytes (long this)))
+  (value->buffer [this to]
+    (value->buffer (long this) to))
 
   Integer
-  (value->bytes [this]
-    (value->bytes (long this)))
+  (value->buffer [this to]
+    (value->buffer (long this) to))
 
   Long
-  (value->bytes [this]
-    (let [ub (UnsafeBuffer. (byte-array (+ Long/BYTES value-type-id-size)))]
-      (.putByte ub 0 long-value-type-id)
-      (.putLong ub value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN)
-      (.byteArray ub)))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (UnsafeBuffer.
+     (doto to
+       (.putByte 0 long-value-type-id)
+       (.putLong value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN))
+     0
+     (+ value-type-id-size Long/BYTES)))
 
   Float
-  (value->bytes [this]
-    (value->bytes (double this)))
+  (value->buffer [this to]
+    (value->buffer (double this) to))
 
   Double
-  (value->bytes [this]
+  (value->buffer [this ^MutableDirectBuffer to]
     (let [l (Double/doubleToLongBits this)
-          l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))
-          ub (UnsafeBuffer. (byte-array (+ Long/BYTES value-type-id-size)))]
-      (.putByte ub 0 double-value-type-id)
-      (.putLong ub value-type-id-size l)
-      (.byteArray ub)))
+          l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
+      (UnsafeBuffer.
+       (doto to
+         (.putByte 0 double-value-type-id)
+         (.putLong value-type-id-size l))
+       0
+       (+ value-type-id-size Long/BYTES))))
 
   Date
-  (value->bytes [this]
-    (doto (value->bytes (.getTime this))
-      (aset 0 (byte date-value-type-id))))
+  (value->buffer [this ^MutableDirectBuffer to]
+    (doto (value->buffer (.getTime this) to)
+      (.putByte 0 (byte date-value-type-id))))
 
   Character
-  (value->bytes [this]
-    (value->bytes (str this)))
+  (value->buffer [this to]
+    (value->buffer (str this) to))
 
   String
-  (value->bytes [this]
+  (value->buffer [this ^MutableDirectBuffer to]
     (if (< max-string-index-length (count this))
-      (doto (id-function (nippy/fast-freeze this))
-        (aset 0 (byte object-value-type-id)))
+      (UnsafeBuffer.
+       (doto to
+         (.putBytes 0 (doto (id-function (nippy/fast-freeze this))
+                        (aset 0 (byte object-value-type-id)))))
+       0
+       id-size)
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
             ub-in (UnsafeBuffer. (.getBytes this "UTF-8"))
-            length (.capacity ub-in)
-            ub-out (UnsafeBuffer. (byte-array (+ value-type-id-size length terminate-mark-size)))]
-        (.putByte ub-out 0 string-value-type-id)
+            length (.capacity ub-in)]
+        (.putByte to 0 string-value-type-id)
         (loop [idx 0]
           (if (= idx length)
-            (do (.putByte ub-out (inc idx) terminate-mark)
-                (.byteArray ub-out))
+            (do (.putByte to (inc idx) terminate-mark)
+                (UnsafeBuffer. to 0 (+ length value-type-id-size terminate-mark-size)))
             (let [b (.getByte ub-in idx)]
-              (.putByte ub-out (inc idx) (byte (+ offset b)))
+              (.putByte to (inc idx) (byte (+ offset b)))
               (recur (inc idx))))))))
 
   nil
-  (value->bytes [this]
-    (id->bytes this))
+  (value->buffer [this to]
+    (id->buffer this to))
 
   Keyword
-  (value->bytes [this]
-    (id->bytes this))
+  (value->buffer [this to]
+    (id->buffer this to))
 
   UUID
-  (value->bytes [this]
-    (id->bytes this))
+  (value->buffer [this to]
+    (id->buffer this to))
 
   URI
+  (value->buffer [this to]
+    (id->buffer this to))
+
+  Object
+  (value->buffer [this ^MutableDirectBuffer to]
+    (if (satisfies? IdToBuffer this)
+      (id->buffer this to)
+      (UnsafeBuffer.
+       (doto to
+         (.putBytes 0 (doto (id-function (nippy/fast-freeze this))
+                        (aset 0 (byte object-value-type-id)))))
+       0
+       id-size))))
+
+(extend-protocol ValueToBytes
+  nil
   (value->bytes [this]
-    (id->bytes this))
+    (mem/->on-heap (value->buffer this (ExpandableArrayBuffer.))))
 
   Object
   (value->bytes [this]
-    (if (satisfies? IdToBytes this)
-      (id->bytes this)
-      (doto (id-function (nippy/fast-freeze this))
-        (aset 0 (byte object-value-type-id))))))
+    (mem/->on-heap (value->buffer this (ExpandableArrayBuffer.)))))
 
 (defn value-bytes-type-id ^bytes [^bytes bs]
   (Arrays/copyOfRange bs 0 value-type-id-size))
@@ -178,51 +205,69 @@
   (when-let [[_ n] (re-find #"\:(.+)" s)]
     (keyword n)))
 
-(extend-protocol IdToBytes
+(extend-protocol IdToBuffer
   (class (byte-array 0))
-  (id->bytes [this]
+  (id->buffer [this ^MutableDirectBuffer to]
     (if (= id-size (alength ^bytes this))
-      this
+      (UnsafeBuffer.
+       (doto to
+         (.putBytes 0 this))
+       0
+       id-size)
       (throw (IllegalArgumentException.
               (str "Not an id byte array: " (bu/bytes->hex this))))))
 
   ByteBuffer
-  (id->bytes [this]
-    (bu/byte-buffer->bytes this))
+  (id->buffer [this ^MutableDirectBuffer to]
+    (UnsafeBuffer. (doto to
+                     (.putBytes 0 this)) 0 id-size))
 
   Keyword
-  (id->bytes [this]
-    (id-function (.getBytes (subs (str this) 1))))
+  (id->buffer [this to]
+    (id->buffer (id-function (.getBytes (subs (str this) 1))) to))
 
   UUID
-  (id->bytes [this]
-    (id-function (.getBytes (str this))))
+  (id->buffer [this to]
+    (id->buffer (id-function (.getBytes (str this))) to))
 
   URI
-  (id->bytes [this]
-    (id-function (.getBytes (str (.normalize this)))))
+  (id->buffer [this to]
+    (id->buffer (id-function (.getBytes (str (.normalize this)))) to))
 
   String
-  (id->bytes [this]
+  (id->buffer [this to]
     (if (hex-id? this)
-      (prepend-value-type-id (bu/hex->bytes this) id-value-type-id)
+      (id->buffer (prepend-value-type-id (bu/hex->bytes this) id-value-type-id) to)
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this))]
-        (id->bytes id)
+        (id->buffer id to)
         (throw (IllegalArgumentException. (format "Not a %s hex, keyword or an UUID string: %s" id-hash-algorithm this))))))
 
   IPersistentMap
-  (id->bytes [this]
-    (id-function (nippy/fast-freeze this)))
+  (id->buffer [this to]
+    (id->buffer (id-function (nippy/fast-freeze this)) to))
 
   nil
+  (id->buffer [this to]
+    (id->buffer nil-id-bytes to)))
+
+(extend-protocol IdToBytes
+  nil
   (id->bytes [this]
-    nil-id-bytes))
+    (.byteArray (id->buffer this (UnsafeBuffer. (byte-array id-size)))))
+
+  Object
+  (id->bytes [this]
+    (.byteArray (id->buffer this (UnsafeBuffer. (byte-array id-size))))))
 
 (deftype Id [^DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
-  IdToBytes
-  (id->bytes [this]
-    (mem/->on-heap buffer))
+  IdToBuffer
+  (id->buffer [this to]
+    (UnsafeBuffer.
+     (doto ^MutableDirectBuffer to
+       (.putBytes 0 buffer 0 (.capacity buffer)))
+     0
+     id-size))
 
   Object
   (toString [this]
@@ -233,7 +278,7 @@
 
   (equals [this that]
     (or (identical? this that)
-        (and (satisfies? IdToBytes that)
+        (and (satisfies? IdToBuffer that)
              (bu/bytes=? (id->bytes this) (id->bytes that)))))
 
   (hashCode [this]
