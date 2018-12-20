@@ -89,6 +89,11 @@
   (capacity [this]
     (.remaining this)))
 
+(defn ensure-off-heap ^org.agrona.DirectBuffer [b ^MutableDirectBuffer tmp]
+  (if (off-heap? b)
+    b
+    (UnsafeBuffer. (->off-heap b tmp) 0 (long (capacity b)))))
+
 (defn buffer->hex ^String [^DirectBuffer b]
   (ByteUtils/bufferToHex b))
 

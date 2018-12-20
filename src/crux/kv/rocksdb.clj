@@ -4,7 +4,8 @@
   Requires org.rocksdb/rocksdbjni on the classpath."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.memory :as mem])
   (:import java.io.Closeable
            clojure.lang.MapEntry
            [org.rocksdb Checkpoint CompressionType LRUCache Options ReadOptions
@@ -14,12 +15,12 @@
 
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
-    (.key i)))
+    (mem/->off-heap (.key i))))
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
   (seek [this k]
-    (.seek i k)
+    (.seek i (mem/->on-heap k))
     (iterator->key i))
 
   (next [this]
@@ -27,7 +28,7 @@
     (iterator->key i))
 
   (value [this]
-    (.value i))
+    (mem/->off-heap (.value i)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
@@ -98,13 +99,13 @@
   (store [{:keys [^RocksDB db ^WriteOptions write-options]} kvs]
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]
-        (.put wb k v))
+        (.put wb (mem/->on-heap k) (mem/->on-heap v)))
       (.write db write-options wb)))
 
   (delete [{:keys [^RocksDB db ^WriteOptions write-options]} ks]
     (with-open [wb (WriteBatch.)]
       (doseq [k ks]
-        (.delete wb k))
+        (.delete wb (mem/->on-heap k)))
       (.write db write-options wb)))
 
   (backup [{:keys [^RocksDB db]} dir]

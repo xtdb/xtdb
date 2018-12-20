@@ -8,9 +8,12 @@
             [clojure.spec.alpha :as s]
             [crux.byte-utils :as bu]
             [crux.io :as cio]
-            [crux.kv :as kv])
-  (:import [clojure.lang ExceptionInfo MapEntry]
+            [crux.kv :as kv]
+            [crux.memory :as mem])
+  (:import [clojure.lang ExceptionInfo]
            java.io.Closeable
+           [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
+           org.agrona.concurrent.UnsafeBuffer
            [org.lwjgl.system MemoryStack MemoryUtil]
            [org.lwjgl.util.lmdb LMDB MDBEnvInfo MDBStat MDBVal]))
 
@@ -45,13 +48,14 @@
       (when-not (= LMDB/MDB_BAD_TXN rc)
         (success? rc)))))
 
-(defn- ^LMDBTransaction new-transaction [^MemoryStack stack env flags]
-  (let [pp (.mallocPointer stack 1)
-        rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
-    (if (= LMDB/MDB_MAP_RESIZED rc)
-      (env-set-mapsize env 0)
-      (success? rc))
-    (->LMDBTransaction (.get pp))))
+(defn- ^LMDBTransaction new-transaction [env flags]
+  (with-open [stack (MemoryStack/stackPush)]
+    (let [pp (.mallocPointer stack 1)
+          rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
+      (if (= LMDB/MDB_MAP_RESIZED rc)
+        (env-set-mapsize env 0)
+        (success? rc))
+      (->LMDBTransaction (.get pp)))))
 
 (defn- env-create []
   (with-open [stack (MemoryStack/stackPush)]
@@ -78,7 +82,7 @@
 
 (defn- dbi-open [env]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction stack env LMDB/MDB_RDONLY)]
+              tx (new-transaction env LMDB/MDB_RDONLY)]
     (let [{:keys [^long txn]} tx
           ip (.mallocInt stack 1)
           ^CharSequence name nil]
@@ -90,8 +94,8 @@
   (close [_]
     (LMDB/mdb_cursor_close cursor)))
 
-(defn- ^LMDBCursor new-cursor [^MemoryStack stack dbi txn]
-  (with-open [stack (.push stack)]
+(defn- ^LMDBCursor new-cursor [dbi txn]
+  (with-open [stack (MemoryStack/stackPush)]
     (let [pp (.mallocPointer stack 1)]
       (success? (LMDB/mdb_cursor_open txn dbi pp))
       (->LMDBCursor (.get pp)))))
@@ -100,55 +104,66 @@
   (let [rc (LMDB/mdb_cursor_get cursor kv dv flags)]
     (when (not= LMDB/MDB_NOTFOUND rc)
       (success? rc)
-      (bu/byte-buffer->bytes (.mv_data kv)))))
+      (UnsafeBuffer. (.mv_data kv) 0 (.mv_size kv)))))
 
 (defn- cursor-put [env dbi kvs]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction stack env 0)
-              cursor (new-cursor stack dbi (:txn tx))]
+              tx (new-transaction env 0)
+              cursor (new-cursor dbi (:txn tx))]
     (let [{:keys [cursor]} cursor
           kv (MDBVal/mallocStack stack)
-          dv (MDBVal/mallocStack stack)]
-      (doseq [[^bytes k ^bytes v] kvs]
-        (with-open [stack (.push stack)]
-          (let [kb (.flip (.put (.malloc stack (alength k)) k))
-                kv (.mv_data kv kb)
-                dv (.mv_size dv (alength v))]
-            (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
-            (.put (.mv_data dv) v)))))))
+          dv (MDBVal/mallocStack stack)
+          kb (ExpandableDirectByteBuffer.)
+          vb (ExpandableDirectByteBuffer.)]
+      (doseq [[k v] kvs]
+        (let [k (mem/ensure-off-heap k kb)
+              v (mem/ensure-off-heap v vb)
+              kv (-> kv
+                     (.mv_data (.byteBuffer k))
+                     (.mv_size (.capacity k)))
+              dv (.mv_size dv (.capacity v))]
+          (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+          (.getBytes v 0 (.mv_data dv) (.mv_size dv)))))))
 
+;; TODO: Figure out why LMDB crashes if we remove the sort here. The
+;; root cause is likely something else.
 (defn- tx-delete [env dbi ks]
   (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction stack env 0)]
+              tx (new-transaction env 0)]
     (let [{:keys [^long txn]} tx
-          kv (MDBVal/callocStack stack)]
-      (doseq [^bytes k (sort bu/bytes-comparator ks)]
-        (with-open [stack (.push stack)]
-          (let [kb (.flip (.put (.malloc stack (alength k)) k))
-                kv (.mv_data kv kb)
-                rc (LMDB/mdb_del txn dbi kv nil)]
-            (when-not (= LMDB/MDB_NOTFOUND rc)
-              (success? rc))))))))
+          kv (MDBVal/callocStack stack)
+          kb (ExpandableDirectByteBuffer.)
+          ks (if (bytes? (first ks))
+               (sort bu/bytes-comparator ks)
+               ks)]
+      (doseq [k ks]
+        (let [k (mem/ensure-off-heap k kb)
+              kv (-> kv
+                     (.mv_data (.byteBuffer k))
+                     (.mv_size (.capacity k)))
+              rc (LMDB/mdb_del txn dbi kv nil)]
+          (when-not (= LMDB/MDB_NOTFOUND rc)
+            (success? rc)))))))
 
 (def default-env-flags (bit-or LMDB/MDB_WRITEMAP
                                LMDB/MDB_MAPASYNC
                                LMDB/MDB_NOTLS
                                LMDB/MDB_NORDAHEAD))
 
-(defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv]
+(defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
   kv/KvIterator
   (seek [_ k]
-    (with-open [stack (MemoryStack/stackPush)]
-      (let [k ^bytes k
-            kb (.flip (.put (.malloc stack (alength k)) k))
-            kv (.mv_data kv kb)]
-        (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE))))
+    (let [^DirectBuffer k (mem/ensure-off-heap k eb)
+          kv (-> kv
+                 (.mv_data (.byteBuffer k))
+                 (.mv_size (.capacity k)))]
+      (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE)))
 
   (next [this]
     (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
 
   (value [this]
-    (bu/byte-buffer->bytes (.mv_data dv)))
+    (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))
 
   (refresh [this]
     (LMDB/mdb_cursor_renew (:txn tx) (:cursor cursor))
@@ -161,11 +176,11 @@
 (defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx]
   kv/KvSnapshot
   (new-iterator [_]
-    (with-open [stack (MemoryStack/stackPush)]
-      (->LMDBKvIterator (new-cursor stack dbi (:txn tx))
-                        tx
-                        (MDBVal/create)
-                        (MDBVal/create))))
+    (->LMDBKvIterator (new-cursor dbi (:txn tx))
+                      tx
+                      (MDBVal/create)
+                      (MDBVal/create)
+                      (ExpandableDirectByteBuffer.)))
 
   Closeable
   (close [_]
@@ -197,9 +212,8 @@
           (throw t)))))
 
   (new-snapshot [_]
-    (with-open [stack (MemoryStack/stackPush)]
-      (let [tx (new-transaction stack env LMDB/MDB_RDONLY)]
-        (->LMDBKvSnapshot env dbi tx))))
+    (let [tx (new-transaction env LMDB/MDB_RDONLY)]
+      (->LMDBKvSnapshot env dbi tx)))
 
   (store [this kvs]
     (try
@@ -213,13 +227,16 @@
             (kv/store this kvs))
           (throw e)))))
 
-  (delete [_ ks]
+  (delete [this ks]
     (try
       (tx-delete env dbi ks)
       (catch ExceptionInfo e
         (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
-          (do (increase-mapsize env 2)
-              (tx-delete env dbi ks))
+          (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
+            (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
+              (throw (IllegalStateException. "Too large size of keys to delete at once.")))
+            (increase-mapsize env *mapsize-increase-factor*)
+            (kv/delete this ks))
           (throw e)))))
 
   (backup [_ dir]
@@ -227,7 +244,7 @@
 
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
-                tx (new-transaction stack env LMDB/MDB_RDONLY)]
+                tx (new-transaction env LMDB/MDB_RDONLY)]
       (let [stat (MDBStat/callocStack stack)]
         (LMDB/mdb_stat (:txn tx) dbi stat)
         (.ms_entries stat))))

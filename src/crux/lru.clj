@@ -2,7 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.memory :as mem])
   (:import java.io.Closeable
            [java.util Collections LinkedHashMap]
            java.util.concurrent.locks.StampedLock
@@ -60,13 +61,14 @@
   (when @closed-state
     (throw (IllegalStateException. "Iterator closed."))))
 
+;; TODO: Remove ->on-heap calls here once rest of Crux can handle it.
 (defrecord CachedIterator [i ^StampedLock lock closed-state]
   kv/KvIterator
   (seek [_ k]
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (kv/seek i k)
+        (some-> (kv/seek i k) (mem/->on-heap))
         (finally
           (.unlock lock stamp)))))
 
@@ -74,7 +76,7 @@
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (kv/next i)
+        (some-> (kv/next i) (mem/->on-heap))
         (finally
           (.unlock lock stamp)))))
 
@@ -82,7 +84,7 @@
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (kv/value i)
+        (some-> (kv/value i) (mem/->on-heap))
         (finally
           (.unlock lock stamp)))))
 

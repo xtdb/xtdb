@@ -7,7 +7,8 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.memory :as mem])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -118,25 +119,23 @@
     (.rocksdb_iter_get_error rocksdb i errptr)
     (check-error errptr)))
 
-(defn- pointer+len->bytes ^bytes [^Pointer address ^Pointer len-out]
-  (let [len (.getInt len-out 0)
-        b (byte-array len)]
-    (.getBytes (UnsafeBuffer. (.address address) len) 0 b)
-    b))
+(defn- pointer+len->buffer ^org.agrona.DirectBuffer [^Pointer address ^Pointer len-out]
+  (let [len (.getInt len-out 0)]
+    (UnsafeBuffer. (.address address) len)))
 
-(defn- iterator->key ^bytes [^Pointer i ^Pointer len-out]
+(defn- iterator->key ^org.agrona.DirectBuffer [^Pointer i ^Pointer len-out]
   (when (= 1 (.rocksdb_iter_valid rocksdb i))
     (let [p-k (.rocksdb_iter_key rocksdb i len-out)]
-      (pointer+len->bytes p-k len-out))))
+      (pointer+len->buffer p-k len-out))))
 
-(defn- bytes->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b ^bytes bs]
-  (.putBytes b 0 bs)
-  (Pointer/wrap rt (.addressOffset b) (alength bs)))
+(defn- buffer->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b]
+  (Pointer/wrap rt (.addressOffset b) (.capacity b)))
 
 (defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
   (seek [this k]
-    (.rocksdb_iter_seek rocksdb i (bytes->pointer eb k) (alength ^bytes k))
+    (let [^DirectBuffer k (mem/ensure-off-heap k eb)]
+      (.rocksdb_iter_seek rocksdb i (buffer->pointer k) (.capacity k)))
     (iterator->key i len-out))
 
   (next [this]
@@ -145,7 +144,7 @@
 
   (value [this]
     (let [p-v (.rocksdb_iter_value rocksdb i len-out)]
-      (pointer+len->bytes p-v len-out)))
+      (pointer+len->buffer p-v len-out)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
@@ -218,8 +217,10 @@
           kb (ExpandableDirectByteBuffer.)
           vb (ExpandableDirectByteBuffer.)]
       (try
-        (doseq [[^bytes k ^bytes v] kvs]
-          (.rocksdb_writebatch_put rocksdb wb (bytes->pointer kb k) (alength k) (bytes->pointer vb v) (alength v)))
+        (doseq [[k v] kvs
+                :let [^DirectBuffer k (mem/ensure-off-heap k kb)
+                      ^DirectBuffer v (mem/ensure-off-heap v vb)]]
+          (.rocksdb_writebatch_put rocksdb wb (buffer->pointer k) (.capacity k) (buffer->pointer v) (.capacity v)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
@@ -230,8 +231,9 @@
           errptr-out (make-array String 1)
           kb (ExpandableDirectByteBuffer.)]
       (try
-        (doseq [^bytes k ks]
-          (.rocksdb_writebatch_delete rocksdb wb (bytes->pointer kb k) (alength k)))
+        (doseq [k ks
+                :let [^DirectBuffer k (mem/ensure-off-heap k kb)]]
+          (.rocksdb_writebatch_delete rocksdb wb (buffer->pointer k) (.capacity k)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)

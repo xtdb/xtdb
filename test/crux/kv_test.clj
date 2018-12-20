@@ -4,6 +4,7 @@
             [crux.byte-utils :as bu]
             [crux.fixtures :as f]
             [crux.kv :as kv]
+            [crux.memory :as mem]
             [crux.io :as cio]
             [criterium.core :as crit])
   (:import [java.io Closeable]))
@@ -22,12 +23,17 @@
   (t/testing "non existing key"
     (t/is (nil? (value f/*kv* (bu/long->bytes 2))))))
 
-(t/deftest test-can-store-all []
+(t/deftest test-can-store-and-delete-all []
   (kv/store f/*kv* (map (fn [i]
                           [(bu/long->bytes i) (bu/long->bytes (inc i))])
                         (range 10)))
   (doseq [i (range 10)]
-    (t/is (= (inc i) (bu/bytes->long (value f/*kv* (bu/long->bytes i)))))))
+    (t/is (= (inc i) (bu/bytes->long (value f/*kv* (bu/long->bytes i))))))
+
+  (t/testing "deleting all keys in random order, including non existent keys"
+    (kv/delete f/*kv* (for [i (shuffle (range 12))]
+                        (bu/long->bytes i)))
+    (t/is (zero? (kv/count-keys f/*kv*)))))
 
 (t/deftest test-seek-and-iterate-range []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
@@ -101,22 +107,24 @@
   (with-open [snapshot (kv/new-snapshot kvs)
               i (kv/new-iterator snapshot)]
     (when-let [k (kv/seek i k)]
-      [k (kv/value i)])))
+      [(mem/->on-heap k) (mem/->on-heap (kv/value i))])))
 
 (defn value [kvs seek-k]
   (let [[k v] (seek kvs seek-k)]
     (when (and k (bu/bytes=? seek-k k))
-      v)))
+      (mem/->on-heap v))))
 
 (defn seek-and-iterate [kvs key-pred seek-k]
   (with-open [snapshot (kv/new-snapshot kvs)
               i (kv/new-iterator snapshot)]
     (loop [acc (transient [])
            k (kv/seek i seek-k)]
-      (if (and k (key-pred k))
-        (recur (conj! acc [k (kv/value i)])
-               (kv/next i))
-        (persistent! acc)))))
+      (let [k (when k
+                (mem/->on-heap k))]
+        (if (and k (key-pred k))
+          (recur (conj! acc [k (mem/->on-heap (kv/value i))])
+                 (kv/next i))
+          (persistent! acc))))))
 
 (t/deftest test-performance
   (if (and (System/getenv "CRUX_KV_PERFORMANCE")

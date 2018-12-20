@@ -2,28 +2,35 @@
   "In-memory KV backend for Crux."
   (:require [clojure.spec.alpha :as s]
             [clojure.java.io :as io]
-            [crux.byte-utils :as bu]
             [crux.kv :as kv]
+            [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable
+           org.agrona.concurrent.UnsafeBuffer
+           [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            clojure.lang.Box))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]
     (.mkdirs file)
-    (->> (into {} @db)
+    (->> (for [[k v] @db]
+           [(mem/->on-heap k)
+            (mem/->on-heap v)])
+         (into {})
          (nippy/freeze-to-file (io/file file "memdb")))))
 
 (defn- restore-db [dir]
-  (->> (nippy/thaw-from-file (io/file dir "memdb"))
-       (into (sorted-map-by bu/bytes-comparator))))
+  (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memdb"))]
+         [(mem/->off-heap k)
+          (mem/->off-heap v)])
+       (into (sorted-map-by mem/buffer-comparator))))
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
 ;; unusable in practice.
 (defrecord MemKvIterator [^Box db cursor]
   kv/KvIterator
   (kv/seek [this k]
-    (let [[x & xs] (subseq (.val db) >= k)]
+    (let [[x & xs] (subseq (.val db) >= (mem/->off-heap k))]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
@@ -63,16 +70,18 @@
     (let [this (assoc this :db-dir db-dir :persist-on-close? persist-on-close?)]
       (if (.isFile (io/file db-dir "memdb"))
         (assoc this :db (atom (restore-db db-dir)))
-        (assoc this :db (atom (sorted-map-by bu/bytes-comparator))))))
+        (assoc this :db (atom (sorted-map-by mem/buffer-comparator))))))
 
   (new-snapshot [_]
     (->MemKvSnapshot @db))
 
   (store [_ kvs]
-    (swap! db into kvs))
+    (swap! db into (vec (for [[k v] kvs]
+                          [(mem/->off-heap k)
+                           (mem/->off-heap v)]))))
 
   (delete [_ ks]
-    (swap! db #(apply dissoc % ks)))
+    (swap! db #(apply dissoc % (map mem/->off-heap ks))))
 
   (backup [_ dir]
     (let [file (io/file dir)]
