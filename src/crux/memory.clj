@@ -89,6 +89,9 @@
   (capacity [this]
     (.remaining this)))
 
+(defn buffer->hex ^String [^DirectBuffer b]
+  (ByteUtils/bufferToHex b))
+
 (defn compare-buffers
   (^long [^DirectBuffer a ^DirectBuffer b]
    (ByteUtils/compareBuffers a b))
@@ -102,7 +105,7 @@
   ([^DirectBuffer a ^DirectBuffer b]
    (ByteUtils/equalBuffers a b))
   ([^DirectBuffer a ^DirectBuffer b ^long max-length]
-   (ByteUtils/equalBytes a b max-length)))
+   (ByteUtils/equalBuffers a b max-length)))
 
 (defn inc-unsigned-buffer!
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer buffer]

@@ -130,7 +130,7 @@ public class ByteUtils {
         int i = 0;
         for (; i < maxStrideOffset; i += Long.BYTES) {
             final long aLong = UNSAFE.getLong(aByteArray, aOffset + i);
-            final long bLong = UNSAFE.getLong(bByteArray, aOffset + i);
+            final long bLong = UNSAFE.getLong(bByteArray, bOffset + i);
             if (aLong != bLong) {
                 if (IS_LITTLE_ENDIAN) {
                     return Long.compareUnsigned(Long.reverseBytes(aLong),
@@ -162,7 +162,7 @@ public class ByteUtils {
         return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE) == 0;
     }
 
-    public static boolean equalBytes(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
+    public static boolean equalBuffers(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
         return ByteUtils.compareBuffers(a, b, maxLength) == 0;
     }
 

@@ -14,6 +14,7 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.kafka :as k]
+            [crux.memory :as mem]
             [crux.rdf :as rdf])
   (:import [crux.api LocalNode ICruxSystem]
            [ch.qos.logback.classic Level Logger]
