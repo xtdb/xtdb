@@ -129,7 +129,7 @@
       (pointer+len->buffer p-k len-out))))
 
 (defn- buffer->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b]
-  (Pointer/wrap rt (.addressOffset b) (.capacity b)))
+  (Pointer/wrap rt (.addressOffset b)))
 
 (defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
