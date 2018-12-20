@@ -27,10 +27,10 @@
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
 ;; unusable in practice.
-(defrecord MemKvIterator [^Box db cursor]
+(defrecord MemKvIterator [^Box db cursor eb]
   kv/KvIterator
   (kv/seek [this k]
-    (let [[x & xs] (subseq (.val db) >= (mem/->off-heap k))]
+    (let [[x & xs] (subseq (.val db) >= (mem/ensure-off-heap k eb))]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
@@ -53,7 +53,7 @@
 (defrecord MemKvSnapshot [db]
   kv/KvSnapshot
   (new-iterator [_]
-    (->MemKvIterator (Box. db) (atom {:rest (seq db)})))
+    (->MemKvIterator (Box. db) (atom {:rest (seq db)}) (ExpandableDirectByteBuffer.)))
 
   Closeable
   (close [_]))
