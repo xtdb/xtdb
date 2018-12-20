@@ -3,10 +3,13 @@ package crux;
 import java.lang.reflect.Field;
 import java.util.Comparator;
 import java.nio.ByteOrder;
+import org.agrona.DirectBuffer;
+import org.agrona.concurrent.UnsafeBuffer;
 
 @SuppressWarnings("deprecation")
 public class ByteUtils {
-    public static final Comparator UNSIGNED_BYTES_COMPARATOR = new UnsignedBytesComparator();
+    public static final Comparator<byte[]> UNSIGNED_BYTES_COMPARATOR = new UnsignedBytesComparator();
+    public static final Comparator<DirectBuffer> UNSIGNED_BUFFER_COMPARATOR = new UnsignedBufferComparator();
 
     private static final boolean IS_LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
     private static final sun.misc.Unsafe UNSAFE;
@@ -33,15 +36,15 @@ public class ByteUtils {
         }
     }
 
-    public static String bytesToHex(byte[] bytes) {
-        int maxOffset = bytes.length + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-        char[] acc = new char[bytes.length << 1];
+    public static String bytesToHex(final byte[] bytes) {
+        final int maxOffset = bytes.length + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+        final char[] acc = new char[bytes.length << 1];
         for (int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET,
                  j = sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET;
              i < maxOffset;
              i += Short.BYTES, j += Long.BYTES) {
             if (i == maxOffset - 1) {
-                int b = UNSAFE.getByte(bytes, i);
+                final int b = UNSAFE.getByte(bytes, i);
                 UNSAFE.putInt(acc, j, UNSAFE.getInt(TWO_BYTES_TO_HEX,
                                                     ((b & 0xFF) << 3)
                                                     + (Character.BYTES << 1)
@@ -66,9 +69,9 @@ public class ByteUtils {
         }
     }
 
-    public static byte[] hexToBytes(String s) {
-        int len = s.length();
-        byte[] acc = new byte[len >> 1];
+    public static byte[] hexToBytes(final String s) {
+        final int len = s.length();
+        final byte[] acc = new byte[len >> 1];
         for (int i = 0,
                  j = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
              i < len;
@@ -79,13 +82,42 @@ public class ByteUtils {
         return acc;
     }
 
-    public static int compareBytes(byte[] a, byte[] b, int maxLength) {
-        int maxCompareOffset = Math.min(Math.min(a.length, b.length), maxLength) + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
-        int maxStrideOffset = maxCompareOffset & ~(Long.BYTES - 1);
-        int i = sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
+    public static int compareBytes(final byte[] a, final byte[] b, final int maxLength) {
+        return ByteUtils.compareBuffers(new UnsafeBuffer(a), new UnsafeBuffer(b), maxLength);
+    }
+
+    public static int compareBytes(final byte[] a, final byte[] b) {
+        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
+    }
+
+    public static boolean equalBytes(final byte[] a, final byte[] b) {
+        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE) == 0;
+    }
+
+    public static boolean equalBytes(final byte[] a, final byte[] b, int maxLength) {
+        return ByteUtils.compareBytes(a, b, maxLength) == 0;
+    }
+
+    public static class UnsignedBytesComparator implements Comparator<byte[]> {
+        public int compare(final byte[] a, final byte[] b) {
+            return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
+        }
+    }
+
+    public static int compareBuffers(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
+        final int aCapacity = a.capacity();
+        final int bCapacity = b.capacity();
+        final byte[] aByteArray = a.byteArray();
+        final byte[] bByteArray = b.byteArray();
+        final long aOffset = a.addressOffset();
+        final long bOffset = b.addressOffset();
+        final int length = Math.min(Math.min(aCapacity, bCapacity), maxLength);
+        final int maxStrideOffset = length & ~(Long.BYTES - 1);
+
+        int i = 0;
         for (; i < maxStrideOffset; i += Long.BYTES) {
-            long aLong = UNSAFE.getLong(a, i);
-            long bLong = UNSAFE.getLong(b, i);
+            final long aLong = UNSAFE.getLong(aByteArray, aOffset + i);
+            final long bLong = UNSAFE.getLong(bByteArray, aOffset + i);
             if (aLong != bLong) {
                 if (IS_LITTLE_ENDIAN) {
                     return Long.compareUnsigned(Long.reverseBytes(aLong),
@@ -95,34 +127,35 @@ public class ByteUtils {
                 }
             }
         }
-        for (; i < maxCompareOffset; i++) {
-            byte aByte = UNSAFE.getByte(a, i);
-            byte bByte = UNSAFE.getByte(b, i);
+        for (; i < length; i++) {
+            final byte aByte = UNSAFE.getByte(aByteArray, aOffset + i);
+            final byte bByte = UNSAFE.getByte(bByteArray, bOffset + i);
             if (aByte != bByte) {
                 return (aByte & 0xFF) - (bByte & 0xFF);
             }
         }
-        if (i == maxLength + sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET) {
+
+        if (i == maxLength) {
             return 0;
         }
-        return a.length - b.length;
+        return aCapacity - bCapacity;
     }
 
-    public static int compareBytes(byte[] a, byte[] b) {
-        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
+    public static int compareBuffers(final DirectBuffer a, final DirectBuffer b) {
+        return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE);
     }
 
-    public static boolean equalBytes(byte[] a, byte[] b) {
-        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE) == 0;
+    public static boolean equalBuffers(final DirectBuffer a, final DirectBuffer b) {
+        return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE) == 0;
     }
 
-    public static boolean equalBytes(byte[] a, byte[] b, int maxLength) {
-        return ByteUtils.compareBytes(a, b, maxLength) == 0;
+    public static boolean equalBytes(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
+        return ByteUtils.compareBuffers(a, b, maxLength) == 0;
     }
 
-    public static class UnsignedBytesComparator implements Comparator<byte[]> {
-        public int compare(byte[] a, byte[] b) {
-            return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
+    public static class UnsignedBufferComparator implements Comparator<DirectBuffer> {
+        public int compare(final DirectBuffer a, final DirectBuffer b) {
+            return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE);
         }
     }
 }

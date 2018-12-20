@@ -1,7 +1,9 @@
 (ns crux.memory
   (:import [java.nio ByteOrder ByteBuffer]
            [org.agrona DirectBuffer MutableDirectBuffer]
-           org.agrona.concurrent.UnsafeBuffer))
+           org.agrona.concurrent.UnsafeBuffer
+           crux.ByteUtils
+           java.util.Comparator))
 
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
@@ -83,3 +85,31 @@
 
   (capacity [this]
     (.remaining this)))
+
+(defn compare-buffers
+  (^long [^DirectBuffer a ^DirectBuffer b]
+   (ByteUtils/compareBuffers a b))
+  (^long [^DirectBuffer a ^DirectBuffer b ^long max-length]
+   (ByteUtils/compareBuffers a b max-length)))
+
+(def ^java.util.Comparator buffer-comparator
+  ByteUtils/UNSIGNED_BUFFER_COMPARATOR)
+
+(defn buffers=?
+  ([^DirectBuffer a ^DirectBuffer b]
+   (ByteUtils/equalBuffers a b))
+  ([^DirectBuffer a ^DirectBuffer b ^long max-length]
+   (ByteUtils/equalBytes a b max-length)))
+
+(defn inc-unsigned-buffer!
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer buffer]
+   (inc-unsigned-buffer! buffer (.capacity buffer)))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer buffer ^long prefix-length]
+   (loop [idx (dec (int prefix-length))]
+     (when-not (neg? idx)
+       (let [b (Byte/toUnsignedInt (.getByte buffer idx))]
+         (if (= 0xff b)
+           (do (.putByte buffer idx (byte 0))
+               (recur (dec idx)))
+           (doto buffer
+             (.putByte idx (unchecked-byte (inc b))))))))))

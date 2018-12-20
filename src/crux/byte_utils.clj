@@ -3,7 +3,8 @@
            java.security.MessageDigest
            [java.util Arrays Comparator]
            org.agrona.concurrent.UnsafeBuffer
-           crux.ByteUtils))
+           crux.ByteUtils)
+  (:require [crux.memory :as mem]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -37,24 +38,19 @@
   (^long [^bytes a ^bytes b max-length]
    (ByteUtils/compareBytes a b max-length)))
 
-(def ^Comparator bytes-comparator
+(def ^java.util.Comparator bytes-comparator
   ByteUtils/UNSIGNED_BYTES_COMPARATOR)
 
 (defn bytes=?
-  ([^bytes k1 ^bytes k2]
-   (ByteUtils/equalBytes k1 k2))
-  ([^bytes k1 ^bytes k2 ^long max-length]
-   (ByteUtils/equalBytes k1 k2 max-length)))
+  ([^bytes a ^bytes b]
+   (ByteUtils/equalBytes a b))
+  ([^bytes a ^bytes b ^long max-length]
+   (ByteUtils/equalBytes a b max-length)))
 
 (defn inc-unsigned-bytes!
   ([^bytes bs]
    (inc-unsigned-bytes! bs (alength bs)))
   ([^bytes bs ^long prefix-length]
-   (loop [idx (dec (int prefix-length))]
-     (when-not (neg? idx)
-       (let [b (aget bs idx)]
-         (if (= (byte 0xff) b)
-           (do (aset bs idx (byte 0))
-               (recur (dec idx)))
-           (doto bs
-             (aset idx (byte (inc b))))))))))
+   (some-> (UnsafeBuffer. bs 0 prefix-length)
+           (mem/inc-unsigned-buffer!)
+           (.byteArray))))
