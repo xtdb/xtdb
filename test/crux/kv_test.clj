@@ -5,8 +5,7 @@
             [crux.fixtures :as f]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.io :as cio]
-            [criterium.core :as crit])
+            [crux.io :as cio])
   (:import [java.io Closeable]))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
@@ -126,35 +125,71 @@
                  (kv/next i))
           (persistent! acc))))))
 
-(t/deftest test-performance
+(t/deftest test-performance-on-heap
+  (if (and (System/getenv "CRUX_KV_PERFORMANCE")
+           (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
+             (= backend f/*kv-backend*)
+             true))
+    (do (println f/*kv-backend* "on-heap")
+        (let [n 1000000
+              ks (vec (for [n (range n)]
+                        (.getBytes (format "%020x" n))))]
+          (t/is (= n (count ks)))
+
+          (System/gc)
+          (println "Writing")
+          (time
+           (kv/store f/*kv* (for [k ks]
+                              [k k])))
+
+          (System/gc)
+          (println "Reading")
+          (time
+           (do (dotimes [_ 10]
+                 (time
+                  (with-open [snapshot (kv/new-snapshot f/*kv*)
+                              i (kv/new-iterator snapshot)]
+                    (dotimes [idx n]
+                      (let [idx (- (dec n) idx)
+                            k (get ks idx)]
+                        (assert (bu/bytes=? k (kv/seek i k)))
+                        (assert (bu/bytes=? k (kv/value i))))))))
+               (println "Done")))
+          (println)))
+    (t/is true)))
+
+(t/deftest test-performance-off-heap
   (if (and (System/getenv "CRUX_KV_PERFORMANCE")
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
              (= backend f/*kv-backend*)
              true))
     (let [n 1000000
           ks (vec (for [n (range n)]
-                    (.getBytes (format "%020x" n))))]
+                    (mem/->off-heap (.getBytes (format "%020x" n)))))]
+      (println f/*kv-backend* "off-heap")
       (t/is (= n (count ks)))
-      (println f/*kv-backend*)
+      (t/is (mem/off-heap? (first ks)))
 
-      (crit/force-gc)
+      (System/gc)
       (println "Writing")
       (time
        (kv/store f/*kv* (for [k ks]
                           [k k])))
 
-      (crit/force-gc)
+      (System/gc)
       (println "Reading")
       (time
        (do (dotimes [_ 10]
              (time
-              (with-open [snapshot (kv/new-snapshot f/*kv*)
+              ;; TODO: Note, the cached decorator still uses
+              ;; bytes, so we grab the underlying kv store.
+              (with-open [snapshot (kv/new-snapshot (:kv f/*kv*))
                           i (kv/new-iterator snapshot)]
                 (dotimes [idx n]
                   (let [idx (- (dec n) idx)
                         k (get ks idx)]
-                    (assert (bu/bytes=? k (kv/seek i k)))
-                    (assert (bu/bytes=? k (kv/value i))))))))
+                    (assert (mem/buffers=? k (kv/seek i k)))
+                    (assert (mem/buffers=? k (kv/value i))))))))
            (println "Done")))
       (println))
     (t/is true)))

@@ -134,7 +134,7 @@
 (defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
   (seek [this k]
-    (let [^DirectBuffer k (mem/ensure-off-heap k eb)]
+    (let [k (mem/ensure-off-heap k eb)]
       (.rocksdb_iter_seek rocksdb i (buffer->pointer k) (.capacity k)))
     (iterator->key i len-out))
 
@@ -218,8 +218,8 @@
           vb (ExpandableDirectByteBuffer.)]
       (try
         (doseq [[k v] kvs
-                :let [^DirectBuffer k (mem/ensure-off-heap k kb)
-                      ^DirectBuffer v (mem/ensure-off-heap v vb)]]
+                :let [k (mem/ensure-off-heap k kb)
+                      v (mem/ensure-off-heap v vb)]]
           (.rocksdb_writebatch_put rocksdb wb (buffer->pointer k) (.capacity k) (buffer->pointer v) (.capacity v)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
@@ -232,7 +232,7 @@
           kb (ExpandableDirectByteBuffer.)]
       (try
         (doseq [k ks
-                :let [^DirectBuffer k (mem/ensure-off-heap k kb)]]
+                :let [k (mem/ensure-off-heap k kb)]]
           (.rocksdb_writebatch_delete rocksdb wb (buffer->pointer k) (.capacity k)))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally

@@ -9,12 +9,21 @@
   (->on-heap ^bytes [this])
 
   (->off-heap
-    ^MutableDirectBuffer [this]
-    ^MutableDirectBuffer [this ^MutableDirectBuffer to])
+    ^org.agrona.MutableDirectBuffer [this]
+    ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to])
 
   (off-heap? [this])
 
+  (as-buffer ^org.agrona.MutableDirectBuffer [this])
+
   (capacity [this]))
+
+(defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
+  (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
+
+(defn copy-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
+  (doto ^MutableDirectBuffer (allocate-buffer (capacity from))
+    (.putBytes 0 from 0 (long (capacity from)))))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))
@@ -23,7 +32,7 @@
 
   (->off-heap
     ([this]
-     (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
+     (let [b (allocate-buffer (alength ^bytes this))]
        (->off-heap this b)))
 
     ([this ^MutableDirectBuffer to]
@@ -32,6 +41,9 @@
 
   (off-heap? [this]
     false)
+
+  (as-buffer [this]
+    (UnsafeBuffer. ^bytes this))
 
   (capacity [this]
     (alength ^bytes this))
@@ -61,6 +73,9 @@
         (and (nil? (.byteArray this))
              (nil? (.byteBuffer this)))))
 
+  (as-buffer [this]
+    this)
+
   (capacity [this]
     (.capacity this))
 
@@ -76,7 +91,7 @@
   (->off-heap
     ([this]
      (if (.isDirect this)
-       (UnsafeBuffer. this (.position this) (.remaining this))
+       (as-buffer this)
        (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this))))))
 
     ([this ^MutableDirectBuffer to]
@@ -85,6 +100,9 @@
 
   (off-heap? [this]
     (.isDirect this))
+
+  (as-buffer [this]
+    (UnsafeBuffer. this (.position this) (.remaining this)))
 
   (capacity [this]
     (.remaining this)))

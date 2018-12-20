@@ -153,7 +153,7 @@
 (defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
   kv/KvIterator
   (seek [_ k]
-    (let [^DirectBuffer k (mem/ensure-off-heap k eb)
+    (let [k (mem/ensure-off-heap k eb)
           kv (-> kv
                  (.mv_data (.byteBuffer k))
                  (.mv_size (.capacity k)))]
