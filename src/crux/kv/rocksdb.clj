@@ -13,9 +13,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+;; NOTE: We're returning on-heap buffers simply wrapping arrays
+;; here. This may or may not work later down the line.
 (defn- iterator->key [^RocksIterator i]
   (when (.isValid i)
-    (mem/->off-heap (.key i))))
+    (mem/on-heap-buffer (.key i))))
 
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
@@ -28,7 +30,7 @@
     (iterator->key i))
 
   (value [this]
-    (mem/->off-heap (.value i)))
+    (mem/on-heap-buffer (.value i)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465

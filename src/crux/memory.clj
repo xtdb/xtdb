@@ -94,6 +94,9 @@
     b
     (UnsafeBuffer. (->off-heap b tmp) 0 (long (capacity b)))))
 
+(defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
+  (UnsafeBuffer. b))
+
 (defn buffer->hex ^String [^DirectBuffer b]
   (ByteUtils/bufferToHex b))
 
