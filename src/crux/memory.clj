@@ -21,13 +21,14 @@
   (->on-heap [this]
     this)
 
-  (->off-heap [this]
-    (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
-      (->off-heap this b)))
+  (->off-heap
+    ([this]
+     (let [b (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this)))]
+       (->off-heap this b)))
 
-  (->off-heap [this ^MutableDirectBuffer to]
-    (doto to
-      (.putBytes 0 ^bytes this)))
+    ([this ^MutableDirectBuffer to]
+     (doto to
+       (.putBytes 0 ^bytes this))))
 
   (off-heap? [this]
     false)
@@ -45,14 +46,15 @@
         (.getBytes this 0 bytes)
         bytes)))
 
-  (->off-heap [this]
-    (if (off-heap? this)
-      this
-      (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this))))))
+  (->off-heap
+    ([this]
+     (if (off-heap? this)
+       this
+       (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this))))))
 
-  (->off-heap [this ^MutableDirectBuffer to]
-    (doto to
-      (.putBytes 0 this 0 (.capacity this))))
+    ([this ^MutableDirectBuffer to]
+     (doto to
+       (.putBytes 0 this 0 (.capacity this)))))
 
   (off-heap? [this]
     (or (some-> (.byteBuffer this) (.isDirect))
@@ -68,17 +70,18 @@
              (= (.remaining this)
                 (alength (.array this))))
       (.array this)
-     (doto (byte-array (.remaining this))
+      (doto (byte-array (.remaining this))
         (->> (.get this)))))
 
-  (->off-heap [this]
-    (if (.isDirect this)
-      (UnsafeBuffer. this (.position this) (.remaining this))
-      (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this))))))
+  (->off-heap
+    ([this]
+     (if (.isDirect this)
+       (UnsafeBuffer. this (.position this) (.remaining this))
+       (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (.remaining this))))))
 
-  (->off-heap [this ^MutableDirectBuffer to]
-    (doto to
-      (.putBytes 0 this (.position this) (.remaining this))))
+    ([this ^MutableDirectBuffer to]
+     (doto to
+       (.putBytes 0 this (.position this) (.remaining this)))))
 
   (off-heap? [this]
     (.isDirect this))
