@@ -103,6 +103,7 @@
     (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
       (doseq [doc (tx/tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
+      (.flush producer)
       (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
                                 (.send producer))]
         (delay
