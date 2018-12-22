@@ -51,7 +51,7 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [snapshot object-store tx-log [op] transact-time tx-id] op))
+(defmulti tx-command (fn [snapshot tx-log [op] transact-time tx-id] op))
 
 (defn- in-range-pred [start end]
   #(and (or (nil? start)
@@ -75,13 +75,13 @@
                    tx-id)
                   content-hash-bytes]))}))
 
-(defmethod tx-command :crux.tx/put [snapshot object-store tx-log [op k v start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/put [snapshot tx-log [op k v start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->bytes (c/new-id v))))
 
-(defmethod tx-command :crux.tx/delete [snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/delete [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-bytes))
 
-(defmethod tx-command :crux.tx/cas [snapshot object-store tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [snapshot tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
@@ -98,7 +98,7 @@
              tx-id)
             (c/id->bytes new-v-id)]]}))
 
-(defmethod tx-command :crux.tx/evict [snapshot object-store tx-log [op k start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
@@ -106,8 +106,7 @@
     {:post-commit-fn #(when tx-log
                         (doseq [^EntityTx entity-tx history-descending
                                 :let [content-hash (.content-hash entity-tx)]
-                                :when (and ((in-range-pred start-business-time end-business-time) (.bt entity-tx))
-                                           (db/get-single-object object-store snapshot content-hash))]
+                                :when ((in-range-pred start-business-time end-business-time) (.bt entity-tx))]
                           (db/submit-doc tx-log content-hash nil)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
              (c/id->bytes eid)
@@ -140,7 +139,7 @@
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (for [tx-op tx-ops]
-                                 (tx-command snapshot object-store tx-log tx-op tx-time tx-id))]
+                                 (tx-command snapshot tx-log tx-op tx-time tx-id))]
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
                    (pre-commit-fn))
