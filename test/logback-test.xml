@@ -9,6 +9,7 @@
   </root>
   <logger name="crux" level="INFO" />
   <logger name="crux.bootstrap" level="WARN" />
+  <logger name="crux.hash" level="WARN" />
   <logger name="crux.http-server" level="WARN" />
   <logger name="crux.kafka" level="WARN" />
   <logger name="crux.tx" level="ERROR" />

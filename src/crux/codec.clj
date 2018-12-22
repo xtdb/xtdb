@@ -1,5 +1,6 @@
 (ns crux.codec
   (:require [crux.byte-utils :as bu]
+            [crux.hash :as hash]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
@@ -30,10 +31,7 @@
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
-(def ^:const ^:private id-hash-algorithm "SHA-1")
-(def ^:const id-size (+ (.getDigestLength (MessageDigest/getInstance id-hash-algorithm))
-                        value-type-id-size))
-(def ^:private ^MessageDigest id-digest-prototype (MessageDigest/getInstance id-hash-algorithm))
+(def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
 (def empty-byte-array (byte-array 0))
 
@@ -70,12 +68,8 @@
     (.byteArray ub)))
 
 (defn id-function ^bytes [^bytes bytes]
-  (let [md (try
-             (.clone id-digest-prototype)
-             (catch CloneNotSupportedException e
-               (MessageDigest/getInstance id-hash-algorithm)))]
-    (-> (.digest ^MessageDigest md bytes)
-        (prepend-value-type-id id-value-type-id))))
+  (-> (hash/id-hash bytes)
+      (prepend-value-type-id id-value-type-id)))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
@@ -241,7 +235,7 @@
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this))]
         (id->buffer id to)
-        (throw (IllegalArgumentException. (format "Not a %s hex, keyword or an UUID string: %s" id-hash-algorithm this))))))
+        (throw (IllegalArgumentException. (format "Not a %s hex, keyword or an UUID string: %s" hash/id-hash-algorithm this))))))
 
   IPersistentMap
   (id->buffer [this to]
