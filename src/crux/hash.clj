@@ -23,7 +23,7 @@
                               (MessageDigest/getInstance id-hash-algorithm)))]
     (UnsafeBuffer. (.digest md (mem/->on-heap buffer)))))
 
-(defn- message-digest-id-hash ^bytes [^bytes bytes]
+(defn message-digest-id-hash ^bytes [^bytes bytes]
   (mem/->on-heap (message-digest-id-hash-buffer (mem/as-buffer bytes))))
 
 (defn- jnr-available? []
@@ -33,13 +33,13 @@
     (catch ClassNotFoundException e
       false)))
 
-(try
-  (when (and gcrypt-enabled?
-             (jnr-available?)
-             (not (bound? #'id-hash)))
-    (require 'crux.hash.jnr)
-    (log/info "Using libgcrypt for ID hashing."))
-  (catch Throwable t
-    (log/warn t "Could not load libgcrypt, using java.security.MessageDigest for ID hashing.")))
-
-(def id-hash (or (resolve 'crux.hash.jnr/gcrypt-id-hash) message-digest-id-hash))
+(when-not (bound? #'id-hash)
+  (try
+    (when (and gcrypt-enabled?
+               (jnr-available?))
+      (require 'crux.hash.jnr)
+      (log/info "Using libgcrypt for ID hashing.")
+      (def id-hash (resolve 'crux.hash.jnr/gcrypt-id-hash)))
+    (catch Throwable t
+      (log/warn t "Could not load libgcrypt, using java.security.MessageDigest for ID hashing.")
+      (def id-hash message-digest-id-hash))))
