@@ -7,7 +7,6 @@
            [java.io Closeable Writer]
            java.net.URI
            [java.nio ByteOrder ByteBuffer]
-           java.security.MessageDigest
            [java.util Arrays Date UUID]
            [org.agrona DirectBuffer ExpandableArrayBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
