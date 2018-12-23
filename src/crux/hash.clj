@@ -16,12 +16,12 @@
 (declare id-hash)
 
 ;; NOTE: Allowing on-heap buffer here for now.
-(defn- message-digest-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
-    (let [^MessageDigest md (try
-                              (.clone id-digest-prototype)
-                              (catch CloneNotSupportedException e
-                                (MessageDigest/getInstance id-hash-algorithm)))]
-      (UnsafeBuffer. (.digest md (mem/->on-heap buffer)))))
+(defn message-digest-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
+  (let [^MessageDigest md (try
+                            (.clone id-digest-prototype)
+                            (catch CloneNotSupportedException e
+                              (MessageDigest/getInstance id-hash-algorithm)))]
+    (UnsafeBuffer. (.digest md (mem/->on-heap buffer)))))
 
 (defn- message-digest-id-hash ^bytes [^bytes bytes]
   (mem/->on-heap (message-digest-id-hash-buffer (mem/as-buffer bytes))))

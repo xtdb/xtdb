@@ -7,20 +7,16 @@
            java.util.function.Supplier
            jnr.ffi.Pointer))
 
-;; TODO: Spike using libgcrypt to do the SHA1 native, can be 30%
-;; faster than MessageDigest, but not necessarily with sane realistic
-;; allocation patterns, might be easier to integrate once everything
-;; is in buffers already.
-
-;; Worth exploring a bit as we calculate a lot of hashes. Would allow
-;; us to get rid of the pre-pending step of the id type id as well to
-;; the digest buffer as we control the offsets here. We would fallback
-;; to MessageDigest if we cannot load libgcrypt. It's available by
-;; default in Ubuntu 16.04 and likely many other distros.
+;; Uses libgcrypt to do the SHA1 native, can be 30% faster than
+;; MessageDigest, but not necessarily with sane realistic allocation
+;; patterns, might be easier to integrate once everything is in
+;; buffers already. It's available by default in Ubuntu 16.04 and
+;; likely many other distros.
 
 ;; See:
 ;; https://www.gnupg.org/documentation/manuals/gcrypt/Hashing.html#Hashing
 ;; https://ubuntuforums.org/archive/index.php/t-337664.html
+
 (definterface GCrypt
   (^int gcry_md_map_name [^String name])
   (^int gcry_md_get_algo_dlen [^int algo])
@@ -53,7 +49,7 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- gcrypt-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
+(defn gcrypt-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (let [^DirectBuffer digest (.get digest-tl)
         ^DirectBuffer buffer (if (mem/off-heap? buffer)
                                buffer
