@@ -145,7 +145,7 @@ public class ByteUtils {
             final byte aByte = UNSAFE.getByte(aOffset + i);
             final byte bByte = UNSAFE.getByte(bOffset + i);
             if (aByte != bByte) {
-                return Byte.compareUnsigned(aByte, bByte);
+                return (aByte & 0xff) - (bByte & 0xff);
             }
         }
 
@@ -182,7 +182,7 @@ public class ByteUtils {
             final byte aByte = UNSAFE.getByte(aByteArray, aOffset + i);
             final byte bByte = UNSAFE.getByte(bByteArray, bOffset + i);
             if (aByte != bByte) {
-                return Byte.compareUnsigned(aByte, bByte);
+                return (aByte & 0xff) - (bByte & 0xff);
             }
         }
 
