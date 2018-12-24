@@ -96,7 +96,7 @@ public class ByteUtils {
     }
 
     public static int compareBytes(final byte[] a, final byte[] b, final int maxLength) {
-        return ByteUtils.compareBuffers(new UnsafeBuffer(a), new UnsafeBuffer(b), maxLength);
+        return ByteUtils.compareBuffersSlowPath(new UnsafeBuffer(a), new UnsafeBuffer(b), maxLength);
     }
 
     public static int compareBytes(final byte[] a, final byte[] b) {
@@ -118,6 +118,44 @@ public class ByteUtils {
     }
 
     public static int compareBuffers(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
+        if (a.byteArray() != null || b.byteArray() != null) {
+            return compareBuffersSlowPath(a, b, maxLength);
+        }
+        final int aCapacity = a.capacity();
+        final int bCapacity = b.capacity();
+        final long aOffset = a.addressOffset();
+        final long bOffset = b.addressOffset();
+        final int length = Math.min(Math.min(aCapacity, bCapacity), maxLength);
+        final int maxStrideOffset = length & ~(Long.BYTES - 1);
+
+        int i = 0;
+        for (; i < maxStrideOffset; i += Long.BYTES) {
+            final long aLong = UNSAFE.getLong(aOffset + i);
+            final long bLong = UNSAFE.getLong(bOffset + i);
+            if (aLong != bLong) {
+                if (IS_LITTLE_ENDIAN) {
+                    return Long.compareUnsigned(Long.reverseBytes(aLong),
+                                                Long.reverseBytes(bLong));
+                } else {
+                    return Long.compareUnsigned(aLong, bLong);
+                }
+            }
+        }
+        for (; i < length; i++) {
+            final byte aByte = UNSAFE.getByte(aOffset + i);
+            final byte bByte = UNSAFE.getByte(bOffset + i);
+            if (aByte != bByte) {
+                return Byte.compareUnsigned(aByte, bByte);
+            }
+        }
+
+        if (i == maxLength) {
+            return 0;
+        }
+        return aCapacity - bCapacity;
+    }
+
+    private static int compareBuffersSlowPath(final DirectBuffer a, final DirectBuffer b, final int maxLength) {
         final int aCapacity = a.capacity();
         final int bCapacity = b.capacity();
         final byte[] aByteArray = a.byteArray();
@@ -144,7 +182,7 @@ public class ByteUtils {
             final byte aByte = UNSAFE.getByte(aByteArray, aOffset + i);
             final byte bByte = UNSAFE.getByte(bByteArray, bOffset + i);
             if (aByte != bByte) {
-                return (aByte & 0xFF) - (bByte & 0xFF);
+                return Byte.compareUnsigned(aByte, bByte);
             }
         }
 
