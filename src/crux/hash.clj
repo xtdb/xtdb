@@ -35,11 +35,13 @@
 
 (when-not (bound? #'id-hash)
   (try
-    (when (and gcrypt-enabled?
-               (jnr-available?))
-      (require 'crux.hash.jnr)
-      (log/info "Using libgcrypt for ID hashing.")
-      (def id-hash (resolve 'crux.hash.jnr/gcrypt-id-hash)))
+    (if-let [gcrypt-id-hash (and gcrypt-enabled?
+                                 (jnr-available?)
+                                 (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash))]
+      (do (log/info "Using libgcrypt for ID hashing.")
+          (def id-hash gcrypt-id-hash))
+      (do (log/info "Using java.security.MessageDigest for ID hashing.")
+          (def id-hash message-digest-id-hash)))
     (catch Throwable t
-      (log/warn t "Could not load libgcrypt, using java.security.MessageDigest for ID hashing.")
+      (log/warn t "Could not load libgcrypt, falling back to java.security.MessageDigest for ID hashing.")
       (def id-hash message-digest-id-hash))))
