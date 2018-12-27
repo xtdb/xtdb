@@ -63,7 +63,7 @@
 
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
   (let [attr (c/->id-buffer attr)
-        prefix (c/encode-attribute+value+entity+content-hash-key attr)]
+        prefix (c/encode-attribute+value+entity+content-hash-key-to nil attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ExpandableDirectByteBuffer.) (atom nil))))
 
 (defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx eb peek-state]
@@ -147,7 +147,7 @@
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
   (let [attr (c/->id-buffer attr)
-        prefix (c/encode-attribute+entity+value+content-hash-key attr)]
+        prefix (c/encode-attribute+entity+value+content-hash-key-to nil attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
                                           (ExpandableDirectByteBuffer.) (atom nil))))
 
@@ -269,11 +269,11 @@
 ;; Meta
 
 (defn store-meta [kv k v]
-  (kv/store kv [[(c/encode-meta-key (c/->id-buffer k))
+  (kv/store kv [[(c/encode-meta-key-to nil (c/->id-buffer k))
                  (mem/->off-heap (nippy/fast-freeze v))]]))
 
 (defn read-meta [kv k]
-  (let [seek-k (c/encode-meta-key (c/->id-buffer k))]
+  (let [seek-k (c/encode-meta-key-to nil (c/->id-buffer k))]
     (with-open [snapshot (kv/new-snapshot kv)
                 i (kv/new-iterator snapshot)]
       (when-let [k (kv/seek i seek-k)]
@@ -311,9 +311,9 @@
                             v v
                             :let [v (c/->value-buffer v)]
                             :when (pos? (mem/capacity v))]
-                        [[(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
+                        [[(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
                           c/empty-buffer]
-                         [(c/encode-attribute+entity+value+content-hash-key k id v content-hash)
+                         [(c/encode-attribute+entity+value+content-hash-key-to nil k id v content-hash)
                           c/empty-buffer]])
                       (reduce into [])))
     (update-predicate-stats kv + normalized-doc)))
@@ -327,8 +327,8 @@
                              v v
                              :let [v (c/->value-buffer v)]
                              :when (pos? (mem/capacity v))]
-                         [(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
-                          (c/encode-attribute+entity+value+content-hash-key k id v content-hash)])
+                         [(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
+                          (c/encode-attribute+entity+value+content-hash-key-to nil k id v content-hash)])
                        (reduce into [])))
     (update-predicate-stats kv - normalized-doc)))
 
@@ -340,16 +340,16 @@
   (get-single-object [this snapshot k]
     (with-open [i (kv/new-iterator snapshot)]
       (let [doc-key (c/->id-buffer k)
-            seek-k (c/encode-doc-key doc-key)
+            seek-k (c/encode-doc-key-to nil doc-key)
             k (kv/seek i seek-k)]
         (when (and k (mem/buffers=? seek-k k))
           (nippy/fast-thaw (mem/->on-heap (kv/value i)))))))
 
   (get-objects [this snapshot ks]
     (with-open [i (kv/new-iterator snapshot)]
-      (->> (for [seek-k (->> (map (comp c/encode-doc-key c/->id-buffer) ks)
-                             (sort mem/buffer-comparator))
-                 :let [k (kv/seek i seek-k)]
+      (->> (for [k ks
+                 :let [seek-k (c/encode-doc-key-to nil (c/->id-buffer k))
+                       k (kv/seek i seek-k)]
                  :when (and k (mem/buffers=? seek-k k))]
              [(c/safe-id (c/decode-doc-key-from k))
               (nippy/fast-thaw (mem/->on-heap (kv/value i)))])
@@ -357,11 +357,12 @@
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
-                   [(c/encode-doc-key (c/->id-buffer k))
+                   [(c/encode-doc-key-to nil (c/->id-buffer k))
                     (mem/->off-heap (nippy/fast-freeze v))])))
 
   (delete-objects [this ks]
-    (kv/delete kv (map (comp c/encode-doc-key c/->id-buffer) ks)))
+    (kv/delete kv (for [k ks]
+                    (c/encode-doc-key-to nil (c/->id-buffer k)))))
 
   Closeable
   (close [_]))
@@ -435,14 +436,14 @@
 
 (defn all-entities [snapshot business-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+bt+tt+tx-id-key))
+    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+bt+tt+tx-id-key-to nil))
                     (map (comp :eid c/decode-entity+bt+tt+tx-id-key-from))
                     (distinct))]
       (entities-at snapshot eids business-time transact-time))))
 
 (defn entity-history [snapshot eid]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [seek-k (c/encode-entity+bt+tt+tx-id-key (c/->id-buffer eid))]
+    (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid))]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (c/decode-entity+bt+tt+tx-id-key-from k)
                  (enrich-entity-tx v)
@@ -515,7 +516,8 @@
 
 (defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
   (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
-    (let [version-k (c/encode-attribute+entity+value+content-hash-key
+    (let [version-k (c/encode-attribute+entity+value+content-hash-key-to
+                     nil
                      a
                      (c/->id-buffer (.eid entity-tx))
                      v

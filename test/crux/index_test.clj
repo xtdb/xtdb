@@ -14,10 +14,7 @@
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q]
-            [taoensso.nippy :as nippy])
-  (:import java.util.Date
-           java.nio.ByteBuffer
-           org.agrona.ExpandableDirectByteBuffer))
+            [taoensso.nippy :as nippy]))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
@@ -237,7 +234,7 @@
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-attribute+entity+value+content-hash-key-to
-                                     (ExpandableDirectByteBuffer.)
+                                     nil
                                      (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/->value-buffer "Pablo")
@@ -262,7 +259,7 @@
                 (with-open [i (kv/new-iterator snapshot)]
                   (doseq [{:keys [content-hash]} picasso-history
                           :let [version-k (c/encode-attribute+entity+value+content-hash-key-to
-                                           (ExpandableDirectByteBuffer.)
+                                           nil
                                            (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
                                            (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                            (c/->value-buffer "Pablo")

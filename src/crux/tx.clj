@@ -68,7 +68,8 @@
                               (filter (in-range-pred start-business-time end-business-time))
                               (into (sorted-set)))]
     {:kvs (vec (for [business-time dates-to-correct]
-                 [(c/encode-entity+bt+tt+tx-id-key
+                 [(c/encode-entity+bt+tt+tx-id-key-to
+                   nil
                    (c/->id-buffer eid)
                    business-time
                    transact-time
@@ -90,7 +91,8 @@
                             (c/new-id old-v))
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
-     :kvs [[(c/encode-entity+bt+tt+tx-id-key
+     :kvs [[(c/encode-entity+bt+tt+tx-id-key-to
+             nil
              (c/->id-buffer eid)
              business-time
              transact-time
@@ -106,7 +108,8 @@
                         (doseq [^EntityTx entity-tx history-descending
                                 :when ((in-range-pred start-business-time end-business-time) (.bt entity-tx))]
                           (db/submit-doc tx-log (.content-hash entity-tx) nil)))
-     :kvs [[(c/encode-entity+bt+tt+tx-id-key
+     :kvs [[(c/encode-entity+bt+tt+tx-id-key-to
+             nil
              (c/->id-buffer eid)
              end-business-time
              transact-time
@@ -180,7 +183,7 @@
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
           indexer (->KvIndexer kv this (idx/->KvObjectStore kv))]
-      (kv/store kv [[(c/encode-tx-log-key tx-id transact-time)
+      (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
                      (nippy/fast-freeze conformed-tx-ops)]])
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
@@ -198,7 +201,7 @@
 
   (tx-log [this tx-log-context]
     (let [i (kv/new-iterator tx-log-context)]
-      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key) true)]
+      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil) true)]
         (assoc (c/decode-tx-log-key-from k)
                :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
 
