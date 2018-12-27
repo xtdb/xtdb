@@ -119,9 +119,14 @@
     (.rocksdb_iter_get_error rocksdb i errptr)
     (check-error errptr)))
 
+;; TODO: What is the right behaviour here? If we don't copy the data
+;; from Rocks, it seems like the data gets reused / GCd and we get
+;; wrong results, but no crash. Who frees this pointer? In the Rocks
+;; example it looks like the caller is responsible for this, but
+;; trying to do it via com.kenai.jffi.MemoryIO crashes.
 (defn- pointer+len->buffer ^org.agrona.DirectBuffer [^Pointer address ^Pointer len-out]
   (let [len (.getInt len-out 0)]
-    (UnsafeBuffer. (.address address) len)))
+    (mem/copy-buffer (UnsafeBuffer. (.address address) len))))
 
 (defn- iterator->key ^org.agrona.DirectBuffer [^Pointer i ^Pointer len-out]
   (when (= 1 (.rocksdb_iter_valid rocksdb i))
