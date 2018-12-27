@@ -69,14 +69,14 @@
                               (into (sorted-set)))]
     {:kvs (vec (for [business-time dates-to-correct]
                  [(c/encode-entity+bt+tt+tx-id-key
-                   (c/id->new-buffer eid)
+                   (c/->id-buffer eid)
                    business-time
                    transact-time
                    tx-id)
                   content-hash]))}))
 
 (defmethod tx-command :crux.tx/put [snapshot tx-log [op k v start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->new-buffer (c/new-id v))))
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/->id-buffer (c/new-id v))))
 
 (defmethod tx-command :crux.tx/delete [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-buffer))
@@ -91,11 +91,11 @@
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
-             (c/id->new-buffer eid)
+             (c/->id-buffer eid)
              business-time
              transact-time
              tx-id)
-            (c/id->new-buffer new-v)]]}))
+            (c/->id-buffer new-v)]]}))
 
 (defmethod tx-command :crux.tx/evict [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (c/new-id k)
@@ -107,7 +107,7 @@
                                 :when ((in-range-pred start-business-time end-business-time) (.bt entity-tx))]
                           (db/submit-doc tx-log (.content-hash entity-tx) nil)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
-             (c/id->new-buffer eid)
+             (c/->id-buffer eid)
              end-business-time
              transact-time
              tx-id)

@@ -66,7 +66,7 @@
         (attribute-value+placeholder k peek-state)))))
 
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
-  (let [attr (c/id->new-buffer attr)
+  (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+value+entity+content-hash-key attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (atom nil))))
 
@@ -74,14 +74,14 @@
   (loop [k current-k]
     (reset! peek-state (mem/inc-unsigned-buffer! (mem/copy-buffer k (- (mem/capacity k) c/id-size))))
     (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))
-              eid-buffer (c/id->new-buffer eid)
+              eid-buffer (c/->id-buffer eid)
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
           (when entity-tx
             (let [version-k (c/encode-attribute+value+entity+content-hash-key
                              attr
                              value
                              eid-buffer
-                             (c/id->new-buffer (.content-hash entity-tx)))]
+                             (c/->id-buffer (.content-hash entity-tx)))]
               (when-let [found-k (kv/seek i version-k)]
                 (when (mem/buffers=? version-k found-k)
                   [eid-buffer entity-tx])))))
@@ -101,7 +101,7 @@
                          attr
                          value
                          (if k
-                           (c/id->new-buffer k)
+                           (c/->id-buffer k)
                            c/empty-buffer))
                         (kv/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-state))))
@@ -112,13 +112,13 @@
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex (kv/new-iterator snapshot) (c/id->new-buffer attr) value-entity-value-idx entity-as-of-idx (atom nil)))
+  (->DocAttributeValueEntityEntityIndex (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx (atom nil)))
 
 ;; AEV
 
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
   (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
-        eid-buffer (c/id->new-buffer eid)
+        eid-buffer (c/->id-buffer eid)
         [_ entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
@@ -129,7 +129,7 @@
   db/Index
   (seek-values [this k]
     (when-let [k (->> (if k
-                        (c/id->new-buffer k)
+                        (c/->id-buffer k)
                         c/empty-buffer)
                       (c/encode-attribute+entity+value+content-hash-key attr)
                       (kv/seek i))]
@@ -149,7 +149,7 @@
             placeholder))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
-  (let [attr (c/id->new-buffer attr)
+  (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+entity+value+content-hash-key attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx (atom nil))))
 
@@ -162,9 +162,9 @@
         (or (let [value (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
                   version-k (c/encode-attribute+entity+value+content-hash-key
                              attr
-                             (c/id->new-buffer eid)
+                             (c/->id-buffer eid)
                              value
-                             (c/id->new-buffer content-hash))]
+                             (c/->id-buffer content-hash))]
               (when-let [found-k (kv/seek i version-k)]
                 (when (mem/buffers=? version-k found-k)
                   [value entity-tx])))
@@ -173,7 +173,7 @@
 
 (defn- attribute-value-entity-tx+prefix-iterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr]
   (let [{:keys [^EntityTx entity-tx]} @(.peek-state entity-value-entity-idx)
-        prefix (c/encode-attribute+entity+value+content-hash-key attr (c/id->new-buffer (.eid entity-tx)))]
+        prefix (c/encode-attribute+entity+value+content-hash-key attr (c/->id-buffer (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 
 (defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx peek-state]
@@ -182,7 +182,7 @@
     (let [[^EntityTx entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr)]
       (when-let [k (->> (c/encode-attribute+entity+value+content-hash-key
                          attr
-                         (c/id->new-buffer (.eid entity-tx))
+                         (c/->id-buffer (.eid entity-tx))
                          (or k c/empty-buffer))
                         (kv/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-state))))
@@ -193,7 +193,7 @@
         (attribute-entity-value-value+entity i k attr entity-tx peek-state)))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
-  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/id->new-buffer attr) entity-value-entity-idx (atom nil)))
+  (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->id-buffer attr) entity-value-entity-idx (atom nil)))
 
 ;; Range Constraints
 
@@ -219,15 +219,15 @@
      (constantly true))))
 
 (defn new-less-than-equal-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate (comp not pos?) (c/value->new-buffer max-v))]
+  (let [pred (value-comparsion-predicate (comp not pos?) (c/->value-buffer max-v))]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-less-than-virtual-index [idx max-v]
-  (let [pred (value-comparsion-predicate neg? (c/value->new-buffer max-v))]
+  (let [pred (value-comparsion-predicate neg? (c/->value-buffer max-v))]
     (->PredicateVirtualIndex idx pred identity)))
 
 (defn new-greater-than-equal-virtual-index [idx min-v]
-  (let [min-v (c/value->new-buffer min-v)
+  (let [min-v (c/->value-buffer min-v)
         pred (value-comparsion-predicate (comp not neg?) min-v)]
     (->PredicateVirtualIndex idx pred (fn [k]
                                         (if (pred k)
@@ -244,7 +244,7 @@
     (db/next-values idx)))
 
 (defn new-greater-than-virtual-index [idx min-v]
-  (let [min-v (c/value->new-buffer min-v)
+  (let [min-v (c/->value-buffer min-v)
         pred (value-comparsion-predicate pos? min-v)
         idx (->PredicateVirtualIndex idx pred (fn [k]
                                                 (if (pred k)
@@ -268,11 +268,11 @@
 ;; Meta
 
 (defn store-meta [kv k v]
-  (kv/store kv [[(c/encode-meta-key (c/id->new-buffer k))
+  (kv/store kv [[(c/encode-meta-key (c/->id-buffer k))
                  (mem/->off-heap (nippy/fast-freeze v))]]))
 
 (defn read-meta [kv k]
-  (let [seek-k (c/encode-meta-key (c/id->new-buffer k))]
+  (let [seek-k (c/encode-meta-key (c/->id-buffer k))]
     (with-open [snapshot (kv/new-snapshot kv)
                 i (kv/new-iterator snapshot)]
       (when-let [k (kv/seek i seek-k)]
@@ -302,13 +302,13 @@
        (store-meta kv :crux.kv/stats)))
 
 (defn index-doc [kv content-hash doc]
-  (let [id (c/id->new-buffer (:crux.db/id doc))
-        content-hash (c/id->new-buffer content-hash)
+  (let [id (c/->id-buffer (:crux.db/id doc))
+        content-hash (c/->id-buffer content-hash)
         normalized-doc (normalize-doc doc)]
     (kv/store kv (->> (for [[k v] normalized-doc
-                            :let [k (c/id->new-buffer k)]
+                            :let [k (c/->id-buffer k)]
                             v v
-                            :let [v (c/value->new-buffer v)]
+                            :let [v (c/->value-buffer v)]
                             :when (pos? (mem/capacity v))]
                         [[(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           c/empty-buffer]
@@ -318,13 +318,13 @@
     (update-predicate-stats kv + normalized-doc)))
 
 (defn delete-doc-from-index [kv content-hash doc]
-  (let [id (c/id->new-buffer (:crux.db/id doc))
-        content-hash (c/id->new-buffer content-hash)
+  (let [id (c/->id-buffer (:crux.db/id doc))
+        content-hash (c/->id-buffer content-hash)
         normalized-doc (normalize-doc doc)]
     (kv/delete kv (->> (for [[k v] normalized-doc
-                             :let [k (c/id->new-buffer k)]
+                             :let [k (c/->id-buffer k)]
                              v v
-                             :let [v (c/value->new-buffer v)]
+                             :let [v (c/->value-buffer v)]
                              :when (pos? (mem/capacity v))]
                          [(c/encode-attribute+value+entity+content-hash-key k v id content-hash)
                           (c/encode-attribute+entity+value+content-hash-key k id v content-hash)])
@@ -338,7 +338,7 @@
   db/ObjectStore
   (get-single-object [this snapshot k]
     (with-open [i (kv/new-iterator snapshot)]
-      (let [doc-key (c/id->new-buffer k)
+      (let [doc-key (c/->id-buffer k)
             seek-k (c/encode-doc-key doc-key)
             k (kv/seek i seek-k)]
         (when (and k (mem/buffers=? seek-k k))
@@ -346,7 +346,7 @@
 
   (get-objects [this snapshot ks]
     (with-open [i (kv/new-iterator snapshot)]
-      (->> (for [seek-k (->> (map (comp c/encode-doc-key c/id->new-buffer) ks)
+      (->> (for [seek-k (->> (map (comp c/encode-doc-key c/->id-buffer) ks)
                              (sort mem/buffer-comparator))
                  :let [k (kv/seek i seek-k)]
                  :when (and k (mem/buffers=? seek-k k))]
@@ -356,11 +356,11 @@
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
-                   [(c/encode-doc-key (c/id->new-buffer k))
+                   [(c/encode-doc-key (c/->id-buffer k))
                     (mem/->off-heap (nippy/fast-freeze v))])))
 
   (delete-objects [this ks]
-    (kv/delete kv (map (comp c/encode-doc-key c/id->new-buffer) ks)))
+    (kv/delete kv (map (comp c/encode-doc-key c/->id-buffer) ks)))
 
   Closeable
   (close [_]))
@@ -406,7 +406,7 @@
                 entity-tx (c/decode-entity+bt+tt+tx-id-key-from k)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (mem/buffers=? c/nil-id-buffer v)
-                [(c/id->new-buffer (.eid entity-tx))
+                [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)])
               (recur (kv/next i))))))))
 
@@ -424,7 +424,7 @@
 (defn entities-at [snapshot eids business-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot business-time transact-time)]
     (some->> (for [eid eids
-                   :let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/id->new-buffer eid))]
+                   :let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
                    :when entity-tx]
                (safe-entity-tx entity-tx))
              (not-empty)
@@ -439,7 +439,7 @@
 
 (defn entity-history [snapshot eid]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [seek-k (c/encode-entity+bt+tt+tx-id-key (c/id->new-buffer eid))]
+    (let [seek-k (c/encode-entity+bt+tt+tx-id-key (c/->id-buffer eid))]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (c/decode-entity+bt+tt+tx-id-key-from k)
                  (enrich-entity-tx v)
@@ -513,10 +513,10 @@
 (defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
   (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
     (let [version-k (c/encode-attribute+entity+value+content-hash-key
-                     (c/id->new-buffer a)
-                     (c/id->new-buffer (.eid entity-tx))
-                     (c/value->new-buffer v)
-                     (c/id->new-buffer (.content-hash entity-tx)))]
+                     (c/->id-buffer a)
+                     (c/->id-buffer (.eid entity-tx))
+                     (c/->value-buffer v)
+                     (c/->id-buffer (.content-hash entity-tx)))]
       (with-open [i (new-prefix-kv-iterator (kv/new-iterator snapshot) version-k)]
         (when (kv/seek i version-k)
           entity-tx)))))
@@ -772,7 +772,7 @@
   (-> (new-sorted-virtual-index
        (for [prefix (partition-by first tuples)
              :let [value (ffirst prefix)]]
-         [(c/value->new-buffer value)
+         [(c/->value-buffer value)
           {:value value
            :child-idx (when (seq (next (first prefix)))
                         (build-nested-index (map next prefix) next-range-constraints))}]))

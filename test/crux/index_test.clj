@@ -236,10 +236,10 @@
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-attribute+entity+value+content-hash-key
-                                     (c/id->new-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                     (c/id->new-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                     (c/value->new-buffer "Pablo")
-                                     (c/id->new-buffer content-hash))]]
+                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                     (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                     (c/->value-buffer "Pablo")
+                                     (c/->id-buffer content-hash))]]
               (t/is (mem/buffers=? version-k (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
 
     (t/testing "can evict entity"
@@ -260,10 +260,10 @@
                 (with-open [i (kv/new-iterator snapshot)]
                   (doseq [{:keys [content-hash]} picasso-history
                           :let [version-k (c/encode-attribute+entity+value+content-hash-key
-                                           (c/id->new-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                           (c/id->new-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                           (c/value->new-buffer "Pablo")
-                                           (c/id->new-buffer content-hash))]]
+                                           (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                           (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                           (c/->value-buffer "Pablo")
+                                           (c/->id-buffer content-hash))]]
                     (t/is (nil? (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
@@ -489,19 +489,19 @@
 
 (t/deftest test-sorted-virtual-index
   (let [idx (idx/new-sorted-virtual-index
-             [[(c/value->new-buffer 1) :a]
-              [(c/value->new-buffer 3) :c]])]
+             [[(c/->value-buffer 1) :a]
+              [(c/->value-buffer 3) :c]])]
     (t/is (= :a
-             (second (db/seek-values idx (c/value->new-buffer 0)))))
+             (second (db/seek-values idx (c/->value-buffer 0)))))
     (t/is (= :a
-             (second (db/seek-values idx (c/value->new-buffer 1)))))
+             (second (db/seek-values idx (c/->value-buffer 1)))))
     (t/is (= :c
              (second (db/next-values idx))))
     (t/is (= :c
-             (second (db/seek-values idx (c/value->new-buffer 2)))))
+             (second (db/seek-values idx (c/->value-buffer 2)))))
     (t/is (= :c
-             (second (db/seek-values idx (c/value->new-buffer 3)))))
-    (t/is (nil? (db/seek-values idx (c/value->new-buffer 4))))))
+             (second (db/seek-values idx (c/->value-buffer 3)))))
+    (t/is (nil? (db/seek-values idx (c/->value-buffer 4))))))
 
 (t/deftest test-range-predicates
   (let [r (idx/new-relation-virtual-index :r
@@ -533,8 +533,8 @@
                   (map second))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/value->new-buffer nil)))))
-      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/value->new-buffer 1))))))
+      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/->value-buffer nil)))))
+      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/->value-buffer 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
@@ -549,17 +549,17 @@
 
 (t/deftest test-or-virtual-index
   (let [idx-1 (idx/new-sorted-virtual-index
-               [[(c/value->new-buffer 1) :a]
-                [(c/value->new-buffer 3) :c]
-                [(c/value->new-buffer 5) :e1]])
+               [[(c/->value-buffer 1) :a]
+                [(c/->value-buffer 3) :c]
+                [(c/->value-buffer 5) :e1]])
         idx-2 (idx/new-sorted-virtual-index
-               [[(c/value->new-buffer 2) :b]
-                [(c/value->new-buffer 4) :d]
-                [(c/value->new-buffer 5) :e2]
-                [(c/value->new-buffer 7) :g]])
+               [[(c/->value-buffer 2) :b]
+                [(c/->value-buffer 4) :d]
+                [(c/->value-buffer 5) :e2]
+                [(c/->value-buffer 7) :g]])
         idx-3 (idx/new-sorted-virtual-index
-               [[(c/value->new-buffer 5) :e3]
-                [(c/value->new-buffer 6) :f]])
+               [[(c/->value-buffer 5) :e3]
+                [(c/->value-buffer 6) :f]])
         idx (idx/new-or-virtual-index [idx-1 idx-2 idx-3])]
     (t/testing "interleaves results in value order"
       (t/is (= :a
@@ -587,7 +587,7 @@
 
     (t/testing "can seek into indexes"
       (t/is (= :d
-               (second (db/seek-values idx (c/value->new-buffer 4)))))
+               (second (db/seek-values idx (c/->value-buffer 4)))))
       (t/is (= :e1
                (second (db/next-values idx)))))))
 

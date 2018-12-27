@@ -233,7 +233,7 @@
                                   (group-by :sym))]
     (->> (for [[v-var clauses] v-var->range-clauses]
            [v-var (->> (for [{:keys [op val]} clauses
-                             :let [type-prefix (c/value-buffer-type-id (c/value->new-buffer val))]]
+                             :let [type-prefix (c/value-buffer-type-id (c/->value-buffer val))]]
                          (case op
                            < #(-> (idx/new-less-than-virtual-index % val)
                                   (idx/new-prefix-equal-virtual-index type-prefix))
@@ -498,7 +498,7 @@
                             (= (count values) 1))
                       (first values)
                       (loop [[x & xs] values]
-                        (if (mem/buffers=? value-buffer (c/value->new-buffer x))
+                        (if (mem/buffers=? value-buffer (c/->value-buffer x))
                           x
                           (when xs
                             (recur xs)))))]
@@ -644,7 +644,7 @@
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
                                    (sorted-set-by mem/buffer-comparator)))
-                            (->> (map c/value->new-buffer (idx/normalize-value arg))
+                            (->> (map c/->value-buffer (idx/normalize-value arg))
                                  (into (sorted-set-by mem/buffer-comparator)))))]
              (when (case op
                      == (boolean (not-empty (apply set/intersection values)))

@@ -165,7 +165,7 @@
        0
        id-size))))
 
-(defn value->new-buffer ^org.agrona.DirectBuffer [x]
+(defn ->value-buffer ^org.agrona.DirectBuffer [x]
   (value->buffer x (ExpandableDirectByteBuffer.)))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
@@ -186,7 +186,7 @@
   (when-let [[_ n] (re-find #"\:(.+)" s)]
     (keyword n)))
 
-(declare id->new-buffer)
+(declare ->id-buffer)
 
 (extend-protocol IdToBuffer
   (class (byte-array 0))
@@ -253,7 +253,7 @@
   (equals [this that]
     (or (identical? this that)
         (and (satisfies? IdToBuffer that)
-             (mem/buffers=? (.buffer this) (id->new-buffer that)))))
+             (mem/buffers=? (.buffer this) (->id-buffer that)))))
 
   (hashCode [this]
     (when (zero? hash-code)
@@ -268,12 +268,12 @@
   (compareTo [this that]
     (if (identical? this that)
       0
-      (mem/compare-buffers (id->new-buffer this) (id->new-buffer that)))))
+      (mem/compare-buffers (->id-buffer this) (->id-buffer that)))))
 
 (def ^:private ^crux.codec.Id nil-id
   (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
 
-(defn id->new-buffer ^org.agrona.DirectBuffer [x]
+(defn ->id-buffer ^org.agrona.DirectBuffer [x]
   (cond
     (instance? Id x)
     (.buffer ^Id x)
@@ -307,13 +307,13 @@
     nil-id
 
     :else
-    (let [bs (id->new-buffer id)]
+    (let [bs (->id-buffer id)]
       (assert (= id-size (mem/capacity bs)))
       (Id. (UnsafeBuffer. bs) 0))))
 
 (defn valid-id? [x]
   (try
-    (id->new-buffer x)
+    (->id-buffer x)
     true
     (catch IllegalArgumentException _
       false)))
@@ -322,7 +322,7 @@
  Id
  :crux.codec/id
  [x data-output]
- (.write data-output (mem/->on-heap (id->new-buffer x))))
+ (.write data-output (mem/->on-heap (->id-buffer x))))
 
 (nippy/extend-thaw
  :crux.codec/id
