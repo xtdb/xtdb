@@ -1,7 +1,7 @@
 (ns crux.hash.jnr
   (:require [crux.hash :as hash]
             [crux.memory :as mem])
-  (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer]
+  (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            java.security.MessageDigest
            java.util.function.Supplier
@@ -37,29 +37,19 @@
         (format "libgcrypt and MessageDigest disagree on digest size: %d %d"
                 gcrypt-hash-dlen hash/id-hash-size))
 
-(def ^:private ^ThreadLocal digest-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (mem/allocate-buffer gcrypt-hash-dlen)))))
-
 (def ^:private ^ThreadLocal buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn gcrypt-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
-  (let [^DirectBuffer digest (.get digest-tl)
-        ^DirectBuffer buffer (if (mem/off-heap? buffer)
+(defn gcrypt-id-hash-buffer ^org.agrona.DirectBuffer [^MutableDirectBuffer to ^DirectBuffer buffer]
+  (let [^DirectBuffer buffer (if (mem/off-heap? buffer)
                                buffer
                                (mem/ensure-off-heap buffer (.get buffer-tl)))]
     (.gcry_md_hash_buffer gcrypt
                           gcrypt-hash-algo
-                          (Pointer/wrap gcrypt-rt (.addressOffset digest))
+                          (Pointer/wrap gcrypt-rt (.addressOffset to))
                           (Pointer/wrap gcrypt-rt (.addressOffset buffer))
                           (mem/capacity buffer))
-    digest))
-
-(defn gcrypt-id-hash ^bytes [^bytes bytes]
-  (mem/->on-heap (gcrypt-id-hash-buffer (mem/ensure-off-heap bytes (.get buffer-tl)))))
+    (UnsafeBuffer. to 0 hash/id-hash-size)))

@@ -92,7 +92,7 @@ public class ByteUtils {
             UNSAFE.putByte(acc, accOffset + j, (byte) ((HEX_TO_NIBBLE[s.charAt(i)] << 4)
                                                        | HEX_TO_NIBBLE[s.charAt(i + 1)]));
         }
-        return buffer;
+        return new UnsafeBuffer(buffer, 0, len >> 2);
     }
 
     public static int compareBytes(final byte[] a, final byte[] b, final int maxLength) {

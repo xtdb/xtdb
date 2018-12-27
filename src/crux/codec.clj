@@ -52,7 +52,7 @@
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
-(def nil-id-buffer (mem/->off-heap nil-id-bytes))
+(def ^org.agrona.DirectBuffer nil-id-buffer (mem/->off-heap nil-id-bytes))
 
 (defn- prepend-value-type-id ^bytes [^bytes bs ^long type-id]
   (let [ub (UnsafeBuffer. (byte-array (+ (alength bs) value-type-id-size)))]
@@ -60,9 +60,10 @@
     (.putBytes ub 1 bs)
     (.byteArray ub)))
 
-(defn id-function ^bytes [^bytes bytes]
-  (-> (hash/id-hash bytes)
-      (prepend-value-type-id id-value-type-id)))
+(defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
+  (.putByte to 0 (byte id-value-type-id))
+  (hash/id-hash (UnsafeBuffer. to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
+  (UnsafeBuffer. to 0 id-size))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
@@ -118,12 +119,8 @@
   String
   (value->buffer [this ^MutableDirectBuffer to]
     (if (< max-string-index-length (count this))
-      (UnsafeBuffer.
-       (doto to
-         (.putBytes 0 (doto (id-function (nippy/fast-freeze this))
-                        (aset 0 (byte object-value-type-id)))))
-       0
-       id-size)
+      (doto (id-function to (nippy/fast-freeze this))
+        (.putByte 0 (byte object-value-type-id)))
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
@@ -158,12 +155,8 @@
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
       (id->buffer this to)
-      (UnsafeBuffer.
-       (doto to
-         (.putBytes 0 (doto (id-function (nippy/fast-freeze this))
-                        (aset 0 (byte object-value-type-id)))))
-       0
-       id-size))))
+      (doto (id-function to (nippy/fast-freeze this))
+        (.putByte 0 (byte object-value-type-id))))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
   (value->buffer x (ExpandableDirectByteBuffer. 32)))
@@ -205,22 +198,30 @@
     (UnsafeBuffer. (doto to
                      (.putBytes 0 this)) 0 id-size))
 
+  DirectBuffer
+  (id->buffer [this ^MutableDirectBuffer to]
+    (UnsafeBuffer. (doto to
+                     (.putBytes 0 this 0 id-size)) 0 id-size))
+
   Keyword
   (id->buffer [this to]
-    (id->buffer (id-function (.getBytes (subs (str this) 1))) to))
+    (id-function to (.getBytes (subs (str this) 1))))
 
   UUID
   (id->buffer [this to]
-    (id->buffer (id-function (.getBytes (str this))) to))
+    (id-function to (.getBytes (str this))))
 
   URI
   (id->buffer [this to]
-    (id->buffer (id-function (.getBytes (str (.normalize this)))) to))
+    (id-function to (.getBytes (str (.normalize this)))))
 
   String
   (id->buffer [this to]
     (if (hex-id? this)
-      (id->buffer (prepend-value-type-id (bu/hex->bytes this) id-value-type-id) to)
+      (let [to (UnsafeBuffer. ^MutableDirectBuffer to 0 id-size)]
+        (do (.putByte to 0 id-value-type-id)
+            (mem/hex->buffer this (UnsafeBuffer. to value-type-id-size hash/id-hash-size))
+            to))
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this))]
         (id->buffer id to)
@@ -228,27 +229,20 @@
 
   IPersistentMap
   (id->buffer [this to]
-    (id->buffer (id-function (nippy/fast-freeze this)) to))
+    (id-function to (nippy/fast-freeze this)))
 
   nil
   (id->buffer [this to]
-    (id->buffer nil-id-bytes to)))
+    (id->buffer nil-id-buffer to)))
 
 (deftype Id [^DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBuffer
   (id->buffer [this to]
-    (UnsafeBuffer.
-     (doto ^MutableDirectBuffer to
-       (.putBytes 0 buffer 0 (.capacity buffer)))
-     0
-     id-size))
+    (id->buffer buffer to))
 
   Object
   (toString [this]
-    (bu/bytes->hex
-     (let [bytes (byte-array (- id-size value-type-id-size))]
-       (.getBytes buffer value-type-id-size bytes)
-       bytes)))
+    (mem/buffer->hex (UnsafeBuffer. buffer value-type-id-size hash/id-hash-size)))
 
   (equals [this that]
     (or (identical? this that)
@@ -278,11 +272,11 @@
     (instance? Id x)
     (.buffer ^Id x)
 
-    (nil? x)
-    nil-id-buffer
-
     (instance? DirectBuffer x)
     x
+
+    (nil? x)
+    nil-id-buffer
 
     :else
     (id->buffer x (mem/allocate-buffer id-size))))

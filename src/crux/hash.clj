@@ -1,7 +1,7 @@
 (ns crux.hash
   (:require [clojure.tools.logging :as log]
             [crux.memory :as mem])
-  (:import [org.agrona DirectBuffer]
+  (:import [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            java.security.MessageDigest))
 
@@ -16,15 +16,13 @@
 (declare id-hash)
 
 ;; NOTE: Allowing on-heap buffer here for now.
-(defn message-digest-id-hash-buffer ^org.agrona.DirectBuffer [^DirectBuffer buffer]
+(defn message-digest-id-hash-buffer ^org.agrona.DirectBuffer [^MutableDirectBuffer to ^DirectBuffer buffer]
   (let [^MessageDigest md (try
                             (.clone id-digest-prototype)
                             (catch CloneNotSupportedException e
                               (MessageDigest/getInstance id-hash-algorithm)))]
-    (UnsafeBuffer. (.digest md (mem/->on-heap buffer)))))
-
-(defn message-digest-id-hash ^bytes [^bytes bytes]
-  (mem/->on-heap (message-digest-id-hash-buffer (mem/as-buffer bytes))))
+    (doto (UnsafeBuffer. to 0 id-hash-size)
+      (.putBytes to 0 (.digest md (mem/->on-heap buffer))))))
 
 (defn- jnr-available? []
   (try
@@ -35,13 +33,13 @@
 
 (when-not (bound? #'id-hash)
   (try
-    (if-let [gcrypt-id-hash (and gcrypt-enabled?
-                                 (jnr-available?)
-                                 (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash))]
+    (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
+                                        (jnr-available?)
+                                        (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer))]
       (do (log/info "Using libgcrypt for ID hashing.")
-          (def id-hash gcrypt-id-hash))
+          (def id-hash gcrypt-id-hash-buffer))
       (do (log/info "Using java.security.MessageDigest for ID hashing.")
-          (def id-hash message-digest-id-hash)))
+          (def id-hash message-digest-id-hash-buffer)))
     (catch Throwable t
       (log/warn t "Could not load libgcrypt, falling back to java.security.MessageDigest for ID hashing.")
-      (def id-hash message-digest-id-hash))))
+      (def id-hash message-digest-id-hash-buffer))))
