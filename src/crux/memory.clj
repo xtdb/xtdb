@@ -21,9 +21,12 @@
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
-(defn copy-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-  (doto ^MutableDirectBuffer (allocate-buffer (capacity from))
-    (.putBytes 0 from 0 (long (capacity from)))))
+(defn copy-buffer ^org.agrona.MutableDirectBuffer
+  ([^DirectBuffer from]
+   (copy-buffer from (long (capacity from))))
+  ([^DirectBuffer from ^long limit]
+   (doto ^MutableDirectBuffer (allocate-buffer limit)
+     (.putBytes 0 from 0 limit))))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))
