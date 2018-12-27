@@ -70,7 +70,7 @@
   (loop [k current-k]
     (reset! peek-state (mem/inc-unsigned-buffer! (mem/copy-buffer k (- (mem/capacity k) c/id-size))))
     (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))
-              eid-buffer (c/->id-buffer eid)
+              eid-buffer (mem/copy-buffer (c/->id-buffer eid))
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
           (when entity-tx
             (let [version-k (c/encode-attribute+value+entity+content-hash-key-to
@@ -157,7 +157,7 @@
           content-hash (.content-hash entity-tx)]
       (loop [k current-k]
         (reset! peek-state (mem/inc-unsigned-buffer! (mem/copy-buffer k (- (mem/capacity k) c/id-size))))
-        (or (let [value (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
+        (or (let [value (mem/copy-buffer (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k)))
                   version-k (c/encode-attribute+entity+value+content-hash-key-to
                              eb
                              attr

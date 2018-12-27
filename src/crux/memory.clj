@@ -25,7 +25,9 @@
   ([^DirectBuffer from]
    (copy-buffer from (capacity from)))
   ([^DirectBuffer from ^long limit]
-   (doto ^MutableDirectBuffer (allocate-buffer limit)
+   (copy-buffer from limit (allocate-buffer limit)))
+  ([^DirectBuffer from ^long limit ^MutableDirectBuffer to]
+   (doto to
      (.putBytes 0 from 0 limit))))
 
 (extend-protocol MemoryRegion
