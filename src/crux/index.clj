@@ -13,12 +13,6 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; TODO: We can potentially use the MemoryRegion protocol to implement
-;; callbacks writing directly to what ever buffer the KV store tells
-;; us by reifying the ->off-heap two arity method which takes a buffer
-;; to write to and pass this on to the codec functions. This is mainly
-;; interesting for seek.
-
 ;; Indexes
 
 (defrecord PrefixKvIterator [i ^DirectBuffer prefix]
