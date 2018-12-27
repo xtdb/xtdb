@@ -86,8 +86,8 @@
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
          :as entity} (first (idx/entities-at snapshot [eid] business-time transact-time))]
-    {:pre-commit-fn #(if (mem/buffers=? (c/id->new-buffer content-hash)
-                                        (c/id->new-buffer old-v))
+    {:pre-commit-fn #(if (= (c/new-id content-hash)
+                            (c/new-id old-v))
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
