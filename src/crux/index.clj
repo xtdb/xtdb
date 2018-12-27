@@ -519,14 +519,12 @@
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (atom nil)))
 
-;; TODO: This allocates both the a and the v each time on heap, could
-;; be cached when building the or constraints.
 (defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
   (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
     (let [version-k (c/encode-attribute+entity+value+content-hash-key
-                     (c/->id-buffer a)
+                     a
                      (c/->id-buffer (.eid entity-tx))
-                     (c/->value-buffer v)
+                     v
                      (c/->id-buffer (.content-hash entity-tx)))]
       (with-open [i (new-prefix-kv-iterator (kv/new-iterator snapshot) version-k)]
         (when (kv/seek i version-k)

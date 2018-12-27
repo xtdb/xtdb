@@ -385,6 +385,14 @@
 (defn- clause-complexity [clause]
   (count (pr-str clause)))
 
+(defn- single-e-var-triple? [vars where]
+  (and (= 1 (count where))
+       (let [[[type {:keys [e v]}]] where]
+         (and (= :triple type)
+              (contains? vars e)
+              (logic-var? e)
+              (literal? v)))))
+
 (defn- or-joins [rules or-type or-clauses var->joins known-vars]
   (->> (sort-by clause-complexity or-clauses)
        (reduce
@@ -402,7 +410,8 @@
                                         or-vars (if or-join?
                                                   (set (:args clause))
                                                   body-vars)
-                                        free-vars (set/difference or-vars known-vars)]]
+                                        free-vars (set/difference or-vars known-vars)
+                                        bound-vars (set/difference or-vars free-vars)]]
                               (do (when or-join?
                                     (doseq [var or-vars
                                             :when (not (contains? body-vars var))]
@@ -410,8 +419,9 @@
                                               (str "Or join variable never used: " var " " (pr-str clause))))))
                                   {:or-vars or-vars
                                    :free-vars free-vars
-                                   :bound-vars (set/difference or-vars free-vars)
-                                   :where where}))
+                                   :bound-vars bound-vars
+                                   :where where
+                                   :single-e-var-triple? (single-e-var-triple? bound-vars where)}))
                 free-vars (:free-vars (first or-branches))
                 idx-id (gensym "or-free-vars")
                 join (when (seq free-vars)
@@ -543,14 +553,6 @@
                  (idx/update-relation-virtual-index! (get idx-id->idx idx-id) [[pred-result]]))
                join-results)))})))
 
-(defn- single-e-var-triple? [vars where]
-  (and (= 1 (count where))
-       (let [[[type {:keys [e v]}]] where]
-         (and (= :triple type)
-              (contains? vars e)
-              (logic-var? e)
-              (literal? v)))))
-
 ;; TODO: For or (but not or-join) it might be possible to embed the
 ;; entire or expression into the parent join via either OrVirtualIndex
 ;; (though as all joins now are binary they have variable order
@@ -564,11 +566,21 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [business-time transact-time] :as db} where args]
-  (let [[[_ {:keys [e a v] :as clause}]] where
-        entity (get (first args) e)]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [business-time transact-time] :as db} {:keys [e a v] :as clause} args]
+  (let [entity (get (first args) e)]
     (when (idx/or-known-triple-fast-path snapshot entity a v business-time transact-time)
       [])))
+
+(defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
+  (->> (for [[branch-index {:keys [where
+                                   single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
+             :when single-e-var-triple?
+             :let [[[_ clause]] where]]
+         [branch-index
+          (-> clause
+              (update :a c/->id-buffer)
+              (update :v c/->value-buffer))])
+       (into {})))
 
 (def ^:private ^:dynamic *recursion-table* {})
 
@@ -585,7 +597,9 @@
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
               has-free-vars? (boolean (seq free-vars))
-              {:keys [rule-name]} (meta clause)]]
+              {:keys [rule-name]} (meta clause)
+              branch-index->single-e-var-triple-fast-path-clause-with-buffers
+              (build-branch-index->single-e-var-triple-fast-path-clause-with-buffers or-branches)]]
     (do (validate-existing-vars var->bindings clause bound-vars)
         {:join-depth or-join-depth
          :constraint-fn
@@ -594,7 +608,8 @@
                         [(->> (for [var bound-vars]
                                 (.value (bound-result-for-var snapshot object-store var->bindings join-keys join-results var)))
                               (zipmap bound-vars))])
-                 branch-results (for [[branch-index {:keys [where] :as or-branch}] (map-indexed vector or-branches)
+                 branch-results (for [[branch-index {:keys [where
+                                                            single-e-var-triple?] :as or-branch}] (map-indexed vector or-branches)
                                       :let [cache-key (when rule-name
                                                         [rule-name branch-index (count free-vars) (set (mapv vals args))])
                                             cached-result (when cache-key
@@ -604,8 +619,12 @@
                                       cached-result
                                       cached-result
 
-                                      (single-e-var-triple? bound-vars where)
-                                      (or-single-e-var-triple-fast-path snapshot db where args)
+                                      single-e-var-triple?
+                                      (or-single-e-var-triple-fast-path
+                                       snapshot
+                                       db
+                                       (get branch-index->single-e-var-triple-fast-path-clause-with-buffers branch-index)
+                                       args)
 
                                       :else
                                       (binding [*recursion-table* (if cache-key
