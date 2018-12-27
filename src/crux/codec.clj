@@ -166,7 +166,7 @@
        id-size))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
-  (value->buffer x (ExpandableDirectByteBuffer.)))
+  (value->buffer x (ExpandableDirectByteBuffer. 32)))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/copy-buffer buffer value-type-id-size))
@@ -285,7 +285,7 @@
     x
 
     :else
-    (id->buffer x (ExpandableDirectByteBuffer.))))
+    (id->buffer x (mem/allocate-buffer id-size))))
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (Id. (mem/copy-buffer (.buffer id)) 0))
@@ -350,22 +350,26 @@
     (Id. (UnsafeBuffer. k index-id-size id-size) 0)))
 
 (defn encode-attribute+value+entity+content-hash-key-to
-  ^org.agrona.MutableDirectBuffer
-  [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
-  (assert (= id-size (.capacity attr)))
-  (assert (or (= id-size (.capacity entity))
-              (zero? (.capacity entity))))
-  (assert (or (= id-size (.capacity content-hash))
-              (zero? (.capacity content-hash))))
-  (UnsafeBuffer.
-   (doto b
-     (.putByte 0 attribute+value+entity+content-hash-index-id)
-     (.putBytes index-id-size attr 0 id-size)
-     (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
-     (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
-     (.putBytes (+ index-id-size id-size (.capacity v) (.capacity entity)) content-hash 0 (.capacity content-hash)))
-   0
-   (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash))))
+  (^org.agrona.MutableDirectBuffer[b attr v]
+   (encode-attribute+value+entity+content-hash-key-to b attr v empty-buffer empty-buffer))
+  (^org.agrona.MutableDirectBuffer[b attr v entity]
+   (encode-attribute+value+entity+content-hash-key-to b attr v entity  empty-buffer))
+  (^org.agrona.MutableDirectBuffer
+   [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
+   (assert (= id-size (.capacity attr)))
+   (assert (or (= id-size (.capacity entity))
+               (zero? (.capacity entity))))
+   (assert (or (= id-size (.capacity content-hash))
+               (zero? (.capacity content-hash))))
+   (UnsafeBuffer.
+    (doto b
+      (.putByte 0 attribute+value+entity+content-hash-index-id)
+      (.putBytes index-id-size attr 0 id-size)
+      (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
+      (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
+      (.putBytes (+ index-id-size id-size (.capacity v) (.capacity entity)) content-hash 0 (.capacity content-hash)))
+    0
+    (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash)))))
 
 (defn encode-attribute+value+entity+content-hash-key
   (^org.agrona.DirectBuffer [attr]
@@ -394,21 +398,25 @@
         (->EntityValueContentHash entity value content-hash)))))
 
 (defn encode-attribute+entity+value+content-hash-key-to
-  ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer v ^DirectBuffer content-hash]
-  (assert (= id-size (.capacity attr)))
-  (assert (or (= id-size (.capacity entity))
-              (zero? (.capacity entity))))
-  (assert (or (= id-size (.capacity content-hash))
-              (zero? (.capacity content-hash))))
-  (UnsafeBuffer.
-   (doto b
-     (.putByte 0 attribute+entity+value+content-hash-index-id)
-     (.putBytes index-id-size attr 0 id-size)
-     (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
-     (.putBytes (+ index-id-size id-size (.capacity entity)) v 0 (.capacity v))
-     (.putBytes (+ index-id-size id-size (.capacity entity) (.capacity v)) content-hash 0 (.capacity content-hash)))
-   0
-   (+ index-id-size id-size (.capacity entity) (.capacity v) (.capacity content-hash))))
+  (^org.agrona.MutableDirectBuffer [b attr entity]
+   ( encode-attribute+entity+value+content-hash-key-to b attr entity empty-buffer empty-buffer))
+  (^org.agrona.MutableDirectBuffer [b attr entity v]
+   ( encode-attribute+entity+value+content-hash-key-to b attr entity v empty-buffer))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer entity ^DirectBuffer v ^DirectBuffer content-hash]
+   (assert (= id-size (.capacity attr)))
+   (assert (or (= id-size (.capacity entity))
+               (zero? (.capacity entity))))
+   (assert (or (= id-size (.capacity content-hash))
+               (zero? (.capacity content-hash))))
+   (UnsafeBuffer.
+    (doto b
+      (.putByte 0 attribute+entity+value+content-hash-index-id)
+      (.putBytes index-id-size attr 0 id-size)
+      (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
+      (.putBytes (+ index-id-size id-size (.capacity entity)) v 0 (.capacity v))
+      (.putBytes (+ index-id-size id-size (.capacity entity) (.capacity v)) content-hash 0 (.capacity content-hash)))
+    0
+    (+ index-id-size id-size (.capacity entity) (.capacity v) (.capacity content-hash)))))
 
 (defn encode-attribute+entity+value+content-hash-key
   (^org.agrona.DirectBuffer [attr]

@@ -56,9 +56,7 @@
     (when-let [k (->> (c/encode-attribute+value+entity+content-hash-key-to
                        eb
                        attr
-                       (or k c/empty-buffer)
-                       c/empty-buffer
-                       c/empty-buffer)
+                       (or k c/empty-buffer))
                       (kv/seek i))]
       (attribute-value+placeholder k peek-state)))
 
@@ -95,7 +93,7 @@
 
 (defn- attribute-value-value+prefix-iterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
   (let [{:keys [value]} @(.peek-state value-entity-value-idx)
-        prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value c/empty-buffer c/empty-buffer)]
+        prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
     [value (new-prefix-kv-iterator i prefix)]))
 
 (defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb eb peek-state]
@@ -106,8 +104,7 @@
                          eb
                          attr
                          value
-                         (or k c/empty-buffer)
-                         c/empty-buffer)
+                         (or k c/empty-buffer))
                         (kv/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx eb peek-state))))
 
@@ -137,9 +134,7 @@
     (when-let [k (->> (c/encode-attribute+entity+value+content-hash-key-to
                        eb
                        attr
-                       (or k c/empty-buffer)
-                       c/empty-buffer
-                       c/empty-buffer)
+                       (or k c/empty-buffer))
                       (kv/seek i))]
       (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
         (if (= ::deleted-entity placeholder)
@@ -183,7 +178,7 @@
 
 (defn- attribute-value-entity-tx+prefix-iterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
   (let [{:keys [^EntityTx entity-tx]} @(.peek-state entity-value-entity-idx)
-        prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)) c/empty-buffer c/empty-buffer)]
+        prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 
 (defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb eb peek-state]
@@ -194,8 +189,7 @@
                          eb
                          attr
                          (c/->id-buffer (.eid entity-tx))
-                         (or k c/empty-buffer)
-                         c/empty-buffer)
+                         (or k c/empty-buffer))
                         (kv/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx eb peek-state))))
 
@@ -525,6 +519,8 @@
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (atom nil)))
 
+;; TODO: This allocates both the a and the v each time on heap, could
+;; be cached when building the or constraints.
 (defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
   (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
     (let [version-k (c/encode-attribute+entity+value+content-hash-key

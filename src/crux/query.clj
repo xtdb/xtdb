@@ -15,6 +15,7 @@
   (:import java.util.Comparator
            java.util.concurrent.TimeoutException
            clojure.lang.ExceptionInfo
+           org.agrona.ExpandableDirectByteBuffer
            crux.index.BinaryJoinLayeredVirtualIndex
            crux.codec.EntityTx
            crux.api.ICruxDatasource))
@@ -497,11 +498,12 @@
               value (if (or (nil? value-buffer)
                             (= (count values) 1))
                       (first values)
-                      (loop [[x & xs] values]
-                        (if (mem/buffers=? value-buffer (c/->value-buffer x))
-                          x
-                          (when xs
-                            (recur xs)))))]
+                      (let [eb (ExpandableDirectByteBuffer. (mem/capacity value-buffer))]
+                        (loop [[x & xs] values]
+                          (if (mem/buffers=? value-buffer (c/value->buffer x eb))
+                            x
+                            (when xs
+                              (recur xs))))))]
           (BoundResult. var value entity-tx doc))))))
 
 (declare build-sub-query)
@@ -634,7 +636,12 @@
   (for [{:keys [op args]
          :as clause} unify-clauses
         :let [unification-vars (filter logic-var? args)
-              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)]]
+              unification-join-depth (calculate-constraint-join-depth var->bindings unification-vars :result-index)
+              args (vec (for [arg args]
+                          (if (logic-var? arg)
+                            arg
+                            (->> (map c/->value-buffer (idx/normalize-value arg))
+                                 (into (sorted-set-by mem/buffer-comparator))))))]]
     (do (validate-existing-vars var->bindings clause unification-vars)
         {:join-depth unification-join-depth
          :constraint-fn
@@ -644,8 +651,7 @@
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
                                    (sorted-set-by mem/buffer-comparator)))
-                            (->> (map c/->value-buffer (idx/normalize-value arg))
-                                 (into (sorted-set-by mem/buffer-comparator)))))]
+                            arg))]
              (when (case op
                      == (boolean (not-empty (apply set/intersection values)))
                      != (empty? (apply set/intersection values)))
