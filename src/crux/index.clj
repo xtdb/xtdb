@@ -57,7 +57,8 @@
   (next-values [this]
     (let [{:keys [last-k]} @peek-state
           prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
-      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/copy-buffer last-k prefix-size))
+      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size eb)
+                                                                        prefix-size))
                             (kv/seek i))]
         (attribute-value+placeholder k peek-state)))))
 
@@ -66,9 +67,10 @@
         prefix (c/encode-attribute+value+entity+content-hash-key-to nil attr)]
     (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ExpandableDirectByteBuffer.) (atom nil))))
 
-(defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx eb peek-state]
+(defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx eb peek-eb peek-state]
   (loop [k current-k]
-    (reset! peek-state (mem/inc-unsigned-buffer! (mem/copy-buffer k (- (mem/capacity k) c/id-size))))
+    (let [limit (- (mem/capacity k) c/id-size)]
+      (reset! peek-state (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
     (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))
               eid-buffer (mem/copy-buffer (c/->id-buffer eid))
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
@@ -90,7 +92,7 @@
         prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
     [value (new-prefix-kv-iterator i prefix)]))
 
-(defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb eb peek-state]
+(defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb eb peek-state]
   db/Index
   (seek-values [this k]
     (let [[value i] (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)]
@@ -100,16 +102,16 @@
                          value
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        (attribute-value-entity-entity+value i k attr value entity-as-of-idx eb peek-state))))
+        (attribute-value-entity-entity+value i k attr value entity-as-of-idx eb peek-eb peek-state))))
 
   (next-values [this]
     (let [[value i] (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)]
       (when-let [k (some->> @peek-state (kv/seek i))]
-        (attribute-value-entity-entity+value i k attr value entity-as-of-idx eb peek-state)))))
+        (attribute-value-entity-entity+value i k attr value entity-as-of-idx eb peek-eb peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
   (->DocAttributeValueEntityEntityIndex (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
-                                        (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
+                                        (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
 
 ;; AEV
 
@@ -138,7 +140,7 @@
   (next-values [this]
     (let [{:keys [last-k]} @peek-state
           prefix-size (+ c/index-id-size c/id-size c/id-size)]
-      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/copy-buffer last-k prefix-size))
+      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size eb) prefix-size))
                             (kv/seek i))]
         (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
           (if (= ::deleted-entity placeholder)
@@ -151,12 +153,13 @@
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
                                           (ExpandableDirectByteBuffer.) (atom nil))))
 
-(defn- attribute-entity-value-value+entity [i ^DirectBuffer current-k attr ^EntityTx entity-tx eb peek-state]
+(defn- attribute-entity-value-value+entity [i ^DirectBuffer current-k attr ^EntityTx entity-tx eb peek-eb peek-state]
   (when entity-tx
     (let [eid (.eid entity-tx)
           content-hash (.content-hash entity-tx)]
       (loop [k current-k]
-        (reset! peek-state (mem/inc-unsigned-buffer! (mem/copy-buffer k (- (mem/capacity k) c/id-size))))
+        (let [limit (- (mem/capacity k) c/id-size)]
+          (reset! peek-state (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
         (or (let [value (mem/copy-buffer (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k)))
                   version-k (c/encode-attribute+entity+value+content-hash-key-to
                              eb
@@ -175,7 +178,7 @@
         prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 
-(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb eb peek-state]
+(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb peek-eb eb peek-state]
   db/Index
   (seek-values [this k]
     (let [[^EntityTx entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)]
@@ -185,16 +188,16 @@
                          (c/->id-buffer (.eid entity-tx))
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        (attribute-entity-value-value+entity i k attr entity-tx eb peek-state))))
+        (attribute-entity-value-value+entity i k attr entity-tx eb peek-eb peek-state))))
 
   (next-values [this]
     (let [[entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)]
       (when-let [k (some->> @peek-state (kv/seek i))]
-        (attribute-entity-value-value+entity i k attr entity-tx eb peek-state)))))
+        (attribute-entity-value-value+entity i k attr entity-tx eb peek-eb peek-state)))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
   (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->id-buffer attr) entity-value-entity-idx
-                                       (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
+                                       (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
 
 ;; Range Constraints
 

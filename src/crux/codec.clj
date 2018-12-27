@@ -57,7 +57,7 @@
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
   (hash/id-hash (UnsafeBuffer. to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
-  (UnsafeBuffer. to 0 id-size))
+  (mem/limit-buffer to id-size))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
@@ -79,11 +79,10 @@
 
   Long
   (value->buffer [this ^MutableDirectBuffer to]
-    (UnsafeBuffer.
+    (mem/limit-buffer
      (doto to
        (.putByte 0 long-value-type-id)
        (.putLong value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN))
-     0
      (+ value-type-id-size Long/BYTES)))
 
   Float
@@ -94,11 +93,10 @@
   (value->buffer [this ^MutableDirectBuffer to]
     (let [l (Double/doubleToLongBits this)
           l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (UnsafeBuffer.
+      (mem/limit-buffer
        (doto to
          (.putByte 0 double-value-type-id)
          (.putLong value-type-id-size l))
-       0
        (+ value-type-id-size Long/BYTES))))
 
   Date
@@ -124,7 +122,7 @@
         (loop [idx 0]
           (if (= idx length)
             (do (.putByte to (inc idx) terminate-mark)
-                (UnsafeBuffer. to 0 (+ length value-type-id-size terminate-mark-size)))
+                (mem/limit-buffer to (+ length value-type-id-size terminate-mark-size)))
             (let [b (.getByte ub-in idx)]
               (.putByte to (inc idx) (byte (+ offset b)))
               (recur (inc idx))))))))
@@ -179,23 +177,22 @@
   (class (byte-array 0))
   (id->buffer [this ^MutableDirectBuffer to]
     (if (= id-size (alength ^bytes this))
-      (UnsafeBuffer.
+      (mem/limit-buffer
        (doto to
          (.putBytes 0 this))
-       0
        id-size)
       (throw (IllegalArgumentException.
               (str "Not an id byte array: " (bu/bytes->hex this))))))
 
   ByteBuffer
   (id->buffer [this ^MutableDirectBuffer to]
-    (UnsafeBuffer. (doto to
-                     (.putBytes 0 this)) 0 id-size))
+    (mem/limit-buffer (doto to
+                        (.putBytes 0 this)) id-size))
 
   DirectBuffer
   (id->buffer [this ^MutableDirectBuffer to]
-    (UnsafeBuffer. (doto to
-                     (.putBytes 0 this 0 id-size)) 0 id-size))
+    (mem/limit-buffer (doto to
+                        (.putBytes 0 this 0 id-size)) id-size))
 
   Keyword
   (id->buffer [this to]
@@ -212,7 +209,7 @@
   String
   (id->buffer [this to]
     (if (hex-id? this)
-      (let [to (UnsafeBuffer. ^MutableDirectBuffer to 0 id-size)]
+      (let [to (mem/limit-buffer ^MutableDirectBuffer to id-size)]
         (do (.putByte to 0 id-value-type-id)
             (mem/hex->buffer this (UnsafeBuffer. to value-type-id-size hash/id-hash-size))
             to))
@@ -322,11 +319,10 @@
 (defn encode-doc-key-to ^MutableDirectBuffer [^MutableDirectBuffer b content-hash]
   (assert (= id-size (mem/capacity content-hash)))
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (UnsafeBuffer.
+    (mem/limit-buffer
      (doto b
        (.putByte 0 content-hash->doc-index-id)
        (.putBytes index-id-size (mem/as-buffer content-hash) 0 (mem/capacity content-hash)))
-     0
      (+ index-id-size id-size))))
 
 (defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
@@ -350,14 +346,13 @@
    (assert (or (= id-size (.capacity content-hash))
                (zero? (.capacity content-hash))))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (mem/capacity v) (mem/capacity entity) (mem/capacity content-hash))))]
-     (UnsafeBuffer.
+     (mem/limit-buffer
       (doto b
         (.putByte 0 attribute+value+entity+content-hash-index-id)
         (.putBytes index-id-size attr 0 id-size)
         (.putBytes (+ index-id-size id-size) v 0 (.capacity v))
         (.putBytes (+ index-id-size id-size (.capacity v)) entity 0 (.capacity entity))
         (.putBytes (+ index-id-size id-size (.capacity v) (.capacity entity)) content-hash 0 (.capacity content-hash)))
-      0
       (+ index-id-size id-size (.capacity v) (.capacity entity) (.capacity content-hash))))))
 
 (defrecord EntityValueContentHash [eid value content-hash])
@@ -388,14 +383,13 @@
    (assert (or (= id-size (.capacity content-hash))
                (zero? (.capacity content-hash))))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size (mem/capacity entity) (mem/capacity v) (mem/capacity content-hash))))]
-     (UnsafeBuffer.
+     (mem/limit-buffer
       (doto b
         (.putByte 0 attribute+entity+value+content-hash-index-id)
         (.putBytes index-id-size attr 0 id-size)
         (.putBytes (+ index-id-size id-size) entity 0 (.capacity entity))
         (.putBytes (+ index-id-size id-size (.capacity entity)) v 0 (.capacity v))
         (.putBytes (+ index-id-size id-size (.capacity entity) (.capacity v)) content-hash 0 (.capacity content-hash)))
-      0
       (+ index-id-size id-size (.capacity entity) (.capacity v) (.capacity content-hash))))))
 
 (defn decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from
@@ -413,11 +407,10 @@
 (defn encode-meta-key-to ^MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
   (assert (= id-size (.capacity k)))
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
-    (UnsafeBuffer.
+    (mem/limit-buffer
      (doto b
        (.putByte 0 meta-key->value-index-id)
        (.putBytes index-id-size k 0 (.capacity k)))
-     0
      (+ index-id-size id-size))))
 
 (defn- date->reverse-time-ms ^long [^Date date]
@@ -453,7 +446,7 @@
        (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
      (->> (+ index-id-size (.capacity entity)
              (maybe-long-size business-time) (maybe-long-size transact-time) (maybe-long-size tx-id))
-          (UnsafeBuffer. b 0)))))
+          (mem/limit-buffer b)))))
 
 (defrecord EntityTx [^Id eid ^Date bt ^Date tt ^long tx-id ^Id content-hash]
   IdToBuffer
@@ -501,7 +494,7 @@
        (.putLong b index-id-size tx-id ByteOrder/BIG_ENDIAN))
      (when tx-time
        (.putLong b (+ index-id-size Long/BYTES) (.getTime tx-time) ByteOrder/BIG_ENDIAN))
-     (UnsafeBuffer. b 0 (+ index-id-size (maybe-long-size tx-id) (maybe-long-size tx-time))))))
+     (mem/limit-buffer b (+ index-id-size (maybe-long-size tx-id) (maybe-long-size tx-time))))))
 
 (defn decode-tx-log-key-from [^DirectBuffer k]
   (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)))
