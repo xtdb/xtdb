@@ -123,7 +123,9 @@
 ;; from Rocks, it seems like the data gets reused / GCd and we get
 ;; wrong results, but no crash. Who frees this pointer? In the Rocks
 ;; example it looks like the caller is responsible for this, but
-;; trying to do it via com.kenai.jffi.MemoryIO crashes.
+;; trying to do it via com.kenai.jffi.MemoryIO crashes. The bug can be
+;; narrowed down by moving the copy to seek, next and value still
+;; seems to work.
 (defn- pointer+len->buffer ^org.agrona.DirectBuffer [^Pointer address ^Pointer len-out]
   (let [len (.getInt len-out 0)]
     (mem/copy-buffer (UnsafeBuffer. (.address address) len))))
