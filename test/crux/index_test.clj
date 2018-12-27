@@ -7,12 +7,13 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
+            [crux.fixtures :as f]
             [crux.tx :as tx]
             [crux.kv :as kv]
             [crux.lru :as lru]
+            [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q]
-            [crux.fixtures :as f]
             [taoensso.nippy :as nippy])
   (:import java.util.Date
            java.nio.ByteBuffer))
@@ -62,10 +63,10 @@
         {:crux.tx/keys [tx-time tx-id]}
         @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])
         expected-entities [(c/map->EntityTx {:eid eid
-                                               :content-hash content-hash
-                                               :bt business-time
-                                               :tt tx-time
-                                               :tx-id tx-id})]]
+                                             :content-hash content-hash
+                                             :bt business-time
+                                             :tt tx-time
+                                             :tx-id tx-id})]]
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "can see entity at transact and business time"
@@ -87,10 +88,10 @@
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid eid
-                                      :content-hash content-hash
-                                      :bt business-time
-                                      :tt tx-time
-                                      :tx-id tx-id})]
+                                    :content-hash content-hash
+                                    :bt business-time
+                                    :tt tx-time
+                                    :tx-id tx-id})]
                  (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
 
     (t/testing "add new version of entity in the past"
@@ -103,16 +104,16 @@
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
-                                        :content-hash new-content-hash
-                                        :bt new-business-time
-                                        :tt new-tx-time
-                                        :tx-id new-tx-id})]
+                                      :content-hash new-content-hash
+                                      :bt new-business-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
-                                        :content-hash new-content-hash
-                                        :bt new-business-time
-                                        :tt new-tx-time
-                                        :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
+                                      :content-hash new-content-hash
+                                      :bt new-business-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
 
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
@@ -126,22 +127,22 @@
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
-                                        :content-hash new-content-hash
-                                        :bt new-business-time
-                                        :tt new-tx-time
-                                        :tx-id new-tx-id})]
+                                      :content-hash new-content-hash
+                                      :bt new-business-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
-                                        :content-hash content-hash
-                                        :bt business-time
-                                        :tt tx-time
-                                        :tx-id tx-id})]
+                                      :content-hash content-hash
+                                      :bt business-time
+                                      :tt tx-time
+                                      :tx-id tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
-                                        :content-hash new-content-hash
-                                        :bt new-business-time
-                                        :tt new-tx-time
-                                        :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time))))
+                                      :content-hash new-content-hash
+                                      :bt new-business-time
+                                      :tt new-tx-time
+                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time))))
 
         (t/testing "can correct entity at earlier business time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -155,16 +156,16 @@
 
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (= [(c/map->EntityTx {:eid eid
-                                            :content-hash new-content-hash
-                                            :bt new-business-time
-                                            :tt new-tx-time
-                                            :tx-id new-tx-id})]
+                                          :content-hash new-content-hash
+                                          :bt new-business-time
+                                          :tt new-tx-time
+                                          :tx-id new-tx-id})]
                        (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
               (t/is (= [(c/map->EntityTx {:eid eid
-                                            :content-hash new-content-hash
-                                            :bt new-business-time
-                                            :tt new-tx-time
-                                            :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
+                                          :content-hash new-content-hash
+                                          :bt new-business-time
+                                          :tt new-tx-time
+                                          :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
@@ -177,10 +178,10 @@
                 (t/is (= cas-failure-tx-time (tx/await-tx-time indexer cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
-                                                :content-hash new-content-hash
-                                                :bt new-business-time
-                                                :tt new-tx-time
-                                                :tx-id new-tx-id})]
+                                              :content-hash new-content-hash
+                                              :bt new-business-time
+                                              :tt new-tx-time
+                                              :tx-id new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time cas-failure-tx-time))))))
 
             (t/testing "compare and set updates with correct content hash"
@@ -193,10 +194,10 @@
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
-                                                :content-hash new-content-hash
-                                                :bt new-business-time
-                                                :tt new-tx-time
-                                                :tx-id new-tx-id})]
+                                              :content-hash new-content-hash
+                                              :bt new-business-time
+                                              :tt new-tx-time
+                                              :tx-id new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time))))))
 
             (t/testing "compare and set can update non existing nil entity"
@@ -209,10 +210,10 @@
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid new-eid
-                                                :content-hash new-content-hash
-                                                :bt new-business-time
-                                                :tt new-tx-time
-                                                :tx-id new-tx-id})]
+                                              :content-hash new-content-hash
+                                              :bt new-business-time
+                                              :tt new-tx-time
+                                              :tx-id new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-business-time new-tx-time))))))))
 
         (t/testing "can delete entity"
@@ -233,13 +234,13 @@
           (t/is (= 6 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
-                    :when (not (bu/bytes=? c/nil-id-bytes (c/id->bytes content-hash)))
+                    :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-attribute+entity+value+content-hash-key
-                                     (c/id->bytes :http://xmlns.com/foaf/0.1/givenName)
-                                     (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
-                                     (c/value->bytes "Pablo")
-                                     (c/id->bytes content-hash))]]
-              (t/is (bu/bytes=? version-k (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
+                                     (c/id->new-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                     (c/id->new-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                     (c/value->new-buffer "Pablo")
+                                     (c/id->new-buffer content-hash))]]
+              (t/is (mem/buffers=? version-k (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -259,10 +260,10 @@
                 (with-open [i (kv/new-iterator snapshot)]
                   (doseq [{:keys [content-hash]} picasso-history
                           :let [version-k (c/encode-attribute+entity+value+content-hash-key
-                                           (c/id->bytes :http://xmlns.com/foaf/0.1/givenName)
-                                           (c/id->bytes :http://dbpedia.org/resource/Pablo_Picasso)
-                                           (c/value->bytes "Pablo")
-                                           (c/id->bytes content-hash))]]
+                                           (c/id->new-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                           (c/id->new-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                           (c/value->new-buffer "Pablo")
+                                           (c/id->new-buffer content-hash))]]
                     (t/is (nil? (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
@@ -488,19 +489,19 @@
 
 (t/deftest test-sorted-virtual-index
   (let [idx (idx/new-sorted-virtual-index
-             [[(c/value->bytes 1) :a]
-              [(c/value->bytes 3) :c]])]
+             [[(c/value->new-buffer 1) :a]
+              [(c/value->new-buffer 3) :c]])]
     (t/is (= :a
-             (second (db/seek-values idx (c/value->bytes 0)))))
+             (second (db/seek-values idx (c/value->new-buffer 0)))))
     (t/is (= :a
-             (second (db/seek-values idx (c/value->bytes 1)))))
+             (second (db/seek-values idx (c/value->new-buffer 1)))))
     (t/is (= :c
              (second (db/next-values idx))))
     (t/is (= :c
-             (second (db/seek-values idx (c/value->bytes 2)))))
+             (second (db/seek-values idx (c/value->new-buffer 2)))))
     (t/is (= :c
-             (second (db/seek-values idx (c/value->bytes 3)))))
-    (t/is (nil? (db/seek-values idx (c/value->bytes 4))))))
+             (second (db/seek-values idx (c/value->new-buffer 3)))))
+    (t/is (nil? (db/seek-values idx (c/value->new-buffer 4))))))
 
 (t/deftest test-range-predicates
   (let [r (idx/new-relation-virtual-index :r
@@ -532,8 +533,8 @@
                   (map second))))
 
     (t/testing "seek skips to lower range"
-      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/value->bytes nil)))))
-      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/value->bytes 1))))))
+      (t/is (= 2 (second (db/seek-values (idx/new-greater-than-equal-virtual-index r 2) (c/value->new-buffer nil)))))
+      (t/is (= 3 (second (db/seek-values (idx/new-greater-than-virtual-index r 2) (c/value->new-buffer 1))))))
 
     (t/testing "combining indexes"
       (t/is (= [2 3 4]
@@ -548,17 +549,17 @@
 
 (t/deftest test-or-virtual-index
   (let [idx-1 (idx/new-sorted-virtual-index
-               [[(c/value->bytes 1) :a]
-                [(c/value->bytes 3) :c]
-                [(c/value->bytes 5) :e1]])
+               [[(c/value->new-buffer 1) :a]
+                [(c/value->new-buffer 3) :c]
+                [(c/value->new-buffer 5) :e1]])
         idx-2 (idx/new-sorted-virtual-index
-               [[(c/value->bytes 2) :b]
-                [(c/value->bytes 4) :d]
-                [(c/value->bytes 5) :e2]
-                [(c/value->bytes 7) :g]])
+               [[(c/value->new-buffer 2) :b]
+                [(c/value->new-buffer 4) :d]
+                [(c/value->new-buffer 5) :e2]
+                [(c/value->new-buffer 7) :g]])
         idx-3 (idx/new-sorted-virtual-index
-               [[(c/value->bytes 5) :e3]
-                [(c/value->bytes 6) :f]])
+               [[(c/value->new-buffer 5) :e3]
+                [(c/value->new-buffer 6) :f]])
         idx (idx/new-or-virtual-index [idx-1 idx-2 idx-3])]
     (t/testing "interleaves results in value order"
       (t/is (= :a
@@ -586,7 +587,7 @@
 
     (t/testing "can seek into indexes"
       (t/is (= :d
-               (second (db/seek-values idx (c/value->bytes 4)))))
+               (second (db/seek-values idx (c/value->new-buffer 4)))))
       (t/is (= :e1
                (second (db/next-values idx)))))))
 

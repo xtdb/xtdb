@@ -1,15 +1,15 @@
 (ns crux.tx
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.byte-utils :as bu]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
+            [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import crux.codec.EntityTx
+  (:import [crux.codec EntityTx Id]
            [java.io Closeable Writer]
            java.util.concurrent.TimeoutException
            java.util.Date))
@@ -59,7 +59,7 @@
         (or (nil? end)
             (neg? (compare % end)))))
 
-(defn- put-delete-kvs [snapshot k start-business-time end-business-time transact-time tx-id content-hash-bytes]
+(defn- put-delete-kvs [snapshot k start-business-time end-business-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
         start-business-time (or start-business-time transact-time)
         dates-in-history (when end-business-time
@@ -69,34 +69,33 @@
                               (into (sorted-set)))]
     {:kvs (vec (for [business-time dates-to-correct]
                  [(c/encode-entity+bt+tt+tx-id-key
-                   (c/id->bytes eid)
+                   (c/id->new-buffer eid)
                    business-time
                    transact-time
                    tx-id)
-                  content-hash-bytes]))}))
+                  content-hash]))}))
 
 (defmethod tx-command :crux.tx/put [snapshot tx-log [op k v start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->bytes (c/new-id v))))
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id (c/id->new-buffer (c/new-id v))))
 
 (defmethod tx-command :crux.tx/delete [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-bytes))
+  (put-delete-kvs snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-buffer))
 
 (defmethod tx-command :crux.tx/cas [snapshot tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         business-time (or at-business-time transact-time)
         {:keys [content-hash]
-         :as entity} (first (idx/entities-at snapshot [eid] business-time transact-time))
-        old-v-bytes (c/id->bytes old-v)
-        new-v-id (c/new-id new-v)]
-    {:pre-commit-fn #(if (bu/bytes=? (c/id->bytes content-hash) old-v-bytes)
+         :as entity} (first (idx/entities-at snapshot [eid] business-time transact-time))]
+    {:pre-commit-fn #(if (mem/buffers=? (c/id->new-buffer content-hash)
+                                        (c/id->new-buffer old-v))
                        true
                        (log/warn "CAS failure:" (pr-str cas-op)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
-             (c/id->bytes eid)
+             (c/id->new-buffer eid)
              business-time
              transact-time
              tx-id)
-            (c/id->bytes new-v-id)]]}))
+            (c/id->new-buffer new-v)]]}))
 
 (defmethod tx-command :crux.tx/evict [snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (let [eid (c/new-id k)
@@ -105,15 +104,14 @@
         end-business-time (or end-business-time transact-time)]
     {:post-commit-fn #(when tx-log
                         (doseq [^EntityTx entity-tx history-descending
-                                :let [content-hash (.content-hash entity-tx)]
                                 :when ((in-range-pred start-business-time end-business-time) (.bt entity-tx))]
-                          (db/submit-doc tx-log content-hash nil)))
+                          (db/submit-doc tx-log (.content-hash entity-tx) nil)))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key
-             (c/id->bytes eid)
+             (c/id->new-buffer eid)
              end-business-time
              transact-time
              tx-id)
-            c/nil-id-bytes]]}))
+            c/nil-id-buffer]]}))
 
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable
@@ -146,7 +144,7 @@
                  (doall)
                  (every? true?))
           (do (->> (map :kvs tx-command-results)
-                   (reduce into (sorted-map-by bu/bytes-comparator))
+                   (reduce into (sorted-map-by mem/buffer-comparator))
                    (kv/store kv))
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
@@ -166,7 +164,7 @@
 (defn tx-ops->docs [tx-ops]
   (vec (for [[op id :as tx-op] tx-ops
              doc (filter map? tx-op)]
-         (if (and (satisfies? c/IdToBytes id)
+         (if (and (satisfies? c/IdToBuffer id)
                   (= (c/new-id id) (c/new-id (get doc :crux.db/id))))
            doc
            (throw (IllegalArgumentException.
@@ -201,8 +199,8 @@
   (tx-log [this tx-log-context]
     (let [i (kv/new-iterator tx-log-context)]
       (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key) true)]
-        (assoc (c/decode-tx-log-key k)
-               :crux.tx/tx-ops (nippy/fast-thaw v))))))
+        (assoc (c/decode-tx-log-key-from k)
+               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
 
 (def ^:const default-await-tx-timeout 10000)
 

@@ -16,14 +16,14 @@
 
   (as-buffer ^org.agrona.MutableDirectBuffer [this])
 
-  (capacity [this]))
+  (^long capacity [this]))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
 (defn copy-buffer ^org.agrona.MutableDirectBuffer
   ([^DirectBuffer from]
-   (copy-buffer from (long (capacity from))))
+   (copy-buffer from (capacity from)))
   ([^DirectBuffer from ^long limit]
    (doto ^MutableDirectBuffer (allocate-buffer limit)
      (.putBytes 0 from 0 limit))))
@@ -113,7 +113,7 @@
 (defn ensure-off-heap ^org.agrona.DirectBuffer [b ^MutableDirectBuffer tmp]
   (if (off-heap? b)
     b
-    (UnsafeBuffer. (->off-heap b tmp) 0 (long (capacity b)))))
+    (UnsafeBuffer. (->off-heap b tmp) 0 (capacity b))))
 
 (defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
   (UnsafeBuffer. b))

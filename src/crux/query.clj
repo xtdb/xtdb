@@ -5,13 +5,13 @@
             [clojure.walk :as w]
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
-            [crux.byte-utils :as bu]
             [crux.codec :as c]
-            [crux.index :as idx]
             [crux.io :as cio]
+            [crux.db :as db]
+            [crux.index :as idx]
             [crux.lru :as lru]
             [crux.kv :as kv]
-            [crux.db :as db])
+            [crux.memory :as mem])
   (:import java.util.Comparator
            java.util.concurrent.TimeoutException
            clojure.lang.ExceptionInfo
@@ -233,7 +233,7 @@
                                   (group-by :sym))]
     (->> (for [[v-var clauses] v-var->range-clauses]
            [v-var (->> (for [{:keys [op val]} clauses
-                             :let [type-prefix (c/value-bytes-type-id (c/value->bytes val))]]
+                             :let [type-prefix (c/value-buffer-type-id (c/value->new-buffer val))]]
                          (case op
                            < #(-> (idx/new-less-than-virtual-index % val)
                                   (idx/new-prefix-equal-virtual-index type-prefix))
@@ -490,15 +490,15 @@
     (if (.value? binding)
       (BoundResult. var (get join-results (.result-name binding)) nil nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
-        (let [value-bytes (get join-keys (.result-index binding))
+        (let [value-buffer (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
               doc (db/get-single-object object-store snapshot content-hash)
               values (idx/normalize-value (get doc (.attr binding)))
-              value (if (or (nil? value-bytes)
+              value (if (or (nil? value-buffer)
                             (= (count values) 1))
                       (first values)
                       (loop [[x & xs] values]
-                        (if (bu/bytes=? value-bytes (c/value->bytes x))
+                        (if (mem/buffers=? value-buffer (c/value->new-buffer x))
                           x
                           (when xs
                             (recur xs)))))]
@@ -643,9 +643,9 @@
                           (if (logic-var? arg)
                             (let [{:keys [result-index]} (get var->bindings arg)]
                               (->> (get join-keys result-index)
-                                   (sorted-set-by bu/bytes-comparator)))
-                            (->> (map c/value->bytes (idx/normalize-value arg))
-                                 (into (sorted-set-by bu/bytes-comparator)))))]
+                                   (sorted-set-by mem/buffer-comparator)))
+                            (->> (map c/value->new-buffer (idx/normalize-value arg))
+                                 (into (sorted-set-by mem/buffer-comparator)))))]
              (when (case op
                      == (boolean (not-empty (apply set/intersection values)))
                      != (empty? (apply set/intersection values)))
@@ -1051,7 +1051,7 @@
   (map :doc (vals (meta result-tuple))))
 
 (defn result-tuple->entity-txs [result-tuple]
-  (map :entity-tx (vals (meta result-tuple))))
+  (map (comp idx/safe-entity-tx :entity-tx) (vals (meta result-tuple))))
 
 (defn entity-tx [db eid]
   (->> (q db {:find '[e]

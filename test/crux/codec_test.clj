@@ -1,33 +1,33 @@
 (ns crux.codec-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
-            [crux.byte-utils :as bu]))
+            [crux.memory :as mem]))
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
     (let [values (shuffle [nil -1 0 1])
-          value+bytes (for [v values]
-                        [v (c/value->bytes v)])]
-      (t/is (= (sort-by first value+bytes)
-               (sort-by second bu/bytes-comparator value+bytes)))))
+          value+buffer (for [v values]
+                         [v (c/value->new-buffer v)])]
+      (t/is (= (sort-by first value+buffer)
+               (sort-by second mem/buffer-comparator value+buffer)))))
 
   (t/testing "doubles"
     (let [values (shuffle [nil -1.0 0.0 1.0])
-          value+bytes (for [v values]
-                        [v (c/value->bytes v)])]
-      (t/is (= (sort-by first value+bytes)
-               (sort-by second bu/bytes-comparator value+bytes)))))
+          value+buffer (for [v values]
+                         [v (c/value->new-buffer v)])]
+      (t/is (= (sort-by first value+buffer)
+               (sort-by second mem/buffer-comparator value+buffer)))))
 
   (t/testing "dates"
     (let [values (shuffle [nil #inst "1900" #inst "1970" #inst "2018"])
-          value+bytes (for [v values]
-                        [v (c/value->bytes v)])]
-      (t/is (= (sort-by first value+bytes)
-               (sort-by second bu/bytes-comparator value+bytes)))))
+          value+buffer (for [v values]
+                         [v (c/value->new-buffer v)])]
+      (t/is (= (sort-by first value+buffer)
+               (sort-by second mem/buffer-comparator value+buffer)))))
 
    (t/testing "strings"
     (let [values (shuffle [nil "a" "ad" "c" "delta" "eq" "foo" "" "0" "året" "漢字" "यूनिकोड"])
-          value+bytes (for [v values]
-                        [v (c/value->bytes v)])]
-      (t/is (= (sort-by first value+bytes)
-               (sort-by second bu/bytes-comparator value+bytes))))))
+          value+buffer (for [v values]
+                         [v (c/value->new-buffer v)])]
+      (t/is (= (sort-by first value+buffer)
+               (sort-by second mem/buffer-comparator value+buffer))))))

@@ -135,7 +135,7 @@
           kb (ExpandableDirectByteBuffer.)
           ks (if (bytes? (first ks))
                (sort bu/bytes-comparator ks)
-               ks)]
+               (sort mem/buffer-comparator ks))]
       (doseq [k ks]
         (let [k (mem/ensure-off-heap k kb)
               kv (-> kv

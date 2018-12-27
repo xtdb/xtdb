@@ -68,7 +68,7 @@
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (some-> (kv/seek i k) (mem/->on-heap))
+        (kv/seek i k)
         (finally
           (.unlock lock stamp)))))
 
@@ -76,7 +76,7 @@
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (some-> (kv/next i) (mem/->on-heap))
+        (kv/next i)
         (finally
           (.unlock lock stamp)))))
 
@@ -84,7 +84,7 @@
     (let [stamp (.readLock lock)]
       (try
         (ensure-iterator-open closed-state)
-        (some-> (kv/value i) (mem/->on-heap))
+        (kv/value i)
         (finally
           (.unlock lock stamp)))))
 
