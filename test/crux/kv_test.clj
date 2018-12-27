@@ -102,6 +102,10 @@
       (finally
         (cio/delete-dir backup-dir)))))
 
+;; TODO: These helpers convert back and forth to bytes, would be good
+;; to get rid of this, but that requires changing removing the byte
+;; arrays above in the tests. The tested code uses buffers internally.
+
 (defn seek [kvs k]
   (with-open [snapshot (kv/new-snapshot kvs)
               i (kv/new-iterator snapshot)]
