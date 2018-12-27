@@ -65,7 +65,7 @@
     ([this]
      (if (off-heap? this)
        this
-       (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (alength ^bytes this))))))
+       (->off-heap this (UnsafeBuffer. (ByteBuffer/allocateDirect (.capacity this))))))
 
     ([this ^MutableDirectBuffer to]
      (doto to
