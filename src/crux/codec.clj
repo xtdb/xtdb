@@ -54,12 +54,6 @@
                     (aset 0 (byte id-value-type-id))))
 (def ^org.agrona.DirectBuffer nil-id-buffer (mem/->off-heap nil-id-bytes))
 
-(defn- prepend-value-type-id ^bytes [^bytes bs ^long type-id]
-  (let [ub (UnsafeBuffer. (byte-array (+ (alength bs) value-type-id-size)))]
-    (.putByte ub 0 type-id)
-    (.putBytes ub 1 bs)
-    (.byteArray ub)))
-
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
   (hash/id-hash (UnsafeBuffer. to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
