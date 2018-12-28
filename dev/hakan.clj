@@ -969,6 +969,75 @@
 
 ;; WatDiv analysis helpers:
 
+;; 230 WatDiv queries:
+;; Using Buffers+libgcrypt (master):
+
+;; RocksJNR:
+;; run 1: 129179 561.6478260869566
+;; run 2: 99675 433.3695652173913
+;; run 3: 91778 399.03478260869565
+;; empty caches: 104029 452.3
+
+;; RocksJava:
+;; run 1: 138160 600.695652173913
+;; run 2: 129845 564.5434782608696
+;; run 3: 112573 489.4478260869565
+;; empty caches: 124112 539.6173913043478
+
+;; LMDB:
+;; run 1: 133482 580.3565217391305
+;; run 2: 68293 296.9260869565217
+;; run 3: 44112 191.7913043478261
+;; empty caches: 108552 471.96521739130435
+
+;; Using Buffers+MessageDigest (master):
+
+;; RocksJNR:
+;; run 1: 115483 502.1
+;; run 2: 91973 399.88260869565215
+;; run 3: 92495 402.1521739130435
+;; empty caches: 103185 448.6304347826087
+
+;; Using Buffers+MessageDigest+agrona.disable.bounds.checks (master):
+
+;; RocksJNR:
+;; run 1: 116484 506.45217391304345
+;; run 2: 92879 403.82173913043476
+;; run 3: 92497 402.1608695652174
+;; empty caches: 103704 450.88695652173914
+
+;; Using Buffers+libgcrypt+agrona.disable.bounds.checks (master):
+
+;; RocksJNR:
+;; run 1: 109899 477.82173913043476
+;; run 2: 98163 426.795652173913
+;; run 3: 89005 386.9782608695652
+;; empty caches: 94521 410.96086956521737
+
+;; Using Bytes (d34e06af2cd474fcc9c912bbb8cc823e723ddfac):
+
+;; RocksJNR:
+;; run 1: 96162 418.09565217391304
+;; run 2: 74150 322.39130434782606
+;; run 3: 72645 315.8478260869565
+;; empty caches: 90454 393.2782608695652
+
+;; RocksJava:
+;; run 1: 114670 498.5652173913044
+;; run 2: 94821 412.26521739130436
+;; run 3: 94199 409.5608695652174
+;; empty caches: 97881 425.5695652173913
+
+;; LMDB:
+;; run 1: 104996 456.504347826087
+;; run 2: 32548 141.51304347826087
+;; run 3: 30490 132.56521739130434
+;; empty caches: 50331 218.8304347826087
+
+;; For reference, single run, same queries (if no errors):
+;; Sail: 25872 113.47368421052632
+;; Datomic: 129908 572.2819383259912
+
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
   (swap! (:cache-state (:kv-store system)) empty)
@@ -988,4 +1057,21 @@
 
   (crux.query/query-plan-for (crux.sparql/sparql->datalog
                               "")
-                             (crux.index/read-meta (:kv-store system) :crux.kv/stats)))
+                             (crux.index/read-meta (:kv-store system) :crux.kv/stats))
+
+  (let [total (atom 0)
+        qs (remove :crux-error c)]
+    (doseq [{:keys [idx query crux-results crux-time]} qs]
+      (prn :idx idx)
+      (prn query)
+      (prn :previous-results crux-results)
+      (prn :prevous-time crux-time)
+      (dotimes [n 1]
+        (let [start (System/currentTimeMillis)]
+          (assert (= crux-results
+                     (count (.q (.db system)
+                                (crux.sparql/sparql->datalog query)))))
+          (let [t (- (System/currentTimeMillis) start)]
+            (swap! total + t)
+            (prn :run n t)))))
+    (prn @total (/ @total (double (count qs))))))
