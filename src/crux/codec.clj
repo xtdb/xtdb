@@ -209,7 +209,7 @@
   String
   (id->buffer [this to]
     (if (hex-id? this)
-      (let [to (mem/limit-buffer ^MutableDirectBuffer to id-size)]
+      (let [^MutableDirectBuffer to (mem/limit-buffer to id-size)]
         (do (.putByte to 0 id-value-type-id)
             (mem/hex->buffer this (UnsafeBuffer. to value-type-id-size hash/id-hash-size))
             to))
