@@ -5,7 +5,7 @@
            org.agrona.concurrent.UnsafeBuffer
            java.security.MessageDigest))
 
-(def ^:const ^:private gcrypt-enabled? (not (boolean (System/getenv "CRUX_DISABLE_LIBGCRYPT"))))
+(def ^:const ^:private gcrypt-enabled? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_LIBGCRYPT"))))
 
 ;; NOTE: Using name without dash as it's supported both by
 ;; MessageDigest and libgcrypt.
