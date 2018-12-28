@@ -1,6 +1,7 @@
 package crux;
 
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.nio.ByteOrder;
 import org.agrona.DirectBuffer;
@@ -212,18 +213,33 @@ public class ByteUtils {
 
     // https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
-    private static final int BLOCK_BYTES = 512 / Byte.SIZE;
+    private static final int SHA1_BLOCK_BYTES = 512 / Byte.SIZE;
+    private static final int SHA1_HASH_SIZE = 160 / Byte.SIZE;
+
+    private static final class SHAState {
+        private final int[] w = new int[80];
+        private final byte[] pad = new byte[SHA1_BLOCK_BYTES];
+    }
+
+    private static final ThreadLocal<SHAState> wTl = new ThreadLocal<>() {
+            public SHAState initialValue() {
+                return new SHAState();
+            }
+        };
 
     public static DirectBuffer sha1(final DirectBuffer from, final MutableDirectBuffer to) {
-        final int extra = from.capacity() % BLOCK_BYTES;
-        final int blocks = from.capacity() / BLOCK_BYTES;
-        final int limit = blocks * BLOCK_BYTES;
-        final UnsafeBuffer pad = new UnsafeBuffer(new byte[BLOCK_BYTES]);
-        pad.putBytes(0, from, limit, extra);
-        pad.putByte(extra, (byte) 0x80);
-        pad.putLong(BLOCK_BYTES - Long.BYTES, Byte.SIZE * from.capacity(), ByteOrder.BIG_ENDIAN);
-
-        final int[] w = new int[80];
+        to.boundsCheck(0, SHA1_HASH_SIZE);
+        final int size = from.capacity();
+        final int blocks = size / SHA1_BLOCK_BYTES;
+        final int bytesInLastBlock = size % SHA1_BLOCK_BYTES;
+        final int offsetOfLastBlock = blocks * SHA1_BLOCK_BYTES;
+        final SHAState s =  wTl.get();
+        final int[] w = s.w;
+        Arrays.fill(s.pad, (byte) 0);
+        final UnsafeBuffer pad = new UnsafeBuffer(s.pad);
+        pad.putBytes(0, from, offsetOfLastBlock, bytesInLastBlock);
+        pad.putByte(bytesInLastBlock, (byte) 0x80);
+        pad.putLong(SHA1_BLOCK_BYTES - Long.BYTES, Byte.SIZE * size, ByteOrder.BIG_ENDIAN);
 
         int h0 = (int) 0x67452301;
         int h1 = (int) 0xEFCDAB89;
@@ -232,7 +248,7 @@ public class ByteUtils {
         int h4 = (int) 0xC3D2E1F0;
 
         for (int i = 0; i <= blocks; i++) {
-            final DirectBuffer block = i == blocks ? pad : new UnsafeBuffer(from, BLOCK_BYTES * i, BLOCK_BYTES);
+            final DirectBuffer block = i == blocks ? pad : new UnsafeBuffer(from, SHA1_BLOCK_BYTES * i, SHA1_BLOCK_BYTES);
 
             int a = h0;
             int b = h1;
@@ -240,24 +256,70 @@ public class ByteUtils {
             int d = h3;
             int e = h4;
 
-            for (int j = 0; j < 80; j++) {
-                if (j < 16) {
-                    w[j] = block.getInt(j * Integer.BYTES, ByteOrder.BIG_ENDIAN);
-                } else {
-                    w[j] = Integer.rotateLeft(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
-                }
+            for (int j = 0; j < 16; j++) {
+                w[j] = block.getInt(j * Integer.BYTES, ByteOrder.BIG_ENDIAN);
 
-                int fK;
-                if (j <= 19) {
-                    fK = ((b & c) | (~(b) & d)) + 0x5A827999;
-                } else if (j <= 39) {
-                    fK = (b ^ c ^ d) + 0x6ED9EBA1;
-                } else if (j <= 59) {
-                    fK = ((b & c) | (b & d) | (c & d)) + 0x8F1BBCDC;
-                } else {
-                    fK = (b ^ c ^ d) + 0xCA62C1D6;
-                }
+                final int fK = ((b & c) | (~(b) & d)) + 0x5A827999;
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
 
+            for (int j = 16; j <= 19; j++) {
+                w[j] = Integer.rotateLeft(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+
+                final int fK = ((b & c) | (~(b) & d)) + 0x5A827999;
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
+
+            for (int j = 20; j <= 31; j++) {
+                w[j] = Integer.rotateLeft(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+
+                final int fK = (b ^ c ^ d) + 0x6ED9EBA1;
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
+
+            for (int j = 32; j <= 39; j++) {
+                w[j] = Integer.rotateLeft(w[j - 6] ^ w[j - 16] ^ w[j - 28] ^ w[j - 32], 2);
+
+                final int fK = (b ^ c ^ d) + 0x6ED9EBA1;
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
+
+            for (int j = 40; j <= 59; j++) {
+                w[j] = Integer.rotateLeft(w[j - 6] ^ w[j - 16] ^ w[j - 28] ^ w[j - 32], 2);
+
+                final int fK = ((b & c) | (b & d) | (c & d)) + 0x8F1BBCDC;
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
+
+            for (int j = 60; j <= 79; j++) {
+                w[j] = Integer.rotateLeft(w[j - 6] ^ w[j - 16] ^ w[j - 28] ^ w[j - 32], 2);
+
+                final int fK = (b ^ c ^ d) + 0xCA62C1D6;
                 final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
                 e = d;
                 d = c;
