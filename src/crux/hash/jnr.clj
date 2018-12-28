@@ -52,4 +52,4 @@
                           (Pointer/wrap gcrypt-rt (.addressOffset to))
                           (Pointer/wrap gcrypt-rt (.addressOffset buffer))
                           (mem/capacity buffer))
-    (UnsafeBuffer. to 0 hash/id-hash-size)))
+    (mem/limit-buffer to hash/id-hash-size)))
