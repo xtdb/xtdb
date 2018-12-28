@@ -21,7 +21,7 @@
                             (.clone id-digest-prototype)
                             (catch CloneNotSupportedException e
                               (MessageDigest/getInstance id-hash-algorithm)))]
-    (doto (UnsafeBuffer. to 0 id-hash-size)
+    (doto ^MutableDirectBuffer (mem/limit-buffer to id-hash-size)
       (.putBytes 0 (.digest md (mem/->on-heap buffer))))))
 
 (defn- jnr-available? []

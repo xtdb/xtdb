@@ -7,6 +7,11 @@
            java.util.function.Supplier
            jnr.ffi.Pointer))
 
+;; NOTE: The data we hash is currently always on heap, strings,
+;; keywords etc. So we currently always first have to copy the data
+;; off heap before hashing it, so we don't gain the potential speed up
+;; from using this. The target is always off heap.
+
 ;; Uses libgcrypt to do the SHA1 native, can be 30% faster than
 ;; MessageDigest, but not necessarily with sane realistic allocation
 ;; patterns, might be easier to integrate once everything is in
