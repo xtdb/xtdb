@@ -13,6 +13,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+;; NOTE: A buffer returned from an kv/KvIterator can only be assumed
+;; to be valid until the next call on the same iterator. In practice
+;; this limitation is only for RocksJNRKv.
+;; TODO: It would be nice to make this explicit somehow.
+
 ;; Indexes
 
 (defrecord PrefixKvIterator [i ^DirectBuffer prefix]
