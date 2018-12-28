@@ -10,12 +10,43 @@
             [crux.kv :as kv]
             [crux.memory :as mem])
   (:import java.io.Closeable
+           [java.lang.reflect InvocationHandler Proxy]
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
            org.rocksdb.util.Environment
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+;; NOTE: This idea doesn't really work well, as it requires all slices
+;; and copies to be wrapped as well. Easiest way around that is to
+;; introduce mem/slice and force usage of it. Alternatively, as this
+;; entire facility is only for debugging to detect if buffers are used
+;; after they've gone out of scope, one can target calls in crux.codec
+;; to call track after the new calls to the UnsafeBuffer constructor.
+(def ^:const track-buffers? (Boolean/parseBoolean (System/getenv "CRUX_ROCKSJNR_TRACK_BUFFERS")))
+
+(definterface TrackedBuffer
+  (^crux.kv.rocksdb.jnr.TrackedBuffer track [^org.agrona.concurrent.UnsafeBuffer b]))
+
+(defn- tracking-buffer [b current-buffer-state]
+  (if (or (not track-buffers?)
+          (nil? b))
+    b
+    (try
+      (Proxy/newProxyInstance
+       (.getClassLoader TrackedBuffer)
+       (into-array [DirectBuffer TrackedBuffer])
+       (reify InvocationHandler
+         (invoke [_ proxy m args]
+           (if (= (.getDeclaringClass m) TrackedBuffer)
+             (tracking-buffer (first args) current-buffer-state)
+             (do (when-not (identical? b @current-buffer-state)
+                   (throw (IllegalStateException.
+                           (str "Buffer has gone out of Iterator scope: " (pr-str b)))))
+                 (.invoke m b args))))))
+      (finally
+        (reset! current-buffer-state b)))))
 
 (definterface RocksDB
   (^jnr.ffi.Pointer rocksdb_options_create [])
@@ -135,27 +166,29 @@
 (defn- buffer->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b]
   (Pointer/wrap rt (.addressOffset b)))
 
-(defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
+(defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out current-buffer-state]
   kv/KvIterator
   (seek [this k]
     (let [k (mem/ensure-off-heap k eb)]
       (.rocksdb_iter_seek rocksdb i (buffer->pointer k) (.capacity k))
-      (iterator->key i len-out)))
+      (tracking-buffer (iterator->key i len-out) current-buffer-state)))
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
-    (iterator->key i len-out))
+    (tracking-buffer (iterator->key i len-out) current-buffer-state))
 
   (value [this]
     (let [p-v (.rocksdb_iter_value rocksdb i len-out)]
-      (pointer+len->buffer p-v len-out)))
+      (tracking-buffer (pointer+len->buffer p-v len-out) current-buffer-state)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
+    (reset! current-buffer-state nil)
     this)
 
   Closeable
   (close [this]
+    (reset! current-buffer-state nil)
     (.rocksdb_iter_destroy rocksdb i)))
 
 (defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot]
@@ -163,7 +196,8 @@
   (new-iterator [this]
     (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
                           (ExpandableDirectByteBuffer.)
-                          (Memory/allocateTemporary rt NativeType/ULONG)))
+                          (Memory/allocateTemporary rt NativeType/ULONG)
+                          (atom nil)))
 
   Closeable
   (close [_]
