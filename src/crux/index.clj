@@ -53,7 +53,7 @@
 ;; AVE
 
 (defn- attribute-value+placeholder [k peek-state]
-  (let [value (mem/copy-buffer (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k)))]
+  (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
     (reset! peek-state {:last-k k :value value})
     [value :crux.index.binary-placeholder/value]))
 
@@ -70,8 +70,7 @@
   (next-values [this]
     (let [{:keys [last-k]} @peek-state
           prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
-      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl))
-                                                                        prefix-size))
+      (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                             (kv/seek i))]
         (attribute-value+placeholder k peek-state)))))
 
