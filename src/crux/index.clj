@@ -45,7 +45,7 @@
 ;; AVE
 
 (defn- attribute-value+placeholder [k peek-state]
-  (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
+  (let [value (mem/copy-buffer (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k)))]
     (reset! peek-state {:last-k k :value value})
     [value :crux.index.binary-placeholder/value]))
 
@@ -77,10 +77,11 @@
     (let [limit (- (mem/capacity k) c/id-size)]
       (reset! peek-state (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
     (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))
-              eid-buffer (mem/copy-buffer (c/->id-buffer eid))
+              eid-buffer (c/->id-buffer eid)
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
           (when entity-tx
-            (let [version-k (c/encode-attribute+value+entity+content-hash-key-to
+            (let [eid-buffer (c/->id-buffer (.eid entity-tx))
+                  version-k (c/encode-attribute+value+entity+content-hash-key-to
                              eb
                              attr
                              value
@@ -123,10 +124,10 @@
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
   (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
         eid-buffer (c/->id-buffer eid)
-        [_ entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
+        [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
     (reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
-      [eid-buffer :crux.index.binary-placeholder/entity]
+      [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
 
 (defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx eb peek-state]
@@ -377,6 +378,11 @@
 
 ;; Utils
 
+
+;; NOTE: We need to copy the keys and values here, as the originals
+;; returned by the iterator will (may) get invalidated by the next
+;; iterator call.
+
 (defn all-keys-in-prefix
   ([i prefix]
    (all-keys-in-prefix i prefix false))
@@ -386,8 +392,9 @@
        (let [k (f-cons)]
          (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
            (cons (if entries?
-                   [k (kv/value i)]
-                   k) (step f-next f-next))))))
+                   [(mem/copy-buffer k)
+                    (mem/copy-buffer (kv/value i))]
+                   (mem/copy-buffer k)) (step f-next f-next))))))
     #(kv/seek i prefix) #(kv/next i))))
 
 (defn idx->seq [idx]
@@ -400,7 +407,12 @@
 
 (defn- ^EntityTx enrich-entity-tx [entity-tx ^DirectBuffer content-hash]
   (assoc entity-tx :content-hash (when (pos? (mem/capacity content-hash))
-                                   (c/new-id content-hash))))
+                                   (c/safe-id (c/new-id content-hash)))))
+
+(defn- safe-entity-tx ^crux.codec.EntityTx [entity-tx]
+  (-> entity-tx
+      (update :eid c/safe-id)
+      (update :content-hash c/safe-id)))
 
 (defrecord EntityAsOfIndex [i business-time transact-time eb]
   db/Index
@@ -414,8 +426,8 @@
                   nil)]
       (loop [k (kv/seek i seek-k)]
         (when (and k (mem/buffers=? seek-k k prefix-size))
-          (let [v (kv/value i)
-                entity-tx (c/decode-entity+bt+tt+tx-id-key-from k)]
+          (let [entity-tx (safe-entity-tx (c/decode-entity+bt+tt+tx-id-key-from k))
+                v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
@@ -428,17 +440,12 @@
 (defn new-entity-as-of-index [snapshot business-time transact-time]
   (->EntityAsOfIndex (kv/new-iterator snapshot) business-time transact-time (ExpandableDirectByteBuffer.)))
 
-(defn safe-entity-tx [entity-tx]
-  (-> entity-tx
-      (update :eid c/safe-id)
-      (update :content-hash c/safe-id)))
-
 (defn entities-at [snapshot eids business-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot business-time transact-time)]
     (some->> (for [eid eids
                    :let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
                    :when entity-tx]
-               (safe-entity-tx entity-tx))
+               entity-tx)
              (not-empty)
              (vec))))
 
@@ -454,8 +461,7 @@
     (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid))]
       (vec (for [[k v] (all-keys-in-prefix i seek-k true)]
              (-> (c/decode-entity+bt+tt+tx-id-key-from k)
-                 (enrich-entity-tx v)
-                 (safe-entity-tx)))))))
+                 (enrich-entity-tx v)))))))
 
 ;; Join
 

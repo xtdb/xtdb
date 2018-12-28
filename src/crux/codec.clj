@@ -273,7 +273,8 @@
     (id->buffer x (mem/allocate-buffer id-size))))
 
 (defn safe-id ^crux.codec.Id [^Id id]
-  (Id. (mem/copy-buffer (.buffer id)) 0))
+  (when id
+    (Id. (mem/copy-buffer (.buffer id)) 0)))
 
 (defmethod print-method Id [id ^Writer w]
   (.write w "#crux/id ")

@@ -1076,7 +1076,7 @@
   (map :doc (vals (meta result-tuple))))
 
 (defn result-tuple->entity-txs [result-tuple]
-  (map (comp idx/safe-entity-tx :entity-tx) (vals (meta result-tuple))))
+  (map :entity-tx (vals (meta result-tuple))))
 
 (defn entity-tx [db eid]
   (->> (q db {:find '[e]
