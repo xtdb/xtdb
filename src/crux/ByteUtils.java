@@ -209,4 +209,76 @@ public class ByteUtils {
             return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE);
         }
     }
+
+    // https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
+
+    private static final int BLOCK_BYTES = 512 / Byte.SIZE;
+
+    public static DirectBuffer sha1(final DirectBuffer from, final MutableDirectBuffer to) {
+        final int extra = from.capacity() % BLOCK_BYTES;
+        final int blocks = from.capacity() / BLOCK_BYTES;
+        final int limit = blocks * BLOCK_BYTES;
+        final UnsafeBuffer pad = new UnsafeBuffer(new byte[BLOCK_BYTES]);
+        pad.putBytes(0, from, limit, extra);
+        pad.putByte(extra, (byte) 0x80);
+        pad.putLong(BLOCK_BYTES - Long.BYTES, Byte.SIZE * from.capacity(), ByteOrder.BIG_ENDIAN);
+
+        final int[] w = new int[80];
+
+        int h0 = (int) 0x67452301;
+        int h1 = (int) 0xEFCDAB89;
+        int h2 = (int) 0x98BADCFE;
+        int h3 = (int) 0x10325476;
+        int h4 = (int) 0xC3D2E1F0;
+
+        for (int i = 0; i <= blocks; i++) {
+            final DirectBuffer block = i == blocks ? pad : new UnsafeBuffer(from, BLOCK_BYTES * i, BLOCK_BYTES);
+
+            int a = h0;
+            int b = h1;
+            int c = h2;
+            int d = h3;
+            int e = h4;
+
+            for (int j = 0; j < 80; j++) {
+                if (j < 16) {
+                    w[j] = block.getInt(j * Integer.BYTES, ByteOrder.BIG_ENDIAN);
+                } else {
+                    w[j] = Integer.rotateLeft(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+                }
+
+                int fK;
+                if (j <= 19) {
+                    fK = ((b & c) | (~(b) & d)) + 0x5A827999;
+                } else if (j <= 39) {
+                    fK = (b ^ c ^ d) + 0x6ED9EBA1;
+                } else if (j <= 59) {
+                    fK = ((b & c) | (b & d) | (c & d)) + 0x8F1BBCDC;
+                } else {
+                    fK = (b ^ c ^ d) + 0xCA62C1D6;
+                }
+
+                final int temp = Integer.rotateLeft(a, 5) + fK + e + w[j];
+                e = d;
+                d = c;
+                c = Integer.rotateLeft(b, 30);
+                b = a;
+                a = temp;
+            }
+
+            h0 += a;
+            h1 += b;
+            h2 += c;
+            h3 += d;
+            h4 += e;
+        }
+
+        to.putInt(0 * Integer.BYTES, h0, ByteOrder.BIG_ENDIAN);
+        to.putInt(1 * Integer.BYTES, h1, ByteOrder.BIG_ENDIAN);
+        to.putInt(2 * Integer.BYTES, h2, ByteOrder.BIG_ENDIAN);
+        to.putInt(3 * Integer.BYTES, h3, ByteOrder.BIG_ENDIAN);
+        to.putInt(4 * Integer.BYTES, h4, ByteOrder.BIG_ENDIAN);
+
+        return to;
+    }
 }
