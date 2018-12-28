@@ -36,6 +36,10 @@
 
 (def ^:const ^:private max-string-index-length 128)
 
+(defprotocol IdOrBuffer
+  (new-id ^crux.codec.Id [id])
+  (->id-buffer ^org.agrona.DirectBuffer [this]))
+
 (defprotocol IdToBuffer
   (id->buffer ^org.agrona.MutableDirectBuffer [this ^MutableDirectBuffer to]))
 
@@ -171,8 +175,6 @@
   (when-let [[_ n] (re-find #"\:(.+)" s)]
     (keyword n)))
 
-(declare ->id-buffer)
-
 (extend-protocol IdToBuffer
   (class (byte-array 0))
   (id->buffer [this ^MutableDirectBuffer to]
@@ -258,19 +260,37 @@
 (def ^:private ^crux.codec.Id nil-id
   (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
 
-(defn ->id-buffer ^org.agrona.DirectBuffer [x]
-  (cond
-    (instance? Id x)
-    (.buffer ^Id x)
+(extend-protocol IdOrBuffer
+  Id
+  (->id-buffer [this]
+    (.buffer this))
 
-    (instance? DirectBuffer x)
-    x
+  (new-id [this]
+    this)
 
-    (nil? x)
-    nil-id-buffer
+  DirectBuffer
+  (->id-buffer [this]
+    this)
 
-    :else
-    (id->buffer x (mem/allocate-buffer id-size))))
+  (new-id [this]
+    (do (assert (= id-size (mem/capacity this)))
+        (Id. this 0)))
+
+  nil
+  (->id-buffer [this]
+    nil-id-buffer)
+
+  (new-id [this]
+    nil-id)
+
+  Object
+  (->id-buffer [this]
+    (id->buffer this (mem/allocate-buffer id-size)))
+
+  (new-id [this]
+    (let [bs (->id-buffer this)]
+      (assert (= id-size (mem/capacity bs)))
+      (Id. (UnsafeBuffer. bs) 0))))
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (when id
@@ -279,23 +299,6 @@
 (defmethod print-method Id [id ^Writer w]
   (.write w "#crux/id ")
   (print-method (str id) w))
-
-(defn new-id ^crux.codec.Id [id]
-  (cond
-    (instance? Id id)
-    id
-
-    (instance? DirectBuffer id)
-    (do (assert (= id-size (mem/capacity id)))
-        (Id. id 0))
-
-    (nil? id)
-    nil-id
-
-    :else
-    (let [bs (->id-buffer id)]
-      (assert (= id-size (mem/capacity bs)))
-      (Id. (UnsafeBuffer. bs) 0))))
 
 (defn valid-id? [x]
   (try
