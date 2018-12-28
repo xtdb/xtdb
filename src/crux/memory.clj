@@ -30,8 +30,11 @@
    (doto to
      (.putBytes 0 from 0 limit))))
 
+(defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
+  (UnsafeBuffer. buffer offset limit))
+
 (defn limit-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long limit]
-  (UnsafeBuffer. buffer 0 limit))
+  (slice-buffer buffer 0 limit))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))

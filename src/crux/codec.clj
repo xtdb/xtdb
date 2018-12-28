@@ -56,7 +56,7 @@
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
-  (hash/id-hash (UnsafeBuffer. to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
+  (hash/id-hash (mem/slice-buffer to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
   (mem/limit-buffer to id-size))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
@@ -116,7 +116,7 @@
       (let [terminate-mark (byte 1)
             terminate-mark-size Byte/BYTES
             offset (byte 2)
-            ub-in (UnsafeBuffer. (.getBytes this "UTF-8"))
+            ub-in (mem/on-heap-buffer (.getBytes this "UTF-8"))
             length (.capacity ub-in)]
         (.putByte to 0 string-value-type-id)
         (loop [idx 0]
@@ -211,7 +211,7 @@
     (if (hex-id? this)
       (let [^MutableDirectBuffer to (mem/limit-buffer to id-size)]
         (do (.putByte to 0 id-value-type-id)
-            (mem/hex->buffer this (UnsafeBuffer. to value-type-id-size hash/id-hash-size))
+            (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
             to))
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this))]
@@ -233,7 +233,7 @@
 
   Object
   (toString [this]
-    (mem/buffer->hex (UnsafeBuffer. buffer value-type-id-size hash/id-hash-size)))
+    (mem/buffer->hex (mem/slice-buffer buffer value-type-id-size hash/id-hash-size)))
 
   (equals [this that]
     (or (identical? this that)
@@ -330,7 +330,7 @@
   (assert (= (+ index-id-size id-size) (.capacity k)))
   (let [index-id (.getByte k 0)]
     (assert (= content-hash->doc-index-id index-id))
-    (Id. (UnsafeBuffer. k index-id-size id-size) 0)))
+    (Id. (mem/slice-buffer k index-id-size id-size) 0)))
 
 (defn encode-attribute+value+entity+content-hash-key-to
   (^org.agrona.MutableDirectBuffer[b attr]
@@ -365,9 +365,9 @@
     (let [index-id (.getByte k 0)]
       (assert (= attribute+value+entity+content-hash-index-id index-id))
       (let [value-size (- length id-size id-size id-size index-id-size)
-            value (UnsafeBuffer. k (+ index-id-size id-size) value-size)
-            entity (Id. (UnsafeBuffer. k (+ index-id-size id-size value-size) id-size) 0)
-            content-hash (Id. (UnsafeBuffer. k (+ index-id-size id-size value-size id-size) id-size) 0)]
+            value (mem/slice-buffer k (+ index-id-size id-size) value-size)
+            entity (Id. (mem/slice-buffer k (+ index-id-size id-size value-size) id-size) 0)
+            content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size value-size id-size) id-size) 0)]
         (->EntityValueContentHash entity value content-hash)))))
 
 (defn encode-attribute+entity+value+content-hash-key-to
@@ -400,9 +400,9 @@
     (let [index-id (.getByte k 0)]
       (assert (= attribute+entity+value+content-hash-index-id index-id))
       (let [value-size (- length id-size id-size id-size index-id-size)
-            entity (Id. (UnsafeBuffer. k (+ index-id-size id-size) id-size) 0)
-            value (UnsafeBuffer. k (+ index-id-size id-size id-size) value-size)
-            content-hash (Id. (UnsafeBuffer. k (+ index-id-size id-size id-size value-size) id-size) 0)]
+            entity (Id. (mem/slice-buffer k (+ index-id-size id-size) id-size) 0)
+            value (mem/slice-buffer k (+ index-id-size id-size id-size) value-size)
+            content-hash (Id. (mem/slice-buffer k (+ index-id-size id-size id-size value-size) id-size) 0)]
         (->EntityValueContentHash entity value content-hash)))))
 
 (defn encode-meta-key-to ^MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
@@ -471,7 +471,7 @@
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)))
   (let [index-id (.getByte k 0)]
     (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. (UnsafeBuffer. k index-id-size id-size) 0)
+    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
           business-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
           transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
