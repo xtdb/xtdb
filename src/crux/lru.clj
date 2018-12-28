@@ -2,11 +2,15 @@
   (:require [clojure.spec.alpha :as s]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.kv :as kv])
+            [crux.kv :as kv]
+            [crux.memory :as mem])
   (:import java.io.Closeable
+           [java.lang.reflect InvocationHandler Proxy]
            [java.util Collections LinkedHashMap]
            java.util.concurrent.locks.StampedLock
-           java.util.function.Function))
+           java.util.function.Function
+           org.agrona.concurrent.UnsafeBuffer
+           [org.agrona DirectBuffer MutableDirectBuffer]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -55,6 +59,66 @@
 
   Closeable
   (close [_]))
+
+;; NOTE: this only tracks buffers created by the iterator and calls to
+;; crux.memory/slice, so might miss things. Adds significant overhead
+;; so only useful for debugging.
+(def ^:const track-buffers? (Boolean/parseBoolean (System/getenv "CRUX_TRACK_BUFFERS")))
+
+(definterface TrackedBuffer
+  (^crux.lru.TrackedBuffer trackSlice [^org.agrona.concurrent.UnsafeBuffer b]))
+
+(defn- tracking-buffer [b buffer-state]
+  (try
+    (Proxy/newProxyInstance
+     (.getClassLoader TrackedBuffer)
+     (into-array [MutableDirectBuffer TrackedBuffer])
+     (reify InvocationHandler
+       (invoke [_ proxy m args]
+         (if (= (.getName m) "trackSlice")
+           (tracking-buffer (first args) buffer-state)
+           (do (when-not (contains? @buffer-state b)
+                 (throw (IllegalStateException.
+                         (str "Buffer has gone out of Iterator scope: " (pr-str b)))))
+               (.invoke m b args))))))
+    (finally
+      (swap! buffer-state conj b))))
+
+(defn- new-tracking-buffer [b buffer-state]
+  (if (or (not track-buffers?)
+          (nil? b))
+    b
+    (tracking-buffer b (doto buffer-state
+                         (reset! #{})))))
+
+(defn- tracking-slice [^DirectBuffer buffer ^long offset ^long limit]
+  (let [b (UnsafeBuffer. buffer offset limit)]
+    (if (instance? TrackedBuffer buffer)
+      (.trackSlice ^TrackedBuffer buffer b)
+      b)))
+
+(when track-buffers?
+  (alter-var-root #'mem/slice-buffer (constantly tracking-slice)))
+
+(defrecord TrackingIterator [i buffer-state]
+  kv/KvIterator
+  (seek [_ k]
+    (new-tracking-buffer (kv/seek i k) buffer-state))
+
+  (next [_]
+    (new-tracking-buffer (kv/next i) buffer-state))
+
+  (value [_]
+    (new-tracking-buffer (kv/value i) buffer-state))
+
+  (refresh [this]
+    (reset! buffer-state #{})
+    (assoc this :i (kv/refresh i)))
+
+  Closeable
+  (close [_]
+    (reset! buffer-state #{})
+    (.close ^Closeable i)))
 
 (defn- ensure-iterator-open [closed-state]
   (when @closed-state
@@ -112,7 +176,11 @@
       (if (compare-and-set! (:closed-state i) true false)
         (kv/refresh i)
         (recur))
-      (let [i (->CachedIterator (kv/new-iterator snapshot) lock (atom false))]
+      (let [i (kv/new-iterator snapshot)
+            i (if track-buffers?
+                (->TrackingIterator i (atom #{}))
+                i)
+            i (->CachedIterator i lock (atom false))]
         (swap! iterators-state conj i)
         i)))
 

@@ -10,56 +10,12 @@
             [crux.kv :as kv]
             [crux.memory :as mem])
   (:import java.io.Closeable
-           [java.lang.reflect InvocationHandler Proxy]
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
            org.rocksdb.util.Environment
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-;; NOTE: this only tracks buffers created by the iterator and calls to
-;; crux.memory/slice, so might miss things. Adds significant
-;; reflection overhead so only useful for debugging. There's nothing
-;; directly tying this to this backend, so should be split out as its
-;; own decorator, easiest living in crux.lru as part of the iterator
-;; cache.
-(def ^:const track-buffers? (Boolean/parseBoolean (System/getenv "CRUX_ROCKSJNR_TRACK_BUFFERS")))
-
-(definterface TrackedBuffer
-  (^crux.kv.rocksdb.jnr.TrackedBuffer trackSlice [^org.agrona.concurrent.UnsafeBuffer b]))
-
-(defn- tracking-buffer [b current-buffer-state]
-  (try
-    (Proxy/newProxyInstance
-     (.getClassLoader TrackedBuffer)
-     (into-array [MutableDirectBuffer TrackedBuffer])
-     (reify InvocationHandler
-       (invoke [_ proxy m args]
-         (if (= (.getName m) "trackSlice")
-           (tracking-buffer (first args) current-buffer-state)
-           (do (when-not (contains? @current-buffer-state b)
-                 (throw (IllegalStateException.
-                         (str "Buffer has gone out of Iterator scope: " (pr-str b)))))
-               (.invoke m b args))))))
-    (finally
-      (swap! current-buffer-state conj b))))
-
-(defn- new-tracking-buffer [b current-buffer-state]
-  (if (or (not track-buffers?)
-          (nil? b))
-    b
-    (tracking-buffer b (doto current-buffer-state
-                         (reset! #{})))))
-
-(defn- tracking-slice [^DirectBuffer buffer ^long offset ^long limit]
-  (let [b (UnsafeBuffer. buffer offset limit)]
-    (if (instance? TrackedBuffer buffer)
-      (.trackSlice ^TrackedBuffer buffer b)
-      b)))
-
-(when track-buffers?
-  (alter-var-root #'mem/slice-buffer (constantly tracking-slice)))
 
 (definterface RocksDB
   (^jnr.ffi.Pointer rocksdb_options_create [])
@@ -179,29 +135,27 @@
 (defn- buffer->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b]
   (Pointer/wrap rt (.addressOffset b)))
 
-(defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out current-buffer-state]
+(defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvIterator
   (seek [this k]
     (let [k (mem/ensure-off-heap k eb)]
       (.rocksdb_iter_seek rocksdb i (buffer->pointer k) (.capacity k))
-      (new-tracking-buffer (iterator->key i len-out) current-buffer-state)))
+      (iterator->key i len-out)))
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
-    (new-tracking-buffer (iterator->key i len-out) current-buffer-state))
+    (iterator->key i len-out))
 
   (value [this]
     (let [p-v (.rocksdb_iter_value rocksdb i len-out)]
-      (new-tracking-buffer (pointer+len->buffer p-v len-out) current-buffer-state)))
+      (pointer+len->buffer p-v len-out)))
 
   (kv/refresh [this]
     ;; TODO: https://github.com/facebook/rocksdb/pull/3465
-    (reset! current-buffer-state #{})
     this)
 
   Closeable
   (close [this]
-    (reset! current-buffer-state #{})
     (.rocksdb_iter_destroy rocksdb i)))
 
 (defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot]
@@ -209,8 +163,7 @@
   (new-iterator [this]
     (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
                           (ExpandableDirectByteBuffer.)
-                          (Memory/allocateTemporary rt NativeType/ULONG)
-                          (atom #{})))
+                          (Memory/allocateTemporary rt NativeType/ULONG)))
 
   Closeable
   (close [_]
