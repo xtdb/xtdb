@@ -14,6 +14,7 @@
             [crux.memory :as mem])
   (:import java.util.Comparator
            java.util.concurrent.TimeoutException
+           java.util.function.Supplier
            clojure.lang.ExceptionInfo
            org.agrona.ExpandableDirectByteBuffer
            crux.index.BinaryJoinLayeredVirtualIndex
@@ -496,6 +497,12 @@
 
 (defrecord BoundResult [var value ^EntityTx entity-tx doc])
 
+(def ^:private ^ThreadLocal value-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
 (defn- bound-result-for-var ^crux.query.BoundResult [snapshot object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
@@ -508,12 +515,11 @@
               value (if (or (nil? value-buffer)
                             (= (count values) 1))
                       (first values)
-                      (let [eb (ExpandableDirectByteBuffer. (mem/capacity value-buffer))]
-                        (loop [[x & xs] values]
-                          (if (mem/buffers=? value-buffer (c/value->buffer x eb))
-                            x
-                            (when xs
-                              (recur xs))))))]
+                      (loop [[x & xs] values]
+                        (if (mem/buffers=? value-buffer (c/value->buffer x (.get value-buffer-tl)))
+                          x
+                          (when xs
+                            (recur xs)))))]
           (BoundResult. var value entity-tx doc))))))
 
 (declare build-sub-query)
