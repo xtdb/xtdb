@@ -6,6 +6,7 @@
            java.security.MessageDigest))
 
 (def ^:const ^:private gcrypt-enabled? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_LIBGCRYPT"))))
+(def ^:const ^:private openssl-enabled? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_LIBCRYPTO"))))
 
 ;; NOTE: Using name without dash as it's supported both by
 ;; MessageDigest and libgcrypt.
@@ -33,13 +34,18 @@
 
 (when-not (bound? #'id-hash)
   (try
-    (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
-                                        (jnr-available?)
-                                        (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer))]
-      (do (log/info "Using libgcrypt for ID hashing.")
-          (def id-hash gcrypt-id-hash-buffer))
-      (do (log/info "Using java.security.MessageDigest for ID hashing.")
-          (def id-hash message-digest-id-hash-buffer)))
+    (if-let [openssl-id-hash-buffer (and openssl-enabled?
+                                         (jnr-available?)
+                                         (requiring-resolve 'crux.hash.jnr/openssl-id-hash-buffer))]
+      (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
+          (def id-hash openssl-id-hash-buffer))
+      (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
+                                          (jnr-available?)
+                                          (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer))]
+        (do (log/info "Using libgcrypt for ID hashing.")
+            (def id-hash gcrypt-id-hash-buffer))
+        (do (log/info "Using java.security.MessageDigest for ID hashing.")
+            (def id-hash message-digest-id-hash-buffer))))
     (catch Throwable t
-      (log/warn t "Could not load libgcrypt, falling back to java.security.MessageDigest for ID hashing.")
+      (log/warn t "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing.")
       (def id-hash message-digest-id-hash-buffer))))
