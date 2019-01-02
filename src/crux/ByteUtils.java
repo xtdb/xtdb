@@ -221,7 +221,7 @@ public class ByteUtils {
         private final byte[] pad = new byte[SHA1_BLOCK_BYTES];
     }
 
-    private static final ThreadLocal<SHAState> wTl = new ThreadLocal<>() {
+    private static final ThreadLocal<SHAState> wTl = new ThreadLocal<SHAState>() {
             public SHAState initialValue() {
                 return new SHAState();
             }
