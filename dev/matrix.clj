@@ -2,8 +2,12 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.walk :as w]
-            [crux.rdf :as rdf])
-  (:import java.util.BitSet
+            [clojure.spec.alpha :as s]
+            [crux.rdf :as rdf]
+            [crux.query :as q])
+  (:import [java.util ArrayList BitSet]
+           [org.roaringbitmap FastRankRoaringBitmap BitmapDataProviderSupplier]
+           [org.roaringbitmap.longlong LongConsumer Roaring64NavigableMap]
            [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
@@ -354,81 +358,450 @@
           (prn (get id->value r) (get id->value c)))
       m_12))
 
-;; Based on the example-data-artists-with-matrix, but using BitSet and
-;; boolean operations. The idea is to treat the diagonal matrix
-;; multiplications as or over ranges. Not necessarily efficient,
-;; should use something like
-;; https://github.com/RoaringBitmap/RoaringBitmap
-(defn bitset-spike []
-  (let [size 64
-        bit->coord (fn [^long b]
-                     [(quot b size)
-                      (mod b size)])
-        row->bit (fn ^long [^long b]
-                   (* size b))
-        coord->bit (fn ^long [[r ^long c]]
-                     (+ c (long (row->bit r))))
-        set-cell (fn [^BitSet bs cell]
-                   (doto bs
-                     (.set (long (coord->bit cell)))))
-        set-row (fn [^BitSet bs ^long r]
-                  (let [bit (long (row->bit r))]
-                    (doto bs
-                      (.set bit (+ bit size)))))
-        sparse-matrix (fn [cells]
-                        (reduce set-cell (BitSet.) cells))
-        all-cells (fn [^BitSet bs]
-                    ((fn step [i]
-                       (let [i (.nextSetBit bs i)]
-                         (when (not= -1 i)
-                           (cons (bit->coord i)
-                                 (lazy-seq (step (inc i))))))) 0))
-        transpose (fn [bs]
-                    (->> (all-cells bs)
-                         (map reverse)
-                         (sparse-matrix)))
-        matlab-any (fn [bs]
-                     (->> (all-cells bs)
-                          (map second)
-                          (distinct)))
-        mult-diag (fn [diag ^BitSet bs-b]
-                    (if (or (empty? diag)
-                            (.isEmpty bs-b))
-                      (BitSet.)
-                      (doto ^BitSet
-                          (reduce set-row (BitSet.) diag)
-                        (.and bs-b))))
+(def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
 
-        value->id {:http://example.org/Picasso 0
-                   "Pablo" 2
-                   :http://example.org/guernica 6
-                   :http://example.org/VanGogh 21
-                   "Vincent" 23
-                   :http://example.org/potatoEaters 27}
-        id->value (set/map-invert value->id)
+;; TODO: org.roaringbitmap.longlong.Roaring64NavigableMap don't seem
+;; to be possible to back by buffers. Getting smaller ranges requires
+;; some form of tree of id space compression.  Max possible is
+;; 4294967294 but the larger the size, the slower the operations.
+(def ^:const roaring-size (bit-shift-right Integer/MAX_VALUE 4))
 
-        ->ids #(w/postwalk-replace value->id %)
-        <-ids #(w/postwalk-replace id->value %)
+(def ^org.roaringbitmap.BitmapDataProviderSupplier fast-rank-supplier
+  (reify BitmapDataProviderSupplier
+    (newEmpty [_]
+      (FastRankRoaringBitmap.))))
 
-        p->so {:http://example.org/creatorOf
-               (-> [[:http://example.org/Picasso :http://example.org/guernica]
-                    [:http://example.org/VanGogh :http://example.org/potatoEaters]]
-                   (->ids)
-                   (sparse-matrix))
-               :http://xmlns.com/foaf/0.1/firstName
-               (->  [[:http://example.org/Picasso "Pablo"]
-                     [:http://example.org/VanGogh "Vincent"]]
-                    (->ids)
-                    (sparse-matrix))}
-        p->os (->> (for [[k v] p->so]
-                     [k (transpose v)])
-                   (into {}))]
+(defn new-roaring-bitmap ^org.roaringbitmap.longlong.Roaring64NavigableMap []
+  (Roaring64NavigableMap. fast-rank-supplier))
 
-    (-> (->ids #{:http://example.org/guernica
-                 :http://example.org/potatoEaters})
-        (mult-diag (p->os :http://example.org/creatorOf))
-        (matlab-any)
-        (mult-diag (p->so :http://xmlns.com/foaf/0.1/firstName))
-        (all-cells)
-        (<-ids)
-        (->> (into {})))))
+(defn roaring-bit->row ^long [^long b]
+  (Long/divideUnsigned b roaring-size))
+
+(defn roaring-bit->col ^long [^long b]
+  (Long/remainderUnsigned b roaring-size))
+
+(defn roaring-bit->coord [^long b]
+  [(roaring-bit->row b)
+   (roaring-bit->col b)])
+
+(defn roaring-row->bit ^long [^long b]
+  (unchecked-multiply roaring-size b))
+
+(defn roaring-coord->bit
+  (^long [[r ^long c]]
+   (roaring-coord->bit r c))
+  (^long [r ^long c]
+   (unchecked-add c (roaring-row->bit r))))
+
+(defn roaring-set-cell ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs cell]
+  (doto bs
+    (.addLong (roaring-coord->bit cell))))
+
+(defn roaring-set-row ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs ^long r]
+  (let [start-bit (roaring-row->bit r)
+        end-bit (unchecked-add start-bit roaring-size)]
+    (doto bs
+      ;; NOTE: Seems to be a bug if there are only ranges when invoking and.
+      (.addLong start-bit)
+      (.addLong (unchecked-dec end-bit))
+      (.add start-bit end-bit)
+      (.runOptimize))))
+
+(defn roaring-and
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [a] a)
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap a ^Roaring64NavigableMap b]
+   (doto a
+     (.and b))))
+
+(defn roaring-or
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [a] a)
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap a ^Roaring64NavigableMap b]
+   (doto a
+     (.or b))))
+
+(defn roaring-cardinality ^long [^Roaring64NavigableMap a]
+  (if a
+    (.getLongCardinality a)
+    0))
+
+(defn roaring-sparse-matrix ^org.roaringbitmap.longlong.Roaring64NavigableMap [cells]
+  (reduce
+   (fn [^Roaring64NavigableMap acc cell]
+     (doto acc
+       (.addLong (roaring-coord->bit cell))))
+   (new-roaring-bitmap)
+   cells))
+
+(defn roaring-diagonal-matrix ^org.roaringbitmap.longlong.Roaring64NavigableMap [diag]
+  (roaring-sparse-matrix (for [d diag]
+                           [d d])))
+
+(defn roaring-column-vector ^org.roaringbitmap.longlong.Roaring64NavigableMap [vs]
+  (roaring-sparse-matrix (for [v vs]
+                           [0 v])))
+
+(defn roaring-seq [^Roaring64NavigableMap bs]
+  (some->> bs
+           (.iterator)
+           (iterator-seq)))
+
+(defn roaring-all-cells [^Roaring64NavigableMap bs]
+  (let [acc (ArrayList. (roaring-cardinality bs))]
+    (.forEach bs
+              (reify LongConsumer
+                (accept [_ v]
+                  (.add acc (roaring-bit->coord v)))))
+    (seq acc)))
+
+(defn roaring-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
+  (let [acc (new-roaring-bitmap)]
+    (.forEach bs
+              (reify LongConsumer
+                (accept [_ v]
+                  (.addLong acc (roaring-coord->bit (roaring-bit->col v)
+                                                    (roaring-bit->row v) )))))
+    acc))
+
+(defn roaring-matlab-any ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
+  (let [acc (new-roaring-bitmap)]
+    (.forEach bs
+              (reify LongConsumer
+                (accept [_ v]
+                  (.addLong acc (roaring-bit->col v)))))
+    acc))
+
+(defn roaring-matlab-any-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
+  (let [acc (new-roaring-bitmap)]
+    (.forEach bs
+              (reify LongConsumer
+                (accept [_ v]
+                  (.addLong acc (roaring-bit->row v)))))
+    acc))
+
+(defn roaring-row
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs ^long row]
+   (roaring-row (new-roaring-bitmap) bs row))
+  (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap to ^Roaring64NavigableMap bs ^long row]
+   (let [start-bit (roaring-row->bit row)
+         end-bit (unchecked-add start-bit roaring-size)
+         first (max (unchecked-dec (.rankLong bs start-bit)) 0)
+         cardinality (roaring-cardinality bs)]
+     (loop [i (int first)]
+       (when (< i cardinality)
+         (let [s (.select bs i)]
+           (cond
+             (< s start-bit)
+             (recur (unchecked-inc-int i))
+
+             (< s end-bit)
+             (do (.addLong to s)
+                 (recur (unchecked-inc-int i)))))))
+     to)))
+
+(defn roaring-mult-diag ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap diag ^Roaring64NavigableMap bs]
+  (cond (or (nil? bs)
+            (.isEmpty bs))
+        (new-roaring-bitmap)
+
+        (nil? diag)
+        (doto (new-roaring-bitmap)
+          (.or bs))
+
+        :else
+        (let [acc (new-roaring-bitmap)]
+          (.forEach diag
+                    (reify LongConsumer
+                      (accept [_ d]
+                        (roaring-row acc bs d))))
+          (doto acc
+            (.runOptimize)))))
+
+(defn load-rdf-into-roaring-graph [resource]
+  (with-open [in (io/input-stream (io/resource resource))]
+    (let [{:keys [value->id
+                  p->so]}
+          (->> (rdf/ntriples-seq in)
+               (map rdf/rdf->clj)
+               (reduce (fn [{:keys [value->id p->so]} [s p o]]
+                         (let [value->id (reduce (fn [value->id v]
+                                                   (update value->id v (fn [x]
+                                                                         (or x (count value->id)))))
+                                                 value->id
+                                                 [s p o])]
+                           (assert (< (count value->id) roaring-size))
+                           {:p->so (update p->so
+                                           p
+                                           (fn [x]
+                                             (let [s-id (long (get value->id s))
+                                                   o-id (long (get value->id o))
+                                                   ^Roaring64NavigableMap bs (or x (new-roaring-bitmap))
+                                                   bit (roaring-coord->bit s-id o-id)]
+                                               (doto bs
+                                                 (.addLong bit)))))
+                            :value->id value->id}))))
+          max-size (round-to-power-of-two (count value->id) 64)
+          p->so (->> (for [[k v] p->so]
+                       [k (doto ^Roaring64NavigableMap v
+                            (.runOptimize))])
+                     (into {}))]
+      {:p->so p->so
+       :p->os (->> (for [[k v] p->so]
+                     [k (roaring-transpose v)])
+                   (into {}))
+       :value->id value->id
+       :id->value (set/map-invert value->id)
+       :max-size max-size})))
+
+(defn roaring-literal-e [{:keys [value->id p->so]} a e]
+  (-> (roaring-column-vector (keep value->id [e]))
+      (roaring-mult-diag (p->so a))
+      (roaring-matlab-any)))
+
+(defn roaring-literal-v [{:keys [value->id p->os]} a v]
+  (-> (roaring-column-vector (keep value->id [v]))
+      (roaring-mult-diag (p->os a))
+      (roaring-matlab-any)))
+
+(defn roaring-join [{:keys [p->os p->so] :as graph} a ^Roaring64NavigableMap mask-e ^Roaring64NavigableMap mask-v]
+  (let [result (roaring-mult-diag
+                mask-e
+                (roaring-transpose
+                 (roaring-mult-diag
+                  mask-v
+                  (p->os a))))]
+    [result
+     (roaring-matlab-any-transpose result)
+     (roaring-matlab-any result)]))
+
+(def logic-var? symbol?)
+(def literal? (complement logic-var?))
+
+(defn roaring-query [{:keys [value->id id->value p->so p->os] :as graph} q]
+  (let [{:keys [find where]} (s/conform :crux.query/query q)
+        triple-clauses (->> where
+                            (filter (comp #{:triple} first))
+                            (map second))
+        literal-clauses (for [{:keys [e v] :as clause} triple-clauses
+                              :when (or (literal? e)
+                                        (literal? v))]
+                          clause)
+        literal-vars (->> (mapcat (juxt :e :v) literal-clauses)
+                          (filter logic-var?)
+                          (set))
+        clauses-in-cardinality-order (->> triple-clauses
+                                          (remove (set literal-clauses))
+                                          (sort-by (comp roaring-cardinality p->so :a))
+                                          (vec))
+        clauses-in-join-order (loop [[{:keys [e v] :as clause} & clauses] clauses-in-cardinality-order
+                                     order []
+                                     vars #{}]
+                                (if-not clause
+                                  order
+                                  (if (or (empty? vars)
+                                          (seq (set/intersection vars (set [e v]))))
+                                    (recur clauses (conj order clause) (into vars [e v]))
+                                    (recur (concat clauses [clause]) order vars))))
+        clause-graph (->> (for [{:keys [e v]} clauses-in-join-order]
+                            {e #{v}})
+                          (apply merge-with into))
+        var-access-maps (->> (for [k (keys clause-graph)]
+                               ((fn step [r path acc]
+                                  (if-let [n (get clause-graph r)]
+                                    (vec (mapcat (fn [var]
+                                                   (when-not (contains? (set path) var)
+                                                     (step var
+                                                           (conj path var)
+                                                           (conj acc
+                                                                 (let [parent-var (last path)]
+                                                                   (merge
+                                                                    {var [[parent-var var]
+                                                                          :col]}
+                                                                    {parent-var [[parent-var var]
+                                                                                 :row]
+                                                                     ::path (conj path var)}))))))
+                                                 n))
+                                    acc))
+                                k
+                                [k]
+                                []))
+                             (sort-by count)
+                             (last))
+        var-access-maps (if (and (empty? clauses-in-join-order)
+                                 (= 1 (count literal-vars)))
+                          (let [[v] (seq literal-vars)]
+                            [{v [[v v] :row]
+                              ::path [v]}])
+                          var-access-maps)
+        var-access-order (->> (mapcat ::path var-access-maps)
+                              (filter (set find))
+                              (distinct)
+                              (vec))
+        _ (when-not (= (set find) (set var-access-order))
+            (throw (IllegalArgumentException.
+                    "Cannot calculate var access order, does the query form a single connected graph?")))
+        var->clause-idx (->> (for [[idx {:keys [e v]}] (map-indexed
+                                                        vector clauses-in-join-order)]
+                               (merge {e idx}
+                                      {v idx}))
+                             (apply merge-with min))
+        var->mask (->> (for [{:keys [e a v]} literal-clauses]
+                         (merge
+                          (when (literal? e)
+                            {v (roaring-literal-e graph a e)})
+                          (when (literal? v)
+                            {e (roaring-literal-v graph a v)})))
+                       (apply merge-with roaring-and))
+        initial-result (->> (for [[v bs] var->mask]
+                              {v {v (roaring-diagonal-matrix (roaring-seq bs))}})
+                            (apply merge-with merge))]
+    (loop [idx 0
+           var->mask var->mask
+           result initial-result]
+      (if-let [{:keys [e a v] :as clause} (get clauses-in-join-order idx)]
+        (let [[join-result mask-e mask-v] (roaring-join
+                                           graph
+                                           a
+                                           (get var->mask e)
+                                           (get var->mask v))]
+          (recur (inc idx)
+                 (assoc var->mask e mask-e v mask-v)
+                 (assoc-in result [e v] join-result)))
+        (let [access-plan (->> (for [v var-access-order
+                                     [access access-fn] (keep v var-access-maps)]
+                                 [access (cond-> (get-in result access)
+                                           ;; TODO: This is broken and wrong, see LUBM 11 for example.
+                                           ;; Too simplistic merging as parent and child get the same access key.
+                                           ;; This should be :col, but doesn't work yet.
+                                           ;; Many queries will still work, but needs fix.
+                                           ;; (= :row access-fn) (roaring-transpose)
+                                           )])
+                               (into {}))
+              root (first var-access-order)
+              root-accesses (map first (keep root var-access-maps))
+              seed (->> (map access-plan root-accesses)
+                        (map roaring-matlab-any-transpose)
+                        (reduce roaring-and))
+              var-result-order (mapv (zipmap var-access-order (range)) find)]
+          (->> ((fn step [^Roaring64NavigableMap xs [var & var-access-order] parent-vars ctx]
+                  (let [acc (ArrayList.)]
+                    (.forEach xs
+                              (reify LongConsumer
+                                (accept [_ x]
+                                  (if-not var
+                                    (.add acc [x])
+                                    (doseq [y (step (->> (for [access (map first (keep var var-access-maps))
+                                                               :let [plan (get access-plan access)]]
+                                                           (if (= (last parent-vars) (first access))
+                                                             (roaring-row plan x)
+                                                             (some->> (get ctx (first access))
+                                                                      (roaring-row plan))))
+                                                         (remove nil?)
+                                                         (map roaring-matlab-any)
+                                                         (reduce roaring-and))
+                                                    var-access-order
+                                                    (conj parent-vars var)
+                                                    (assoc ctx (last parent-vars) x))]
+                                      (.add acc (cons x y)))))))
+                    (seq acc)))
+                seed
+                (next var-access-order)
+                [(first var-access-order)]
+                {})
+               (map #(->> var-result-order
+                          (mapv (comp
+                                 id->value
+                                 (vec %)))))
+               (into #{})))))))
+
+(comment
+  (matrix/roaring-query
+   lg
+   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+     '{:find [x y z]
+       :where [[x :rdf/type :ub/GraduateStudent]
+               [y :rdf/type :ub/AssistantProfessor]
+               [z :rdf/type :ub/GraduateCourse]
+               [x :ub/advisor y]
+               [y :ub/teacherOf z]
+               [x :ub/takesCourse z]]}))
+
+  #{[:http://www.Department0.University0.edu/GraduateStudent76
+     :http://www.Department0.University0.edu/AssistantProfessor5
+     :http://www.Department0.University0.edu/GraduateCourse46]
+    [:http://www.Department0.University0.edu/GraduateStudent143
+     :http://www.Department0.University0.edu/AssistantProfessor8
+     :http://www.Department0.University0.edu/GraduateCourse53]
+    [:http://www.Department0.University0.edu/GraduateStudent60
+     :http://www.Department0.University0.edu/AssistantProfessor8
+     :http://www.Department0.University0.edu/GraduateCourse52]})
+
+(defn mat-mul [^doubles a ^doubles b]
+  (assert (= (alength a) (alength b)))
+  (let [size (alength a)
+        n (bit-shift-right size 1)
+        c (double-array size)]
+    (dotimes [i n]
+      (dotimes [j n]
+        (let [row-idx (* n i)
+              c-idx (+ row-idx j)]
+          (dotimes [k n]
+            (aset c
+                  c-idx
+                  (+ (aget c c-idx)
+                     (* (aget a (+ row-idx k))
+                        (aget b (+ (* n k) j)))))))))
+    c))
+
+(defn vec-mul [^doubles a ^doubles x]
+  (let [size (alength a)
+        n (bit-shift-right size 1)
+        y (double-array n)]
+    (assert (= n (alength x)))
+    (dotimes [i n]
+      (dotimes [j n]
+        (aset y
+              i
+              (+ (aget y i)
+                 (* (aget a (+ (* n i) j))
+                    (aget x j))))))
+    y))
+
+;; CSR
+;; https://people.eecs.berkeley.edu/~aydin/GALLA-sparse.pdf
+
+{:nrows 6
+ :row-ptr (int-array [0 2 5 6 9 12 16])
+ :col-ind (int-array [0 1
+                      1 3 5
+                      2
+                      2 4 5
+                      0 3 4
+                      0 2 3 5])
+ :values (double-array [5.4 1.1
+                        6.3 7.7 8.8
+                        1.1
+                        2.9 3.7 2.9
+                        9.0 1.1 4.5
+                        1.1 2.9 3.7 1.1])}
+
+;; DCSC Example
+{:nrows 8
+ :jc (int-array [1 7 8])
+ :col-ptr (int-array [1 3 4 5])
+ :row-ind (int-array [6 8 4 5])
+ :values (double-array [0.1 0.2 0.3 0.4])}
+
+(defn vec-csr-mul [{:keys [^long nrows ^ints row-ptr ^ints col-ind ^doubles values] :as a} ^doubles x]
+  (let [n nrows
+        y (double-array n)]
+    (assert (= n (alength x)))
+    (dotimes [i n]
+      (loop [j (aget row-ptr i)
+             yr 0.0]
+        (if (< j (aget row-ptr (inc i)))
+          (recur (inc i)
+                 (+ yr
+                    (* (aget values j)
+                       (aget x (aget col-ind j)))))
+          (aset y i yr))))
+    y))

@@ -45,6 +45,7 @@
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]
+                                  [org.roaringbitmap/RoaringBitmap "0.7.36"]
                                   [integrant "0.6.3"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
