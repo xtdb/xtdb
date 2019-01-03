@@ -144,7 +144,7 @@ remotely via REST.
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=http-setup]
+include::./examples.clj[tags=http-setup]
 ----
 
 NOTE: TODO, get some examples of calling the HTTP server.
@@ -153,7 +153,7 @@ Close the server:
 
 [source,clj]
 ----
-include::../dev/examples.clj[tags=http-close]
+include::./examples.clj[tags=http-close]
 ----
 
 == Embedded Crux System
