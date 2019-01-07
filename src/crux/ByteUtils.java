@@ -227,7 +227,7 @@ public class ByteUtils {
             }
         };
 
-    public static DirectBuffer sha1(final DirectBuffer from, final MutableDirectBuffer to) {
+    public static DirectBuffer sha1(final MutableDirectBuffer to, final DirectBuffer from) {
         to.boundsCheck(0, SHA1_HASH_SIZE);
         final int size = from.capacity();
         final int blocks = size / SHA1_BLOCK_BYTES;

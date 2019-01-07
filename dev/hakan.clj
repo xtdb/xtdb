@@ -1014,6 +1014,30 @@
 ;; run 3: 89005 386.9782608695652
 ;; empty caches: 94521 410.96086956521737
 
+;; Using Buffers+OpenSSL (master):
+
+;; RocksJNR:
+;; run 1: 110868 482.03478260869565
+;; run 2: 88095 383.0217391304348
+;; run 3: 91061 395.9173913043478
+;; empty caches: 103080 448.17391304347825
+
+;; Using Buffers+ByteUtils/sha1 ThreadLocals (master):
+
+;; RocksJNR:
+;; run 1: 99720 433.5652173913044
+;; run 2: 86895 377.80434782608694
+;; run 3: 86584 376.45217391304345
+;; empty caches: 97467 423.7695652173913
+
+;; Using Buffers+ByteUtils/sha1 locals (master+local changes):
+
+;; RocksJNR:
+;; run 1: 102052 443.704347826087
+;; run 2: 87579 380.7782608695652
+;; run 3: 88220 383.5652173913044
+;; empty caches: 98702 429.1391304347826
+
 ;; Using Bytes (d34e06af2cd474fcc9c912bbb8cc823e723ddfac):
 
 ;; RocksJNR:
