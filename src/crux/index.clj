@@ -20,9 +20,6 @@
 ;; this limitation is only for RocksJNRKv.
 ;; TODO: It would be nice to make this explicit somehow.
 
-;; TODO: Try removing all destructuring from the fast path,
-;; introducing explicit index access and/or records.
-
 ;; Indexes
 
 (defrecord PrefixKvIterator [i ^DirectBuffer prefix]
