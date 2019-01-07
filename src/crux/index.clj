@@ -499,18 +499,14 @@
                                         sorted-virtual-index-key-comparator)
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
-                                    idx))
-          {:keys [fst]} (reset! seq-state {:fst x :rest xs})]
-      (if fst
-        fst
-        (reset! seq-state nil))))
+                                    idx))]
+      (reset! seq-state (seq xs))
+      x))
 
   (next-values [this]
-    (let [{:keys [fst]} (swap! seq-state (fn [{[x & xs] :rest
-                                               :as seq-state}]
-                                           (assoc seq-state :fst x :rest xs)))]
-      (when fst
-        fst))))
+    (when-let [[x & xs] @seq-state]
+      (reset! seq-state (seq xs))
+      x)))
 
 (defn new-sorted-virtual-index [idx-or-seq]
   (let [idx-as-seq (if (satisfies? db/Index idx-or-seq)
