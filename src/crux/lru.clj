@@ -170,10 +170,11 @@
 (defrecord CachedSnapshot [^Closeable snapshot close-snapshot? ^StampedLock lock iterators-state]
   kv/KvSnapshot
   (new-iterator [_]
-    (if-let [i (->> @iterators-state
-                    (filter (comp deref :closed-state))
-                    (first))]
-      (if (compare-and-set! (:closed-state i) true false)
+    (if-let [^CachedIterator i (->> @iterators-state
+                                    (filter (fn [^CachedIterator i]
+                                              @(.closed-state i)))
+                                    (first))]
+      (if (compare-and-set! (.closed-state i) true false)
         (kv/refresh i)
         (recur))
       (let [i (kv/new-iterator snapshot)
@@ -186,11 +187,11 @@
 
   Closeable
   (close [_]
-    (doseq [{:keys [^Closeable i closed-state]} @iterators-state]
+    (doseq [^CachedIterator i @iterators-state]
       (let [stamp (.writeLock lock)]
         (try
-          (reset! closed-state true)
-          (.close i)
+          (reset! (.closed-state i) true)
+          (.close ^Closeable (.i i))
           (finally
             (.unlock lock stamp)))))
     (when close-snapshot?
