@@ -640,38 +640,41 @@
 (defn new-n-ary-join-layered-virtual-index [indexes]
   (->NAryJoinLayeredVirtualIndex indexes (atom 0)))
 
+(defrecord BinaryJoinLayeredVirtualIndexState [indexes depth])
+
 (defrecord BinaryJoinLayeredVirtualIndex [index-and-depth-state]
   db/Index
   (seek-values [this k]
-    (let [{:keys [indexes depth]} @index-and-depth-state]
-      (db/seek-values (get indexes depth) k)))
+    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
+      (db/seek-values (get (.indexes indexes-and-depth) (.depth indexes-and-depth)) k)))
 
   (next-values [this]
-    (let [{:keys [indexes depth]} @index-and-depth-state]
-      (db/next-values (get indexes depth))))
+    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
+      (db/next-values (get (.indexes indexes-and-depth) (.depth indexes-and-depth)))))
 
   db/LayeredIndex
   (open-level [this]
-    (let [{:keys [indexes depth]} @index-and-depth-state]
-      (db/open-level (get indexes depth)))
+    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
+      (db/open-level (get (.indexes indexes-and-depth) (.depth indexes-and-depth))))
     (swap! index-and-depth-state update :depth inc)
     nil)
 
   (close-level [this]
-    (let [{:keys [indexes depth]} @index-and-depth-state]
-      (db/close-level (get indexes (dec (long depth)))))
+    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
+      (db/close-level (get (.indexes indexes-and-depth) (dec (long (.depth indexes-and-depth))))))
     (swap! index-and-depth-state update :depth dec)
     nil)
 
   (max-depth [this]
-    (count (:indexes @index-and-depth-state))))
+    2))
 
 (defn new-binary-join-virtual-index
   ([]
    (new-binary-join-virtual-index nil nil))
   ([lhs-index rhs-index]
-   (->BinaryJoinLayeredVirtualIndex (atom {:depth 0
-                                           :indexes [lhs-index rhs-index]}))))
+   (->BinaryJoinLayeredVirtualIndex (atom (BinaryJoinLayeredVirtualIndexState.
+                                           [lhs-index rhs-index]
+                                           0)))))
 
 (defn update-binary-join-order! [binary-join-index lhs-index rhs-index]
   (swap! (:index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
