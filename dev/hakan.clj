@@ -1022,6 +1022,12 @@
 ;; run 3: 91061 395.9173913043478
 ;; empty caches: 103080 448.17391304347825
 
+;; LMDB:
+;; run 1: 83796 364.3304347826087
+;; run 2: 39404 171.3217391304348
+;; run 3: 42925 186.6304347826087
+;; empty caches: 71580 311.2173913043478
+
 ;; Using Buffers+ByteUtils/sha1 ThreadLocals (master):
 
 ;; RocksJNR:

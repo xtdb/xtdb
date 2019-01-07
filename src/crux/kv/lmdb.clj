@@ -48,7 +48,7 @@
       (when-not (= LMDB/MDB_BAD_TXN rc)
         (success? rc)))))
 
-(defn- ^LMDBTransaction new-transaction [env flags]
+(defn- new-transaction ^crux.kv.lmdb.LMDBTransaction [env flags]
   (with-open [stack (MemoryStack/stackPush)]
     (let [pp (.mallocPointer stack 1)
           rc (LMDB/mdb_txn_begin env MemoryUtil/NULL flags pp)]
@@ -94,7 +94,7 @@
   (close [_]
     (LMDB/mdb_cursor_close cursor)))
 
-(defn- ^LMDBCursor new-cursor [dbi txn]
+(defn- new-cursor ^crux.kv.lmdb.LMDBCursor [dbi txn]
   (with-open [stack (MemoryStack/stackPush)]
     (let [pp (.mallocPointer stack 1)]
       (success? (LMDB/mdb_cursor_open txn dbi pp))
@@ -157,16 +157,16 @@
           kv (-> kv
                  (.mv_data (.byteBuffer k))
                  (.mv_size (.capacity k)))]
-      (cursor->key (:cursor cursor) kv dv LMDB/MDB_SET_RANGE)))
+      (cursor->key (.cursor cursor) kv dv LMDB/MDB_SET_RANGE)))
 
   (next [this]
-    (cursor->key (:cursor cursor) kv dv LMDB/MDB_NEXT))
+    (cursor->key (.cursor cursor) kv dv LMDB/MDB_NEXT))
 
   (value [this]
     (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))
 
   (refresh [this]
-    (LMDB/mdb_cursor_renew (:txn tx) (:cursor cursor))
+    (LMDB/mdb_cursor_renew (.txn tx) (.cursor cursor))
     this)
 
   Closeable
@@ -176,7 +176,7 @@
 (defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx]
   kv/KvSnapshot
   (new-iterator [_]
-    (->LMDBKvIterator (new-cursor dbi (:txn tx))
+    (->LMDBKvIterator (new-cursor dbi (.txn tx))
                       tx
                       (MDBVal/create)
                       (MDBVal/create)
@@ -246,7 +246,7 @@
     (with-open [stack (MemoryStack/stackPush)
                 tx (new-transaction env LMDB/MDB_RDONLY)]
       (let [stat (MDBStat/callocStack stack)]
-        (LMDB/mdb_stat (:txn tx) dbi stat)
+        (LMDB/mdb_stat (.txn tx) dbi stat)
         (.ms_entries stat))))
 
   (db-dir [this]
