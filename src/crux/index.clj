@@ -756,48 +756,56 @@
     (when (pos? max-depth)
       (step [] 0 true))))
 
+(defrecord RelationNestedIndexState [value child-idx])
+(defrecord RelationIteratorsState [indexes child-idx needs-seek?])
+
 (defn- relation-virtual-index-depth ^long [iterators-state]
-  (dec (count (:indexes @iterators-state))))
+  (dec (count (.indexes ^RelationIteratorsState @iterators-state))))
 
 (defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
   db/Index
   (seek-values [this k]
-    (let [{:keys [indexes]} @iterators-state]
-      (when-let [idx (last indexes)]
-        (let [[k {:keys [value child-idx]}] (db/seek-values idx k)]
-          (swap! iterators-state merge {:child-idx child-idx
-                                        :needs-seek? false})
+    (let [relation-iterators-state ^RelationIteratorsState @iterators-state]
+      (when-let [idx (last (.indexes relation-iterators-state))]
+        (let [[k ^RelationNestedIndexState nested-index-state] (db/seek-values idx k)]
+          (swap! iterators-state (fn [^RelationIteratorsState iterators-state]
+                                   (RelationIteratorsState.
+                                    (.indexes iterators-state)
+                                    (some-> nested-index-state (.child-idx))
+                                    false)))
           (when k
-            [k value])))))
+            [k (.value nested-index-state)])))))
 
   (next-values [this]
-    (let [{:keys [needs-seek? indexes]} @iterators-state]
-      (if needs-seek?
+    (let [relation-iterators-state ^RelationIteratorsState @iterators-state]
+      (if (.needs-seek? relation-iterators-state)
         (db/seek-values this nil)
-        (when-let [idx (last indexes)]
-          (let [[k {:keys [value child-idx]}] (db/next-values idx)]
-            (swap! iterators-state assoc :child-idx child-idx)
+        (when-let [idx (last (.indexes relation-iterators-state))]
+          (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
+            (swap! iterators-state assoc :child-idx (some-> nested-index-state (.child-idx)))
             (when k
-              [k value]))))))
+              [k (.value nested-index-state)]))))))
 
   db/LayeredIndex
   (open-level [this]
     (when (= max-depth (relation-virtual-index-depth iterators-state))
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
     (swap! iterators-state
-           (fn [{:keys [indexes child-idx]}]
-             {:indexes (conj indexes child-idx)
-              :child-idx nil
-              :needs-seek? true}))
+           (fn [^RelationIteratorsState iterators-state]
+             (RelationIteratorsState.
+              (conj (.indexes iterators-state) (.child-idx iterators-state))
+              nil
+              true)))
     nil)
 
   (close-level [this]
     (when (zero? (relation-virtual-index-depth iterators-state))
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (swap! iterators-state (fn [{:keys [indexes]}]
-                             {:indexes (pop indexes)
-                              :child-idx nil
-                              :needs-seek? false}))
+    (swap! iterators-state (fn [^RelationIteratorsState iterators-state]
+                             (RelationIteratorsState.
+                              (pop (.indexes iterators-state))
+                              nil
+                              false)))
     nil)
 
   (max-depth [this]
@@ -808,25 +816,27 @@
        (for [prefix (partition-by first tuples)
              :let [value (ffirst prefix)]]
          [(c/->value-buffer value)
-          {:value value
-           :child-idx (when (seq (next (first prefix)))
-                        (build-nested-index (map next prefix) next-range-constraints))}]))
+          (RelationNestedIndexState.
+           value
+           (when (seq (next (first prefix)))
+             (build-nested-index (map next prefix) next-range-constraints)))]))
       (wrap-with-range-constraints range-constraints)))
 
 (defn update-relation-virtual-index!
-  ([relation tuples]
-   (update-relation-virtual-index! relation tuples (:layered-range-constraints relation)))
-  ([relation tuples layered-range-constraints]
-   (reset! (:iterators-state relation)
-           {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                        (build-nested-index tuples layered-range-constraints))]
-            :child-idx nil
-            :needs-seek? true})
+  ([^RelationVirtualIndex relation tuples]
+   (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
+  ([^RelationVirtualIndex relation tuples layered-range-constraints]
+   (reset! (.iterators-state relation)
+           (RelationIteratorsState.
+            [(binding [nippy/*freeze-fallback* :write-unfreezable]
+               (build-nested-index tuples layered-range-constraints))]
+            nil
+            true))
    relation))
 
 (defn new-relation-virtual-index
   ([relation-name tuples max-depth]
    (new-relation-virtual-index relation-name tuples max-depth nil))
   ([relation-name tuples max-depth layered-range-constraints]
-   (let [iterators-state (atom nil)]
+   (let [iterators-state (atom (RelationIteratorsState. nil nil nil))]
      (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
