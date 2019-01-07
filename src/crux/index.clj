@@ -55,9 +55,11 @@
 
 ;; AVE
 
+(defrecord ValueEntityValuePeekState [last-k value])
+
 (defn- attribute-value+placeholder [k peek-state]
   (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
-    (reset! peek-state {:last-k k :value value})
+    (reset! peek-state (ValueEntityValuePeekState. k value))
     [value :crux.index.binary-placeholder/value]))
 
 (defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr peek-state]
@@ -71,7 +73,7 @@
       (attribute-value+placeholder k peek-state)))
 
   (next-values [this]
-    (let [{:keys [last-k]} @peek-state
+    (let [last-k (.last-k ^ValueEntityValuePeekState @peek-state)
           prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
       (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                             (kv/seek i))]
@@ -104,7 +106,7 @@
           (recur k)))))
 
 (defn- attribute-value-value+prefix-iterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
-  (let [{:keys [value]} @(.peek-state value-entity-value-idx)
+  (let [value (.value ^ValueEntityValuePeekState @(.peek-state value-entity-value-idx))
         prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
     [value (new-prefix-kv-iterator i prefix)]))
 
@@ -131,11 +133,13 @@
 
 ;; AEV
 
+(defrecord EntityValueEntityPeekState [last-k ^EntityTx entity-tx])
+
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
   (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
         eid-buffer (c/->id-buffer eid)
         [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
-    (reset! peek-state {:last-k k :entity-tx entity-tx})
+    (reset! peek-state (EntityValueEntityPeekState. k entity-tx))
     (if entity-tx
       [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
@@ -154,7 +158,7 @@
           placeholder))))
 
   (next-values [this]
-    (let [{:keys [last-k]} @peek-state
+    (let [last-k (.last-k ^EntityValueEntityPeekState @peek-state)
           prefix-size (+ c/index-id-size c/id-size c/id-size)]
       (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                             (kv/seek i))]
@@ -190,7 +194,7 @@
               (recur k)))))))
 
 (defn- attribute-value-entity-tx+prefix-iterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
-  (let [{:keys [^EntityTx entity-tx]} @(.peek-state entity-value-entity-idx)
+  (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState @(.peek-state entity-value-entity-idx))
         prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)))]
     [entity-tx (new-prefix-kv-iterator i prefix)]))
 
