@@ -102,15 +102,19 @@
         (when-let [k (some->> @peek-state (kv/seek i))]
           (recur k)))))
 
-(defn- attribute-value-value+prefix-iterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
+(defrecord ValueAndPrefixIterator [value prefix-iterator])
+
+(defn- attribute-value-value+prefix-iterator ^crux.index.ValueAndPrefixIterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
   (let [value (.value ^ValueEntityValuePeekState @(.peek-state value-entity-value-idx))
         prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
-    [value (new-prefix-kv-iterator i prefix)]))
+    (ValueAndPrefixIterator. value (new-prefix-kv-iterator i prefix))))
 
 (defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb peek-state]
   db/Index
   (seek-values [this k]
-    (let [[value i] (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)]
+    (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
+          value (.value value+prefix-iterator)
+          i (.prefix-iterator value+prefix-iterator)]
       (when-let [k (->> (c/encode-attribute+value+entity+content-hash-key-to
                          (.get seek-buffer-tl)
                          attr
@@ -120,7 +124,9 @@
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-eb peek-state))))
 
   (next-values [this]
-    (let [[value i] (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)]
+    (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
+          value (.value value+prefix-iterator)
+          i (.prefix-iterator value+prefix-iterator)]
       (when-let [k (some->> @peek-state (kv/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-eb peek-state)))))
 
@@ -190,15 +196,19 @@
             (when-let [k (some->> @peek-state (kv/seek i))]
               (recur k)))))))
 
-(defn- attribute-value-entity-tx+prefix-iterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
+(defrecord EntityTxAndPrefixIterator [entity-tx prefix-iterator])
+
+(defn- attribute-value-entity-tx+prefix-iterator ^crux.index.EntityTxAndPrefixIterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
   (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState @(.peek-state entity-value-entity-idx))
         prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)))]
-    [entity-tx (new-prefix-kv-iterator i prefix)]))
+    (EntityTxAndPrefixIterator. entity-tx (new-prefix-kv-iterator i prefix))))
 
 (defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb peek-eb peek-state]
   db/Index
   (seek-values [this k]
-    (let [[^EntityTx entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)]
+    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
+          entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
+          i (.prefix-iterator entity-tx+prefix-iterator)]
       (when-let [k (->> (c/encode-attribute+entity+value+content-hash-key-to
                          (.get seek-buffer-tl)
                          attr
@@ -208,7 +218,9 @@
         (attribute-entity-value-value+entity i k attr entity-tx peek-eb peek-state))))
 
   (next-values [this]
-    (let [[entity-tx i] (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)]
+    (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
+          entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
+          i (.prefix-iterator entity-tx+prefix-iterator)]
       (when-let [k (some->> @peek-state (kv/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-eb peek-state)))))
 
