@@ -1105,3 +1105,211 @@
             (swap! total + t)
             (prn :run n t)))))
     (prn @total (/ @total (double (count qs))))))
+
+;; Destructure costs:
+
+;; Records
+;; Record field access
+;; "Elapsed time: 264.034433 msecs"
+;; Record destructure
+;; "Elapsed time: 4180.275593 msecs"
+;; Record keyword lookup
+;; "Elapsed time: 425.580412 msecs"
+;; Record keyword lookup with default
+;; "Elapsed time: 1252.865026 msecs"
+;; Record get lookup
+;; "Elapsed time: 1344.899763 msecs"
+;; Record get lookup with default
+;; "Elapsed time: 1346.48226 msecs"
+;; Record .valAt Java interop
+;; "Elapsed time: 446.372848 msecs"
+
+;; Maps
+;; Map destructure
+;; "Elapsed time: 4201.326436 msecs"
+;; Map keyword lookup
+;; "Elapsed time: 813.649374 msecs"
+;; Map keyword lookup with default
+;; "Elapsed time: 916.385803 msecs"
+;; Map get lookup
+;; "Elapsed time: 957.835825 msecs"
+;; Map get lookup with default
+;; "Elapsed time: 935.201014 msecs"
+;; Map .valAt Java interop
+;; "Elapsed time: 439.555881 msecs"
+
+;; Vectors
+;; Vector destructure
+;; "Elapsed time: 398.926347 msecs"
+;; Vector first
+;; "Elapsed time: 5938.484479 msecs"
+;; Vector get
+;; "Elapsed time: 974.473855 msecs"
+;; Vector nth
+;; "Elapsed time: 619.242223 msecs"
+;; Vector nth with default
+;; "Elapsed time: 399.153515 msecs"
+;; Vector .nth Java interop
+;; "Elapsed time: 330.657743 msecs"
+
+(defrecord Foo [bar])
+(defn destructure-test []
+  (println "Records")
+  (println "Record field access")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (.bar x))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record destructure")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (let [{:keys [bar]} x]
+         (aset a 0 bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record keyword lookup")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (:bar x))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record keyword lookup with default")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (:bar x nil))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record get lookup")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (get x :bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record get lookup with default")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (get x :bar nil))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Record .valAt Java interop")
+  (let [x (Foo. 1)
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (.valAt x :bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println)
+  (println "Maps")
+  (println "Map destructure")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (let [{:keys [bar]} x]
+         (aset a 0 bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Map keyword lookup")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (:bar x))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Map keyword lookup with default")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (:bar x nil))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Map get lookup")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (get x :bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Map get lookup with default")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (get x :bar nil))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Map .valAt Java interop")
+  (let [x {:bar 1}
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (.valAt x :bar))))
+    (assert (= 1 (aget a 0))))
+
+  (println)
+  (println "Vectors")
+  (println "Vector destructure")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (let [[y] x]
+         (aset a 0 y))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Vector first")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (first x))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Vector get")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (get x 0))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Vector nth")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (nth x 0))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Vector nth with default")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (nth x 0 nil))))
+    (assert (= 1 (aget a 0))))
+
+  (println "Vector .nth Java interop")
+  (let [x [1]
+        a (object-array 1)]
+    (time
+     (dotimes [_ 100000000]
+       (aset a 0 (.nth x 0))))
+    (assert (= 1 (aget a 0)))))
