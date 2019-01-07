@@ -676,8 +676,8 @@
                                            [lhs-index rhs-index]
                                            0)))))
 
-(defn update-binary-join-order! [binary-join-index lhs-index rhs-index]
-  (swap! (:index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
+(defn update-binary-join-order! [^BinaryJoinLayeredVirtualIndex binary-join-index lhs-index rhs-index]
+  (swap! (.index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
   binary-join-index)
 
 (defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
