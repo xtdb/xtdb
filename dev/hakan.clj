@@ -1429,3 +1429,17 @@
                name)]
     (define-bean name fields)
     `(import ~name)))
+
+(defmacro bswap! [bean field f & args]
+  `(set! (~(symbol (str "." (name field))) ~bean)
+         (~f (~(symbol (str "." (name field))) ~bean) ~@args)))
+
+(defmacro breset! [bean m]
+  `(do ~@(for [[k v] m]
+           `(set! (~(symbol (str "." (name k))) ~bean) ~v))
+       ~bean))
+
+(defmacro bselect-keys [bean keyseq]
+  `(-> {}
+       ~@(for [k keyseq]
+           `(assoc ~k (~(symbol (str "." (name k))) ~bean)))))
