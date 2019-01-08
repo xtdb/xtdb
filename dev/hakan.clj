@@ -1341,7 +1341,7 @@
        (aset a 0 (.nth x 0))))
     (assert (= 1 (aget a 0)))))
 
-;; Bean with mutable public fields spike:
+;; Java class with mutable public fields spike:
 (defn define-bean [fqn fields]
   (let [cw (clojure.asm.ClassWriter. clojure.asm.ClassWriter/COMPUTE_MAXS)
         cw (doto cw
@@ -1419,5 +1419,7 @@
                               nil)))
     (.visitEnd cw)
     (let [bs (.toByteArray cw)]
-      ;; TODO; How to properly define this?
-      (.defineClass ^clojure.lang.DynamicClassLoader @clojure.lang.Compiler/LOADER (str fqn) bs ""))))
+      (.defineClass ^clojure.lang.DynamicClassLoader (clojure.lang.RT/makeClassLoader) (str fqn) bs ""))))
+
+(defmacro defbean [name fields]
+  (define-bean name fields))
