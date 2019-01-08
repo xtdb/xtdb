@@ -971,6 +971,11 @@
 
 ;; 230 WatDiv queries:
 
+;; Concurrency, 1 vs 2 query threads:
+;; RocksJNR: (/ 85185.683737  60181.143235) 1.4154879611435816
+;; RocksJava: (/ 96791.482514 69994.982891) 1.3828345763685514
+;; LMDB: (/ 29754.773409 21082.969962) 1.4113179244968845
+
 ;; Using chunked Buffers+OpenSSL (ce63626eebb151946b166d0cc409416bb637935d)
 ;; ("master" below was before this commit.)
 
