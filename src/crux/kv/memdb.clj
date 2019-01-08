@@ -77,8 +77,8 @@
 
   (store [_ kvs]
     (swap! db into (vec (for [[k v] kvs]
-                          [(mem/copy-buffer (mem/as-buffer k))
-                           (mem/copy-buffer (mem/as-buffer v))]))))
+                          [(mem/copy-to-unpooled-buffer (mem/as-buffer k))
+                           (mem/copy-to-unpooled-buffer (mem/as-buffer v))]))))
 
   (delete [_ ks]
     (swap! db #(apply dissoc % (map mem/->off-heap ks))))

@@ -20,38 +20,44 @@
   (^long capacity [this]))
 
 (def ^:private ^:const default-chunk-size (* 1024 1024))
-
-(defn- allocate-chunk
-  ([]
-   (allocate-chunk default-chunk-size))
-  ([^long size]
-   (ByteBuffer/allocateDirect (max size default-chunk-size))))
+(def ^:private ^:const large-buffer-size (* 256 1024))
 
 (def ^:private ^ThreadLocal chunk-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
-       (allocate-chunk)))))
+       (ByteBuffer/allocateDirect default-chunk-size)))))
+
+(defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
+  (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (let [chunk ^ByteBuffer (.get chunk-tl)
-        offset (.position chunk)
-        new-offset (+ offset size)]
-    (if (< (.capacity chunk) new-offset)
-      (let [chunk (allocate-chunk size)]
-        (.set chunk-tl chunk)
-        (recur size))
-      (do (.position chunk new-offset)
+        offset (.position chunk)]
+    (cond
+      (> size large-buffer-size)
+      (allocate-unpooled-buffer size)
+
+      (> size (.remaining chunk))
+      (do (.set chunk-tl (ByteBuffer/allocateDirect default-chunk-size))
+          (recur size))
+
+      :else
+      (do (.position chunk (+ offset size))
           (UnsafeBuffer. chunk offset size)))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
    (copy-buffer from (capacity from)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit]
-   (copy-buffer from limit (allocate-buffer limit)))
+   (copy-buffer from limit nil))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit ^MutableDirectBuffer to]
-   (doto to
-     (.putBytes 0 from 0 limit))))
+   (let [^MutableDirectBuffer to (or to (allocate-buffer limit))]
+     (doto to
+       (.putBytes 0 from 0 limit)))))
+
+(defn copy-to-unpooled-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
+  (copy-buffer from (capacity from) (allocate-unpooled-buffer (capacity from))))
 
 (defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
   (UnsafeBuffer. buffer offset limit))
