@@ -970,6 +970,28 @@
 ;; WatDiv analysis helpers:
 
 ;; 230 WatDiv queries:
+
+;; Using chunked Buffers+OpenSSL (ce63626eebb151946b166d0cc409416bb637935d)
+;; ("master" below was before this commit.)
+
+;; RocksJNR:
+;; run 1: 86984 378.1913043478261
+;; run 2: 71378 310.3391304347826
+;; run 3: 75396 327.8086956521739
+;; empty caches: 93228 405.3391304347826
+
+;; RocksJava:
+;; run 1: 134982 586.8782608695652
+;; run 2: 98710 429.17391304347825
+;; run 3: 94586 411.24347826086955
+;; empty caches: 104238 453.2086956521739
+
+;; LMDB:
+;; run 1: 110801 481.74347826086955
+;; run 2: 38391 166.91739130434783
+;; run 3: 30168 131.16521739130434
+;; empty caches: 99904 434.3652173913043
+
 ;; Using Buffers+libgcrypt (master):
 
 ;; RocksJNR:
