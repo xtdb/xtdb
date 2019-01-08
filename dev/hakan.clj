@@ -1422,4 +1422,10 @@
       (.defineClass ^clojure.lang.DynamicClassLoader (clojure.lang.RT/makeClassLoader) (str fqn) bs ""))))
 
 (defmacro defbean [name fields]
-  (define-bean name fields))
+  (let [name (if-not (namespace name)
+               (symbol (str (ns-name *ns*)
+                            "."
+                            name))
+               name)]
+    (define-bean name fields)
+    `(import ~name)))
