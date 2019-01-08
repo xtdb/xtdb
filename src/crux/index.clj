@@ -697,26 +697,28 @@
                                  (not-empty))]
       (conj result-stack [join-keys join-results]))))
 
+(defrecord NAryWalkState [result-stack last])
+
 (defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn walk-state]
   db/Index
   (seek-values [this k]
-    (when-let [values (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+    (when-let [[value :as values] (db/seek-values n-ary-index k)]
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack ^NAryWalkState @walk-state) values)]
         (do (swap! walk-state assoc :last result)
-            [(first values) (second (last result))])
+            [value (second (last result))])
         (db/next-values this))))
 
   (next-values [this]
-    (when-let [values (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (:result-stack @walk-state) values)]
+    (when-let [[value :as values] (db/next-values n-ary-index)]
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack ^NAryWalkState @walk-state) values)]
         (do (swap! walk-state assoc :last result)
-            [(first values) (second (last result))])
+            [value (second (last result))])
         (recur))))
 
   db/LayeredIndex
   (open-level [this]
     (db/open-level n-ary-index)
-    (swap! walk-state #(assoc % :result-stack (:last %)))
+    (swap! walk-state #(assoc % :result-stack (.last ^NAryWalkState %)))
     nil)
 
   (close-level [this]
@@ -728,7 +730,7 @@
     (db/max-depth n-ary-index)))
 
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom {:result-stack [] :last nil})))
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom (NAryWalkState. [] nil))))
 
 (defn layered-idx->seq [idx]
   (let [max-depth (long (db/max-depth idx))
