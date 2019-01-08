@@ -14,7 +14,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.codec :as c]
-            [crux.io]
+            [crux.io :as cio]
             [crux.kafka]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
@@ -104,6 +104,11 @@
 
     business-time
     (.db local-node business-time)
+
+    ;; TODO: This could also be an error, depending how you see it,
+    ;; not supported via the Java API itself.
+    transact-time
+    (.db local-node (cio/next-monotonic-date) transact-time)
 
     :else
     (.db local-node)))
