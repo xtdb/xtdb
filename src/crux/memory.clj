@@ -31,6 +31,8 @@
 (defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
+(def ^:private ^:const alignment-round-mask 0xf)
+
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (let [chunk ^ByteBuffer (.get chunk-tl)
         offset (.position chunk)]
@@ -43,18 +45,19 @@
           (recur size))
 
       :else
-      (do (.position chunk (+ offset size))
-          (UnsafeBuffer. chunk offset size)))))
+      (let [new-aligned-offset (bit-and (+ offset size alignment-round-mask)
+                                        (bit-not alignment-round-mask))]
+        (.position chunk new-aligned-offset)
+        (UnsafeBuffer. chunk offset size)))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
    (copy-buffer from (capacity from)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit]
-   (copy-buffer from limit nil))
+   (copy-buffer from limit (allocate-buffer limit)))
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from ^long limit ^MutableDirectBuffer to]
-   (let [^MutableDirectBuffer to (or to (allocate-buffer limit))]
-     (doto to
-       (.putBytes 0 from 0 limit)))))
+   (doto to
+     (.putBytes 0 from 0 limit))))
 
 (defn copy-to-unpooled-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
   (copy-buffer from (capacity from) (allocate-unpooled-buffer (capacity from))))
