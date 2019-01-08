@@ -217,6 +217,12 @@
     [#"^/document/.+$" [:get :post]]
     (document local-node request)
 
+    [#"^/entity$" [:post]]
+    (entity local-node request)
+
+    [#"^/entity-tx$" [:post]]
+    (entity-tx local-node request)
+
     [#"^/history/.+$" [:get :post]]
     (history local-node request)
 
@@ -226,20 +232,14 @@
     [#"^/query-stream$" [:post]]
     (query-stream local-node request)
 
-    [#"^/entity$" [:post]]
-    (entity local-node request)
-
-    [#"^/entity-tx$" [:post]]
-    (entity-tx local-node request)
-
-    [#"^/tx-log$" [:post]]
-    (transact local-node request)
+    [#"^/sync$" [:get]]
+    (sync-handler local-node request)
 
     [#"^/tx-log$" [:get]]
     (tx-log local-node request)
 
-    [#"^/sync$" [:get]]
-    (sync-handler local-node request)
+    [#"^/tx-log$" [:post]]
+    (transact local-node request)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available? )
