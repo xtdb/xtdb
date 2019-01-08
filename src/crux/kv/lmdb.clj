@@ -119,7 +119,7 @@
         (let [k (mem/ensure-off-heap k kb)
               v (mem/ensure-off-heap v vb)
               kv (-> kv
-                     (.mv_data (.byteBuffer k))
+                     (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
                      (.mv_size (.capacity k)))
               dv (.mv_size dv (.capacity v))]
           (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
@@ -139,7 +139,7 @@
       (doseq [k ks]
         (let [k (mem/ensure-off-heap k kb)
               kv (-> kv
-                     (.mv_data (.byteBuffer k))
+                     (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
                      (.mv_size (.capacity k)))
               rc (LMDB/mdb_del txn dbi kv nil)]
           (when-not (= LMDB/MDB_NOTFOUND rc)
@@ -155,7 +155,7 @@
   (seek [_ k]
     (let [k (mem/ensure-off-heap k eb)
           kv (-> kv
-                 (.mv_data (.byteBuffer k))
+                 (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
                  (.mv_size (.capacity k)))]
       (cursor->key (.cursor cursor) kv dv LMDB/MDB_SET_RANGE)))
 

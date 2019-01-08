@@ -1,9 +1,10 @@
 (ns crux.memory
-  (:import [java.nio ByteOrder ByteBuffer]
+  (:import java.nio.ByteBuffer
+           java.util.Comparator
+           java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           crux.ByteUtils
-           java.util.Comparator))
+           crux.ByteUtils))
 
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
@@ -18,8 +19,30 @@
 
   (^long capacity [this]))
 
+(def ^:private ^:const default-chunk-size (* 1024 1024))
+
+(defn- allocate-chunk
+  ([]
+   (allocate-chunk default-chunk-size))
+  ([^long size]
+   (ByteBuffer/allocateDirect (max size default-chunk-size))))
+
+(def ^:private ^ThreadLocal chunk-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (allocate-chunk)))))
+
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
-  (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
+  (let [chunk ^ByteBuffer (.get chunk-tl)
+        offset (.position chunk)
+        new-offset (+ offset size)]
+    (if (< (.capacity chunk) new-offset)
+      (let [chunk (allocate-chunk size)]
+        (.set chunk-tl chunk)
+        (recur size))
+      (do (.position chunk new-offset)
+          (UnsafeBuffer. chunk offset size)))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
