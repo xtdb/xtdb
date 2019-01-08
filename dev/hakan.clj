@@ -1340,3 +1340,84 @@
      (dotimes [_ 100000000]
        (aset a 0 (.nth x 0))))
     (assert (= 1 (aget a 0)))))
+
+;; Bean with mutable public fields spike:
+(defn define-bean [fqn fields]
+  (let [cw (clojure.asm.ClassWriter. clojure.asm.ClassWriter/COMPUTE_MAXS)
+        cw (doto cw
+             (.visit 52 #_clojure.asm.Constants/V1_8
+                     17 #_(bit-or clojure.asm.Constants/ACC_PUBLIC
+                                  clojure.asm.Constants/ACC_FINAL)
+                     (clojure.string/replace (str fqn) "." "/")
+                     nil
+                     (.getInternalName (clojure.asm.Type/getType Object))
+                     (make-array String 0))
+             (-> (.visitMethod 1 "<init>" "()V" nil nil)
+                 (doto (.visitCode)
+                   (.visitVarInsn clojure.asm.Opcodes/ALOAD 0)
+                   (.visitMethodInsn clojure.asm.Opcodes/INVOKESPECIAL (.getInternalName (clojure.asm.Type/getType Object)) "<init>" "()V" false)
+                   (.visitInsn clojure.asm.Opcodes/RETURN)
+                   (.visitMaxs 0 0)
+                   (.visitEnd))))]
+
+    (doseq [f fields]
+      (.visitEnd (.visitField cw
+                              1 #_clojure.asm.Constants/ACC_PUBLIC
+                              (str f)
+                              (.getDescriptor
+                               ^clojure.asm.Type
+                               (case (some-> f meta :tag str)
+                                 "boolean"
+                                 clojure.asm.Type/BOOLEAN_TYPE
+                                 "booleans"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/BOOLEAN_TYPE)))
+
+                                 "byte"
+                                 clojure.asm.Type/BYTE_TYPE
+                                 "bytes"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/BYTE_TYPE)))
+
+                                 "char"
+                                 clojure.asm.Type/CHAR_TYPE
+                                 "chars"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/CHAR_TYPE)))
+
+                                 "short"
+                                 clojure.asm.Type/SHORT_TYPE
+                                 "shorts"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/SHORT_TYPE)))
+
+                                 "int"
+                                 clojure.asm.Type/INT_TYPE
+                                 "ints"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/INT_TYPE)))
+
+                                 "long"
+                                 clojure.asm.Type/LONG_TYPE
+                                 "longs"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/LONG_TYPE)))
+
+                                 "float"
+                                 clojure.asm.Type/FLOAT_TYPE
+                                 "floats"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/FLOAT_TYPE)))
+
+                                 "double"
+                                 clojure.asm.Type/DOUBLE_TYPE
+                                 "doubles"
+                                 (clojure.asm.Type/getType (str "[" (.getDescriptor clojure.asm.Type/DOUBLE_TYPE)))
+
+                                 "objects"
+                                 (clojure.asm.Type/getType (str "[" (clojure.asm.Type/getDescriptor Object)))
+
+                                 (clojure.asm.Type/getType
+                                  ^Class
+                                  (resolve
+                                   (symbol (or (some-> f meta :tag str)
+                                               'java.lang.Object))))))
+                              nil
+                              nil)))
+    (.visitEnd cw)
+    (let [bs (.toByteArray cw)]
+      ;; TODO; How to properly define this?
+      (.defineClass ^clojure.lang.DynamicClassLoader @clojure.lang.Compiler/LOADER (str fqn) bs ""))))
