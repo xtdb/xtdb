@@ -1345,9 +1345,9 @@
 (defn define-bean [fqn fields]
   (let [cw (clojure.asm.ClassWriter. clojure.asm.ClassWriter/COMPUTE_MAXS)
         cw (doto cw
-             (.visit 52 #_clojure.asm.Constants/V1_8
-                     17 #_(bit-or clojure.asm.Constants/ACC_PUBLIC
-                                  clojure.asm.Constants/ACC_FINAL)
+             (.visit clojure.asm.Opcodes/V1_8
+                     (bit-or clojure.asm.Opcodes/ACC_PUBLIC
+                             clojure.asm.Opcodes/ACC_FINAL)
                      (clojure.string/replace (str fqn) "." "/")
                      nil
                      (.getInternalName (clojure.asm.Type/getType Object))
@@ -1362,7 +1362,7 @@
 
     (doseq [f fields]
       (.visitEnd (.visitField cw
-                              1 #_clojure.asm.Constants/ACC_PUBLIC
+                              clojure.asm.Opcodes/ACC_PUBLIC
                               (str f)
                               (.getDescriptor
                                ^clojure.asm.Type
@@ -1443,3 +1443,9 @@
   `(-> {}
        ~@(for [k keyseq]
            `(assoc ~k (~(symbol (str "." (name k))) ~bean)))))
+
+(defn bean->map [bean]
+  (->> (for [^java.lang.reflect.Field f (.getFields (class bean))]
+         [(keyword (.getName f))
+          (clojure.lang.Reflector/getInstanceField bean (.getName f))])
+       (into {})))
