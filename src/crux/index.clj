@@ -56,7 +56,8 @@
 
 (defn- attribute-value+placeholder [k ^ValueEntityValuePeekState peek-state]
   (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
-    (mem/vo-reset! peek-state {:last-k k :value value})
+    (set! (.last-k peek-state) k)
+    (set! (.value peek-state) value)
     [value :crux.index.binary-placeholder/value]))
 
 (defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr ^ValueEntityValuePeekState peek-state]
@@ -145,7 +146,8 @@
   (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
         eid-buffer (c/->id-buffer eid)
         [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
-    (mem/vo-reset! peek-state {:last-k k :entity-tx entity-tx})
+    (set! (.last-k peek-state) k)
+    (set! (.entity-tx peek-state) entity-tx)
     (if entity-tx
       [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
@@ -608,9 +610,10 @@
                                            (db/next-values idx)
                                            (db/seek-values idx max-k))]
                   (when next-value+results
-                    (mem/vo-reset! iterators-thunk
-                                   {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
-                                    :index (mod (inc index) (count iterators))})))
+                    (set! (.iterators iterators-thunk)
+                          (assoc iterators index (new-unary-join-iterator-state idx next-value+results)))
+                    (set! (.index iterators-thunk) (mod (inc index) (count iterators)))
+                    iterators-thunk))
                (set! (.thunk state)))
           (if match?
             (when-let [result (->> (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)
@@ -650,12 +653,12 @@
   db/LayeredIndex
   (open-level [this]
     (db/open-level (nth unary-join-indexes (.depth state) nil))
-    (mem/vo-swap! state :depth inc)
+    (set! (.depth state) (inc (.depth state)))
     nil)
 
   (close-level [this]
     (db/close-level (nth unary-join-indexes (dec (long (.depth state))) nil))
-    (mem/vo-swap! state :depth dec)
+    (set! (.depth state) (dec (.depth state)))
     nil)
 
   (max-depth [this]
@@ -677,12 +680,12 @@
   db/LayeredIndex
   (open-level [this]
     (db/open-level (nth (.indexes state) (.depth state) nil))
-    (mem/vo-swap! state :depth inc)
+    (set! (.depth state) (inc (.depth state)))
     nil)
 
   (close-level [this]
     (db/close-level (nth (.indexes state) (dec (long (.depth state))) nil))
-    (mem/vo-swap! state :depth dec)
+    (set! (.depth state) (dec (.depth state)))
     nil)
 
   (max-depth [this]
@@ -734,7 +737,7 @@
 
   (close-level [this]
     (db/close-level n-ary-index)
-    (mem/vo-swap! state :result-stack pop)
+    (set! (.result-stack state) (pop (.result-stack state)))
     nil)
 
   (max-depth [this]
@@ -789,10 +792,8 @@
   (seek-values [this k]
     (when-let [idx (last (.indexes state))]
       (let [[k ^RelationNestedIndexState nested-index-state] (db/seek-values idx k)]
-        (mem/vo-reset! state
-                       {:indexes (.indexes state)
-                        :child-idx (some-> nested-index-state (.child-idx))
-                        :needs-seek? false})
+        (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
+        (set! (.needs-seek? state) false)
         (when k
           [k (.value nested-index-state)]))))
 
@@ -809,19 +810,17 @@
   (open-level [this]
     (when (= max-depth (relation-virtual-index-depth state))
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (mem/vo-reset! state
-                   {:indexes (conj (.indexes state) (.child-idx state))
-                    :child-idx nil
-                    :needs-seek? true})
+    (set! (.indexes state) (conj (.indexes state) (.child-idx state)))
+    (set! (.child-idx state) nil)
+    (set! (.needs-seek? state) true)
     nil)
 
   (close-level [this]
     (when (zero? (relation-virtual-index-depth state))
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (mem/vo-reset! state
-                   {:indexes (pop (.indexes state))
-                    :child-idx nil
-                    :needs-seek? false})
+    (set! (.indexes state) (pop (.indexes state)))
+    (set! (.child-idx state) nil)
+    (set! (.needs-seek? state) false)
     nil)
 
   (max-depth [this]
@@ -842,11 +841,11 @@
   ([^RelationVirtualIndex relation tuples]
    (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (mem/vo-reset! ^RelationIteratorsState (.state relation)
-                  {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
-                               (build-nested-index tuples layered-range-constraints))]
-                   :child-idx nil
-                   :needs-seek? true})
+   (let [state ^RelationIteratorsState (.state relation)]
+     (set! (.indexes state) [(binding [nippy/*freeze-fallback* :write-unfreezable]
+                               (build-nested-index tuples layered-range-constraints))])
+     (set! (.child-idx state) nil)
+     (set! (.needs-seek? state) nil))
    relation))
 
 (defn new-relation-virtual-index

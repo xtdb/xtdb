@@ -279,25 +279,19 @@
                              (.visitEnd)))]
       (.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str fqn) bs ""))))
 
-(defmacro vo-swap! [bean field f & args]
-  `(set! (~(symbol (str "." (name field))) ~bean)
-         (~f (~(symbol (str "." (name field))) ~bean) ~@args)))
-
-(defmacro vo-reset! [bean m]
-  `(do ~@(for [[k v] m]
-           `(set! (~(symbol (str "." (name k))) ~bean) ~v))
-       ~bean))
-
 (defmacro defvo [name fields]
   (let [fqn (if-not (namespace name)
               (symbol (str (ns-name *ns*)
                            "."
                            name))
-              name)]
+              name)
+        vo-sym (gensym "vo")]
     (define-value-object fqn fields)
     `(do (import ~fqn)
          (defn ~(symbol (str "->" name)) ~(with-meta (mapv #(with-meta % nil) fields)
                                             {:tag fqn})
-           (let [vo# (~(symbol (str name ".")))]
-             (vo-reset! vo# ~(zipmap (map keyword fields) fields))))
+           (let [~vo-sym (~(symbol (str name ".")))]
+             ~@(for [[k v] (zipmap (map keyword fields) fields)]
+                 `(set! (~(symbol (str "." (clojure.core/name k))) ~vo-sym) ~v))
+             ~vo-sym))
          ~fqn)))
