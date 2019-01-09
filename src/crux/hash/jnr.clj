@@ -46,7 +46,7 @@
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
-       (ExpandableDirectByteBuffer. hash/id-hash-size)))))
+       (ExpandableDirectByteBuffer.)))))
 
 (defn gcrypt-id-hash-buffer ^org.agrona.DirectBuffer [^MutableDirectBuffer to ^DirectBuffer buffer]
   (let [^DirectBuffer buffer (if (mem/off-heap? buffer)
