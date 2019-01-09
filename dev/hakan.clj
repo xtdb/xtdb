@@ -976,6 +976,15 @@
 ;; RocksJava: (/ 96791.482514 69994.982891) 1.3828345763685514
 ;; LMDB: (/ 29754.773409 21082.969962) 1.4113179244968845
 
+;; Using chunked Buffers+OpenSSL+value objects (9e58f2d716b829e1333c09dd7658a513816b6eb5)
+;; ("master" below was before this commit.)
+
+;; RocksJNR:
+;; run 1: 79986 347.76521739130436
+;; run 2: 68590 298.2173913043478
+;; run 3: 68195 296.5
+;; empty caches: 81919 356.1695652173913
+
 ;; Using chunked Buffers+OpenSSL (ce63626eebb151946b166d0cc409416bb637935d)
 ;; ("master" below was before this commit.)
 
