@@ -25,13 +25,22 @@
         lock (StampedLock.)]
     (reify LRUCache
       (compute-if-absent [_ k f]
-        (let [stamp (.writeLock lock)]
-          (try
-            (.computeIfAbsent cache k (reify Function
-                                        (apply [_ k]
-                                          (f k))))
-            (finally
-              (.unlock lock stamp)))))
+        (if (.containsKey cache k)
+          (let [stamp (.writeLock lock)]
+            (try
+              (.computeIfAbsent cache k (reify Function
+                                          (apply [_ k]
+                                            (f k))))
+              (finally
+                (.unlock lock stamp))))
+          (let [v (f k)
+                stamp (.writeLock lock)]
+            (try
+              (.computeIfAbsent cache k (reify Function
+                                          (apply [_ k]
+                                            v)))
+              (finally
+                (.unlock lock stamp))))))
 
       (evict [_ k]
         (let [stamp (.writeLock lock)]
