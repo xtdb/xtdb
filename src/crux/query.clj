@@ -1072,31 +1072,24 @@
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (with-meta
                     (mapv #(.value ^BoundResult %) bound-result-tuple)
-                    (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple)))
+                    (zipmap (map #(.var ^BoundResult %) bound-result-tuple)
+                            (map #(dissoc % :entity-tx) bound-result-tuple))))
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)
          limit (take limit))))))
 
-(defn result-tuple->entities [result-tuple]
-  (map :doc (vals (meta result-tuple))))
+(defn entity-tx
+  ([{:keys [kv] :as db} eid]
+   (with-open [snapshot (kv/new-snapshot kv)]
+     (entity-tx snapshot db eid)))
+  ([snapshot {:keys [business-time transact-time] :as db} eid]
+   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] business-time transact-time)))))
 
-(defn result-tuple->entity-txs [result-tuple]
-  (map :entity-tx (vals (meta result-tuple))))
-
-(defn entity-tx [db eid]
-  (->> (q db {:find '[e]
-              :where '[[e :crux.db/id eid]]
-              :args [{:eid eid}]})
-       (map result-tuple->entity-txs)
-       (ffirst)))
-
-(defn entity [db eid]
-  (->> (q db {:find '[e]
-              :where '[[e :crux.db/id eid]]
-              :args [{:eid eid}]})
-       (map result-tuple->entities)
-       (ffirst)))
+(defn entity [{:keys [kv object-store] :as db} eid]
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (let [entity-tx (entity-tx snapshot db eid)]
+      (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
 (defrecord QueryDatasource [kv query-cache object-store business-time transact-time]
   ICruxDatasource
@@ -1104,7 +1097,7 @@
     (entity this eid))
 
   (entityTx [this eid]
-    (c/entity-tx->edn (entity-tx this eid)))
+    (entity-tx this eid))
 
   (newSnapshot [this]
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
@@ -1149,4 +1142,4 @@
                         (or transact-time now)))))
 
 (defn submitted-tx-updated-entity? [kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} eid]
-  (= tx-id (:tx-id (entity-tx (db kv tx-time tx-time) eid))))
+  (= tx-id (:crux.tx/tx-id (entity-tx (db kv tx-time tx-time) eid))))

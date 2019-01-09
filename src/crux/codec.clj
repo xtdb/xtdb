@@ -480,13 +480,13 @@
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
       (->EntityTx entity business-time transact-time tx-id nil))))
 
-(defn entity-tx->edn [{:keys [eid bt tt tx-id content-hash] :as entity-tx}]
+(defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
-    {:crux.db/id (str eid)
-     :crux.db/content-hash (str content-hash)
-     :crux.db/business-time bt
-     :crux.tx/tx-id tx-id
-     :crux.tx/tx-time tt}))
+    {:crux.db/id (str (.eid entity-tx))
+     :crux.db/content-hash (str (.content-hash entity-tx))
+     :crux.db/business-time (.bt entity-tx)
+     :crux.tx/tx-time (.tt entity-tx)
+     :crux.tx/tx-id (.tx-id entity-tx)}))
 
 (defn encode-tx-log-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]

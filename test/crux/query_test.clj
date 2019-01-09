@@ -1172,7 +1172,7 @@
                                       '{:find [n]
                                         :where [[:ivan :name n]]})))
 
-        (t/is (= tx-id (:tx-id (q/entity-tx (q/db *kv* tx-time tx-time) :ivan))))
+        (t/is (= tx-id (:crux.tx/tx-id (q/entity-tx (q/db *kv* tx-time tx-time) :ivan))))
 
         (t/is (= {:crux.db/id :ivan
                   :name "Ivan 1st"} (q/entity (q/db *kv* tx-time tx-time) :ivan)))))
