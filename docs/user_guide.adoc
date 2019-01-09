@@ -19,8 +19,8 @@ To add Crux as a project dependency:
 juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
 ----
 
-Note, that depending on your setup, other dependencies will be
-required as described in this guide.
+NOTE: Depending on your setup, other dependencies will be
+required, as described below.
 
 == Standalone
 
