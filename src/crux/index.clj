@@ -782,7 +782,7 @@
       (step [] 0 true))))
 
 (mem/defvo RelationNestedIndexState [value child-idx])
-(mem/defvo RelationIteratorsState [indexes child-idx needs-seek?])
+(mem/defvo RelationIteratorsState [indexes child-idx ^boolean needs-seek?])
 
 (defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
   (dec (count (.indexes iterators-state))))
@@ -845,12 +845,12 @@
      (set! (.indexes state) [(binding [nippy/*freeze-fallback* :write-unfreezable]
                                (build-nested-index tuples layered-range-constraints))])
      (set! (.child-idx state) nil)
-     (set! (.needs-seek? state) nil))
+     (set! (.needs-seek? state) false))
    relation))
 
 (defn new-relation-virtual-index
   ([relation-name tuples max-depth]
    (new-relation-virtual-index relation-name tuples max-depth nil))
   ([relation-name tuples max-depth layered-range-constraints]
-   (let [iterators-state (->RelationIteratorsState nil nil nil)]
+   (let [iterators-state (->RelationIteratorsState nil nil false)]
      (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
