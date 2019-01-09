@@ -110,6 +110,7 @@
           (t/is (= {:crux.db/id :ivan :name "Ivan"} (.document f/*api* (:crux.db/content-hash entity-tx))))
           (t/is (= [entity-tx] (.history f/*api* :ivan)))
 
+          (t/is (nil? (.document f/*api* (c/new-id :does-not-exist))))
           (t/is (nil? (.entityTx (.db f/*api* #inst "1999") :ivan)))))
 
       (t/testing "tx-log"
@@ -121,6 +122,20 @@
                              :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) business-time]])]
                      result))
             (t/is (realized? result))))))))
+
+(t/deftest test-document-bug-123
+  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 1}]])]
+    (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-1-submitted-tx :ivan))))
+
+  (let [version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 2}]])]
+    (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-2-submitted-tx :ivan))))
+
+  (let [history (.history f/*api* :ivan)]
+    (t/is (= 2 (count history)))
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
+              {:crux.db/id :ivan :name "Ivan" :version 1}]
+             (for [content-hash (map :crux.db/content-hash history)]
+               (.document f/*api* content-hash))))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
