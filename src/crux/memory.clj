@@ -288,17 +288,6 @@
            `(set! (~(symbol (str "." (name k))) ~bean) ~v))
        ~bean))
 
-(defmacro vo-select-keys [bean keyseq]
-  `(-> {}
-       ~@(for [k keyseq]
-           `(assoc ~k (~(symbol (str "." (name k))) ~bean)))))
-
-(defn vo->map [bean]
-  (->> (for [^java.lang.reflect.Field f (.getFields (class bean))]
-         [(keyword (Compiler/demunge (.getName f)))
-          (Reflector/getInstanceField bean (.getName f))])
-       (into {})))
-
 (defmacro defvo [name fields]
   (let [fqn (if-not (namespace name)
               (symbol (str (ns-name *ns*)
