@@ -266,7 +266,7 @@
 
                          (if (string? tag)
                            (Type/getType (str tag))
-                           (Type/getType ^Class (resolve (symbol (or (str tag) 'java.lang.Object))))))]]
+                           (Type/getType ^Class (resolve (symbol (str (or tag 'java.lang.Object)))))))]]
       (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
     (.visitEnd cw)
     (let [bs (.toByteArray cw)]
@@ -293,13 +293,13 @@
        (into {})))
 
 (defmacro defvo [name fields]
-  (let [class-name (if-not (namespace name)
-                     (symbol (str (ns-name *ns*)
-                                  "."
-                                  name))
-                     name)]
-    (define-bean class-name fields)
+  (let [fqn (if-not (namespace name)
+              (symbol (str (ns-name *ns*)
+                           "."
+                           name))
+              name)]
+    (define-value-object fqn fields)
     `(do (defn ~(symbol (str "->" name)) ~(vec fields)
            (let [vo# (~(symbol (str name ".")))]
              (vo-reset! vo# ~(zipmap (map keyword fields) fields))))
-         (import ~class-name))))
+         (import ~fqn))))
