@@ -495,7 +495,7 @@
          [var (value-var-binding var result-index :or)])
        (into {})))
 
-(defrecord BoundResult [var value ^EntityTx entity-tx doc])
+(defrecord BoundResult [var value doc])
 
 (def ^:private ^ThreadLocal value-buffer-tl
   (ThreadLocal/withInitial
@@ -506,7 +506,7 @@
 (defn- bound-result-for-var ^crux.query.BoundResult [snapshot object-store var->bindings join-keys join-results var]
   (let [binding ^VarBinding (get var->bindings var)]
     (if (.value? binding)
-      (BoundResult. var (get join-results (.result-name binding)) nil nil)
+      (BoundResult. var (get join-results (.result-name binding)) nil)
       (when-let [^EntityTx entity-tx (get join-results (.e-var binding))]
         (let [value-buffer (get join-keys (.result-index binding))
               content-hash (.content-hash entity-tx)
@@ -520,7 +520,7 @@
                           x
                           (when xs
                             (recur xs)))))]
-          (BoundResult. var value entity-tx doc))))))
+          (BoundResult. var value doc))))))
 
 (declare build-sub-query)
 
@@ -1072,8 +1072,7 @@
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (with-meta
                     (mapv #(.value ^BoundResult %) bound-result-tuple)
-                    (zipmap (map #(.var ^BoundResult %) bound-result-tuple)
-                            (map #(dissoc % :entity-tx) bound-result-tuple))))
+                    (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple)))
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)
