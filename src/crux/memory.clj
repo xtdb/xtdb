@@ -305,7 +305,9 @@
                            name))
               name)]
     (define-value-object fqn fields)
-    `(do (defn ~(symbol (str "->" name)) ~(mapv #(with-meta % nil) fields)
+    `(do (import ~fqn)
+         (defn ~(symbol (str "->" name)) ~(with-meta (mapv #(with-meta % nil) fields)
+                                            {:tag fqn})
            (let [vo# (~(symbol (str name ".")))]
              (vo-reset! vo# ~(zipmap (map keyword fields) fields))))
-         (import ~fqn))))
+         ~fqn)))
