@@ -6,7 +6,7 @@
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            crux.ByteUtils
-           [clojure.lang DynamicClassLoader Reflector RT]
+           [clojure.lang Compiler DynamicClassLoader Reflector RT]
            [clojure.asm ClassWriter Opcodes Type]))
 
 (defprotocol MemoryRegion
@@ -220,6 +220,7 @@
 
     (doseq [f fields
             :let [tag (some-> f meta :tag)
+                  f (Compiler/munge f)
                   type (case (str tag)
                          "boolean"
                          Type/BOOLEAN_TYPE
@@ -294,7 +295,7 @@
 
 (defn vo->map [bean]
   (->> (for [^java.lang.reflect.Field f (.getFields (class bean))]
-         [(keyword (.getName f))
+         [(keyword (Compiler/demunge (.getName f)))
           (Reflector/getInstanceField bean (.getName f))])
        (into {})))
 
