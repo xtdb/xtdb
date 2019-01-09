@@ -19,19 +19,26 @@
   (evict [this k]))
 
 (defn new-cache [^long size]
-  (Collections/synchronizedMap
-    (proxy [LinkedHashMap] [size 0.75 true]
-      (removeEldestEntry [_]
-        (> (count this) size)))))
+  (let [cache (proxy [LinkedHashMap] [size 0.75 true]
+                (removeEldestEntry [_]
+                  (> (count this) size)))
+        lock (StampedLock.)]
+    (reify LRUCache
+      (compute-if-absent [_ k f]
+        (let [stamp (.writeLock lock)]
+          (try
+            (.computeIfAbsent cache k (reify Function
+                                        (apply [_ k]
+                                          (f k))))
+            (finally
+              (.unlock lock stamp)))))
 
-(extend-type java.util.Collections$SynchronizedMap
-  LRUCache
-  (compute-if-absent [this k f]
-    (.computeIfAbsent this k (reify Function
-                               (apply [_ k]
-                                 (f k)))))
-  (evict [this k]
-    (.remove this k)))
+      (evict [_ k]
+        (let [stamp (.writeLock lock)]
+          (try
+            (.remove cache k)
+            (finally
+              (.unlock lock stamp))))))))
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
