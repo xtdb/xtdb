@@ -220,7 +220,7 @@
 
     (doseq [f fields
             :let [tag (some-> f meta :tag)
-                  f (Compiler/munge f)
+                  f (Compiler/munge (str f))
                   type (case (str tag)
                          "boolean"
                          Type/BOOLEAN_TYPE
