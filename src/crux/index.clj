@@ -52,14 +52,14 @@
 
 ;; AVE
 
-(defrecord ValueEntityValuePeekState [last-k value])
+(mem/defvo ValueEntityValuePeekState [last-k value])
 
-(defn- attribute-value+placeholder [k peek-state]
+(defn- attribute-value+placeholder [k ^ValueEntityValuePeekState peek-state]
   (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
-    (reset! peek-state (ValueEntityValuePeekState. k value))
+    (mem/vo-reset! peek-state {:last-k k :value value})
     [value :crux.index.binary-placeholder/value]))
 
-(defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr peek-state]
+(defrecord DocAttributeValueEntityValueIndex [i ^DirectBuffer attr ^ValueEntityValuePeekState peek-state]
   db/Index
   (seek-values [this k]
     (when-let [k (->> (c/encode-attribute+value+entity+content-hash-key-to
@@ -70,7 +70,7 @@
       (attribute-value+placeholder k peek-state)))
 
   (next-values [this]
-    (let [last-k (.last-k ^ValueEntityValuePeekState @peek-state)
+    (let [last-k (.last-k peek-state)
           prefix-size (- (mem/capacity last-k) c/id-size c/id-size)]
       (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                             (kv/seek i))]
@@ -79,12 +79,14 @@
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
   (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+value+entity+content-hash-key-to nil attr)]
-    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (atom nil))))
+    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (->ValueEntityValuePeekState nil nil))))
 
-(defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb peek-state]
+(mem/defvo DocAttributeValueEntityEntityIndexState [peek])
+
+(defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
     (let [limit (- (mem/capacity k) c/id-size)]
-      (reset! peek-state (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
+      (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
     (or (let [eid (.eid (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))
               eid-buffer (c/->id-buffer eid)
               [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
@@ -99,17 +101,17 @@
               (when-let [found-k (kv/seek i version-k)]
                 (when (mem/buffers=? version-k found-k)
                   [eid-buffer entity-tx])))))
-        (when-let [k (some->> @peek-state (kv/seek i))]
+        (when-let [k (some->> (.peek peek-state) (kv/seek i))]
           (recur k)))))
 
 (defrecord ValueAndPrefixIterator [value prefix-iterator])
 
 (defn- attribute-value-value+prefix-iterator ^crux.index.ValueAndPrefixIterator [i ^DocAttributeValueEntityValueIndex value-entity-value-idx attr prefix-eb]
-  (let [value (.value ^ValueEntityValuePeekState @(.peek-state value-entity-value-idx))
+  (let [value (.value ^ValueEntityValuePeekState (.peek-state value-entity-value-idx))
         prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
     (ValueAndPrefixIterator. value (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb peek-state]
+(defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   db/Index
   (seek-values [this k]
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
@@ -127,27 +129,28 @@
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
           value (.value value+prefix-iterator)
           i (.prefix-iterator value+prefix-iterator)]
-      (when-let [k (some->> @peek-state (kv/seek i))]
+      (when-let [k (some->> (.peek peek-state) (kv/seek i))]
         (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-eb peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
   (->DocAttributeValueEntityEntityIndex (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
-                                        (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
+                                        (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
+                                        (->DocAttributeValueEntityEntityIndexState nil)))
 
 ;; AEV
 
-(defrecord EntityValueEntityPeekState [last-k ^EntityTx entity-tx])
+(mem/defvo EntityValueEntityPeekState [last-k ^EntityTx entity-tx])
 
-(defn- attribute-entity+placeholder [k attr entity-as-of-idx peek-state]
+(defn- attribute-entity+placeholder [k attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   (let [eid (.eid (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k))
         eid-buffer (c/->id-buffer eid)
         [_ ^EntityTx entity-tx] (db/seek-values entity-as-of-idx eid-buffer)]
-    (reset! peek-state (EntityValueEntityPeekState. k entity-tx))
+    (mem/vo-reset! peek-state {:last-k k :entity-tx entity-tx})
     (if entity-tx
       [(c/->id-buffer (.eid entity-tx)) :crux.index.binary-placeholder/entity]
       ::deleted-entity)))
 
-(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx peek-state]
+(defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   db/Index
   (seek-values [this k]
     (when-let [k (->> (c/encode-attribute+entity+value+content-hash-key-to
@@ -161,7 +164,7 @@
           placeholder))))
 
   (next-values [this]
-    (let [last-k (.last-k ^EntityValueEntityPeekState @peek-state)
+    (let [last-k (.last-k peek-state)
           prefix-size (+ c/index-id-size c/id-size c/id-size)]
       (when-let [k (some->> (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer last-k prefix-size (.get seek-buffer-tl)) prefix-size))
                             (kv/seek i))]
@@ -174,15 +177,17 @@
   (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+entity+value+content-hash-key-to nil attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
-                                          (atom nil))))
+                                          (->EntityValueEntityPeekState nil nil))))
 
-(defn- attribute-entity-value-value+entity [i ^DirectBuffer current-k attr ^EntityTx entity-tx peek-eb peek-state]
+(mem/defvo DocAttributeEntityValueValueIndexState [peek])
+
+(defn- attribute-entity-value-value+entity [i ^DirectBuffer current-k attr ^EntityTx entity-tx peek-eb ^DocAttributeEntityValueValueIndexState peek-state]
   (when entity-tx
     (let [eid (.eid entity-tx)
           content-hash (.content-hash entity-tx)]
       (loop [k current-k]
         (let [limit (- (mem/capacity k) c/id-size)]
-          (reset! peek-state (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
+          (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
         (or (let [value (mem/copy-buffer (.value (c/decode-attribute+entity+value+content-hash-key->entity+value+content-hash-from k)))
                   version-k (c/encode-attribute+entity+value+content-hash-key-to
                              (.get seek-buffer-tl)
@@ -193,17 +198,17 @@
               (when-let [found-k (kv/seek i version-k)]
                 (when (mem/buffers=? version-k found-k)
                   [value entity-tx])))
-            (when-let [k (some->> @peek-state (kv/seek i))]
+            (when-let [k (some->> (.peek peek-state) (kv/seek i))]
               (recur k)))))))
 
 (defrecord EntityTxAndPrefixIterator [entity-tx prefix-iterator])
 
 (defn- attribute-value-entity-tx+prefix-iterator ^crux.index.EntityTxAndPrefixIterator [i ^DocAttributeEntityValueEntityIndex entity-value-entity-idx attr prefix-eb]
-  (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState @(.peek-state entity-value-entity-idx))
+  (let [entity-tx ^EntityTx (.entity-tx ^EntityValueEntityPeekState (.peek-state entity-value-entity-idx))
         prefix (c/encode-attribute+entity+value+content-hash-key-to prefix-eb attr (c/->id-buffer (.eid entity-tx)))]
     (EntityTxAndPrefixIterator. entity-tx (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb peek-eb peek-state]
+(defrecord DocAttributeEntityValueValueIndex [i ^DirectBuffer attr entity-value-entity-idx prefix-eb peek-eb ^DocAttributeEntityValueValueIndexState peek-state]
   db/Index
   (seek-values [this k]
     (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
@@ -221,12 +226,13 @@
     (let [entity-tx+prefix-iterator (attribute-value-entity-tx+prefix-iterator i entity-value-entity-idx attr prefix-eb)
           entity-tx ^EntityTx (.entity-tx entity-tx+prefix-iterator)
           i (.prefix-iterator entity-tx+prefix-iterator)]
-      (when-let [k (some->> @peek-state (kv/seek i))]
+      (when-let [k (some->> (.peek peek-state) (kv/seek i))]
         (attribute-entity-value-value+entity i k attr entity-tx peek-eb peek-state)))))
 
 (defn new-doc-attribute-entity-value-value-index [snapshot attr entity-value-entity-idx]
   (->DocAttributeEntityValueValueIndex (kv/new-iterator snapshot) (c/->id-buffer attr) entity-value-entity-idx
-                                       (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.) (atom nil)))
+                                       (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
+                                       (->DocAttributeEntityValueValueIndexState nil)))
 
 ;; Range Constraints
 
@@ -500,7 +506,9 @@
       (mem/compare-buffers (or a c/nil-id-buffer)
                            (or b c/nil-id-buffer)))))
 
-(defrecord SortedVirtualIndex [values seq-state]
+(mem/defvo SortedVirtualIndexState [seq])
+
+(defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
   db/Index
   (seek-values [this k]
     (let [idx (Collections/binarySearch values
@@ -509,12 +517,12 @@
           [x & xs] (subvec values (if (neg? idx)
                                     (dec (- idx))
                                     idx))]
-      (reset! seq-state (seq xs))
+      (set! (.seq state) (seq xs))
       x))
 
   (next-values [this]
-    (when-let [[x & xs] @seq-state]
-      (reset! seq-state (seq xs))
+    (when-let [[x & xs] (.seq state)]
+      (set! (.seq state) (seq xs))
       x)))
 
 (defn new-sorted-virtual-index [idx-or-seq]
@@ -526,26 +534,30 @@
           (sort-by first mem/buffer-comparator)
           (distinct)
           (vec))
-     (atom nil))))
+     (->SortedVirtualIndexState nil))))
 
-(defrecord OrVirtualIndex [indexes peek-state]
+;; NOTE: Not used by production code, kept for reference.
+(defrecord OrVirtualIndex [indexes ^objects peek-state]
   db/Index
   (seek-values [this k]
-    (reset! peek-state (vec (for [idx indexes]
-                              (db/seek-values idx k))))
+    (loop [[idx & indexes] indexes
+           i 0]
+      (when idx
+        (aset peek-state i (db/seek-values idx k))
+        (recur indexes (inc i))))
     (db/next-values this))
 
   (next-values [this]
-    (let [[n value] (->> (map-indexed vector @peek-state)
+    (let [[n value] (->> (map-indexed vector peek-state)
                          (remove (comp nil? second))
                          (sort-by (comp first second) mem/buffer-comparator)
                          (first))]
       (when n
-        (swap! peek-state assoc n (db/next-values (get indexes n))))
+        (aset peek-state n (db/next-values (get indexes n))))
       value)))
 
 (defn new-or-virtual-index [indexes]
-  (->OrVirtualIndex indexes (atom nil)))
+  (->OrVirtualIndex indexes (object-array (count indexes))))
 
 (defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
   (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
@@ -559,30 +571,31 @@
         (when (kv/seek i version-k)
           entity-tx)))))
 
-(defrecord UnaryJoinIteratorsThunkState [iterators ^long index])
-(defrecord UnaryJoinIteratorState [idx key results])
+(mem/defvo UnaryJoinIteratorsThunkFnState [thunk])
+(mem/defvo UnaryJoinIteratorsThunkState [iterators ^long index])
+(mem/defvo UnaryJoinIteratorState [idx key results])
 
 (defn- new-unary-join-iterator-state [idx [value results]]
   (let [result-name (:name idx)]
-    (UnaryJoinIteratorState.
+    (->UnaryJoinIteratorState
      idx
      (or value c/nil-id-buffer)
      (when (and result-name results)
        {result-name results}))))
 
-(defrecord UnaryJoinVirtualIndex [indexes iterators-thunk-state]
+(defrecord UnaryJoinVirtualIndex [indexes ^UnaryJoinIteratorsThunkFnState state]
   db/Index
   (seek-values [this k]
     (->> #(let [iterators (->> (for [idx indexes]
                                  (new-unary-join-iterator-state idx (db/seek-values idx k)))
                                (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
                                (vec))]
-            (UnaryJoinIteratorsThunkState. iterators 0))
-         (reset! iterators-thunk-state))
+            (->UnaryJoinIteratorsThunkState iterators 0))
+         (set! (.thunk state)))
     (db/next-values this))
 
   (next-values [this]
-    (when-let [iterators-thunk @iterators-thunk-state]
+    (when-let [iterators-thunk (.thunk state)]
       (when-let [iterators-thunk ^UnaryJoinIteratorsThunkState (iterators-thunk)]
         (let [iterators (.iterators iterators-thunk)
               index (.index iterators-thunk)
@@ -595,10 +608,10 @@
                                            (db/next-values idx)
                                            (db/seek-values idx max-k))]
                   (when next-value+results
-                    (UnaryJoinIteratorsThunkState.
-                     (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
-                     (mod (inc index) (count iterators)))))
-               (reset! iterators-thunk-state))
+                    (mem/vo-reset! iterators-thunk
+                                   {:iterators (assoc iterators index (new-unary-join-iterator-state idx next-value+results))
+                                    :index (mod (inc index) (count iterators))})))
+               (set! (.thunk state)))
           (if match?
             (when-let [result (->> (map (fn [x] (.results ^UnaryJoinIteratorState x)) iterators)
                                    (apply merge))]
@@ -618,60 +631,58 @@
     1))
 
 (defn new-unary-join-virtual-index [indexes]
-  (->UnaryJoinVirtualIndex indexes (atom nil)))
+  (->UnaryJoinVirtualIndex indexes (->UnaryJoinIteratorsThunkFnState nil)))
 
 (defn constrain-join-result-by-empty-names [join-keys join-results]
   (when (not-any? nil? (vals join-results))
     join-results))
 
-(defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes depth-state]
+(mem/defvo NAryJoinLayeredVirtualIndexState [^long depth])
+
+(defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes ^NAryJoinLayeredVirtualIndexState state]
   db/Index
   (seek-values [this k]
-    (db/seek-values (get unary-join-indexes @depth-state) k))
+    (db/seek-values (nth unary-join-indexes (.depth state) nil) k))
 
   (next-values [this]
-    (db/next-values (get unary-join-indexes @depth-state)))
+    (db/next-values (nth unary-join-indexes (.depth state) nil)))
 
   db/LayeredIndex
   (open-level [this]
-    (db/open-level (get unary-join-indexes @depth-state))
-    (swap! depth-state inc)
+    (db/open-level (nth unary-join-indexes (.depth state) nil))
+    (mem/vo-swap! state :depth inc)
     nil)
 
   (close-level [this]
-    (db/close-level (get unary-join-indexes (dec (long @depth-state))))
-    (swap! depth-state dec)
+    (db/close-level (nth unary-join-indexes (dec (long (.depth state))) nil))
+    (mem/vo-swap! state :depth dec)
     nil)
 
   (max-depth [this]
     (count unary-join-indexes)))
 
 (defn new-n-ary-join-layered-virtual-index [indexes]
-  (->NAryJoinLayeredVirtualIndex indexes (atom 0)))
+  (->NAryJoinLayeredVirtualIndex indexes (->NAryJoinLayeredVirtualIndexState 0)))
 
-(defrecord BinaryJoinLayeredVirtualIndexState [indexes depth])
+(mem/defvo BinaryJoinLayeredVirtualIndexState [indexes ^long depth])
 
-(defrecord BinaryJoinLayeredVirtualIndex [index-and-depth-state]
+(defrecord BinaryJoinLayeredVirtualIndex [^BinaryJoinLayeredVirtualIndexState state]
   db/Index
   (seek-values [this k]
-    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
-      (db/seek-values (get (.indexes indexes-and-depth) (.depth indexes-and-depth)) k)))
+    (db/seek-values (nth (.indexes state) (.depth state) nil) k))
 
   (next-values [this]
-    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
-      (db/next-values (get (.indexes indexes-and-depth) (.depth indexes-and-depth)))))
+    (db/next-values (nth (.indexes state) (.depth state) nil)))
 
   db/LayeredIndex
   (open-level [this]
-    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
-      (db/open-level (get (.indexes indexes-and-depth) (.depth indexes-and-depth))))
-    (swap! index-and-depth-state update :depth inc)
+    (db/open-level (nth (.indexes state) (.depth state) nil))
+    (mem/vo-swap! state :depth inc)
     nil)
 
   (close-level [this]
-    (let [indexes-and-depth ^BinaryJoinLayeredVirtualIndexState @index-and-depth-state]
-      (db/close-level (get (.indexes indexes-and-depth) (dec (long (.depth indexes-and-depth))))))
-    (swap! index-and-depth-state update :depth dec)
+    (db/close-level (nth (.indexes state) (dec (long (.depth state))) nil))
+    (mem/vo-swap! state :depth dec)
     nil)
 
   (max-depth [this]
@@ -681,12 +692,12 @@
   ([]
    (new-binary-join-virtual-index nil nil))
   ([lhs-index rhs-index]
-   (->BinaryJoinLayeredVirtualIndex (atom (BinaryJoinLayeredVirtualIndexState.
-                                           [lhs-index rhs-index]
-                                           0)))))
+   (->BinaryJoinLayeredVirtualIndex (->BinaryJoinLayeredVirtualIndexState
+                                     [lhs-index rhs-index]
+                                     0))))
 
 (defn update-binary-join-order! [^BinaryJoinLayeredVirtualIndex binary-join-index lhs-index rhs-index]
-  (swap! (.index-and-depth-state binary-join-index) assoc :indexes [lhs-index rhs-index])
+  (set! (.indexes ^BinaryJoinLayeredVirtualIndexState (.state binary-join-index)) [lhs-index rhs-index])
   binary-join-index)
 
 (defn- build-constrained-result [constrain-result-fn result-stack [max-k new-values]]
@@ -697,40 +708,40 @@
                                  (not-empty))]
       (conj result-stack [join-keys join-results]))))
 
-(defrecord NAryWalkState [result-stack last])
+(mem/defvo NAryWalkState [result-stack last])
 
-(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn walk-state]
+(defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn ^NAryWalkState state]
   db/Index
   (seek-values [this k]
     (when-let [[value :as values] (db/seek-values n-ary-index k)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack ^NAryWalkState @walk-state) values)]
-        (do (swap! walk-state assoc :last result)
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
+        (do (set! (.last state) result)
             [value (second (last result))])
         (db/next-values this))))
 
   (next-values [this]
     (when-let [[value :as values] (db/next-values n-ary-index)]
-      (if-let [result (build-constrained-result constrain-result-fn (.result-stack ^NAryWalkState @walk-state) values)]
-        (do (swap! walk-state assoc :last result)
+      (if-let [result (build-constrained-result constrain-result-fn (.result-stack state) values)]
+        (do (set! (.last state) result)
             [value (second (last result))])
         (recur))))
 
   db/LayeredIndex
   (open-level [this]
     (db/open-level n-ary-index)
-    (swap! walk-state #(assoc % :result-stack (.last ^NAryWalkState %)))
+    (set! (.result-stack state) (.last state))
     nil)
 
   (close-level [this]
     (db/close-level n-ary-index)
-    (swap! walk-state update :result-stack pop)
+    (mem/vo-swap! state :result-stack pop)
     nil)
 
   (max-depth [this]
     (db/max-depth n-ary-index)))
 
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (atom (NAryWalkState. [] nil))))
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (->NAryWalkState [] nil)))
 
 (defn layered-idx->seq [idx]
   (let [max-depth (long (db/max-depth idx))
@@ -767,56 +778,50 @@
     (when (pos? max-depth)
       (step [] 0 true))))
 
-(defrecord RelationNestedIndexState [value child-idx])
-(defrecord RelationIteratorsState [indexes child-idx needs-seek?])
+(mem/defvo RelationNestedIndexState [value child-idx])
+(mem/defvo RelationIteratorsState [indexes child-idx needs-seek?])
 
-(defn- relation-virtual-index-depth ^long [iterators-state]
-  (dec (count (.indexes ^RelationIteratorsState @iterators-state))))
+(defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
+  (dec (count (.indexes iterators-state))))
 
-(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints iterators-state]
+(defrecord RelationVirtualIndex [relation-name max-depth layered-range-constraints ^RelationIteratorsState state]
   db/Index
   (seek-values [this k]
-    (let [relation-iterators-state ^RelationIteratorsState @iterators-state]
-      (when-let [idx (last (.indexes relation-iterators-state))]
-        (let [[k ^RelationNestedIndexState nested-index-state] (db/seek-values idx k)]
-          (swap! iterators-state (fn [^RelationIteratorsState iterators-state]
-                                   (RelationIteratorsState.
-                                    (.indexes iterators-state)
-                                    (some-> nested-index-state (.child-idx))
-                                    false)))
+    (when-let [idx (last (.indexes state))]
+      (let [[k ^RelationNestedIndexState nested-index-state] (db/seek-values idx k)]
+        (mem/vo-reset! state
+                       {:indexes (.indexes state)
+                        :child-idx (some-> nested-index-state (.child-idx))
+                        :needs-seek? false})
+        (when k
+          [k (.value nested-index-state)]))))
+
+  (next-values [this]
+    (if (.needs-seek? state)
+      (db/seek-values this nil)
+      (when-let [idx (last (.indexes state))]
+        (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
+          (set! (.child-idx state) (some-> nested-index-state (.child-idx)))
           (when k
             [k (.value nested-index-state)])))))
 
-  (next-values [this]
-    (let [relation-iterators-state ^RelationIteratorsState @iterators-state]
-      (if (.needs-seek? relation-iterators-state)
-        (db/seek-values this nil)
-        (when-let [idx (last (.indexes relation-iterators-state))]
-          (let [[k ^RelationNestedIndexState nested-index-state] (db/next-values idx)]
-            (swap! iterators-state assoc :child-idx (some-> nested-index-state (.child-idx)))
-            (when k
-              [k (.value nested-index-state)]))))))
-
   db/LayeredIndex
   (open-level [this]
-    (when (= max-depth (relation-virtual-index-depth iterators-state))
+    (when (= max-depth (relation-virtual-index-depth state))
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (swap! iterators-state
-           (fn [^RelationIteratorsState iterators-state]
-             (RelationIteratorsState.
-              (conj (.indexes iterators-state) (.child-idx iterators-state))
-              nil
-              true)))
+    (mem/vo-reset! state
+                   {:indexes (conj (.indexes state) (.child-idx state))
+                    :child-idx nil
+                    :needs-seek? true})
     nil)
 
   (close-level [this]
-    (when (zero? (relation-virtual-index-depth iterators-state))
+    (when (zero? (relation-virtual-index-depth state))
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (swap! iterators-state (fn [^RelationIteratorsState iterators-state]
-                             (RelationIteratorsState.
-                              (pop (.indexes iterators-state))
-                              nil
-                              false)))
+    (mem/vo-reset! state
+                   {:indexes (pop (.indexes state))
+                    :child-idx nil
+                    :needs-seek? false})
     nil)
 
   (max-depth [this]
@@ -827,7 +832,7 @@
        (for [prefix (partition-by first tuples)
              :let [value (ffirst prefix)]]
          [(c/->value-buffer value)
-          (RelationNestedIndexState.
+          (->RelationNestedIndexState
            value
            (when (seq (next (first prefix)))
              (build-nested-index (map next prefix) next-range-constraints)))]))
@@ -837,17 +842,16 @@
   ([^RelationVirtualIndex relation tuples]
    (update-relation-virtual-index! relation tuples (.layered-range-constraints relation)))
   ([^RelationVirtualIndex relation tuples layered-range-constraints]
-   (reset! (.iterators-state relation)
-           (RelationIteratorsState.
-            [(binding [nippy/*freeze-fallback* :write-unfreezable]
-               (build-nested-index tuples layered-range-constraints))]
-            nil
-            true))
+   (mem/vo-reset! ^RelationIteratorsState (.state relation)
+                  {:indexes [(binding [nippy/*freeze-fallback* :write-unfreezable]
+                               (build-nested-index tuples layered-range-constraints))]
+                   :child-idx nil
+                   :needs-seek? true})
    relation))
 
 (defn new-relation-virtual-index
   ([relation-name tuples max-depth]
    (new-relation-virtual-index relation-name tuples max-depth nil))
   ([relation-name tuples max-depth layered-range-constraints]
-   (let [iterators-state (atom (RelationIteratorsState. nil nil nil))]
+   (let [iterators-state (->RelationIteratorsState nil nil nil)]
      (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
