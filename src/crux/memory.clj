@@ -264,12 +264,18 @@
                          "objects"
                          (Type/getType (str "[" (Type/getDescriptor Object)))
 
-                         (if (string? tag)
-                           (Type/getType (str tag))
-                           (Type/getType ^Class (resolve (symbol (str (or tag 'java.lang.Object)))))))]]
+                         (cond
+                           (string? tag)
+                           (Type/getType (Class/forName (str tag)))
+
+                           (symbol? tag)
+                           (Type/getType ^Class (resolve tag))
+
+                           :else
+                           (Type/getType Object)))]]
       (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
-    (.visitEnd cw)
-    (let [bs (.toByteArray cw)]
+    (let [bs (.toByteArray (doto cw
+                             (.visitEnd)))]
       (.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str fqn) bs ""))))
 
 (defmacro vo-swap! [bean field f & args]
@@ -299,7 +305,7 @@
                            name))
               name)]
     (define-value-object fqn fields)
-    `(do (defn ~(symbol (str "->" name)) ~(vec fields)
+    `(do (defn ~(symbol (str "->" name)) ~(mapv #(with-meta % nil) fields)
            (let [vo# (~(symbol (str name ".")))]
              (vo-reset! vo# ~(zipmap (map keyword fields) fields))))
          (import ~fqn))))
