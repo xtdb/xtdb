@@ -1,10 +1,13 @@
 (ns crux.memory
+  (:require [clojure.string :as str])
   (:import java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           crux.ByteUtils))
+           crux.ByteUtils
+           [clojure.lang DynamicClassLoader Reflector RT]
+           [clojure.asm ClassWriter Opcodes Type]))
 
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
@@ -194,3 +197,109 @@
                (recur (dec idx)))
            (doto buffer
              (.putByte idx (unchecked-byte (inc b))))))))))
+
+;; Value Objects, normal on heap classes with mutable public fields.
+
+(defn- define-value-object [fqn fields]
+  (let [cw (ClassWriter. ClassWriter/COMPUTE_MAXS)
+        cw (doto cw
+             (.visit Opcodes/V1_8
+                     (bit-or Opcodes/ACC_PUBLIC
+                             Opcodes/ACC_FINAL)
+                     (str/replace (str fqn) "." "/")
+                     nil
+                     (.getInternalName (Type/getType Object))
+                     (make-array String 0))
+             (-> (.visitMethod 1 "<init>" "()V" nil nil)
+                 (doto (.visitCode)
+                   (.visitVarInsn Opcodes/ALOAD 0)
+                   (.visitMethodInsn Opcodes/INVOKESPECIAL (.getInternalName (Type/getType Object)) "<init>" "()V" false)
+                   (.visitInsn Opcodes/RETURN)
+                   (.visitMaxs 0 0)
+                   (.visitEnd))))]
+
+    (doseq [f fields
+            :let [tag (some-> f meta :tag)
+                  type (case (str tag)
+                         "boolean"
+                         Type/BOOLEAN_TYPE
+                         "booleans"
+                         (Type/getType "[Z")
+
+                         "byte"
+                         Type/BYTE_TYPE
+                         "bytes"
+                         (Type/getType "[B")
+
+                         "char"
+                         Type/CHAR_TYPE
+                         "chars"
+                         (Type/getType "[C")
+
+                         "short"
+                         Type/SHORT_TYPE
+                         "shorts"
+                         (Type/getType "[S")
+
+                         "int"
+                         Type/INT_TYPE
+                         "ints"
+                         (Type/getType "[I")
+
+                         "long"
+                         Type/LONG_TYPE
+                         "longs"
+                         (Type/getType "[J")
+
+                         "float"
+                         Type/FLOAT_TYPE
+                         "floats"
+                         (Type/getType "[F")
+
+                         "double"
+                         Type/DOUBLE_TYPE
+                         "doubles"
+                         (Type/getType "[D")
+
+                         "objects"
+                         (Type/getType (str "[" (Type/getDescriptor Object)))
+
+                         (if (string? tag)
+                           (Type/getType (str tag))
+                           (Type/getType ^Class (resolve (symbol (or (str tag) 'java.lang.Object))))))]]
+      (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
+    (.visitEnd cw)
+    (let [bs (.toByteArray cw)]
+      (.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str fqn) bs ""))))
+
+(defmacro vo-swap! [bean field f & args]
+  `(set! (~(symbol (str "." (name field))) ~bean)
+         (~f (~(symbol (str "." (name field))) ~bean) ~@args)))
+
+(defmacro vo-reset! [bean m]
+  `(do ~@(for [[k v] m]
+           `(set! (~(symbol (str "." (name k))) ~bean) ~v))
+       ~bean))
+
+(defmacro vo-select-keys [bean keyseq]
+  `(-> {}
+       ~@(for [k keyseq]
+           `(assoc ~k (~(symbol (str "." (name k))) ~bean)))))
+
+(defn vo->map [bean]
+  (->> (for [^java.lang.reflect.Field f (.getFields (class bean))]
+         [(keyword (.getName f))
+          (Reflector/getInstanceField bean (.getName f))])
+       (into {})))
+
+(defmacro defvo [name fields]
+  (let [class-name (if-not (namespace name)
+                     (symbol (str (ns-name *ns*)
+                                  "."
+                                  name))
+                     name)]
+    (define-bean class-name fields)
+    `(do (defn ~(symbol (str "->" name)) ~(vec fields)
+           (let [vo# (~(symbol (str name ".")))]
+             (vo-reset! vo# ~(zipmap (map keyword fields) fields))))
+         (import ~class-name))))
