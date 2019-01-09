@@ -52,7 +52,7 @@ curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
 ----
 {:crux.db/id :foobar, :name "FooBar"}
 ----
-NOTE: This is not the recommended method for accessing documents. Every time a document is changed by a transaction, it is stored under a new hash and the old hash will no longer work with `/document`.
+NOTE: Hashes for older versions of a document can be obtained with `/history`, under the `:crux.db/content-hash` keys.
 
 `/entity`:: POST: takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the value stored under that key at those times.
 +
