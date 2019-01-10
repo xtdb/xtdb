@@ -225,20 +225,22 @@
         property-returns (atom {})]
     (str "MATCH " (str/join ", " (remove nil? (for [[e a v] where]
                                                 (if (relationship? a)
-                                                  (format "(`%s`)-[:`%s`]->(%s)"
+                                                  (format "(%s:Entity)-[:`%s`]->(%s)"
                                                           (maybe-fix-variable e)
                                                           a
                                                           (if (keyword? v)
                                                             (format "{`:crux.db/id`: '%s'}" v)
-                                                            (maybe-fix-variable v)))
+                                                            (if (symbol? v)
+                                                              (str (maybe-fix-variable v) ":Entity")
+                                                              v)))
                                                   (if (symbol? v)
                                                     (do
                                                       (swap! property-returns assoc v [e a])
                                                       nil)
-                                                    (format "(%s {`%s`: %s})"
+                                                    (format "(%s:Entity {`%s`: %s})"
                                                             (maybe-fix-variable e) a (if (keyword? v)
                                                                                        (str "'" v "'")
-                                                                                       (maybe-fix-variable v))))))))
+                                                                                       v)))))))
          (when (not-empty @property-returns)
            (str " WHERE " (str/join " AND " (for [[_ [e a]] @property-returns]
                                              (format "%s.`%s` IS NOT NULL"
