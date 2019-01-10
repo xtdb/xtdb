@@ -10,6 +10,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.pprint :as pp]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
@@ -137,9 +138,10 @@
 (s/def ::business-time inst?)
 (s/def ::transact-time inst?)
 
-(s/def ::query-map (s/keys :req-un [:crux.query/query]
-                           :opt-un [::business-time
-                                    ::transact-time]))
+(s/def ::query-map (s/and #(set/superset? #{:query :business-time :transact-time} (keys %))
+                          (s/keys :req-un [:crux.query/query]
+                                  :opt-un [::business-time
+                                           ::transact-time])))
 
 ;; TODO: Potentially require both business and transaction time sent
 ;; by the client?
@@ -159,9 +161,10 @@
         (add-last-modified (.transactionTime db)))))
 
 (s/def ::eid c/valid-id?)
-(s/def ::entity-map (s/keys :req-un [::eid]
-                            :opt-un [::business-time
-                                     ::transact-time]))
+(s/def ::entity-map (s/and #(set/superset? #{:eid :business-time :transact-time} (keys %))
+                           (s/keys :req-un [::eid]
+                                   :opt-un [::business-time
+                                            ::transact-time])))
 
 ;; TODO: Could support as-of now via path and GET.
 (defn- entity [^ICruxSystem local-node request]
