@@ -22,7 +22,9 @@
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.sail.nativerdf.NativeStore
            org.eclipse.rdf4j.rio.RDFFormat
-           org.eclipse.rdf4j.query.Binding))
+           org.eclipse.rdf4j.query.Binding
+           [org.neo4j.graphdb GraphDatabaseService RelationshipType]
+           org.neo4j.graphdb.factory.GraphDatabaseFactory))
 
 ;; See:
 ;; https://dsg.uwaterloo.ca/watdiv/
@@ -92,6 +94,7 @@
 (def crux-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_CRUX")))
 (def datomic-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_DATOMIC")))
 (def sail-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_SAIL")))
+(def neo4j-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_NEO4J")))
 
 (def query-timeout-ms 15000)
 
@@ -187,6 +190,21 @@
             (f)))
         (finally
           (.shutDown db)
+          (cio/delete-dir db-dir))))
+    (f)))
+
+(def ^:dynamic ^GraphDatabaseService *neo4j-db*)
+
+;; dbms.directories.data
+(defn with-neo4j [f]
+  (if neo4j-tests?
+    (let [db-dir (cio/create-tmpdir "neo4j")
+          db (.newEmbeddedDatabase (GraphDatabaseFactory.) db-dir)]
+      (try
+        (binding [*neo4j-db* db]
+          (f))
+        (finally
+          (.shutdown db)
           (cio/delete-dir db-dir))))
     (f)))
 
@@ -323,6 +341,36 @@
          (.flush out))
        (.write out "]")))
     (t/is true "skipping")))
+
+;; TODO: Will remove this once we get the suite running.
+(t/deftest test-neo4j-hello-world
+  (let [f (fn []
+            (with-open [tx (.beginTx *neo4j-db*)]
+              (let [n1 (doto (.createNode *neo4j-db*)
+                         (.setProperty "message" "Hello, "))
+                    n2 (doto (.createNode *neo4j-db*)
+                         (.setProperty "message" "World!"))
+                    r (doto (.createRelationshipTo n1 n2 (RelationshipType/withName "knows"))
+                        (.setProperty "message" "brave Neo4j "))]
+                (t/is (= "Hello, brave Neo4j World!"
+                         (str (.getProperty n1 "message")
+                              (.getProperty r "message")
+                              (.getProperty n2 "message"))))
+                (.success tx)))
+
+            (with-open [tx (.beginTx *neo4j-db*)
+                        result (.execute *neo4j-db* "MATCH (n) RETURN n.message")]
+              (t/is (= [{"n.message" "Hello, "}
+                        {"n.message" "World!"}] (iterator-seq result))))
+
+            (with-open [tx (.beginTx *neo4j-db*)
+                        result (.execute *neo4j-db* "MATCH (n1)-[:knows]->(n2) RETURN n1.message, n2.message")]
+              (t/is (= [{"n1.message" "Hello, "
+                         "n2.message" "World!"}] (iterator-seq result)))))]
+    (if neo4j-tests?
+      (f)
+      (with-redefs [neo4j-tests? true]
+        (with-neo4j f)))))
 
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.

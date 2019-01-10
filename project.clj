@@ -38,6 +38,14 @@
                                   [criterium "0.4.4"]
                                   [com.datomic/datomic-free "0.9.5697"
                                    :exclusions [org.slf4j/slf4j-nop]]
+                                  [org.neo4j/neo4j "3.5.1"
+                                   :exclusions [com.github.ben-manes.caffeine/caffeine
+                                                io.netty/netty-all
+                                                org.ow2.asm/asm
+                                                org.ow2.asm/asm-analysis
+                                                org.ow2.asm/asm-tree
+                                                org.ow2.asm/asm-util]]
+                                  [com.github.ben-manes.caffeine/caffeine "2.6.2"]
                                   [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.2"]
                                   [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.2"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
