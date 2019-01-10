@@ -222,17 +222,24 @@
                                (subs (name x) 1)
                                x))
         {:keys [find where]} (sparql/sparql->datalog q)
-        property-returns (atom {})]
+        property-returns (atom {})
+        where (if (and (= 1 (count where))
+                      (keyword? (ffirst where)))
+               (let [[e a v] (first where)
+                     tmp (gensym "?tmp")]
+                 [[tmp :crux.db/id e]
+                  [tmp a v]])
+               where)]
     (str "MATCH " (str/join ", " (remove nil? (for [[e a v] where]
                                                 (if (relationship? a)
-                                                  (format "(%s:Entity)-[:`%s`]->(%s)"
-                                                          (maybe-fix-variable e)
+                                                  (format "(%s)-[:`%s`]->(%s)"
+                                                          (if (symbol? e)
+                                                            (str (maybe-fix-variable e) ":Entity")
+                                                            (format ":Entity {`:crux.db/id`: '%s'}" e))
                                                           a
-                                                          (if (keyword? v)
-                                                            (format "{`:crux.db/id`: '%s'}" v)
-                                                            (if (symbol? v)
-                                                              (str (maybe-fix-variable v) ":Entity")
-                                                              v)))
+                                                          (if (symbol? v)
+                                                            (str (maybe-fix-variable v) ":Entity")
+                                                            (format ":Entity {`:crux.db/id`: '%s'}" v)))
                                                   (if (symbol? v)
                                                     (do
                                                       (swap! property-returns assoc v [e a])
