@@ -398,7 +398,7 @@
       (println "Using KV backend:" f/*kv-backend*))
     (f)))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic with-kv-backend-from-env f/with-kv-store with-watdiv-data)
+(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic with-neo4j with-kv-backend-from-env f/with-kv-store with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
