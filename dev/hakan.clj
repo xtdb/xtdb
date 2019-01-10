@@ -1104,6 +1104,7 @@
 ;; Sail: 25872 113.47368421052632
 ;; Datomic: 129908 572.2819383259912
 ;; Neo4j: 7153 31.1
+;; Neo4j, lein test: 54584 227.43333333333334 (is this due to mmap?)
 
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
