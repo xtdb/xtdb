@@ -263,7 +263,7 @@
 
 (defn execute-cypher [^GraphDatabaseService graph-db q]
   (with-open [tx (.beginTx graph-db query-timeout-ms TimeUnit/MILLISECONDS)
-              result (.execute graph-db q query-timeout-ms TimeUnit/MILLISECONDS)]
+              result (.execute graph-db q)]
     (vec (iterator-seq result))))
 
 (def neo4j-tx-size 100000)
