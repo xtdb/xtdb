@@ -449,7 +449,7 @@
          (when neo4j-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* (sparql->cypher q))))
+                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* (sparql->cypher *neo4j-db* q))))
                                       "\n"))
                      true
                      (catch Throwable t
