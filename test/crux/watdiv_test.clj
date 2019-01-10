@@ -195,6 +195,8 @@
           (cio/delete-dir db-dir))))
     (f)))
 
+;; Neo4j
+
 (def ^:dynamic ^GraphDatabaseService *neo4j-db*)
 
 (defn with-neo4j [f]
@@ -209,11 +211,23 @@
           (cio/delete-dir db-dir))))
     (f)))
 
-;; Neo4j
+;; TODO: Translate triple patterns to Cypher's MATCH.
+(defn sparql->cypher [q]
+  (let [q (sparql/sparql->datalog q)]
+    (throw (UnsupportedOperationException.))))
+
+(defn execute-cypher [^GraphDatabaseService graph-db q]
+  (with-open [tx (.beginTx graph-db)
+              result (.execute graph-db (sparql->cypher q))]
+    (vec (iterator-seq result))))
 
 (def neo4j-tx-size 100000)
 
-(defn- load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
+;; (def graphdb (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j")))
+;; (crux.watdiv-test/load-rdf-into-neo4j graphdb crux.watdiv-test/watdiv-triples-resource)
+;; (crux.watdiv-test/execute-cypher graphdb "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
+
+(defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
         get-or-create-node (fn [iri]
                              (.computeIfAbsent iri->node
@@ -297,6 +311,11 @@
           (time
            (load-rdf-into-sail *sail-conn* watdiv-triples-resource)))
 
+        (when neo4j-tests?
+          (println "Loading into Neo4j...")
+          (time
+           (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)))
+
         (when crux-tests?
           (println "Loading into Crux...")
           (time
@@ -366,6 +385,18 @@
                        (throw t)))
                    idx)
              (.write out (str ":sail-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
+
+         (when neo4j-tests?
+           (let [start-time (System/currentTimeMillis)]
+             (t/is (try
+                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* q)))
+                                      "\n"))
+                     true
+                     (catch Throwable t
+                       (.write out (str ":neo4j-error " (pr-str (str t)) "\n"))
+                       (throw t)))
+                   idx)
+             (.write out (str ":neo4j-time " (pr-str (-  (System/currentTimeMillis) start-time))))))
 
          (when datomic-tests?
            (let [start-time (System/currentTimeMillis)]
