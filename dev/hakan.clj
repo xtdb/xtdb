@@ -1100,16 +1100,24 @@
 ;; run 3: 30490 132.56521739130434
 ;; empty caches: 50331 218.8304347826087
 
-;; For reference, single run, same queries (if no errors):
+;; For reference, same queries (if no errors):
 ;; Sail:
+;; ingest: 6m, 767M
 ;; run 1: 22020 95.73913043478261
 ;; run 2: 21402 93.05217391304348
 ;; run 3: 21656 94.15652173913044
-;; Datomic: 129908 572.2819383259912
+;; Datomic:
+;; ingest: 37m, 2.3G
+;; run 1: 93480 406.4347826086956
+;; run 2: 41818 181.81739130434784
+;; run 3: 25404 110.45217391304348
 ;; Neo4j:
+;; ingest: 7m, 6.2G
 ;; run 1: 22971 99.87391304347825
 ;; run 2: 5777 25.117391304347827
 ;; run 3: 5704 24.8
+;; Crux (see above):
+;; ingest: 5.5m, 1.1G (RocksJava)
 
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
