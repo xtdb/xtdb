@@ -20,12 +20,13 @@
   (:import java.io.StringReader
            java.util.HashMap
            java.util.function.Function
+           java.util.concurrent.TimeUnit
            org.eclipse.rdf4j.repository.sail.SailRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.sail.nativerdf.NativeStore
            org.eclipse.rdf4j.rio.RDFFormat
            org.eclipse.rdf4j.query.Binding
-           [org.neo4j.graphdb GraphDatabaseService Node RelationshipType]
+           [org.neo4j.graphdb GraphDatabaseService Label Node RelationshipType]
            org.neo4j.graphdb.factory.GraphDatabaseFactory))
 
 ;; See:
@@ -257,25 +258,23 @@
     (vec (iterator-seq result))))
 
 (def neo4j-tx-size 100000)
+(def neo4j-index-timeout-ms 120000)
 
-;; (def graphdb (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j/data")))
-;; (crux.watdiv-test/load-rdf-into-neo4j graphdb crux.watdiv-test/watdiv-triples-resource)
-;; (crux.watdiv-test/execute-cypher graphdb "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
-;; (.shutdown graphdb)
-
-;; "MATCH (v0)-[`http://xmlns.com/foaf/homepage`]->({`crux.db.id`: ':http://db.uwaterloo.ca/~galuc/wsdbm/Website2948'}) RETURN v0"
-
-;; (crux.watdiv-test/execute-cypher graphdb
-;;                                  "MATCH (v0)-[:`:http://www.w3.org/1999/02/22-rdf-syntax-ns#type`]->({`:crux.db/id`: ':http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11'}), (v0)-[:`:http://ogp.me/ns#tag`]->(v1) RETURN v0.`:crux.db/id`, v1.`:crux.db/id`")
-
+;; (def graph-db (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j/data")))
+;; (set-log-level! 'crux.watdiv-test :debug)
+;; (crux.watdiv-test/load-rdf-into-neo4j graph-db crux.watdiv-test/watdiv-triples-resource)
+;; (crux.watdiv-test/execute-cypher graph-db "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
+;; (.shutdown graph-db)
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
+        entity-label (Label/label "Entity")
+        labels (into-array [entity-label])
         get-or-create-node (fn [iri]
                              (.computeIfAbsent iri->node
                                                iri
                                                (reify Function
                                                  (apply [_ _]
-                                                   (.createNode graph-db)))))
+                                                   (.createNode graph-db labels)))))
         iri->relationship (HashMap.)
         get-or-create-relationship (fn [iri]
                                      (.computeIfAbsent iri->relationship
@@ -283,6 +282,13 @@
                                                        (reify Function
                                                          (apply [_ iri]
                                                            (RelationshipType/withName (str iri))))))]
+
+    (with-open [tx (.beginTx graph-db)]
+      (-> (.schema graph-db)
+          (.indexFor entity-label)
+          (.on (str :crux.db/id))
+          (.create))
+      (.success tx))
 
     (with-open [in (io/input-stream (io/resource resource))]
       (->> (rdf/ntriples-seq in)
@@ -305,7 +311,11 @@
                              (.setProperty s-node (str p) o))))
                        (.success tx))
                      (+ n (count statements)))
-                   0)))))
+                   0)))
+
+    (with-open [tx (.beginTx graph-db)]
+      (-> (.schema graph-db)
+          (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS)))))
 
 ;; Crux
 
