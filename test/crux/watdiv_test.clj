@@ -202,7 +202,8 @@
 (defn with-neo4j [f]
   (if neo4j-tests?
     (let [db-dir (cio/create-tmpdir "neo4j")
-          db (.newEmbeddedDatabase (GraphDatabaseFactory.) db-dir)]
+          data-dir (io/file db-dir "data")
+          db (.newEmbeddedDatabase (GraphDatabaseFactory.) data-dir)]
       (try
         (binding [*neo4j-db* db]
           (f))
@@ -223,9 +224,10 @@
 
 (def neo4j-tx-size 100000)
 
-;; (def graphdb (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j")))
+;; (def graphdb (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j/data")))
 ;; (crux.watdiv-test/load-rdf-into-neo4j graphdb crux.watdiv-test/watdiv-triples-resource)
 ;; (crux.watdiv-test/execute-cypher graphdb "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
+;; (.shutdown graphdb)
 
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
