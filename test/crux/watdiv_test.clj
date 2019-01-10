@@ -272,6 +272,7 @@
 ;; TODO: Consider using, but complicates setup, as this requires the
 ;; DB not to be running:
 ;; https://neo4j.com/docs/java-reference/3.5/javadocs/org/neo4j/unsafe/batchinsert/BatchInserters.html
+;; NOTE: Spiked using this, but it got much slower, but didn't follow up.
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
         entity-label (Label/label "Entity")
