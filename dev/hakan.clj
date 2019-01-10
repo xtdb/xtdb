@@ -1103,6 +1103,7 @@
 ;; For reference, single run, same queries (if no errors):
 ;; Sail: 25872 113.47368421052632
 ;; Datomic: 129908 572.2819383259912
+;; Neo4j: 7153 31.1
 
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
