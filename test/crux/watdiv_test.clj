@@ -353,28 +353,32 @@
 
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
-    (do (when datomic-tests?
-          (println "Loading into Datomic...")
-          (time
-           (load-rdf-into-datomic *datomic-conn* watdiv-triples-resource)))
+    (do
+      ;; 37m, 2.3G
+      (when datomic-tests?
+        (println "Loading into Datomic...")
+        (time
+         (load-rdf-into-datomic *datomic-conn* watdiv-triples-resource)))
 
-        ;; "Elapsed time: 305376.165167 msecs" 767Mb
-        (when sail-tests?
-          (println "Loading into Sail...")
-          (time
-           (load-rdf-into-sail *sail-conn* watdiv-triples-resource)))
+      ;; 6m, 767M
+      (when sail-tests?
+        (println "Loading into Sail...")
+        (time
+         (load-rdf-into-sail *sail-conn* watdiv-triples-resource)))
 
-        (when neo4j-tests?
-          (println "Loading into Neo4j...")
-          (time
-           (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)))
+      ;; 7m, 6.2G
+      (when neo4j-tests?
+        (println "Loading into Neo4j...")
+        (time
+         (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)))
 
-        (when crux-tests?
-          (println "Loading into Crux...")
-          (time
-           (load-rdf-into-crux watdiv-triples-resource)))
+      ;; ?m, 1.1G (RocksJava)
+      (when crux-tests?
+        (println "Loading into Crux...")
+        (time
+         (load-rdf-into-crux watdiv-triples-resource)))
 
-        (f))
+      (f))
     (f)))
 
 (defn lazy-count-with-timeout [kv q timeout-ms]
