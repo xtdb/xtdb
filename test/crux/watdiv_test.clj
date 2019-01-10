@@ -140,15 +140,17 @@
 (def ^:dynamic *datomic-conn*)
 
 (defn with-datomic [f]
-  (let [uri (str datomic-uri-base (d/squuid))]
-    (try
-      (d/delete-database uri)
-      (d/create-database uri)
-      (binding [*datomic-conn* (d/connect uri)]
-        @(d/transact *datomic-conn* datomic-watdiv-schema)
-        (f))
-      (finally
-        (d/delete-database uri)))))
+  (if datomic-tests?
+    (let [uri (str datomic-uri-base (d/squuid))]
+      (try
+        (d/delete-database uri)
+        (d/create-database uri)
+        (binding [*datomic-conn* (d/connect uri)]
+          @(d/transact *datomic-conn* datomic-watdiv-schema)
+          (f))
+        (finally
+          (d/delete-database uri))))
+    (f)))
 
 ;; Sail
 
@@ -175,16 +177,18 @@
 (def ^:dynamic *sail-conn*)
 
 (defn with-sail-repository [f]
-  (let [db-dir (str (cio/create-tmpdir "sail-store"))
-        db (SailRepository. (NativeStore. (io/file db-dir)))]
-    (try
-      (.initialize db)
-      (with-open [conn (.getConnection db)]
-        (binding [*sail-conn* conn]
-          (f)))
-      (finally
-        (.shutDown db)
-        (cio/delete-dir db-dir)))))
+  (if sail-tests?
+    (let [db-dir (str (cio/create-tmpdir "sail-store"))
+          db (SailRepository. (NativeStore. (io/file db-dir)))]
+      (try
+        (.initialize db)
+        (with-open [conn (.getConnection db)]
+          (binding [*sail-conn* conn]
+            (f)))
+        (finally
+          (.shutDown db)
+          (cio/delete-dir db-dir))))
+    (f)))
 
 ;; Crux
 
@@ -258,6 +262,10 @@
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
 ;; times. Does not seem to be result size either.
+
+;; TODO: It's not realistic really to run all the DBs in the same
+;; process like this assumes. One can still run them one at a time,
+;; but this could be split up more.
 (t/deftest watdiv-stress-test-1
   (if run-watdiv-tests?
     (time
