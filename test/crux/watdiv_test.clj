@@ -212,14 +212,48 @@
           (cio/delete-dir db-dir))))
     (f)))
 
-;; TODO: Translate triple patterns to Cypher's MATCH.
-(defn sparql->cypher [q]
-  (let [q (sparql/sparql->datalog q)]
-    (throw (UnsupportedOperationException.))))
+(defn sparql->cypher [^GraphDatabaseService graph-db q]
+  (let [relationship? (with-open [tx (.beginTx graph-db)]
+                        (set (for [r (iterator-seq (.iterator (.getAllRelationshipTypes graph-db)))]
+                               (keyword (subs (.name ^RelationshipType r) 1)))))
+        maybe-fix-variable (fn [x]
+                             (if (symbol? x)
+                               (subs (name x) 1)
+                               x))
+        {:keys [find where]} (sparql/sparql->datalog q)
+        property-returns (atom {})]
+    (str "MATCH " (str/join ", " (remove nil? (for [[e a v] where]
+                                                (if (relationship? a)
+                                                  (format "(`%s`)-[:`%s`]->(%s)"
+                                                          (maybe-fix-variable e)
+                                                          a
+                                                          (if (keyword? v)
+                                                            (format "{`:crux.db/id`: '%s'}" v)
+                                                            (maybe-fix-variable v)))
+                                                  (if (symbol? v)
+                                                    (do
+                                                      (swap! property-returns assoc v [e a])
+                                                      nil)
+                                                    (format "(%s {`%s`: %s})"
+                                                            (maybe-fix-variable e) a (if (keyword? v)
+                                                                                       (str "'" v "'")
+                                                                                       (maybe-fix-variable v))))))))
+         (when (not-empty @property-returns)
+           (str " WHERE " (str/join " AND " (for [[_ [e a]] @property-returns]
+                                             (format "%s.`%s` IS NOT NULL"
+                                                     (maybe-fix-variable e)
+                                                     a)))))
+         " RETURN " (str/join ", " (for [v find]
+                                     (if-let [[e a] (get @property-returns v)]
+                                       (format "%s.`%s` AS %s"
+                                               (maybe-fix-variable e)
+                                               a
+                                               (maybe-fix-variable v))
+                                       (maybe-fix-variable v)))))))
 
 (defn execute-cypher [^GraphDatabaseService graph-db q]
   (with-open [tx (.beginTx graph-db)
-              result (.execute graph-db (sparql->cypher q))]
+              result (.execute graph-db q)]
     (vec (iterator-seq result))))
 
 (def neo4j-tx-size 100000)
@@ -228,6 +262,11 @@
 ;; (crux.watdiv-test/load-rdf-into-neo4j graphdb crux.watdiv-test/watdiv-triples-resource)
 ;; (crux.watdiv-test/execute-cypher graphdb "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
 ;; (.shutdown graphdb)
+
+;; "MATCH (v0)-[`http://xmlns.com/foaf/homepage`]->({`crux.db.id`: ':http://db.uwaterloo.ca/~galuc/wsdbm/Website2948'}) RETURN v0"
+
+;; (crux.watdiv-test/execute-cypher graphdb
+;;                                  "MATCH (v0)-[:`:http://www.w3.org/1999/02/22-rdf-syntax-ns#type`]->({`:crux.db/id`: ':http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11'}), (v0)-[:`:http://ogp.me/ns#tag`]->(v1) RETURN v0.`:crux.db/id`, v1.`:crux.db/id`")
 
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
@@ -391,7 +430,7 @@
          (when neo4j-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* q)))
+                     (.write out (str ":neo4j-results " (pr-str (count (execute-cypher *neo4j-db* (sparql->cypher q))))
                                       "\n"))
                      true
                      (catch Throwable t
