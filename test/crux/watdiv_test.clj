@@ -372,7 +372,7 @@
         (time
          (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)))
 
-      ;; ?m, 1.1G (RocksJava)
+      ;; 5.5m, 1.1G (RocksJava)
       (when crux-tests?
         (println "Loading into Crux...")
         (time
