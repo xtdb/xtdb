@@ -18,12 +18,14 @@
             [crux.fixtures :as f]
             [datomic.api :as d])
   (:import java.io.StringReader
+           java.util.HashMap
+           java.util.function.Function
            org.eclipse.rdf4j.repository.sail.SailRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.sail.nativerdf.NativeStore
            org.eclipse.rdf4j.rio.RDFFormat
            org.eclipse.rdf4j.query.Binding
-           [org.neo4j.graphdb GraphDatabaseService RelationshipType]
+           [org.neo4j.graphdb GraphDatabaseService Node RelationshipType]
            org.neo4j.graphdb.factory.GraphDatabaseFactory))
 
 ;; See:
@@ -195,7 +197,6 @@
 
 (def ^:dynamic ^GraphDatabaseService *neo4j-db*)
 
-;; dbms.directories.data
 (defn with-neo4j [f]
   (if neo4j-tests?
     (let [db-dir (cio/create-tmpdir "neo4j")
@@ -207,6 +208,49 @@
           (.shutdown db)
           (cio/delete-dir db-dir))))
     (f)))
+
+;; Neo4j
+
+(def neo4j-tx-size 100000)
+
+(defn- load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
+  (let [iri->node (HashMap.)
+        get-or-create-node (fn [iri]
+                             (.computeIfAbsent iri->node
+                                               iri
+                                               (reify Function
+                                                 (apply [_ _]
+                                                   (.createNode graph-db)))))
+        iri->relationship (HashMap.)
+        get-or-create-relationship (fn [iri]
+                                     (.computeIfAbsent iri->relationship
+                                                       iri
+                                                       (reify Function
+                                                         (apply [_ iri]
+                                                           (RelationshipType/withName (str iri))))))]
+
+    (with-open [in (io/input-stream (io/resource resource))]
+      (->> (rdf/ntriples-seq in)
+           (map rdf/rdf->clj)
+           (map #(rdf/use-default-language % rdf/*default-language*))
+           (partition-all neo4j-tx-size)
+           (reduce (fn [^long n statements]
+                     (when (zero? (long (mod n rdf/*ntriples-log-size*)))
+                       (log/debug "submitted" n))
+
+                     (with-open [tx (.beginTx graph-db)]
+                       (doseq [[s p o] statements]
+                         (let [s-node (doto ^Node (get-or-create-node s)
+                                        (.setProperty (str :crux.db/id) (str s)))]
+                           (if (keyword? o)
+                             (let [o-node (doto ^Node (get-or-create-node o)
+                                            (.setProperty (str :crux.db/id) (str o)))
+                                   p-rel (doto (.createRelationshipTo s-node o-node (get-or-create-relationship p))
+                                           (.setProperty (str :crux.db/id) (str p)))])
+                             (.setProperty s-node (str p) o))))
+                       (.success tx))
+                     (+ n (count statements)))
+                   0)))))
 
 ;; Crux
 
@@ -371,6 +415,27 @@
       (f)
       (with-redefs [neo4j-tests? true]
         (with-neo4j f)))))
+
+#_(t/deftest test-neo4j-populate-with-watdiv
+    (let [f (fn []
+              (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)
+              (with-open [tx (.beginTx *neo4j-db*)
+                          result (.execute *neo4j-db* "MATCH (n) RETURN n.`:crux.db/id` LIMIT 10")]
+                (t/is (= [{"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City0"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country6"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City100"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country2"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City101"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City102"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country17"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City103"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country3"}
+                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City104"}]
+                         (iterator-seq result)))))]
+      (if neo4j-tests?
+        (f)
+        (with-redefs [neo4j-tests? true]
+          (with-neo4j f)))))
 
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
