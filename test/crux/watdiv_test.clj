@@ -324,23 +324,6 @@
        (.write out "]")))
     (t/is true "skipping")))
 
-(t/deftest sail-sanity-check
-  (if (and run-watdiv-tests? sail-tests?)
-    (t/is true "skipping")
-    (with-sail-repository
-      (fn []
-        (load-rdf-into-sail *sail-conn* "crux/example-data-artists.nt")
-        (t/is (= 2 (count (execute-sparql *sail-conn* "
-PREFIX ex: <http://example.org/>
-PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-
-SELECT ?s ?n
-WHERE
-{
-   ?s a ex:Artist;
-     foaf:firstName ?n.
-}"))))))))
-
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
 (def datomic-watdiv-schema
