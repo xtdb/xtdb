@@ -477,57 +477,6 @@
        (.write out "]")))
     (t/is true "skipping")))
 
-;; TODO: Will remove this once we get the suite running.
-(t/deftest test-neo4j-hello-world
-  (let [f (fn []
-            (with-open [tx (.beginTx *neo4j-db*)]
-              (let [n1 (doto (.createNode *neo4j-db*)
-                         (.setProperty "message" "Hello, "))
-                    n2 (doto (.createNode *neo4j-db*)
-                         (.setProperty "message" "World!"))
-                    r (doto (.createRelationshipTo n1 n2 (RelationshipType/withName "knows"))
-                        (.setProperty "message" "brave Neo4j "))]
-                (t/is (= "Hello, brave Neo4j World!"
-                         (str (.getProperty n1 "message")
-                              (.getProperty r "message")
-                              (.getProperty n2 "message"))))
-                (.success tx)))
-
-            (with-open [tx (.beginTx *neo4j-db*)
-                        result (.execute *neo4j-db* "MATCH (n) RETURN n.message")]
-              (t/is (= [{"n.message" "Hello, "}
-                        {"n.message" "World!"}] (iterator-seq result))))
-
-            (with-open [tx (.beginTx *neo4j-db*)
-                        result (.execute *neo4j-db* "MATCH (n1)-[:knows]->(n2) RETURN n1.message, n2.message")]
-              (t/is (= [{"n1.message" "Hello, "
-                         "n2.message" "World!"}] (iterator-seq result)))))]
-    (if neo4j-tests?
-      (f)
-      (with-redefs [neo4j-tests? true]
-        (with-neo4j f)))))
-
-#_(t/deftest test-neo4j-populate-with-watdiv
-    (let [f (fn []
-              (load-rdf-into-neo4j *neo4j-db* watdiv-triples-resource)
-              (with-open [tx (.beginTx *neo4j-db*)
-                          result (.execute *neo4j-db* "MATCH (n) RETURN n.`:crux.db/id` LIMIT 10")]
-                (t/is (= [{"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City0"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country6"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City100"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country2"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City101"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City102"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country17"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City103"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/Country3"}
-                          {"n.`:crux.db/id`" ":http://db.uwaterloo.ca/~galuc/wsdbm/City104"}]
-                         (iterator-seq result)))))]
-      (if neo4j-tests?
-        (f)
-        (with-redefs [neo4j-tests? true]
-          (with-neo4j f)))))
-
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
 (def datomic-watdiv-schema
