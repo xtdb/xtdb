@@ -262,7 +262,7 @@
                                        (maybe-fix-variable v)))))))
 
 (defn execute-cypher [^GraphDatabaseService graph-db q]
-  (with-open [tx (.beginTx graph-db)
+  (with-open [tx (.beginTx graph-db query-timeout-ms TimeUnit/MILLISECONDS)
               result (.execute graph-db q query-timeout-ms TimeUnit/MILLISECONDS)]
     (vec (iterator-seq result))))
 
