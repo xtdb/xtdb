@@ -269,11 +269,9 @@
 (def neo4j-tx-size 100000)
 (def neo4j-index-timeout-ms 120000)
 
-;; (def graph-db (.newEmbeddedDatabase (org.neo4j.graphdb.factory.GraphDatabaseFactory.) (io/file "dev-storage/neo4j/data")))
-;; (set-log-level! 'crux.watdiv-test :debug)
-;; (crux.watdiv-test/load-rdf-into-neo4j graph-db crux.watdiv-test/watdiv-triples-resource)
-;; (crux.watdiv-test/execute-cypher graph-db "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }")
-;; (.shutdown graph-db)
+;; TODO: Consider using, but complicates setup, as this requires the
+;; DB not to be running:
+;; https://neo4j.com/docs/java-reference/3.5/javadocs/org/neo4j/unsafe/batchinsert/BatchInserters.html
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db resource]
   (let [iri->node (HashMap.)
         entity-label (Label/label "Entity")
@@ -327,12 +325,6 @@
           (.awaitIndexesOnline neo4j-index-timeout-ms TimeUnit/MILLISECONDS)))))
 
 ;; Crux
-
-;; TODO: This query returns 0 results in Crux, should return 117:
-;; {:idx 91
-;; :query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v5 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://purl.org/ontology/mo/performed_in> ?v1 .  }"
-;; :crux-results 0
-;; :crux-time 40078}
 
 (defn load-rdf-into-crux [resource]
   (let [tx-topic "test-can-run-watdiv-tx-queries"
