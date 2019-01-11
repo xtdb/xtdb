@@ -626,11 +626,12 @@
                                 []))
                              (sort-by count)
                              (last))
-        var-access-maps (if (and (empty? clauses-in-join-order)
-                                 (= 1 (count literal-vars)))
-                          (let [[v] (seq literal-vars)]
-                            [{v [[v v] :row]
-                              ::path [v]}])
+        var-access-maps (if (empty? clauses-in-join-order)
+                          (if (= 1 (count literal-vars))
+                            (let [[v] (seq literal-vars)]
+                              [{v [[v v] :row]
+                                ::path [v]}])
+                            (throw (IllegalArgumentException. "Does not support cartesian product, does the query form a single connected graph?xs")))
                           var-access-maps)
         var-access-order (->> (mapcat ::path var-access-maps)
                               (filter (set find))
@@ -639,11 +640,6 @@
         _ (when-not (= (set find) (set var-access-order))
             (throw (IllegalArgumentException.
                     "Cannot calculate var access order, does the query form a single connected graph?")))
-        var->clause-idx (->> (for [[idx {:keys [e v]}] (map-indexed
-                                                        vector clauses-in-join-order)]
-                               (merge {e idx}
-                                      {v idx}))
-                             (apply merge-with min))
         var->mask (->> (for [{:keys [e a v]} literal-clauses]
                          (merge
                           (when (literal? e)
