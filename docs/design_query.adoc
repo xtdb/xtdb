@@ -1,0 +1,82 @@
+= Query Design
+
+== Introduction
+
+This document serves as a guide for understand the query internals of
+Crux.
+
+== Index
+
+Crux has the fundamental notion of an index.
+
+[source,clj]
+----
+include::../src/crux/db.clj[tags=Index]
+----
+
+The two operations are `seek` and `next`.
+
+== Layered Index
+
+The layered index exists to faciliate the idea of navigating up and
+down an index, in a tree like manner.
+
+[source,clj]
+----
+include::../src/crux/db.clj[tags=LayeredIndex]
+----
+
+For example the index `attribute+value+entity+content-hash` is the following tree:
+
+[graphviz, diagram-classes, png]
+....
+digraph G
+{
+attribute->value
+value->entity
+entity->content
+
+}
+....
+
+`open-level` gives instructions to open and move down a level. In the
+above example if could be moving the index down to point at the values
+within a given attribute. That is to say that if we have an attribute
+`:name`, the index will interate across all values for that attribute,
+until there are no more `name` values.
+
+`close-level` moves the index back-up, so in the above example, we can
+iterate at the higher level of attribute.
+
+== Virtual Index
+
+A Virtual Index comprises together multiple child indices. This is
+to join indices together, returning key/value pairs on where they match.
+
+
+A join condition in a query could be reflected by a Virtual Index. A
+Virtual Index will maintain state as to where Index is currently
+positioned.
+
+`UnaryJoinVirtualIndex` comprises of multiple child indices. Calling
+`seek-values` on it will advance all the child indices internally
+until they all contain the same key. This involves calling
+`seek-values` on each child index until the indices match at the same
+level. Calling `next-values` would move all the indices along until
+the next common key that all the indices share.
+
+.Virtual Index Example
+[#virtual-index,cols="d,d,d,d,s,d,s,d"]
+|===
+|`a`|0|1||3|4|5|6
+|`b`|0||2|3||5|
+|`c`|||2|3|4|5|6
+|===
+
+In the above example, where `UnaryJoinVirtualIndex` joins three
+`RelationVirtualIndexs` (a,b,c). Calling `seek-values` would return 3
+as the first value found.
+
+Calling `next-values` would jump ahead to the value 5.
+
+TODO: JP: I need to understand the Nary vs Unary testing index-test.

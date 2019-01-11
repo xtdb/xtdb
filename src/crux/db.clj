@@ -1,14 +1,18 @@
 (ns crux.db
   (:import java.io.Closeable))
 
+;; tag::Index[]
 (defprotocol Index
   (seek-values [this k])
   (next-values [this]))
+;; end::Index[]
 
+;; tag::LayeredIndex[]
 (defprotocol LayeredIndex
   (open-level [this])
   (close-level [this])
   (max-depth [this]))
+;; end::LayeredIndex[]
 
 ;; tag::Indexer[]
 (defprotocol Indexer

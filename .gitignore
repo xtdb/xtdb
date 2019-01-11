@@ -14,3 +14,5 @@ target
 /test/watdiv
 /docs/nav.html
 /pom.xml
+/docs/img/diagram-classes.png
+/docs/.asciidoctor/
