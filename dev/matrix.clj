@@ -5,7 +5,7 @@
             [clojure.spec.alpha :as s]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import [java.util ArrayList BitSet]
+  (:import [java.util Arrays ArrayList BitSet]
            [org.roaringbitmap FastRankRoaringBitmap BitmapDataProviderSupplier]
            [org.roaringbitmap.longlong LongConsumer Roaring64NavigableMap]
            [org.ejml.data DMatrix DMatrixRMaj
@@ -453,30 +453,51 @@
                   (.add acc (roaring-bit->coord v)))))
     (seq acc)))
 
+(defn roaring-can-use-array? [^Roaring64NavigableMap bs]
+  (<= (roaring-cardinality bs) Integer/MAX_VALUE))
+
+(defn roaring-array-map [^Roaring64NavigableMap bs ^clojure.lang.IFn$LL f]
+  (let [ls (.toArray bs)
+        length (alength ls)]
+    (loop [idx (int 0)]
+      (when (< idx length)
+        (aset ls idx (.invokePrim f (aget ls idx)))
+        (recur (unchecked-inc-int idx))))
+    (Roaring64NavigableMap/bitmapOf (doto ls
+                                      (Arrays/sort)))))
+
 (defn roaring-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (let [acc (new-roaring-bitmap)]
-    (.forEach bs
-              (reify LongConsumer
-                (accept [_ v]
-                  (.addLong acc (roaring-coord->bit (roaring-bit->col v)
-                                                    (roaring-bit->row v) )))))
-    acc))
+  (let [f (fn ^long [^long bit]
+            (roaring-coord->bit (roaring-bit->col bit)
+                                (roaring-bit->row bit)))]
+    (if (roaring-can-use-array? bs)
+      (roaring-array-map bs f)
+      (let [acc (new-roaring-bitmap)]
+        (.forEach bs
+                  (reify LongConsumer
+                    (accept [_ v]
+                      (.addLong acc (f v)))))
+        acc))))
 
 (defn roaring-matlab-any ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (let [acc (new-roaring-bitmap)]
-    (.forEach bs
-              (reify LongConsumer
-                (accept [_ v]
-                  (.addLong acc (roaring-bit->col v)))))
-    acc))
+  (if (roaring-can-use-array? bs)
+    (roaring-array-map bs roaring-bit->col)
+    (let [acc (new-roaring-bitmap)]
+      (.forEach bs
+                (reify LongConsumer
+                  (accept [_ v]
+                    (.addLong acc (roaring-bit->col v)))))
+      acc)))
 
 (defn roaring-matlab-any-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (let [acc (new-roaring-bitmap)]
-    (.forEach bs
-              (reify LongConsumer
-                (accept [_ v]
-                  (.addLong acc (roaring-bit->row v)))))
-    acc))
+  (if (roaring-can-use-array? bs)
+    (roaring-array-map bs roaring-bit->row)
+    (let [acc (new-roaring-bitmap)]
+      (.forEach bs
+                (reify LongConsumer
+                  (accept [_ v]
+                    (.addLong acc (roaring-bit->row v)))))
+      acc)))
 
 (defn roaring-row
   (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs ^long row]
