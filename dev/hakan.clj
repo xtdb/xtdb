@@ -1120,7 +1120,8 @@
 ;; ingest: 5m30s, 1.1G (RocksJava)
 ;; dev/matrix.clj:
 ;; ingest: 1m10s, 112.5M (RoaringBitmap estimated in-memory size.)
-;; 186 queries work, average query time:
+;; 186 queries work, 15 produce wrong result, 29 cannot calculate var access order.
+;; Average query time:
 ;; run 1: 100.76521739130435
 ;; run 2: 94.80869565217391
 ;; run 3: 94.12608695652175
