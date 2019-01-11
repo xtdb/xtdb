@@ -631,7 +631,7 @@
                             (let [[v] (seq literal-vars)]
                               [{v [[v v] :row]
                                 ::path [v]}])
-                            (throw (IllegalArgumentException. "Does not support cartesian product, does the query form a single connected graph?xs")))
+                            (throw (IllegalArgumentException. "Does not support cartesian product, does the query form a single connected graph?")))
                           var-access-maps)
         var-access-order (->> (mapcat ::path var-access-maps)
                               (filter (set find))
