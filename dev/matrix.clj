@@ -651,16 +651,17 @@
           (->> ((fn step [^Roaring64NavigableMap xs [var & var-access-order] parent-vars ctx]
                   (when (pos? (roaring-cardinality xs))
                     (let [acc (ArrayList.)
-                          parent-var->plan (->> (for [p parent-vars
-                                                      :let [a (get-in result [p var])
-                                                            b (when-let [b (get-in result [var p])]
-                                                                (transpose-memo b))
-                                                            plan (if (and a b)
-                                                                   (roaring-and a b)
-                                                                   (or a b))]
-                                                      :when plan]
-                                                  [p plan])
-                                                (into {}))
+                          parent-var->plan (when var
+                                             (->> (for [p parent-vars
+                                                        :let [a (get-in result [p var])
+                                                              b (when-let [b (get-in result [var p])]
+                                                                  (transpose-memo b))
+                                                              plan (if (and a b)
+                                                                     (roaring-and a b)
+                                                                     (or a b))]
+                                                        :when plan]
+                                                    [p plan])
+                                                  (into {})))
                           parent-var (last parent-vars)]
                       (.forEach xs
                                 (reify LongConsumer
