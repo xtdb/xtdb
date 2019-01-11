@@ -454,50 +454,36 @@
     (seq acc)))
 
 (defn roaring-can-use-array? [^Roaring64NavigableMap bs]
-  (<= (roaring-cardinality bs) Integer/MAX_VALUE))
+  (let [cardinality (roaring-cardinality bs)]
+    (and (pos? cardinality)
+         (<= cardinality Integer/MAX_VALUE))))
 
-(defn roaring-array-map [^Roaring64NavigableMap bs ^clojure.lang.IFn$LL f]
-  (let [ls (.toArray bs)
-        length (alength ls)]
-    (loop [idx (int 0)]
-      (when (< idx length)
+(defn roaring-array-map ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs ^clojure.lang.IFn$LL f]
+  (if (roaring-can-use-array? bs)
+    (let [ls (.toArray bs)]
+      (loop [idx (unchecked-dec-int (alength ls))]
         (aset ls idx (.invokePrim f (aget ls idx)))
-        (recur (unchecked-inc-int idx))))
-    (Roaring64NavigableMap/bitmapOf (doto ls
-                                      (Arrays/sort)))))
+        (if (zero? idx)
+          (Roaring64NavigableMap/bitmapOf (doto ls
+                                            (Arrays/sort)))
+          (recur (unchecked-dec-int idx)))))
+    (let [acc (new-roaring-bitmap)]
+      (.forEach bs
+                (reify LongConsumer
+                  (accept [_ v]
+                    (.addLong acc (f v)))))
+      acc)))
 
 (defn roaring-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (let [f (fn ^long [^long bit]
-            (roaring-coord->bit (roaring-bit->col bit)
-                                (roaring-bit->row bit)))]
-    (if (roaring-can-use-array? bs)
-      (roaring-array-map bs f)
-      (let [acc (new-roaring-bitmap)]
-        (.forEach bs
-                  (reify LongConsumer
-                    (accept [_ v]
-                      (.addLong acc (f v)))))
-        acc))))
+  (roaring-array-map bs (fn ^long [^long bit]
+                          (roaring-coord->bit (roaring-bit->col bit)
+                                              (roaring-bit->row bit)))))
 
 (defn roaring-matlab-any ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (if (roaring-can-use-array? bs)
-    (roaring-array-map bs roaring-bit->col)
-    (let [acc (new-roaring-bitmap)]
-      (.forEach bs
-                (reify LongConsumer
-                  (accept [_ v]
-                    (.addLong acc (roaring-bit->col v)))))
-      acc)))
+  (roaring-array-map bs roaring-bit->col))
 
 (defn roaring-matlab-any-transpose ^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs]
-  (if (roaring-can-use-array? bs)
-    (roaring-array-map bs roaring-bit->row)
-    (let [acc (new-roaring-bitmap)]
-      (.forEach bs
-                (reify LongConsumer
-                  (accept [_ v]
-                    (.addLong acc (roaring-bit->row v)))))
-      acc)))
+  (roaring-array-map bs roaring-bit->row))
 
 (defn roaring-row
   (^org.roaringbitmap.longlong.Roaring64NavigableMap [^Roaring64NavigableMap bs ^long row]
