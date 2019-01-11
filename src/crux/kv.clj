@@ -31,7 +31,9 @@
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))
     (let [record-class ^Class (eval (symbol record-class-name))]
-      record-class)))
+      (when (and (extends? (eval 'crux.kv/KvStore) record-class)
+                 (.isAssignableFrom ^Class IRecord record-class))
+        record-class))))
 
 (s/def ::db-dir string?)
 (s/def ::kv-backend #'require-and-ensure-kv-record)
