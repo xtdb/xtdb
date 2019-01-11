@@ -601,26 +601,11 @@
                                           (seq (set/intersection vars (set [e v]))))
                                     (recur clauses (conj order clause) (into vars [e v]))
                                     (recur (concat clauses [clause]) order vars))))
-        [full-clause-graph
-         var-access-order] (loop [[{:keys [e v] :as clause} & clauses] clauses-in-join-order
-                                  acc (->> (for [v literal-vars]
-                                             [v [[v v :literal]]])
-                                           (into {}))
-                                  order (vec literal-vars)]
-                             (if-not clause
-                               [acc (vec (distinct order))]
-                               (recur clauses
-                                      (if (not (or (contains? acc e)
-                                                   (contains? acc v)))
-                                        (update acc v (fnil conj []) [e v :p->so])
-                                        (cond-> acc
-                                          (contains? acc e)
-                                          (update v (fnil conj []) [e v :p->so])
-
-                                          (contains? acc v)
-                                          (update e (fnil conj []) [v e :p->os])))
-                                      (vec (concat order [e v])))))
-        ;; _ (prn full-clause-graph var-access-order (set/difference (set find) (set (keys full-clause-graph))))
+        var-access-order (->> (for [{:keys [e v]} clauses-in-join-order]
+                                [e v])
+                              (apply concat literal-vars)
+                              (distinct)
+                              (vec))
         _ (when-not (set/subset? (set find) (set var-access-order))
             (throw (IllegalArgumentException.
                     "Cannot calculate var access order, does the query form a single connected graph?")))
@@ -642,52 +627,58 @@
                                            graph
                                            a
                                            (get var->mask e)
-                                           (get var->mask v))]
+                                           (get var->mask v))
+              join-result (if (= e v)
+                            (roaring-and join-result (roaring-transpose join-result))
+                            join-result)]
           (recur (inc idx)
                  (assoc var->mask e mask-e v mask-v)
-                 (assoc-in result [e v] (if (= e v)
-                                          (roaring-and join-result (roaring-transpose join-result))
-                                          join-result))))
-        (let [access-plan (->> (for [v var-access-order
-                                     [x y type] (get full-clause-graph v)]
-                                 [[x y] (or (cond-> (get-in result [x y])
-                                              ;; (= :p->so type) (roaring-transpose)
-                                              )
-                                            (cond-> (get-in result [y x])
-                                              ;; (= :p->os type) (roaring-transpose)
-                                               true (roaring-transpose)))])
-                               (into {}))
-              root (first var-access-order)
-              root-accesses (map butlast (get full-clause-graph root))
-              ;;  (prn root root-accesses (keys access-plan) (keys result))
-              seed (->> (map access-plan root-accesses)
-                        (map roaring-matlab-any-transpose)
+                 (update-in result [e v] (fn [bs]
+                                           (if bs
+                                             (roaring-and bs join-result)
+                                             join-result)))))
+        (let [root-var (first var-access-order)
+              seed (->> (for [[v bs] (get result root-var)]
+                          (roaring-matlab-any-transpose bs))
                         (reduce roaring-and))
-              var-result-order (mapv (zipmap var-access-order (range)) find)]
+              var-result-order (mapv (zipmap var-access-order (range)) find)
+              transpose-memo (memoize
+                              (fn [bs]
+                                (roaring-transpose bs)))]
           (->> ((fn step [^Roaring64NavigableMap xs [var & var-access-order] parent-vars ctx]
-                  (let [acc (ArrayList.)]
-                    (.forEach xs
-                              (reify LongConsumer
-                                (accept [_ x]
-                                  (if-not var
-                                    (.add acc [x])
-                                    (doseq [y (step (->> (for [access (map butlast (get full-clause-graph var))
-                                                               :let [plan (get access-plan access)]]
-                                                           (if (= (last parent-vars) (first access))
-                                                             (roaring-row plan x)
-                                                             (some->> (get ctx (first access))
-                                                                      (roaring-row plan))))
-                                                         (remove nil?)
-                                                         (map roaring-matlab-any)
-                                                         (reduce roaring-and))
-                                                    var-access-order
-                                                    (conj parent-vars var)
-                                                    (assoc ctx (last parent-vars) x))]
-                                      (.add acc (cons x y)))))))
-                    (seq acc)))
+                  (when (pos? (roaring-cardinality xs))
+                    (let [acc (ArrayList.)
+                          parent-var->plan (->> (for [p parent-vars
+                                                      :let [a (get-in result [p var])
+                                                            b (when-let [b (get-in result [var p])]
+                                                                (transpose-memo b))
+                                                            plan (if (and a b)
+                                                                   (roaring-and a b)
+                                                                   (or a b))]
+                                                      :when plan]
+                                                  [p plan])
+                                                (into {}))]
+                      (.forEach xs
+                                (reify LongConsumer
+                                  (accept [_ x]
+                                    (if-not var
+                                      (.add acc [x])
+                                      (when-let [access (seq (for [[p plan] parent-var->plan]
+                                                               (if (= (last parent-vars) p)
+                                                                 (roaring-row plan x)
+                                                                 (some->> (get ctx p) (roaring-row plan)))))]
+                                        (doseq [y (step (->> access
+                                                             (remove nil?)
+                                                             (map roaring-matlab-any)
+                                                             (reduce roaring-and))
+                                                        var-access-order
+                                                        (conj parent-vars var)
+                                                        (assoc ctx (last parent-vars) x))]
+                                          (.add acc (cons x y))))))))
+                      (seq acc))))
                 seed
                 (next var-access-order)
-                [(first var-access-order)]
+                [root-var]
                 {})
                (map #(->> var-result-order
                           (mapv (comp
