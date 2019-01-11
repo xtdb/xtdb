@@ -638,13 +638,16 @@
                                              (roaring-and bs join-result)
                                              join-result)))))
         (let [root-var (first var-access-order)
-              seed (->> (for [[v bs] (get result root-var)]
-                          (roaring-matlab-any-transpose bs))
+              seed (->> (concat
+                         (for [[v bs] (get result root-var)]
+                           (roaring-matlab-any-transpose bs))
+                         (for [[e vs] result
+                               [v bs] vs
+                               :when (= v root-var)]
+                           (roaring-matlab-any bs)))
                         (reduce roaring-and))
               var-result-order (mapv (zipmap var-access-order (range)) find)
-              transpose-memo (memoize
-                              (fn [bs]
-                                (roaring-transpose bs)))]
+              transpose-memo (memoize roaring-transpose)]
           (->> ((fn step [^Roaring64NavigableMap xs [var & var-access-order] parent-vars ctx]
                   (when (pos? (roaring-cardinality xs))
                     (let [acc (ArrayList.)
@@ -657,14 +660,15 @@
                                                                    (or a b))]
                                                       :when plan]
                                                   [p plan])
-                                                (into {}))]
+                                                (into {}))
+                          parent-var (last parent-vars)]
                       (.forEach xs
                                 (reify LongConsumer
                                   (accept [_ x]
                                     (if-not var
                                       (.add acc [x])
                                       (when-let [access (seq (for [[p plan] parent-var->plan]
-                                                               (if (= (last parent-vars) p)
+                                                               (if (= parent-var p)
                                                                  (roaring-row plan x)
                                                                  (some->> (get ctx p) (roaring-row plan)))))]
                                         (doseq [y (step (->> access
