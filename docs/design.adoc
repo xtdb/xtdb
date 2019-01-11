@@ -38,10 +38,10 @@ Implementations of the `KvStore` include:
 [#table-conversion%header,cols="d,d"]
 |===
 |Implementation|Description
-|`crux.kv.rocksdb/RocksKv`|Uses https://rocksdb.org/[RocksDB] and the standard Java API that ships with RocksDB.
-|`crux.kv.rocksdb.jnr/RocksJNRKv`|Uses https://rocksdb.org/[RocksDB] and a custom built JNR bridge.
-|`crux.kv.lmdb/LMDBKv`|Uses https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database[LMBD].
-|`crux.kv.memdb/MemKv`|An in-memory KvStore.
+|`crux.kv.rocksdb/RocksKv`|Uses https://rocksdb.org/[RocksDB] and the standard Java API that ships with RocksDB
+|`crux.kv.rocksdb.jnr/RocksJNRKv`|Uses https://rocksdb.org/[RocksDB] and a custom built JNR bridge
+|`crux.kv.lmdb/LMDBKv`|Uses https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database[LMBD]
+|`crux.kv.memdb/MemKv`|An in-memory KvStore
 |===
 
 == TxLog
@@ -60,8 +60,8 @@ an appendable transaction log.
 [#table-conversion%header,cols="d,d"]
 |===
 |Implementation|Description
-|`crux.kafka.KafkaTxLog`|(default), using Kafka with separate Kafka topics for both documents and transactions.
-|`crux.tx.KvTxLog`|Uses the KvStore as the transaction log. This useful if Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transacton log isn't required.
+|`crux.kafka.KafkaTxLog`|(default), using Kafka with separate Kafka topics for both documents and transactions
+|`crux.tx.KvTxLog`|Uses the KvStore as the transaction log. This useful if Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transacton log isn't required
 |===
 
 == Indexer
@@ -77,3 +77,22 @@ include::../src/crux/db.clj[tags=Indexer]
 
 The single implememention is `crux.tx.KvIndexer`, which makes use of
 the `KvStore` to persist indices.
+
+The Indexer writes to these indices when indexing _documents_:
+
+.Crux Document Indices
+[#table-conversion%header,cols="d,d"]
+|===
+|Implementation|Description
+|`attribute+value+entity+content-hash-key`|For querying against attribute values
+|`attribute+entity+value+entity+content-hash-key`|For querying against attribute values within entities
+|===
+
+The Indexer writes to these indices when indexing _transactions_:
+
+.Crux Transaction Indices
+[#table-conversion%header,cols="d,d"]
+|===
+|Implementation|Description
+|`entity+business-time+transaction-time+transaction-id`|Use for `as-of` document retrieval
+|===
