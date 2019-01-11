@@ -3,3 +3,4 @@
 * <<query.adoc#,Query>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<faq.adoc#,FAQ>>
+* <<design.adoc#,Design>>
