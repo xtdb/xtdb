@@ -1117,7 +1117,13 @@
 ;; run 2: 5777 25.117391304347827
 ;; run 3: 5704 24.8
 ;; Crux (see above):
-;; ingest: 5.5m, 1.1G (RocksJava)
+;; ingest: 5m30s, 1.1G (RocksJava)
+;; dev/matrix.clj:
+;; ingest: 1m10s, 112.5M (RoaringBitmap estimated in-memory size.)
+;; 186 queries work, average query time:
+;; run 1: 100.76521739130435
+;; run 2: 94.80869565217391
+;; run 3: 94.12608695652175
 
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
