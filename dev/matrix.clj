@@ -653,16 +653,17 @@
                                            (get var->mask v))]
           (recur (inc idx)
                  (assoc var->mask e mask-e v mask-v)
-                 (assoc-in result [e v] join-result)))
+                 (assoc-in result [e v] (if (= e v)
+                                          (roaring-and join-result (roaring-transpose join-result))
+                                          join-result))))
         (let [access-plan (->> (for [v var-access-order
                                      [x y type] (get full-clause-graph v)]
                                  [[x y] (or (cond-> (get-in result [x y])
                                               ;; (= :p->so type) (roaring-transpose)
-                                              (= x y) (roaring-and (roaring-transpose (get-in result [x y]))))
+                                              )
                                             (cond-> (get-in result [y x])
                                               ;; (= :p->os type) (roaring-transpose)
-                                               true (roaring-transpose)
-                                              (= x y) (roaring-and (get-in result [x y]))))])
+                                               true (roaring-transpose)))])
                                (into {}))
               root (first var-access-order)
               root-accesses (map butlast (get full-clause-graph root))
