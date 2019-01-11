@@ -609,25 +609,17 @@
                                   order (vec literal-vars)]
                              (if-not clause
                                [acc (vec (distinct order))]
-                               (recur clauses (if (not (or (contains? acc e)
-                                                           (contains? acc v)))
-                                                (update acc v (fnil conj []) [e v :p->so])
-                                                (cond-> acc
-                                                  (contains? acc e)
-                                                  (update v (fnil conj []) [e v :p->so])
-
-                                                  (contains? acc v)
-                                                  (update e (fnil conj []) [v e :p->os])))
-
+                               (recur clauses
                                       (if (not (or (contains? acc e)
                                                    (contains? acc v)))
-                                        (vec (concat order [e v]))
-                                        (cond-> order
+                                        (update acc v (fnil conj []) [e v :p->so])
+                                        (cond-> acc
                                           (contains? acc e)
-                                          (conj v)
+                                          (update v (fnil conj []) [e v :p->so])
 
                                           (contains? acc v)
-                                          (conj e))))))
+                                          (update e (fnil conj []) [v e :p->os])))
+                                      (vec (concat order [e v])))))
         ;; _ (prn full-clause-graph var-access-order (set/difference (set find) (set (keys full-clause-graph))))
         _ (when-not (set/subset? (set find) (set var-access-order))
             (throw (IllegalArgumentException.
