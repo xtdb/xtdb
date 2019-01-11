@@ -601,43 +601,35 @@
                                           (seq (set/intersection vars (set [e v]))))
                                     (recur clauses (conj order clause) (into vars [e v]))
                                     (recur (concat clauses [clause]) order vars))))
-        clause-graph (->> (for [{:keys [e v]} clauses-in-join-order]
-                            {e #{v}})
-                          (apply merge-with into))
-        var-access-maps (->> (for [k (keys clause-graph)]
-                               ((fn step [r path acc]
-                                  (if-let [n (get clause-graph r)]
-                                    (vec (mapcat (fn [var]
-                                                   (when-not (contains? (set path) var)
-                                                     (step var
-                                                           (conj path var)
-                                                           (conj acc
-                                                                 (let [parent-var (last path)]
-                                                                   (merge
-                                                                    {var [[parent-var var]
-                                                                          :col]}
-                                                                    {parent-var [[parent-var var]
-                                                                                 :row]
-                                                                     ::path (conj path var)}))))))
-                                                 n))
-                                    acc))
-                                k
-                                [k]
-                                []))
-                             (sort-by count)
-                             (last))
-        var-access-maps (if (empty? clauses-in-join-order)
-                          (if (= 1 (count literal-vars))
-                            (let [[v] (seq literal-vars)]
-                              [{v [[v v] :row]
-                                ::path [v]}])
-                            (throw (IllegalArgumentException. "Does not support cartesian product, does the query form a single connected graph?")))
-                          var-access-maps)
-        var-access-order (->> (mapcat ::path var-access-maps)
-                              (filter (set find))
-                              (distinct)
-                              (vec))
-        _ (when-not (= (set find) (set var-access-order))
+        [full-clause-graph
+         var-access-order] (loop [[{:keys [e v] :as clause} & clauses] clauses-in-join-order
+                                  acc (->> (for [v literal-vars]
+                                             [v [[v v :literal]]])
+                                           (into {}))
+                                  order (vec literal-vars)]
+                             (if-not clause
+                               [acc (vec (distinct order))]
+                               (recur clauses (if (not (or (contains? acc e)
+                                                           (contains? acc v)))
+                                                (update acc v (fnil conj []) [e v :p->so])
+                                                (cond-> acc
+                                                  (contains? acc e)
+                                                  (update v (fnil conj []) [e v :p->so])
+
+                                                  (contains? acc v)
+                                                  (update e (fnil conj []) [v e :p->os])))
+
+                                      (if (not (or (contains? acc e)
+                                                   (contains? acc v)))
+                                        (vec (concat order [e v]))
+                                        (cond-> order
+                                          (contains? acc e)
+                                          (conj v)
+
+                                          (contains? acc v)
+                                          (conj e))))))
+        ;; _ (prn full-clause-graph var-access-order (set/difference (set find) (set (keys full-clause-graph))))
+        _ (when-not (set/subset? (set find) (set var-access-order))
             (throw (IllegalArgumentException.
                     "Cannot calculate var access order, does the query form a single connected graph?")))
         var->mask (->> (for [{:keys [e a v]} literal-clauses]
@@ -663,17 +655,18 @@
                  (assoc var->mask e mask-e v mask-v)
                  (assoc-in result [e v] join-result)))
         (let [access-plan (->> (for [v var-access-order
-                                     [access access-fn] (keep v var-access-maps)]
-                                 [access (cond-> (get-in result access)
-                                           ;; TODO: This is broken and wrong, see LUBM 11 for example.
-                                           ;; Too simplistic merging as parent and child get the same access key.
-                                           ;; This should be :col, but doesn't work yet.
-                                           ;; Many queries will still work, but needs fix.
-                                           ;; (= :row access-fn) (roaring-transpose)
-                                           )])
+                                     [x y type] (get full-clause-graph v)]
+                                 [[x y] (or (cond-> (get-in result [x y])
+                                              ;; (= :p->so type) (roaring-transpose)
+                                              (= x y) (roaring-and (roaring-transpose (get-in result [x y]))))
+                                            (cond-> (get-in result [y x])
+                                              ;; (= :p->os type) (roaring-transpose)
+                                               true (roaring-transpose)
+                                              (= x y) (roaring-and (get-in result [x y]))))])
                                (into {}))
               root (first var-access-order)
-              root-accesses (map first (keep root var-access-maps))
+              root-accesses (map butlast (get full-clause-graph root))
+              ;;  (prn root root-accesses (keys access-plan) (keys result))
               seed (->> (map access-plan root-accesses)
                         (map roaring-matlab-any-transpose)
                         (reduce roaring-and))
@@ -685,7 +678,7 @@
                                 (accept [_ x]
                                   (if-not var
                                     (.add acc [x])
-                                    (doseq [y (step (->> (for [access (map first (keep var var-access-maps))
+                                    (doseq [y (step (->> (for [access (map butlast (get full-clause-graph var))
                                                                :let [plan (get access-plan access)]]
                                                            (if (= (last parent-vars) (first access))
                                                              (roaring-row plan x)
