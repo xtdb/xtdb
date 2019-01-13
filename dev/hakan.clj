@@ -1146,6 +1146,12 @@
 ;; run 2: 7878 34.25217391304348
 ;; run 3: 8376 36.417391304347824
 
+;; dev/matrix.clj r-* Int2ObjectHashMap, one off-heap
+;; ImmutableRoaringBitmap per row:
+;; run 1: 11038 47.99130434782609
+;; run 2: 8920 38.78260869565217
+;; run 3: 8690 37.78260869565217
+
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
   (swap! (:cache-state (:kv-store system)) empty)

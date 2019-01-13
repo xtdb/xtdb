@@ -8,8 +8,12 @@
   (:import [java.util Arrays ArrayList BitSet HashMap HashSet IdentityHashMap Map]
            [java.util.function Function IntFunction]
            clojure.lang.Indexed
+           java.io.DataOutputStream
            [org.agrona.collections Hashing Int2ObjectHashMap]
-           [org.roaringbitmap BitmapDataProviderSupplier FastRankRoaringBitmap IntConsumer RoaringBitmap]
+           org.agrona.ExpandableDirectByteBuffer
+           org.agrona.io.ExpandableDirectBufferOutputStream
+           [org.roaringbitmap BitmapDataProviderSupplier FastRankRoaringBitmap ImmutableBitmapDataProvider IntConsumer RoaringBitmap]
+           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
            [org.roaringbitmap.longlong LongConsumer Roaring64NavigableMap]
            [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
@@ -755,8 +759,8 @@
   (^Int2ObjectHashMap [^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
-(defn new-r-roaring-bitmap ^org.roaringbitmap.RoaringBitmap []
-  (RoaringBitmap.))
+(defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
+  (MutableRoaringBitmap.))
 
 (defn r-and
   ([a] a)
@@ -766,7 +770,7 @@
      (reduce (fn [^Int2ObjectHashMap m k]
                (let [k (int k)]
                  (doto m
-                   (.put k (RoaringBitmap/and (.get a k) (.get b k))))))
+                   (.put k (ImmutableRoaringBitmap/and (.get a k) (.get b k))))))
              (new-r-bitmap (count ks))
              ks))))
 
@@ -778,18 +782,18 @@
      (reduce (fn [^Int2ObjectHashMap m k]
                (let [k (int k)]
                  (doto m
-                   (.put k (RoaringBitmap/or (.get a k) (.get b k))))))
+                   (.put k (ImmutableRoaringBitmap/or (.get a k) (.get b k))))))
              (new-r-bitmap (count ks))
              ks))))
 
 (defn r-roaring-and
   ([a] a)
-  ([^RoaringBitmap a ^RoaringBitmap b]
-   (RoaringBitmap/and a b)))
+  ([^ImmutableRoaringBitmap a ^ImmutableRoaringBitmap b]
+   (ImmutableRoaringBitmap/and a b)))
 
 (defn r-cardinality ^long [^Int2ObjectHashMap a]
   (->> (.values a)
-       (map #(.getCardinality ^RoaringBitmap %))
+       (map #(.getCardinality ^ImmutableBitmapDataProvider %))
        (reduce +)))
 
 (def ^Map pred-cardinality-cache (HashMap.))
@@ -810,7 +814,7 @@
     (reduce
      (fn [^Int2ObjectHashMap m [[[row]] :as cells]]
        (reduce
-        (fn [^RoaringBitmap x [_ col]]
+        (fn [^MutableRoaringBitmap x [_ col]]
           (doto x
             (.add (int col))))
         (.computeIfAbsent m
@@ -831,9 +835,9 @@
           (new-r-bitmap (count diag))
           diag))
 
-(defn r-column-vector ^org.roaringbitmap.RoaringBitmap [vs]
+(defn r-column-vector ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [vs]
   (reduce
-   (fn [^RoaringBitmap acc v]
+   (fn [^MutableRoaringBitmap acc v]
      (doto acc
        (.add (int v))))
    (new-r-roaring-bitmap)
@@ -841,7 +845,7 @@
 
 (defn r-all-cells [^Int2ObjectHashMap a]
   (reduce (fn [acc row]
-            (into acc (->> (.toArray ^RoaringBitmap (.get a (int row)))
+            (into acc (->> (.toArray ^ImmutableRoaringBitmap (.get a (int row)))
                            (mapv #(vector row %)))))
           [] (.keySet a)))
 
@@ -849,36 +853,36 @@
   (reduce
    (fn [^Int2ObjectHashMap m row]
      (let [row (int row)
-           cells ^RoaringBitmap (.get a row)]
+           cells ^ImmutableRoaringBitmap (.get a row)]
        (.forEach cells
                  (reify IntConsumer
                    (accept [_ v]
-                     (let [^RoaringBitmap x (.computeIfAbsent m
-                                                              v
-                                                              (reify IntFunction
-                                                                (apply [_ k]
-                                                                  (new-r-roaring-bitmap))))]
+                     (let [^MutableRoaringBitmap x (.computeIfAbsent m
+                                                                     v
+                                                                     (reify IntFunction
+                                                                       (apply [_ k]
+                                                                         (new-r-roaring-bitmap))))]
                        (.add x row)))))
        m))
    (new-r-bitmap (count a))
    (.keySet a)))
 
-(defn r-matlab-any ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
+(defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
     (new-r-roaring-bitmap)
-    (RoaringBitmap/or (.iterator (.values a)))))
+    (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
-(defn r-matlab-any-transpose ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
+(defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
     (new-r-roaring-bitmap)
     (r-column-vector (.keySet a))))
 
-(defn r-row ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a ^long row]
+(defn r-row ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a ^long row]
   (if-let [b (.get a (int row))]
     b
     (new-r-roaring-bitmap)))
 
-(defn r-mult-diag [^RoaringBitmap diag ^Int2ObjectHashMap a]
+(defn r-mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
         (new-r-bitmap)
 
@@ -906,7 +910,7 @@
       (r-mult-diag (p->os a))
       (r-matlab-any)))
 
-(defn r-join [{:keys [p->os p->so] :as graph} a ^RoaringBitmap mask-e ^RoaringBitmap mask-v]
+(defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
   (let [result (r-mult-diag
                 mask-e
                 (p->so a) ;; TODO: is the transpose worth it?
@@ -962,7 +966,7 @@
                             {e (r-literal-v graph a v)})))
                        (apply merge-with r-and))
         initial-result (->> (for [[v bs] var->mask]
-                              {v {v (r-diagonal-matrix (.toArray ^RoaringBitmap bs))}})
+                              {v {v (r-diagonal-matrix (.toArray ^ImmutableRoaringBitmap bs))}})
                             (apply merge-with merge))
         var-result-order (mapv (zipmap var-access-order (range)) find)]
     [var->mask initial-result clauses-in-join-order var-access-order var-result-order]))
@@ -1004,7 +1008,7 @@
                            (r-matlab-any bs)))
                         (reduce r-roaring-and))
               transpose-cache (IdentityHashMap.)]
-          (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^Map ctx]
+          (->> ((fn step [^ImmutableRoaringBitmap xs [var & var-access-order] parent-vars ^Map ctx]
                   (when (and xs (not (.isEmpty xs)))
                     (let [acc (ArrayList.)
                           parent-var+plan (when var
@@ -1031,7 +1035,7 @@
                                     (if-not var
                                       (.add acc [(.get id->value x)])
                                       (when-let [xs (reduce
-                                                     (fn [^RoaringBitmap acc [p plan]]
+                                                     (fn [^ImmutableRoaringBitmap acc [p plan]]
                                                        (let [xs (if (= parent-var p)
                                                                   (r-row plan x)
                                                                   (some->> (.get ctx p) (r-row plan)))]
@@ -1073,18 +1077,30 @@
                                              (let [m (or m (new-r-bitmap))
                                                    s-id (int (get value->id s))
                                                    o-id (int (get value->id o))
-                                                   ^RoaringBitmap bs (.computeIfAbsent m s-id
-                                                                                       (reify IntFunction
-                                                                                         (apply [_ k]
-                                                                                           (new-r-roaring-bitmap))))]
+                                                   ^MutableRoaringBitmap bs (.computeIfAbsent m s-id
+                                                                                              (reify IntFunction
+                                                                                                (apply [_ k]
+                                                                                                  (new-r-roaring-bitmap))))]
                                                (doto bs
                                                  (.add o-id))
                                                m)))
                             :value->id value->id}))))
-          max-size (round-to-power-of-two (count value->id) 64)]
-      {:p->so p->so
-       :p->os (->> (for [[k v] p->so]
-                     [k (r-transpose v)])
+          max-size (round-to-power-of-two (count value->id) 64)
+          ->immutable-bitmap (fn [^MutableRoaringBitmap x]
+                               (let [eb (ExpandableDirectByteBuffer. (.serializedSizeInBytes x))]
+                                 (with-open [out (DataOutputStream. (ExpandableDirectBufferOutputStream. eb))]
+                                   (.serialize (doto x
+                                                 (.runOptimize)) out))
+                                 (ImmutableRoaringBitmap. (.byteBuffer eb))))
+          ->immutable-matrix (fn [^Int2ObjectHashMap m]
+                               (doseq [k (.keySet m)]
+                                 (.put m (int k) (->immutable-bitmap (.get m (int k)))))
+                               m)]
+      {:p->os (->> (for [[k v] p->so]
+                     [k (->immutable-matrix (r-transpose v))])
+                   (into {}))
+       :p->so (->> (for [[k v] p->so]
+                     [k (->immutable-matrix v)])
                    (into {}))
        :value->id value->id
        :id->value (doto (Int2ObjectHashMap.)
