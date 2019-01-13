@@ -1118,6 +1118,7 @@
 ;; run 3: 5704 24.8
 ;; Crux (see above):
 ;; ingest: 5m30s, 1.1G (RocksJava)
+
 ;; dev/matrix.clj:
 ;; ingest: 1m10s, 112.5M (RoaringBitmap estimated in-memory size.)
 ;; 228 queries work, 2 does not finish.
@@ -1126,6 +1127,24 @@
 ;; run 1: 21898 95.20869565217392
 ;; run 2: 19780 86.0
 ;; run 3: 19445 84.54347826086956
+
+;; dev/matrix.clj roaring-*, one Roaring64NavigableMap:
+;; ingest: 1m10s, 112.5M (RoaringBitmap estimated in-memory size.)
+;; 228 queries work, 2 does not finish.
+;;
+;; Average query time:
+;; run 1: 21898 95.20869565217392
+;; run 2: 19780 86.0
+;; run 3: 19445 84.54347826086956
+
+;; dev/matrix.clj r-* Int2ObjectHashMap, one RoaringBitmap per row:
+;; ingest: 1m10s, 105M (RoaringBitmap estimated in-memory size.)
+;; All queries work, 2 are slow (same as above), numbers exclude these.
+;;
+;; Average query time:
+;; run 1: 8015 34.84782608695652
+;; run 2: 7878 34.25217391304348
+;; run 3: 8376 36.417391304347824
 
 (comment
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
