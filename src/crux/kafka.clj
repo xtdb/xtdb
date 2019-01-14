@@ -200,7 +200,7 @@
              (do (index-doc-record indexer record)
                  (update state :docs inc))
 
-             (throw (ex-info "Unkown topic" {:topic (.topic record)}))))
+             (throw (ex-info "Unknown topic" {:topic (.topic record)}))))
          {:txs 0
           :docs 0}
          records)]
