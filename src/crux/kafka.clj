@@ -204,25 +204,35 @@
   [{:keys [indexer ^KafkaConsumer consumer pending-txs-state
            follower timeout tx-topic doc-topic]
     :or   {timeout 5000}}]
-  (let [records (.poll consumer (Duration/ofMillis timeout))
+  (let [tx-topic-partition (TopicPartition. tx-topic 0)
+        _ (when (and (.contains (.paused consumer) tx-topic-partition)
+                     (empty? @pending-txs-state))
+            (log/debug "Resuming" tx-topic)
+            (.resume consumer [tx-topic-partition]))
+        records (.poll consumer (Duration/ofMillis timeout))
         topic->records (group-by #(.topic ^ConsumerRecord %) records)
         _ (swap! pending-txs-state into (get topic->records tx-topic))
         pending-txs @pending-txs-state
-        records (vec (concat (get topic->records doc-topic)
-                             (take-while (fn [^ConsumerRecord tx-record]
-                                           (let [content-hashes (->> (.lastHeader (.headers tx-record)
-                                                                                  (str :crux.tx/docs))
-                                                                     (.value)
-                                                                     (nippy/fast-thaw))
-                                                 ready? (db/docs-exist? indexer content-hashes)
-                                                 {:crux.tx/keys [tx-time
-                                                                 tx-ops
-                                                                 tx-id]} (tx-record->tx-log-entry tx-record)]
-                                             (if ready?
-                                               (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))
-                                               (log/warn "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-txs)))
-                                             ready?))
-                                         pending-txs)))
+        records (->> pending-txs
+                     (take-while
+                      (fn [^ConsumerRecord tx-record]
+                        (let [content-hashes (->> (.lastHeader (.headers tx-record)
+                                                               (str :crux.tx/docs))
+                                                  (.value)
+                                                  (nippy/fast-thaw))
+                              ready? (db/docs-exist? indexer content-hashes)
+                              {:crux.tx/keys [tx-time
+                                              tx-ops
+                                              tx-id]} (tx-record->tx-log-entry tx-record)]
+                          (if ready?
+                            (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))
+                            (do (when-not (.contains (.paused consumer) tx-topic-partition)
+                                  (log/debug "Pausing" tx-topic)
+                                  (.pause consumer [tx-topic-partition]))
+                                (log/info "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-txs))))
+                          ready?)))
+                     (concat (get topic->records doc-topic))
+                     (vec))
         result
         (reduce
          (fn [state ^ConsumerRecord record]
