@@ -83,7 +83,7 @@
                                correct-state? (not (nil? doc))]
                            (when-not correct-state?
                              (log/debug "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
-                           true)))
+                           correct-state?)))
 
 (defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-buffer))
@@ -97,8 +97,8 @@
                             (c/new-id old-v))
                        (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
                           (when-not correct-state?
-                            (log/debug "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                          true)
+                            (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
+                          correct-state?)
                        (do (log/warn "CAS failure:" (pr-str cas-op))
                            false))
      :kvs [[(c/encode-entity+bt+tt+tx-id-key-to

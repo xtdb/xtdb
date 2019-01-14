@@ -142,8 +142,11 @@
 (defn consumer-status [indexer]
   {:crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)})
 
-(defn- update-stored-consumer-state [indexer ^KafkaConsumer consumer ^ConsumerRecords records]
-  (let [partitions (.partitions records)
+(defn- update-stored-consumer-state [indexer ^KafkaConsumer consumer records]
+  (let [partition->records (group-by (fn [^ConsumerRecord r]
+                                       (TopicPartition. (.topic r)
+                                                        (.partition r))) records)
+        partitions (vec (keys partition->records))
         end-offsets (.endOffsets consumer partitions)
         stored-consumer-state (or (db/read-index-meta indexer :crux.tx-log/consumer-state) {})
         consumer-state (->> (for [^TopicPartition partition partitions
@@ -154,7 +157,7 @@
                                     (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
                                   [(topic-partition-meta-key partition)
                                    {:offset position
-                                    :time (->>  (.records records partition)
+                                    :time (->>  (get partition->records partition)
                                                 (map #(.timestamp ^ConsumerRecord %))
                                                 (reduce max)
                                                 (long)
@@ -191,10 +194,23 @@
     tx-ops))
 
 (defn consume-and-index-entities
-  [{:keys [indexer ^KafkaConsumer consumer
+  [{:keys [indexer ^KafkaConsumer consumer pending-txs-state
            follower timeout tx-topic doc-topic]
-    :or   {timeout 10000}}]
+    :or   {timeout 5000}}]
   (let [records (.poll consumer (Duration/ofMillis timeout))
+        topic->records (group-by #(.topic ^ConsumerRecord %) records)
+        previous-pending-txs @pending-txs-state
+        _ (swap! pending-txs-state into (get topic->records tx-topic))
+        records (if-let [docs (seq (get topic->records doc-topic))]
+                  (do (log/debug "indexing docs:" (count docs) (.timestamp ^ConsumerRecord (last docs))
+                                 "pending txs:" (count @pending-txs-state)
+                                 (when-let [txs (seq @pending-txs-state)]
+                                   (.timestamp ^ConsumerRecord (last txs))))
+                      docs)
+                  (when-let [txs (seq previous-pending-txs)]
+                    (log/debug "indexing txs" (count txs) (.timestamp ^ConsumerRecord (last txs)))
+                    txs))
+        records (sort-by #(.timestamp ^ConsumerRecord %) records)
         result
         (reduce
          (fn [state ^ConsumerRecord record]
@@ -212,7 +228,8 @@
           :docs 0}
          records)]
     (when (seq records)
-      (update-stored-consumer-state indexer consumer records))
+      (update-stored-consumer-state indexer consumer records)
+      (swap! pending-txs-state (comp vec (partial drop (:txs result)))))
     result))
 
 ;; TODO: This works as long as each node has a unique consumer group
@@ -241,17 +258,19 @@
   (with-open [consumer (create-consumer consumer-config)]
     (subscribe-from-stored-offsets
      indexer consumer [(:tx-topic options) (:doc-topic options)])
-    (while @running?
-      (try
-        (consume-and-index-entities
-         {:indexer indexer
-          :consumer consumer
-          :timeout 100
-          :tx-topic (:tx-topic options)
-          :doc-topic (:doc-topic options)})
-        (catch Exception e
-          (log/error e "Error while consuming and indexing from Kafka:")
-          (Thread/sleep 500))))))
+    (let [pending-txs-state (atom [])]
+      (while @running?
+        (try
+          (consume-and-index-entities
+           {:indexer indexer
+            :consumer consumer
+            :timeout 1000
+            :pending-txs-state pending-txs-state
+            :tx-topic (:tx-topic options)
+            :doc-topic (:doc-topic options)})
+          (catch Exception e
+            (log/error e "Error while consuming and indexing from Kafka:")
+            (Thread/sleep 500)))))))
 
 (defn- ensure-tx-topic-has-single-partition [^AdminClient admin-client tx-topic]
   (let [name->description @(.all (.describeTopics admin-client [tx-topic]))]

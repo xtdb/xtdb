@@ -342,6 +342,7 @@
                             (rdf/submit-ntriples tx-log in 1000)))
           consume-args {:indexer indexer
                         :consumer f/*consumer*
+                        :pending-txs-state (atom [])
                         :tx-topic tx-topic
                         :doc-topic doc-topic}]
       (k/consume-and-index-entities consume-args)

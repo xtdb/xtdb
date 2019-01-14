@@ -76,13 +76,16 @@
     (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
 
     (t/testing "transacting and indexing"
-      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)]
+      (let [{:crux.tx/keys [tx-id tx-time]} @(db/submit-tx tx-log tx-ops)
+            consume-opts {:indexer indexer :consumer f/*consumer*
+                          :pending-txs-state (atom [])
+                          :tx-topic tx-topic
+                          :doc-topic doc-topic}]
 
-        (t/is (= {:txs 1 :docs 3}
-                 (k/consume-and-index-entities
-                  {:indexer indexer :consumer f/*consumer*
-                   :tx-topic tx-topic
-                   :doc-topic doc-topic})))
+        (t/is (= {:txs 0 :docs 3}
+                 (k/consume-and-index-entities consume-opts)))
+        (t/is (= {:txs 1 :docs 0}
+                 (k/consume-and-index-entities consume-opts)))
         (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000))))
 
         (t/testing "restoring to stored offsets"
@@ -125,14 +128,20 @@
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
-      (t/is (= {:txs 1 :docs 2}
-               (select-keys
-                 (k/consume-and-index-entities
-                   {:indexer indexer
-                    :consumer f/*consumer*
-                    :tx-topic tx-topic
-                    :doc-topic doc-topic})
-                 [:txs :docs]))))
+      (let [consume-opts {:indexer indexer :consumer f/*consumer*
+                          :pending-txs-state (atom [])
+                          :tx-topic tx-topic
+                          :doc-topic doc-topic}]
+        (t/is (= {:txs 0 :docs 2}
+                 (select-keys
+                  (k/consume-and-index-entities
+                   consume-opts)
+                  [:txs :docs])))
+        (t/is (= {:txs 1 :docs 0}
+                 (select-keys
+                  (k/consume-and-index-entities
+                   consume-opts)
+                  [:txs :docs])))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
@@ -238,18 +247,23 @@
 
     (t/testing "transacting and indexing"
       (db/submit-tx tx-log tx-ops)
-      (t/is (= {:txs 1 :docs 8}
-               (k/consume-and-index-entities
-                 {:indexer indexer
-                  :consumer f/*consumer*
-                  :tx-topic tx-topic
-                  :doc-topic doc-topic}))))
+      (let [consumer-opts {:indexer indexer
+                           :consumer f/*consumer*
+                           :pending-txs-state (atom [])
+                           :tx-topic tx-topic
+                           :doc-topic doc-topic}]
+        (t/is (= {:txs 0 :docs 8}
+                 (k/consume-and-index-entities
+                  consumer-opts)))
+        (t/is (= {:txs 1 :docs 0}
+                 (k/consume-and-index-entities
+                  consumer-opts)))))
 
     (t/testing "querying transacted data"
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 SELECT ?x
 WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
 
@@ -259,7 +273,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
                  [(keyword "http://somewhere/MattJones/") "Matt Jones"]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 SELECT ?x ?fname
 WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
 
@@ -267,7 +281,7 @@ WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
                  ["Rebecca"]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 SELECT ?givenName
 WHERE
   { ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Family>  \"Smith\" .
@@ -278,7 +292,7 @@ WHERE
                  ["Sarah"]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
 SELECT ?g
@@ -289,7 +303,7 @@ WHERE
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 PREFIX info: <http://somewhere/peopleInfo#>
 
 SELECT ?resource
@@ -308,7 +322,7 @@ WHERE
                  ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 PREFIX info:    <http://somewhere/peopleInfo#>
 PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -323,7 +337,7 @@ WHERE
                  ["John Smith" 25]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 PREFIX info:   <http://somewhere/peopleInfo#>
 PREFIX vcard:  <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -341,7 +355,7 @@ WHERE
                  ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
-              "
+                     "
 PREFIX info:        <http://somewhere/peopleInfo#>
 PREFIX vcard:      <http://www.w3.org/2001/vcard-rdf/3.0#>
 
