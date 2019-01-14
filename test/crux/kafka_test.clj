@@ -82,9 +82,7 @@
                           :tx-topic tx-topic
                           :doc-topic doc-topic}]
 
-        (t/is (= {:txs 0 :docs 3}
-                 (k/consume-and-index-entities consume-opts)))
-        (t/is (= {:txs 1 :docs 0}
+        (t/is (= {:txs 1 :docs 3}
                  (k/consume-and-index-entities consume-opts)))
         (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000))))
 
@@ -132,12 +130,7 @@
                           :pending-txs-state (atom [])
                           :tx-topic tx-topic
                           :doc-topic doc-topic}]
-        (t/is (= {:txs 0 :docs 2}
-                 (select-keys
-                  (k/consume-and-index-entities
-                   consume-opts)
-                  [:txs :docs])))
-        (t/is (= {:txs 1 :docs 0}
+        (t/is (= {:txs 1 :docs 2}
                  (select-keys
                   (k/consume-and-index-entities
                    consume-opts)
@@ -252,10 +245,7 @@
                            :pending-txs-state (atom [])
                            :tx-topic tx-topic
                            :doc-topic doc-topic}]
-        (t/is (= {:txs 0 :docs 8}
-                 (k/consume-and-index-entities
-                  consumer-opts)))
-        (t/is (= {:txs 1 :docs 0}
+        (t/is (= {:txs 1 :docs 8}
                  (k/consume-and-index-entities
                   consumer-opts)))))
 

@@ -210,49 +210,36 @@
             (log/debug "Resuming" tx-topic)
             (.resume consumer [tx-topic-partition]))
         records (.poll consumer (Duration/ofMillis timeout))
-        topic->records (group-by #(.topic ^ConsumerRecord %) records)
-        _ (swap! pending-txs-state into (get topic->records tx-topic))
-        pending-txs @pending-txs-state
-        records (->> pending-txs
-                     (take-while
-                      (fn [^ConsumerRecord tx-record]
-                        (let [content-hashes (->> (.lastHeader (.headers tx-record)
-                                                               (str :crux.tx/docs))
-                                                  (.value)
-                                                  (nippy/fast-thaw))
-                              ready? (db/docs-exist? indexer content-hashes)
-                              {:crux.tx/keys [tx-time
-                                              tx-ops
-                                              tx-id]} (tx-record->tx-log-entry tx-record)]
-                          (if ready?
-                            (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))
-                            (do (when-not (.contains (.paused consumer) tx-topic-partition)
-                                  (log/debug "Pausing" tx-topic)
-                                  (.pause consumer [tx-topic-partition]))
-                                (log/info "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-txs))))
-                          ready?)))
-                     (concat (get topic->records doc-topic))
-                     (vec))
-        result
-        (reduce
-         (fn [state ^ConsumerRecord record]
-           (condp = (.topic record)
-             tx-topic
-             (do (index-tx-record indexer record)
-                 (update state :txs inc))
-
-             doc-topic
-             (do (index-doc-record indexer record)
-                 (update state :docs inc))
-
-             (throw (ex-info "Unknown topic" {:topic (.topic record)}))))
-         {:txs 0
-          :docs 0}
-         records)]
+        doc-records (vec (.records records (str doc-topic)))
+        tx-records (vec (.records records (str tx-topic)))
+        pending-tx-records (swap! pending-txs-state into tx-records)
+        tx-records (->> pending-tx-records
+                        (take-while
+                         (fn [^ConsumerRecord tx-record]
+                           (let [content-hashes (->> (.lastHeader (.headers tx-record)
+                                                                  (str :crux.tx/docs))
+                                                     (.value)
+                                                     (nippy/fast-thaw))
+                                 ready? (db/docs-exist? indexer content-hashes)
+                                 {:crux.tx/keys [tx-time
+                                                 tx-ops
+                                                 tx-id]} (tx-record->tx-log-entry tx-record)]
+                             (if ready?
+                               (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))
+                               (do (when-not (.contains (.paused consumer) tx-topic-partition)
+                                     (log/debug "Pausing" tx-topic)
+                                     (.pause consumer [tx-topic-partition]))
+                                   (log/info "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-tx-records))))
+                             ready?))))]
+    (doseq [record doc-records]
+      (index-doc-record indexer record))
+    (doseq [record tx-records]
+      (index-tx-record indexer record))
     (when (seq records)
       (update-stored-consumer-state indexer consumer records)
-      (swap! pending-txs-state (comp vec (partial drop (:txs result)))))
-    result))
+      (swap! pending-txs-state (comp vec (partial drop (count tx-records)))))
+    {:txs (count tx-records)
+     :docs (count doc-records)}))
 
 ;; TODO: This works as long as each node has a unique consumer group
 ;; id, if not the node will only get a subset of the doc-topic. The
