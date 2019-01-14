@@ -2,8 +2,10 @@
   (:require [crux.db :as db]
             [clojure.spec.alpha :as s]
             [crux.codec :as c]
+            [crux.kv :as kv]
             [crux.tx :as tx]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [taoensso.nippy :as nippy])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.time.Duration
@@ -103,11 +105,16 @@
   (submit-tx [this tx-ops]
     (.beginTransaction producer)
     (try
-      (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
-        (doseq [doc (tx/tx-ops->docs tx-ops)]
-          (db/submit-doc this (str (c/new-id doc)) doc))
+      (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)
+            content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
+                                     [(c/new-id doc) doc])
+                                   (into {}))]
+        (doseq [[content-hash doc] content-hash->doc]
+          (db/submit-doc this (str content-hash) doc))
         (.flush producer)
-        (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
+        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil conformed-tx-ops)
+                                    (-> (.headers) (.add (str :crux.tx/docs)
+                                                         (nippy/fast-freeze (set (keys content-hash->doc))))))
                                   (.send producer))]
           (.commitTransaction producer)
           (delay
@@ -199,18 +206,23 @@
     :or   {timeout 5000}}]
   (let [records (.poll consumer (Duration/ofMillis timeout))
         topic->records (group-by #(.topic ^ConsumerRecord %) records)
-        previous-pending-txs @pending-txs-state
         _ (swap! pending-txs-state into (get topic->records tx-topic))
-        records (if-let [docs (seq (get topic->records doc-topic))]
-                  (do (log/debug "indexing docs:" (count docs) (.timestamp ^ConsumerRecord (last docs))
-                                 "pending txs:" (count @pending-txs-state)
-                                 (when-let [txs (seq @pending-txs-state)]
-                                   (.timestamp ^ConsumerRecord (last txs))))
-                      docs)
-                  (when-let [txs (seq previous-pending-txs)]
-                    (log/debug "indexing txs" (count txs) (.timestamp ^ConsumerRecord (last txs)))
-                    txs))
-        records (sort-by #(.timestamp ^ConsumerRecord %) records)
+        pending-txs @pending-txs-state
+        records (vec (concat (get topic->records doc-topic)
+                             (take-while (fn [^ConsumerRecord tx-record]
+                                           (let [content-hashes (->> (.lastHeader (.headers tx-record)
+                                                                                  (str :crux.tx/docs))
+                                                                     (.value)
+                                                                     (nippy/fast-thaw))
+                                                 ready? (db/docs-exist? indexer content-hashes)
+                                                 {:crux.tx/keys [tx-time
+                                                                 tx-ops
+                                                                 tx-id]} (tx-record->tx-log-entry tx-record)]
+                                             (if ready?
+                                               (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))
+                                               (log/warn "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-txs)))
+                                             ready?))
+                                         pending-txs)))
         result
         (reduce
          (fn [state ^ConsumerRecord record]
