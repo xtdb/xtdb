@@ -133,7 +133,8 @@
 (def ^:dynamic ^KafkaConsumer *consumer*)
 
 (defn with-kafka-client [f]
-  (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
+  (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*
+                                           "transactional.id" "0"})
               consumer (k/create-consumer {"bootstrap.servers" *kafka-bootstrap-servers*
                                            "group.id" "0"})]
     (binding [*producer* producer

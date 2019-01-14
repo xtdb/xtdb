@@ -47,11 +47,11 @@
                 doc-topic-key (keyword "crux.kafka.topic-partition"
                                        (str (get-in f/*local-node* [:options :doc-topic]) "-0"))]
             (t/is (= {:lag 0
-                      :offset 1
+                      :offset 2
                       :time tx-time}
                      (get-in status-map [:crux.tx-log/consumer-state tx-topic-key])))
             (t/is (= {:lag 0
-                      :offset 1}
+                      :offset 2}
                      (-> status-map
                          (get-in [:crux.tx-log/consumer-state doc-topic-key])
                          (dissoc :time)))))))

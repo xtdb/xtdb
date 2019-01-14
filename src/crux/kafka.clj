@@ -50,7 +50,8 @@
 
 (defn create-producer
   ^org.apache.kafka.clients.producer.KafkaProducer [config]
-  (KafkaProducer. ^Map (merge default-producer-config config)))
+  (doto (KafkaProducer. ^Map (merge default-producer-config config))
+    (.initTransactions)))
 
 (defn create-consumer
   ^org.apache.kafka.clients.consumer.KafkaConsumer [config]
@@ -100,16 +101,22 @@
          (.send producer)))
 
   (submit-tx [this tx-ops]
-    (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
-      (doseq [doc (tx/tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (c/new-id doc)) doc))
-      (.flush producer)
-      (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
-                                (.send producer))]
-        (delay
-         (let [record-meta ^RecordMetadata @tx-send-future]
-           {:crux.tx/tx-id (.offset record-meta)
-            :crux.tx/tx-time (Date. (.timestamp record-meta))})))))
+    (.beginTransaction producer)
+    (try
+      (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)]
+        (doseq [doc (tx/tx-ops->docs tx-ops)]
+          (db/submit-doc this (str (c/new-id doc)) doc))
+        (.flush producer)
+        (let [tx-send-future (->> (ProducerRecord. tx-topic nil conformed-tx-ops)
+                                  (.send producer))]
+          (.commitTransaction producer)
+          (delay
+           (let [record-meta ^RecordMetadata @tx-send-future]
+             {:crux.tx/tx-id (.offset record-meta)
+              :crux.tx/tx-time (Date. (.timestamp record-meta))}))))
+      (catch Throwable t
+        (.abortTransaction producer)
+        (throw t))))
 
   (new-tx-log-context [this]
     (create-consumer (assoc kafka-config "enable.auto.commit" "false")))

@@ -119,10 +119,12 @@
   (s/assert ::options options)
   (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
                             (read-kafka-properties-file kafka-properties-file))
+        producer-config (merge {"transactional.id" (:group-id options)}
+                               kafka-config)
         consumer-config (merge {"group.id" (:group-id options)}
                                kafka-config)]
     (with-open [kv-store (start-kv-store options)
-                producer (k/create-producer kafka-config)
+                producer (k/create-producer producer-config)
                 tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
                 object-store ^Closeable (lru/new-cached-object-store kv-store)
                 indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
