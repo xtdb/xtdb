@@ -82,7 +82,7 @@
                                doc (db/get-single-object object-store snapshot content-hash)
                                correct-state? (not (nil? doc))]
                            (when-not correct-state?
-                             (log/debug "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
+                             (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
 
 (defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
@@ -163,6 +163,11 @@
                       :when post-commit-fn]
                 (post-commit-fn)))
           (log/warn "Transaction aborted:" (pr-str tx-ops) (pr-str tx-time) tx-id)))))
+
+  (docs-exist? [_ content-hashes]
+    (with-open [snapshot (kv/new-snapshot kv)]
+      (= (set content-hashes)
+         (set (keys (db/get-objects object-store snapshot content-hashes))))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv k v))

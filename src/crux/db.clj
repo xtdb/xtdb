@@ -18,6 +18,7 @@
 (defprotocol Indexer
   (index-doc [this content-hash doc])
   (index-tx [this tx-ops tx-time tx-id])
+  (docs-exist? [this content-hashes])
   (store-index-meta [this k v])
   (read-index-meta [this k]))
 ;; end::Indexer[]
