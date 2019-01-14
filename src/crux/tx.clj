@@ -67,17 +67,7 @@
         dates-to-correct (->> (cons start-business-time dates-in-history)
                               (filter (in-range-pred start-business-time end-business-time))
                               (into (sorted-set)))]
-    {:pre-commit-fn #(let [doc (db/get-single-object object-store snapshot (c/new-id content-hash))
-                           delete? (= c/nil-id-buffer content-hash)
-                           correct-state? (if delete?
-                                            (nil? doc)
-                                            (not (nil? doc)))]
-                       (when-not correct-state?
-                         (log/debug (if delete?
-                                      "Delete"
-                                      "Put") "incorrect doc state for:" (c/new-id content-hash) "tx id:" tx-id))
-                       true)
-     :kvs (vec (for [business-time dates-to-correct]
+    {:kvs (vec (for [business-time dates-to-correct]
                  [(c/encode-entity+bt+tt+tx-id-key-to
                    nil
                    (c/->id-buffer eid)
@@ -87,7 +77,13 @@
                   content-hash]))}))
 
 (defmethod tx-command :crux.tx/put [object-store snapshot tx-log [op k v start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id (c/->id-buffer (c/new-id v))))
+  (assoc (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id (c/->id-buffer (c/new-id v)))
+         :pre-commit-fn #(let [content-hash (c/new-id v)
+                               doc (db/get-single-object object-store snapshot content-hash)
+                               correct-state? (not (nil? doc))]
+                           (when-not correct-state?
+                             (log/debug "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
+                           true)))
 
 (defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
   (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-buffer))
