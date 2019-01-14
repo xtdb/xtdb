@@ -58,11 +58,13 @@
      #(db/get-single-object object-store snapshot %)))
 
   (get-objects [this snapshot ks]
-    (->> (for [k ks]
-           [k (compute-if-absent
-               cache
-               k
-               #(get (db/get-objects object-store snapshot [%]) %))])
+    (->> (for [k ks
+               :let [v (compute-if-absent
+                        cache
+                        k
+                        #(get (db/get-objects object-store snapshot [%]) %))]
+               :when v]
+           [k v])
          (into {})))
 
   (put-objects [this kvs]
