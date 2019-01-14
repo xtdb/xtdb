@@ -230,7 +230,8 @@
                                      (log/debug "Pausing" tx-topic)
                                      (.pause consumer [tx-topic-partition]))
                                    (log/info "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-tx-records))))
-                             ready?))))]
+                             ready?))))
+        records (concat doc-records tx-records)]
     (doseq [record doc-records]
       (index-doc-record indexer record))
     (doseq [record tx-records]
