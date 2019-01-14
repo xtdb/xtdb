@@ -152,7 +152,7 @@
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
                 (post-commit-fn)))
-          (log/warn "Transaction aborted:" (pr-str tx-ops) tx-time tx-id)))))
+          (log/warn "Transaction aborted:" (pr-str tx-ops) (pr-str tx-time) tx-id)))))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv k v))
@@ -233,11 +233,14 @@
 
 (defn await-tx-time [indexer transact-time {:crux.tx-log/keys [await-tx-timeout]
                                             :or {await-tx-timeout default-await-tx-timeout}}]
-  (if (cio/wait-while #(pos? (compare transact-time
-                                      (or (latest-completed-tx-time indexer)
-                                          (Date. 0))))
-                      await-tx-timeout)
-    (latest-completed-tx-time indexer)
-    (throw (TimeoutException.
-            (str "Timed out waiting for: " transact-time
-                 " index has: " (latest-completed-tx-time indexer))))))
+  (let [seen-tx-time (atom (Date. 0))]
+    (if (cio/wait-while #(pos? (compare transact-time
+                                        (let [completed-tx-time (or (latest-completed-tx-time indexer)
+                                                                    (Date. 0))]
+                                          (reset! seen-tx-time completed-tx-time)
+                                          completed-tx-time)))
+                        await-tx-timeout)
+      @seen-tx-time
+      (throw (TimeoutException.
+              (str "Timed out waiting for: " (pr-str transact-time)
+                   " index has: " (pr-str @seen-tx-time)))))))
