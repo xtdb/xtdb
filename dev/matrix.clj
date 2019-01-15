@@ -833,9 +833,10 @@
 
 (def ^Map pred-cardinality-cache (HashMap.))
 
+;; TODO: Get rid of this or move to protocol.
 (defn r-pred-cardinality [a attr]
   (.computeIfAbsent pred-cardinality-cache
-                    attr
+                    [(System/identityHashCode a) attr]
                     (reify Function
                       (apply [_ k]
                         (r-cardinality a)))))
