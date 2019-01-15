@@ -53,17 +53,17 @@ iterate at the higher level of attribute.
 A Virtual Index comprises together multiple child indices. This is
 to join indices together, returning key/value pairs on where they match.
 
-
 A join condition in a query could be reflected by a Virtual Index. A
 Virtual Index will maintain state as to where Index is currently
 positioned.
 
-`UnaryJoinVirtualIndex` comprises of multiple child indices. Calling
-`seek-values` on it will advance all the child indices internally
-until they all contain the same key. This involves calling
-`seek-values` on each child index until the indices match at the same
-level. Calling `next-values` would move all the indices along until
-the next common key that all the indices share.
+`UnaryJoinVirtualIndex` comprises of multiple child indices and
+implements both `Index` and `LayeredIndex`. Calling `seek-values` on
+it will advance all the child indices internally until they all
+contain the same key. This involves calling `seek-values` on each
+child index until the indices match at the same level. Calling
+`next-values` would move all the indices along until the next common
+key that all the indices share.
 
 .Virtual Index Example
 [#virtual-index,cols="d,d,d,d,s,d,s,d"]
