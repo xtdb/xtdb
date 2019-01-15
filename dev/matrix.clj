@@ -11,9 +11,11 @@
   (:import [java.util Arrays ArrayList BitSet HashMap HashSet IdentityHashMap Map]
            [java.util.function Function IntFunction]
            clojure.lang.Indexed
+           crux.ByteUtils
            [java.io DataInputStream DataOutputStream]
            java.nio.ByteOrder
            [org.agrona.collections Hashing Int2ObjectHashMap]
+           org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            [org.roaringbitmap BitmapDataProviderSupplier FastRankRoaringBitmap ImmutableBitmapDataProvider IntConsumer RoaringBitmap]
@@ -767,7 +769,8 @@
   (a-get-row ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [this row-id])
   (a-rows ^java.util.Collection [this])
   (a-row-ids ^java.util.Collection [this])
-  (a-put-row ^AMatrix [this row-id row]))
+  (a-put-row ^AMatrix [this row-id row])
+  (a-empty? [this]))
 
 (extend-protocol AMatrix
   Int2ObjectHashMap
@@ -786,7 +789,10 @@
 
   (a-put-row [this row-id row]
     (doto this
-      (.put (int row-id) row))))
+      (.put (int row-id) row)))
+
+  (a-empty? [this]
+    (.isEmpty this)))
 
 (defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
   (MutableRoaringBitmap.))
@@ -889,12 +895,12 @@
    (a-row-ids a)))
 
 (defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
-  (if (empty? (a-row-ids a))
+  (if (a-empty? a)
     (new-r-roaring-bitmap)
     (ImmutableRoaringBitmap/or (.iterator (a-rows a)))))
 
 (defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
-  (if (empty? (a-row-ids a))
+  (if (a-empty? a)
     (new-r-roaring-bitmap)
     (r-column-vector (a-row-ids a))))
 
@@ -902,7 +908,7 @@
   (a-get-row a (int row)))
 
 (defn r-mult-diag [^ImmutableRoaringBitmap diag a]
-  (cond (empty? (a-row-ids a))
+  (cond (a-empty? a)
         (new-r-bitmap)
 
         (nil? diag)
@@ -1175,20 +1181,44 @@
                                (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
                                  (let [p (keyword (subs (String. (mem/->on-heap k)) (count prefix)))
                                        bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
-                                       am (let [rows (int-array (.getInt bb))
-                                                offsets (int-array (alength rows))]
-                                            (dotimes [i (alength rows)]
-                                              (aset rows i (.getInt bb)))
-                                            (dotimes [i (alength offsets)]
-                                              (aset offsets i (.getInt bb)))
-                                            (reduce
-                                             (fn [m ^long row]
-                                               (let [idx (count (a-row-ids m))
-                                                     bs (ImmutableRoaringBitmap. (.position bb (aget offsets idx)))]
-                                                 (doto m
-                                                   (a-put-row (int row) bs))))
-                                             (new-r-bitmap)
-                                             rows))]
+                                       row-size (.getInt bb)
+                                       row-ids-buffer (UnsafeBuffer. bb Integer/BYTES (* Integer/BYTES row-size))
+                                       offsets-buffer (UnsafeBuffer. bb
+                                                                     (+ Integer/BYTES (* Integer/BYTES row-size))
+                                                                     (* Integer/BYTES row-size))
+                                       am (reify AMatrix
+                                            (a-get-row [this row-id]
+                                              (let [idx (ByteUtils/binarySearchBuffer row-ids-buffer (int row-id))]
+                                                (if (= -1 idx)
+                                                  (new-r-roaring-bitmap)
+                                                  (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                                    (ImmutableRoaringBitmap. (.position bb offset))))))
+
+                                            (a-rows [this]
+                                              (loop [idx (int 0)
+                                                     acc (ArrayList. row-size)]
+                                                (if (= idx row-size)
+                                                  acc
+                                                  (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                                    (recur (unchecked-inc-int idx)
+                                                           (doto acc
+                                                             (.add (ImmutableRoaringBitmap. (.position bb offset)))))))))
+
+                                            (a-row-ids [this]
+                                              (loop [idx (int 0)
+                                                     acc (ArrayList. row-size)]
+                                                (if (= idx row-size)
+                                                  acc
+                                                  (let [row-id (.getInt row-ids-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                                    (recur (unchecked-inc-int idx)
+                                                           (doto acc
+                                                             (.add row-id)))))))
+
+                                            (a-put-row [this row-id row]
+                                              (throw (UnsupportedOperationException.)))
+
+                                            (a-empty? [this]
+                                              (zero? row-size)))]
                                    (recur (kv/next i) (assoc acc p am)))
                                  acc))))]
       {:value->id value->id
