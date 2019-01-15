@@ -211,6 +211,27 @@ public class ByteUtils {
         }
     }
 
+    public static int binarySearchBuffer(final DirectBuffer a, final int key) {
+        return binarySearchBuffer(a, key, ByteOrder.BIG_ENDIAN);
+    }
+
+    public static int binarySearchBuffer(final DirectBuffer a, final int key, final ByteOrder order) {
+        int low = 0;
+        int high = (a.capacity() >>> 2) - 1;
+        while (low <= high) {
+            final int idx = (low + high) >> 1;
+            final int element = a.getInt(idx << 2, order);
+            if (element == key) {
+                return idx;
+            } else if (element > key) {
+                high = idx - 1;
+            } else {
+                low = idx + 1;
+            }
+        }
+        return -1;
+    }
+
     // https://en.wikipedia.org/wiki/SHA-1#SHA-1_pseudocode
 
     private static final int SHA1_BLOCK_BYTES = 512 / Byte.SIZE;
