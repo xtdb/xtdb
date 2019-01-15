@@ -1124,13 +1124,19 @@
               (mem/->off-heap (nippy/fast-freeze value->id))]])
   (let [matrix->buffer (fn [^Int2ObjectHashMap m]
                          (let [b (ExpandableDirectByteBuffer.)
-                               rows (sort (.keySet m))]
+                               rows (sort (.keySet m))
+                               header-size (* Integer/BYTES (+ 1 (* 2 (count rows))))]
                            (with-open [out (DataOutputStream. (ExpandableDirectBufferOutputStream. b))]
                              (.writeInt out (count rows))
                              (doseq [row rows]
                                (.writeInt out row))
-                             (doseq [row rows]
-                               (.writeInt out (.serializedSizeInBytes ^ImmutableRoaringBitmap (.get m row))))
+                             (reduce
+                              (fn [^long offset row]
+                                (let [size (.serializedSizeInBytes ^ImmutableRoaringBitmap (.get m row))]
+                                  (.writeInt out offset)
+                                  (+ offset size)))
+                              header-size
+                              rows)
                              (doseq [row rows]
                                (.serialize ^ImmutableRoaringBitmap (.get m row) out)))
                            b))]
@@ -1158,15 +1164,15 @@
                                  (let [p (keyword (subs (String. (mem/->on-heap k)) (count prefix)))
                                        bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
                                        rows (let [rows (int-array (.getInt bb))
-                                                  sizes (int-array (alength rows))]
+                                                  offsets (int-array (alength rows))]
                                               (dotimes [i (alength rows)]
                                                 (aset rows i (.getInt bb)))
-                                              (dotimes [i (alength sizes)]
-                                                (aset sizes i (.getInt bb)))
+                                              (dotimes [i (alength offsets)]
+                                                (aset offsets i (.getInt bb)))
                                               (reduce
-                                               (fn [^Int2ObjectHashMap m row]
-                                                 (let [bs (ImmutableRoaringBitmap. bb)]
-                                                   (.position bb (+ (.serializedSizeInBytes bs) (.position bb)))
+                                               (fn [^Int2ObjectHashMap m ^long row]
+                                                 (let [idx (count m)
+                                                       bs (ImmutableRoaringBitmap. (.position bb (aget offsets idx)))]
                                                    (doto m
                                                      (.put (int row) bs))))
                                                (Int2ObjectHashMap.)
