@@ -1175,21 +1175,21 @@
                                (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
                                  (let [p (keyword (subs (String. (mem/->on-heap k)) (count prefix)))
                                        bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
-                                       rows (let [rows (int-array (.getInt bb))
-                                                  offsets (int-array (alength rows))]
-                                              (dotimes [i (alength rows)]
-                                                (aset rows i (.getInt bb)))
-                                              (dotimes [i (alength offsets)]
-                                                (aset offsets i (.getInt bb)))
-                                              (reduce
-                                               (fn [m ^long row]
-                                                 (let [idx (count (a-row-ids m))
-                                                       bs (ImmutableRoaringBitmap. (.position bb (aget offsets idx)))]
-                                                   (doto m
-                                                     (a-put-row (int row) bs))))
-                                               (new-r-bitmap)
-                                               rows))]
-                                   (recur (kv/next i) (assoc acc p rows)))
+                                       am (let [rows (int-array (.getInt bb))
+                                                offsets (int-array (alength rows))]
+                                            (dotimes [i (alength rows)]
+                                              (aset rows i (.getInt bb)))
+                                            (dotimes [i (alength offsets)]
+                                              (aset offsets i (.getInt bb)))
+                                            (reduce
+                                             (fn [m ^long row]
+                                               (let [idx (count (a-row-ids m))
+                                                     bs (ImmutableRoaringBitmap. (.position bb (aget offsets idx)))]
+                                                 (doto m
+                                                   (a-put-row (int row) bs))))
+                                             (new-r-bitmap)
+                                             rows))]
+                                   (recur (kv/next i) (assoc acc p am)))
                                  acc))))]
       {:value->id value->id
        :id->value (doto (Int2ObjectHashMap.)
