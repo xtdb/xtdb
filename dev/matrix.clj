@@ -1196,24 +1196,17 @@
                                                     (ImmutableRoaringBitmap. (.position bb offset))))))
 
                                             (a-rows [this]
-                                              (loop [idx (int 0)
-                                                     acc (ArrayList. row-size)]
-                                                (if (= idx row-size)
-                                                  acc
-                                                  (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
-                                                    (recur (unchecked-inc-int idx)
-                                                           (doto acc
-                                                             (.add (ImmutableRoaringBitmap. (.position bb offset)))))))))
+                                              ((fn step [^long idx]
+                                                 (when (< idx row-size)
+                                                   (let [offset  (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                                     (cons (ImmutableRoaringBitmap. (.position bb offset))
+                                                           (lazy-seq (step (inc idx))))))) 0))
 
                                             (a-row-ids [this]
-                                              (loop [idx (int 0)
-                                                     acc (ArrayList. row-size)]
-                                                (if (= idx row-size)
-                                                  acc
-                                                  (let [row-id (.getInt row-ids-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
-                                                    (recur (unchecked-inc-int idx)
-                                                           (doto acc
-                                                             (.add row-id)))))))
+                                              ((fn step [^long idx]
+                                                 (when (< idx row-size)
+                                                   (cons (.getInt row-ids-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)
+                                                         (lazy-seq (step (inc idx)))))) 0))
 
                                             (a-put-row [this row-id row]
                                               (throw (UnsupportedOperationException.)))
