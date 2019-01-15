@@ -1198,7 +1198,7 @@
                                             (a-rows [this]
                                               ((fn step [^long idx]
                                                  (when (< idx row-size)
-                                                   (let [offset  (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                                   (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
                                                      (cons (ImmutableRoaringBitmap. (.position bb offset))
                                                            (lazy-seq (step (inc idx))))))) 0))
 
