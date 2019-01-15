@@ -1130,6 +1130,8 @@
                              (doseq [row rows]
                                (.writeInt out row))
                              (doseq [row rows]
+                               (.writeInt out (.serializedSizeInBytes ^ImmutableRoaringBitmap (.get m row))))
+                             (doseq [row rows]
                                (.serialize ^ImmutableRoaringBitmap (.get m row) out)))
                            b))]
     (doseq [[p ^Int2ObjectHashMap so] p->so]
@@ -1155,9 +1157,12 @@
                                (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
                                  (let [p (keyword (subs (String. (mem/->on-heap k)) (count prefix)))
                                        bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
-                                       rows (let [rows (int-array (.getInt bb))]
+                                       rows (let [rows (int-array (.getInt bb))
+                                                  sizes (int-array (alength rows))]
                                               (dotimes [i (alength rows)]
                                                 (aset rows i (.getInt bb)))
+                                              (dotimes [i (alength sizes)]
+                                                (aset sizes i (.getInt bb)))
                                               (reduce
                                                (fn [^Int2ObjectHashMap m row]
                                                  (let [bs (ImmutableRoaringBitmap. bb)]
