@@ -765,6 +765,9 @@
   ([^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
+(defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
+  (MutableRoaringBitmap.))
+
 (defprotocol AMatrix
   (a-get-row ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [this row-id])
   (a-rows ^java.util.Collection [this])
@@ -793,9 +796,6 @@
 
   (a-empty? [this]
     (.isEmpty this)))
-
-(defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
-  (MutableRoaringBitmap.))
 
 (defn r-and
   ([a] a)
