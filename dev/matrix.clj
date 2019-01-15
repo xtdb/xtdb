@@ -3,15 +3,19 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]
+            [crux.kv :as kv]
+            [crux.memory :as mem]
             [crux.rdf :as rdf]
-            [crux.query :as q])
+            [crux.query :as q]
+            [taoensso.nippy :as nippy])
   (:import [java.util Arrays ArrayList BitSet HashMap HashSet IdentityHashMap Map]
            [java.util.function Function IntFunction]
            clojure.lang.Indexed
-           java.io.DataOutputStream
+           [java.io DataInputStream DataOutputStream]
+           java.nio.ByteOrder
            [org.agrona.collections Hashing Int2ObjectHashMap]
            org.agrona.ExpandableDirectByteBuffer
-           org.agrona.io.ExpandableDirectBufferOutputStream
+           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            [org.roaringbitmap BitmapDataProviderSupplier FastRankRoaringBitmap ImmutableBitmapDataProvider IntConsumer RoaringBitmap]
            [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
            [org.roaringbitmap.longlong LongConsumer Roaring64NavigableMap]
@@ -1106,6 +1110,69 @@
        :id->value (doto (Int2ObjectHashMap.)
                     (.putAll (set/map-invert value->id)))
        :max-size max-size})))
+
+;; Persistence Spike, this is not how it will eventually look / work,
+;; but can server queries out of memory mapped buffers in LMDB.
+
+(comment
+  (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
+                        {:db-dir "dev-storage/matrix-lmdb"})))
+
+(defn r-graph->lmdb [kv {:keys [p->os p->so value->id]}]
+  (kv/store kv
+            [[(mem/->off-heap (.getBytes (str :matrix/value->id)))
+              (mem/->off-heap (nippy/fast-freeze value->id))]])
+  (let [matrix->buffer (fn [^Int2ObjectHashMap m]
+                         (let [b (ExpandableDirectByteBuffer.)
+                               rows (sort (.keySet m))]
+                           (with-open [out (DataOutputStream. (ExpandableDirectBufferOutputStream. b))]
+                             (.writeInt out (count rows))
+                             (doseq [row rows]
+                               (.writeInt out row))
+                             (doseq [row rows]
+                               (.serialize ^ImmutableRoaringBitmap (.get m row) out)))
+                           b))]
+    (doseq [[p ^Int2ObjectHashMap so] p->so]
+      (kv/store kv
+                [[(mem/->off-heap (.getBytes (str :matrix/p->so- p)))
+                  (matrix->buffer so)]]))
+    (doseq [[p ^Int2ObjectHashMap os] p->os]
+      (kv/store kv
+                [[(mem/->off-heap (.getBytes (str :matrix/p->os- p)))
+                  (matrix->buffer os)]]))))
+
+(defn lmdb->r-graph [kv]
+  (with-open [snapshot (kv/new-snapshot kv)
+              i (kv/new-iterator snapshot)]
+    (let [value->id (let [seek-k (mem/->off-heap (.getBytes (str :matrix/value->id)))]
+                      (assert (mem/buffers=? seek-k (kv/seek i seek-k)))
+                      (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i)))))
+          buffer->matrix (fn [prefix]
+                           (let [prefix (str prefix)
+                                 seek-k (mem/->off-heap (.getBytes prefix))]
+                             (loop [k (kv/seek i seek-k)
+                                    acc {}]
+                               (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
+                                 (let [p (keyword (subs (String. (mem/->on-heap k)) (count prefix)))
+                                       bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
+                                       rows (let [rows (int-array (.getInt bb))]
+                                              (dotimes [i (alength rows)]
+                                                (aset rows i (.getInt bb)))
+                                              (reduce
+                                               (fn [^Int2ObjectHashMap m row]
+                                                 (let [bs (ImmutableRoaringBitmap. bb)]
+                                                   (.position bb (+ (.serializedSizeInBytes bs) (.position bb)))
+                                                   (doto m
+                                                     (.put (int row) bs))))
+                                               (Int2ObjectHashMap.)
+                                               rows))]
+                                   (recur (kv/next i) (assoc acc p rows)))
+                                 acc))))]
+      {:value->id value->id
+       :id->value (doto (Int2ObjectHashMap.)
+                    (.putAll (set/map-invert value->id)))
+       :p->so (buffer->matrix ":matrix/p->so-:")
+       :p->os (buffer->matrix ":matrix/p->os-:")})))
 
 ;; Other Matrix-format related spikes:
 
