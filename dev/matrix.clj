@@ -839,7 +839,11 @@
 (deftype SnapshotMatrix [snapshot idx-id p seek-b row-ids rows ^Int2ObjectHashMap id->row]
   AMatrix
   (a-get-row [this row-id]
-    (.get id->row (int row-id)))
+    (.computeIfAbsent id->row
+                      (int row-id)
+                      (reify IntFunction
+                        (apply [_ k]
+                          (new-r-roaring-bitmap)))))
 
   (a-rows [this]
     rows)
@@ -990,6 +994,99 @@
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))})))
+
+(defn get-or-create-id [kv value last-id-state pending-id-state]
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (let [seek-b (ExpandableDirectByteBuffer.)
+          value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)]
+      (if-let [id (get value->id value)]
+        [id []]
+        (let [b (ExpandableDirectByteBuffer.)
+              prefix-k (with-buffer-out seek-b
+                         (fn [^DataOutput out]
+                           (.writeInt out id->value-idx-id)))
+              within-prefix? (fn [k]
+                               (and k (mem/buffers=? k prefix-k (mem/capacity prefix-k))))
+              ;; TODO: This is obviously a slow way to find the latest id.
+              id (get @pending-id-state
+                      value
+                      (do (when-not @last-id-state
+                            (with-open [i (kv/new-iterator snapshot)]
+                              (loop [last-id (int 0)
+                                     k ^DirectBuffer (kv/seek i prefix-k)]
+                                (if (within-prefix? k)
+                                  (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
+                                  (reset! last-id-state last-id)))))
+                          (swap! last-id-state inc)))]
+          (swap! pending-id-state assoc value id)
+          [id [[(with-buffer-out b
+                  (fn [^DataOutput out]
+                    (.writeInt out id->value-idx-id)
+                    (.writeInt out id)))
+                (with-buffer-out b
+                  (fn [^DataOutput out]
+                    (nippy/freeze-to-out! out value)))]
+               [(with-buffer-out b
+                  (fn [^DataOutput out]
+                    (.writeInt out value->id-idx-id)
+                    (nippy/freeze-to-out! out value)))
+                (with-buffer-out b
+                  (fn [^DataOutput out]
+                    (.writeInt out id)))]]])))))
+
+(defn load-rdf-into-lmdb
+  ([kv resource]
+   (load-rdf-into-lmdb kv resource 100000))
+  ([kv resource chunk-size]
+   (with-open [in (io/input-stream (io/resource resource))]
+     (let [now (cio/next-monotonic-date)
+           business-time now
+           transaction-time now
+           b (ExpandableDirectByteBuffer.)
+           last-id-state (atom nil)]
+       (doseq [chunk (->> (rdf/ntriples-seq in)
+                          (map rdf/rdf->clj)
+                          (partition-all chunk-size))]
+         (with-open [snapshot (kv/new-snapshot kv)]
+           (let [g (lmdb->r-graph snapshot business-time transaction-time)
+                 row-cache (HashMap.)
+                 get-current-row (fn [idx-id idx p id]
+                                   (.computeIfAbsent row-cache
+                                                     [idx-id idx p id]
+                                                     (reify Function
+                                                       (apply [_ _]
+                                                         [(with-buffer-out b
+                                                            (fn [^DataOutput out]
+                                                              (.writeInt out idx-id)
+                                                              (nippy/freeze-to-out! out p)
+                                                              (.writeInt out id)
+                                                              (.writeLong out (date->reverse-time-ms business-time))
+                                                              (.writeLong out (date->reverse-time-ms transaction-time))))
+                                                          (.toMutableRoaringBitmap (a-get-row (get-in g [idx p]) id))]))))
+
+                 pending-id-state (atom {})]
+             (prn (count chunk))
+             (->> (for [[s p o] chunk
+                        :let [[^long s-id s-id-kvs] (get-or-create-id kv s last-id-state pending-id-state)
+                              [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
+                    (concat s-id-kvs
+                            o-id-kvs
+                            [(let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
+                               [k (doto row
+                                    (.add o-id))])]
+                            [(let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
+                               [k (doto row
+                                    (.add s-id))])]))
+                  (reduce into [])
+                  (into (sorted-map-by mem/buffer-comparator))
+                  (map (fn [[k v]]
+                         [k (if (instance? MutableRoaringBitmap v)
+                              (with-buffer-out b
+                                (fn [^DataOutput out]
+                                  (.serialize ^MutableRoaringBitmap v out)))
+                              v)]))
+                  (kv/store kv)))))))))
+
 
 ;; Other Matrix-format related spikes:
 
