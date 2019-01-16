@@ -651,10 +651,12 @@
   ([b f]
    (with-buffer-out b f true))
   ([b f copy?]
-   (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)))]
+   (with-buffer-out b f copy? 0))
+  ([b f copy? ^long offset]
+   (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)) offset)]
      (with-open [out (DataOutputStream. b-out)]
        (f out))
-     (cond-> (UnsafeBuffer. (.buffer b-out) 0 (.position b-out))
+     (cond-> (UnsafeBuffer. (.buffer b-out) 0 (+ (.position b-out) offset))
        copy? (mem/copy-buffer)))))
 
 (defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
@@ -685,11 +687,10 @@
                                      [row-id k]
                                      (let [found-k ^DirectBuffer (kv/seek i (with-buffer-out seek-b
                                                                               (fn [^DataOutput out]
-                                                                                (.writeInt out idx-id)
-                                                                                (nippy/freeze-to-out! out p)
                                                                                 (.writeInt out row-id)
                                                                                 (.writeLong out reverse-business-time-ms))
-                                                                              false))]
+                                                                              false
+                                                                              (mem/capacity seek-k)))]
                                        (when (within-prefix? found-k)
                                          (let [found-row-id (int (key->row-id found-k))]
                                            (if (= row-id found-row-id)
@@ -710,10 +711,9 @@
                              (.put row-id row))
                            (kv/seek i (with-buffer-out seek-b
                                         (fn [^DataOutput out]
-                                          (.writeInt out idx-id)
-                                          (nippy/freeze-to-out! out p)
                                           (.writeInt out (inc row-id)))
-                                        false))))
+                                        false
+                                        (mem/capacity seek-k)))))
                   (recur id->row k)))
               id->row)))]
     id->row))
