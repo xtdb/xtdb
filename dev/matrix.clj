@@ -451,11 +451,11 @@
              (.toArray diag)))))
 
 (defn r-literal-e [{:keys [value->id p->so]} a e]
-  (or (.get ^Int2ObjectHashMap (get p->so a) (int (get value->id e)))
+  (or (some->>  (get value->id e) (int) (.get ^Int2ObjectHashMap (get p->so a)))
       (new-r-roaring-bitmap)))
 
 (defn r-literal-v [{:keys [value->id p->os]} a v]
-  (or (.get ^Int2ObjectHashMap (get p->os a) (int (get value->id v)))
+  (or (some->> (get value->id v) (int) (.get ^Int2ObjectHashMap (get p->os a)))
       (new-r-roaring-bitmap)))
 
 (defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
