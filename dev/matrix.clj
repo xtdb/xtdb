@@ -15,7 +15,7 @@
            crux.ByteUtils
            [java.io DataInputStream DataOutput DataOutputStream]
            java.nio.ByteOrder
-           [org.agrona.collections Hashing Int2ObjectHashMap]
+           [org.agrona.collections Hashing Int2ObjectHashMap Object2IntHashMap]
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            org.agrona.DirectBuffer
@@ -560,7 +560,7 @@
                            (r-matlab-any bs)))
                         (reduce r-roaring-and))
               transpose-cache (IdentityHashMap.)]
-          (->> ((fn step [^ImmutableRoaringBitmap xs [var & var-access-order] parent-vars ^Map ctx]
+          (->> ((fn step [^ImmutableRoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
                   (when (and xs (not (.isEmpty xs)))
                     (let [acc (ArrayList.)
                           parent-var+plan (when var
@@ -590,7 +590,9 @@
                                                      (fn [^ImmutableRoaringBitmap acc [p ^Int2ObjectHashMap plan]]
                                                        (let [xs (if (= parent-var p)
                                                                   (.get plan x)
-                                                                  (some->> (.get ctx p) (int) (.get plan)))]
+                                                                  (let [idx (.get ctx p)]
+                                                                    (when-not (= -1 idx)
+                                                                      (.get plan idx))))]
                                                          (if (and acc xs)
                                                            (r-roaring-and acc xs)
                                                            xs)))
@@ -606,7 +608,7 @@
                 seed
                 (next var-access-order)
                 [root-var]
-                (IdentityHashMap.))
+                (Object2IntHashMap. -1))
                (map #(mapv (vec %) var-result-order))
                (into #{})))))))
 
