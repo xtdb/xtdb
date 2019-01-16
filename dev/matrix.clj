@@ -856,39 +856,67 @@
 (defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
+        reverse-business-time-ms (date->reverse-time-ms business-time)
         seek-k (with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (nippy/freeze-to-out! out p))
-                 false)
-        [rows row-ids id->row] (with-open [i (kv/new-iterator snapshot)]
-                                 (loop [rows (ArrayList.)
-                                        row-ids (ArrayList.)
-                                        id->row (Int2ObjectHashMap.)
-                                        k ^DirectBuffer (kv/seek i seek-k)]
-                                   (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
-                                     (if (and (<= (reverse-time-ms->time-ms
-                                                   (.getLong k (- (mem/capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
-                                                  business-time-ms)
-                                              (<= (reverse-time-ms->time-ms
-                                                   (.getLong k (- (mem/capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN))
-                                                  transaction-time-ms))
-                                         (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)
-                                               row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                                           (recur (doto rows
-                                                    (.add row))
-                                                  (doto row-ids
-                                                    (.add row-id))
-                                                  (doto id->row
-                                                    (.put row-id row))
-                                                  (kv/seek i (with-buffer-out seek-b
-                                                               (fn [^DataOutput out]
-                                                                 (.writeInt out idx-id)
-                                                                 (nippy/freeze-to-out! out p)
-                                                                 (.writeInt out (inc row-id)))
-                                                               false))))
-                                         (recur rows row-ids id->row (kv/next i)))
-                                     [rows row-ids id->row])))]
+                   (nippy/freeze-to-out! out p)))
+        key->business-time-ms (fn [^DirectBuffer k]
+                                (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
+        key->transaction-time-ms (fn [^DirectBuffer k]
+                                   (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN)))
+        key->row-id (fn [^DirectBuffer k]
+                      (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
+        within-prefix? (fn [k]
+                         (and k (mem/buffers=? k seek-k (mem/capacity seek-k))))
+        [rows row-ids id->row]
+        (with-open [i (kv/new-iterator snapshot)]
+          (loop [rows (ArrayList.)
+                 row-ids (ArrayList.)
+                 id->row (Int2ObjectHashMap.)
+                 k ^DirectBuffer (kv/seek i seek-k)]
+            (if (within-prefix? k)
+              (let [[row-id k] (loop [k k]
+                                 (let [row-id (key->row-id k)]
+                                   (if (<= (long (key->business-time-ms k)) business-time-ms)
+                                     [row-id k]
+                                     (let [found-k ^DirectBuffer (kv/seek i (with-buffer-out seek-b
+                                                                              (fn [^DataOutput out]
+                                                                                (.writeInt out idx-id)
+                                                                                (nippy/freeze-to-out! out p)
+                                                                                (.writeInt out row-id)
+                                                                                (.writeLong out reverse-business-time-ms))
+                                                                              false))]
+                                       (when (within-prefix? found-k)
+                                         (let [found-row-id (key->row-id found-k)]
+                                           (if (= row-id found-row-id)
+                                             [row-id found-k]
+                                             (recur found-k))))))))
+                    [found? k] (loop [k ^DirectBuffer k]
+                                 (when (within-prefix? k)
+                                   (if (<= (long (key->transaction-time-ms k)) transaction-time-ms)
+                                     [true k]
+                                     (let [next-k (kv/next i)]
+                                       (if (= row-id (key->row-id next-k))
+                                         (recur next-k)
+                                         [false next-k])))))]
+                (if found?
+                  (let [row-id (int row-id)
+                        row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                    (recur (doto rows
+                             (.add row))
+                           (doto row-ids
+                             (.add row-id))
+                           (doto id->row
+                             (.put row-id row))
+                           (kv/seek i (with-buffer-out seek-b
+                                        (fn [^DataOutput out]
+                                          (.writeInt out idx-id)
+                                          (nippy/freeze-to-out! out p)
+                                          (.writeInt out (inc row-id)))
+                                        false))))
+                  (recur rows row-ids id->row k)))
+              [rows row-ids id->row])))]
     (->SnapshotMatrix snapshot idx-id p seek-b row-ids rows id->row)))
 
 (deftype SnapshotValueToId [snapshot ^Map cache seek-b]
