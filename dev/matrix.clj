@@ -653,8 +653,7 @@
   ([b f copy?]
    (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)))]
      (with-open [out (DataOutputStream. b-out)]
-       (f out)
-       (.flush out))
+       (f out))
      (cond-> (UnsafeBuffer. (.buffer b-out) 0 (.position b-out))
        copy? (mem/copy-buffer)))))
 
