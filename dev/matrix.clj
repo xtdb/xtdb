@@ -523,7 +523,7 @@
         var-result-order (mapv (zipmap var-access-order (range)) find)]
     [var->mask initial-result clauses-in-join-order var-access-order var-result-order]))
 
-(defn r-query [{:keys [id->value] :as graph} q]
+(defn r-query [{:keys [^IntFunction id->value] :as graph} q]
   (let [[var->mask
          initial-result
          clauses-in-join-order
@@ -585,7 +585,7 @@
                                 (reify IntConsumer
                                   (accept [_ x]
                                     (if-not var
-                                      (.add acc [(get id->value x)])
+                                      (.add acc [(.apply id->value x)])
                                       (when-let [xs (reduce
                                                      (fn [^ImmutableRoaringBitmap acc [p ^Int2ObjectHashMap plan]]
                                                        (let [xs (if (= parent-var p)
@@ -603,7 +603,7 @@
                                                         (conj parent-vars var)
                                                         (doto ctx
                                                           (.put (last parent-vars) x)))]
-                                          (.add acc (cons (get id->value x) y))))))))
+                                          (.add acc (cons (.apply id->value x) y))))))))
                       (seq acc))))
                 seed
                 (next var-access-order)
@@ -750,7 +750,11 @@
   (valAt [this k]
     (.valAt this k nil))
 
-  (valAt [_ k default]
+  (valAt [this k default]
+    (or (.apply this (int k)) default))
+
+  IntFunction
+  (apply [_ k]
     (.computeIfAbsent cache
                       (int k)
                       (reify IntFunction
@@ -762,9 +766,8 @@
                                              (.writeInt out k))
                                            false)
                                   k (kv/seek i seek-k)]
-                              (if (and k (mem/buffers=? k seek-k))
-                                (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))
-                                default))))))))
+                              (when (and k (mem/buffers=? k seek-k))
+                                (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
 (defn lmdb->r-graph
   ([snapshot]
