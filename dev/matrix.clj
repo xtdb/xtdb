@@ -459,32 +459,37 @@
                                   row)))]
     (reduce
      (fn [m [[[row]] :as cells]]
-       (reduce
-        (fn [^MutableRoaringBitmap x [_ col]]
-          (doto x
-            (.add (int col))))
-        (a-get-row m (int row))
-        cells)
+       (doto ^MutableRoaringBitmap
+           (reduce
+            (fn [^MutableRoaringBitmap x [_ col]]
+              (doto x
+                (.add (int col))))
+            (a-get-row m (int row))
+            cells)
+         (.runOptimize))
        m)
      (new-r-bitmap (count rows))
      rows)))
 
 (defn r-diagonal-matrix [diag]
-  (reduce (fn [m d]
-            (let [d (int d)]
-              (doto m
-                (a-put-row d (doto (new-r-roaring-bitmap)
-                               (.add d))))))
-          (new-r-bitmap (count diag))
-          diag))
+  (reduce
+   (fn [m d]
+     (let [d (int d)]
+       (doto m
+         (a-put-row d (doto (new-r-roaring-bitmap)
+                        (.add d))))))
+   (new-r-bitmap (count diag))
+   diag))
 
 (defn r-column-vector ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [vs]
-  (reduce
-   (fn [^MutableRoaringBitmap acc v]
-     (doto acc
-       (.add (int v))))
-   (new-r-roaring-bitmap)
-   vs))
+  (doto ^MutableRoaringBitmap
+      (reduce
+       (fn [^MutableRoaringBitmap acc v]
+         (doto acc
+           (.add (int v))))
+       (new-r-roaring-bitmap)
+       vs)
+    (.runOptimize)))
 
 (defn r-all-cells [a]
   (reduce (fn [acc row]
@@ -528,15 +533,16 @@
         a
 
         :else
-        (reduce
-         (fn [m d]
-           (let [d (int d)]
-             (if-let [b (a-get-row a d)]
-               (doto m
-                 (a-put-row d b))
-               m)))
-         (new-r-bitmap (.getCardinality diag))
-         (.toArray diag))))
+        (doto ^MutableRoaringBitmap
+            (reduce
+             (fn [m d]
+               (let [d (int d)]
+                 (if-let [b (a-get-row a d)]
+                   (doto m
+                     (a-put-row d b))
+                   m)))
+             (new-r-bitmap (.getCardinality diag))
+             (.toArray diag)))))
 
 (defn r-literal-e [{:keys [value->id p->so]} a e]
   (-> (r-column-vector [(get value->id e)])
@@ -867,6 +873,7 @@
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
+        idx-id (int idx-id)
         seek-k (with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
@@ -887,7 +894,7 @@
                  k ^DirectBuffer (kv/seek i seek-k)]
             (if (within-prefix? k)
               (let [[row-id k] (loop [k k]
-                                 (let [row-id (key->row-id k)]
+                                 (let [row-id (int (key->row-id k))]
                                    (if (<= (long (key->business-time-ms k)) business-time-ms)
                                      [row-id k]
                                      (let [found-k ^DirectBuffer (kv/seek i (with-buffer-out seek-b
@@ -898,21 +905,21 @@
                                                                                 (.writeLong out reverse-business-time-ms))
                                                                               false))]
                                        (when (within-prefix? found-k)
-                                         (let [found-row-id (key->row-id found-k)]
+                                         (let [found-row-id (int (key->row-id found-k))]
                                            (if (= row-id found-row-id)
                                              [row-id found-k]
                                              (recur found-k))))))))
+                    row-id (int row-id)
                     [found? k] (loop [k ^DirectBuffer k]
                                  (when (within-prefix? k)
                                    (if (<= (long (key->transaction-time-ms k)) transaction-time-ms)
                                      [true k]
                                      (let [next-k (kv/next i)]
-                                       (if (= row-id (key->row-id next-k))
+                                       (if (= row-id (int (key->row-id next-k)))
                                          (recur next-k)
                                          [false next-k])))))]
                 (if found?
-                  (let [row-id (int row-id)
-                        row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                  (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
                     (recur (doto rows
                              (.add row))
                            (doto row-ids
@@ -1089,7 +1096,8 @@
                          [k (if (instance? MutableRoaringBitmap v)
                               (with-buffer-out b
                                 (fn [^DataOutput out]
-                                  (.serialize ^MutableRoaringBitmap v out)))
+                                  (.serialize (doto ^MutableRoaringBitmap v
+                                                (.runOptimize)) out)))
                               v)]))
                   (kv/store kv)))))))))
 
