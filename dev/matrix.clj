@@ -549,11 +549,12 @@
 (defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
   (let [result (r-mult-diag
                 mask-e
-                (get p->so a) ;; TODO: is the transpose worth it?
-                #_(r-transpose
+                (if mask-v
+                  (r-transpose
                    (r-mult-diag
                     mask-v
-                    (p->os a))))]
+                    (get p->os a)))
+                  (get p->so a)))]
     [result
      (r-matlab-any-transpose result)
      (r-matlab-any result)]))
