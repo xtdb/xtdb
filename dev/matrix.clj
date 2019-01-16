@@ -471,9 +471,10 @@
 
 (defn r-diagonal-matrix [diag]
   (reduce (fn [m d]
-            (doto m
-              (a-put-row (int d) (doto (new-r-roaring-bitmap)
-                                   (.add (int d))))))
+            (let [d (int d)]
+              (doto m
+                (a-put-row d (doto (new-r-roaring-bitmap)
+                               (.add d))))))
           (new-r-bitmap (count diag))
           diag))
 
@@ -487,8 +488,9 @@
 
 (defn r-all-cells [a]
   (reduce (fn [acc row]
-            (into acc (->> (.toArray (a-get-row a (int row)))
-                           (mapv #(vector row %)))))
+            (let [row (int row)]
+              (into acc (->> (.toArray ^ImmutableRoaringBitmap (a-get-row a row))
+                             (mapv #(vector row %))))))
           [] (a-row-ids a)))
 
 (defn r-transpose [a]
@@ -729,8 +731,9 @@
                                                  (.runOptimize)) out))
                                  (ImmutableRoaringBitmap. (.byteBuffer eb))))
           ->immutable-matrix (fn [m]
-                               (doseq [k (a-row-ids m)]
-                                 (a-put-row m (int k) (->immutable-bitmap (a-get-row m (int k)))))
+                               (doseq [k (a-row-ids m)
+                                       :let [k (int k)]]
+                                 (a-put-row m k (->immutable-bitmap (a-get-row m k))))
                                m)]
       {:p->os (->> (for [[k v] p->so]
                      [k (->immutable-matrix (r-transpose v))])
@@ -812,12 +815,13 @@
                         (.writeInt out id)))]))
     (doseq [[p so] p->so]
       (kv/store kv
-                (for [row-id (a-row-ids so)]
+                (for [row-id (a-row-ids so)
+                      :let [row-id (int row-id)]]
                   [(with-buffer-out b
                      (fn [^DataOutput out]
                        (.writeInt out p->so-idx-id)
                        (nippy/freeze-to-out! out p)
-                       (.writeInt out (int row-id))
+                       (.writeInt out row-id)
                        (.writeLong out (date->reverse-time-ms business-time))
                        (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
@@ -825,12 +829,13 @@
                        (.serialize ^ImmutableRoaringBitmap (a-get-row so row-id) out)))])))
     (doseq [[p os] p->os]
       (kv/store kv
-                (for [row-id (a-row-ids os)]
+                (for [row-id (a-row-ids os)
+                      :let [row-id (int row-id)]]
                   [(with-buffer-out b
                      (fn [^DataOutput out]
                        (.writeInt out p->os-idx-id)
                        (nippy/freeze-to-out! out p)
-                       (.writeInt out (int row-id))
+                       (.writeInt out row-id)
                        (.writeLong out (date->reverse-time-ms business-time))
                        (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
@@ -959,7 +964,7 @@
                             (let [seek-k (with-buffer-out seek-b
                                            (fn [^DataOutput out]
                                              (.writeInt out id->value-idx-id)
-                                             (.writeInt out (int k)))
+                                             (.writeInt out k))
                                            false)
                                   k (kv/seek i seek-k)]
                               (if (and k (mem/buffers=? k seek-k))
@@ -1063,7 +1068,7 @@
                                                               (.writeInt out id)
                                                               (.writeLong out (date->reverse-time-ms business-time))
                                                               (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                          (.toMutableRoaringBitmap (a-get-row (get-in g [idx p]) id))]))))
+                                                          (.toMutableRoaringBitmap ^ImmutableRoaringBitmap (a-get-row (get-in g [idx p]) id))]))))
 
                  pending-id-state (atom {})]
              (prn (count chunk))
