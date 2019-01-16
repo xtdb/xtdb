@@ -378,56 +378,27 @@
 (defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
   (MutableRoaringBitmap.))
 
-(defprotocol AMatrix
-  (a-get-row ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [this row-id])
-  (a-rows ^java.util.Collection [this])
-  (a-row-ids ^java.util.Collection [this])
-  (a-put-row ^AMatrix [this row-id row])
-  (a-empty? [this]))
-
-(extend-protocol AMatrix
-  Int2ObjectHashMap
-  (a-get-row [this row-id]
-    (.computeIfAbsent this
-                      (int row-id)
-                      (reify IntFunction
-                        (apply [_ k]
-                          (new-r-roaring-bitmap)))))
-
-  (a-rows [this]
-    (.values this))
-
-  (a-row-ids [this]
-    (.keySet this))
-
-  (a-put-row [this row-id row]
-    (doto this
-      (.put (int row-id) row)))
-
-  (a-empty? [this]
-    (.isEmpty this)))
-
 (defn r-and
   ([a] a)
-  ([a b]
-   (let [ks (doto (HashSet. (a-row-ids a))
-              (.retainAll (a-row-ids b)))]
-     (reduce (fn [m k]
+  ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
+   (let [ks (doto (HashSet. (.keySet a))
+              (.retainAll (.keySet b)))]
+     (reduce (fn [^Int2ObjectHashMap m k]
                (let [k (int k)]
                  (doto m
-                   (a-put-row k (ImmutableRoaringBitmap/and (a-get-row a k) (a-get-row b k))))))
+                   (.put k (ImmutableRoaringBitmap/and (.get a k) (.get b k))))))
              (new-r-bitmap (count ks))
              ks))))
 
 (defn r-or
   ([a] a)
-  ([a b]
-   (let [ks (doto (HashSet. (a-row-ids a))
-              (.retainAll (a-row-ids b)))]
-     (reduce (fn [m k]
+  ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
+   (let [ks (doto (HashSet. (.keySet a))
+              (.retainAll (.keySet b)))]
+     (reduce (fn [^Int2ObjectHashMap m k]
                (let [k (int k)]
                  (doto m
-                   (a-put-row k (ImmutableRoaringBitmap/or (a-get-row a k) (a-get-row b k))))))
+                   (.put k (ImmutableRoaringBitmap/or (.get a k) (.get b k))))))
              (new-r-bitmap (count ks))
              ks))))
 
@@ -436,8 +407,8 @@
   ([^ImmutableRoaringBitmap a ^ImmutableRoaringBitmap b]
    (ImmutableRoaringBitmap/and a b)))
 
-(defn r-cardinality ^long [a]
-  (->> (a-rows a)
+(defn r-cardinality ^long [^Int2ObjectHashMap a]
+  (->> (.values a)
        (map #(.getCardinality ^ImmutableBitmapDataProvider %))
        (reduce +)))
 
@@ -458,13 +429,13 @@
                   (partition-by (fn [[row]]
                                   row)))]
     (reduce
-     (fn [m [[[row]] :as cells]]
+     (fn [^Int2ObjectHashMap m [[[row]] :as cells]]
        (doto ^MutableRoaringBitmap
            (reduce
             (fn [^MutableRoaringBitmap x [_ col]]
               (doto x
                 (.add (int col))))
-            (a-get-row m (int row))
+            (.get m (int row))
             cells)
          (.runOptimize))
        m)
@@ -473,11 +444,11 @@
 
 (defn r-diagonal-matrix [diag]
   (reduce
-   (fn [m d]
+   (fn [^Int2ObjectHashMap m d]
      (let [d (int d)]
        (doto m
-         (a-put-row d (doto (new-r-roaring-bitmap)
-                        (.add d))))))
+         (.put d (doto (new-r-roaring-bitmap)
+                   (.add d))))))
    (new-r-bitmap (count diag))
    diag))
 
@@ -491,42 +462,42 @@
        vs)
     (.runOptimize)))
 
-(defn r-all-cells [a]
+(defn r-all-cells [^Int2ObjectHashMap a]
   (reduce (fn [acc row]
             (let [row (int row)]
-              (into acc (->> (.toArray ^ImmutableRoaringBitmap (a-get-row a row))
+              (into acc (->> (.toArray ^ImmutableRoaringBitmap (.get a row))
                              (mapv #(vector row %))))))
-          [] (a-row-ids a)))
+          [] (.keySet a)))
 
-(defn r-transpose [a]
+(defn r-transpose [^Int2ObjectHashMap a]
   (reduce
-   (fn [m row]
+   (fn [^Int2ObjectHashMap m row]
      (let [row (int row)
-           cells ^ImmutableRoaringBitmap (a-get-row a row)]
+           cells ^ImmutableRoaringBitmap (.get a row)]
        (.forEach cells
                  (reify IntConsumer
                    (accept [_ col]
-                     (let [^MutableRoaringBitmap x (a-get-row m col)]
+                     (let [^MutableRoaringBitmap x (.computeIfAbsent m col
+                                                                     (reify IntFunction
+                                                                       (apply [_ _]
+                                                                         (new-r-roaring-bitmap))))]
                        (.add x row)))))
        m))
-   (new-r-bitmap (count (a-row-ids a)))
-   (a-row-ids a)))
+   (new-r-bitmap (count a))
+   (.keySet a)))
 
-(defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
-  (if (a-empty? a)
+(defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+  (if (.isEmpty a)
     (new-r-roaring-bitmap)
-    (ImmutableRoaringBitmap/or (.iterator (a-rows a)))))
+    (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
-(defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
-  (if (a-empty? a)
+(defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+  (if (.isEmpty a)
     (new-r-roaring-bitmap)
-    (r-column-vector (a-row-ids a))))
+    (r-column-vector (.keySet a))))
 
-(defn r-row ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a ^long row]
-  (a-get-row a (int row)))
-
-(defn r-mult-diag [^ImmutableRoaringBitmap diag a]
-  (cond (a-empty? a)
+(defn r-mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
+  (cond (.isEmpty a)
         (new-r-bitmap)
 
         (nil? diag)
@@ -535,11 +506,11 @@
         :else
         (doto ^MutableRoaringBitmap
             (reduce
-             (fn [m d]
+             (fn [^Int2ObjectHashMap m d]
                (let [d (int d)]
-                 (if-let [b (a-get-row a d)]
+                 (if-let [b (.get a d)]
                    (doto m
-                     (a-put-row d b))
+                     (.put d b))
                    m)))
              (new-r-bitmap (.getCardinality diag))
              (.toArray diag)))))
@@ -638,7 +609,7 @@
                                            a
                                            (get var->mask e)
                                            (get var->mask v))]
-          (if (a-empty? join-result)
+          (if (empty? join-result)
             #{}
             (recur (inc idx)
                    (assoc var->mask e mask-e v mask-v)
@@ -683,11 +654,11 @@
                                     (if-not var
                                       (.add acc [(get id->value x)])
                                       (when-let [xs (reduce
-                                                     (fn [^ImmutableRoaringBitmap acc [p plan]]
+                                                     (fn [^ImmutableRoaringBitmap acc [p ^Int2ObjectHashMap plan]]
                                                        (let [xs (if (= parent-var p)
-                                                                  (r-row plan x)
-                                                                  (some->> (.get ctx p) (r-row plan)))]
-                                                         (if acc
+                                                                  (.get plan x)
+                                                                  (some->> (.get ctx p) (int) (.get plan)))]
+                                                         (if (and acc xs)
                                                            (r-roaring-and acc xs)
                                                            xs)))
                                                      nil
@@ -720,11 +691,11 @@
                                                  [s p o])]
                            {:p->so (update p->so
                                            p
-                                           (fn [ m]
-                                             (let [m (or m (new-r-bitmap))
+                                           (fn [m]
+                                             (let [^Int2ObjectHashMap m (or m (new-r-bitmap))
                                                    s-id (int (get value->id s))
                                                    o-id (int (get value->id o))
-                                                   ^MutableRoaringBitmap bs (a-get-row m s-id)]
+                                                   ^MutableRoaringBitmap bs (.get m s-id)]
                                                (doto bs
                                                  (.add o-id))
                                                m)))
@@ -736,10 +707,10 @@
                                    (.serialize (doto x
                                                  (.runOptimize)) out))
                                  (ImmutableRoaringBitmap. (.byteBuffer eb))))
-          ->immutable-matrix (fn [m]
-                               (doseq [k (a-row-ids m)
+          ->immutable-matrix (fn [^Int2ObjectHashMap m]
+                               (doseq [k (.keySet m)
                                        :let [k (int k)]]
-                                 (a-put-row m k (->immutable-bitmap (a-get-row m k))))
+                                 (.put m k (->immutable-bitmap (.get m k))))
                                m)]
       {:p->os (->> (for [[k v] p->so]
                      [k (->immutable-matrix (r-transpose v))])
@@ -819,9 +790,9 @@
                     (with-buffer-out b
                       (fn [^DataOutput out]
                         (.writeInt out id)))]))
-    (doseq [[p so] p->so]
+    (doseq [[p ^Int2ObjectHashMap so] p->so]
       (kv/store kv
-                (for [row-id (a-row-ids so)
+                (for [row-id (.keySet so)
                       :let [row-id (int row-id)]]
                   [(with-buffer-out b
                      (fn [^DataOutput out]
@@ -832,10 +803,10 @@
                        (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
                      (fn [^DataOutput out]
-                       (.serialize ^ImmutableRoaringBitmap (a-get-row so row-id) out)))])))
-    (doseq [[p os] p->os]
+                       (.serialize ^ImmutableRoaringBitmap (.get so row-id) out)))])))
+    (doseq [[p ^Int2ObjectHashMap os] p->os]
       (kv/store kv
-                (for [row-id (a-row-ids os)
+                (for [row-id (.keySet os)
                       :let [row-id (int row-id)]]
                   [(with-buffer-out b
                      (fn [^DataOutput out]
@@ -846,28 +817,7 @@
                        (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
                      (fn [^DataOutput out]
-                       (.serialize ^ImmutableRoaringBitmap (a-get-row os row-id) out)))])))))
-
-(deftype SnapshotMatrix [snapshot idx-id p seek-b row-ids rows ^Int2ObjectHashMap id->row]
-  AMatrix
-  (a-get-row [this row-id]
-    (.computeIfAbsent id->row
-                      (int row-id)
-                      (reify IntFunction
-                        (apply [_ k]
-                          (new-r-roaring-bitmap)))))
-
-  (a-rows [this]
-    rows)
-
-  (a-row-ids [this]
-    row-ids)
-
-  (a-put-row [this row-id row]
-    (throw (UnsupportedOperationException.)))
-
-  (a-empty? [this]
-    (.isEmpty id->row)))
+                       (.serialize ^ImmutableRoaringBitmap (.get os row-id) out)))])))))
 
 (defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
@@ -886,11 +836,9 @@
                       (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
         within-prefix? (fn [k]
                          (and k (mem/buffers=? k seek-k (mem/capacity seek-k))))
-        [rows row-ids id->row]
+        id->row
         (with-open [i (kv/new-iterator snapshot)]
-          (loop [rows (ArrayList.)
-                 row-ids (ArrayList.)
-                 id->row (Int2ObjectHashMap.)
+          (loop [id->row (Int2ObjectHashMap.)
                  k ^DirectBuffer (kv/seek i seek-k)]
             (if (within-prefix? k)
               (let [[row-id k] (loop [k k]
@@ -920,11 +868,7 @@
                                          [false next-k])))))]
                 (if found?
                   (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                    (recur (doto rows
-                             (.add row))
-                           (doto row-ids
-                             (.add row-id))
-                           (doto id->row
+                    (recur (doto id->row
                              (.put row-id row))
                            (kv/seek i (with-buffer-out seek-b
                                         (fn [^DataOutput out]
@@ -932,9 +876,9 @@
                                           (nippy/freeze-to-out! out p)
                                           (.writeInt out (inc row-id)))
                                         false))))
-                  (recur rows row-ids id->row k)))
-              [rows row-ids id->row])))]
-    (->SnapshotMatrix snapshot idx-id p seek-b row-ids rows id->row)))
+                  (recur id->row k)))
+              id->row)))]
+    id->row))
 
 (deftype SnapshotValueToId [snapshot ^Map cache seek-b]
   ILookup
@@ -1075,7 +1019,8 @@
                                                               (.writeInt out id)
                                                               (.writeLong out (date->reverse-time-ms business-time))
                                                               (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                          (.toMutableRoaringBitmap ^ImmutableRoaringBitmap (a-get-row (get-in g [idx p]) id))]))))
+                                                          (let [^Int2ObjectHashMap m (get-in g [idx p])]
+                                                            (.toMutableRoaringBitmap ^ImmutableRoaringBitmap (.get m id)))]))))
 
                  pending-id-state (atom {})]
              (prn (count chunk))
