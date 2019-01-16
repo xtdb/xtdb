@@ -370,9 +370,9 @@
 ;; also seems to be behaving unexpectedly (returns duplicated keys),
 ;; at least when using RoaringBitmaps as values.
 (defn new-r-bitmap
-  ([]
+  (^Int2ObjectHashMap []
    (Int2ObjectHashMap.))
-  ([^long size]
+  (^Int2ObjectHashMap [^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
 (defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
@@ -387,18 +387,6 @@
                (let [k (int k)]
                  (doto m
                    (.put k (ImmutableRoaringBitmap/and (.get a k) (.get b k))))))
-             (new-r-bitmap (count ks))
-             ks))))
-
-(defn r-or
-  ([a] a)
-  ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
-   (let [ks (doto (HashSet. (.keySet a))
-              (.retainAll (.keySet b)))]
-     (reduce (fn [^Int2ObjectHashMap m k]
-               (let [k (int k)]
-                 (doto m
-                   (.put k (ImmutableRoaringBitmap/or (.get a k) (.get b k))))))
              (new-r-bitmap (count ks))
              ks))))
 
@@ -422,26 +410,6 @@
                       (apply [_ k]
                         (r-cardinality a)))))
 
-(declare r-column-vector)
-
-(defn r-sparse-matrix [cells]
-  (let [rows (->> (sort cells)
-                  (partition-by (fn [[row]]
-                                  row)))]
-    (reduce
-     (fn [^Int2ObjectHashMap m [[[row]] :as cells]]
-       (doto ^MutableRoaringBitmap
-           (reduce
-            (fn [^MutableRoaringBitmap x [_ col]]
-              (doto x
-                (.add (int col))))
-            (.get m (int row))
-            cells)
-         (.runOptimize))
-       m)
-     (new-r-bitmap (count rows))
-     rows)))
-
 (defn r-diagonal-matrix [diag]
   (reduce
    (fn [^Int2ObjectHashMap m d]
@@ -452,39 +420,22 @@
    (new-r-bitmap (count diag))
    diag))
 
-(defn r-column-vector ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [vs]
-  (doto ^MutableRoaringBitmap
-      (reduce
-       (fn [^MutableRoaringBitmap acc v]
-         (doto acc
-           (.add (int v))))
-       (new-r-roaring-bitmap)
-       vs)
-    (.runOptimize)))
-
-(defn r-all-cells [^Int2ObjectHashMap a]
-  (reduce (fn [acc row]
-            (let [row (int row)]
-              (into acc (->> (.toArray ^ImmutableRoaringBitmap (.get a row))
-                             (mapv #(vector row %))))))
-          [] (.keySet a)))
-
 (defn r-transpose [^Int2ObjectHashMap a]
-  (reduce
-   (fn [^Int2ObjectHashMap m row]
-     (let [row (int row)
-           cells ^ImmutableRoaringBitmap (.get a row)]
-       (.forEach cells
-                 (reify IntConsumer
-                   (accept [_ col]
-                     (let [^MutableRoaringBitmap x (.computeIfAbsent m col
-                                                                     (reify IntFunction
-                                                                       (apply [_ _]
-                                                                         (new-r-roaring-bitmap))))]
-                       (.add x row)))))
-       m))
-   (new-r-bitmap (count a))
-   (.keySet a)))
+  (loop [i (.iterator (.keySet a))
+         m ^Int2ObjectHashMap (new-r-bitmap (.size a))]
+    (if-not (.hasNext i)
+      m
+      (let [row (.nextInt i)
+            cols ^ImmutableRoaringBitmap (.get a row)]
+        (.forEach cols
+                  (reify IntConsumer
+                    (accept [_ col]
+                      (let [^MutableRoaringBitmap x (.computeIfAbsent m col
+                                                                      (reify IntFunction
+                                                                        (apply [_ _]
+                                                                          (new-r-roaring-bitmap))))]
+                        (.add x row)))))
+        (recur i m)))))
 
 (defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
@@ -492,9 +443,12 @@
     (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
 (defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
-  (if (.isEmpty a)
-    (new-r-roaring-bitmap)
-    (r-column-vector (.keySet a))))
+  (loop [i (.iterator (.keySet a))
+         acc (new-r-roaring-bitmap)]
+    (if-not (.hasNext i)
+      acc
+      (recur i (doto acc
+                 (.add (.nextInt i)))))))
 
 (defn r-mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
@@ -516,14 +470,12 @@
              (.toArray diag)))))
 
 (defn r-literal-e [{:keys [value->id p->so]} a e]
-  (-> (r-column-vector [(get value->id e)])
-      (r-mult-diag (get p->so a))
-      (r-matlab-any)))
+  (or (.get ^Int2ObjectHashMap (get p->so a) (int (get value->id e)))
+      (new-r-roaring-bitmap)))
 
 (defn r-literal-v [{:keys [value->id p->os]} a v]
-  (-> (r-column-vector [(get value->id v)])
-      (r-mult-diag (get p->os a))
-      (r-matlab-any)))
+  (or (.get ^Int2ObjectHashMap (get p->os a) (int (get value->id v)))
+      (new-r-roaring-bitmap)))
 
 (defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
   (let [result (r-mult-diag
