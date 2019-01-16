@@ -501,7 +501,7 @@
                      (let [^MutableRoaringBitmap x (a-get-row m col)]
                        (.add x row)))))
        m))
-   (new-r-bitmap (count (a-rows a)))
+   (new-r-bitmap (count (a-row-ids a)))
    (a-row-ids a)))
 
 (defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
