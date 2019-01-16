@@ -754,12 +754,16 @@
 (def p->so-idx-id 2)
 (def p->os-idx-id 3)
 
-(defn with-buffer-out [b f]
-  (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)))]
-    (with-open [out (DataOutputStream. b-out)]
-      (f out)
-      (.flush out))
-    (mem/copy-buffer (UnsafeBuffer. (.buffer b-out) 0 (.position b-out)))))
+(defn with-buffer-out
+  ([b f]
+   (with-buffer-out b f true))
+  ([b f copy?]
+   (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)))]
+     (with-open [out (DataOutputStream. b-out)]
+       (f out)
+       (.flush out))
+     (cond-> (UnsafeBuffer. (.buffer b-out) 0 (.position b-out))
+       copy? (mem/copy-buffer)))))
 
 (defn r-graph->lmdb [kv {:keys [p->os p->so value->id]}]
   (let [b (ExpandableDirectByteBuffer.)]
@@ -823,7 +827,8 @@
   (let [seek-k (with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (nippy/freeze-to-out! out p)))
+                   (nippy/freeze-to-out! out p))
+                 false)
         id->row (with-open [i (kv/new-iterator snapshot)]
                   (loop [acc (Int2ObjectHashMap.)
                          k ^DirectBuffer (kv/seek i seek-k)]
@@ -851,7 +856,8 @@
                             (let [seek-k (with-buffer-out seek-b
                                            (fn [^DataOutput out]
                                              (.writeInt out value->id-idx-id)
-                                             (nippy/freeze-to-out! out k)))
+                                             (nippy/freeze-to-out! out k))
+                                           false)
                                   k (kv/seek i seek-k)]
                               (if (and k (mem/buffers=? k seek-k))
                                 (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
@@ -871,7 +877,8 @@
                             (let [seek-k (with-buffer-out seek-b
                                            (fn [^DataOutput out]
                                              (.writeInt out id->value-idx-id)
-                                             (.writeInt out (int k))))
+                                             (.writeInt out (int k)))
+                                           false)
                                   k (kv/seek i seek-k)]
                               (if (and k (mem/buffers=? k seek-k))
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))
