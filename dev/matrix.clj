@@ -648,11 +648,11 @@
   (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE))
 
 (defn with-buffer-out
-  ([b f]
+  (^org.agrona.DirectBuffer [b f]
    (with-buffer-out b f true))
-  ([b f copy?]
+  (^org.agrona.DirectBuffer [b f copy?]
    (with-buffer-out b f copy? 0))
-  ([b f copy? ^long offset]
+  (^org.agrona.DirectBuffer [b f copy? ^long offset]
    (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)) offset)]
      (with-open [out (DataOutputStream. b-out)]
        (f out))
@@ -694,7 +694,7 @@
                                                                           (.writeInt out row-id)
                                                                           (.writeLong out reverse-business-time-ms))
                                                                         false
-                                                                        (mem/capacity seek-k)))]
+                                                                        (.capacity seek-k)))]
                                  (when (within-prefix? found-k)
                                    (let [found-row-id (int (key->row-id found-k))]
                                      (if (= row-id found-row-id)
@@ -718,7 +718,7 @@
                                     (fn [^DataOutput out]
                                       (.writeInt out (inc row-id)))
                                     false
-                                    (mem/capacity seek-k)))))
+                                    (.capacity seek-k)))))
               (recur id->row (.key ^RowIdAndKey row-id+k))))
           id->row)))))
 
