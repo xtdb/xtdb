@@ -3,12 +3,13 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]
+            [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import [java.util Arrays ArrayList BitSet HashMap HashSet IdentityHashMap Map]
+  (:import [java.util Arrays ArrayList Date HashMap HashSet IdentityHashMap Map]
            [java.util.function Function IntFunction]
            [clojure.lang ILookup Indexed]
            crux.ByteUtils
@@ -747,12 +748,34 @@
 (comment
   (require 'crux.kv.lmdb)
   (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
-                        {:db-dir "dev-storage/matrix-lmdb"})))
+                        {:db-dir "dev-storage/matrix-lmdb"}))
+
+  (with-open [snapshot (crux.kv/new-snapshot lm)]
+    (let [total (atom 0)
+          qs (remove :crux-error c)
+          wg-r (matrix/lmdb->r-graph snapshot)]
+      (doseq [{:keys [idx query crux-results crux-time]} qs
+              :when (not (contains? #{35 67} idx))]
+        (let [start (System/currentTimeMillis)
+              result (count (matrix/r-query wg-r (crux.sparql/sparql->datalog query)))]
+          (try
+            (assert (= crux-results result) (pr-str [crux-results result]))
+            (catch Throwable t
+              (prn t)))
+          (let [t (- (System/currentTimeMillis) start)]
+            (swap! total + t))))
+      (prn @total (/ @total (double (count qs)))))))
 
 (def id->value-idx-id 0)
 (def value->id-idx-id 1)
 (def p->so-idx-id 2)
 (def p->os-idx-id 3)
+
+(defn- date->reverse-time-ms ^long [^Date date]
+  (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
+
+(defn- reverse-time-ms->time-ms ^long [^long reverse-time-ms]
+  (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE))
 
 (defn with-buffer-out
   ([b f]
@@ -766,7 +789,10 @@
        copy? (mem/copy-buffer)))))
 
 (defn r-graph->lmdb [kv {:keys [p->os p->so value->id]}]
-  (let [b (ExpandableDirectByteBuffer.)]
+  (let [b (ExpandableDirectByteBuffer.)
+        now (cio/next-monotonic-date)
+        business-time now
+        transaction-time now]
     (kv/store kv (for [[value id] value->id]
                    [(with-buffer-out b
                       (fn [^DataOutput out]
@@ -790,7 +816,9 @@
                      (fn [^DataOutput out]
                        (.writeInt out p->so-idx-id)
                        (nippy/freeze-to-out! out p)
-                       (.writeInt out (int row-id))))
+                       (.writeInt out (int row-id))
+                       (.writeLong out (date->reverse-time-ms business-time))
+                       (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
                      (fn [^DataOutput out]
                        (.serialize ^ImmutableRoaringBitmap (a-get-row so row-id) out)))])))
@@ -801,7 +829,9 @@
                      (fn [^DataOutput out]
                        (.writeInt out p->os-idx-id)
                        (nippy/freeze-to-out! out p)
-                       (.writeInt out (int row-id))))
+                       (.writeInt out (int row-id))
+                       (.writeLong out (date->reverse-time-ms business-time))
+                       (.writeLong out (date->reverse-time-ms transaction-time))))
                    (with-buffer-out b
                      (fn [^DataOutput out]
                        (.serialize ^ImmutableRoaringBitmap (a-get-row os row-id) out)))])))))
@@ -823,8 +853,10 @@
   (a-empty? [this]
     (.isEmpty id->row)))
 
-(defn new-snapshot-matrix [snapshot idx-id p seek-b]
-  (let [seek-k (with-buffer-out seek-b
+(defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
+  (let [business-time-ms (.getTime business-time)
+        transaction-time-ms (.getTime transaction-time)
+        seek-k (with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
                    (nippy/freeze-to-out! out p))
@@ -835,15 +867,27 @@
                                         id->row (Int2ObjectHashMap.)
                                         k ^DirectBuffer (kv/seek i seek-k)]
                                    (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
-                                     (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES) ByteOrder/BIG_ENDIAN)
-                                           row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                                       (recur (doto rows
-                                                (.add row))
-                                              (doto row-ids
-                                                (.add row-id))
-                                              (doto id->row
-                                                (.put row-id row))
-                                              (kv/next i)))
+                                     (if (and (<= (reverse-time-ms->time-ms
+                                                   (.getLong k (- (mem/capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
+                                                  business-time-ms)
+                                              (<= (reverse-time-ms->time-ms
+                                                   (.getLong k (- (mem/capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN))
+                                                  transaction-time-ms))
+                                         (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)
+                                               row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                                           (recur (doto rows
+                                                    (.add row))
+                                                  (doto row-ids
+                                                    (.add row-id))
+                                                  (doto id->row
+                                                    (.put row-id row))
+                                                  (kv/seek i (with-buffer-out seek-b
+                                                               (fn [^DataOutput out]
+                                                                 (.writeInt out idx-id)
+                                                                 (nippy/freeze-to-out! out p)
+                                                                 (.writeInt out (inc row-id)))
+                                                               false))))
+                                         (recur rows row-ids id->row (kv/next i)))
                                      [rows row-ids id->row])))]
     (->SnapshotMatrix snapshot idx-id p seek-b row-ids rows id->row)))
 
@@ -889,31 +933,35 @@
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))
                                 default))))))))
 
-(defn lmdb->r-graph [snapshot]
-  (let [seek-b (ExpandableDirectByteBuffer.)
-        matrix-cache (HashMap.)]
-    {:value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)
-     :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
-     :p->so (reify ILookup
-              (valAt [this k]
-                (.computeIfAbsent matrix-cache
-                                  [p->so-idx-id k]
-                                  (reify Function
-                                    (apply [_ _]
-                                      (new-snapshot-matrix snapshot p->so-idx-id k seek-b)))))
+(defn lmdb->r-graph
+  ([snapshot]
+   (let [now (cio/next-monotonic-date)]
+     (lmdb->r-graph snapshot now now)))
+  ([snapshot business-time transaction-time]
+   (let [seek-b (ExpandableDirectByteBuffer.)
+         matrix-cache (HashMap.)]
+     {:value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)
+      :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
+      :p->so (reify ILookup
+               (valAt [this k]
+                 (.computeIfAbsent matrix-cache
+                                   [p->so-idx-id k]
+                                   (reify Function
+                                     (apply [_ _]
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b)))))
 
-              (valAt [this k default]
-                (throw (UnsupportedOperationException.))))
-     :p->os (reify ILookup
-              (valAt [this k]
-                (.computeIfAbsent matrix-cache
-                                  [p->os-idx-id k]
-                                  (reify Function
-                                    (apply [_ _]
-                                      (new-snapshot-matrix snapshot p->os-idx-id k seek-b)))))
+               (valAt [this k default]
+                 (throw (UnsupportedOperationException.))))
+      :p->os (reify ILookup
+               (valAt [this k]
+                 (.computeIfAbsent matrix-cache
+                                   [p->os-idx-id k]
+                                   (reify Function
+                                     (apply [_ _]
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b)))))
 
-              (valAt [this k default]
-                (throw (UnsupportedOperationException.))))}))
+               (valAt [this k default]
+                 (throw (UnsupportedOperationException.))))})))
 
 ;; Other Matrix-format related spikes:
 
