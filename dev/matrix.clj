@@ -806,13 +806,13 @@
                      (fn [^DataOutput out]
                        (.serialize ^ImmutableRoaringBitmap (a-get-row os row-id) out)))])))))
 
-(deftype SnapshotMatrix [snapshot idx-id p seek-b row-ids ^Int2ObjectHashMap row-cache]
+(deftype SnapshotMatrix [snapshot idx-id p seek-b row-ids rows ^Int2ObjectHashMap id->row]
   AMatrix
   (a-get-row [this row-id]
-    (.get row-cache (int row-id)))
+    (.get id->row (int row-id)))
 
   (a-rows [this]
-    (mapv #(.get row-cache (int %)) row-ids))
+    rows)
 
   (a-row-ids [this]
     row-ids)
@@ -821,7 +821,7 @@
     (throw (UnsupportedOperationException.)))
 
   (a-empty? [this]
-    (empty? row-ids)))
+    (.isEmpty id->row)))
 
 (defn new-snapshot-matrix [snapshot idx-id p seek-b]
   (let [seek-k (with-buffer-out seek-b
@@ -829,18 +829,23 @@
                    (.writeInt out idx-id)
                    (nippy/freeze-to-out! out p))
                  false)
-        id->row (with-open [i (kv/new-iterator snapshot)]
-                  (loop [acc (Int2ObjectHashMap.)
-                         k ^DirectBuffer (kv/seek i seek-k)]
-                    (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
-                      (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES) ByteOrder/BIG_ENDIAN)
-                            row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                        (recur (doto acc
-                                 (.put row-id row))
-                               (kv/next i)))
-                      acc)))
-        row-ids (sort (.keySet ^Int2ObjectHashMap id->row))]
-    (->SnapshotMatrix snapshot idx-id p seek-b row-ids id->row)))
+        [rows row-ids id->row] (with-open [i (kv/new-iterator snapshot)]
+                                 (loop [rows (ArrayList.)
+                                        row-ids (ArrayList.)
+                                        id->row (Int2ObjectHashMap.)
+                                        k ^DirectBuffer (kv/seek i seek-k)]
+                                   (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
+                                     (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES) ByteOrder/BIG_ENDIAN)
+                                           row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                                       (recur (doto rows
+                                                (.add row))
+                                              (doto row-ids
+                                                (.add row-id))
+                                              (doto id->row
+                                                (.put row-id row))
+                                              (kv/next i)))
+                                     [rows row-ids id->row])))]
+    (->SnapshotMatrix snapshot idx-id p seek-b row-ids rows id->row)))
 
 (deftype SnapshotValueToId [snapshot ^Map cache seek-b]
   ILookup
