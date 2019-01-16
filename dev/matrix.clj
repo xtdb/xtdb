@@ -537,18 +537,18 @@
 
 (defn r-literal-e [{:keys [value->id p->so]} a e]
   (-> (r-column-vector [(get value->id e)])
-      (r-mult-diag (p->so a))
+      (r-mult-diag (get p->so a))
       (r-matlab-any)))
 
 (defn r-literal-v [{:keys [value->id p->os]} a v]
   (-> (r-column-vector [(get value->id v)])
-      (r-mult-diag (p->os a))
+      (r-mult-diag (get p->os a))
       (r-matlab-any)))
 
 (defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
   (let [result (r-mult-diag
                 mask-e
-                (p->so a) ;; TODO: is the transpose worth it?
+                (get p->so a) ;; TODO: is the transpose worth it?
                 #_(r-transpose
                    (r-mult-diag
                     mask-v
@@ -800,111 +800,139 @@
         b (ExpandableDirectByteBuffer.)]
     (doseq [[p so] p->so]
       (kv/store kv
-                [[(with-buffer-out b
-                    (fn [^DataOutput out]
-                      (.writeInt out p->so-idx-id)
-                      (nippy/freeze-to-out! out p)))
-                  (matrix->buffer so)]]))
+                (for [row-id (a-row-ids so)]
+                  [(with-buffer-out b
+                     (fn [^DataOutput out]
+                       (.writeInt out p->so-idx-id)
+                       (nippy/freeze-to-out! out p)
+                       (.writeInt out (int row-id))))
+                   (with-buffer-out b
+                     (fn [^DataOutput out]
+                       (.serialize ^ImmutableRoaringBitmap (a-get-row so row-id) out)))])))
     (doseq [[p os] p->os]
       (kv/store kv
-                [[(with-buffer-out b
-                    (fn [^DataOutput out]
-                      (.writeInt out p->os-idx-id)
-                      (nippy/freeze-to-out! out p)))
-                  (matrix->buffer os)]]))))
+                (for [row-id (a-row-ids os)]
+                  [(with-buffer-out b
+                     (fn [^DataOutput out]
+                       (.writeInt out p->os-idx-id)
+                       (nippy/freeze-to-out! out p)
+                       (.writeInt out (int row-id))))
+                   (with-buffer-out b
+                     (fn [^DataOutput out]
+                       (.serialize ^ImmutableRoaringBitmap (a-get-row os row-id) out)))])))))
 
 (defn lmdb->r-graph [kv]
-  (with-open [snapshot (kv/new-snapshot kv)
-              i (kv/new-iterator snapshot)]
-    (let [buffer->matrix (fn [idx-id]
-                           (let [seek-k (with-buffer-out
-                                          nil
-                                          (fn [^DataOutput out]
-                                            (.writeInt out idx-id)))]
-                             (loop [k (kv/seek i seek-k)
-                                    acc {}]
-                               (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
-                                 (let [p (with-open [in (DataInputStream. (DirectBufferInputStream. k))]
-                                           (assert (= idx-id (.readInt in)))
-                                           (nippy/thaw-from-in! in))
-                                       bb (.order (.byteBuffer ^DirectBuffer (kv/value i)) ByteOrder/BIG_ENDIAN)
-                                       row-size (.getInt bb)
-                                       row-ids-buffer (UnsafeBuffer. bb Integer/BYTES (* Integer/BYTES row-size))
-                                       offsets-buffer (UnsafeBuffer. bb
-                                                                     (+ Integer/BYTES (* Integer/BYTES row-size))
-                                                                     (* Integer/BYTES row-size))
-                                       am (reify AMatrix
-                                            (a-get-row [this row-id]
-                                              (let [idx (ByteUtils/binarySearchBuffer row-ids-buffer (int row-id))]
-                                                (if (= -1 idx)
-                                                  (new-r-roaring-bitmap)
-                                                  (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
-                                                    (ImmutableRoaringBitmap. (.position bb offset))))))
+  (let [buffer->matrix (fn [idx-id p]
+                         (let [seek-b (ExpandableDirectByteBuffer.)]
+                           (reify AMatrix
+                             (a-get-row [this row-id]
+                               (with-open [snapshot (kv/new-snapshot kv)
+                                           i (kv/new-iterator snapshot)]
+                                 (let [seek-k (with-buffer-out seek-b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out idx-id)
+                                                  (nippy/freeze-to-out! out p)
+                                                  (.writeInt out (int row-id))))
+                                       k (kv/seek i seek-k)]
+                                   (if (and k (mem/buffers=? k seek-k))
+                                     (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))
+                                     (new-r-roaring-bitmap)))))
 
-                                            (a-rows [this]
-                                              ((fn step [^long idx]
-                                                 (when (< idx row-size)
-                                                   (let [offset (.getInt offsets-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)]
-                                                     (cons (ImmutableRoaringBitmap. (.position bb offset))
-                                                           (lazy-seq (step (inc idx))))))) 0))
+                             (a-rows [this]
+                               (with-open [snapshot (kv/new-snapshot kv)
+                                           i (kv/new-iterator snapshot)]
+                                 (let [seek-k (with-buffer-out seek-b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out idx-id)
+                                                  (nippy/freeze-to-out! out p)))]
+                                   (loop [acc []
+                                          k (kv/seek i seek-k)]
+                                     (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
+                                       (recur (conj acc (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i))))
+                                              (kv/next i))
+                                       acc)))))
 
-                                            (a-row-ids [this]
-                                              ((fn step [^long idx]
-                                                 (when (< idx row-size)
-                                                   (cons (.getInt row-ids-buffer (* idx Integer/BYTES) ByteOrder/BIG_ENDIAN)
-                                                         (lazy-seq (step (inc idx)))))) 0))
+                             (a-row-ids [this]
+                               (with-open [snapshot (kv/new-snapshot kv)
+                                           i (kv/new-iterator snapshot)]
+                                 (let [seek-k (with-buffer-out seek-b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out idx-id)
+                                                  (nippy/freeze-to-out! out p)))]
+                                   (loop [acc []
+                                          k ^DirectBuffer (kv/seek i seek-k)]
+                                     (if (and k (mem/buffers=? k seek-k (mem/capacity seek-k)))
+                                       (let [row-id (.getInt k (- (mem/capacity k) Integer/BYTES) ByteOrder/BIG_ENDIAN)]
+                                         (recur (conj acc row-id)
+                                                (kv/next i)))
+                                       acc)))))
 
-                                            (a-put-row [this row-id row]
-                                              (throw (UnsupportedOperationException.)))
+                             (a-put-row [this row-id row]
+                               (throw (UnsupportedOperationException.)))
 
-                                            (a-empty? [this]
-                                              (zero? row-size)))]
-                                   (recur (kv/next i) (assoc acc p am)))
-                                 acc))))]
-      {:value->id (let [seek-b (ExpandableDirectByteBuffer.)
-                        cache (HashMap.)]
-                    (reify ILookup
-                      (valAt [this k]
-                        (.valAt this k nil))
+                             (a-empty? [this]
+                               (with-open [snapshot (kv/new-snapshot kv)
+                                           i (kv/new-iterator snapshot)]
+                                 (let [seek-k (with-buffer-out seek-b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out idx-id)
+                                                  (nippy/freeze-to-out! out p)))
+                                       k (kv/seek i seek-k)]
+                                   (not (and k (mem/buffers=? k seek-k (mem/capacity seek-k))))))))))]
+    {:value->id (let [seek-b (ExpandableDirectByteBuffer.)
+                      cache (HashMap.)]
+                  (reify ILookup
+                    (valAt [this k]
+                      (.valAt this k nil))
 
-                      (valAt [_ k default]
-                        (.computeIfAbsent cache
-                                          k
-                                          (reify Function
-                                            (apply [_ k]
-                                              (with-open [snapshot (kv/new-snapshot kv)
-                                                          i (kv/new-iterator snapshot)]
-                                                (let [seek-k (with-buffer-out seek-b
-                                                               (fn [^DataOutput out]
-                                                                 (.writeInt out value->id-idx-id)
-                                                                 (nippy/freeze-to-out! out k)))
-                                                      k (kv/seek i seek-k)]
-                                                  (if (and k (mem/buffers=? k seek-k))
-                                                    (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
-                                                    default)))))))))
-       :id->value (let [seek-b (ExpandableDirectByteBuffer.)
-                        cache (Int2ObjectHashMap.)]
-                    (reify ILookup
-                      (valAt [this k]
-                        (.valAt this k nil))
+                    (valAt [_ k default]
+                      (.computeIfAbsent cache
+                                        k
+                                        (reify Function
+                                          (apply [_ k]
+                                            (with-open [snapshot (kv/new-snapshot kv)
+                                                        i (kv/new-iterator snapshot)]
+                                              (let [seek-k (with-buffer-out seek-b
+                                                             (fn [^DataOutput out]
+                                                               (.writeInt out value->id-idx-id)
+                                                               (nippy/freeze-to-out! out k)))
+                                                    k (kv/seek i seek-k)]
+                                                (if (and k (mem/buffers=? k seek-k))
+                                                  (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
+                                                  default)))))))))
+     :id->value (let [seek-b (ExpandableDirectByteBuffer.)
+                      cache (Int2ObjectHashMap.)]
+                  (reify ILookup
+                    (valAt [this k]
+                      (.valAt this k nil))
 
-                      (valAt [_ k default]
-                        (.computeIfAbsent cache
-                                          (int k)
-                                          (reify IntFunction
-                                            (apply [_ k]
-                                              (with-open [snapshot (kv/new-snapshot kv)
-                                                          i (kv/new-iterator snapshot)]
-                                                (let [seek-k (with-buffer-out seek-b
-                                                               (fn [^DataOutput out]
-                                                                 (.writeInt out id->value-idx-id)
-                                                                 (.writeInt out (int k))))
-                                                      k (kv/seek i seek-k)]
-                                                  (if (and k (mem/buffers=? k seek-k))
-                                                    (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))
-                                                    default)))))))))
-       :p->so (buffer->matrix p->so-idx-id)
-       :p->os (buffer->matrix p->os-idx-id)})))
+                    (valAt [_ k default]
+                      (.computeIfAbsent cache
+                                        (int k)
+                                        (reify IntFunction
+                                          (apply [_ k]
+                                            (with-open [snapshot (kv/new-snapshot kv)
+                                                        i (kv/new-iterator snapshot)]
+                                              (let [seek-k (with-buffer-out seek-b
+                                                             (fn [^DataOutput out]
+                                                               (.writeInt out id->value-idx-id)
+                                                               (.writeInt out (int k))))
+                                                    k (kv/seek i seek-k)]
+                                                (if (and k (mem/buffers=? k seek-k))
+                                                  (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))
+                                                  default)))))))))
+     :p->so (reify ILookup
+              (valAt [this k]
+                (.valAt this k nil))
+
+              (valAt [this k default]
+                (buffer->matrix p->so-idx-id k)))
+     :p->os (reify ILookup
+              (valAt [this k]
+                (.valAt this k nil))
+
+              (valAt [this k default]
+                (buffer->matrix p->os-idx-id k)))}))
 
 ;; Other Matrix-format related spikes:
 
