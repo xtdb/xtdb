@@ -501,7 +501,7 @@
                      (let [^MutableRoaringBitmap x (a-get-row m col)]
                        (.add x row)))))
        m))
-   (new-r-bitmap (count a))
+   (new-r-bitmap (count (a-rows a)))
    (a-row-ids a)))
 
 (defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [a]
@@ -628,7 +628,7 @@
                                            a
                                            (get var->mask e)
                                            (get var->mask v))]
-          (if (empty? join-result)
+          (if (a-empty? join-result)
             #{}
             (recur (inc idx)
                    (assoc var->mask e mask-e v mask-v)
@@ -745,6 +745,7 @@
 ;; but can server queries out of memory mapped buffers in LMDB.
 
 (comment
+  (require 'crux.kv.lmdb)
   (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
                         {:db-dir "dev-storage/matrix-lmdb"})))
 
