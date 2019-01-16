@@ -347,25 +347,6 @@
 
 ;; Bitmap-per-Row version.
 
-(comment
-
-  (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
-  (def wg-r (matrix/load-rdf-into-r-graph matrix/watdiv-triples-resource))
-
-  (let [total (atom 0)
-        qs (remove :crux-error c)]
-    (doseq [{:keys [idx query crux-results crux-time]} qs
-            :when (not (contains? #{35 67} idx))]
-      (let [start (System/currentTimeMillis)
-            result (count (matrix/r-query wg-r (crux.sparql/sparql->datalog query)))]
-        (try
-          (assert (= crux-results result) (pr-str [crux-results result]))
-          (catch Throwable t
-            (prn t)))
-        (let [t (- (System/currentTimeMillis) start)]
-          (swap! total + t))))
-    (prn @total (/ @total (double (count qs))))))
-
 ;; NOTE: toString on Int2ObjectHashMap seems to be broken. entrySet
 ;; also seems to be behaving unexpectedly (returns duplicated keys),
 ;; at least when using RoaringBitmaps as values.
@@ -629,52 +610,6 @@
                (map #(mapv (vec %) var-result-order))
                (into #{})))))))
 
-(defn load-rdf-into-r-graph [resource]
-  (with-open [in (io/input-stream (io/resource resource))]
-    (let [{:keys [value->id
-                  p->so]}
-          (->> (rdf/ntriples-seq in)
-               (map rdf/rdf->clj)
-               (reduce (fn [{:keys [value->id p->so]} [s p o]]
-                         (let [value->id (reduce (fn [value->id v]
-                                                   (update value->id v (fn [x]
-                                                                         (or x (count value->id)))))
-                                                 value->id
-                                                 [s p o])]
-                           {:p->so (update p->so
-                                           p
-                                           (fn [m]
-                                             (let [^Int2ObjectHashMap m (or m (new-r-bitmap))
-                                                   s-id (int (get value->id s))
-                                                   o-id (int (get value->id o))
-                                                   ^MutableRoaringBitmap bs (.get m s-id)]
-                                               (doto bs
-                                                 (.add o-id))
-                                               m)))
-                            :value->id value->id}))))
-          max-size (round-to-power-of-two (count value->id) 64)
-          ->immutable-bitmap (fn [^MutableRoaringBitmap x]
-                               (let [eb (ExpandableDirectByteBuffer. (.serializedSizeInBytes x))]
-                                 (with-open [out (DataOutputStream. (ExpandableDirectBufferOutputStream. eb))]
-                                   (.serialize (doto x
-                                                 (.runOptimize)) out))
-                                 (ImmutableRoaringBitmap. (.byteBuffer eb))))
-          ->immutable-matrix (fn [^Int2ObjectHashMap m]
-                               (doseq [k (.keySet m)
-                                       :let [k (int k)]]
-                                 (.put m k (->immutable-bitmap (.get m k))))
-                               m)]
-      {:p->os (->> (for [[k v] p->so]
-                     [k (->immutable-matrix (r-transpose v))])
-                   (into {}))
-       :p->so (->> (for [[k v] p->so]
-                     [k (->immutable-matrix v)])
-                   (into {}))
-       :value->id value->id
-       :id->value (doto (Int2ObjectHashMap.)
-                    (.putAll (set/map-invert value->id)))
-       :max-size max-size})))
-
 ;; Persistence Spike, this is not how it will eventually look / work,
 ;; but can server queries out of memory mapped buffers in LMDB.
 
@@ -682,7 +617,9 @@
   (require 'crux.kv.lmdb)
   (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
                         {:db-dir "dev-storage/matrix-lmdb"}))
+  (matrix/load-rdf-into-lmdb lm matrix/watdiv-triples-resource)
 
+  (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
   (with-open [snapshot (crux.kv/new-snapshot lm)]
     (let [total (atom 0)
           qs (remove :crux-error c)
@@ -720,56 +657,6 @@
        (.flush out))
      (cond-> (UnsafeBuffer. (.buffer b-out) 0 (.position b-out))
        copy? (mem/copy-buffer)))))
-
-(defn r-graph->lmdb [kv {:keys [p->os p->so value->id]}]
-  (let [b (ExpandableDirectByteBuffer.)
-        now (cio/next-monotonic-date)
-        business-time now
-        transaction-time now]
-    (kv/store kv (for [[value id] value->id]
-                   [(with-buffer-out b
-                      (fn [^DataOutput out]
-                        (.writeInt out id->value-idx-id)
-                        (.writeInt out id)))
-                    (with-buffer-out b
-                      (fn [^DataOutput out]
-                        (nippy/freeze-to-out! out value)))]))
-    (kv/store kv (for [[value id] value->id]
-                   [(with-buffer-out b
-                      (fn [^DataOutput out]
-                        (.writeInt out value->id-idx-id)
-                        (nippy/freeze-to-out! out value)))
-                    (with-buffer-out b
-                      (fn [^DataOutput out]
-                        (.writeInt out id)))]))
-    (doseq [[p ^Int2ObjectHashMap so] p->so]
-      (kv/store kv
-                (for [row-id (.keySet so)
-                      :let [row-id (int row-id)]]
-                  [(with-buffer-out b
-                     (fn [^DataOutput out]
-                       (.writeInt out p->so-idx-id)
-                       (nippy/freeze-to-out! out p)
-                       (.writeInt out row-id)
-                       (.writeLong out (date->reverse-time-ms business-time))
-                       (.writeLong out (date->reverse-time-ms transaction-time))))
-                   (with-buffer-out b
-                     (fn [^DataOutput out]
-                       (.serialize ^ImmutableRoaringBitmap (.get so row-id) out)))])))
-    (doseq [[p ^Int2ObjectHashMap os] p->os]
-      (kv/store kv
-                (for [row-id (.keySet os)
-                      :let [row-id (int row-id)]]
-                  [(with-buffer-out b
-                     (fn [^DataOutput out]
-                       (.writeInt out p->os-idx-id)
-                       (nippy/freeze-to-out! out p)
-                       (.writeInt out row-id)
-                       (.writeLong out (date->reverse-time-ms business-time))
-                       (.writeLong out (date->reverse-time-ms transaction-time))))
-                   (with-buffer-out b
-                     (fn [^DataOutput out]
-                       (.serialize ^ImmutableRoaringBitmap (.get os row-id) out)))])))))
 
 (defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
