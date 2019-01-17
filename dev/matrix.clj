@@ -10,8 +10,8 @@
             [crux.query :as q]
             [taoensso.nippy :as nippy])
   (:import [java.util ArrayList Date HashMap HashSet IdentityHashMap Map]
-           [java.util.function Function IntFunction]
-           [clojure.lang ILookup Indexed]
+           [java.util.function Function IntFunction ToIntFunction]
+           [clojure.lang Box ILookup Indexed]
            crux.ByteUtils
            [java.io DataInputStream DataOutput DataOutputStream]
            java.nio.ByteOrder
@@ -213,7 +213,7 @@
         var-result-order (mapv (zipmap var-access-order (range)) find)]
     [var->mask initial-result clauses-in-join-order var-access-order var-result-order]))
 
-(def ^:const ^:private ctx-missing-value -1)
+(def ^:const ^:private unknown-id -1)
 
 (defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
@@ -283,7 +283,7 @@
                                                        (let [xs (if (= parent-var p)
                                                                   (.get plan x)
                                                                   (let [idx (.get ctx p)]
-                                                                    (when-not (= ctx-missing-value idx)
+                                                                    (when-not (= unknown-id idx)
                                                                       (.get plan idx))))]
                                                          (if (and acc xs)
                                                            (bitmap-and acc xs)
@@ -300,7 +300,7 @@
                 seed
                 (next var-access-order)
                 [root-var]
-                (Object2IntHashMap. ctx-missing-value))
+                (Object2IntHashMap. unknown-id))
                (map #(mapv (vec %) var-result-order))
                (into #{})))))))
 
@@ -463,7 +463,7 @@
       :predicate-cardinality-cache (HashMap.)
       :query-cache (HashMap.)})))
 
-(defn- get-or-create-id [kv value last-id-state pending-id-state]
+(defn- get-or-create-id [kv value ^Box last-id-state ^Object2IntHashMap pending-id-state]
   (with-open [snapshot (kv/new-snapshot kv)]
     (let [seek-b (ExpandableDirectByteBuffer.)
           value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)]
@@ -476,17 +476,19 @@
               within-prefix? (fn [k]
                                (and k (mem/buffers=? k prefix-k (.capacity prefix-k))))
               ;; TODO: This is obviously a slow way to find the latest id.
-              id (get @pending-id-state
-                      value
-                      (do (when-not @last-id-state
-                            (with-open [i (kv/new-iterator snapshot)]
-                              (loop [last-id (int 0)
-                                     k ^DirectBuffer (kv/seek i prefix-k)]
-                                (if (within-prefix? k)
-                                  (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
-                                  (reset! last-id-state last-id)))))
-                          (swap! last-id-state inc)))]
-          (swap! pending-id-state assoc value id)
+              id (.computeIfAbsent pending-id-state
+                                   value
+                                   (reify ToIntFunction
+                                     (applyAsInt [_ k]
+                                       (when (= unknown-id (.val last-id-state))
+                                         (with-open [i (kv/new-iterator snapshot)]
+                                           (loop [last-id (int 0)
+                                                  k ^DirectBuffer (kv/seek i prefix-k)]
+                                             (if (within-prefix? k)
+                                               (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
+                                               (set! (.val last-id-state) last-id)))))
+                                       (unchecked-int (set! (.val last-id-state)
+                                                            (unchecked-inc-int (.val last-id-state)))))))]
           [id [[(mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (.writeInt out id->value-idx-id)
@@ -511,7 +513,7 @@
            business-time now
            transaction-time now
            b (ExpandableDirectByteBuffer.)
-           last-id-state (atom nil)]
+           last-id-state (Box. nil)]
        (doseq [chunk (->> (rdf/ntriples-seq in)
                           (map rdf/rdf->clj)
                           (partition-all chunk-size))]
@@ -535,7 +537,7 @@
                                                                   b ^ImmutableRoaringBitmap (or (.get m id) (new-bitmap))]
                                                               (.toMutableRoaringBitmap ^ImmutableRoaringBitmap b))])))))
 
-                 pending-id-state (atom {})]
+                 pending-id-state (Object2IntHashMap. unknown-id)]
              (prn (count chunk))
              (->> (for [[s p o] chunk
                         :let [[^long s-id s-id-kvs] (get-or-create-id kv s last-id-state pending-id-state)
