@@ -19,7 +19,7 @@
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            org.agrona.DirectBuffer
-           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
+           org.agrona.io.DirectBufferInputStream
            [org.roaringbitmap IntConsumer]
            [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]))
 
@@ -35,16 +35,16 @@
 ;; NOTE: toString on Int2ObjectHashMap seems to be broken. entrySet
 ;; also seems to be behaving unexpectedly (returns duplicated keys),
 ;; at least when using RoaringBitmaps as values.
-(defn new-matrix
+(defn- new-matrix
   (^Int2ObjectHashMap []
    (Int2ObjectHashMap.))
   (^Int2ObjectHashMap [^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
-(defn new-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
+(defn- new-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
   (MutableRoaringBitmap.))
 
-(defn matrix-and
+(defn- matrix-and
   ([a] a)
   ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
    (let [ks (doto (HashSet. (.keySet a))
@@ -56,24 +56,24 @@
              (new-matrix (count ks))
              ks))))
 
-(defn bitmap-and
+(defn- bitmap-and
   ([a] a)
   ([^ImmutableRoaringBitmap a ^ImmutableRoaringBitmap b]
    (ImmutableRoaringBitmap/and a b)))
 
-(defn matrix-cardinality ^long [^Int2ObjectHashMap a]
+(defn- matrix-cardinality ^long [^Int2ObjectHashMap a]
   (->> (.values a)
        (map #(.getCardinality ^ImmutableRoaringBitmap %))
        (reduce +)))
 
-(defn predicate-cardinality [{:keys [p->so ^Map predicate-cardinality-cache]} attr]
+(defn- predicate-cardinality [{:keys [p->so ^Map predicate-cardinality-cache]} attr]
   (.computeIfAbsent predicate-cardinality-cache
                     attr
                     (reify Function
                       (apply [_ k]
                         (matrix-cardinality (get p->so k))))))
 
-(defn new-diagonal-matrix [^ImmutableRoaringBitmap diag]
+(defn- new-diagonal-matrix [^ImmutableRoaringBitmap diag]
   (let [diag (.toArray diag)]
     (reduce
      (fn [^Int2ObjectHashMap m d]
@@ -84,7 +84,7 @@
      (new-matrix (alength diag))
      diag)))
 
-(defn transpose [^Int2ObjectHashMap a]
+(defn- transpose [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
          m ^Int2ObjectHashMap (new-matrix (.size a))]
     (if-not (.hasNext i)
@@ -101,12 +101,12 @@
                         (.add x row)))))
         (recur i m)))))
 
-(defn matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn- matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
     (new-bitmap)
     (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
-(defn matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn- matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
          acc (new-bitmap)]
     (if-not (.hasNext i)
@@ -114,7 +114,7 @@
       (recur i (doto acc
                  (.add (.nextInt i)))))))
 
-(defn mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
+(defn- mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
         (new-matrix)
 
@@ -133,15 +133,15 @@
              (new-matrix (.getCardinality diag))
              (.toArray diag)))))
 
-(defn new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->so]} a e]
+(defn- new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->so]} a e]
   (or (some->> (get value->id e) (int) (.get ^Int2ObjectHashMap (get p->so a)))
       (new-bitmap)))
 
-(defn new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->os]} a v]
+(defn- new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->os]} a v]
   (or (some->> (get value->id v) (int) (.get ^Int2ObjectHashMap (get p->os a)))
       (new-bitmap)))
 
-(defn join [{:keys [p->os p->so] :as graph} a mask-e mask-v]
+(defn- join [{:keys [p->os p->so] :as graph} a mask-e mask-v]
   (let [result (mult-diag
                 mask-e
                 (if mask-v
@@ -157,7 +157,7 @@
 (def ^:private logic-var? symbol?)
 (def ^:private literal? (complement logic-var?))
 
-(defn compile-query [{:keys [p->so] :as graph} q]
+(defn- compile-query [graph q]
   (let [{:keys [find where]} (s/conform :crux.query/query q)
         triple-clauses (->> where
                             (filter (comp #{:triple} first))
@@ -296,10 +296,10 @@
 ;; Persistence Spike, this is not how it will eventually look / work,
 ;; but can server queries out of memory mapped buffers in LMDB.
 
-(def id->value-idx-id 0)
-(def value->id-idx-id 1)
-(def p->so-idx-id 2)
-(def p->os-idx-id 3)
+(def ^:private id->value-idx-id 0)
+(def ^:private value->id-idx-id 1)
+(def ^:private p->so-idx-id 2)
+(def ^:private p->os-idx-id 3)
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -307,35 +307,23 @@
 (defn- reverse-time-ms->time-ms ^long [^long reverse-time-ms]
   (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE))
 
-(defn with-buffer-out
-  (^org.agrona.DirectBuffer [b f]
-   (with-buffer-out b f true))
-  (^org.agrona.DirectBuffer [b f copy?]
-   (with-buffer-out b f copy? 0))
-  (^org.agrona.DirectBuffer [b f copy? ^long offset]
-   (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)) offset)]
-     (with-open [out (DataOutputStream. b-out)]
-       (f out))
-     (cond-> (UnsafeBuffer. (.buffer b-out) 0 (+ (.position b-out) offset))
-       copy? (mem/copy-buffer)))))
-
-(defn key->business-time-ms ^long [^DirectBuffer k]
+(defn- key->business-time-ms ^long [^DirectBuffer k]
   (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
-(defn key->transaction-time-ms ^long [^DirectBuffer k]
+(defn- key->transaction-time-ms ^long [^DirectBuffer k]
   (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
-(defn key->row-id ^long [^DirectBuffer k]
+(defn- key->row-id ^long [^DirectBuffer k]
   (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
 
 (deftype RowIdAndKey [^int row-id ^DirectBuffer key])
 
-(defn new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
+(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
         idx-id (int idx-id)
-        seek-k (with-buffer-out seek-b
+        seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
                    (nippy/freeze-to-out! out p)))
@@ -349,7 +337,7 @@
                            (let [row-id (int (key->row-id k))]
                              (if (<= (key->business-time-ms k) business-time-ms)
                                (RowIdAndKey. row-id k)
-                               (let [found-k ^DirectBuffer (kv/seek i (with-buffer-out seek-b
+                               (let [found-k ^DirectBuffer (kv/seek i (mem/with-buffer-out seek-b
                                                                         (fn [^DataOutput out]
                                                                           (.writeInt out row-id)
                                                                           (.writeLong out reverse-business-time-ms))
@@ -374,7 +362,7 @@
               (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
                 (recur (doto id->row
                          (.put row-id row))
-                       (kv/seek i (with-buffer-out seek-b
+                       (kv/seek i (mem/with-buffer-out seek-b
                                     (fn [^DataOutput out]
                                       (.writeInt out (inc row-id)))
                                     false
@@ -393,7 +381,7 @@
                       (reify Function
                         (apply [_ k]
                           (with-open [i (kv/new-iterator snapshot)]
-                            (let [seek-k (with-buffer-out seek-b
+                            (let [seek-k (mem/with-buffer-out seek-b
                                            (fn [^DataOutput out]
                                              (.writeInt out value->id-idx-id)
                                              (nippy/freeze-to-out! out k))
@@ -418,7 +406,7 @@
                       (reify IntFunction
                         (apply [_ k]
                           (with-open [i (kv/new-iterator snapshot)]
-                            (let [seek-k (with-buffer-out seek-b
+                            (let [seek-k (mem/with-buffer-out seek-b
                                            (fn [^DataOutput out]
                                              (.writeInt out id->value-idx-id)
                                              (.writeInt out k))
@@ -459,14 +447,14 @@
       :predicate-cardinality-cache (HashMap.)
       :query-cache (HashMap.)})))
 
-(defn get-or-create-id [kv value last-id-state pending-id-state]
+(defn- get-or-create-id [kv value last-id-state pending-id-state]
   (with-open [snapshot (kv/new-snapshot kv)]
     (let [seek-b (ExpandableDirectByteBuffer.)
           value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)]
       (if-let [id (get value->id value)]
         [id []]
         (let [b (ExpandableDirectByteBuffer.)
-              prefix-k (with-buffer-out seek-b
+              prefix-k (mem/with-buffer-out seek-b
                          (fn [^DataOutput out]
                            (.writeInt out id->value-idx-id)))
               within-prefix? (fn [k]
@@ -483,18 +471,18 @@
                                   (reset! last-id-state last-id)))))
                           (swap! last-id-state inc)))]
           (swap! pending-id-state assoc value id)
-          [id [[(with-buffer-out b
+          [id [[(mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (.writeInt out id->value-idx-id)
                     (.writeInt out id)))
-                (with-buffer-out b
+                (mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (nippy/freeze-to-out! out value)))]
-               [(with-buffer-out b
+               [(mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (.writeInt out value->id-idx-id)
                     (nippy/freeze-to-out! out value)))
-                (with-buffer-out b
+                (mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (.writeInt out id)))]]])))))
 
@@ -520,7 +508,7 @@
                                                        [idx-id idx p id]
                                                        (reify Function
                                                          (apply [_ _]
-                                                           [(with-buffer-out b
+                                                           [(mem/with-buffer-out b
                                                               (fn [^DataOutput out]
                                                                 (.writeInt out idx-id)
                                                                 (nippy/freeze-to-out! out p)
@@ -548,7 +536,7 @@
                   (into (sorted-map-by mem/buffer-comparator))
                   (map (fn [[k v]]
                          [k (if (instance? MutableRoaringBitmap v)
-                              (with-buffer-out b
+                              (mem/with-buffer-out b
                                 (fn [^DataOutput out]
                                   (.serialize (doto ^MutableRoaringBitmap v
                                                 (.runOptimize)) out)))

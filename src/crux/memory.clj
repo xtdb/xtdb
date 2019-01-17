@@ -1,10 +1,12 @@
 (ns crux.memory
   (:require [clojure.string :as str])
-  (:import java.nio.ByteBuffer
+  (:import [java.io DataOutputStream]
+           java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
+           org.agrona.io.ExpandableDirectBufferOutputStream
            crux.ByteUtils
            [clojure.lang Compiler DynamicClassLoader Reflector RT]
            [clojure.asm ClassWriter Opcodes Type]))
@@ -70,6 +72,18 @@
 
 (defn limit-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long limit]
   (slice-buffer buffer 0 limit))
+
+(defn with-buffer-out
+  (^org.agrona.DirectBuffer [b f]
+   (with-buffer-out b f true))
+  (^org.agrona.DirectBuffer [b f copy?]
+   (with-buffer-out b f copy? 0))
+  (^org.agrona.DirectBuffer [b f copy? ^long offset]
+   (let [b-out (ExpandableDirectBufferOutputStream. (or b (ExpandableDirectByteBuffer.)) offset)]
+     (with-open [out (DataOutputStream. b-out)]
+       (f out))
+     (cond-> (UnsafeBuffer. (.buffer b-out) 0 (+ (.position b-out) offset))
+       copy? (copy-buffer)))))
 
 (extend-protocol MemoryRegion
   (class (byte-array 0))
