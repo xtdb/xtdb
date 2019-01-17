@@ -443,6 +443,8 @@
                               (when (within-prefix? seek-k k)
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
+;; TODO: This isn't safe across snapshots if the address inside LMDB
+;; changes.
 (def ^:private bitmap-buffer-cache (lru/new-cache (* 2 1024 1024)))
 
 (defn lmdb->graph
@@ -536,7 +538,7 @@
                           (map rdf/rdf->clj)
                           (partition-all chunk-size))]
          (with-open [snapshot (kv/new-snapshot kv)]
-           (let [g (lmdb->graph snapshot business-time transaction-time)
+           (let [g (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
                  row-cache (HashMap.)
                  get-current-row (fn [idx-id idx p ^long id]
                                    (let [id (int id)]
