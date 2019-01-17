@@ -94,7 +94,7 @@
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend]
                                           :as options}]
-  (-> (kv/new-kv-store options)
+  (-> (kv/new-kv-store kv-backend)
       (lru/new-cache-providing-kv-store)
       (kv/open options)))
 

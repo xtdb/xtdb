@@ -320,30 +320,82 @@
     (print-assigned-values graph creator-of)
     (print-assigned-values graph creator-of-fname)))
 
+
+;; Other Matrix-format related spikes:
+
+(defn mat-mul [^doubles a ^doubles b]
+  (assert (= (alength a) (alength b)))
+  (let [size (alength a)
+        n (bit-shift-right size 1)
+        c (double-array size)]
+    (dotimes [i n]
+      (dotimes [j n]
+        (let [row-idx (* n i)
+              c-idx (+ row-idx j)]
+          (dotimes [k n]
+            (aset c
+                  c-idx
+                  (+ (aget c c-idx)
+                     (* (aget a (+ row-idx k))
+                        (aget b (+ (* n k) j)))))))))
+    c))
+
+(defn vec-mul [^doubles a ^doubles x]
+  (let [size (alength a)
+        n (bit-shift-right size 1)
+        y (double-array n)]
+    (assert (= n (alength x)))
+    (dotimes [i n]
+      (dotimes [j n]
+        (aset y
+              i
+              (+ (aget y i)
+                 (* (aget a (+ (* n i) j))
+                    (aget x j))))))
+    y))
+
+;; CSR
+;; https://people.eecs.berkeley.edu/~aydin/GALLA-sparse.pdf
+
+{:nrows 6
+ :row-ptr (int-array [0 2 5 6 9 12 16])
+ :col-ind (int-array [0 1
+                      1 3 5
+                      2
+                      2 4 5
+                      0 3 4
+                      0 2 3 5])
+ :values (double-array [5.4 1.1
+                        6.3 7.7 8.8
+                        1.1
+                        2.9 3.7 2.9
+                        9.0 1.1 4.5
+                        1.1 2.9 3.7 1.1])}
+
+;; DCSC Example
+{:nrows 8
+ :jc (int-array [1 7 8])
+ :col-ptr (int-array [1 3 4 5])
+ :row-ind (int-array [6 8 4 5])
+ :values (double-array [0.1 0.2 0.3 0.4])}
+
+(defn vec-csr-mul [{:keys [^long nrows ^ints row-ptr ^ints col-ind ^doubles values] :as a} ^doubles x]
+  (let [n nrows
+        y (double-array n)]
+    (assert (= n (alength x)))
+    (dotimes [i n]
+      (loop [j (aget row-ptr i)
+             yr 0.0]
+        (if (< j (aget row-ptr (inc i)))
+          (recur (inc i)
+                 (+ yr
+                    (* (aget values j)
+                       (aget x (aget col-ind j)))))
+          (aset y i yr))))
+    y))
+
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
-
-(comment
-  (matrix/r-query
-   lg
-   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
-     '{:find [x y z]
-       :where [[x :rdf/type :ub/GraduateStudent]
-               [y :rdf/type :ub/AssistantProfessor]
-               [z :rdf/type :ub/GraduateCourse]
-               [x :ub/advisor y]
-               [y :ub/teacherOf z]
-               [x :ub/takesCourse z]]}))
-
-  #{[:http://www.Department0.University0.edu/GraduateStudent76
-     :http://www.Department0.University0.edu/AssistantProfessor5
-     :http://www.Department0.University0.edu/GraduateCourse46]
-    [:http://www.Department0.University0.edu/GraduateStudent143
-     :http://www.Department0.University0.edu/AssistantProfessor8
-     :http://www.Department0.University0.edu/GraduateCourse53]
-    [:http://www.Department0.University0.edu/GraduateStudent60
-     :http://www.Department0.University0.edu/AssistantProfessor8
-     :http://www.Department0.University0.edu/GraduateCourse52]})
 
 ;; Bitmap-per-Row version.
 
@@ -615,35 +667,6 @@
 ;; Persistence Spike, this is not how it will eventually look / work,
 ;; but can server queries out of memory mapped buffers in LMDB.
 
-(comment
-  (require 'crux.kv.lmdb)
-  ;; Create an LMDBKv store for our matrices.
-  (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
-                        {:db-dir "dev-storage/matrix-lmdb-watdiv"}))
-  ;; Only needs to be done once.
-  (matrix/load-rdf-into-lmdb lm matrix/watdiv-triples-resource)
-
-  ;; Load reference test run to compare with.
-  (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
-
-  ;; Run the 240 reference queries against the Matrix spike, skipping
-  ;; errors and two queries that currently blocks.
-  (with-open [snapshot (crux.kv/new-snapshot lm)]
-    (let [total (atom 0)
-          qs (remove :crux-error c)
-          wg-r (matrix/lmdb->r-graph snapshot)]
-      (doseq [{:keys [idx query crux-results crux-time]} qs
-              :when (not (contains? #{35 67} idx))]
-        (let [start (System/currentTimeMillis)
-              result (count (matrix/r-query wg-r (crux.sparql/sparql->datalog query)))]
-          (try
-            (assert (= crux-results result) (pr-str [crux-results result]))
-            (catch Throwable t
-              (prn t)))
-          (let [t (- (System/currentTimeMillis) start)]
-            (swap! total + t))))
-      (prn @total (/ @total (double (count qs)))))))
-
 (def id->value-idx-id 0)
 (def value->id-idx-id 1)
 (def p->so-idx-id 2)
@@ -860,20 +883,22 @@
          (with-open [snapshot (kv/new-snapshot kv)]
            (let [g (lmdb->r-graph snapshot business-time transaction-time)
                  row-cache (HashMap.)
-                 get-current-row (fn [idx-id idx p id]
-                                   (.computeIfAbsent row-cache
-                                                     [idx-id idx p id]
-                                                     (reify Function
-                                                       (apply [_ _]
-                                                         [(with-buffer-out b
-                                                            (fn [^DataOutput out]
-                                                              (.writeInt out idx-id)
-                                                              (nippy/freeze-to-out! out p)
-                                                              (.writeInt out id)
-                                                              (.writeLong out (date->reverse-time-ms business-time))
-                                                              (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                          (let [^Int2ObjectHashMap m (get-in g [idx p])]
-                                                            (.toMutableRoaringBitmap ^ImmutableRoaringBitmap (.get m id)))]))))
+                 get-current-row (fn [idx-id idx p ^long id]
+                                   (let [id (int id)]
+                                     (.computeIfAbsent row-cache
+                                                       [idx-id idx p id]
+                                                       (reify Function
+                                                         (apply [_ _]
+                                                           [(with-buffer-out b
+                                                              (fn [^DataOutput out]
+                                                                (.writeInt out idx-id)
+                                                                (nippy/freeze-to-out! out p)
+                                                                (.writeInt out id)
+                                                                (.writeLong out (date->reverse-time-ms business-time))
+                                                                (.writeLong out (date->reverse-time-ms transaction-time))))
+                                                            (let [^Int2ObjectHashMap m (get-in g [idx p])
+                                                                  b ^ImmutableRoaringBitmap (or (.get m id) (new-r-roaring-bitmap))]
+                                                              (.toMutableRoaringBitmap ^ImmutableRoaringBitmap b))])))))
 
                  pending-id-state (atom {})]
              (prn (count chunk))
@@ -899,76 +924,74 @@
                               v)]))
                   (kv/store kv)))))))))
 
+;; LUBM:
+(comment
+  ;; Create an LMDBKv store for the LUBM data.
+  (def lm-lubm (kv/open (kv/new-kv-store "crux.kv.lmdbx.LMDBKv")
+                        {:db-dir "dev-storage/matrix-lmdb-lubm"}))
+  ;; Populate with LUBM data.
+  (matrix/load-rdf-into-lmdb lm-lubm matrix/lubm-triples-resource)
 
-;; Other Matrix-format related spikes:
+  ;; Try LUBM query 9:
+  (with-open [snapshot (kv/new-snapshot lm-lubm)]
+    (= (matrix/r-query
+        (matrix/lmdb->r-graph snapshot)
+        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
+          '{:find [x y z]
+            :where [[x :rdf/type :ub/GraduateStudent]
+                    [y :rdf/type :ub/AssistantProfessor]
+                    [z :rdf/type :ub/GraduateCourse]
+                    [x :ub/advisor y]
+                    [y :ub/teacherOf z]
+                    [x :ub/takesCourse z]]}))
+       #{[:http://www.Department0.University0.edu/GraduateStudent76
+          :http://www.Department0.University0.edu/AssistantProfessor5
+          :http://www.Department0.University0.edu/GraduateCourse46]
+         [:http://www.Department0.University0.edu/GraduateStudent143
+          :http://www.Department0.University0.edu/AssistantProfessor8
+          :http://www.Department0.University0.edu/GraduateCourse53]
+         [:http://www.Department0.University0.edu/GraduateStudent60
+          :http://www.Department0.University0.edu/AssistantProfessor8
+          :http://www.Department0.University0.edu/GraduateCourse52]}))
 
-(defn mat-mul [^doubles a ^doubles b]
-  (assert (= (alength a) (alength b)))
-  (let [size (alength a)
-        n (bit-shift-right size 1)
-        c (double-array size)]
-    (dotimes [i n]
-      (dotimes [j n]
-        (let [row-idx (* n i)
-              c-idx (+ row-idx j)]
-          (dotimes [k n]
-            (aset c
-                  c-idx
-                  (+ (aget c c-idx)
-                     (* (aget a (+ row-idx k))
-                        (aget b (+ (* n k) j)))))))))
-    c))
+  ;; Close when done.
+  (.close lm-lmdb))
 
-(defn vec-mul [^doubles a ^doubles x]
-  (let [size (alength a)
-        n (bit-shift-right size 1)
-        y (double-array n)]
-    (assert (= n (alength x)))
-    (dotimes [i n]
-      (dotimes [j n]
-        (aset y
-              i
-              (+ (aget y i)
-                 (* (aget a (+ (* n i) j))
-                    (aget x j))))))
-    y))
+;; WatDiv:
+(comment
+  ;; Create an LMDBKv store for our matrices.
+  (def lm-watdiv (kv/open (kv/new-kv-store "crux.kv.lmdb.LMDBKv")
+                          {:db-dir "dev-storage/matrix-lmdb-watdiv"}))
+  ;; This only needs to be done once and then whenever the data
+  ;; storage code changes. You need this file:
+  ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2 Place it at
+  ;; test/watdiv/data/watdiv.10M.nt
+  (matrix/load-rdf-into-lmdb lm-watdiv matrix/watdiv-triples-resource)
 
-;; CSR
-;; https://people.eecs.berkeley.edu/~aydin/GALLA-sparse.pdf
+  ;; Run the 240 reference queries against the Matrix spike, skipping
+  ;; errors and two queries that currently blocks.
+  (defn run-watdiv-reference
+    ([lm]
+     (run-watdiv-reference lm (io/resource "watdiv/watdiv_crux.edn") #{35 67}))
+    ([lm resource skip?]
+     (with-open [snapshot (crux.kv/new-snapshot lm)]
+       (let [wg (matrix/lmdb->r-graph snapshot)
+             times (mapv
+                    (fn [{:keys [idx query crux-results]}]
+                      (let [start (System/currentTimeMillis)
+                            result (count (matrix/r-query wg (crux.sparql/sparql->datalog query)))]
+                        (try
+                          (assert (= crux-results result) (pr-str [idx crux-results result]))
+                          (catch Throwable t
+                            (prn idx t)))
+                        (- (System/currentTimeMillis) start)))
+                    (->> (read-string (slurp resource))
+                         (remove :crux-error)
+                         (remove (comp skip? :idx))))
+             total (reduce + times)]
+         {:total total :average (/ total (double (count times)))}))))
 
-{:nrows 6
- :row-ptr (int-array [0 2 5 6 9 12 16])
- :col-ind (int-array [0 1
-                      1 3 5
-                      2
-                      2 4 5
-                      0 3 4
-                      0 2 3 5])
- :values (double-array [5.4 1.1
-                        6.3 7.7 8.8
-                        1.1
-                        2.9 3.7 2.9
-                        9.0 1.1 4.5
-                        1.1 2.9 3.7 1.1])}
+  (run-watdiv-reference lm-watdiv)
 
-;; DCSC Example
-{:nrows 8
- :jc (int-array [1 7 8])
- :col-ptr (int-array [1 3 4 5])
- :row-ind (int-array [6 8 4 5])
- :values (double-array [0.1 0.2 0.3 0.4])}
-
-(defn vec-csr-mul [{:keys [^long nrows ^ints row-ptr ^ints col-ind ^doubles values] :as a} ^doubles x]
-  (let [n nrows
-        y (double-array n)]
-    (assert (= n (alength x)))
-    (dotimes [i n]
-      (loop [j (aget row-ptr i)
-             yr 0.0]
-        (if (< j (aget row-ptr (inc i)))
-          (recur (inc i)
-                 (+ yr
-                    (* (aget values j)
-                       (aget x (aget col-ind j)))))
-          (aset y i yr))))
-    y))
+  ;; Close when done.
+  (.close lm-watdiv))

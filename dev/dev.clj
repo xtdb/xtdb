@@ -10,6 +10,7 @@
             [crux.byte-utils :as bu]
             [crux.index :as idx]
             [crux.kafka.embedded :as ek]
+            [crux.kv :as kv]
             [crux.http-server :as srv]
             [crux.codec :as c]
             [crux.io :as cio]

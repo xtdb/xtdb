@@ -35,16 +35,7 @@
                  (.isAssignableFrom ^Class IRecord record-class))
         record-class))))
 
-(s/def ::db-dir string?)
-(s/def ::kv-backend #'require-and-ensure-kv-record)
-
-(s/def ::options (s/keys :req-un [::kv-backend]
-                         :opt-un [::db-dir]))
-
-(defn new-kv-store ^java.io.Closeable [{:keys [db-dir
-                                               kv-backend]
-                                        :as options}]
-  (s/assert ::options options)
+(defn new-kv-store ^java.io.Closeable [kv-backend]
   (let [kv-record-class (require-and-ensure-kv-record kv-backend)]
     (.invoke (.getMethod kv-record-class "create"
                          (into-array [clojure.lang.IPersistentMap]))
