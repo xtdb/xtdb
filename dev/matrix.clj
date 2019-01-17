@@ -343,7 +343,7 @@
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
 
-(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b bitmap-buffer-cache]
+(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b ^MutableDirectBuffer content-hash-b bitmap-buffer-cache]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
@@ -385,11 +385,11 @@
               id->row
               (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                 (if (not= no-matches-for-row row-id)
-                  (let [buffer-hash (mem/copy-buffer (kv/value i))
+                  (let [buffer-hash ^DirectBuffer (kv/value i)
                         row (lru/compute-if-absent bitmap-buffer-cache
                                                    buffer-hash
                                                    (fn [_]
-                                                     (let [c-seek-k (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+                                                     (let [c-seek-k (doto content-hash-b
                                                                       (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN)
                                                                       (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
                                                            c-k ^DirectBuffer (kv/seek i c-seek-k)]
@@ -448,6 +448,7 @@
      (lmdb->graph snapshot now now bitmap-buffer-cache)))
   ([snapshot business-time transaction-time bitmap-buffer-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
+         content-hash-b (mem/allocate-buffer (+ sha1-size Integer/BYTES))
          matrix-cache (HashMap.)]
      {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
       :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
@@ -457,7 +458,7 @@
                                    [p->so-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b bitmap-buffer-cache)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b content-hash-b bitmap-buffer-cache)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
@@ -467,7 +468,7 @@
                                    [p->os-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b bitmap-buffer-cache)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b content-hash-b bitmap-buffer-cache)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
