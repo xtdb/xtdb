@@ -226,7 +226,7 @@
          clauses-in-join-order
          var-access-order
          var-result-order] (.computeIfAbsent query-cache
-                                             [(System/identityHashCode graph) q]
+                                             q
                                              (reify Function
                                                (apply [_ k]
                                                  (compile-query graph q))))]
