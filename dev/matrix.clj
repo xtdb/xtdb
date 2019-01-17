@@ -342,8 +342,6 @@
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
 
-(def loaded-bitmaps (atom 0))
-
 (defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
@@ -397,7 +395,6 @@
                                                                    (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
                                                         c-k ^DirectBuffer (kv/seek i c-seek-k)]
                                                     (assert (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN)))
-                                                    (swap! loaded-bitmaps inc)
                                                     (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))))))]
                     (recur (doto id->row
                              (.put row-id row))
