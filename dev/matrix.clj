@@ -533,12 +533,15 @@
            business-time now
            transaction-time now
            b (ExpandableDirectByteBuffer.)
+           content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+                            (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN))
            last-id-state (Box. nil)]
        (doseq [chunk (->> (rdf/ntriples-seq in)
                           (map rdf/rdf->clj)
                           (partition-all chunk-size))]
          (with-open [snapshot (kv/new-snapshot kv)]
-           (let [g (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
+           (let [bitmap-buffer-cache (lru/new-cache (* 1024 1024))
+                 g (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
                  row-cache (HashMap.)
                  get-current-row (fn [idx-id idx p ^long id]
                                    (let [id (int id)]
@@ -572,21 +575,26 @@
                           (reduce into [])
                           (into (sorted-map-by mem/buffer-comparator)))
                  bitmap->hash (IdentityHashMap.)
-                 bitmap-kvs (->> (for [[_ v] kvs
-                                       :when (instance? MutableRoaringBitmap v)
-                                       :let [v-serialized (mem/with-buffer-out b
-                                                            (fn [^DataOutput out]
-                                                              (.serialize (doto ^MutableRoaringBitmap v
-                                                                            (.runOptimize)) out)))
-                                             k (crux.ByteUtils/sha1
-                                                (mem/allocate-buffer sha1-size)
-                                                v-serialized)]]
-                                   (do (.put bitmap->hash v k)
-                                       [(doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
-                                          (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN)
-                                          (.putBytes Integer/BYTES k 0 (.capacity k)))
-                                        v-serialized]))
-                                 (into (sorted-map-by mem/buffer-comparator)))
+                 bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
+                              (->> (for [[_ v] kvs
+                                         :when (instance? MutableRoaringBitmap v)
+                                         :let [v (doto ^MutableRoaringBitmap v
+                                                   (.runOptimize))
+                                               v-serialized (mem/with-buffer-out b
+                                                              (fn [^DataOutput out]
+                                                                (.serialize v out))
+                                                              false)
+                                               k (crux.ByteUtils/sha1
+                                                  (mem/allocate-buffer sha1-size)
+                                                  v-serialized)
+                                               c-k (doto content-hash-b
+                                                     (.putBytes Integer/BYTES k 0 (.capacity k)))]]
+                                     (do (.put bitmap->hash v k)
+                                         (when-not (within-prefix? c-k (kv/seek i c-k))
+                                           [(mem/copy-buffer c-k)
+                                            (mem/copy-buffer v-serialized)])))
+                                   (remove nil?)
+                                   (into (sorted-map-by mem/buffer-comparator))))
                  kvs (->> (for [[k v] kvs]
                             [k (.getOrDefault bitmap->hash v v)])
                           (into bitmap-kvs))]
