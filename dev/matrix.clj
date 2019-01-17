@@ -335,6 +335,9 @@
 
 (def ^:private ^:const no-matches-for-row -1)
 
+(defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
+  (and k (mem/buffers=? k prefix (.capacity prefix))))
+
 (defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
@@ -343,13 +346,11 @@
         seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (nippy/freeze-to-out! out p)))
-        within-prefix? (fn [k]
-                         (and k (mem/buffers=? k seek-k (.capacity seek-k))))]
+                   (nippy/freeze-to-out! out p)))]
     (with-open [i (kv/new-iterator snapshot)]
       (loop [id->row (Int2ObjectHashMap.)
              k ^DirectBuffer (kv/seek i seek-k)]
-        (if (within-prefix? k)
+        (if (within-prefix? seek-k k)
           (let [row-id+k (loop [k k]
                            (let [row-id (int (key->row-id k))]
                              (if (<= (key->business-time-ms k) business-time-ms)
@@ -360,7 +361,7 @@
                                                                           (.writeLong out reverse-business-time-ms))
                                                                         false
                                                                         (.capacity seek-k)))]
-                                 (when (within-prefix? found-k)
+                                 (when (within-prefix? seek-k found-k)
                                    (let [found-row-id (int (key->row-id found-k))]
                                      (if (= row-id found-row-id)
                                        (RowIdAndKey. row-id k)
@@ -368,7 +369,7 @@
                 row-id+k (when row-id+k
                            (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                              (loop [k (.key ^RowIdAndKey row-id+k)]
-                               (when (within-prefix? k)
+                               (when (within-prefix? seek-k k)
                                  (if (<= (key->transaction-time-ms k) transaction-time-ms)
                                    (RowIdAndKey. row-id k)
                                    (let [next-k (kv/next i)]
@@ -477,8 +478,6 @@
               prefix-k (mem/with-buffer-out seek-b
                          (fn [^DataOutput out]
                            (.writeInt out id->value-idx-id)))
-              within-prefix? (fn [k]
-                               (and k (mem/buffers=? k prefix-k (.capacity prefix-k))))
               ;; TODO: This is obviously a slow way to find the latest id.
               id (.computeIfAbsent pending-id-state
                                    value
@@ -488,7 +487,7 @@
                                          (with-open [i (kv/new-iterator snapshot)]
                                            (loop [last-id (int 0)
                                                   k ^DirectBuffer (kv/seek i prefix-k)]
-                                             (if (within-prefix? k)
+                                             (if (within-prefix? prefix-k k)
                                                (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
                                                (set! (.val last-id-state) last-id)))))
                                        (unchecked-int (set! (.val last-id-state)
