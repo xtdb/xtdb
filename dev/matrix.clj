@@ -489,6 +489,9 @@
                                                (set! (.val last-id-state) last-id)))))
                                        (unchecked-int (set! (.val last-id-state)
                                                             (unchecked-inc-int (.val last-id-state)))))))]
+          (when (= id unknown-id)
+            (throw (IllegalStateException.
+                    (str "Out of ids, maximum id is: " (dec (Integer/toUnsignedLong -1))))))
           [id [[(mem/with-buffer-out b
                   (fn [^DataOutput out]
                     (.writeInt out id->value-idx-id)
