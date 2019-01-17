@@ -18,7 +18,7 @@
            [org.agrona.collections Int2ObjectHashMap Object2IntHashMap]
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
-           org.agrona.DirectBuffer
+           [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
            [org.roaringbitmap IntConsumer]
            [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]))
@@ -317,6 +317,7 @@
 (def ^:private value->id-idx-id 1)
 (def ^:private p->so-idx-id 2)
 (def ^:private p->os-idx-id 3)
+(def ^:private row-content-idx-id 4)
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -336,9 +337,12 @@
 (deftype RowIdAndKey [^int row-id ^DirectBuffer key])
 
 (def ^:private ^:const no-matches-for-row -1)
+(def ^:private ^:const sha1-size 20)
 
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
+
+(def loaded-bitmaps (atom 0))
 
 (defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
@@ -348,7 +352,8 @@
         seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (nippy/freeze-to-out! out p)))]
+                   (nippy/freeze-to-out! out p)))
+        hash->buffer (HashMap.)]
     (with-open [i (kv/new-iterator snapshot)]
       (loop [id->row ^Int2ObjectHashMap (new-matrix)
              k ^DirectBuffer (kv/seek i seek-k)]
@@ -382,7 +387,18 @@
               id->row
               (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                 (if (not= no-matches-for-row row-id)
-                  (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                  (let [buffer-hash (mem/copy-buffer (kv/value i))
+                        row (.computeIfAbsent hash->buffer
+                                              buffer-hash
+                                              (reify Function
+                                                (apply [_ _]
+                                                  (let [c-seek-k (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+                                                                   (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN)
+                                                                   (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
+                                                        c-k ^DirectBuffer (kv/seek i c-seek-k)]
+                                                    (assert (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN)))
+                                                    (swap! loaded-bitmaps inc)
+                                                    (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))))))]
                     (recur (doto id->row
                              (.put row-id row))
                            (kv/seek i (mem/with-buffer-out seek-b
@@ -536,29 +552,41 @@
                                                                   b ^ImmutableRoaringBitmap (or (.get m id) (new-bitmap))]
                                                               (.toMutableRoaringBitmap ^ImmutableRoaringBitmap b))])))))
 
-                 pending-id-state (Object2IntHashMap. unknown-id)]
+                 pending-id-state (Object2IntHashMap. unknown-id)
+                 kvs (->> (for [[s p o] chunk
+                                :let [[^long s-id s-id-kvs] (get-or-create-id kv s last-id-state pending-id-state)
+                                      [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
+                            (concat s-id-kvs
+                                    o-id-kvs
+                                    [(let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
+                                       [k (doto row
+                                            (.add o-id))])]
+                                    [(let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
+                                       [k (doto row
+                                            (.add s-id))])]))
+                          (reduce into [])
+                          (into (sorted-map-by mem/buffer-comparator)))
+                 bitmap->hash (IdentityHashMap.)
+                 bitmap-kvs (->> (for [[_ v] kvs
+                                       :when (instance? MutableRoaringBitmap v)
+                                       :let [v-serialized (mem/with-buffer-out b
+                                                            (fn [^DataOutput out]
+                                                              (.serialize (doto ^MutableRoaringBitmap v
+                                                                            (.runOptimize)) out)))
+                                             k (crux.ByteUtils/sha1
+                                                (mem/allocate-buffer sha1-size)
+                                                v-serialized)]]
+                                   (do (.put bitmap->hash v k)
+                                       [(doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+                                          (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN)
+                                          (.putBytes Integer/BYTES k 0 (.capacity k)))
+                                        v-serialized]))
+                                 (into (sorted-map-by mem/buffer-comparator)))
+                 kvs (->> (for [[k v] kvs]
+                            [k (.getOrDefault bitmap->hash v v)])
+                          (into bitmap-kvs))]
              (prn (count chunk))
-             (->> (for [[s p o] chunk
-                        :let [[^long s-id s-id-kvs] (get-or-create-id kv s last-id-state pending-id-state)
-                              [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
-                    (concat s-id-kvs
-                            o-id-kvs
-                            [(let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
-                               [k (doto row
-                                    (.add o-id))])]
-                            [(let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
-                               [k (doto row
-                                    (.add s-id))])]))
-                  (reduce into [])
-                  (into (sorted-map-by mem/buffer-comparator))
-                  (map (fn [[k v]]
-                         [k (if (instance? MutableRoaringBitmap v)
-                              (mem/with-buffer-out b
-                                (fn [^DataOutput out]
-                                  (.serialize (doto ^MutableRoaringBitmap v
-                                                (.runOptimize)) out)))
-                              v)]))
-                  (kv/store kv)))))))))
+             (kv/store kv kvs))))))))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
