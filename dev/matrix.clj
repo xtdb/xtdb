@@ -101,12 +101,18 @@
                         (.add x row)))))
         (recur i m)))))
 
-(defn- matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn- matlab-any
+  "Determine if any array elements are nonzero. Test each column for
+  nonzero elements."
+  ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
     (new-bitmap)
     (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
-(defn- matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn- matlab-any-of-transpose
+  "Determine if any array elements are nonzero. Test each row for
+  nonzero elements."
+  ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
          acc (new-bitmap)]
     (if-not (.hasNext i)
@@ -151,7 +157,7 @@
                     (get p->os a)))
                   (get p->so a)))]
     [result
-     (matlab-any-transpose result)
+     (matlab-any-of-transpose result)
      (matlab-any result)]))
 
 (def ^:private logic-var? symbol?)
@@ -234,7 +240,7 @@
         (let [[root-var] var-access-order
               seed (->> (concat
                          (for [[v bs] (get result root-var)]
-                           (matlab-any-transpose bs))
+                           (matlab-any-of-transpose bs))
                          (for [[e vs] result
                                [v bs] vs
                                :when (= v root-var)]
