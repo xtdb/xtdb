@@ -343,7 +343,7 @@
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
 
-(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b buffer-cache]
+(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b bitmap-buffer-cache]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
@@ -386,7 +386,7 @@
               (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                 (if (not= no-matches-for-row row-id)
                   (let [buffer-hash (mem/copy-buffer (kv/value i))
-                        row (lru/compute-if-absent buffer-cache
+                        row (lru/compute-if-absent bitmap-buffer-cache
                                                    buffer-hash
                                                    (fn [_]
                                                      (let [c-seek-k (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
@@ -440,13 +440,13 @@
                               (when (within-prefix? seek-k k)
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
-(def ^:private buffer-cache (lru/new-cache (* 2 1024 1024)))
+(def ^:private bitmap-buffer-cache (lru/new-cache (* 2 1024 1024)))
 
 (defn lmdb->graph
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
      (lmdb->graph snapshot now now hash->buffer)))
-  ([snapshot business-time transaction-time buffer-cache]
+  ([snapshot business-time transaction-time bitmap-buffer-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
          matrix-cache (HashMap.)]
      {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
@@ -457,7 +457,7 @@
                                    [p->so-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b buffer-cache)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b bitmap-buffer-cache)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
