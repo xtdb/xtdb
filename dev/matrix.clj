@@ -25,6 +25,8 @@
 
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
+;; https://www.slideshare.net/RoiLipman/graph-algebra
+;; https://www.youtube.com/embed/xnez6tloNSQ
 ;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
 ;; gSMat https://arxiv.org/pdf/1807.07691.pdf
 ;; GraphBLAS https://github.com/tgmattso/GraphBLAS/blob/master/graph_blas-HPEC18.pdf
