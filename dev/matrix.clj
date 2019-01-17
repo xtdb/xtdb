@@ -408,7 +408,7 @@
                                              (nippy/freeze-to-out! out k))
                                            false)
                                   k (kv/seek i seek-k)]
-                              (if (and k (mem/buffers=? k seek-k))
+                              (if (within-prefix? seek-k k)
                                 (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
                                 default))))))))
 
@@ -433,7 +433,7 @@
                                              (.writeInt out k))
                                            false)
                                   k (kv/seek i seek-k)]
-                              (when (and k (mem/buffers=? k seek-k))
+                              (when (within-prefix? seek-k k)
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
 (defn lmdb->graph
