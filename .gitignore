@@ -11,7 +11,7 @@ target
 /website/aero-deploy.tar.gz
 /docs/index.html
 /docs/docs.zip
-/test/watdiv
+/test/watdiv/data
 /docs/nav.html
 /pom.xml
 /docs/img/diagram-classes.png

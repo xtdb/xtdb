@@ -321,7 +321,7 @@
     (print-assigned-values graph creator-of-fname)))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
-(def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
+(def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
 
 (comment
   (matrix/r-query
@@ -617,11 +617,17 @@
 
 (comment
   (require 'crux.kv.lmdb)
+  ;; Create an LMDBKv store for our matrices.
   (def lm (crux.kv/open (crux.kv.lmdb.LMDBKv/create {})
-                        {:db-dir "dev-storage/matrix-lmdb"}))
+                        {:db-dir "dev-storage/matrix-lmdb-watdiv"}))
+  ;; Only needs to be done once.
   (matrix/load-rdf-into-lmdb lm matrix/watdiv-triples-resource)
 
+  ;; Load reference test run to compare with.
   (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
+
+  ;; Run the 240 reference queries against the Matrix spike, skipping
+  ;; errors and two queries that currently blocks.
   (with-open [snapshot (crux.kv/new-snapshot lm)]
     (let [total (atom 0)
           qs (remove :crux-error c)

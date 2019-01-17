@@ -1,0 +1,1010 @@
+[
+{:idx 0
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/homepage> <http://db.uwaterloo.ca/~galuc/wsdbm/Website2948> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v0 <http://schema.org/contentRating> ?v3 .  }"
+:datomic-results 0
+:datomic-time 687}
+{:idx 1
+:query "SELECT * WHERE {  ?v0 <http://purl.org/goodrelations/includes> <http://db.uwaterloo.ca/~galuc/wsdbm/Product19173> .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v3 .  ?v0 <http://schema.org/priceValidUntil> ?v4 .  }"
+:datomic-results 0
+:datomic-time 360}
+{:idx 2
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country7> .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v6 .  ?v2 <http://schema.org/priceValidUntil> ?v9 .  ?v0 <http://purl.org/goodrelations/description> ?v1 .  ?v0 <http://schema.org/aggregateRating> ?v5 .  ?v0 <http://schema.org/faxNumber> ?v8 .  ?v0 <http://schema.org/telephone> ?v10 .  }"
+:datomic-results 18
+:datomic-time 3918}
+{:idx 3
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory14> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#tag> ?v2 .  ?v1 <http://ogp.me/ns#title> ?v4 .  ?v1 <http://schema.org/expires> ?v7 .  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v3 <http://ogp.me/ns#tag> ?v2 .  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v6 .  }"
+:datomic-results 56
+:datomic-time 3520}
+{:idx 4
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory10> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://purl.org/stuff/rev#hasReview> ?v3 .  ?v1 <http://schema.org/contentSize> ?v9 .  ?v3 <http://purl.org/stuff/rev#rating> ?v4 .  ?v3 <http://purl.org/stuff/rev#reviewer> ?v5 .  ?v3 <http://purl.org/stuff/rev#text> ?v6 .  ?v3 <http://purl.org/stuff/rev#title> ?v7 .  ?v3 <http://purl.org/stuff/rev#totalVotes> ?v8 .  }"
+:datomic-results 53
+:datomic-time 3096}
+{:idx 5
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/givenName> ?v1 .  ?v0 <http://schema.org/nationality> ?v3 .  ?v2 <http://www.geonames.org/ontology#parentCountry> ?v3 .  ?v4 <http://schema.org/eligibleRegion> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14075 ?v0 ?v1 ?v3 ?v2 ?v4), message: processing clause: [?v4 :http://schema.org/eligibleRegion ?v3], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 16799}
+{:idx 6
+:query "SELECT * WHERE {  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/author> ?v2 .  ?v2 <http://schema.org/email> ?v5 .  ?v2 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/contentSize> ?v4 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14082 ?v2 ?v0 ?v5 ?v1 ?v4), message: processing clause: [?v0 :http://schema.org/author ?v2], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 15575}
+{:idx 7
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup6> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/nationality> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v5 .  }"
+:datomic-results 0
+:datomic-time 8205}
+{:idx 8
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country23> .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/price> ?v3 .  ?v2 <http://purl.org/goodrelations/validFrom> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v0 <http://purl.org/goodrelations/name> ?v1 .  ?v0 <http://schema.org/contactPoint> ?v8 .  ?v0 <http://schema.org/email> ?v10 .  ?v0 <http://schema.org/openingHours> ?v11 .  ?v6 <http://purl.org/stuff/rev#reviewer> ?v8 .  ?v6 <http://purl.org/stuff/rev#rating> ?v7 .  }"
+:datomic-results 309
+:datomic-time 1034}
+{:idx 9
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic248> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/description> ?v7 .  ?v0 <http://schema.org/keywords> ?v8 .  ?v2 <http://purl.org/stuff/rev#rating> ?v3 .  ?v2 <http://purl.org/stuff/rev#reviewer> ?v4 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v5 .  }"
+:datomic-results 7
+:datomic-time 1554}
+{:idx 10
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City63> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v4 <http://schema.org/nationality> ?v1 .  ?v2 <http://schema.org/eligibleQuantity> ?v3 .  }"
+:datomic-results 1359390
+:datomic-time 4875}
+{:idx 11
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/familyName> ?v1 .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v5 .  }"
+:datomic-results 28378
+:datomic-time 1750}
+{:idx 12
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country20> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/contactPoint> ?v3 .  ?v0 <http://schema.org/email> ?v5 .  ?v0 <http://schema.org/legalName> ?v6 .  ?v0 <http://schema.org/openingHours> ?v7 .  ?v0 <http://schema.org/paymentAccepted> ?v8 .  }"
+:datomic-results 116
+:datomic-time 60}
+{:idx 13
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 9909
+:datomic-time 80}
+{:idx 14
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory5> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/keywords> ?v3 .  }"
+:datomic-results 2982
+:datomic-time 195}
+{:idx 15
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic242> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v0 <http://schema.org/contentRating> ?v8 .  ?v2 <http://purl.org/stuff/rev#rating> ?v3 .  ?v2 <http://purl.org/stuff/rev#reviewer> ?v4 .  ?v2 <http://purl.org/stuff/rev#text> ?v5 .  ?v2 <http://purl.org/stuff/rev#title> ?v6 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v7 .  }"
+:datomic-results 15
+:datomic-time 961}
+{:idx 16
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup3> .  ?v2 <http://schema.org/author> ?v0 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 11
+:datomic-time 4136}
+{:idx 17
+:query "SELECT * WHERE {  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Genre18> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v0 .  ?v0 <http://schema.org/caption> ?v5 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/text> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 103
+:datomic-time 408}
+{:idx 18
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/nationality> ?v8 .  ?v2 <http://schema.org/eligibleRegion> ?v8 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v4 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v2 <http://schema.org/eligibleQuantity> ?v7 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14100 ?v0 ?v1 ?v8 ?v2 ?v3 ?v4 ?v5 ?v6 ?v7), message: processing clause: [?v2 :http://schema.org/eligibleRegion ?v8], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 15054}
+{:idx 19
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer1084> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/eligibleRegion> ?v6 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 36
+:datomic-time 733}
+{:idx 20
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase105791> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v3 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v5 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v0 <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v6 <http://schema.org/nationality> ?v1 .  }"
+:datomic-results 0
+:datomic-time 104}
+{:idx 21
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 36526
+:datomic-time 626}
+{:idx 22
+:query "SELECT * WHERE {  ?v4 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic41> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v4 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://xmlns.com/foaf/homepage> ?v3 .  }"
+:datomic-results 44
+:datomic-time 231}
+{:idx 23
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory0> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/expires> ?v3 .  }"
+:datomic-results 10
+:datomic-time 7}
+{:idx 24
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country7> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 245
+:datomic-time 161}
+{:idx 25
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup8> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 65
+:datomic-time 879}
+{:idx 26
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre80> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://schema.org/keywords> ?v3 .  }"
+:datomic-results 648
+:datomic-time 47}
+{:idx 27
+:query "SELECT * WHERE {  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre33> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/contentSize> ?v2 .  ?v1 <http://schema.org/description> ?v3 .  }"
+:datomic-results 44
+:datomic-time 298}
+{:idx 28
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory6> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v2 .  }"
+:datomic-results 2451
+:datomic-time 139}
+{:idx 29
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User30576> <http://schema.org/nationality> ?v3 .  ?v0 <http://schema.org/eligibleRegion> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v1 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v2 .  }"
+:datomic-results 0
+:datomic-time 7}
+{:idx 30
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory8> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#tag> ?v2 .  ?v1 <http://schema.org/contentRating> ?v6 .  ?v1 <http://schema.org/description> ?v7 .  ?v1 <http://schema.org/keywords> ?v8 .  ?v1 <http://schema.org/text> ?v9 .  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v4 .  ?v10 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v1 .  ?v4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v5 .  }"
+:datomic-results 3934
+:datomic-time 731}
+{:idx 31
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender0> .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v4 .  }"
+:datomic-results 0
+:datomic-time 5866}
+{:idx 32
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City63> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v4 <http://schema.org/nationality> ?v1 .  ?v2 <http://schema.org/eligibleQuantity> ?v3 .  }"
+:datomic-results 1359390
+:datomic-time 4213}
+{:idx 33
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  }"
+:datomic-results 23274
+:datomic-time 81}
+{:idx 34
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory3> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v4 .  ?v0 <http://schema.org/contentSize> ?v9 .  ?v0 <http://schema.org/description> ?v10 .  ?v0 <http://schema.org/keywords> ?v11 .  ?v12 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  ?v4 <http://purl.org/stuff/rev#rating> ?v5 .  ?v4 <http://purl.org/stuff/rev#reviewer> ?v6 .  ?v4 <http://purl.org/stuff/rev#text> ?v7 .  ?v4 <http://purl.org/stuff/rev#title> ?v8 .  }"
+:datomic-results 243150
+:datomic-time 11332}
+{:idx 35
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City93> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v6 <http://schema.org/nationality> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v2 <http://schema.org/eligibleQuantity> ?v8 .  ?v6 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v7 .  ?v6 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v3 .  ?v9 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14123 ?v1 ?v2 ?v6 ?v3 ?v4 ?v5 ?v8 ?v7 ?v9), message: processing clause: [?v6 :http://schema.org/nationality ?v1], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 17895}
+{:idx 36
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre54> <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  }"
+:datomic-results 11
+:datomic-time 252}
+{:idx 37
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country23> .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/price> ?v3 .  ?v2 <http://purl.org/goodrelations/validFrom> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v0 <http://purl.org/goodrelations/name> ?v1 .  ?v0 <http://schema.org/contactPoint> ?v8 .  ?v0 <http://schema.org/email> ?v10 .  ?v0 <http://schema.org/openingHours> ?v11 .  ?v6 <http://purl.org/stuff/rev#reviewer> ?v8 .  ?v6 <http://purl.org/stuff/rev#rating> ?v7 .  }"
+:datomic-results 309
+:datomic-time 2710}
+{:idx 38
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country21> .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v6 .  ?v2 <http://schema.org/priceValidUntil> ?v9 .  ?v0 <http://purl.org/goodrelations/description> ?v1 .  ?v0 <http://schema.org/aggregateRating> ?v5 .  ?v0 <http://schema.org/faxNumber> ?v8 .  ?v0 <http://schema.org/telephone> ?v10 .  }"
+:datomic-results 6
+:datomic-time 935}
+{:idx 39
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/nationality> ?v8 .  ?v2 <http://schema.org/eligibleRegion> ?v8 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v4 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v2 <http://schema.org/eligibleQuantity> ?v7 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14127 ?v0 ?v1 ?v8 ?v2 ?v3 ?v4 ?v5 ?v6 ?v7), message: processing clause: [?v2 :http://schema.org/eligibleRegion ?v8], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 18545}
+{:idx 40
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre135> .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://schema.org/contentRating> ?v2 .  }"
+:datomic-results 15
+:datomic-time 993}
+{:idx 41
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre111> <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/description> ?v3 .  }"
+:datomic-results 1770
+:datomic-time 129}
+{:idx 42
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User68180> <http://purl.org/dc/terms/Location> ?v1 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://schema.org/eligibleRegion> ?v2 .  ?v3 <http://purl.org/goodrelations/price> ?v4 .  ?v3 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v3 <http://purl.org/goodrelations/validFrom> ?v6 .  ?v3 <http://purl.org/goodrelations/validThrough> ?v7 .  ?v3 <http://schema.org/eligibleQuantity> ?v8 .  }"
+:datomic-results 0
+:datomic-time 62}
+{:idx 43
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 649
+:datomic-time 818}
+{:idx 44
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory3> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 9321
+:datomic-time 147}
+{:idx 45
+:query "SELECT * WHERE {  ?v1 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic38> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/description> ?v6 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v7 .  ?v0 <http://schema.org/eligibleRegion> ?v8 .  }"
+:datomic-results 401
+:datomic-time 585}
+{:idx 46
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country19> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/contactPoint> ?v3 .  ?v0 <http://schema.org/email> ?v5 .  ?v0 <http://schema.org/legalName> ?v6 .  ?v0 <http://schema.org/openingHours> ?v7 .  ?v0 <http://schema.org/paymentAccepted> ?v8 .  }"
+:datomic-results 124
+:datomic-time 66}
+{:idx 47
+:query "SELECT * WHERE {  ?v0 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review2269> .  ?v0 <http://schema.org/keywords> ?v2 .  }"
+:datomic-results 0
+:datomic-time 52}
+{:idx 48
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  }"
+:datomic-results 1
+:datomic-time 6023}
+{:idx 49
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre105> .  ?v0 <http://schema.org/description> ?v1 .  ?v0 <http://schema.org/editor> ?v2 .  }"
+:datomic-results 11
+:datomic-time 8}
+{:idx 50
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer961> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v1 <http://schema.org/text> ?v5 .  }"
+:datomic-results 5
+:datomic-time 51}
+{:idx 51
+:query "SELECT * WHERE {  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Genre4> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v0 .  ?v0 <http://schema.org/caption> ?v5 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/text> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 71
+:datomic-time 208}
+{:idx 52
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender0> .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v3 .  }"
+:datomic-results 0
+:datomic-time 1137}
+{:idx 53
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City119> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v2 <http://purl.org/goodrelations/validFrom> ?v3 .  }"
+:datomic-results 1741
+:datomic-time 27}
+{:idx 54
+:query "SELECT * WHERE {  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Genre9> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v0 .  ?v0 <http://schema.org/caption> ?v5 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/text> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 0
+:datomic-time 231}
+{:idx 55
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country11> .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/price> ?v3 .  ?v2 <http://purl.org/goodrelations/validFrom> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v0 <http://purl.org/goodrelations/name> ?v1 .  ?v0 <http://schema.org/contactPoint> ?v8 .  ?v0 <http://schema.org/email> ?v10 .  ?v0 <http://schema.org/openingHours> ?v11 .  ?v6 <http://purl.org/stuff/rev#reviewer> ?v8 .  ?v6 <http://purl.org/stuff/rev#rating> ?v7 .  }"
+:datomic-results 481
+:datomic-time 351}
+{:idx 56
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country2> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v1 <http://schema.org/priceValidUntil> ?v4 .  }"
+:datomic-results 3663
+:datomic-time 308}
+{:idx 57
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/nationality> ?v8 .  ?v2 <http://schema.org/eligibleRegion> ?v8 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v4 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v2 <http://schema.org/eligibleQuantity> ?v7 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14157 ?v0 ?v1 ?v8 ?v2 ?v3 ?v4 ?v5 ?v6 ?v7), message: processing clause: [?v2 :http://schema.org/eligibleRegion ?v8], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 17495}
+{:idx 58
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v4 .  }"
+:datomic-results 0
+:datomic-time 1236}
+{:idx 59
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic123> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 2275
+:datomic-time 513}
+{:idx 60
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup8> .  ?v2 <http://schema.org/author> ?v0 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 1
+:datomic-time 9235}
+{:idx 61
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre119> <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  }"
+:datomic-results 61
+:datomic-time 190}
+{:idx 62
+:query "SELECT * WHERE {  ?v1 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language19> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#title> ?v2 .  }"
+:datomic-results 59
+:datomic-time 848}
+{:idx 63
+:query "SELECT * WHERE {  ?v2 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review130565> .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 3
+:datomic-time 47}
+{:idx 64
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country24> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/contactPoint> ?v3 .  ?v0 <http://schema.org/email> ?v5 .  ?v0 <http://schema.org/legalName> ?v6 .  ?v0 <http://schema.org/openingHours> ?v7 .  ?v0 <http://schema.org/paymentAccepted> ?v8 .  }"
+:datomic-results 80
+:datomic-time 95}
+{:idx 65
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase72880> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://schema.org/text> ?v4 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 0
+:datomic-time 50}
+{:idx 66
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase33337> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://schema.org/text> ?v4 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 0
+:datomic-time 92}
+{:idx 67
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City91> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v6 <http://schema.org/nationality> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v2 <http://schema.org/eligibleQuantity> ?v8 .  ?v6 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v7 .  ?v6 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v3 .  ?v9 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14173 ?v1 ?v2 ?v6 ?v3 ?v4 ?v5 ?v8 ?v7 ?v9), message: processing clause: [?v6 :http://schema.org/nationality ?v1], message: java.lang.OutOfMemoryError: Java heap space"
+:datomic-time 28275}
+{:idx 68
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase114762> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v4 .  }"
+:datomic-results 2
+:datomic-time 102}
+{:idx 69
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City75> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v4 <http://schema.org/nationality> ?v1 .  ?v2 <http://schema.org/eligibleQuantity> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14175 ?v1 ?v2 ?v4 ?v3), message: processing clause: [?v4 :http://schema.org/nationality ?v1], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 15394}
+{:idx 70
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country14> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v5 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v0 <http://schema.org/eligibleQuantity> ?v8 .  ?v0 <http://schema.org/priceValidUntil> ?v10 .  ?v1 <http://schema.org/author> ?v7 .  }"
+:datomic-results 27
+:datomic-time 1095}
+{:idx 71
+:query "SELECT * WHERE {  ?v5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v7 <http://purl.org/stuff/rev#reviewer> ?v5 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v5 .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v7 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v0 .  ?v0 <http://ogp.me/ns#title> ?v3 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v4 .  ?v0 <http://schema.org/description> ?v8 .  ?v0 <http://schema.org/text> ?v10 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v11 .  ?v2 <http://schema.org/eligibleRegion> ?v9 .  }"
+:datomic-results 0
+:datomic-time 7308}
+{:idx 72
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory4> .  ?v0 <http://schema.org/contentRating> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v0 <http://schema.org/text> ?v5 .  }"
+:datomic-results 4
+:datomic-time 65}
+{:idx 73
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City197> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v4 <http://schema.org/eligibleRegion> ?v1 .  ?v9 <http://schema.org/nationality> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v4 .  ?v4 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v4 <http://schema.org/eligibleQuantity> ?v7 .  ?v4 <http://schema.org/priceValidUntil> ?v10 .  ?v2 <http://purl.org/goodrelations/description> ?v3 .  ?v2 <http://schema.org/aggregateRating> ?v6 .  ?v2 <http://schema.org/legalName> ?v8 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14201 ?v1 ?v4 ?v9 ?v2 ?v5 ?v7 ?v10 ?v3 ?v6 ?v8), message: processing clause: [?v2 :http://purl.org/goodrelations/offers ?v4], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 15042}
+{:idx 74
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic162> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v0 <http://schema.org/contentRating> ?v8 .  ?v2 <http://purl.org/stuff/rev#rating> ?v3 .  ?v2 <http://purl.org/stuff/rev#reviewer> ?v4 .  ?v2 <http://purl.org/stuff/rev#text> ?v5 .  ?v2 <http://purl.org/stuff/rev#title> ?v6 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v7 .  }"
+:datomic-results 14
+:datomic-time 2707}
+{:idx 75
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory9> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/expires> ?v3 .  }"
+:datomic-results 26
+:datomic-time 10}
+{:idx 76
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://schema.org/jobTitle> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v4 .  }"
+:datomic-results 223
+:datomic-time 628}
+{:idx 77
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 22370
+:datomic-time 169}
+{:idx 78
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory13> .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://schema.org/caption> ?v3 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 573
+:datomic-time 61}
+{:idx 79
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic206> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://ogp.me/ns#title> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v5 .  ?v6 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  ?v7 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  }"
+:datomic-results 24
+:datomic-time 155}
+{:idx 80
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Offer51690> <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v1 <http://schema.org/keywords> ?v3 .  }"
+:datomic-results 0
+:datomic-time 49}
+{:idx 81
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City155> .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 35
+:datomic-time 765}
+{:idx 82
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer219> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/eligibleRegion> ?v6 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 56
+:datomic-time 14}
+{:idx 83
+:query "SELECT * WHERE {  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre40> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/contentSize> ?v2 .  ?v1 <http://schema.org/description> ?v3 .  }"
+:datomic-results 63
+:datomic-time 6}
+{:idx 84
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User36871> <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 1
+:datomic-time 1}
+{:idx 85
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country7> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v5 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v0 <http://schema.org/eligibleQuantity> ?v8 .  ?v0 <http://schema.org/priceValidUntil> ?v11 .  ?v1 <http://ogp.me/ns#tag> ?v7 .  ?v1 <http://schema.org/keywords> ?v10 .  ?v12 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v1 .  }"
+:datomic-results 9798
+:datomic-time 539}
+{:idx 86
+:query "SELECT * WHERE {  ?v0 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review118608> .  ?v0 <http://schema.org/keywords> ?v2 .  }"
+:datomic-results 0
+:datomic-time 3}
+{:idx 87
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language34> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  }"
+:datomic-results 21
+:datomic-time 52}
+{:idx 88
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language22> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v1 .  ?v1 <http://purl.org/stuff/rev#title> ?v2 .  }"
+:datomic-results 21
+:datomic-time 52}
+{:idx 89
+:query "SELECT * WHERE {  ?v1 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language16> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#title> ?v2 .  }"
+:datomic-results 59
+:datomic-time 5}
+{:idx 90
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase19426> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://schema.org/text> ?v4 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 0
+:datomic-time 51}
+{:idx 91
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v5 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://purl.org/ontology/mo/performed_in> ?v1 .  }"
+:datomic-results 117
+:datomic-time 636}
+{:idx 92
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country3> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 415
+:datomic-time 184}
+{:idx 93
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User85041> <http://schema.org/nationality> ?v2 .  ?v0 <http://schema.org/eligibleRegion> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v1 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 94
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic116> .  ?v0 <http://schema.org/keywords> ?v2 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase> ?v4 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate> ?v5 .  }"
+:datomic-results 312
+:datomic-time 661}
+{:idx 95
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City136> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v3 .  ?v3 <http://ogp.me/ns#title> ?v4 .  ?v3 <http://schema.org/keywords> ?v5 .  }"
+:datomic-results 3
+:datomic-time 4}
+{:idx 96
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City52> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v3 .  ?v3 <http://ogp.me/ns#title> ?v4 .  ?v3 <http://schema.org/keywords> ?v5 .  }"
+:datomic-results 7
+:datomic-time 5}
+{:idx 97
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City106> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v3 .  ?v3 <http://ogp.me/ns#title> ?v4 .  ?v3 <http://schema.org/keywords> ?v5 .  }"
+:datomic-results 21
+:datomic-time 5}
+{:idx 98
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre88> .  ?v0 <http://ogp.me/ns#title> ?v1 .  }"
+:datomic-results 779
+:datomic-time 8}
+{:idx 99
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre31> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v1 <http://schema.org/url> ?v5 .  }"
+:datomic-results 3
+:datomic-time 56}
+{:idx 100
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre83> <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/description> ?v3 .  }"
+:datomic-results 1437
+:datomic-time 10}
+{:idx 101
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup3> .  ?v2 <http://schema.org/author> ?v0 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 11
+:datomic-time 772}
+{:idx 102
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country6> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v1 <http://schema.org/priceValidUntil> ?v4 .  }"
+:datomic-results 1938
+:datomic-time 74}
+{:idx 103
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User65011> <http://purl.org/dc/terms/Location> ?v1 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://schema.org/eligibleRegion> ?v2 .  ?v3 <http://schema.org/eligibleQuantity> ?v4 .  ?v3 <http://schema.org/priceValidUntil> ?v5 .  }"
+:datomic-results 6993
+:datomic-time 242}
+{:idx 104
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City109> .  ?v0 <http://xmlns.com/foaf/homepage> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 4
+:datomic-time 2}
+{:idx 105
+:query "SELECT * WHERE {  ?v0 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review142158> .  ?v0 <http://schema.org/keywords> ?v2 .  }"
+:datomic-results 0
+:datomic-time 1}
+{:idx 106
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  }"
+:datomic-results 1
+:datomic-time 212}
+{:idx 107
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic227> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v2 <http://purl.org/stuff/rev#text> ?v3 .  ?v2 <http://purl.org/stuff/rev#title> ?v4 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v5 .  }"
+:datomic-results 36
+:datomic-time 1368}
+{:idx 108
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer663> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v6 .  }"
+:datomic-results 5
+:datomic-time 8}
+{:idx 109
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer1162> <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v1 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v1 <http://schema.org/eligibleRegion> ?v4 .  }"
+:datomic-results 105
+:datomic-time 51}
+{:idx 110
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country21> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/contactPoint> ?v3 .  ?v0 <http://schema.org/email> ?v5 .  ?v0 <http://schema.org/legalName> ?v6 .  ?v0 <http://schema.org/openingHours> ?v7 .  ?v0 <http://schema.org/paymentAccepted> ?v8 .  }"
+:datomic-results 85
+:datomic-time 34}
+{:idx 111
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer203> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v6 .  }"
+:datomic-results 10
+:datomic-time 5}
+{:idx 112
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User47091> <http://purl.org/dc/terms/Location> ?v1 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://schema.org/eligibleRegion> ?v2 .  ?v3 <http://schema.org/eligibleQuantity> ?v4 .  ?v3 <http://schema.org/priceValidUntil> ?v5 .  }"
+:datomic-results 1380
+:datomic-time 48}
+{:idx 113
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/email> ?v2 .  ?v0 <http://schema.org/nationality> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  }"
+:datomic-results 2237
+:datomic-time 2590}
+{:idx 114
+:query "SELECT * WHERE {  ?v1 <http://www.geonames.org/ontology#parentCountry> <http://db.uwaterloo.ca/~galuc/wsdbm/Country9> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 193
+:datomic-time 4}
+{:idx 115
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country6> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v5 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v0 <http://schema.org/eligibleQuantity> ?v8 .  ?v0 <http://schema.org/priceValidUntil> ?v10 .  ?v1 <http://schema.org/author> ?v7 .  }"
+:datomic-results 41
+:datomic-time 127}
+{:idx 116
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre134> <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/contentRating> ?v4 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 117
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User69832> <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 0
+:datomic-time 1}
+{:idx 118
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory5> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 10019
+:datomic-time 10}
+{:idx 119
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender0> .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v3 .  }"
+:datomic-results 0
+:datomic-time 399}
+{:idx 120
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Offer13219> <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/description> ?v2 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v1 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  }"
+:datomic-results 1
+:datomic-time 3}
+{:idx 121
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase3365> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v3 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v5 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v0 <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v6 <http://schema.org/nationality> ?v1 .  }"
+:datomic-results 0
+:datomic-time 3}
+{:idx 122
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender0> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  }"
+:datomic-results 0
+:datomic-time 5514}
+{:idx 123
+:query "SELECT * WHERE {  ?v0 <http://schema.org/nationality> <http://db.uwaterloo.ca/~galuc/wsdbm/Country14> .  ?v0 <http://xmlns.com/foaf/familyName> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v5 .  }"
+:datomic-results 11
+:datomic-time 8}
+{:idx 124
+:query "SELECT * WHERE {  ?v0 <http://schema.org/nationality> <http://db.uwaterloo.ca/~galuc/wsdbm/Country16> .  ?v0 <http://xmlns.com/foaf/familyName> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v5 .  }"
+:datomic-results 26
+:datomic-time 5}
+{:idx 125
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country4> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v3 .  ?v0 <http://schema.org/eligibleQuantity> ?v4 .  ?v1 <http://schema.org/text> ?v6 .  }"
+:datomic-results 1331
+:datomic-time 421}
+{:idx 126
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer611> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v6 .  }"
+:datomic-results 17
+:datomic-time 10}
+{:idx 127
+:query "SELECT * WHERE {  ?v2 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v2 <http://schema.org/jobTitle> ?v3 .  ?v2 <http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate> ?v5 .  }"
+:datomic-results 904
+:datomic-time 1044}
+{:idx 128
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country10> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 158
+:datomic-time 116}
+{:idx 129
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 129
+:datomic-time 108}
+{:idx 130
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/follows> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v5 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://purl.org/ontology/mo/performed_in> ?v1 .  }"
+:datomic-results 117
+:datomic-time 1556}
+{:idx 131
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory7> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/contentRating> ?v5 .  ?v0 <http://schema.org/contentSize> ?v6 .  ?v0 <http://schema.org/description> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v4 .  }"
+:datomic-results 439622
+:datomic-time 1655}
+{:idx 132
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language5> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  }"
+:datomic-results 116
+:datomic-time 97}
+{:idx 133
+:query "SELECT * WHERE {  ?v0 <http://schema.org/nationality> <http://db.uwaterloo.ca/~galuc/wsdbm/Country16> .  ?v0 <http://xmlns.com/foaf/familyName> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v5 .  }"
+:datomic-results 26
+:datomic-time 334}
+{:idx 134
+:query "SELECT * WHERE {  ?v1 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic134> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/description> ?v6 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v7 .  ?v0 <http://schema.org/eligibleRegion> ?v8 .  }"
+:datomic-results 350
+:datomic-time 1800}
+{:idx 135
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer859> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v6 .  }"
+:datomic-results 8
+:datomic-time 107}
+{:idx 136
+:query "SELECT * WHERE {  ?v1 <http://www.geonames.org/ontology#parentCountry> <http://db.uwaterloo.ca/~galuc/wsdbm/Country17> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 153
+:datomic-time 3}
+{:idx 137
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User27060> <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 0
+:datomic-time 4}
+{:idx 138
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User27915> <http://purl.org/dc/terms/Location> ?v1 .  ?v1 <http://www.geonames.org/ontology#parentCountry> ?v2 .  ?v3 <http://schema.org/eligibleRegion> ?v2 .  ?v3 <http://schema.org/eligibleQuantity> ?v4 .  ?v3 <http://schema.org/priceValidUntil> ?v5 .  }"
+:datomic-results 2116
+:datomic-time 111}
+{:idx 139
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 129
+:datomic-time 1747}
+{:idx 140
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/givenName> ?v1 .  ?v0 <http://schema.org/nationality> ?v3 .  ?v2 <http://www.geonames.org/ontology#parentCountry> ?v3 .  ?v4 <http://schema.org/eligibleRegion> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14280 ?v0 ?v1 ?v3 ?v2 ?v4), message: processing clause: [?v4 :http://schema.org/eligibleRegion ?v3], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 22066}
+{:idx 141
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 129
+:datomic-time 3257}
+{:idx 142
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory11> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  }"
+:datomic-results 23274
+:datomic-time 147}
+{:idx 143
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User79183> <http://schema.org/nationality> ?v3 .  ?v0 <http://schema.org/eligibleRegion> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v1 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v2 .  }"
+:datomic-results 1258
+:datomic-time 132}
+{:idx 144
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender0> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  }"
+:datomic-results 0
+:datomic-time 257}
+{:idx 145
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer163> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/eligibleRegion> ?v6 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 30
+:datomic-time 227}
+{:idx 146
+:query "SELECT * WHERE {  ?v1 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic73> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/description> ?v6 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v7 .  ?v0 <http://schema.org/eligibleRegion> ?v8 .  }"
+:datomic-results 491
+:datomic-time 393}
+{:idx 147
+:query "SELECT * WHERE {  ?v5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role1> .  ?v1 <http://schema.org/editor> ?v5 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v8 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#title> ?v4 .  ?v1 <http://schema.org/expires> ?v7 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  }"
+:datomic-results 6
+:datomic-time 1276}
+{:idx 148
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City212> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://schema.org/birthDate> ?v3 .  }"
+:datomic-results 7
+:datomic-time 3}
+{:idx 149
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v4 <http://schema.org/editor> ?v0 .  }"
+:datomic-results 485
+:datomic-time 287}
+{:idx 150
+:query "SELECT * WHERE {  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre81> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/contentSize> ?v2 .  ?v1 <http://schema.org/description> ?v3 .  }"
+:datomic-results 176
+:datomic-time 88}
+{:idx 151
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v4 .  }"
+:datomic-results 12602
+:datomic-time 356}
+{:idx 152
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country14> .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v6 .  ?v2 <http://schema.org/priceValidUntil> ?v9 .  ?v0 <http://purl.org/goodrelations/description> ?v1 .  ?v0 <http://schema.org/aggregateRating> ?v5 .  ?v0 <http://schema.org/faxNumber> ?v8 .  ?v0 <http://schema.org/telephone> ?v10 .  }"
+:datomic-results 14
+:datomic-time 162}
+{:idx 153
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup7> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 150
+:datomic-time 393}
+{:idx 154
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre77> <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/contentRating> ?v4 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 489
+:datomic-time 14}
+{:idx 155
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User41079> <http://schema.org/nationality> ?v2 .  ?v0 <http://schema.org/eligibleRegion> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v1 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 156
+:query "SELECT * WHERE {  ?v1 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country11> .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/contactPoint> ?v3 .  ?v0 <http://schema.org/email> ?v5 .  ?v0 <http://schema.org/legalName> ?v6 .  ?v0 <http://schema.org/openingHours> ?v7 .  ?v0 <http://schema.org/paymentAccepted> ?v8 .  }"
+:datomic-results 147
+:datomic-time 158}
+{:idx 157
+:query "SELECT * WHERE {  ?v0 <http://purl.org/goodrelations/includes> <http://db.uwaterloo.ca/~galuc/wsdbm/Product10994> .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v3 .  ?v0 <http://schema.org/priceValidUntil> ?v4 .  }"
+:datomic-results 2
+:datomic-time 12}
+{:idx 158
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup6> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 461
+:datomic-time 193}
+{:idx 159
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/givenName> ?v1 .  ?v0 <http://schema.org/nationality> ?v3 .  ?v2 <http://www.geonames.org/ontology#parentCountry> ?v3 .  ?v4 <http://schema.org/eligibleRegion> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14315 ?v0 ?v1 ?v3 ?v2 ?v4), message: processing clause: [?v4 :http://schema.org/eligibleRegion ?v3], message: java.lang.OutOfMemoryError: Java heap space"
+:datomic-time 30831}
+{:idx 160
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role1> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 167
+:datomic-time 2520}
+{:idx 161
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer217> <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v1 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v1 <http://schema.org/eligibleRegion> ?v4 .  }"
+:datomic-results 104
+:datomic-time 3}
+{:idx 162
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User74461> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v1 .  }"
+:datomic-results 1
+:datomic-time 2}
+{:idx 163
+:query "SELECT * WHERE {  ?v4 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic140> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v4 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://xmlns.com/foaf/homepage> ?v3 .  }"
+:datomic-results 50
+:datomic-time 159}
+{:idx 164
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre83> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v1 <http://schema.org/url> ?v5 .  }"
+:datomic-results 7
+:datomic-time 12}
+{:idx 165
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory0> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#tag> ?v2 .  ?v1 <http://ogp.me/ns#title> ?v4 .  ?v1 <http://schema.org/expires> ?v7 .  ?v1 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v3 <http://ogp.me/ns#tag> ?v2 .  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v6 .  }"
+:datomic-results 10
+:datomic-time 188}
+{:idx 166
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic127> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v2 <http://purl.org/stuff/rev#text> ?v3 .  ?v2 <http://purl.org/stuff/rev#title> ?v4 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v5 .  }"
+:datomic-results 34
+:datomic-time 882}
+{:idx 167
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/nationality> ?v2 .  }"
+:datomic-results 4205
+:datomic-time 71}
+{:idx 168
+:query "SELECT * WHERE {  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Genre19> .  ?v2 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/author> ?v6 .  ?v4 <http://purl.org/stuff/rev#reviewer> ?v6 .  ?v4 <http://purl.org/stuff/rev#rating> ?v5 .  }"
+:datomic-results 17
+:datomic-time 548}
+{:idx 169
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup5> .  ?v2 <http://schema.org/editor> ?v0 .  }"
+:datomic-results 207
+:datomic-time 3280}
+{:idx 170
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  }"
+:datomic-results 3
+:datomic-time 1252}
+{:idx 171
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  }"
+:datomic-results 3
+:datomic-time 311}
+{:idx 172
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City24> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v4 <http://schema.org/nationality> ?v1 .  ?v2 <http://schema.org/eligibleQuantity> ?v3 .  }"
+:datomic-results 653426
+:datomic-time 1380}
+{:idx 173
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/contentRating> ?v3 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v1 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v5 .  }"
+:datomic-results 2558
+:datomic-time 68}
+{:idx 174
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup4> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 707
+:datomic-time 296}
+{:idx 175
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic108> .  ?v0 <http://ogp.me/ns#title> ?v2 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 1931
+:datomic-time 146}
+{:idx 176
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 129
+:datomic-time 4978}
+{:idx 177
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City101> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v2 <http://schema.org/eligibleRegion> ?v1 .  ?v4 <http://schema.org/nationality> ?v1 .  ?v2 <http://schema.org/eligibleQuantity> ?v3 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14355 ?v1 ?v2 ?v4 ?v3), message: processing clause: [?v4 :http://schema.org/nationality ?v1], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 20989}
+{:idx 178
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City64> .  ?v0 <http://xmlns.com/foaf/homepage> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 4
+:datomic-time 146}
+{:idx 179
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/nationality> ?v8 .  ?v2 <http://schema.org/eligibleRegion> ?v8 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v4 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v2 <http://schema.org/eligibleQuantity> ?v7 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14357 ?v0 ?v1 ?v8 ?v2 ?v3 ?v4 ?v5 ?v6 ?v7), message: processing clause: [?v2 :http://schema.org/eligibleRegion ?v8], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 16934}
+{:idx 180
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country13> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v3 .  ?v0 <http://schema.org/eligibleQuantity> ?v4 .  ?v1 <http://schema.org/text> ?v6 .  }"
+:datomic-results 498
+:datomic-time 383}
+{:idx 181
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City108> .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 42
+:datomic-time 371}
+{:idx 182
+:query "SELECT * WHERE {  ?v2 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review123602> .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 4
+:datomic-time 8}
+{:idx 183
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic233> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v0 <http://schema.org/contentRating> ?v8 .  ?v2 <http://purl.org/stuff/rev#rating> ?v3 .  ?v2 <http://purl.org/stuff/rev#reviewer> ?v4 .  ?v2 <http://purl.org/stuff/rev#text> ?v5 .  ?v2 <http://purl.org/stuff/rev#title> ?v6 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v7 .  }"
+:datomic-results 4
+:datomic-time 1583}
+{:idx 184
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://purl.org/dc/terms/Location> ?v1 .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 649
+:datomic-time 311}
+{:idx 185
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Offer3494> <http://schema.org/eligibleRegion> ?v1 .  ?v0 <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v3 <http://schema.org/nationality> ?v1 .  ?v3 <http://schema.org/jobTitle> ?v4 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v5 .  }"
+:datomic-results 0
+:datomic-time 3}
+{:idx 186
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre15> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v1 <http://schema.org/url> ?v5 .  }"
+:datomic-results 0
+:datomic-time 138}
+{:idx 187
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre11> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v1 <http://schema.org/url> ?v5 .  }"
+:datomic-results 1
+:datomic-time 48}
+{:idx 188
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country1> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v5 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v0 <http://schema.org/eligibleQuantity> ?v7 .  ?v0 <http://schema.org/priceValidUntil> ?v9 .  }"
+:datomic-results 972
+:datomic-time 650}
+{:idx 189
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User36435> <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 190
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User40361> <http://schema.org/nationality> ?v2 .  ?v0 <http://schema.org/eligibleRegion> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v1 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 191
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic57> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v2 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/description> ?v7 .  ?v0 <http://schema.org/keywords> ?v8 .  ?v2 <http://purl.org/stuff/rev#rating> ?v3 .  ?v2 <http://purl.org/stuff/rev#reviewer> ?v4 .  ?v2 <http://purl.org/stuff/rev#totalVotes> ?v5 .  }"
+:datomic-results 16
+:datomic-time 692}
+{:idx 192
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role1> .  ?v2 <http://schema.org/contactPoint> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v3 .  }"
+:datomic-results 167
+:datomic-time 1667}
+{:idx 193
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic22> .  ?v0 <http://schema.org/caption> ?v2 .  ?v0 <http://schema.org/expires> ?v3 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate> ?v5 .  }"
+:datomic-results 5
+:datomic-time 356}
+{:idx 194
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/City239> <http://www.geonames.org/ontology#parentCountry> ?v1 .  ?v4 <http://schema.org/eligibleRegion> ?v1 .  ?v9 <http://schema.org/nationality> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v4 .  ?v4 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v4 <http://schema.org/eligibleQuantity> ?v7 .  ?v4 <http://schema.org/priceValidUntil> ?v10 .  ?v2 <http://purl.org/goodrelations/description> ?v3 .  ?v2 <http://schema.org/aggregateRating> ?v6 .  ?v2 <http://schema.org/legalName> ?v8 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14372 ?v1 ?v4 ?v9 ?v2 ?v5 ?v7 ?v10 ?v3 ?v6 ?v8), message: processing clause: [?v9 :http://schema.org/nationality ?v1], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 49894}
+{:idx 195
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase76624> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v4 .  }"
+:datomic-results 4
+:datomic-time 49}
+{:idx 196
+:query "SELECT * WHERE {  ?v0 <http://schema.org/nationality> <http://db.uwaterloo.ca/~galuc/wsdbm/Country1> .  ?v0 <http://xmlns.com/foaf/familyName> ?v1 .  ?v0 <http://schema.org/birthDate> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v5 .  }"
+:datomic-results 238
+:datomic-time 372}
+{:idx 197
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> <http://db.uwaterloo.ca/~galuc/wsdbm/Website245> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v2 .  }"
+:datomic-results 32
+:datomic-time 45}
+{:idx 198
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic154> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://ogp.me/ns#title> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v5 .  ?v6 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  ?v7 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  }"
+:datomic-results 531
+:datomic-time 397}
+{:idx 199
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup2> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/nationality> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v0 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v5 .  }"
+:datomic-results 0
+:datomic-time 1633}
+{:idx 200
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country19> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 65
+:datomic-time 38}
+{:idx 201
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup6> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 461
+:datomic-time 66}
+{:idx 202
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory0> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  ?v3 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 7234
+:datomic-time 107}
+{:idx 203
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language14> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  }"
+:datomic-results 48
+:datomic-time 3}
+{:idx 204
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language5> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  }"
+:datomic-results 116
+:datomic-time 2}
+{:idx 205
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer483> <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/price> ?v2 .  ?v1 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v1 <http://schema.org/eligibleRegion> ?v4 .  }"
+:datomic-results 246
+:datomic-time 8}
+{:idx 206
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language6> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v1 .  ?v1 <http://purl.org/stuff/rev#title> ?v2 .  }"
+:datomic-results 89
+:datomic-time 203}
+{:idx 207
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City105> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://schema.org/birthDate> ?v3 .  }"
+:datomic-results 7
+:datomic-time 96}
+{:idx 208
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre132> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v2 .  ?v0 <http://schema.org/keywords> ?v3 .  }"
+:datomic-results 44
+:datomic-time 54}
+{:idx 209
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory12> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 10195
+:datomic-time 72}
+{:idx 210
+:query "SELECT * WHERE {  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/author> ?v2 .  ?v2 <http://schema.org/email> ?v5 .  ?v2 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/contentSize> ?v4 .  }"
+:datomic-results 0
+:datomic-time 1398}
+{:idx 211
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Retailer146> <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v6 .  }"
+:datomic-results 5
+:datomic-time 10}
+{:idx 212
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country18> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 126
+:datomic-time 63}
+{:idx 213
+:query "SELECT * WHERE {  ?v3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Genre20> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v3 .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v2 <http://purl.org/goodrelations/includes> ?v0 .  ?v0 <http://schema.org/caption> ?v5 .  ?v0 <http://schema.org/contentRating> ?v6 .  ?v0 <http://schema.org/text> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  }"
+:datomic-results 110
+:datomic-time 43}
+{:idx 214
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase99462> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://schema.org/text> ?v4 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  }"
+:datomic-results 0
+:datomic-time 46}
+{:idx 215
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country16> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v3 .  ?v0 <http://schema.org/eligibleQuantity> ?v4 .  ?v1 <http://schema.org/text> ?v6 .  }"
+:datomic-results 402
+:datomic-time 70}
+{:idx 216
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre50> .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://schema.org/contentRating> ?v2 .  }"
+:datomic-results 210
+:datomic-time 100}
+{:idx 217
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role0> .  ?v0 <http://schema.org/nationality> ?v2 .  }"
+:datomic-results 11735
+:datomic-time 504}
+{:idx 218
+:query "SELECT * WHERE {  ?v4 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic170> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v4 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  ?v0 <http://xmlns.com/foaf/familyName> ?v2 .  ?v0 <http://xmlns.com/foaf/homepage> ?v3 .  }"
+:datomic-results 43
+:datomic-time 28}
+{:idx 219
+:query "SELECT * WHERE {  ?v4 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v4 <http://schema.org/nationality> ?v7 .  ?v1 <http://schema.org/eligibleRegion> ?v7 .  ?v0 <http://purl.org/goodrelations/offers> ?v1 .  ?v1 <http://purl.org/goodrelations/validFrom> ?v2 .  ?v1 <http://purl.org/goodrelations/validThrough> ?v3 .  ?v1 <http://schema.org/eligibleQuantity> ?v6 .  ?v1 <http://schema.org/priceValidUntil> ?v8 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14403 ?v4 ?v7 ?v1 ?v0 ?v2 ?v3 ?v6 ?v8), message: processing clause: [?v1 :http://schema.org/eligibleRegion ?v7], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 16400}
+{:idx 220
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country2> .  ?v0 <http://purl.org/goodrelations/validThrough> ?v1 .  ?v0 <http://schema.org/eligibleQuantity> ?v2 .  }"
+:datomic-results 6588
+:datomic-time 135}
+{:idx 221
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User40774> <http://schema.org/nationality> ?v2 .  ?v0 <http://schema.org/eligibleRegion> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v1 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 222
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country13> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v0 <http://schema.org/eligibleQuantity> ?v5 .  ?v0 <http://schema.org/priceValidUntil> ?v7 .  }"
+:datomic-results 108
+:datomic-time 148}
+{:idx 223
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase20566> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v4 .  }"
+:datomic-results 2
+:datomic-time 50}
+{:idx 224
+:query "SELECT * WHERE {  ?v5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role1> .  ?v1 <http://schema.org/editor> ?v5 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v8 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#title> ?v4 .  ?v1 <http://schema.org/expires> ?v7 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  }"
+:datomic-results 6
+:datomic-time 253}
+{:idx 225
+:query "SELECT * WHERE {  ?v5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v1 <http://schema.org/editor> ?v5 .  ?v5 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v8 .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://ogp.me/ns#title> ?v4 .  ?v1 <http://schema.org/expires> ?v7 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v2 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v3 .  }"
+:datomic-results 52
+:datomic-time 125}
+{:idx 226
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country19> .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/price> ?v3 .  ?v2 <http://purl.org/goodrelations/validFrom> ?v4 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v5 .  ?v0 <http://purl.org/goodrelations/name> ?v1 .  ?v0 <http://schema.org/contactPoint> ?v8 .  ?v0 <http://schema.org/email> ?v10 .  ?v0 <http://schema.org/openingHours> ?v11 .  ?v6 <http://purl.org/stuff/rev#reviewer> ?v8 .  ?v6 <http://purl.org/stuff/rev#rating> ?v7 .  }"
+:datomic-results 346
+:datomic-time 172}
+{:idx 227
+:query "SELECT * WHERE {  ?v2 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review91939> .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 5
+:datomic-time 97}
+{:idx 228
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory3> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://schema.org/text> ?v3 .  }"
+:datomic-results 1863
+:datomic-time 24}
+{:idx 229
+:query "SELECT * WHERE {  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory2> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://purl.org/stuff/rev#hasReview> ?v3 .  ?v1 <http://schema.org/contentSize> ?v9 .  ?v3 <http://purl.org/stuff/rev#rating> ?v4 .  ?v3 <http://purl.org/stuff/rev#reviewer> ?v5 .  ?v3 <http://purl.org/stuff/rev#text> ?v6 .  ?v3 <http://purl.org/stuff/rev#title> ?v7 .  ?v3 <http://purl.org/stuff/rev#totalVotes> ?v8 .  }"
+:datomic-results 23
+:datomic-time 927}
+{:idx 230
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic57> .  ?v0 <http://schema.org/caption> ?v2 .  ?v0 <http://schema.org/expires> ?v3 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate> ?v5 .  }"
+:datomic-results 2
+:datomic-time 7}
+{:idx 231
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup4> .  ?v0 <http://xmlns.com/foaf/givenName> ?v2 .  ?v0 <http://schema.org/email> ?v3 .  ?v0 <http://schema.org/telephone> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v5 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v6 .  }"
+:datomic-results 707
+:datomic-time 486}
+{:idx 232
+:query "SELECT * WHERE {  ?v0 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country19> .  ?v0 <http://purl.org/goodrelations/includes> ?v1 .  ?v2 <http://purl.org/goodrelations/offers> ?v0 .  ?v0 <http://purl.org/goodrelations/price> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v4 .  ?v0 <http://purl.org/goodrelations/validFrom> ?v5 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v0 <http://schema.org/eligibleQuantity> ?v7 .  ?v0 <http://schema.org/priceValidUntil> ?v9 .  }"
+:datomic-results 65
+:datomic-time 55}
+{:idx 233
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Offer46426> <http://purl.org/goodrelations/includes> ?v1 .  ?v1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v1 <http://schema.org/keywords> ?v3 .  }"
+:datomic-results 0
+:datomic-time 1}
+{:idx 234
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup7> .  ?v2 <http://schema.org/author> ?v0 .  ?v0 <http://schema.org/telephone> ?v3 .  }"
+:datomic-results 5
+:datomic-time 555}
+{:idx 235
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/User76214> <http://schema.org/nationality> ?v3 .  ?v0 <http://schema.org/eligibleRegion> ?v3 .  ?v0 <http://purl.org/goodrelations/serialNumber> ?v1 .  ?v0 <http://purl.org/goodrelations/validThrough> ?v2 .  }"
+:datomic-results 1816
+:datomic-time 62}
+{:idx 236
+:query "SELECT * WHERE {  ?v0 <http://xmlns.com/foaf/age> <http://db.uwaterloo.ca/~galuc/wsdbm/AgeGroup3> .  ?v0 <http://xmlns.com/foaf/homepage> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 400
+:datomic-time 76}
+{:idx 237
+:query "SELECT * WHERE {  ?v2 <http://purl.org/stuff/rev#hasReview> <http://db.uwaterloo.ca/~galuc/wsdbm/Review15565> .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v2 .  ?v0 <http://xmlns.com/foaf/age> ?v1 .  }"
+:datomic-results 2
+:datomic-time 2}
+{:idx 238
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/contentRating> ?v3 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/subscribes> ?v1 .  ?v4 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> ?v5 .  }"
+:datomic-results 2558
+:datomic-time 111}
+{:idx 239
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language21> .  ?v0 <http://purl.org/stuff/rev#hasReview> ?v1 .  ?v1 <http://purl.org/stuff/rev#title> ?v2 .  }"
+:datomic-results 5
+:datomic-time 3}
+{:idx 240
+:query "SELECT * WHERE {  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/Role2> .  ?v0 <http://schema.org/author> ?v2 .  ?v2 <http://schema.org/email> ?v5 .  ?v2 <http://db.uwaterloo.ca/~galuc/wsdbm/friendOf> ?v2 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/contentSize> ?v4 .  }"
+:datomic-results 0
+:datomic-time 447}
+{:idx 241
+:query "SELECT * WHERE {  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/gender> <http://db.uwaterloo.ca/~galuc/wsdbm/Gender1> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://schema.org/nationality> ?v8 .  ?v2 <http://schema.org/eligibleRegion> ?v8 .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v4 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/serialNumber> ?v5 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v6 .  ?v2 <http://schema.org/eligibleQuantity> ?v7 .  }"
+:datomic-error "java.lang.Exception: processing rule: (q__14441 ?v0 ?v1 ?v8 ?v2 ?v3 ?v4 ?v5 ?v6 ?v7), message: processing clause: [?v2 :http://schema.org/eligibleRegion ?v8], message: java.util.concurrent.TimeoutException: Query canceled: timeout elapsed"
+:datomic-time 17286}
+{:idx 242
+:query "SELECT * WHERE {  ?v0 <http://schema.org/language> <http://db.uwaterloo.ca/~galuc/wsdbm/Language8> .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v2 .  }"
+:datomic-results 86
+:datomic-time 3}
+{:idx 243
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Product17840> <http://ogp.me/ns#title> ?v1 .  }"
+:datomic-results 1
+:datomic-time 1}
+{:idx 244
+:query "SELECT * WHERE {  ?v2 <http://schema.org/eligibleRegion> <http://db.uwaterloo.ca/~galuc/wsdbm/Country7> .  ?v2 <http://purl.org/goodrelations/includes> ?v3 .  ?v0 <http://purl.org/goodrelations/offers> ?v2 .  ?v2 <http://purl.org/goodrelations/validThrough> ?v4 .  ?v2 <http://schema.org/eligibleQuantity> ?v6 .  ?v2 <http://schema.org/priceValidUntil> ?v9 .  ?v0 <http://purl.org/goodrelations/description> ?v1 .  ?v0 <http://schema.org/aggregateRating> ?v5 .  ?v0 <http://schema.org/faxNumber> ?v8 .  ?v0 <http://schema.org/telephone> ?v10 .  }"
+:datomic-results 18
+:datomic-time 75}
+{:idx 245
+:query "SELECT * WHERE {  ?v0 <http://purl.org/goodrelations/includes> <http://db.uwaterloo.ca/~galuc/wsdbm/Product1826> .  ?v0 <http://purl.org/goodrelations/price> ?v2 .  ?v0 <http://schema.org/eligibleQuantity> ?v3 .  ?v0 <http://schema.org/priceValidUntil> ?v4 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 246
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City239> .  ?v0 <http://xmlns.com/foaf/age> ?v2 .  ?v0 <http://schema.org/birthDate> ?v3 .  }"
+:datomic-results 3
+:datomic-time 1}
+{:idx 247
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/SubGenre17> <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/description> ?v3 .  }"
+:datomic-results 1688
+:datomic-time 116}
+{:idx 248
+:query "SELECT * WHERE {  ?v0 <http://ogp.me/ns#tag> <http://db.uwaterloo.ca/~galuc/wsdbm/Topic154> .  ?v0 <http://xmlns.com/foaf/homepage> ?v1 .  ?v0 <http://ogp.me/ns#title> ?v3 .  ?v0 <http://schema.org/expires> ?v4 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v5 .  ?v6 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  ?v7 <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  }"
+:datomic-results 531
+:datomic-time 6}
+{:idx 249
+:query "SELECT * WHERE {  <http://db.uwaterloo.ca/~galuc/wsdbm/Purchase79646> <http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor> ?v0 .  ?v0 <http://ogp.me/ns#title> ?v1 .  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v2 .  ?v0 <http://schema.org/description> ?v3 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre> ?v4 .  }"
+:datomic-results 0
+:datomic-time 2}
+{:idx 250
+:query "SELECT * WHERE {  ?v0 <http://purl.org/dc/terms/Location> <http://db.uwaterloo.ca/~galuc/wsdbm/City27> .  ?v0 <http://xmlns.com/foaf/homepage> ?v2 .  ?v0 <http://db.uwaterloo.ca/~galuc/wsdbm/userId> ?v3 .  }"
+:datomic-results 7
+:datomic-time 2}
+{:idx 251
+:query "SELECT * WHERE {  ?v0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://db.uwaterloo.ca/~galuc/wsdbm/ProductCategory4> .  ?v0 <http://ogp.me/ns#tag> ?v1 .  ?v0 <http://schema.org/contentRating> ?v5 .  ?v0 <http://schema.org/contentSize> ?v6 .  ?v0 <http://schema.org/description> ?v7 .  ?v8 <http://db.uwaterloo.ca/~galuc/wsdbm/likes> ?v0 .  ?v2 <http://ogp.me/ns#tag> ?v1 .  ?v2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?v4 .  }"
+:datomic-results 211989
+:datomic-time 786}
+]

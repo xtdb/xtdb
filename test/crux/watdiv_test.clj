@@ -33,7 +33,7 @@
 ;; https://dsg.uwaterloo.ca/watdiv/
 ;; https://pdfs.semanticscholar.org/eaed/4750e90109f6efaf01aa9fa914636e9366b5.pdf
 
-;; Needs the following files downloaded and unpacked under test/watdiv
+;; Needs the following files downloaded and unpacked under test/watdiv/data
 ;; in the project root:
 
 ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2
@@ -42,10 +42,10 @@
 ;; First test run:
 
 ;; WatDiv 10M:
-;; wc -l test/watdiv/watdiv.10M.nt
-;; 10916457 test/watdiv/watdiv.10M.nt
-;; du -hs test/watdiv/watdiv.10M.nt
-;; 1.5G	test/watdiv/watdiv.10M.nt
+;; wc -l test/watdiv/data/watdiv.10M.nt
+;; 10916457 test/watdiv/data/watdiv.10M.nt
+;; du -hs test/watdiv/data/watdiv.10M.nt
+;; 1.5G	test/watdiv/data/watdiv.10M.nt
 
 ;; Ingest:
 ;; "Elapsed time: 136125.904116 msecs"
@@ -54,8 +54,8 @@
 ;; 192M	/tmp/kv-store1625659699196661317
 
 ;; Query:
-;; wc -l test/watdiv/watdiv-stress-100/test.1.sparql
-;; 12400 test/watdiv/watdiv-stress-100/test.1.sparql
+;; wc -l test/watdiv/data/watdiv-stress-100/test.1.sparql
+;; 12400 test/watdiv/data/watdiv-stress-100/test.1.sparql
 
 ;; "Elapsed time: 2472368.881591 msecs"
 ;; Tested 1 namespaces
@@ -84,7 +84,7 @@
 ;; First 4 queries match Sail's counts, the 5 times out in Sail (and
 ;; takes forever in Crux).
 
-(def ^:const watdiv-triples-resource "watdiv/watdiv.10M.nt")
+(def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
 (def ^:const watdiv-num-queries (System/getenv "CRUX_WATDIV_NUM_QUERIES"))
 (def ^:const watdiv-indexes (some-> (System/getenv "CRUX_WATDIV_IDS")
                                     (str/split #"\s*,\s+")
