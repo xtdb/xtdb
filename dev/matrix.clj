@@ -445,7 +445,7 @@
 (defn lmdb->graph
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
-     (lmdb->graph snapshot now now hash->buffer)))
+     (lmdb->graph snapshot now now bitmap-buffer-cache)))
   ([snapshot business-time transaction-time bitmap-buffer-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
          matrix-cache (HashMap.)]
@@ -467,7 +467,7 @@
                                    [p->os-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b hash->buffer)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b bitmap-buffer-cache)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
