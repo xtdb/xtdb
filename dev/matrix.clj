@@ -348,7 +348,7 @@
                    (.writeInt out idx-id)
                    (nippy/freeze-to-out! out p)))]
     (with-open [i (kv/new-iterator snapshot)]
-      (loop [id->row (Int2ObjectHashMap.)
+      (loop [id->row ^Int2ObjectHashMap (new-matrix)
              k ^DirectBuffer (kv/seek i seek-k)]
         (if (within-prefix? seek-k k)
           (let [row-id+k (loop [k k]
