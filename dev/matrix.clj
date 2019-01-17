@@ -215,6 +215,8 @@
 
 (def ^:const ^:private unknown-id -1)
 
+(deftype ParentVarAndPlan [parent-var plan])
+
 (defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
          initial-result
@@ -268,7 +270,7 @@
                                                                                  a (matrix-and a))))))
                                                      plan (or b a)]
                                                  (cond-> acc
-                                                   plan (.add [p plan]))
+                                                   plan (.add (ParentVarAndPlan. p plan)))
                                                  acc))
                                              (ArrayList.)
                                              parent-vars))
@@ -279,8 +281,10 @@
                                     (if-not var
                                       (.add acc [(.apply id->value x)])
                                       (when-let [xs (reduce
-                                                     (fn [^ImmutableRoaringBitmap acc [p ^Int2ObjectHashMap plan]]
-                                                       (let [xs (if (= parent-var p)
+                                                     (fn [^ImmutableRoaringBitmap acc ^ParentVarAndPlan p+plan]
+                                                       (let [p (.parent-var p+plan)
+                                                             ^Int2ObjectHashMap plan (.plan p+plan)
+                                                             xs (if (= parent-var p)
                                                                   (.get plan x)
                                                                   (let [idx (.get ctx p)]
                                                                     (when-not (= unknown-id idx)
