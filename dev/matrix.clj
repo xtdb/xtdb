@@ -317,13 +317,13 @@
   (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE))
 
 (defn- key->business-time-ms ^long [^DirectBuffer k]
-  (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
+  (reverse-time-ms->time-ms (.getLong k (- (.capacity k) Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
 (defn- key->transaction-time-ms ^long [^DirectBuffer k]
-  (reverse-time-ms->time-ms (.getLong k (- (mem/capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN)))
+  (reverse-time-ms->time-ms (.getLong k (- (.capacity k) Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
 (defn- key->row-id ^long [^DirectBuffer k]
-  (.getInt k (- (mem/capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
+  (.getInt k (- (.capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
 
 (deftype RowIdAndKey [^int row-id ^DirectBuffer key])
 
@@ -337,7 +337,7 @@
                    (.writeInt out idx-id)
                    (nippy/freeze-to-out! out p)))
         within-prefix? (fn [k]
-                         (and k (mem/buffers=? k seek-k (mem/capacity seek-k))))]
+                         (and k (mem/buffers=? k seek-k (.capacity seek-k))))]
     (with-open [i (kv/new-iterator snapshot)]
       (loop [id->row (Int2ObjectHashMap.)
              k ^DirectBuffer (kv/seek i seek-k)]
@@ -467,7 +467,7 @@
                          (fn [^DataOutput out]
                            (.writeInt out id->value-idx-id)))
               within-prefix? (fn [k]
-                               (and k (mem/buffers=? k prefix-k (mem/capacity prefix-k))))
+                               (and k (mem/buffers=? k prefix-k (.capacity prefix-k))))
               ;; TODO: This is obviously a slow way to find the latest id.
               id (get @pending-id-state
                       value
