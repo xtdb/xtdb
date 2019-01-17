@@ -213,6 +213,8 @@
         var-result-order (mapv (zipmap var-access-order (range)) find)]
     [var->mask initial-result clauses-in-join-order var-access-order var-result-order]))
 
+(def ^:const ^:private ctx-missing-value -1)
+
 (defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
          initial-result
@@ -281,7 +283,7 @@
                                                        (let [xs (if (= parent-var p)
                                                                   (.get plan x)
                                                                   (let [idx (.get ctx p)]
-                                                                    (when-not (= -1 idx)
+                                                                    (when-not (= ctx-missing-value idx)
                                                                       (.get plan idx))))]
                                                          (if (and acc xs)
                                                            (bitmap-and acc xs)
@@ -298,7 +300,7 @@
                 seed
                 (next var-access-order)
                 [root-var]
-                (Object2IntHashMap. -1))
+                (Object2IntHashMap. ctx-missing-value))
                (map #(mapv (vec %) var-result-order))
                (into #{})))))))
 
@@ -326,6 +328,8 @@
   (.getInt k (- (.capacity k) Integer/BYTES Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN))
 
 (deftype RowIdAndKey [^int row-id ^DirectBuffer key])
+
+(def ^:private ^:const no-matches-for-row -1)
 
 (defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
   (let [business-time-ms (.getTime business-time)
@@ -366,11 +370,11 @@
                                    (let [next-k (kv/next i)]
                                      (if (= row-id (int (key->row-id next-k)))
                                        (recur next-k)
-                                       (RowIdAndKey. -1 next-k))))))))]
+                                       (RowIdAndKey. no-matches-for-row next-k))))))))]
             (if-not row-id+k
               id->row
               (let [row-id (.row-id ^RowIdAndKey row-id+k)]
-                (if (not= -1 row-id)
+                (if (not= no-matches-for-row row-id)
                   (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
                     (recur (doto id->row
                              (.put row-id row))
