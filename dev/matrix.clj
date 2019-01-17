@@ -359,13 +359,14 @@
                                        (recur found-k))))))))
                 row-id (.row-id ^RowIdAndKey row-id+k)
                 row-id+k (loop [k (.key ^RowIdAndKey row-id+k)]
-                           (when (within-prefix? k)
+                           (if (within-prefix? k)
                              (if (<= (key->transaction-time-ms k) transaction-time-ms)
                                (RowIdAndKey. row-id k)
                                (let [next-k (kv/next i)]
                                  (if (= row-id (int (key->row-id next-k)))
                                    (recur next-k)
-                                   (RowIdAndKey. -1 next-k))))))
+                                   (RowIdAndKey. -1 next-k))))
+                             (RowIdAndKey. -1 nil)))
                 row-id (.row-id ^RowIdAndKey row-id+k)]
             (if (not= -1 row-id)
               (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
