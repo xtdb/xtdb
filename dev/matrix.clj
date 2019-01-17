@@ -342,7 +342,7 @@
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
 
-(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b]
+(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p seek-b ^Map hash->buffer]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
@@ -350,8 +350,7 @@
         seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (nippy/freeze-to-out! out p)))
-        hash->buffer (HashMap.)]
+                   (nippy/freeze-to-out! out p)))]
     (with-open [i (kv/new-iterator snapshot)]
       (loop [id->row ^Int2ObjectHashMap (new-matrix)
              k ^DirectBuffer (kv/seek i seek-k)]
@@ -447,7 +446,8 @@
      (lmdb->graph snapshot now now)))
   ([snapshot business-time transaction-time]
    (let [seek-b (ExpandableDirectByteBuffer.)
-         matrix-cache (HashMap.)]
+         matrix-cache (HashMap.)
+         hash->buffer (HashMap.)]
      {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
       :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
       :p->so (reify ILookup
@@ -456,7 +456,7 @@
                                    [p->so-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id k seek-b hash->buffer)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
@@ -466,7 +466,7 @@
                                    [p->os-idx-id k]
                                    (reify Function
                                      (apply [_ _]
-                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b)))))
+                                       (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b hash->buffer)))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
