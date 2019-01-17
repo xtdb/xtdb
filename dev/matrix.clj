@@ -390,7 +390,6 @@
                                                    buffer-hash
                                                    (fn [_]
                                                      (let [c-seek-k (doto content-hash-b
-                                                                      (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN)
                                                                       (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
                                                            c-k ^DirectBuffer (kv/seek i c-seek-k)]
                                                        (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
@@ -448,7 +447,8 @@
      (lmdb->graph snapshot now now bitmap-buffer-cache)))
   ([snapshot business-time transaction-time bitmap-buffer-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
-         content-hash-b (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+         content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
+                          (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN))
          matrix-cache (HashMap.)]
      {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
       :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
