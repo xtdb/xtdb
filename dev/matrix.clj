@@ -339,6 +339,7 @@
 
 (def ^:private ^:const no-matches-for-row -1)
 (def ^:private ^:const sha1-size 20)
+(def ^:private ^:const bitmap-in-memory-threshold 2)
 
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
@@ -393,7 +394,10 @@
                                                                       (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
                                                            c-k ^DirectBuffer (kv/seek i c-seek-k)]
                                                        (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
-                                                       (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i))))))]
+                                                       (let [b (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                                                         (if (<= (.getCardinality b) bitmap-in-memory-threshold)
+                                                           (.toMutableRoaringBitmap b)
+                                                           b)))))]
                     (recur (doto id->row
                              (.put row-id row))
                            (kv/seek i (mem/with-buffer-out seek-b
