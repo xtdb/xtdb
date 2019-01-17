@@ -357,27 +357,29 @@
                                      (if (= row-id found-row-id)
                                        (RowIdAndKey. row-id k)
                                        (recur found-k))))))))
-                row-id (.row-id ^RowIdAndKey row-id+k)
-                row-id+k (loop [k (.key ^RowIdAndKey row-id+k)]
-                           (if (within-prefix? k)
-                             (if (<= (key->transaction-time-ms k) transaction-time-ms)
-                               (RowIdAndKey. row-id k)
-                               (let [next-k (kv/next i)]
-                                 (if (= row-id (int (key->row-id next-k)))
-                                   (recur next-k)
-                                   (RowIdAndKey. -1 next-k))))
-                             (RowIdAndKey. -1 nil)))
-                row-id (.row-id ^RowIdAndKey row-id+k)]
-            (if (not= -1 row-id)
-              (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                (recur (doto id->row
-                         (.put row-id row))
-                       (kv/seek i (mem/with-buffer-out seek-b
-                                    (fn [^DataOutput out]
-                                      (.writeInt out (inc row-id)))
-                                    false
-                                    (.capacity seek-k)))))
-              (recur id->row (.key ^RowIdAndKey row-id+k))))
+                row-id+k (when row-id+k
+                           (let [row-id (.row-id ^RowIdAndKey row-id+k)]
+                             (loop [k (.key ^RowIdAndKey row-id+k)]
+                               (when (within-prefix? k)
+                                 (if (<= (key->transaction-time-ms k) transaction-time-ms)
+                                   (RowIdAndKey. row-id k)
+                                   (let [next-k (kv/next i)]
+                                     (if (= row-id (int (key->row-id next-k)))
+                                       (recur next-k)
+                                       (RowIdAndKey. -1 next-k))))))))]
+            (if-not row-id+k
+              id->row
+              (let [row-id (.row-id ^RowIdAndKey row-id+k)]
+                (if (not= -1 row-id)
+                  (let [row (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
+                    (recur (doto id->row
+                             (.put row-id row))
+                           (kv/seek i (mem/with-buffer-out seek-b
+                                        (fn [^DataOutput out]
+                                          (.writeInt out (inc row-id)))
+                                        false
+                                        (.capacity seek-k)))))
+                  (recur id->row (.key ^RowIdAndKey row-id+k))))))
           id->row)))))
 
 (deftype SnapshotValueToId [snapshot ^Map cache seek-b]
