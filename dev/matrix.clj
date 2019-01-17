@@ -142,13 +142,15 @@
              (new-matrix (.getCardinality diag))
              (.toArray diag)))))
 
-(defn- new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->so]} a e]
-  (or (some->> (get value->id e) (int) (.get ^Int2ObjectHashMap (get p->so a)))
-      (new-bitmap)))
+(defn- new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [^ToIntFunction value->id p->so]} a e]
+  (let [id (.applyAsInt value->id e)]
+    (or (.get ^Int2ObjectHashMap (get p->so a) id)
+        (new-bitmap))))
 
-(defn- new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->os]} a v]
-  (or (some->> (get value->id v) (int) (.get ^Int2ObjectHashMap (get p->os a)))
-      (new-bitmap)))
+(defn- new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [^ToIntFunction value->id p->os]} a v]
+  (let [id (.applyAsInt value->id v)]
+    (or (.get ^Int2ObjectHashMap (get p->os a) id)
+        (new-bitmap))))
 
 (defn- join [{:keys [p->os p->so] :as graph} a mask-e mask-v]
   (let [result (mult-diag
@@ -391,16 +393,13 @@
                   (recur id->row (.key ^RowIdAndKey row-id+k))))))
           id->row)))))
 
-(deftype SnapshotValueToId [snapshot ^Map cache seek-b]
-  ILookup
-  (valAt [this k]
-    (.valAt this k nil))
-
-  (valAt [_ k default]
+(deftype SnapshotValueToId [snapshot ^Object2IntHashMap cache seek-b]
+  ToIntFunction
+  (applyAsInt [_ k]
     (.computeIfAbsent cache
                       k
-                      (reify Function
-                        (apply [_ k]
+                      (reify ToIntFunction
+                        (applyAsInt [_ k]
                           (with-open [i (kv/new-iterator snapshot)]
                             (let [seek-k (mem/with-buffer-out seek-b
                                            (fn [^DataOutput out]
@@ -410,20 +409,13 @@
                                   k (kv/seek i seek-k)]
                               (if (within-prefix? seek-k k)
                                 (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
-                                default))))))))
+                                unknown-id))))))))
 
 (deftype SnapshotIdToValue [snapshot ^Int2ObjectHashMap cache seek-b]
-  ILookup
-  (valAt [this k]
-    (.valAt this k nil))
-
-  (valAt [this k default]
-    (or (.apply this (int k)) default))
-
   IntFunction
   (apply [_ k]
     (.computeIfAbsent cache
-                      (int k)
+                      k
                       (reify IntFunction
                         (apply [_ k]
                           (with-open [i (kv/new-iterator snapshot)]
@@ -443,7 +435,7 @@
   ([snapshot business-time transaction-time]
    (let [seek-b (ExpandableDirectByteBuffer.)
          matrix-cache (HashMap.)]
-     {:value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)
+     {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
       :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
       :p->so (reify ILookup
                (valAt [this k]
@@ -471,8 +463,9 @@
 (defn- get-or-create-id [kv value ^Box last-id-state ^Object2IntHashMap pending-id-state]
   (with-open [snapshot (kv/new-snapshot kv)]
     (let [seek-b (ExpandableDirectByteBuffer.)
-          value->id (->SnapshotValueToId snapshot (HashMap.) seek-b)]
-      (if-let [id (get value->id value)]
+          value->id ^ToIntFunction (->SnapshotValueToId snapshot (HashMap.) seek-b)
+          id (.applyAsInt value->id value)]
+      (if (not= unknown-id id)
         [id []]
         (let [b (ExpandableDirectByteBuffer.)
               prefix-k (mem/with-buffer-out seek-b
