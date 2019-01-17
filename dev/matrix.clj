@@ -9,409 +9,42 @@
             [crux.rdf :as rdf]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import [java.util Arrays ArrayList Date HashMap HashSet IdentityHashMap Map]
+  (:import [java.util ArrayList Date HashMap HashSet IdentityHashMap Map]
            [java.util.function Function IntFunction]
            [clojure.lang ILookup Indexed]
            crux.ByteUtils
            [java.io DataInputStream DataOutput DataOutputStream]
            java.nio.ByteOrder
-           [org.agrona.collections Hashing Int2ObjectHashMap Object2IntHashMap]
+           [org.agrona.collections Int2ObjectHashMap Object2IntHashMap]
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.ExpandableDirectByteBuffer
            org.agrona.DirectBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
-           [org.roaringbitmap BitmapDataProviderSupplier FastRankRoaringBitmap ImmutableBitmapDataProvider IntConsumer RoaringBitmap]
-           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]
-           [org.roaringbitmap.longlong LongConsumer Roaring64NavigableMap]
-           [org.ejml.data DMatrix DMatrixRMaj
-            DMatrixSparse DMatrixSparseCSC]
-           org.ejml.dense.row.CommonOps_DDRM
-           [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
-           org.ejml.generic.GenericMatrixOps_F64))
-
-(set! *unchecked-math* :warn-on-boxed)
+           [org.roaringbitmap IntConsumer]
+           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]))
 
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
 ;; MAGiQ http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf
 ;; gSMat https://arxiv.org/pdf/1807.07691.pdf
 
-(defn square-matrix ^DMatrixSparseCSC [size]
-  (DMatrixSparseCSC. size size))
-
-(defn row-vector ^DMatrixSparseCSC [size]
-  (DMatrixSparseCSC. 1 size))
-
-(defn col-vector ^DMatrixSparseCSC [size]
-  (DMatrixSparseCSC. size 1))
-
-(defn equals-matrix [^DMatrix a ^DMatrix b]
-  (GenericMatrixOps_F64/isEquivalent a b 0.0))
-
-(defn resize-matrix [^DMatrixSparse m new-size]
-  (let [grown (square-matrix new-size)]
-    (CommonOps_DSCC/extract m
-                            0
-                            (.getNumCols m)
-                            0
-                            (.getNumRows m)
-                            grown
-                            0
-                            0)
-    grown))
-
-(defn ensure-matrix-capacity ^DMatrixSparseCSC [^DMatrixSparseCSC m size factor]
-  (if (> (long size) (.getNumRows m))
-    (resize-matrix m (* (long factor) (long size)))
-    m))
-
-(defn round-to-power-of-two [^long x ^long stride]
-  (bit-and (bit-not (dec stride))
-           (dec (+ stride x))))
-
-(defn load-rdf-into-matrix-graph [resource]
-  (with-open [in (io/input-stream (io/resource resource))]
-    (let [{:keys [value->id
-                  eid->matrix]}
-          (->> (rdf/ntriples-seq in)
-               (map rdf/rdf->clj)
-               (reduce (fn [{:keys [value->id eid->matrix]} [s p o]]
-                         (let [value->id (reduce (fn [value->id v]
-                                                   (update value->id v (fn [x]
-                                                                         (or x (count value->id)))))
-                                                 value->id
-                                                 [s p o])]
-                           {:eid->matrix (update eid->matrix
-                                                 p
-                                                 (fn [x]
-                                                   (let [s-id (long (get value->id s))
-                                                         o-id (long (get value->id o))
-                                                         size (count value->id)
-                                                         m (if x
-                                                             (ensure-matrix-capacity x size 2)
-                                                             (square-matrix size))]
-                                                     (doto m
-                                                       (.unsafe_set s-id o-id 1.0)))))
-                            :value->id value->id}))))
-          max-size (round-to-power-of-two (count value->id) 64)]
-      {:eid->matrix (->> (for [[k ^DMatrixSparseCSC v] eid->matrix]
-                           [k (ensure-matrix-capacity v max-size 1)])
-                         (into {}))
-       :value->id value->id
-       :id->value (->> (set/map-invert value->id)
-                       (into (sorted-map)))
-       :max-size max-size})))
-
-(defn print-assigned-values [{:keys [id->value] :as graph} ^DMatrix m]
-  (if (instance? DMatrixSparse m)
-    (.printNonZero ^DMatrixSparse m)
-    (.print m))
-  (doseq [r (range (.getNumRows m))
-          c (range (.getNumCols m))
-          :when (= 1.0 (.unsafe_get m r c))]
-    (if (= 1 (.getNumRows m))
-      (prn (get id->value c))
-      (prn (get id->value r) (get id->value c))))
-  (prn))
-
-;; TODO: Couldn't this be a vector in most cases?
-(defn new-constant-matix ^DMatrixSparseCSC [{:keys [value->id max-size] :as graph} & vs]
-  (let [m (square-matrix max-size)]
-    (doseq [v vs
-            :let [id (get value->id v)]
-            :when id]
-      (.unsafe_set m id id 1.0))
-    m))
-
-(defn transpose-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
-  (CommonOps_DSCC/transpose m nil nil))
-
-(defn boolean-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC m]
-  (dotimes [n (alength (.nz_values m))]
-    (when (pos? (aget (.nz_values m) n))
-      (aset (.nz_values m) n 1.0)))
-  m)
-
-(defn ^DMatrixSparseCSC assign-mask
-  ([^DMatrixSparseCSC mask ^DMatrixSparseCSC w u]
-   (assign-mask mask w u pos?))
-  ([^DMatrixSparseCSC mask ^DMatrixSparseCSC w u pred]
-   (assert (= 1 (.getNumCols mask) (.getNumCols w)))
-   (dotimes [n (min (.getNumRows mask) (.getNumRows w))]
-     (when (pred (.get mask n 0))
-       (.set w n 0 (double u))))
-   w))
-
-(defn mask ^DMatrixSparseCSC [^DMatrixSparseCSC mask ^DMatrixSparseCSC w]
-  (assign-mask mask w 0.0 zero?))
-
-(defn inverse-mask ^DMatrixSparseCSC [^DMatrixSparseCSC mask ^DMatrixSparseCSC w]
-  (assign-mask mask w 0.0 pos?))
-
-(defn multiply-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (doto (DMatrixSparseCSC. (.getNumRows a) (.getNumCols b))
-    (->> (CommonOps_DSCC/mult a b))))
-
-(defn or-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (->> (multiply-matrix a b)
-       (boolean-matrix)))
-
-(defn multiply-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (let [c (DMatrixSparseCSC. (max (.getNumRows a) (.getNumRows b))
-                             (max (.getNumCols a) (.getNumCols b)))]
-    (CommonOps_DSCC/elementMult a b c nil nil)
-    c))
-
-(defn add-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (let [c (DMatrixSparseCSC. (max (.getNumRows a) (.getNumRows b))
-                             (max (.getNumCols a) (.getNumCols b)))]
-    (CommonOps_DSCC/add 1.0 a 1.0 b c nil nil)
-    c))
-
-(defn or-elements-matrix ^DMatrixSparseCSC [^DMatrixSparseCSC a ^DMatrixSparseCSC b]
-  (->> (add-elements-matrix a b)
-       (boolean-matrix)))
-
-;; NOTE: these return row vectors, which they potentially shouldn't?
-;; Though the result of this is always fed straight into a diagonal.
-(defn matlab-any-matrix ^DMatrixRMaj [^DMatrixSparseCSC m]
-  (CommonOps_DDRM/transpose (CommonOps_DSCC/maxCols m nil) nil))
-
-(defn matlab-any-matrix-sparse ^DMatrixSparseCSC [^DMatrixSparseCSC m]
-  (let [v (col-vector (.getNumRows m))]
-    (doseq [^long x (->> (.col_idx m)
-                         (map-indexed vector)
-                         (remove (comp zero? second))
-                         (partition-by second)
-                         (map ffirst))]
-      (.unsafe_set v (dec x) 0 1.0))
-    v))
-
-(defn diagonal-matrix ^DMatrixSparseCSC [^DMatrix v]
-  (let [target-size (.getNumRows v)
-        m (square-matrix target-size)]
-    (doseq [i (range target-size)
-            :let [x (.unsafe_get v i 0)]
-            :when (not (zero? x))]
-      (.unsafe_set m i i x))
-    m))
-
-;; GraphBLAS Tutorial https://github.com/tgmattso/GraphBLAS
-
-(defn graph-blas-tutorial []
-  (let [num-nodes 7
-        graph (doto (square-matrix num-nodes)
-                (.set 0 1 1.0)
-                (.set 0 3 1.0)
-                (.set 1 4 1.0)
-                (.set 1 6 1.0)
-                (.set 2 5 1.0)
-                (.set 3 0 1.0)
-                (.set 3 2 1.0)
-                (.set 4 5 1.0)
-                (.set 5 2 1.0)
-                (.set 6 2 1.0)
-                (.set 6 3 1.0)
-                (.set 6 4 1.0))
-        vec (doto (col-vector num-nodes)
-              (.set 2 0 1.0))]
-    (println "Exercise 3: Adjacency matrix")
-    (println "Matrix: Graoh =")
-    (.print graph)
-
-    (println "Exercise 4: Matrix Vector Multiplication")
-    (println "Vector: Target node =")
-    (.print vec)
-    (println "Vector: sources =")
-    (.print (multiply-matrix graph vec))
-
-    (println "Exercise 5: Matrix Vector Multiplication")
-    (let [vec (doto (col-vector num-nodes)
-                (.set 6 0 1.0))]
-      (println "Vector: source node =")
-      (.print vec)
-      (println "Vector: neighbours =")
-      (.print (multiply-matrix (transpose-matrix graph) vec)))
-
-    (println "Exercise 7: Traverse the graph")
-    (let [w (doto (col-vector num-nodes)
-              (.set 0 0 1.0))]
-      (println "Vector: wavefront(src) =")
-      (.print w)
-      (loop [w w
-             n 0]
-        (when (< n num-nodes)
-          ;; TODO: This should really use or and not accumulate.
-          (let [w (or-matrix (transpose-matrix graph) w)]
-            (println "Vector: wavefront =")
-            (.print w)
-            (recur w (inc n))))))
-
-    (println "Exercise 9: Avoid revisiting")
-    (let [w (doto (col-vector num-nodes)
-              (.set 0 0 1.0))
-          v (col-vector num-nodes)]
-      (println "Vector: wavefront(src) =")
-      (.print w)
-      (loop [v v
-             w w
-             n 0]
-        (when (< n num-nodes)
-          (let [v (or-elements-matrix v w)]
-            (println "Vector: visited =")
-            (.print v)
-            (let [w (inverse-mask v (or-matrix (transpose-matrix graph) w))]
-              (println "Vector: wavefront =")
-              (.print w)
-              (when-not (MatrixFeatures_DSCC/isZeros w 0)
-                (recur v w (inc n))))))))
-
-    (println "Exercise 10: level BFS")
-    (let [w (doto (col-vector num-nodes)
-              (.set 0 0 1.0))
-          levels (col-vector num-nodes)]
-      (println "Vector: wavefront(src) =")
-      (.print w)
-      (loop [levels levels
-             w w
-             lvl 1]
-        (let [levels (assign-mask w levels lvl)]
-          (println "Vector: levels =")
-          (.print levels)
-          (let [w (inverse-mask levels (or-matrix (transpose-matrix graph) w))]
-            (println "Vector: wavefront =")
-            (.print w)
-            (when-not (MatrixFeatures_DSCC/isZeros w 0)
-              (recur levels w (inc lvl)))))))))
-
-(def ^:const example-data-artists-resource "crux/example-data-artists.nt")
-
-(defn example-data-artists-with-matrix [{:keys [eid->matrix id->value value->id max-size] :as graph}]
-  (println "== Data")
-  (doseq [[k ^DMatrixSparseCSC v] eid->matrix]
-    (prn k)
-    (print-assigned-values graph v))
-
-  (println "== Query")
-  (let [ ;; ?x :rdf/label "The Potato Eaters" -- backwards, so
-        ;; transposing adjacency matrix.
-        potato-eaters-label (multiply-matrix
-                             (new-constant-matix graph "The Potato Eaters" "Guernica")
-                             (transpose-matrix (:http://www.w3.org/2000/01/rdf-schema#label eid->matrix)))
-        ;; Create mask for subjects. A mask is a diagonal, like the
-        ;; constant matrix. Done to "lift" the new left hand side into
-        ;; "focus".
-        potato-eaters-mask (->> potato-eaters-label ;; TODO: Why transpose here in MAGiQ paper?
-                                (matlab-any-matrix)
-                                (diagonal-matrix))
-        ;; ?y :example/creatorOf ?x -- backwards, so transposing adjacency
-        ;; matrix.
-        creator-of (multiply-matrix
-                    potato-eaters-mask
-                    (transpose-matrix (:http://example.org/creatorOf eid->matrix)))
-        ;; ?y :foaf/firstName ?z -- forwards, so no transpose of adjacency matrix.
-        creator-of-fname (multiply-matrix
-                          (->> creator-of
-                               (matlab-any-matrix)
-                               (diagonal-matrix))
-                          (:http://xmlns.com/foaf/0.1/firstName eid->matrix))]
-    (print-assigned-values graph potato-eaters-label)
-    (print-assigned-values graph potato-eaters-mask)
-    (print-assigned-values graph creator-of)
-    (print-assigned-values graph creator-of-fname)))
-
-
-;; Other Matrix-format related spikes:
-
-(defn mat-mul [^doubles a ^doubles b]
-  (assert (= (alength a) (alength b)))
-  (let [size (alength a)
-        n (bit-shift-right size 1)
-        c (double-array size)]
-    (dotimes [i n]
-      (dotimes [j n]
-        (let [row-idx (* n i)
-              c-idx (+ row-idx j)]
-          (dotimes [k n]
-            (aset c
-                  c-idx
-                  (+ (aget c c-idx)
-                     (* (aget a (+ row-idx k))
-                        (aget b (+ (* n k) j)))))))))
-    c))
-
-(defn vec-mul [^doubles a ^doubles x]
-  (let [size (alength a)
-        n (bit-shift-right size 1)
-        y (double-array n)]
-    (assert (= n (alength x)))
-    (dotimes [i n]
-      (dotimes [j n]
-        (aset y
-              i
-              (+ (aget y i)
-                 (* (aget a (+ (* n i) j))
-                    (aget x j))))))
-    y))
-
-;; CSR
-;; https://people.eecs.berkeley.edu/~aydin/GALLA-sparse.pdf
-
-{:nrows 6
- :row-ptr (int-array [0 2 5 6 9 12 16])
- :col-ind (int-array [0 1
-                      1 3 5
-                      2
-                      2 4 5
-                      0 3 4
-                      0 2 3 5])
- :values (double-array [5.4 1.1
-                        6.3 7.7 8.8
-                        1.1
-                        2.9 3.7 2.9
-                        9.0 1.1 4.5
-                        1.1 2.9 3.7 1.1])}
-
-;; DCSC Example
-{:nrows 8
- :jc (int-array [1 7 8])
- :col-ptr (int-array [1 3 4 5])
- :row-ind (int-array [6 8 4 5])
- :values (double-array [0.1 0.2 0.3 0.4])}
-
-(defn vec-csr-mul [{:keys [^long nrows ^ints row-ptr ^ints col-ind ^doubles values] :as a} ^doubles x]
-  (let [n nrows
-        y (double-array n)]
-    (assert (= n (alength x)))
-    (dotimes [i n]
-      (loop [j (aget row-ptr i)
-             yr 0.0]
-        (if (< j (aget row-ptr (inc i)))
-          (recur (inc i)
-                 (+ yr
-                    (* (aget values j)
-                       (aget x (aget col-ind j)))))
-          (aset y i yr))))
-    y))
-
-(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
-(def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
+(set! *unchecked-math* :warn-on-boxed)
 
 ;; Bitmap-per-Row version.
 
 ;; NOTE: toString on Int2ObjectHashMap seems to be broken. entrySet
 ;; also seems to be behaving unexpectedly (returns duplicated keys),
 ;; at least when using RoaringBitmaps as values.
-(defn new-r-bitmap
+(defn new-matrix
   (^Int2ObjectHashMap []
    (Int2ObjectHashMap.))
   (^Int2ObjectHashMap [^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
-(defn new-r-roaring-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
+(defn new-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
   (MutableRoaringBitmap.))
 
-(defn r-and
+(defn matrix-and
   ([a] a)
   ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
    (let [ks (doto (HashSet. (.keySet a))
@@ -420,42 +53,40 @@
                (let [k (int k)]
                  (doto m
                    (.put k (ImmutableRoaringBitmap/and (.get a k) (.get b k))))))
-             (new-r-bitmap (count ks))
+             (new-matrix (count ks))
              ks))))
 
-(defn r-roaring-and
+(defn bitmap-and
   ([a] a)
   ([^ImmutableRoaringBitmap a ^ImmutableRoaringBitmap b]
    (ImmutableRoaringBitmap/and a b)))
 
-(defn r-cardinality ^long [^Int2ObjectHashMap a]
+(defn matrix-cardinality ^long [^Int2ObjectHashMap a]
   (->> (.values a)
-       (map #(.getCardinality ^ImmutableBitmapDataProvider %))
+       (map #(.getCardinality ^ImmutableRoaringBitmap %))
        (reduce +)))
 
-(def ^Map pred-cardinality-cache (HashMap.))
-
-;; TODO: Get rid of this or move to protocol.
-(defn r-pred-cardinality [a attr]
-  (.computeIfAbsent pred-cardinality-cache
-                    [(System/identityHashCode a) attr]
+(defn predicate-cardinality [{:keys [p->so ^Map predicate-cardinality-cache]} attr]
+  (.computeIfAbsent predicate-cardinality-cache
+                    attr
                     (reify Function
                       (apply [_ k]
-                        (r-cardinality a)))))
+                        (matrix-cardinality (get p->so k))))))
 
-(defn r-diagonal-matrix [diag]
-  (reduce
-   (fn [^Int2ObjectHashMap m d]
-     (let [d (int d)]
-       (doto m
-         (.put d (doto (new-r-roaring-bitmap)
-                   (.add d))))))
-   (new-r-bitmap (count diag))
-   diag))
+(defn new-diagonal-matrix [^ImmutableRoaringBitmap diag]
+  (let [diag (.toArray diag)]
+    (reduce
+     (fn [^Int2ObjectHashMap m d]
+       (let [d (int d)]
+         (doto m
+           (.put d (doto (new-bitmap)
+                     (.add d))))))
+     (new-matrix (alength diag))
+     diag)))
 
-(defn r-transpose [^Int2ObjectHashMap a]
+(defn transpose [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
-         m ^Int2ObjectHashMap (new-r-bitmap (.size a))]
+         m ^Int2ObjectHashMap (new-matrix (.size a))]
     (if-not (.hasNext i)
       m
       (let [row (.nextInt i)
@@ -466,26 +97,26 @@
                       (let [^MutableRoaringBitmap x (.computeIfAbsent m col
                                                                       (reify IntFunction
                                                                         (apply [_ _]
-                                                                          (new-r-roaring-bitmap))))]
+                                                                          (new-bitmap))))]
                         (.add x row)))))
         (recur i m)))))
 
-(defn r-matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn matlab-any ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
-    (new-r-roaring-bitmap)
+    (new-bitmap)
     (ImmutableRoaringBitmap/or (.iterator (.values a)))))
 
-(defn r-matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+(defn matlab-any-transpose ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
-         acc (new-r-roaring-bitmap)]
+         acc (new-bitmap)]
     (if-not (.hasNext i)
       acc
       (recur i (doto acc
                  (.add (.nextInt i)))))))
 
-(defn r-mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
+(defn mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
-        (new-r-bitmap)
+        (new-matrix)
 
         (nil? diag)
         a
@@ -499,36 +130,34 @@
                    (doto m
                      (.put d b))
                    m)))
-             (new-r-bitmap (.getCardinality diag))
+             (new-matrix (.getCardinality diag))
              (.toArray diag)))))
 
-(defn r-literal-e [{:keys [value->id p->so]} a e]
-  (or (some->>  (get value->id e) (int) (.get ^Int2ObjectHashMap (get p->so a)))
-      (new-r-roaring-bitmap)))
+(defn new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->so]} a e]
+  (or (some->> (get value->id e) (int) (.get ^Int2ObjectHashMap (get p->so a)))
+      (new-bitmap)))
 
-(defn r-literal-v [{:keys [value->id p->os]} a v]
+(defn new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [value->id p->os]} a v]
   (or (some->> (get value->id v) (int) (.get ^Int2ObjectHashMap (get p->os a)))
-      (new-r-roaring-bitmap)))
+      (new-bitmap)))
 
-(defn r-join [{:keys [p->os p->so] :as graph} a ^ImmutableRoaringBitmap mask-e ^ImmutableRoaringBitmap mask-v]
-  (let [result (r-mult-diag
+(defn join [{:keys [p->os p->so] :as graph} a mask-e mask-v]
+  (let [result (mult-diag
                 mask-e
                 (if mask-v
-                  (r-transpose
-                   (r-mult-diag
+                  (transpose
+                   (mult-diag
                     mask-v
                     (get p->os a)))
                   (get p->so a)))]
     [result
-     (r-matlab-any-transpose result)
-     (r-matlab-any result)]))
+     (matlab-any-transpose result)
+     (matlab-any result)]))
 
-(def logic-var? symbol?)
-(def literal? (complement logic-var?))
+(def ^:private logic-var? symbol?)
+(def ^:private literal? (complement logic-var?))
 
-(def ^Map r-query-cache (HashMap.))
-
-(defn r-compile-query [{:keys [value->id p->so] :as graph} q]
+(defn compile-query [{:keys [p->so] :as graph} q]
   (let [{:keys [find where]} (s/conform :crux.query/query q)
         triple-clauses (->> where
                             (filter (comp #{:triple} first))
@@ -543,7 +172,7 @@
         clauses-in-cardinality-order (->> triple-clauses
                                           (remove (set literal-clauses))
                                           (sort-by (fn [{:keys [a]}]
-                                                     (r-pred-cardinality (get p->so a) a)))
+                                                     (predicate-cardinality graph a)))
                                           (vec))
         clauses-in-join-order (loop [[{:keys [e v] :as clause} & clauses] clauses-in-cardinality-order
                                      order []
@@ -565,31 +194,31 @@
         var->mask (->> (for [{:keys [e a v]} literal-clauses]
                          (merge
                           (when (literal? e)
-                            {v (r-literal-e graph a e)})
+                            {v (new-literal-e-mask graph a e)})
                           (when (literal? v)
-                            {e (r-literal-v graph a v)})))
-                       (apply merge-with r-and))
+                            {e (new-literal-v-mask graph a v)})))
+                       (apply merge-with bitmap-and))
         initial-result (->> (for [[v bs] var->mask]
-                              {v {v (r-diagonal-matrix (.toArray ^ImmutableRoaringBitmap bs))}})
+                              {v {v (new-diagonal-matrix bs)}})
                             (apply merge-with merge))
         var-result-order (mapv (zipmap var-access-order (range)) find)]
     [var->mask initial-result clauses-in-join-order var-access-order var-result-order]))
 
-(defn r-query [{:keys [^IntFunction id->value] :as graph} q]
+(defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
          initial-result
          clauses-in-join-order
          var-access-order
-         var-result-order] (.computeIfAbsent r-query-cache
+         var-result-order] (.computeIfAbsent query-cache
                                              [(System/identityHashCode graph) q]
                                              (reify Function
                                                (apply [_ k]
-                                                 (r-compile-query graph q))))]
+                                                 (compile-query graph q))))]
     (loop [idx 0
            var->mask var->mask
            result initial-result]
       (if-let [{:keys [e a v] :as clause} (get clauses-in-join-order idx)]
-        (let [[join-result mask-e mask-v] (r-join
+        (let [[join-result mask-e mask-v] (join
                                            graph
                                            a
                                            (get var->mask e)
@@ -600,17 +229,17 @@
                    (assoc var->mask e mask-e v mask-v)
                    (update-in result [e v] (fn [bs]
                                              (if bs
-                                               (r-and bs join-result)
+                                               (matrix-and bs join-result)
                                                join-result))))))
         (let [[root-var] var-access-order
               seed (->> (concat
                          (for [[v bs] (get result root-var)]
-                           (r-matlab-any-transpose bs))
+                           (matlab-any-transpose bs))
                          (for [[e vs] result
                                [v bs] vs
                                :when (= v root-var)]
-                           (r-matlab-any bs)))
-                        (reduce r-roaring-and))
+                           (matlab-any bs)))
+                        (reduce bitmap-and))
               transpose-cache (IdentityHashMap.)]
           (->> ((fn step [^ImmutableRoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
                   (when (and xs (not (.isEmpty xs)))
@@ -624,8 +253,8 @@
                                                                            b
                                                                            (reify Function
                                                                              (apply [_ b]
-                                                                               (cond-> (r-transpose b)
-                                                                                 a (r-and a))))))
+                                                                               (cond-> (transpose b)
+                                                                                 a (matrix-and a))))))
                                                      plan (or b a)]
                                                  (cond-> acc
                                                    plan (.add [p plan]))
@@ -646,7 +275,7 @@
                                                                     (when-not (= -1 idx)
                                                                       (.get plan idx))))]
                                                          (if (and acc xs)
-                                                           (r-roaring-and acc xs)
+                                                           (bitmap-and acc xs)
                                                            xs)))
                                                      nil
                                                      parent-var+plan)]
@@ -798,10 +427,10 @@
                               (when (and k (mem/buffers=? k seek-k))
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
-(defn lmdb->r-graph
+(defn lmdb->graph
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
-     (lmdb->r-graph snapshot now now)))
+     (lmdb->graph snapshot now now)))
   ([snapshot business-time transaction-time]
    (let [seek-b (ExpandableDirectByteBuffer.)
          matrix-cache (HashMap.)]
@@ -826,7 +455,9 @@
                                        (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id k seek-b)))))
 
                (valAt [this k default]
-                 (throw (UnsupportedOperationException.))))})))
+                 (throw (UnsupportedOperationException.))))
+      :predicate-cardinality-cache (HashMap.)
+      :query-cache (HashMap.)})))
 
 (defn get-or-create-id [kv value last-id-state pending-id-state]
   (with-open [snapshot (kv/new-snapshot kv)]
@@ -881,7 +512,7 @@
                           (map rdf/rdf->clj)
                           (partition-all chunk-size))]
          (with-open [snapshot (kv/new-snapshot kv)]
-           (let [g (lmdb->r-graph snapshot business-time transaction-time)
+           (let [g (lmdb->graph snapshot business-time transaction-time)
                  row-cache (HashMap.)
                  get-current-row (fn [idx-id idx p ^long id]
                                    (let [id (int id)]
@@ -897,7 +528,7 @@
                                                                 (.writeLong out (date->reverse-time-ms business-time))
                                                                 (.writeLong out (date->reverse-time-ms transaction-time))))
                                                             (let [^Int2ObjectHashMap m (get-in g [idx p])
-                                                                  b ^ImmutableRoaringBitmap (or (.get m id) (new-r-roaring-bitmap))]
+                                                                  b ^ImmutableRoaringBitmap (or (.get m id) (new-bitmap))]
                                                               (.toMutableRoaringBitmap ^ImmutableRoaringBitmap b))])))))
 
                  pending-id-state (atom {})]
@@ -924,6 +555,9 @@
                               v)]))
                   (kv/store kv)))))))))
 
+(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
+(def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
+
 ;; LUBM:
 (comment
   ;; Create an LMDBKv store for the LUBM data.
@@ -934,8 +568,8 @@
 
   ;; Try LUBM query 9:
   (with-open [snapshot (kv/new-snapshot lm-lubm)]
-    (= (matrix/r-query
-        (matrix/lmdb->r-graph snapshot)
+    (= (matrix/query
+        (matrix/lmdb->graph snapshot)
         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
           '{:find [x y z]
             :where [[x :rdf/type :ub/GraduateStudent]
@@ -975,11 +609,11 @@
      (run-watdiv-reference lm (io/resource "watdiv/watdiv_crux.edn") #{35 67}))
     ([lm resource skip?]
      (with-open [snapshot (crux.kv/new-snapshot lm)]
-       (let [wg (matrix/lmdb->r-graph snapshot)
+       (let [wg (matrix/lmdb->graph snapshot)
              times (mapv
                     (fn [{:keys [idx query crux-results]}]
                       (let [start (System/currentTimeMillis)
-                            result (count (matrix/r-query wg (crux.sparql/sparql->datalog query)))]
+                            result (count (matrix/query wg (crux.sparql/sparql->datalog query)))]
                         (try
                           (assert (= crux-results result) (pr-str [idx crux-results result]))
                           (catch Throwable t
