@@ -463,7 +463,7 @@
 (defn- get-or-create-id [kv value ^Box last-id-state ^Object2IntHashMap pending-id-state]
   (with-open [snapshot (kv/new-snapshot kv)]
     (let [seek-b (ExpandableDirectByteBuffer.)
-          value->id ^ToIntFunction (->SnapshotValueToId snapshot (HashMap.) seek-b)
+          value->id ^ToIntFunction (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
           id (.applyAsInt value->id value)]
       (if (not= unknown-id id)
         [id []]
@@ -484,7 +484,7 @@
                                                (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
                                                (set! (.val last-id-state) last-id)))))
                                        (unchecked-int (set! (.val last-id-state)
-                                                            (unchecked-inc-int (.val last-id-state)))))))]
+                                                            (unchecked-inc-int (or (.val last-id-state) 0)))))))]
           (when (= id unknown-id)
             (throw (IllegalStateException.
                     (str "Out of ids, maximum id is: " (dec (Integer/toUnsignedLong -1))))))
@@ -566,7 +566,7 @@
 ;; LUBM:
 (comment
   ;; Create an LMDBKv store for the LUBM data.
-  (def lm-lubm (kv/open (kv/new-kv-store "crux.kv.lmdbx.LMDBKv")
+  (def lm-lubm (kv/open (kv/new-kv-store "crux.kv.lmdb.LMDBKv")
                         {:db-dir "dev-storage/matrix-lmdb-lubm"}))
   ;; Populate with LUBM data.
   (matrix/load-rdf-into-lmdb lm-lubm matrix/lubm-triples-resource)
