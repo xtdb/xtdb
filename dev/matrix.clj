@@ -374,10 +374,10 @@
                 row-id+k (when row-id+k
                            (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                              (loop [k (.key ^RowIdAndKey row-id+k)]
-                               (when (within-prefix? seek-k k)
-                                 (if (<= (key->transaction-time-ms k) transaction-time-ms)
-                                   (RowIdAndKey. row-id k)
-                                   (let [next-k (kv/next i)]
+                               (if (<= (key->transaction-time-ms k) transaction-time-ms)
+                                 (RowIdAndKey. row-id k)
+                                 (let [next-k (kv/next i)]
+                                   (when (within-prefix? seek-k k)
                                      (if (= row-id (int (key->row-id next-k)))
                                        (recur next-k)
                                        (RowIdAndKey. no-matches-for-row next-k))))))))]
