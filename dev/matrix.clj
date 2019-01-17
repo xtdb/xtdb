@@ -609,10 +609,11 @@
        (let [wg (matrix/lmdb->graph snapshot)
              times (mapv
                     (fn [{:keys [idx query crux-results]}]
-                      (let [start (System/currentTimeMillis)
-                            result (count (matrix/query wg (crux.sparql/sparql->datalog query)))]
+                      (let [start (System/currentTimeMillis)]
                         (try
-                          (assert (= crux-results result) (pr-str [idx crux-results result]))
+                          (let [result (count (matrix/query wg (crux.sparql/sparql->datalog query)))]
+                            (assert (= crux-results result)
+                                    (pr-str [idx crux-results result])))
                           (catch Throwable t
                             (prn idx t)))
                         (- (System/currentTimeMillis) start)))
