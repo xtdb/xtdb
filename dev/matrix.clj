@@ -416,15 +416,15 @@
                           (with-open [i (kv/new-iterator snapshot)]
                             (let [seek-k (mem/with-buffer-out seek-b
                                            (fn [^DataOutput out]
-                                             (.writeInt out value->id-idx-id)
                                              (nippy/freeze-to-out! out k))
-                                           false)
+                                           false
+                                           Integer/BYTES)
                                   k (kv/seek i seek-k)]
                               (if (within-prefix? seek-k k)
                                 (.readInt (DataInputStream. (DirectBufferInputStream. (kv/value i))))
                                 unknown-id))))))))
 
-(deftype SnapshotIdToValue [snapshot ^Int2ObjectHashMap cache seek-b]
+(deftype SnapshotIdToValue [snapshot ^Int2ObjectHashMap cache ^MutableDirectBuffer seek-b]
   IntFunction
   (apply [_ k]
     (.computeIfAbsent cache
@@ -432,11 +432,8 @@
                       (reify IntFunction
                         (apply [_ k]
                           (with-open [i (kv/new-iterator snapshot)]
-                            (let [seek-k (mem/with-buffer-out seek-b
-                                           (fn [^DataOutput out]
-                                             (.writeInt out id->value-idx-id)
-                                             (.writeInt out k))
-                                           false)
+                            (let [seek-k (doto seek-b
+                                           (.putInt Integer/BYTES k ByteOrder/BIG_ENDIAN))
                                   k (kv/seek i seek-k)]
                               (when (within-prefix? seek-k k)
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
@@ -453,11 +450,15 @@
      (lmdb->graph snapshot now now bitmap-buffer-cache)))
   ([snapshot business-time transaction-time bitmap-buffer-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
+         value->id-seek-b (doto (ExpandableDirectByteBuffer.)
+                            (.putInt 0 value->id-idx-id ByteOrder/BIG_ENDIAN))
+         id->value-seek-b (doto ^MutableDirectBuffer (mem/allocate-buffer (* Integer/BYTES 2))
+                            (.putInt 0 id->value-idx-id ByteOrder/BIG_ENDIAN))
          content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
                           (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN))
          matrix-cache (HashMap.)]
-     {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) seek-b)
-      :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) seek-b)
+     {:value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) value->id-seek-b)
+      :id->value (->SnapshotIdToValue snapshot (Int2ObjectHashMap.) id->value-seek-b)
       :p->so (reify ILookup
                (valAt [this k]
                  (.computeIfAbsent matrix-cache
