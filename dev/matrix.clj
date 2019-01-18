@@ -575,9 +575,11 @@
                           (reduce into [])
                           (into {}))
                  bitmap->hash (IdentityHashMap.)
+                 hash->bitmap (HashMap.)
                  bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
                               (->> (for [[_ v] kvs
-                                         :when (instance? MutableRoaringBitmap v)
+                                         :when (and (instance? MutableRoaringBitmap v)
+                                                    (not (.containsKey bitmap->hash v)))
                                          :let [v (doto ^MutableRoaringBitmap v
                                                    (.runOptimize))
                                                v-serialized (mem/with-buffer-out b
@@ -590,7 +592,9 @@
                                                c-k (doto content-hash-b
                                                      (.putBytes Integer/BYTES k 0 (.capacity k)))]]
                                      (do (.put bitmap->hash v k)
-                                         (when-not (within-prefix? c-k (kv/seek i c-k))
+                                         (when-not (and (not (.containsKey hash->bitmap k))
+                                                        (within-prefix? c-k (kv/seek i c-k)))
+                                           (.put hash->bitmap k v)
                                            [(mem/copy-buffer c-k)
                                             (mem/copy-buffer v-serialized)])))
                                    (remove nil?)
