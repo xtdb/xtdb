@@ -53,10 +53,18 @@
 
       ILookup
       (valAt [this k]
-        (.get cache k))
+        (let [stamp (.writeLock lock)]
+          (try
+            (.get cache k)
+            (finally
+              (.unlock lock stamp)))))
 
       (valAt [this k default]
-        (.getOrDefault cache k default)))))
+        (let [stamp (.writeLock lock)]
+          (try
+            (.getOrDefault cache k default)
+            (finally
+              (.unlock lock stamp))))))))
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
