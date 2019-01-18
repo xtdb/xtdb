@@ -50,10 +50,13 @@
           (recur size))
 
       :else
-      (let [new-aligned-offset (bit-and (+ offset size alignment-round-mask)
+      ;; TODO: This limit is safer if the byte buffer itself is used,
+      ;; but slower.
+      (let [buffer (.limit (.slice chunk) size)
+            new-aligned-offset (bit-and (+ offset size alignment-round-mask)
                                         (bit-not alignment-round-mask))]
         (.position chunk new-aligned-offset)
-        (UnsafeBuffer. chunk offset size)))))
+        (UnsafeBuffer. buffer 0 size)))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
