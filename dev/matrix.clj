@@ -394,7 +394,7 @@
                                                                             (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
                                                                  c-k ^DirectBuffer (kv/seek i c-seek-k)]
                                                              (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
-                                                             (doto (RoaringBitmap.)
+                                                             (doto (new-bitmap)
                                                                (.deserialize (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))]
                     (recur (doto id->row
                              (.put row-id row))
