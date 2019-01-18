@@ -56,7 +56,7 @@
             new-aligned-offset (bit-and (+ offset size alignment-round-mask)
                                         (bit-not alignment-round-mask))]
         (.position chunk new-aligned-offset)
-        (UnsafeBuffer. buffer 0 size)))))
+        (UnsafeBuffer. ^ByteBuffer buffer 0 size)))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
