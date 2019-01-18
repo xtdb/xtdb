@@ -21,8 +21,7 @@
            org.agrona.ExpandableDirectByteBuffer
            [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
-           [org.roaringbitmap IntConsumer]
-           [org.roaringbitmap.buffer ImmutableRoaringBitmap MutableRoaringBitmap]))
+           [org.roaringbitmap IntConsumer RoaringBitmap]))
 
 ;; Matrix / GraphBLAS style breath first search
 ;; https://redislabs.com/redis-enterprise/technology/redisgraph/
@@ -45,8 +44,8 @@
   (^Int2ObjectHashMap [^long size]
    (Int2ObjectHashMap. (Math/ceil (/ size 0.9)) 0.9)))
 
-(defn- new-bitmap ^org.roaringbitmap.buffer.MutableRoaringBitmap []
-  (MutableRoaringBitmap.))
+(defn- new-bitmap ^org.roaringbitmap.RoaringBitmap []
+  (RoaringBitmap.))
 
 (defn- matrix-and
   ([a] a)
@@ -56,18 +55,18 @@
      (reduce (fn [^Int2ObjectHashMap m k]
                (let [k (int k)]
                  (doto m
-                   (.put k (ImmutableRoaringBitmap/and (.get a k) (.get b k))))))
+                   (.put k (RoaringBitmap/and (.get a k) (.get b k))))))
              (new-matrix (count ks))
              ks))))
 
 (defn- bitmap-and
   ([a] a)
-  ([^ImmutableRoaringBitmap a ^ImmutableRoaringBitmap b]
-   (ImmutableRoaringBitmap/and a b)))
+  ([^RoaringBitmap a ^RoaringBitmap b]
+   (RoaringBitmap/and a b)))
 
 (defn- matrix-cardinality ^long [^Int2ObjectHashMap a]
   (->> (.values a)
-       (map #(.getCardinality ^ImmutableRoaringBitmap %))
+       (map #(.getCardinality ^RoaringBitmap %))
        (reduce +)))
 
 (defn- predicate-cardinality [{:keys [p->so ^Map predicate-cardinality-cache]} attr]
@@ -77,7 +76,7 @@
                       (apply [_ k]
                         (matrix-cardinality (get p->so k))))))
 
-(defn- new-diagonal-matrix [^ImmutableRoaringBitmap diag]
+(defn- new-diagonal-matrix [^RoaringBitmap diag]
   (let [diag (.toArray diag)]
     (reduce
      (fn [^Int2ObjectHashMap m d]
@@ -94,29 +93,29 @@
     (if-not (.hasNext i)
       m
       (let [row (.nextInt i)
-            cols ^ImmutableRoaringBitmap (.get a row)]
+            cols ^RoaringBitmap (.get a row)]
         (.forEach cols
                   (reify IntConsumer
                     (accept [_ col]
-                      (let [^MutableRoaringBitmap x (.computeIfAbsent m col
-                                                                      (reify IntFunction
-                                                                        (apply [_ _]
-                                                                          (new-bitmap))))]
+                      (let [^RoaringBitmap x (.computeIfAbsent m col
+                                                               (reify IntFunction
+                                                                 (apply [_ _]
+                                                                   (new-bitmap))))]
                         (.add x row)))))
         (recur i m)))))
 
 (defn- matlab-any
   "Determine if any array elements are nonzero. Test each column for
   nonzero elements."
-  ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+  ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
   (if (.isEmpty a)
     (new-bitmap)
-    (ImmutableRoaringBitmap/or (.iterator (.values a)))))
+    (RoaringBitmap/or (.iterator (.values a)))))
 
 (defn- matlab-any-of-transpose
   "Determine if any array elements are nonzero. Test each row for
   nonzero elements."
-  ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^Int2ObjectHashMap a]
+  ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
   (loop [i (.iterator (.keySet a))
          acc (new-bitmap)]
     (if-not (.hasNext i)
@@ -124,7 +123,7 @@
       (recur i (doto acc
                  (.add (.nextInt i)))))))
 
-(defn- mult-diag [^ImmutableRoaringBitmap diag ^Int2ObjectHashMap a]
+(defn- mult-diag [^RoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
         (new-matrix)
 
@@ -132,7 +131,7 @@
         a
 
         :else
-        (doto ^MutableRoaringBitmap
+        (doto ^RoaringBitmap
             (reduce
              (fn [^Int2ObjectHashMap m d]
                (let [d (int d)]
@@ -143,12 +142,12 @@
              (new-matrix (.getCardinality diag))
              (.toArray diag)))))
 
-(defn- new-literal-e-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [^ToIntFunction value->id p->so]} a e]
+(defn- new-literal-e-mask ^org.roaringbitmap.RoaringBitmap [{:keys [^ToIntFunction value->id p->so]} a e]
   (let [id (.applyAsInt value->id e)]
     (or (.get ^Int2ObjectHashMap (get p->so a) id)
         (new-bitmap))))
 
-(defn- new-literal-v-mask ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [{:keys [^ToIntFunction value->id p->os]} a v]
+(defn- new-literal-v-mask ^org.roaringbitmap.RoaringBitmap [{:keys [^ToIntFunction value->id p->os]} a v]
   (let [id (.applyAsInt value->id v)]
     (or (.get ^Int2ObjectHashMap (get p->os a) id)
         (new-bitmap))))
@@ -257,7 +256,7 @@
                            (matlab-any bs)))
                         (reduce bitmap-and))
               transpose-cache (IdentityHashMap.)]
-          (->> ((fn step [^ImmutableRoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
+          (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
                   (when (and xs (not (.isEmpty xs)))
                     (let [acc (ArrayList.)
                           parent-var+plan (when var
@@ -284,7 +283,7 @@
                                     (if-not var
                                       (.add acc [(.apply id->value x)])
                                       (when-let [xs (reduce
-                                                     (fn [^ImmutableRoaringBitmap acc ^ParentVarAndPlan p+plan]
+                                                     (fn [^RoaringBitmap acc ^ParentVarAndPlan p+plan]
                                                        (let [p (.parent-var p+plan)
                                                              ^Int2ObjectHashMap plan (.plan p+plan)
                                                              xs (if (= parent-var p)
@@ -339,7 +338,6 @@
 
 (def ^:private ^:const no-matches-for-row -1)
 (def ^:private ^:const sha1-size 20)
-(def ^:private ^:const bitmap-in-memory-threshold 2)
 
 (defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
   (and k (mem/buffers=? k prefix (.capacity prefix))))
@@ -387,17 +385,17 @@
               (let [row-id (.row-id ^RowIdAndKey row-id+k)]
                 (if (not= no-matches-for-row row-id)
                   (let [buffer-hash ^DirectBuffer (kv/value i)
-                        row (lru/compute-if-absent bitmap-buffer-cache
-                                                   buffer-hash
-                                                   (fn [_]
-                                                     (let [c-seek-k (doto content-hash-b
-                                                                      (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
-                                                           c-k ^DirectBuffer (kv/seek i c-seek-k)]
-                                                       (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
-                                                       (let [b (ImmutableRoaringBitmap. (.byteBuffer ^DirectBuffer (kv/value i)))]
-                                                         (if (<= (.getCardinality b) bitmap-in-memory-threshold)
-                                                           (.toMutableRoaringBitmap b)
-                                                           b)))))]
+                        row (or (get bitmap-buffer-cache buffer-hash)
+                                (let [buffer-hash (mem/as-buffer (mem/->on-heap buffer-hash))]
+                                  (lru/compute-if-absent bitmap-buffer-cache
+                                                         buffer-hash
+                                                         (fn [_]
+                                                           (let [c-seek-k (doto content-hash-b
+                                                                            (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
+                                                                 c-k ^DirectBuffer (kv/seek i c-seek-k)]
+                                                             (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
+                                                             (doto (RoaringBitmap.)
+                                                               (.deserialize (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))]
                     (recur (doto id->row
                              (.put row-id row))
                            (kv/seek i (mem/with-buffer-out seek-b
@@ -443,8 +441,10 @@
                               (when (within-prefix? seek-k k)
                                 (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))))
 
-;; TODO: This isn't safe across snapshots if the address inside LMDB
-;; changes.
+;; NOTE: Using buffers between transactions isn't safe, see:
+;; https://javadoc.lwjgl.org/index.html?org/lwjgl/util/lmdb/LMDB.html
+;; "Values returned from the database are valid only until a subsequent update operation, or the end of the transaction."
+;; This cache is currently purely on-heap, both keys and values.
 (def ^:private bitmap-buffer-cache (lru/new-cache (* 2 1024 1024)))
 
 (defn lmdb->graph
@@ -556,9 +556,10 @@
                                                                 (.writeInt out id)
                                                                 (.writeLong out (date->reverse-time-ms business-time))
                                                                 (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                            (let [^Int2ObjectHashMap m (get-in g [idx p])
-                                                                  b ^ImmutableRoaringBitmap (or (.get m id) (new-bitmap))]
-                                                              (.toMutableRoaringBitmap ^ImmutableRoaringBitmap b))])))))
+                                                            (let [^Int2ObjectHashMap m (get-in g [idx p])]
+                                                              (if-let [b (.get m id)]
+                                                                (.clone ^RoaringBitmap b)
+                                                                (new-bitmap)))])))))
 
                  pending-id-state (Object2IntHashMap. unknown-id)
                  kvs (->> (for [[s p o] chunk
@@ -566,10 +567,10 @@
                                       [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
                             (concat s-id-kvs
                                     o-id-kvs
-                                    [(let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
+                                    [(let [[k ^RoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
                                        [k (doto row
                                             (.add o-id))])]
-                                    [(let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
+                                    [(let [[k ^RoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
                                        [k (doto row
                                             (.add s-id))])]))
                           (reduce into [])
@@ -578,9 +579,9 @@
                  hash->bitmap (HashMap.)
                  bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
                               (->> (for [[_ v] kvs
-                                         :when (and (instance? MutableRoaringBitmap v)
+                                         :when (and (instance? RoaringBitmap v)
                                                     (not (.containsKey bitmap->hash v)))
-                                         :let [v (doto ^MutableRoaringBitmap v
+                                         :let [v (doto ^RoaringBitmap v
                                                    (.runOptimize))
                                                v-serialized (mem/with-buffer-out b
                                                               (fn [^DataOutput out]
