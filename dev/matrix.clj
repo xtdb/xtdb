@@ -568,12 +568,12 @@
                                       [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
                             (concat s-id-kvs
                                     o-id-kvs
-                                    [(let [[k ^RoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
-                                       [k (doto row
-                                            (.add o-id))])]
-                                    [(let [[k ^RoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
-                                       [k (doto row
-                                            (.add s-id))])]))
+                                    (let [[k ^RoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
+                                      (when (.checkedAdd row o-id)
+                                        [[k row]]))
+                                    (let [[k ^RoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
+                                      (when (.checkedAdd row s-id)
+                                        [[k row]]))))
                           (reduce into [])
                           (into {}))
                  bitmap->hash (IdentityHashMap.)

@@ -600,12 +600,12 @@
                                           [^long o-id o-id-kvs] (get-or-create-id kv o last-id-state pending-id-state)]]
                                 (concat s-id-kvs
                                         o-id-kvs
-                                        [(let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
-                                           [k (doto row
-                                                (.add o-id))])]
-                                        [(let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
-                                           [k (doto row
-                                                (.add s-id))])]))
+                                        (let [[k ^MutableRoaringBitmap row] (get-current-row p->so-idx-id :p->so p s-id)]
+                                          (when (.checkedAdd row o-id)
+                                            [[k row]]))
+                                        (let [[k ^MutableRoaringBitmap row] (get-current-row p->os-idx-id :p->os p o-id)]
+                                          (when (.checkedAdd row s-id)
+                                            [[k row]]))))
                               (reduce into [])
                               (into {}))
                      bitmap->hash (IdentityHashMap.)
@@ -645,7 +645,7 @@
                              (.setLength raf new-size)))
                          (.put hash->position
                                (mem/slice-buffer k Integer/BYTES sha1-size)
-(doto ^MutableDirectBuffer (mem/allocate-buffer Long/BYTES)
+                               (doto ^MutableDirectBuffer (mem/allocate-buffer Long/BYTES)
                                  (.putLong 0 position ByteOrder/BIG_ENDIAN)))
                          (.write out (.limit (.slice (.byteBuffer v)) (.capacity v)))
                          (when-not (= (+ position (.capacity v))
