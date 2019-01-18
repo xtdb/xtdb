@@ -573,7 +573,7 @@
                                        [k (doto row
                                             (.add s-id))])]))
                           (reduce into [])
-                          (into (sorted-map-by mem/buffer-comparator)))
+                          (into {}))
                  bitmap->hash (IdentityHashMap.)
                  bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
                               (->> (for [[_ v] kvs
@@ -594,7 +594,7 @@
                                            [(mem/copy-buffer c-k)
                                             (mem/copy-buffer v-serialized)])))
                                    (remove nil?)
-                                   (into (sorted-map-by mem/buffer-comparator))))
+                                   (into {})))
                  kvs (->> (for [[k v] kvs]
                             [k (.getOrDefault bitmap->hash v v)])
                           (into bitmap-kvs))]
