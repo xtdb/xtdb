@@ -9,6 +9,7 @@
            [java.util Collections LinkedHashMap]
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
+           clojure.lang.ILookup
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona DirectBuffer MutableDirectBuffer]))
 
@@ -23,7 +24,8 @@
                 (removeEldestEntry [_]
                   (> (count this) size)))
         lock (StampedLock.)]
-    (reify LRUCache
+    (reify
+      LRUCache
       (compute-if-absent [_ k f]
         (if (.containsKey cache k)
           (let [stamp (.writeLock lock)]
@@ -47,7 +49,14 @@
           (try
             (.remove cache k)
             (finally
-              (.unlock lock stamp))))))))
+              (.unlock lock stamp)))))
+
+      ILookup
+      (valAt [this k]
+        (.get cache k))
+
+      (valAt [this k default]
+        (.getOrDefault cache k default)))))
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
