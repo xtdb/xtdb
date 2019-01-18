@@ -54,5 +54,7 @@
           (do (log/info "Using java.security.MessageDigest for ID hashing.")
               (def id-hash message-digest-id-hash-buffer)))))
     (catch Throwable t
-      (log/warn t "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing.")
+      (if (instance? UnsatisfiedLinkError (.getCause t))
+        (log/warn "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing.")
+        (log/error t "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing."))
       (def id-hash message-digest-id-hash-buffer))))
