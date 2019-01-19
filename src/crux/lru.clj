@@ -9,7 +9,7 @@
            [java.util Collections LinkedHashMap]
            java.util.concurrent.locks.StampedLock
            java.util.function.Function
-           clojure.lang.ILookup
+           [clojure.lang Counted ILookup]
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona DirectBuffer MutableDirectBuffer]))
 
@@ -64,7 +64,11 @@
           (try
             (.getOrDefault cache k default)
             (finally
-              (.unlock lock stamp))))))))
+              (.unlock lock stamp)))))
+
+      Counted
+      (count [_]
+        (.size cache)))))
 
 (defrecord CachedObjectStore [cache object-store]
   db/ObjectStore
