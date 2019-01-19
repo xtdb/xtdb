@@ -50,14 +50,16 @@
 (defn- matrix-and
   ([a] a)
   ([^Int2ObjectHashMap a ^Int2ObjectHashMap b]
-   (let [ks (doto (HashSet. (.keySet a))
-              (.retainAll (.keySet b)))]
-     (reduce (fn [^Int2ObjectHashMap m k]
-               (let [k (int k)]
-                 (doto m
-                   (.put k (RoaringBitmap/and (.get a k) (.get b k))))))
-             (new-matrix (count ks))
-             ks))))
+   (if (< (.size b) (.size a))
+     (recur b a)
+     (let [i (.iterator (.entrySet a))
+           m ^Int2ObjectHashMap (new-matrix (.size a))]
+       (while (.hasNext i)
+         (.next i)
+         (let [row (.getIntKey i)]
+           (when-let [b-cols ^RoaringBitmap (.get b row)]
+             (.put m row (RoaringBitmap/and ^RoaringBitmap (.getValue i) b-cols)))))
+       m))))
 
 (defn- bitmap-and
   ([a] a)
@@ -77,32 +79,30 @@
                         (matrix-cardinality (get p->so k))))))
 
 (defn- new-diagonal-matrix [^RoaringBitmap diag]
-  (let [diag (.toArray diag)]
-    (reduce
-     (fn [^Int2ObjectHashMap m d]
-       (let [d (int d)]
-         (doto m
-           (.put d (doto (new-bitmap)
-                     (.add d))))))
-     (new-matrix (alength diag))
-     diag)))
+  (let [diag (.toArray diag)
+        m ^Int2ObjectHashMap (new-matrix (alength diag))]
+    (dotimes [idx (alength diag)]
+      (let [d (aget diag idx)]
+        (.put m d (doto (new-bitmap)
+                    (.add d)))))
+    m))
 
 (defn- transpose [^Int2ObjectHashMap a]
-  (loop [i (.iterator (.keySet a))
-         m ^Int2ObjectHashMap (new-matrix (.size a))]
-    (if-not (.hasNext i)
-      m
-      (let [row (.nextInt i)
-            cols ^RoaringBitmap (.get a row)]
+  (let [i (.iterator (.entrySet a))
+        m ^Int2ObjectHashMap (new-matrix (.size a))]
+    (while (.hasNext i)
+      (.next i)
+      (let [row (.getIntKey i)
+            cols ^RoaringBitmap (.getValue i)]
         (.forEach cols
                   (reify IntConsumer
                     (accept [_ col]
-                      (let [^RoaringBitmap x (.computeIfAbsent m col
-                                                               (reify IntFunction
-                                                                 (apply [_ _]
-                                                                   (new-bitmap))))]
-                        (.add x row)))))
-        (recur i m)))))
+                      (.add ^RoaringBitmap (.computeIfAbsent m col
+                                                             (reify IntFunction
+                                                               (apply [_ _]
+                                                                 (new-bitmap))))
+                            row))))))
+    m))
 
 (defn- matlab-any
   "Determine if any array elements are nonzero. Test each column for
@@ -116,12 +116,11 @@
   "Determine if any array elements are nonzero. Test each row for
   nonzero elements."
   ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
-  (loop [i (.iterator (.keySet a))
-         acc (new-bitmap)]
-    (if-not (.hasNext i)
-      acc
-      (recur i (doto acc
-                 (.add (.nextInt i)))))))
+  (let [i (.iterator (.keySet a))
+        m (new-bitmap)]
+    (while (.hasNext i)
+      (.add m (.nextInt i)))
+    m))
 
 (defn- mult-diag [^RoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
@@ -131,16 +130,13 @@
         a
 
         :else
-        (doto ^RoaringBitmap
-            (reduce
-             (fn [^Int2ObjectHashMap m d]
-               (let [d (int d)]
-                 (if-let [b (.get a d)]
-                   (doto m
-                     (.put d b))
-                   m)))
-             (new-matrix (.getCardinality diag))
-             (.toArray diag)))))
+        (let [m ^Int2ObjectHashMap (new-matrix (.getCardinality diag))
+              diag (.toArray diag)]
+          (dotimes [idx (alength diag)]
+            (let [d (aget diag idx)]
+              (when-let [b (.get a d)]
+                (.put m d b))))
+          m)))
 
 (defn- new-literal-e-mask ^org.roaringbitmap.RoaringBitmap [{:keys [^ToIntFunction value->id p->so]} a e]
   (let [id (.applyAsInt value->id e)]
