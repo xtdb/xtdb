@@ -251,27 +251,28 @@
                                :when (= v root-var)]
                            (matlab-any bs)))
                         (reduce bitmap-and))
-              transpose-cache (IdentityHashMap.)]
+              plan-cache (HashMap.)]
           (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
                   (when (and xs (not (.isEmpty xs)))
                     (let [acc (ArrayList.)
                           parent-var+plan (when var
-                                            (reduce
-                                             (fn [^ArrayList acc p]
-                                               (let [a (get-in result [p var])
-                                                     b (when-let [b (get-in result [var p])]
-                                                         (.computeIfAbsent transpose-cache
-                                                                           b
-                                                                           (reify Function
-                                                                             (apply [_ b]
-                                                                               (cond-> (transpose b)
-                                                                                 a (matrix-and a))))))
-                                                     plan (or b a)]
-                                                 (cond-> acc
-                                                   plan (.add (ParentVarAndPlan. p plan)))
-                                                 acc))
-                                             (ArrayList.)
-                                             parent-vars))
+                                            (.computeIfAbsent
+                                             plan-cache
+                                             var
+                                             (reify Function
+                                               (apply [_ _]
+                                                 (reduce
+                                                  (fn [^ArrayList acc p]
+                                                    (let [a (get-in result [p var])
+                                                          b (when-let [b (get-in result [var p])]
+                                                              (cond-> (transpose b)
+                                                                a (matrix-and a)))
+                                                          plan (or b a)]
+                                                      (cond-> acc
+                                                        plan (.add (ParentVarAndPlan. p plan)))
+                                                      acc))
+                                                  (ArrayList.)
+                                                  parent-vars)))))
                           parent-var (last parent-vars)]
                       (.forEach xs
                                 (reify IntConsumer
