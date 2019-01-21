@@ -57,7 +57,6 @@
                                   [integrant "0.6.3"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
-  :aliases {"javadoc" ["run" "-m" "javadoc"  "docs/javadoc"]}
   :java-source-paths ["src"]
   :javac-options ["-XDignore.symbol.file"]
   :aot [crux.kafka.nippy

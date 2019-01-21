@@ -4,8 +4,8 @@ STYLESHEET = juxt.css
 index.html:	*.adoc ${STYLESDIR}/${STYLESHEET}
 	asciidoctor -d book -a "webfonts!" -a stylesdir=${STYLESDIR} -a stylesheet=${STYLESHEET} index.adoc
 
-docs.zip: index.html
-	zip -r docs.zip index.html img/*
+docs.zip: index.html javadoc
+	zip -r docs.zip index.html img/* javadoc/*
 
 %.adoc:		%.md
 	pandoc --atx-headers $< -o $@
@@ -13,5 +13,8 @@ docs.zip: index.html
 crux.epub:	index.html
 	pandoc $< -o $@
 
+javadoc:
+	javadoc -cp `cd ..; lein classpath` -d $@ -sourcepath ../src -exclude crux crux.api
+
 clean:
-	rm index.html
+	rm -rf index.html javadoc docs.zip
