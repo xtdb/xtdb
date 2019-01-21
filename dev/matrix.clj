@@ -278,26 +278,26 @@
                                   (accept [_ x]
                                     (if-not var
                                       (.add acc [(.apply id->value x)])
-                                      (when-let [xs (reduce
+                                      (when-let [ys (reduce
                                                      (fn [^RoaringBitmap acc ^ParentVarAndPlan p+plan]
                                                        (let [p (.parent-var p+plan)
                                                              ^Int2ObjectHashMap plan (.plan p+plan)
-                                                             xs (if (= parent-var p)
+                                                             ys (if (= parent-var p)
                                                                   (.get plan x)
                                                                   (let [idx (.get ctx p)]
                                                                     (when-not (= unknown-id idx)
                                                                       (.get plan idx))))]
-                                                         (if (and acc xs)
-                                                           (bitmap-and acc xs)
-                                                           xs)))
+                                                         (if (and acc ys)
+                                                           (bitmap-and acc ys)
+                                                           ys)))
                                                      nil
                                                      parent-var+plan)]
-                                        (doseq [y (step xs
-                                                        var-access-order
-                                                        (conj parent-vars var)
-                                                        (doto ctx
-                                                          (.put (last parent-vars) x)))]
-                                          (.add acc (cons (.apply id->value x) y))))))))
+                                        (doseq [tuple (step ys
+                                                            var-access-order
+                                                            (conj parent-vars var)
+                                                            (doto ctx
+                                                              (.put (last parent-vars) x)))]
+                                          (.add acc (cons (.apply id->value x) tuple))))))))
                       (seq acc))))
                 seed
                 (next var-access-order)
