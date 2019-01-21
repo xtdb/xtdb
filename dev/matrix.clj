@@ -213,7 +213,7 @@
 
 (def ^:const ^:private unknown-id -1)
 
-(deftype ParentVarAndPlan [parent-var idx plan])
+(deftype ParentVarIndexAndPlan [idx plan])
 
 (defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
@@ -251,11 +251,13 @@
                                :when (= v root-var)]
                            (matlab-any bs)))
                         (reduce bitmap-and))
-              plan-cache (HashMap.)]
-          (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^ints ctx]
-                  (when (and xs (not (.isEmpty xs)))
-                    (let [acc (ArrayList.)
-                          parent-var+plan (when var
+              plan-cache (HashMap.)
+              acc (ArrayList.)
+              var-result-order (int-array var-result-order)
+              vars (int (count var-access-order))]
+          ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^ints ctx]
+             (when (and xs (not (.isEmpty xs)))
+               (let [parent-var-idx+plans (when var
                                             (.computeIfAbsent
                                              plan-cache
                                              var
@@ -269,44 +271,47 @@
                                                                 a (matrix-and a)))
                                                           plan (or b a)]
                                                       (cond-> acc
-                                                        plan (.add (ParentVarAndPlan. p p-idx plan)))
+                                                        plan (.add (ParentVarIndexAndPlan. p-idx plan)))
                                                       acc))
                                                   (ArrayList.)
                                                   (map-indexed vector parent-vars))))))
-                          parent-var (last parent-vars)
-                          new-parent-vars (conj parent-vars var)
-                          depth (dec (count parent-vars))]
-                      (.forEach xs
-                                (reify IntConsumer
-                                  (accept [_ x]
-                                    (if-not var
-                                      (.add acc [(.apply id->value x)])
-                                      (when-let [ys (reduce
-                                                     (fn [^RoaringBitmap acc ^ParentVarAndPlan p+plan]
-                                                       (let [p (.parent-var p+plan)
-                                                             ^Int2ObjectHashMap plan (.plan p+plan)
-                                                             ys (if (= parent-var p)
-                                                                  (.get plan x)
-                                                                  (let [row-id (aget ctx (.idx p+plan))]
-                                                                    (when-not (= unknown-id row-id)
-                                                                      (.get plan row-id))))]
-                                                         (if (and acc ys)
-                                                           (bitmap-and acc ys)
-                                                           ys)))
-                                                     nil
-                                                     parent-var+plan)]
-                                        (doseq [tuple (step ys
-                                                            var-access-order
-                                                            new-parent-vars
-                                                            (doto ctx
-                                                              (aset depth x)))]
-                                          (.add acc (cons (.apply id->value x) tuple))))))))
-                      (seq acc))))
-                seed
-                (next var-access-order)
-                [root-var]
-                (int-array (count var-access-order)))
-               (map #(mapv (vec %) var-result-order))
+                     parent-var (last parent-vars)
+                     new-parent-vars (conj parent-vars var)
+                     depth (dec (count parent-vars))]
+                 (.forEach xs
+                           (reify IntConsumer
+                             (accept [_ x]
+                               (let [ctx (doto ctx
+                                           (aset depth x))]
+                                 (if-not var
+                                   (.add acc (aclone ctx))
+                                   (when-let [ys (reduce
+                                                  (fn [^RoaringBitmap acc ^ParentVarIndexAndPlan p+plan]
+                                                    (let [^Int2ObjectHashMap plan (.plan p+plan)
+                                                          ys (let [row-id (aget ctx (.idx p+plan))]
+                                                               (when-not (= unknown-id row-id)
+                                                                 (.get plan row-id)))]
+                                                      (if (and acc ys)
+                                                        (bitmap-and acc ys)
+                                                        ys)))
+                                                  nil
+                                                  parent-var-idx+plans)]
+                                     (step ys
+                                           var-access-order
+                                           new-parent-vars
+                                           ctx))))))))))
+           seed
+           (next var-access-order)
+           [root-var]
+           (int-array (count var-access-order)))
+          (->> acc
+               (map (fn [^ints tuple]
+                      (loop [idx 0
+                             acc (transient [])]
+                        (if (= idx vars)
+                          (persistent! acc)
+                          (recur (inc idx)
+                                 (conj! acc (.apply id->value (aget tuple (aget var-result-order idx)))))))))
                (into #{})))))))
 
 ;; Persistence Spike, this is not how it will eventually look / work,
