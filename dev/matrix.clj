@@ -213,7 +213,7 @@
 
 (def ^:const ^:private unknown-id -1)
 
-(deftype ParentVarAndPlan [parent-var plan])
+(deftype ParentVarAndPlan [parent-var idx plan])
 
 (defn query [{:keys [^IntFunction id->value ^Map query-cache] :as graph} q]
   (let [[var->mask
@@ -252,7 +252,7 @@
                            (matlab-any bs)))
                         (reduce bitmap-and))
               plan-cache (HashMap.)]
-          (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^Object2IntHashMap ctx]
+          (->> ((fn step [^RoaringBitmap xs [var & var-access-order] parent-vars ^ints ctx]
                   (when (and xs (not (.isEmpty xs)))
                     (let [acc (ArrayList.)
                           parent-var+plan (when var
@@ -262,18 +262,20 @@
                                              (reify Function
                                                (apply [_ _]
                                                  (reduce
-                                                  (fn [^ArrayList acc p]
+                                                  (fn [^ArrayList acc [p-idx p]]
                                                     (let [a (get-in result [p var])
                                                           b (when-let [b (get-in result [var p])]
                                                               (cond-> (transpose b)
                                                                 a (matrix-and a)))
                                                           plan (or b a)]
                                                       (cond-> acc
-                                                        plan (.add (ParentVarAndPlan. p plan)))
+                                                        plan (.add (ParentVarAndPlan. p p-idx plan)))
                                                       acc))
                                                   (ArrayList.)
-                                                  parent-vars)))))
-                          parent-var (last parent-vars)]
+                                                  (map-indexed vector parent-vars))))))
+                          parent-var (last parent-vars)
+                          new-parent-vars (conj parent-vars var)
+                          depth (dec (count parent-vars))]
                       (.forEach xs
                                 (reify IntConsumer
                                   (accept [_ x]
@@ -285,9 +287,9 @@
                                                              ^Int2ObjectHashMap plan (.plan p+plan)
                                                              ys (if (= parent-var p)
                                                                   (.get plan x)
-                                                                  (let [idx (.get ctx p)]
-                                                                    (when-not (= unknown-id idx)
-                                                                      (.get plan idx))))]
+                                                                  (let [row-id (aget ctx (.idx p+plan))]
+                                                                    (when-not (= unknown-id row-id)
+                                                                      (.get plan row-id))))]
                                                          (if (and acc ys)
                                                            (bitmap-and acc ys)
                                                            ys)))
@@ -295,15 +297,15 @@
                                                      parent-var+plan)]
                                         (doseq [tuple (step ys
                                                             var-access-order
-                                                            (conj parent-vars var)
+                                                            new-parent-vars
                                                             (doto ctx
-                                                              (.put (last parent-vars) x)))]
+                                                              (aset depth x)))]
                                           (.add acc (cons (.apply id->value x) tuple))))))))
                       (seq acc))))
                 seed
                 (next var-access-order)
                 [root-var]
-                (Object2IntHashMap. unknown-id))
+                (int-array (count var-access-order)))
                (map #(mapv (vec %) var-result-order))
                (into #{})))))))
 
