@@ -15,5 +15,5 @@
     exit))
 
 (defn -main [target-dir & args]
-  (let [exit (generate-javadoc (or target-dir "website/javadoc"))]
+  (let [exit (generate-javadoc (or target-dir "docs/javadoc"))]
     (System/exit exit)))
