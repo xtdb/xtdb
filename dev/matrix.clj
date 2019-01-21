@@ -117,10 +117,10 @@
   nonzero elements."
   ^org.roaringbitmap.RoaringBitmap [^Int2ObjectHashMap a]
   (let [i (.iterator (.keySet a))
-        m (new-bitmap)]
+        b (new-bitmap)]
     (while (.hasNext i)
-      (.add m (.nextInt i)))
-    m))
+      (.add b (.nextInt i)))
+    b))
 
 (defn- mult-diag [^RoaringBitmap diag ^Int2ObjectHashMap a]
   (cond (.isEmpty a)
