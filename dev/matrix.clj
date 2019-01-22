@@ -663,37 +663,42 @@
                                    (get acc (dec x)))))
                       [empty-hash]
                       (range 1 (inc Integer/SIZE))))
-         acc (ArrayList.)
+         acc (HashMap.)
          build (fn build [^long start ^long end ^long depth]
-                 (let [node (or (when (<= start max-known)
-                                  (if (= (- end start) 1)
-                                    (let [start-row (unchecked-int start)]
-                                      (when-let [x (.get m start-row)]
-                                        (let [x (doto ^RoaringBitmap x
-                                                  (.runOptimize))
-                                              x-serialized (mem/with-buffer-out b
-                                                             (fn [^DataOutput out]
-                                                               (.serialize x out))
-                                                             false)
-                                              x-hash (crux.ByteUtils/sha1
-                                                      (mem/allocate-buffer sha1-size)
-                                                      x-serialized)]
-                                          [x-hash x-serialized])))
-                                    (let [half (unsigned-bit-shift-right (+ start end) 1)
-                                          new-depth (inc depth)
-                                          [^DirectBuffer left-hash] (build start half new-depth)
-                                          [^DirectBuffer right-hash] (build half end new-depth)
-                                          concat-hash (mem/copy-buffer
-                                                       (doto b
-                                                         (.putBytes 0 left-hash 0 sha1-size)
-                                                         (.putBytes sha1-size right-hash 0 sha1-size))
-                                                       (* sha1-size 2))
-                                          combine-hash (crux.ByteUtils/sha1
-                                                        (mem/allocate-buffer sha1-size)
-                                                        concat-hash)]
-                                      [combine-hash concat-hash])))
-                                [(aget nil-hashes depth) nil])]
-                   (.add acc node)
+                 (let [[k v :as node]
+                       (if (= (- end start) 1)
+                         (let [start-row (unchecked-int start)]
+                           (if-let [x (.get m start-row)]
+                             (let [x (doto ^RoaringBitmap x
+                                       (.runOptimize))
+                                   x-serialized (mem/with-buffer-out b
+                                                  (fn [^DataOutput out]
+                                                    (.serialize x out))
+                                                  false)
+                                   x-hash (crux.ByteUtils/sha1
+                                           (mem/allocate-buffer sha1-size)
+                                           x-serialized)]
+                               [x-hash x-serialized])
+                             [(aget nil-hashes depth) nil]))
+                         (let [half (unsigned-bit-shift-right (+ start end) 1)
+                               new-depth (inc depth)
+                               [^DirectBuffer left-hash] (if (<= start max-known)
+                                                           (build start half new-depth)
+                                                           [(aget nil-hashes new-depth) nil])
+                               [^DirectBuffer right-hash] (if (<= half max-known)
+                                                            (build half end new-depth)
+                                                            [(aget nil-hashes new-depth) nil])
+                               concat-hash (mem/copy-buffer
+                                            (doto b
+                                              (.putBytes 0 left-hash 0 sha1-size)
+                                              (.putBytes sha1-size right-hash 0 sha1-size))
+                                            (* sha1-size 2))
+                               combine-hash (crux.ByteUtils/sha1
+                                             (mem/allocate-buffer sha1-size)
+                                             concat-hash)]
+                           [combine-hash concat-hash]))]
+                   (when v
+                     (.put acc k v))
                    node))]
      (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)
      acc)))
