@@ -648,60 +648,72 @@
              (kv/store kv kvs))))))))
 
 ;; TODO: Early spike to split up matrix.
-(defn build-merkle-tree
-  ([^Int2ObjectHashMap m]
-   (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
-         b (ExpandableDirectByteBuffer.)
-         empty-hash (crux.ByteUtils/sha1
-                     (mem/allocate-buffer sha1-size)
-                     (mem/allocate-buffer 0))
-         nil-hashes (object-array
-                     (reduce
-                      (fn [acc ^long x]
-                        (conj acc (crux.ByteUtils/sha1
-                                   (mem/allocate-buffer sha1-size)
-                                   (get acc (dec x)))))
-                      [empty-hash]
-                      (range 1 (inc Integer/SIZE))))
-         acc (HashMap.)
-         build (fn build [^long start ^long end ^long depth]
-                 (let [[k v :as node]
-                       (if (= (- end start) 1)
-                         (let [start-row (unchecked-int start)]
-                           (if-let [x (.get m start-row)]
-                             (let [x (doto ^RoaringBitmap x
-                                       (.runOptimize))
-                                   x-serialized (mem/with-buffer-out b
-                                                  (fn [^DataOutput out]
-                                                    (.serialize x out))
-                                                  false)
-                                   x-hash (crux.ByteUtils/sha1
-                                           (mem/allocate-buffer sha1-size)
-                                           x-serialized)]
-                               [x-hash x-serialized])
-                             [(aget nil-hashes depth) nil]))
-                         (let [half (unsigned-bit-shift-right (+ start end) 1)
-                               new-depth (inc depth)
-                               [^DirectBuffer left-hash] (if (<= start max-known)
-                                                           (build start half new-depth)
-                                                           [(aget nil-hashes new-depth) nil])
-                               [^DirectBuffer right-hash] (if (<= half max-known)
-                                                            (build half end new-depth)
-                                                            [(aget nil-hashes new-depth) nil])
-                               concat-hash (mem/copy-buffer
-                                            (doto b
-                                              (.putBytes 0 left-hash 0 sha1-size)
-                                              (.putBytes sha1-size right-hash 0 sha1-size))
-                                            (* sha1-size 2))
-                               combine-hash (crux.ByteUtils/sha1
-                                             (mem/allocate-buffer sha1-size)
-                                             concat-hash)]
-                           [combine-hash concat-hash]))]
-                   (when v
-                     (.put acc k v))
-                   node))]
-     (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)
-     acc)))
+(def ^:private empty-hash (crux.ByteUtils/sha1
+                           (mem/allocate-buffer sha1-size)
+                           (mem/allocate-buffer 0)))
+(def ^:private ^{:tag 'objects}
+  nil-hashes (object-array
+              (reduce
+               (fn [acc ^long x]
+                 (conj acc (crux.ByteUtils/sha1
+                            (mem/allocate-buffer sha1-size)
+                            (get acc (dec x)))))
+               [empty-hash]
+               (range 1 (inc Integer/SIZE)))))
+
+
+(def ^:private node-id 0)
+(def ^:private leaf-id 1)
+
+(defn build-merkle-tree [^Int2ObjectHashMap m]
+  (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
+        b (ExpandableDirectByteBuffer.)
+        nodes (HashMap.)
+        leaf-cache (HashMap.)
+        leaves (HashMap.)
+        build (fn build [^long start ^long end ^long depth]
+                (let [node (if (= (- end start) 1)
+                             (let [start-row (unchecked-int start)]
+                               (if-let [x (.get m start-row)]
+                                 (.computeIfAbsent leaf-cache
+                                                   x
+                                                   (reify Function
+                                                     (apply [_ _]
+                                                       (let [x (doto ^RoaringBitmap x
+                                                                 (.runOptimize))
+                                                             x-serialized (mem/with-buffer-out b
+                                                                            (fn [^DataOutput out]
+                                                                              (.writeInt out leaf-id)
+                                                                              (.serialize x out))
+                                                                            false)
+                                                             x-hash (crux.ByteUtils/sha1
+                                                                     (mem/allocate-buffer sha1-size)
+                                                                     x-serialized)]
+                                                         (.put leaves x-hash x-serialized)
+                                                         [x-hash x-serialized]))))
+                                 [(aget nil-hashes depth) nil]))
+                             (let [half (unsigned-bit-shift-right (+ start end) 1)
+                                   new-depth (inc depth)
+                                   [^DirectBuffer left-hash] (if (<= start max-known)
+                                                               (build start half new-depth)
+                                                               [(aget nil-hashes new-depth) nil])
+                                   [^DirectBuffer right-hash] (if (<= half max-known)
+                                                                (build half end new-depth)
+                                                                [(aget nil-hashes new-depth) nil])
+                                   concat-hash (mem/copy-buffer
+                                                (doto b
+                                                  (.putInt 0 node-id ByteOrder/BIG_ENDIAN)
+                                                  (.putBytes Integer/BYTES left-hash 0 sha1-size)
+                                                  (.putBytes (+ Integer/BYTES sha1-size) right-hash 0 sha1-size))
+                                                (+ (* 2 sha1-size) Integer/BYTES))
+                                   combine-hash (crux.ByteUtils/sha1
+                                                 (mem/allocate-buffer sha1-size)
+                                                 concat-hash)]
+                               (.put nodes combine-hash concat-hash)
+                               [combine-hash concat-hash]))]
+                  node))]
+    (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)
+    [nodes leaves]))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
