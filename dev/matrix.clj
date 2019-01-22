@@ -14,7 +14,7 @@
            [java.util.function Function IntFunction ToIntFunction]
            [clojure.lang Box ILookup Indexed]
            crux.ByteUtils
-           [java.io DataInputStream DataOutput DataOutputStream]
+           [java.io DataInputStream DataOutput DataOutputStream IOException]
            java.nio.ByteOrder
            [org.agrona.collections Int2ObjectHashMap Object2IntHashMap]
            org.agrona.concurrent.UnsafeBuffer
@@ -648,9 +648,7 @@
              (kv/store kv kvs))))))))
 
 ;; TODO: Early spike to split up matrix.
-(def ^:private node-id 1)
-(def ^:private leaf-id 2)
-
+(def ^:private node-pad (int 0))
 (def ^:private empty-hash (crux.ByteUtils/sha1
                            (mem/allocate-unpooled-buffer sha1-size)
                            (mem/allocate-buffer 0)))
@@ -673,7 +671,6 @@
                                                                          (.runOptimize))
                                                                      x-serialized (mem/with-buffer-out b
                                                                                     (fn [^DataOutput out]
-                                                                                      (.writeInt out leaf-id)
                                                                                       (.serialize x out)))
                                                                      x-hash (crux.ByteUtils/sha1
                                                                              (mem/allocate-buffer sha1-size)
@@ -701,7 +698,7 @@
                                          right-idx (or right-idx unknown-id)
                                          concat-hash (mem/copy-buffer
                                                       (doto b
-                                                        (.putInt 0 node-id ByteOrder/BIG_ENDIAN)
+                                                        (.putInt 0 node-pad ByteOrder/BIG_ENDIAN)
                                                         (.putInt Integer/BYTES left-idx ByteOrder/BIG_ENDIAN)
                                                         (.putInt (* 2 Integer/BYTES) right-idx ByteOrder/BIG_ENDIAN)
                                                         (.putBytes (* 3 Integer/BYTES) left-hash 0 sha1-size)
@@ -722,13 +719,12 @@
         build (fn build [node ^long idx]
                 (when-not (= node empty-hash)
                   (if-let [^DirectBuffer v (get nodes node)]
-                    (if (= node-id (.getInt v 0 ByteOrder/BIG_ENDIAN))
+                    (if (= node-pad (.getInt v 0 ByteOrder/BIG_ENDIAN))
                       (let [left-idx (.getInt v Integer/BYTES ByteOrder/BIG_ENDIAN)
                             right-idx (.getInt v (* 2 Integer/BYTES) ByteOrder/BIG_ENDIAN)]
                         (build (mem/slice-buffer v (* 3 Integer/BYTES) sha1-size) left-idx)
                         (build (mem/slice-buffer v (+ (* 3 Integer/BYTES) sha1-size) sha1-size) right-idx))
                       (with-open [in (DataInputStream. (DirectBufferInputStream. v))]
-                        (assert (= leaf-id (.readInt in)))
                         (.put m (int idx) (doto (new-bitmap)
                                             (.deserialize in)))))
                     (throw (IllegalStateException. (str "Could not found hash: " (mem/buffer->hex node)))))))]
