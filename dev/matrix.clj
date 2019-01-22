@@ -627,7 +627,7 @@
                                                                  (fn [^DataOutput out]
                                                                    (.serialize v out))
                                                                  false)
-                                                  k (crux.ByteUtils/sha1
+                                                  k (ByteUtils/sha1
                                                      (mem/allocate-buffer sha1-size)
                                                      v-serialized)]
                                               (.put bitmap->hash v k)
@@ -649,7 +649,7 @@
 
 ;; TODO: Early spike to split up matrix.
 (def ^:private node-pad (int 0))
-(def ^:private empty-hash (crux.ByteUtils/sha1
+(def ^:private empty-hash (ByteUtils/sha1
                            (mem/allocate-unpooled-buffer sha1-size)
                            (mem/allocate-buffer 0)))
 
@@ -672,7 +672,7 @@
                                                                      x-serialized (mem/with-buffer-out b
                                                                                     (fn [^DataOutput out]
                                                                                       (.serialize x out)))
-                                                                     x-hash (crux.ByteUtils/sha1
+                                                                     x-hash (ByteUtils/sha1
                                                                              (mem/allocate-buffer sha1-size)
                                                                              x-serialized)]
                                                                  (.put nodes x-hash x-serialized)
@@ -705,7 +705,7 @@
                                                         (.putBytes (+ (* 3 Integer/BYTES) sha1-size) right-hash 0 sha1-size))
                                                       (+ (* 3 Integer/BYTES)
                                                          (* 2 sha1-size)))
-                                         combine-hash (crux.ByteUtils/sha1
+                                         combine-hash (ByteUtils/sha1
                                                        (mem/allocate-buffer sha1-size)
                                                        concat-hash)]
                                      (.put nodes combine-hash concat-hash)
