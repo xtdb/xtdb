@@ -651,59 +651,67 @@
 (def ^:private node-id 0)
 (def ^:private leaf-id 1)
 
+(def ^:private empty-hash (crux.ByteUtils/sha1
+                           (mem/allocate-buffer sha1-size)
+                           (mem/allocate-buffer 0)))
+
 (defn build-merkle-tree [^Int2ObjectHashMap m]
-  (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
-        b (ExpandableDirectByteBuffer.)
-        nodes (HashMap.)
-        leaf-cache (HashMap.)
-        leaves (HashMap.)
-        build (fn build [^long start ^long end]
-                (let [node (if (= (- end start) 1)
-                             (let [start-row (unchecked-int start)]
-                               (when-let [x (.get m start-row)]
-                                 (.computeIfAbsent leaf-cache
-                                                   x
-                                                   (reify Function
-                                                     (apply [_ _]
-                                                       (let [x (doto ^RoaringBitmap x
-                                                                 (.runOptimize))
-                                                             x-serialized (mem/with-buffer-out b
-                                                                            (fn [^DataOutput out]
-                                                                              (.writeInt out leaf-id)
-                                                                              (.serialize x out))
-                                                                            false)
-                                                             x-hash (crux.ByteUtils/sha1
-                                                                     (mem/allocate-buffer sha1-size)
-                                                                     x-serialized)]
-                                                         (.put leaves x-hash x-serialized)
-                                                         [x-hash x-serialized]))))))
-                             (let [half (unsigned-bit-shift-right (+ start end) 1)
-                                   [^DirectBuffer left-hash :as left] (when (<= start max-known)
-                                                                        (build start half))
-                                   [^DirectBuffer right-hash :as right] (when (<= half max-known)
-                                                                          (build half end))]
-                               (cond
-                                 (nil? right)
-                                 left
+  (when-not (empty? m)
+    (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
+          b (ExpandableDirectByteBuffer.)
+          nodes (HashMap.)
+          leaf-cache (HashMap.)
+          build (fn build [^long start ^long end ^long depth]
+                  (let [node (if (= (- end start) 1)
+                               (let [start-row (unchecked-int start)]
+                                 (when-let [x (.get m start-row)]
+                                   (.computeIfAbsent leaf-cache
+                                                     x
+                                                     (reify Function
+                                                       (apply [_ _]
+                                                         (let [x (doto ^RoaringBitmap x
+                                                                   (.runOptimize))
+                                                               x-serialized (mem/with-buffer-out b
+                                                                              (fn [^DataOutput out]
+                                                                                (.writeInt out leaf-id)
+                                                                                (.serialize x out))
+                                                                              false)
+                                                               x-hash (crux.ByteUtils/sha1
+                                                                       (mem/allocate-buffer sha1-size)
+                                                                       x-serialized)]
+                                                           (.put nodes x-hash x-serialized)
+                                                           [x-hash x-serialized start-row]))))))
+                               (let [half (unsigned-bit-shift-right (+ start end) 1)
+                                     new-depth (inc depth)
+                                     [left-hash :as left] (when (<= start max-known)
+                                                            (build start half new-depth))
+                                     [right-hash :as right] (when (<= half max-known)
+                                                              (build half end new-depth))]
+                                 (cond
+                                   (and (nil? right) (pos? depth))
+                                   left
 
-                                 (nil? left)
-                                 right
+                                   (and (nil? left)  (pos? depth))
+                                   right
 
-                                 :else
-                                 (let [concat-hash (mem/copy-buffer
-                                                    (doto b
-                                                      (.putInt 0 node-id ByteOrder/BIG_ENDIAN)
-                                                      (.putBytes Integer/BYTES left-hash 0 sha1-size)
-                                                      (.putBytes (+ Integer/BYTES sha1-size) right-hash 0 sha1-size))
-                                                    (+ (* 2 sha1-size) Integer/BYTES))
-                                       combine-hash (crux.ByteUtils/sha1
-                                                     (mem/allocate-buffer sha1-size)
-                                                     concat-hash)]
-                                   (.put nodes combine-hash concat-hash)
-                                   [combine-hash concat-hash]))))]
-                  node))]
-    (build 0 (Integer/toUnsignedLong (int unknown-id)))
-    [nodes leaves]))
+                                   :else
+                                   (let [^DirectBuffer left-hash (or left-hash empty-hash)
+                                         ^DirectBuffer right-hash (or right-hash empty-hash)
+                                         concat-hash (mem/copy-buffer
+                                                      (doto b
+                                                        (.putInt 0 node-id ByteOrder/BIG_ENDIAN)
+                                                        (.putInt Integer/BYTES half ByteOrder/BIG_ENDIAN)
+                                                        (.putBytes (* 2 Integer/BYTES) left-hash 0 sha1-size)
+                                                        (.putBytes (+ (* 2 Integer/BYTES) sha1-size) right-hash 0 sha1-size))
+                                                      (+ (* 2 sha1-size) (* 2 Integer/BYTES)))
+                                         combine-hash (crux.ByteUtils/sha1
+                                                       (mem/allocate-buffer sha1-size)
+                                                       concat-hash)]
+                                     (.put nodes combine-hash concat-hash)
+                                     [combine-hash concat-hash half]))))]
+                    node))
+          [root-hash] (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)]
+      {:root root-hash :nodes nodes})))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
