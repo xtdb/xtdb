@@ -558,40 +558,41 @@
                           (map rdf/rdf->clj)
                           (partition-all chunk-size))]
          (with-open [snapshot (kv/new-snapshot kv)]
-           (let [bitmap-buffer-cache (lru/new-cache (* 1024 1024))
-                 {:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
-                 row-cache (HashMap.)
+           (let [{:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
                  seek-b (ExpandableDirectByteBuffer.)
                  pending-id-state (Object2IntHashMap. unknown-id)
-                 get-current-row (fn [idx-id idx p p-id id]
-                                   (let [id (int id)]
-                                     (.computeIfAbsent row-cache
-                                                       [idx-id idx p-id id]
-                                                       (reify Function
-                                                         (apply [_ _]
-                                                           [(mem/with-buffer-out b
-                                                              (fn [^DataOutput out]
-                                                                (.writeInt out idx-id)
-                                                                (.writeInt out p-id)
-                                                                (.writeInt out id)
-                                                                (.writeLong out (date->reverse-time-ms business-time))
-                                                                (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                            (let [^Int2ObjectHashMap m (get-in g [idx p])]
-                                                              (if-let [b (.get m id)]
-                                                                (.clone ^RoaringBitmap b)
-                                                                (new-bitmap)))])))))
-
-                 kvs (->> (for [[s p o] chunk
+                 kvs (->> (for [[p triples] (group-by second chunk)
+                                :let [row-cache (HashMap.)]
+                                [s p o] triples
                                 :let [[^long s-id s-id-kvs] (get-or-create-id snapshot value->id s last-id-state pending-id-state seek-b)
                                       [^long p-id p-id-kvs] (get-or-create-id snapshot value->id p last-id-state pending-id-state seek-b)
-                                      [^long o-id o-id-kvs] (get-or-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
+                                      [^long o-id o-id-kvs] (get-or-create-id snapshot value->id o last-id-state pending-id-state seek-b)
+                                      get-current-row (fn [idx ^long id]
+                                                        (let [id (int id)]
+                                                          (.computeIfAbsent row-cache
+                                                                            [idx id]
+                                                                            (reify Function
+                                                                              (apply [_ _]
+                                                                                [(mem/with-buffer-out b
+                                                                                   (fn [^DataOutput out]
+                                                                                     (.writeInt out (case idx
+                                                                                                      :p->so p->so-idx-id
+                                                                                                      :p->os p->os-idx-id))
+                                                                                     (.writeInt out p-id)
+                                                                                     (.writeInt out id)
+                                                                                     (.writeLong out (date->reverse-time-ms business-time))
+                                                                                     (.writeLong out (date->reverse-time-ms transaction-time))))
+                                                                                 (let [^Int2ObjectHashMap m (get-in g [idx p])]
+                                                                                   (if-let [b (.get m id)]
+                                                                                     (.clone ^RoaringBitmap b)
+                                                                                     (new-bitmap)))])))))]]
                             (concat s-id-kvs
                                     p-id-kvs
                                     o-id-kvs
-                                    (let [[k ^RoaringBitmap row] (get-current-row p->so-idx-id :p->so p p-id s-id)]
+                                    (let [[k ^RoaringBitmap row] (get-current-row :p->so s-id)]
                                       (when (.checkedAdd row o-id)
                                         [[k row]]))
-                                    (let [[k ^RoaringBitmap row] (get-current-row p->os-idx-id :p->os p p-id o-id)]
+                                    (let [[k ^RoaringBitmap row] (get-current-row :p->os o-id)]
                                       (when (.checkedAdd row s-id)
                                         [[k row]]))))
                           (reduce into [])
