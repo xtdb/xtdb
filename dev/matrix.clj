@@ -650,18 +650,53 @@
 ;; TODO: Early spike to split up matrix.
 (defn build-merkle-tree
   ([^Int2ObjectHashMap m]
-   (build-merkle-tree m
-                      0
-                      (Integer/toUnsignedLong (int unknown-id))
-                      (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m))))))
-  ([^Int2ObjectHashMap m ^long start ^long end ^long max-known]
-   (when (<= start max-known)
-     (if (= (- end start) 1)
-       (when-let [x (.get m (unchecked-int start))]
-         [start x])
-       (let [half (unsigned-bit-shift-right (+ start end) 1)]
-         [(build-merkle-tree m start half max-known)
-          (build-merkle-tree m half end max-known)])))))
+   (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
+         b (ExpandableDirectByteBuffer.)
+         empty-hash (crux.ByteUtils/sha1
+                     (mem/allocate-buffer sha1-size)
+                     (mem/allocate-buffer 0))
+         nil-hashes (object-array
+                     (reduce
+                      (fn [acc ^long x]
+                        (conj acc (crux.ByteUtils/sha1
+                                   (mem/allocate-buffer sha1-size)
+                                   (get acc (dec x)))))
+                      [empty-hash]
+                      (range 1 (inc Integer/SIZE))))
+         acc (ArrayList.)
+         build (fn build [^long start ^long end ^long depth]
+                 (let [node (or (when (<= start max-known)
+                                  (if (= (- end start) 1)
+                                    (let [start-row (unchecked-int start)]
+                                      (when-let [x (.get m start-row)]
+                                        (let [x (doto ^RoaringBitmap x
+                                                  (.runOptimize))
+                                              x-serialized (mem/with-buffer-out b
+                                                             (fn [^DataOutput out]
+                                                               (.serialize x out))
+                                                             false)
+                                              x-hash (crux.ByteUtils/sha1
+                                                      (mem/allocate-buffer sha1-size)
+                                                      x-serialized)]
+                                          [x-hash x-serialized])))
+                                    (let [half (unsigned-bit-shift-right (+ start end) 1)
+                                          new-depth (inc depth)
+                                          [^DirectBuffer left-hash] (build start half new-depth)
+                                          [^DirectBuffer right-hash] (build half end new-depth)
+                                          concat-hash (mem/copy-buffer
+                                                       (doto b
+                                                         (.putBytes 0 left-hash 0 sha1-size)
+                                                         (.putBytes sha1-size right-hash 0 sha1-size))
+                                                       (* sha1-size 2))
+                                          combine-hash (crux.ByteUtils/sha1
+                                                        (mem/allocate-buffer sha1-size)
+                                                        concat-hash)]
+                                      [combine-hash concat-hash])))
+                                [(aget nil-hashes depth) nil])]
+                   (.add acc node)
+                   node))]
+     (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)
+     acc)))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
