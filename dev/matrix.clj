@@ -647,6 +647,22 @@
              (prn (count chunk))
              (kv/store kv kvs))))))))
 
+;; TODO: Early spike to split up matrix.
+(defn build-merkle-tree
+  ([^Int2ObjectHashMap m]
+   (build-merkle-tree m
+                      0
+                      (Integer/toUnsignedLong (int unknown-id))
+                      (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m))))))
+  ([^Int2ObjectHashMap m ^long start ^long end ^long max-known]
+   (when (<= start max-known)
+     (if (= (- end start) 1)
+       (when-let [x (.get m (unchecked-int start))]
+         [start x])
+       (let [half (unsigned-bit-shift-right (+ start end) 1)]
+         [(build-merkle-tree m start half max-known)
+          (build-merkle-tree m half end max-known)])))))
+
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
 
