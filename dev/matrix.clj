@@ -499,48 +499,51 @@
       :predicate-cardinality-cache (HashMap.)
       :query-cache (HashMap.)})))
 
-(defn- get-or-create-id [snapshot ^ToIntFunction value->id value ^Box last-id-state ^Object2IntHashMap pending-id-state seek-b]
+(defn- get-known-id ^long [^ToIntFunction value->id ^Object2IntHashMap pending-id-state value]
   (let [pending-id (.getValue pending-id-state value)]
     (if (not= unknown-id pending-id)
-      [pending-id []]
-      (let [id (.applyAsInt value->id value)]
-        (if (not= unknown-id id)
-          [id []]
-          (let [;; TODO: This is obviously a slow way to find the latest id.
-                id (.computeIfAbsent pending-id-state
-                                     value
-                                     (reify ToIntFunction
-                                       (applyAsInt [_ k]
-                                         (when (= unknown-id (.val last-id-state))
-                                           (with-open [i (kv/new-iterator snapshot)]
-                                             (let [prefix-k (mem/with-buffer-out seek-b
-                                                              (fn [^DataOutput out]
-                                                                (.writeInt out id->value-idx-id)))]
-                                               (loop [last-id (int 0)
-                                                      k ^DirectBuffer (kv/seek i prefix-k)]
-                                                 (if (within-prefix? prefix-k k)
-                                                   (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
-                                                   (set! (.val last-id-state) last-id))))))
-                                         (unchecked-int (set! (.val last-id-state)
-                                                              (unchecked-inc-int (or (.val last-id-state) 0)))))))
-                b (ExpandableDirectByteBuffer.)]
-            (when (= id unknown-id)
-              (throw (IllegalStateException.
-                      (str "Out of ids, maximum id is: " (dec (Integer/toUnsignedLong -1))))))
-            [id [[(mem/with-buffer-out b
-                    (fn [^DataOutput out]
-                      (.writeInt out id->value-idx-id)
-                      (.writeInt out id)))
-                  (mem/with-buffer-out b
-                    (fn [^DataOutput out]
-                      (nippy/freeze-to-out! out value)))]
-                 [(mem/with-buffer-out b
-                    (fn [^DataOutput out]
-                      (.writeInt out value->id-idx-id)
-                      (nippy/freeze-to-out! out value)))
-                  (mem/with-buffer-out b
-                    (fn [^DataOutput out]
-                      (.writeInt out id)))]]]))))))
+      pending-id
+      (.applyAsInt value->id value))))
+
+(defn- maybe-create-id [snapshot ^ToIntFunction value->id value ^Box last-id-state ^Object2IntHashMap pending-id-state seek-b]
+  (let [id (get-known-id value->id pending-id-state value)]
+    (if-not (= unknown-id id)
+      []
+      (let [ ;; TODO: This is obviously a slow way to find the latest id.
+            id (.computeIfAbsent pending-id-state
+                                 value
+                                 (reify ToIntFunction
+                                   (applyAsInt [_ k]
+                                     (when (= unknown-id (.val last-id-state))
+                                       (with-open [i (kv/new-iterator snapshot)]
+                                         (let [prefix-k (mem/with-buffer-out seek-b
+                                                          (fn [^DataOutput out]
+                                                            (.writeInt out id->value-idx-id)))]
+                                           (loop [last-id (int 0)
+                                                  k ^DirectBuffer (kv/seek i prefix-k)]
+                                             (if (within-prefix? prefix-k k)
+                                               (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
+                                               (set! (.val last-id-state) last-id))))))
+                                     (unchecked-int (set! (.val last-id-state)
+                                                          (unchecked-inc-int (or (.val last-id-state) 0)))))))
+            b (ExpandableDirectByteBuffer.)]
+        (when (= id unknown-id)
+          (throw (IllegalStateException.
+                  (str "Out of ids, maximum id is: " (dec (Integer/toUnsignedLong -1))))))
+        [[(mem/with-buffer-out b
+            (fn [^DataOutput out]
+              (.writeInt out id->value-idx-id)
+              (.writeInt out id)))
+          (mem/with-buffer-out b
+            (fn [^DataOutput out]
+              (nippy/freeze-to-out! out value)))]
+         [(mem/with-buffer-out b
+            (fn [^DataOutput out]
+              (.writeInt out value->id-idx-id)
+              (nippy/freeze-to-out! out value)))
+          (mem/with-buffer-out b
+            (fn [^DataOutput out]
+              (.writeInt out id)))]]))))
 
 (defn load-rdf-into-lmdb
   ([kv resource]
@@ -561,42 +564,55 @@
            (let [{:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
                  seek-b (ExpandableDirectByteBuffer.)
                  pending-id-state (Object2IntHashMap. unknown-id)
+                 id-kvs (->> (for [[s p o] chunk
+                                   :let [s-id-kvs (maybe-create-id snapshot value->id s last-id-state pending-id-state seek-b)
+                                         p-id-kvs (maybe-create-id snapshot value->id p last-id-state pending-id-state seek-b)
+                                         o-id-kvs (maybe-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
+                               (concat s-id-kvs p-id-kvs o-id-kvs))
+                             (reduce into [])
+                             (into {}))
                  kvs (->> (for [[p triples] (group-by second chunk)
-                                :let [row-cache (HashMap.)]
-                                [s p o] triples
-                                :let [[^long s-id s-id-kvs] (get-or-create-id snapshot value->id s last-id-state pending-id-state seek-b)
-                                      [^long p-id p-id-kvs] (get-or-create-id snapshot value->id p last-id-state pending-id-state seek-b)
-                                      [^long o-id o-id-kvs] (get-or-create-id snapshot value->id o last-id-state pending-id-state seek-b)
-                                      get-current-row (fn [idx ^long id]
-                                                        (let [id (int id)]
-                                                          (.computeIfAbsent row-cache
-                                                                            [idx id]
-                                                                            (reify Function
-                                                                              (apply [_ _]
-                                                                                [(mem/with-buffer-out b
-                                                                                   (fn [^DataOutput out]
-                                                                                     (.writeInt out (case idx
-                                                                                                      :p->so p->so-idx-id
-                                                                                                      :p->os p->os-idx-id))
-                                                                                     (.writeInt out p-id)
-                                                                                     (.writeInt out id)
-                                                                                     (.writeLong out (date->reverse-time-ms business-time))
-                                                                                     (.writeLong out (date->reverse-time-ms transaction-time))))
-                                                                                 (let [^Int2ObjectHashMap m (get-in g [idx p])]
-                                                                                   (if-let [b (.get m id)]
-                                                                                     (.clone ^RoaringBitmap b)
-                                                                                     (new-bitmap)))])))))]]
-                            (concat s-id-kvs
-                                    p-id-kvs
-                                    o-id-kvs
-                                    (let [[k ^RoaringBitmap row] (get-current-row :p->so s-id)]
-                                      (when (.checkedAdd row o-id)
-                                        [[k row]]))
-                                    (let [[k ^RoaringBitmap row] (get-current-row :p->os o-id)]
-                                      (when (.checkedAdd row s-id)
-                                        [[k row]]))))
+                                :let [p->so-row-cache (Int2ObjectHashMap.)
+                                      p->os-row-cache (Int2ObjectHashMap.)
+                                      p-id (get-known-id value->id pending-id-state p)
+                                      row-key (fn [idx-id id]
+                                                (mem/with-buffer-out b
+                                                  (fn [^DataOutput out]
+                                                    (.writeInt out idx-id)
+                                                    (.writeInt out p-id)
+                                                    (.writeInt out id)
+                                                    (.writeLong out (date->reverse-time-ms business-time))
+                                                    (.writeLong out (date->reverse-time-ms transaction-time)))))]
+                                [s _ o] triples
+                                :let [s-id (get-known-id value->id pending-id-state s)
+                                      o-id (get-known-id value->id pending-id-state o)]]
+                            (concat
+                             (let [[k ^RoaringBitmap row :as kv]
+                                   (.computeIfAbsent p->so-row-cache
+                                                     s-id
+                                                     (reify IntFunction
+                                                       (apply [_ _]
+                                                         [(row-key p->so-idx-id s-id)
+                                                          (let [^Int2ObjectHashMap m (get-in g [:p->so p])]
+                                                            (if-let [b (.get m s-id)]
+                                                              (.clone ^RoaringBitmap b)
+                                                              (new-bitmap)))])))]
+                               (when (.checkedAdd row o-id)
+                                 [kv]))
+                             (let [[k ^RoaringBitmap row :as kv]
+                                   (.computeIfAbsent p->os-row-cache
+                                                     o-id
+                                                     (reify IntFunction
+                                                       (apply [_ _]
+                                                         [(row-key p->os-idx-id o-id)
+                                                          (let [^Int2ObjectHashMap m (get-in g [:p->os p])]
+                                                            (if-let [b (.get m o-id)]
+                                                              (.clone ^RoaringBitmap b)
+                                                              (new-bitmap)))])))]
+                               (when (.checkedAdd row s-id)
+                                 [kv]))))
                           (reduce into [])
-                          (into {}))
+                          (into id-kvs))
                  bitmap->hash (IdentityHashMap.)
                  known-hashes (HashSet.)
                  bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
