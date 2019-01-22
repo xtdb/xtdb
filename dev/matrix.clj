@@ -598,30 +598,33 @@
                           (reduce into [])
                           (into {}))
                  bitmap->hash (IdentityHashMap.)
-                 hash->bitmap (HashMap.)
+                 known-hashes (HashSet.)
                  bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
-                              (->> (for [[_ v] kvs
-                                         :when (and (instance? RoaringBitmap v)
-                                                    (not (.containsKey bitmap->hash v)))
-                                         :let [v (doto ^RoaringBitmap v
-                                                   (.runOptimize))
-                                               v-serialized (mem/with-buffer-out b
-                                                              (fn [^DataOutput out]
-                                                                (.serialize v out))
-                                                              false)
-                                               k (crux.ByteUtils/sha1
-                                                  (mem/allocate-buffer sha1-size)
-                                                  v-serialized)
-                                               c-k (doto content-hash-b
-                                                     (.putBytes Integer/BYTES k 0 (.capacity k)))]]
-                                     (do (.put bitmap->hash v k)
-                                         (when-not (and (not (.containsKey hash->bitmap k))
-                                                        (within-prefix? c-k (kv/seek i c-k)))
-                                           (.put hash->bitmap k v)
-                                           [(mem/copy-buffer c-k)
-                                            (mem/copy-buffer v-serialized)])))
-                                   (remove nil?)
-                                   (into {})))
+                              (->> (vals kvs)
+                                   (filter #(instance? RoaringBitmap %))
+                                   (reduce
+                                    (fn [acc v]
+                                      (or (when-not (.containsKey bitmap->hash v)
+                                            (let [v (doto ^RoaringBitmap v
+                                                      (.runOptimize))
+                                                  v-serialized (mem/with-buffer-out b
+                                                                 (fn [^DataOutput out]
+                                                                   (.serialize v out))
+                                                                 false)
+                                                  k (crux.ByteUtils/sha1
+                                                     (mem/allocate-buffer sha1-size)
+                                                     v-serialized)]
+                                              (.put bitmap->hash v k)
+                                              (when-not (.contains known-hashes k)
+                                                (.add known-hashes k)
+                                                (let [c-k (doto content-hash-b
+                                                            (.putBytes Integer/BYTES k 0 (.capacity k)))]
+                                                  (when-not (within-prefix? c-k (kv/seek i c-k))
+                                                    (assoc acc
+                                                           (mem/copy-buffer c-k)
+                                                           (mem/copy-buffer v-serialized)))))))
+                                          acc))
+                                    {})))
                  kvs (->> (for [[k v] kvs]
                             [k (.getOrDefault bitmap->hash v v)])
                           (into bitmap-kvs))]
