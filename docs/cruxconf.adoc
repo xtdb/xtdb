@@ -24,3 +24,7 @@ Discussion of internal apps using Crux and client apps
 * For Users: One-click marketplace cloud-formation offering
 * For Users: PaaS using private link (or however it's done... on marketplace?)
 * For Users: A guide to setting up their own cloud environment (sample CF templates? Not sure how this works and there's @hug's efforts to consolidate)
+
+== A discussion on Time
+
+== What's the gap?
