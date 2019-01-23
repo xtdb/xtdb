@@ -147,6 +147,7 @@
 
 (def default-env-flags (bit-or LMDB/MDB_WRITEMAP
                                LMDB/MDB_MAPASYNC
+                               LMDB/MDB_NOMETASYNC
                                LMDB/MDB_NOTLS
                                LMDB/MDB_NORDAHEAD))
 
