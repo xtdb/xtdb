@@ -83,7 +83,7 @@
        (into {})))
 
 (defn- parse-pom-version []
-  (with-open [in (io/reader (io/resource "META-INF/maven/crux/crux/pom.properties"))]
+  (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux/pom.properties"))]
     (load-properties in)))
 
 (defn- options->table [options]

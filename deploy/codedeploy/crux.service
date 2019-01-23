@@ -1,0 +1,14 @@
+[Unit]
+Description=Crux
+
+[Service]
+Type=simple
+EnvironmentFile=/var/lib/crux/environment
+ExecStart=/usr/bin/java -jar /srv/crux.jar
+Restart=always
+# TODO Move to an unprivileged user.
+User=ec2-user
+WorkingDirectory=/home/ec2-user
+
+[Install]
+WantedBy=multi-user.target
