@@ -443,10 +443,10 @@
 (def ^:private node-cache (lru/new-cache (* 2 1024 1024)))
 (def ^:private matrix-cache (lru/new-cache 128))
 
-(defn lmdb->graph
+(defn kv->graph
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
-     (lmdb->graph snapshot now now node-cache matrix-cache)))
+     (kv->graph snapshot now now node-cache matrix-cache)))
   ([snapshot business-time transaction-time node-cache matrix-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
          value->id-seek-b (doto (ExpandableDirectByteBuffer.)
@@ -630,9 +630,9 @@
 
 (def ^:const default-chunk-size 100000)
 
-(defn load-rdf-into-lmdb
+(defn load-rdf-into-kv
   ([kv resource]
-   (load-rdf-into-lmdb kv resource default-chunk-size 0 Long/MAX_VALUE))
+   (load-rdf-into-kv kv resource default-chunk-size 0 Long/MAX_VALUE))
   ([kv resource chunk-size drop-chunks take-chunks]
    (with-open [in (io/input-stream (io/resource resource))]
      (let [now (cio/next-monotonic-date)
@@ -650,7 +650,7 @@
                           (take (or take-chunks Long/MAX_VALUE)))]
          (with-open [snapshot (kv/new-snapshot kv)]
            (let [chunk-start-time (System/currentTimeMillis)
-                 {:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time node-cache matrix-cache)
+                 {:keys [value->id] :as g} (kv->graph snapshot business-time transaction-time node-cache matrix-cache)
                  seek-b (ExpandableDirectByteBuffer.)
                  pending-id-state (Object2IntHashMap. unknown-id)
                  id-kvs (->> (for [[s p o] chunk
@@ -732,16 +732,16 @@
 
 ;; LUBM:
 (comment
-  ;; Create an LMDBKv store for the LUBM data.
+  ;; Create an Kv store for the LUBM data.
   (def lm-lubm (kv/open (kv/new-kv-store "crux.kv.lmdb.LMDBKv")
                         {:db-dir "dev-storage/matrix-lmdb-lubm"}))
   ;; Populate with LUBM data.
-  (matrix/load-rdf-into-lmdb lm-lubm matrix/lubm-triples-resource)
+  (matrix/load-rdf-into-kv lm-lubm matrix/lubm-triples-resource)
 
   ;; Try LUBM query 9:
   (with-open [snapshot (kv/new-snapshot lm-lubm)]
     (= (matrix/query
-        (matrix/lmdb->graph snapshot)
+        (matrix/kv->graph snapshot)
         (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
           '{:find [x y z]
             :where [[x :rdf/type :ub/GraduateStudent]
@@ -761,18 +761,18 @@
           :http://www.Department0.University0.edu/GraduateCourse52]}))
 
   ;; Close when done.
-  (.close lm-lmdb))
+  (.close lm-lubm))
 
 ;; WatDiv:
 (comment
-  ;; Create an LMDBKv store for our matrices.
+  ;; Create an Kv store for our matrices.
   (def lm-watdiv (kv/open (kv/new-kv-store "crux.kv.lmdb.LMDBKv")
                           {:db-dir "dev-storage/matrix-lmdb-watdiv"}))
   ;; This only needs to be done once and then whenever the data
   ;; storage code changes. You need this file:
   ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2 Place it at
   ;; test/watdiv/data/watdiv.10M.nt
-  (matrix/load-rdf-into-lmdb lm-watdiv matrix/watdiv-triples-resource)
+  (matrix/load-rdf-into-kv lm-watdiv matrix/watdiv-triples-resource)
 
   ;; Run the 240 reference queries against the Matrix spike, skipping
   ;; errors and two queries that currently blocks.
@@ -781,7 +781,7 @@
      (run-watdiv-reference lm (io/resource "watdiv/watdiv_crux.edn") #{35 67}))
     ([lm resource skip?]
      (with-open [snapshot (crux.kv/new-snapshot lm)]
-       (let [wg (matrix/lmdb->graph snapshot)
+       (let [wg (matrix/kv->graph snapshot)
              times (mapv
                     (fn [{:keys [idx query crux-results]}]
                       (let [start (System/currentTimeMillis)]
