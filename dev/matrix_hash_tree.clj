@@ -362,7 +362,7 @@
              (mem/as-buffer (mem/->on-heap node-hash))
              (fn [_]
                (if (<= (.getInt v 0 ByteOrder/BIG_ENDIAN) (long branches))
-                 (mem/copy-buffer v)
+                 (mem/copy-to-unpooled-buffer v)
                  (with-open [in (DataInputStream. (DirectBufferInputStream. v))]
                    (doto (new-bitmap)
                      (.deserialize in)))))))))))
@@ -536,10 +536,10 @@
 (deftype HashTree [^DirectBuffer root-hash ^Map nodes])
 
 ;; TODO: Early spike to split up matrix.
-(def ^:private ^{:tag 'long} branches 256)
+(def ^:private ^{:tag 'long} branches 2048)
 (def ^:private ^{:tag 'long} bits-per-branch (Long/numberOfTrailingZeros branches))
 
-(defn build-hash-tree ^matrix.HashTree [^Int2ObjectHashMap m]
+(defn build-hash-tree ^matrix_hash_tree.HashTree [^Int2ObjectHashMap m]
   (when-not (empty? m)
     (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
           b (ExpandableDirectByteBuffer.)
@@ -720,7 +720,11 @@
              (prn (count chunk) (count kvs))
              (kv/store kv kvs)
              (doseq [[k v] node-kvs]
-               (lru/compute-if-absent node-cache (mem/as-buffer (mem/->on-heap k)) (fn [_] v)))
+               (lru/compute-if-absent
+                node-cache
+                (mem/as-buffer (mem/->on-heap k))
+                (fn [_]
+                  (mem/copy-to-unpooled-buffer v))))
              (prn (- (System/currentTimeMillis) chunk-start-time)))))))))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
