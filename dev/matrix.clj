@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.hash :as hash]
             [crux.io :as cio]
             [crux.kv :as kv]
@@ -332,6 +333,7 @@
 (def ^:private p->so-idx-id 2)
 (def ^:private p->os-idx-id 3)
 (def ^:private node-idx-id 4)
+(def ^:private latest-id-idx-id 5)
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -502,16 +504,15 @@
                                  value
                                  (reify ToIntFunction
                                    (applyAsInt [_ k]
-                                     (when (= unknown-id (.val last-id-state))
+                                     (when-not (.val last-id-state)
                                        (with-open [i (kv/new-iterator snapshot)]
                                          (let [prefix-k (mem/with-buffer-out seek-b
                                                           (fn [^DataOutput out]
-                                                            (.writeInt out id->value-idx-id)))]
-                                           (loop [last-id (int 0)
-                                                  k ^DirectBuffer (kv/seek i prefix-k)]
-                                             (if (within-prefix? prefix-k k)
-                                               (recur (.getInt k Integer/BYTES ByteOrder/BIG_ENDIAN) (kv/next i))
-                                               (set! (.val last-id-state) last-id))))))
+                                                            (.writeInt out latest-id-idx-id)))
+                                               k ^DirectBuffer (kv/seek i prefix-k)]
+                                           (if (within-prefix? prefix-k k)
+                                             (set! (.val last-id-state) (.getInt ^DirectBuffer (kv/value i) 0 ByteOrder/BIG_ENDIAN))
+                                             (set! (.val last-id-state) 0)))))
                                      (unchecked-int (set! (.val last-id-state)
                                                           (unchecked-inc-int (or (.val last-id-state) 0)))))))
             b (ExpandableDirectByteBuffer.)]
@@ -630,102 +631,118 @@
 
 (def ^:const default-chunk-size 100000)
 
-(defn load-rdf-into-kv
-  ([kv resource]
-   (load-rdf-into-kv kv resource default-chunk-size 0 Long/MAX_VALUE))
-  ([kv resource chunk-size drop-chunks take-chunks]
-   (with-open [in (io/input-stream (io/resource resource))]
-     (let [now (cio/next-monotonic-date)
-           business-time now
-           transaction-time now
+(defn transact-rdf-triples
+  ([kv triples]
+   (transact-rdf-triples kv triples nil))
+  ([kv triples business-time]
+   (with-open [snapshot (kv/new-snapshot kv)]
+     (let [transaction-time (cio/next-monotonic-date)
+           business-time (or business-time transaction-time)
+           tx-start-time (.getTime transaction-time)
            b (ExpandableDirectByteBuffer.)
            content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ hash/id-hash-size Integer/BYTES))
                             (.putInt 0 node-idx-id ByteOrder/BIG_ENDIAN))
            last-id-state (Box. nil)
-           matrix-cache nil]
-       (doseq [chunk (->> (rdf/ntriples-seq in)
-                          (map rdf/rdf->clj)
-                          (partition-all chunk-size)
-                          (drop drop-chunks)
-                          (take (or take-chunks Long/MAX_VALUE)))]
-         (with-open [snapshot (kv/new-snapshot kv)]
-           (let [chunk-start-time (System/currentTimeMillis)
-                 {:keys [value->id] :as g} (kv->graph snapshot business-time transaction-time node-cache matrix-cache)
-                 seek-b (ExpandableDirectByteBuffer.)
-                 pending-id-state (Object2IntHashMap. unknown-id)
-                 id-kvs (->> (for [[s p o] chunk
-                                   :let [s-id-kvs (maybe-create-id snapshot value->id s last-id-state pending-id-state seek-b)
-                                         p-id-kvs (maybe-create-id snapshot value->id p last-id-state pending-id-state seek-b)
-                                         o-id-kvs (maybe-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
-                               (concat s-id-kvs p-id-kvs o-id-kvs))
+           matrix-cache nil
+           {:keys [value->id] :as g} (kv->graph snapshot business-time transaction-time node-cache matrix-cache)
+           seek-b (ExpandableDirectByteBuffer.)
+           pending-id-state (Object2IntHashMap. unknown-id)
+           id-kvs (->> (for [[s p o] triples
+                             :let [s-id-kvs (maybe-create-id snapshot value->id s last-id-state pending-id-state seek-b)
+                                   p-id-kvs (maybe-create-id snapshot value->id p last-id-state pending-id-state seek-b)
+                                   o-id-kvs (maybe-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
+                         (concat s-id-kvs p-id-kvs o-id-kvs))
+                       (reduce into [])
+                       (into {}))
+           id-kvs (if-let [last-id (.val last-id-state)]
+                    (assoc id-kvs
+                           (mem/with-buffer-out b
+                             (fn [^DataOutput out]
+                               (.writeInt out latest-id-idx-id)))
+                           (mem/with-buffer-out b
+                             (fn [^DataOutput out]
+                               (.writeInt out last-id))))
+                    id-kvs)
+           tree-nodes (HashMap.)
+           tx->root-kvs (->> (for [[p triples] (group-by second triples)
+                                   :let [p->so ^Int2ObjectHashMap (get-in g [:p->so p])
+                                         p->os ^Int2ObjectHashMap (get-in g [:p->os p])
+                                         p-id (get-known-id value->id pending-id-state p)]]
+                               (do (doseq [[s _ o] triples
+                                           :let [s-id (get-known-id value->id pending-id-state s)
+                                                 o-id (get-known-id value->id pending-id-state o)]]
+                                     (let [row ^RoaringBitmap (.computeIfAbsent p->so
+                                                                                s-id
+                                                                                (reify IntFunction
+                                                                                  (apply [_ _]
+                                                                                    (new-bitmap))))]
+                                       (.checkedAdd row o-id))
+                                     (let [row ^RoaringBitmap (.computeIfAbsent p->os
+                                                                                o-id
+                                                                                (reify IntFunction
+                                                                                  (apply [_ _]
+                                                                                    (new-bitmap))))]
+                                       (.checkedAdd row s-id)))
+                                   (concat
+                                    [(let [hash-tree ^HashTree (build-hash-tree p->so)
+                                           nodes ^Map (.nodes hash-tree)]
+                                       (.putAll tree-nodes nodes)
+                                       [(mem/with-buffer-out b
+                                          (fn [^DataOutput out]
+                                            (.writeInt out p->so-idx-id)
+                                            (.writeInt out p-id)
+                                            (.writeLong out (date->reverse-time-ms business-time))
+                                            (.writeLong out (date->reverse-time-ms transaction-time))))
+                                        (.root-hash hash-tree)])]
+                                    [(let [hash-tree ^HashTree (build-hash-tree p->os)
+                                           nodes ^Map (.nodes hash-tree)]
+                                       (.putAll tree-nodes nodes)
+                                       [(mem/with-buffer-out b
+                                          (fn [^DataOutput out]
+                                            (.writeInt out p->os-idx-id)
+                                            (.writeInt out p-id)
+                                            (.writeLong out (date->reverse-time-ms business-time))
+                                            (.writeLong out (date->reverse-time-ms transaction-time))))
+                                        (.root-hash hash-tree)])])))
                              (reduce into [])
                              (into {}))
-                 tree-nodes (HashMap.)
-                 tx->root-kvs (->> (for [[p triples] (group-by second chunk)
-                                         :let [p->so ^Int2ObjectHashMap (get-in g [:p->so p])
-                                               p->os ^Int2ObjectHashMap (get-in g [:p->os p])
-                                               p-id (get-known-id value->id pending-id-state p)]]
-                                     (do (doseq [[s _ o] triples
-                                                 :let [s-id (get-known-id value->id pending-id-state s)
-                                                       o-id (get-known-id value->id pending-id-state o)]]
-                                           (let [row ^RoaringBitmap (.computeIfAbsent p->so
-                                                                                      s-id
-                                                                                      (reify IntFunction
-                                                                                        (apply [_ _]
-                                                                                          (new-bitmap))))]
-                                             (.checkedAdd row o-id))
-                                           (let [row ^RoaringBitmap (.computeIfAbsent p->os
-                                                                                      o-id
-                                                                                      (reify IntFunction
-                                                                                        (apply [_ _]
-                                                                                          (new-bitmap))))]
-                                             (.checkedAdd row s-id)))
-                                         (concat
-                                          [(let [hash-tree ^HashTree (build-hash-tree p->so)
-                                                 nodes ^Map (.nodes hash-tree)]
-                                             (.putAll tree-nodes nodes)
-                                             [(mem/with-buffer-out b
-                                                (fn [^DataOutput out]
-                                                  (.writeInt out p->so-idx-id)
-                                                  (.writeInt out p-id)
-                                                  (.writeLong out (date->reverse-time-ms business-time))
-                                                  (.writeLong out (date->reverse-time-ms transaction-time))))
-                                              (.root-hash hash-tree)])]
-                                          [(let [hash-tree ^HashTree (build-hash-tree p->os)
-                                                 nodes ^Map (.nodes hash-tree)]
-                                             (.putAll tree-nodes nodes)
-                                             [(mem/with-buffer-out b
-                                                (fn [^DataOutput out]
-                                                  (.writeInt out p->os-idx-id)
-                                                  (.writeInt out p-id)
-                                                  (.writeLong out (date->reverse-time-ms business-time))
-                                                  (.writeLong out (date->reverse-time-ms transaction-time))))
-                                              (.root-hash hash-tree)])])))
-                                   (reduce into [])
-                                   (into {}))
-                 node-kvs (with-open [i (kv/new-iterator snapshot)]
-                            (->> tree-nodes
-                                 (reduce
-                                  (fn [acc [^DirectBuffer k v]]
-                                    (if (get node-cache k)
-                                      acc
-                                      (assoc acc
-                                             (mem/copy-buffer
-                                              (doto content-hash-b
-                                                (.putBytes Integer/BYTES k 0 (.capacity k)))
-                                              (+ Integer/BYTES hash/id-hash-size))
-                                             v)))
-                                  {})))
-                 kvs (merge id-kvs tx->root-kvs node-kvs)]
-             (prn (count chunk) (count kvs))
-             (kv/store kv kvs)
-             (doseq [[k v] node-kvs]
-               (lru/compute-if-absent
-                node-cache
-                (mem/as-buffer (mem/->on-heap k))
-                (fn [_]
-                  (mem/copy-to-unpooled-buffer v))))
-             (prn (- (System/currentTimeMillis) chunk-start-time)))))))))
+           node-kvs (with-open [i (kv/new-iterator snapshot)]
+                      (->> tree-nodes
+                           (reduce
+                            (fn [acc [^DirectBuffer k v]]
+                              (if (get node-cache k)
+                                acc
+                                (assoc acc
+                                       (mem/copy-buffer
+                                        (doto content-hash-b
+                                          (.putBytes Integer/BYTES k 0 (.capacity k)))
+                                        (+ Integer/BYTES hash/id-hash-size))
+                                       v)))
+                            {})))
+           kvs (merge id-kvs tx->root-kvs node-kvs)]
+       (kv/store kv kvs)
+       (log/info :triples (count triples) :kvs (count kvs) :time (- (System/currentTimeMillis) tx-start-time))
+       (doseq [[k v] node-kvs]
+         (lru/compute-if-absent
+          node-cache
+          (mem/as-buffer (mem/->on-heap (mem/slice-buffer k Integer/BYTES hash/id-hash-size)))
+          (fn [_]
+            (mem/copy-to-unpooled-buffer v))))))))
+
+(defn load-rdf-into-kv
+  ([kv resource]
+   (load-rdf-into-kv kv resource {}))
+  ([kv resource {:keys [chunk-size drop-chunks take-chunks] :as opts
+                 :or {drop-chunks 0
+                      take-chunks Long/MAX_VALUE
+                      chunk-size default-chunk-size}}]
+   (with-open [in (io/input-stream (io/resource resource))]
+     (doseq [chunk (->> (rdf/ntriples-seq in)
+                        (map rdf/rdf->clj)
+                        (partition-all chunk-size)
+                        (drop drop-chunks)
+                        (take (or take-chunks Long/MAX_VALUE)))]
+       (transact-rdf-triples kv chunk)))))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
@@ -772,6 +789,7 @@
   ;; storage code changes. You need this file:
   ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2 Place it at
   ;; test/watdiv/data/watdiv.10M.nt
+  (set-log-level! 'matrix :info)
   (matrix/load-rdf-into-kv lm-watdiv matrix/watdiv-triples-resource)
 
   ;; Run the 240 reference queries against the Matrix spike, skipping
