@@ -3,6 +3,7 @@
             [clojure.set :as set]
             [clojure.walk :as w]
             [clojure.spec.alpha :as s]
+            [crux.hash :as hash]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -330,7 +331,7 @@
 (def ^:private value->id-idx-id 1)
 (def ^:private p->so-idx-id 2)
 (def ^:private p->os-idx-id 3)
-(def ^:private row-content-idx-id 4)
+(def ^:private node-idx-id 4)
 
 (defn- date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
@@ -338,24 +339,35 @@
 (defn- reverse-time-ms->time-ms ^long [^long reverse-time-ms]
   (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE))
 
-(defn- key->row-id ^long [^DirectBuffer k]
-  (.getInt k (+ Integer/BYTES Integer/BYTES) ByteOrder/BIG_ENDIAN))
+(defn within-prefix?
+  ([^DirectBuffer prefix ^DirectBuffer k]
+   (within-prefix? prefix k (.capacity prefix)))
+  ([^DirectBuffer prefix ^DirectBuffer k ^long length]
+   (and k (mem/buffers=? k prefix length))))
 
-(defn- key->business-time-ms ^long [^DirectBuffer k]
-  (reverse-time-ms->time-ms (.getLong k (+ Integer/BYTES Integer/BYTES Integer/BYTES) ByteOrder/BIG_ENDIAN)))
+(declare rebuild-matrix-from-hash-tree node-pad branches)
 
-(defn- key->transaction-time-ms ^long [^DirectBuffer k]
-  (reverse-time-ms->time-ms (.getLong k (+ Integer/BYTES Integer/BYTES Integer/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
+(defn- hash-tree-key->transaction-time-ms ^long [^DirectBuffer k]
+  (reverse-time-ms->time-ms (.getLong k (+ Integer/BYTES Integer/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)))
 
-(deftype RowIdAndKey [^int row-id ^DirectBuffer key])
+(defn- node-by-hash [node-cache i ^MutableDirectBuffer content-hash-b ^DirectBuffer node-hash]
+  (or (get node-cache node-hash)
+      (let [c-seek-k (doto content-hash-b
+                       (.putBytes Integer/BYTES node-hash 0 (.capacity node-hash)))
+            c-k ^DirectBuffer (kv/seek i c-seek-k)]
+        (when (within-prefix? c-seek-k c-k)
+          (let [v ^DirectBuffer (kv/value i)]
+            (lru/compute-if-absent
+             node-cache
+             (mem/as-buffer (mem/->on-heap node-hash))
+             (fn [_]
+               (if (<= (.getInt v 0 ByteOrder/BIG_ENDIAN) (long branches))
+                 (mem/copy-to-unpooled-buffer v)
+                 (with-open [in (DataInputStream. (DirectBufferInputStream. v))]
+                   (doto (new-bitmap)
+                     (.deserialize in)))))))))))
 
-(def ^:private ^:const no-matches-for-row -1)
-(def ^:private ^:const sha1-size 20)
-
-(defn within-prefix? [^DirectBuffer prefix ^DirectBuffer k]
-  (and k (mem/buffers=? k prefix (.capacity prefix))))
-
-(defn- new-snapshot-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p-id seek-b ^MutableDirectBuffer content-hash-b bitmap-buffer-cache]
+(defn- root-hash-for-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p-id seek-b]
   (let [business-time-ms (.getTime business-time)
         transaction-time-ms (.getTime transaction-time)
         reverse-business-time-ms (date->reverse-time-ms business-time)
@@ -363,61 +375,34 @@
         seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
-                   (.writeInt out p-id)))]
+                   (.writeInt out p-id)
+                   (.writeLong out reverse-business-time-ms)))]
     (with-open [i (kv/new-iterator snapshot)]
-      (loop [id->row ^Int2ObjectHashMap (new-matrix)
-             k ^DirectBuffer (kv/seek i seek-k)]
-        (if (within-prefix? seek-k k)
-          (let [row-id+k (loop [k k]
-                           (let [row-id (int (key->row-id k))]
-                             (if (<= (key->business-time-ms k) business-time-ms)
-                               (RowIdAndKey. row-id k)
-                               (let [found-k ^DirectBuffer (kv/seek i (mem/with-buffer-out seek-b
-                                                                        (fn [^DataOutput out]
-                                                                          (.writeInt out row-id)
-                                                                          (.writeLong out reverse-business-time-ms))
-                                                                        false
-                                                                        (.capacity seek-k)))]
-                                 (when (within-prefix? seek-k found-k)
-                                   (let [found-row-id (int (key->row-id found-k))]
-                                     (if (= row-id found-row-id)
-                                       (RowIdAndKey. row-id k)
-                                       (recur found-k))))))))
-                row-id+k (when row-id+k
-                           (let [row-id (.row-id ^RowIdAndKey row-id+k)]
-                             (loop [k (.key ^RowIdAndKey row-id+k)]
-                               (if (<= (key->transaction-time-ms k) transaction-time-ms)
-                                 (RowIdAndKey. row-id k)
-                                 (let [next-k (kv/next i)]
-                                   (when (within-prefix? seek-k k)
-                                     (if (= row-id (int (key->row-id next-k)))
-                                       (recur next-k)
-                                       (RowIdAndKey. no-matches-for-row next-k))))))))]
-            (if-not row-id+k
-              id->row
-              (let [row-id (.row-id ^RowIdAndKey row-id+k)]
-                (if (not= no-matches-for-row row-id)
-                  (let [buffer-hash ^DirectBuffer (kv/value i)
-                        row (or (get bitmap-buffer-cache buffer-hash)
-                                (let [buffer-hash (mem/as-buffer (mem/->on-heap buffer-hash))]
-                                  (lru/compute-if-absent bitmap-buffer-cache
-                                                         buffer-hash
-                                                         (fn [_]
-                                                           (let [c-seek-k (doto content-hash-b
-                                                                            (.putBytes Integer/BYTES buffer-hash 0 (.capacity buffer-hash)))
-                                                                 c-k ^DirectBuffer (kv/seek i c-seek-k)]
-                                                             (assert (and c-k (= row-content-idx-id (.getInt c-k 0 ByteOrder/BIG_ENDIAN))))
-                                                             (doto (new-bitmap)
-                                                               (.deserialize (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))))]
-                    (recur (doto id->row
-                             (.put row-id row))
-                           (kv/seek i (mem/with-buffer-out seek-b
-                                        (fn [^DataOutput out]
-                                          (.writeInt out (inc row-id)))
-                                        false
-                                        (.capacity seek-k)))))
-                  (recur id->row (.key ^RowIdAndKey row-id+k))))))
-          id->row)))))
+      (let [k ^DirectBuffer (kv/seek i seek-k)]
+        (if (within-prefix? seek-k k (* 2 Integer/BYTES))
+          (loop [k k]
+            (if (<= (hash-tree-key->transaction-time-ms k) transaction-time-ms)
+              (kv/value i)
+              (let [next-k (kv/next i)]
+                (when (within-prefix? seek-k k)
+                  (recur next-k))))))))))
+
+(defn- new-snapshot-matrix [snapshot content-hash-b node-cache matrix-cache root-hash]
+  (if root-hash
+    (let [f (fn [k]
+              (with-open [i (kv/new-iterator snapshot)]
+                (rebuild-matrix-from-hash-tree
+                 k
+                 (fn [^DirectBuffer node-hash]
+                   (node-by-hash node-cache i content-hash-b node-hash)))))]
+      (if-not matrix-cache
+        (f root-hash)
+        (or (get matrix-cache root-hash)
+            (lru/compute-if-absent
+             matrix-cache
+             (mem/as-buffer (mem/->on-heap root-hash))
+             f))))
+    (new-matrix)))
 
 (deftype SnapshotValueToId [snapshot ^Object2IntHashMap cache seek-b]
   ToIntFunction
@@ -455,20 +440,21 @@
 ;; https://javadoc.lwjgl.org/index.html?org/lwjgl/util/lmdb/LMDB.html
 ;; "Values returned from the database are valid only until a subsequent update operation, or the end of the transaction."
 ;; This cache is currently purely on-heap, both keys and values.
-(def ^:private bitmap-buffer-cache (lru/new-cache (* 2 1024 1024)))
+(def ^:private node-cache (lru/new-cache (* 2 1024 1024)))
+(def ^:private matrix-cache (lru/new-cache 128))
 
 (defn lmdb->graph
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
-     (lmdb->graph snapshot now now bitmap-buffer-cache)))
-  ([snapshot business-time transaction-time bitmap-buffer-cache]
+     (lmdb->graph snapshot now now node-cache matrix-cache)))
+  ([snapshot business-time transaction-time node-cache matrix-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
          value->id-seek-b (doto (ExpandableDirectByteBuffer.)
                             (.putInt 0 value->id-idx-id ByteOrder/BIG_ENDIAN))
          id->value-seek-b (doto ^MutableDirectBuffer (mem/allocate-buffer (* Integer/BYTES 2))
                             (.putInt 0 id->value-idx-id ByteOrder/BIG_ENDIAN))
-         content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
-                          (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN))
+         content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ hash/id-hash-size Integer/BYTES))
+                          (.putInt 0 node-idx-id ByteOrder/BIG_ENDIAN))
          p->so-cache (HashMap.)
          p->os-cache (HashMap.)
          value->id (->SnapshotValueToId snapshot (Object2IntHashMap. unknown-id) value->id-seek-b)]
@@ -481,7 +467,8 @@
                                    (reify Function
                                      (apply [_ _]
                                        (let [p-id (.applyAsInt ^ToIntFunction value->id k)]
-                                         (new-snapshot-matrix snapshot business-time transaction-time p->so-idx-id p-id seek-b content-hash-b bitmap-buffer-cache))))))
+                                         (->> (root-hash-for-matrix snapshot business-time transaction-time p->so-idx-id p-id seek-b)
+                                              (new-snapshot-matrix snapshot content-hash-b node-cache matrix-cache)))))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
@@ -492,7 +479,8 @@
                                    (reify Function
                                      (apply [_ _]
                                        (let [p-id (.applyAsInt ^ToIntFunction value->id k)]
-                                         (new-snapshot-matrix snapshot business-time transaction-time p->os-idx-id p-id seek-b content-hash-b bitmap-buffer-cache))))))
+                                         (->> (root-hash-for-matrix snapshot business-time transaction-time p->os-idx-id p-id seek-b)
+                                              (new-snapshot-matrix snapshot content-hash-b node-cache matrix-cache)))))))
 
                (valAt [this k default]
                  (throw (UnsupportedOperationException.))))
@@ -545,122 +533,20 @@
             (fn [^DataOutput out]
               (.writeInt out id)))]]))))
 
-(defn load-rdf-into-lmdb
-  ([kv resource]
-   (load-rdf-into-lmdb kv resource 100000))
-  ([kv resource chunk-size]
-   (with-open [in (io/input-stream (io/resource resource))]
-     (let [now (cio/next-monotonic-date)
-           business-time now
-           transaction-time now
-           b (ExpandableDirectByteBuffer.)
-           content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ sha1-size Integer/BYTES))
-                            (.putInt 0 row-content-idx-id ByteOrder/BIG_ENDIAN))
-           last-id-state (Box. nil)]
-       (doseq [chunk (->> (rdf/ntriples-seq in)
-                          (map rdf/rdf->clj)
-                          (partition-all chunk-size))]
-         (with-open [snapshot (kv/new-snapshot kv)]
-           (let [{:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time bitmap-buffer-cache)
-                 seek-b (ExpandableDirectByteBuffer.)
-                 pending-id-state (Object2IntHashMap. unknown-id)
-                 id-kvs (->> (for [[s p o] chunk
-                                   :let [s-id-kvs (maybe-create-id snapshot value->id s last-id-state pending-id-state seek-b)
-                                         p-id-kvs (maybe-create-id snapshot value->id p last-id-state pending-id-state seek-b)
-                                         o-id-kvs (maybe-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
-                               (concat s-id-kvs p-id-kvs o-id-kvs))
-                             (reduce into [])
-                             (into {}))
-                 kvs (->> (for [[p triples] (group-by second chunk)
-                                :let [p->so-row-cache (Int2ObjectHashMap.)
-                                      p->os-row-cache (Int2ObjectHashMap.)
-                                      p-id (get-known-id value->id pending-id-state p)
-                                      row-key (fn [idx-id id]
-                                                (mem/with-buffer-out b
-                                                  (fn [^DataOutput out]
-                                                    (.writeInt out idx-id)
-                                                    (.writeInt out p-id)
-                                                    (.writeInt out id)
-                                                    (.writeLong out (date->reverse-time-ms business-time))
-                                                    (.writeLong out (date->reverse-time-ms transaction-time)))))]
-                                [s _ o] triples
-                                :let [s-id (get-known-id value->id pending-id-state s)
-                                      o-id (get-known-id value->id pending-id-state o)]]
-                            (concat
-                             (let [[k ^RoaringBitmap row :as kv]
-                                   (.computeIfAbsent p->so-row-cache
-                                                     s-id
-                                                     (reify IntFunction
-                                                       (apply [_ _]
-                                                         [(row-key p->so-idx-id s-id)
-                                                          (let [^Int2ObjectHashMap m (get-in g [:p->so p])]
-                                                            (if-let [b (.get m s-id)]
-                                                              (.clone ^RoaringBitmap b)
-                                                              (new-bitmap)))])))]
-                               (when (.checkedAdd row o-id)
-                                 [kv]))
-                             (let [[k ^RoaringBitmap row :as kv]
-                                   (.computeIfAbsent p->os-row-cache
-                                                     o-id
-                                                     (reify IntFunction
-                                                       (apply [_ _]
-                                                         [(row-key p->os-idx-id o-id)
-                                                          (let [^Int2ObjectHashMap m (get-in g [:p->os p])]
-                                                            (if-let [b (.get m o-id)]
-                                                              (.clone ^RoaringBitmap b)
-                                                              (new-bitmap)))])))]
-                               (when (.checkedAdd row s-id)
-                                 [kv]))))
-                          (reduce into [])
-                          (into id-kvs))
-                 bitmap->hash (IdentityHashMap.)
-                 known-hashes (HashSet.)
-                 bitmap-kvs (with-open [i (kv/new-iterator snapshot)]
-                              (->> (vals kvs)
-                                   (filter #(instance? RoaringBitmap %))
-                                   (reduce
-                                    (fn [acc v]
-                                      (or (when-not (.containsKey bitmap->hash v)
-                                            (let [v (doto ^RoaringBitmap v
-                                                      (.runOptimize))
-                                                  v-serialized (mem/with-buffer-out b
-                                                                 (fn [^DataOutput out]
-                                                                   (.serialize v out))
-                                                                 false)
-                                                  k (ByteUtils/sha1
-                                                     (mem/allocate-buffer sha1-size)
-                                                     v-serialized)]
-                                              (.put bitmap->hash v k)
-                                              (when-not (.contains known-hashes k)
-                                                (.add known-hashes k)
-                                                (let [c-k (doto content-hash-b
-                                                            (.putBytes Integer/BYTES k 0 (.capacity k)))]
-                                                  (when-not (within-prefix? c-k (kv/seek i c-k))
-                                                    (assoc acc
-                                                           (mem/copy-buffer c-k)
-                                                           (mem/copy-buffer v-serialized)))))))
-                                          acc))
-                                    {})))
-                 kvs (->> (for [[k v] kvs]
-                            [k (.getOrDefault bitmap->hash v v)])
-                          (into bitmap-kvs))]
-             (prn (count chunk))
-             (kv/store kv kvs))))))))
+(deftype HashTree [^DirectBuffer root-hash ^Map nodes])
 
 ;; TODO: Early spike to split up matrix.
-(def ^:private node-pad (int 0))
-(def ^:private empty-hash (ByteUtils/sha1
-                           (mem/allocate-unpooled-buffer sha1-size)
-                           (mem/allocate-buffer 0)))
+(def ^:private ^{:tag 'long} branches 2048)
+(def ^:private ^{:tag 'long} bits-per-branch (Long/numberOfTrailingZeros branches))
 
-(defn build-merkle-tree [^Int2ObjectHashMap m]
+(defn build-hash-tree ^matrix.HashTree [^Int2ObjectHashMap m]
   (when-not (empty? m)
     (let [max-known (long (reduce max (map #(Integer/toUnsignedLong %) (sort (.keySet m)))))
           b (ExpandableDirectByteBuffer.)
           nodes (HashMap.)
           leaf-cache (HashMap.)
           build (fn build [^long start ^long end ^long depth]
-                  (let [node (if (= (- end start) 1)
+                  (let [node (if (<= (- end start) 1)
                                (let [start-row (unchecked-int start)]
                                  (when-let [x (.get m start-row)]
                                    (conj (.computeIfAbsent leaf-cache
@@ -672,64 +558,174 @@
                                                                      x-serialized (mem/with-buffer-out b
                                                                                     (fn [^DataOutput out]
                                                                                       (.serialize x out)))
-                                                                     x-hash (ByteUtils/sha1
-                                                                             (mem/allocate-buffer sha1-size)
+                                                                     x-hash (hash/id-hash
+                                                                             (mem/allocate-buffer hash/id-hash-size)
                                                                              x-serialized)]
                                                                  (.put nodes x-hash x-serialized)
                                                                  [x-hash x-serialized]))))
                                          start-row)))
-                               (let [half (unsigned-bit-shift-right (+ start end) 1)
-                                     new-depth (inc depth)
-                                     [left-hash _ left-idx :as left] (when (<= start max-known)
-                                                                       (build start half new-depth))
-                                     [right-hash _ right-idx :as right] (when (<= half max-known)
-                                                                          (build half end new-depth))]
-                                 (cond
-                                   (and (nil? right) (pos? depth))
-                                   left
-
-                                   (and (nil? left) (pos? depth))
-                                   right
-
-                                   :else
-                                   (let [^DirectBuffer left-hash (or left-hash empty-hash)
-                                         ^DirectBuffer right-hash (or right-hash empty-hash)
-                                         left-idx (or left-idx unknown-id)
-                                         right-idx (or right-idx unknown-id)
-                                         concat-hash (mem/copy-buffer
-                                                      (doto b
-                                                        (.putInt 0 node-pad ByteOrder/BIG_ENDIAN)
-                                                        (.putInt Integer/BYTES left-idx ByteOrder/BIG_ENDIAN)
-                                                        (.putInt (* 2 Integer/BYTES) right-idx ByteOrder/BIG_ENDIAN)
-                                                        (.putBytes (* 3 Integer/BYTES) left-hash 0 sha1-size)
-                                                        (.putBytes (+ (* 3 Integer/BYTES) sha1-size) right-hash 0 sha1-size))
-                                                      (+ (* 3 Integer/BYTES)
-                                                         (* 2 sha1-size)))
-                                         combine-hash (ByteUtils/sha1
-                                                       (mem/allocate-buffer sha1-size)
-                                                       concat-hash)]
-                                     (.put nodes combine-hash concat-hash)
-                                     [combine-hash concat-hash half]))))]
+                               (let [new-depth (inc depth)
+                                     step (max (unsigned-bit-shift-right (inc (Integer/toUnsignedLong -1))
+                                                                         (* new-depth bits-per-branch))
+                                               1)
+                                     step (if (>= step (- end start))
+                                            1
+                                            step)
+                                     children (loop [n start
+                                                     acc []]
+                                                (if (and (< n end) (<= n max-known))
+                                                  (let [next-end (+ n step)]
+                                                    (recur next-end
+                                                           (if-let [child (build n next-end new-depth)]
+                                                             (conj acc child)
+                                                             acc)))
+                                                  acc))]
+                                 (when (seq children)
+                                   (if (and (= 1 (count children)) (pos? depth))
+                                     (first children)
+                                     (let [inner-node (mem/copy-buffer
+                                                       (do (.putInt b 0 (count children) ByteOrder/BIG_ENDIAN)
+                                                           (loop [offset Integer/BYTES
+                                                                  [[_ _ idx] & children] children]
+                                                             (when idx
+                                                               (.putInt b offset (int idx) ByteOrder/BIG_ENDIAN)
+                                                               (recur (+ offset Integer/BYTES) children)))
+                                                           (loop [offset (+ Integer/BYTES (* (count children) Integer/BYTES))
+                                                                  [[h] & children] children]
+                                                             (when h
+                                                               (.putBytes b offset ^DirectBuffer h 0 hash/id-hash-size)
+                                                               (recur (+ offset hash/id-hash-size) children)))
+                                                           b)
+                                                       (+ Integer/BYTES
+                                                          (* (count children) Integer/BYTES)
+                                                          (* (count children) hash/id-hash-size)))
+                                           combine-hash (hash/id-hash
+                                                         (mem/allocate-buffer hash/id-hash-size)
+                                                         inner-node)]
+                                       (.put nodes combine-hash inner-node)
+                                       [combine-hash inner-node start])))))]
                     node))
-          [root-hash] (build 0 (Integer/toUnsignedLong (int unknown-id)) 0)]
-      {:root root-hash :nodes nodes})))
+          [root-hash] (build 0 (inc (Integer/toUnsignedLong (int unknown-id))) 0)]
+      (HashTree. root-hash nodes))))
 
-(defn rebuild-matrix-from-merkle-tree [{:keys [nodes root]}]
+(defn rebuild-matrix-from-hash-tree [root node->buffer-fn]
   (let [m (Int2ObjectHashMap.)
         build (fn build [node ^long idx]
-                (when-not (= node empty-hash)
-                  (if-let [^DirectBuffer v (get nodes node)]
-                    (if (= node-pad (.getInt v 0 ByteOrder/BIG_ENDIAN))
-                      (let [left-idx (.getInt v Integer/BYTES ByteOrder/BIG_ENDIAN)
-                            right-idx (.getInt v (* 2 Integer/BYTES) ByteOrder/BIG_ENDIAN)]
-                        (build (mem/slice-buffer v (* 3 Integer/BYTES) sha1-size) left-idx)
-                        (build (mem/slice-buffer v (+ (* 3 Integer/BYTES) sha1-size) sha1-size) right-idx))
-                      (with-open [in (DataInputStream. (DirectBufferInputStream. v))]
-                        (.put m (int idx) (doto (new-bitmap)
-                                            (.deserialize in)))))
-                    (throw (IllegalStateException. (str "Could not found hash: " (mem/buffer->hex node)))))))]
+                (if-let [^DirectBuffer v (node->buffer-fn node)]
+                  (if (instance? RoaringBitmap v)
+                    (.put m (int idx) (.clone ^RoaringBitmap v))
+                    (let [number-of-children (.getInt v 0 ByteOrder/BIG_ENDIAN)]
+                      (if (<= number-of-children branches)
+                        (dotimes [n number-of-children]
+                          (let [idx (.getInt v (+ Integer/BYTES (* Integer/BYTES (long n))) ByteOrder/BIG_ENDIAN)]
+                            (build (mem/slice-buffer v (+ Integer/BYTES
+                                                          (* number-of-children Integer/BYTES)
+                                                          (* (long n) hash/id-hash-size)) hash/id-hash-size) idx)))
+                        (with-open [in (DataInputStream. (DirectBufferInputStream. v))]
+                          (.put m (int idx) (doto (new-bitmap)
+                                              (.deserialize in)))))))
+                  (throw (IllegalStateException. (str "Could not find hash: " (mem/buffer->hex node))))))]
     (build root unknown-id)
     m))
+
+(def ^:const default-chunk-size 100000)
+
+(defn load-rdf-into-lmdb
+  ([kv resource]
+   (load-rdf-into-lmdb kv resource default-chunk-size 0 Long/MAX_VALUE))
+  ([kv resource chunk-size drop-chunks take-chunks]
+   (with-open [in (io/input-stream (io/resource resource))]
+     (let [now (cio/next-monotonic-date)
+           business-time now
+           transaction-time now
+           b (ExpandableDirectByteBuffer.)
+           content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ hash/id-hash-size Integer/BYTES))
+                            (.putInt 0 node-idx-id ByteOrder/BIG_ENDIAN))
+           last-id-state (Box. nil)
+           matrix-cache nil]
+       (doseq [chunk (->> (rdf/ntriples-seq in)
+                          (map rdf/rdf->clj)
+                          (partition-all chunk-size)
+                          (drop drop-chunks)
+                          (take (or take-chunks Long/MAX_VALUE)))]
+         (with-open [snapshot (kv/new-snapshot kv)]
+           (let [chunk-start-time (System/currentTimeMillis)
+                 {:keys [value->id] :as g} (lmdb->graph snapshot business-time transaction-time node-cache matrix-cache)
+                 seek-b (ExpandableDirectByteBuffer.)
+                 pending-id-state (Object2IntHashMap. unknown-id)
+                 id-kvs (->> (for [[s p o] chunk
+                                   :let [s-id-kvs (maybe-create-id snapshot value->id s last-id-state pending-id-state seek-b)
+                                         p-id-kvs (maybe-create-id snapshot value->id p last-id-state pending-id-state seek-b)
+                                         o-id-kvs (maybe-create-id snapshot value->id o last-id-state pending-id-state seek-b)]]
+                               (concat s-id-kvs p-id-kvs o-id-kvs))
+                             (reduce into [])
+                             (into {}))
+                 tree-nodes (HashMap.)
+                 tx->root-kvs (->> (for [[p triples] (group-by second chunk)
+                                         :let [p->so ^Int2ObjectHashMap (get-in g [:p->so p])
+                                               p->os ^Int2ObjectHashMap (get-in g [:p->os p])
+                                               p-id (get-known-id value->id pending-id-state p)]]
+                                     (do (doseq [[s _ o] triples
+                                                 :let [s-id (get-known-id value->id pending-id-state s)
+                                                       o-id (get-known-id value->id pending-id-state o)]]
+                                           (let [row ^RoaringBitmap (.computeIfAbsent p->so
+                                                                                      s-id
+                                                                                      (reify IntFunction
+                                                                                        (apply [_ _]
+                                                                                          (new-bitmap))))]
+                                             (.checkedAdd row o-id))
+                                           (let [row ^RoaringBitmap (.computeIfAbsent p->os
+                                                                                      o-id
+                                                                                      (reify IntFunction
+                                                                                        (apply [_ _]
+                                                                                          (new-bitmap))))]
+                                             (.checkedAdd row s-id)))
+                                         (concat
+                                          [(let [hash-tree ^HashTree (build-hash-tree p->so)
+                                                 nodes ^Map (.nodes hash-tree)]
+                                             (.putAll tree-nodes nodes)
+                                             [(mem/with-buffer-out b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out p->so-idx-id)
+                                                  (.writeInt out p-id)
+                                                  (.writeLong out (date->reverse-time-ms business-time))
+                                                  (.writeLong out (date->reverse-time-ms transaction-time))))
+                                              (.root-hash hash-tree)])]
+                                          [(let [hash-tree ^HashTree (build-hash-tree p->os)
+                                                 nodes ^Map (.nodes hash-tree)]
+                                             (.putAll tree-nodes nodes)
+                                             [(mem/with-buffer-out b
+                                                (fn [^DataOutput out]
+                                                  (.writeInt out p->os-idx-id)
+                                                  (.writeInt out p-id)
+                                                  (.writeLong out (date->reverse-time-ms business-time))
+                                                  (.writeLong out (date->reverse-time-ms transaction-time))))
+                                              (.root-hash hash-tree)])])))
+                                   (reduce into [])
+                                   (into {}))
+                 node-kvs (with-open [i (kv/new-iterator snapshot)]
+                            (->> tree-nodes
+                                 (reduce
+                                  (fn [acc [^DirectBuffer k v]]
+                                    (if (get node-cache k)
+                                      acc
+                                      (assoc acc
+                                             (mem/copy-buffer
+                                              (doto content-hash-b
+                                                (.putBytes Integer/BYTES k 0 (.capacity k)))
+                                              (+ Integer/BYTES hash/id-hash-size))
+                                             v)))
+                                  {})))
+                 kvs (merge id-kvs tx->root-kvs node-kvs)]
+             (prn (count chunk) (count kvs))
+             (kv/store kv kvs)
+             (doseq [[k v] node-kvs]
+               (lru/compute-if-absent
+                node-cache
+                (mem/as-buffer (mem/->on-heap k))
+                (fn [_]
+                  (mem/copy-to-unpooled-buffer v))))
+             (prn (- (System/currentTimeMillis) chunk-start-time)))))))))
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
