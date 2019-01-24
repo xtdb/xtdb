@@ -668,21 +668,26 @@
                                    :let [p->so ^Int2ObjectHashMap (get-in g [:p->so p])
                                          p->os ^Int2ObjectHashMap (get-in g [:p->os p])
                                          p-id (get-known-id value->id pending-id-state p)]]
-                               (do (doseq [[s _ o] triples
+                               (do (doseq [[s triples] (group-by first triples)
                                            :let [s-id (get-known-id value->id pending-id-state s)
-                                                 o-id (get-known-id value->id pending-id-state o)]]
-                                     (let [row ^RoaringBitmap (.computeIfAbsent p->so
-                                                                                s-id
-                                                                                (reify IntFunction
-                                                                                  (apply [_ _]
-                                                                                    (new-bitmap))))]
-                                       (.checkedAdd row o-id))
-                                     (let [row ^RoaringBitmap (.computeIfAbsent p->os
-                                                                                o-id
-                                                                                (reify IntFunction
-                                                                                  (apply [_ _]
-                                                                                    (new-bitmap))))]
-                                       (.checkedAdd row s-id)))
+                                                 row ^RoaringBitmap (.computeIfAbsent p->so
+                                                                                      s-id
+                                                                                      (reify IntFunction
+                                                                                        (apply [_ _]
+                                                                                          (new-bitmap))))]
+                                           [_ _ o] triples
+                                           :let [o-id (get-known-id value->id pending-id-state o)]]
+                                     (.checkedAdd row o-id))
+                                   (doseq [[o triples] (group-by last triples)
+                                           :let [o-id (get-known-id value->id pending-id-state o)
+                                                 row ^RoaringBitmap (.computeIfAbsent p->os
+                                                                                      o-id
+                                                                                      (reify IntFunction
+                                                                                        (apply [_ _]
+                                                                                          (new-bitmap))))]
+                                           [s _ _] triples
+                                           :let [s-id (get-known-id value->id pending-id-state s)]]
+                                     (.checkedAdd row s-id))
                                    (concat
                                     [(let [hash-tree ^HashTree (build-hash-tree p->so)
                                            nodes ^Map (.nodes hash-tree)]
@@ -753,6 +758,7 @@
   (def lm-lubm (kv/open (kv/new-kv-store "crux.kv.lmdb.LMDBKv")
                         {:db-dir "dev-storage/matrix-lmdb-lubm"}))
   ;; Populate with LUBM data.
+  (set-log-level! 'matrix :info)
   (matrix/load-rdf-into-kv lm-lubm matrix/lubm-triples-resource)
 
   ;; Try LUBM query 9:
