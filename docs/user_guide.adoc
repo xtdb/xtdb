@@ -14,9 +14,9 @@ lein install
 
 To add Crux as a project dependency:
 
-[source,clj,subs="normal"]
+[source,clj]
 ----
-juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
+include::./deps.edn[tags=CruxDep]
 ----
 
 NOTE: Depending on your setup, other dependencies will be
@@ -88,11 +88,11 @@ using Crux <<#standalone,standalone>> which uses in-memory event logs.
 
 === Embedded Kafka
 
-Add Kafka to your project dependencies:
+Add Kafka and Zookeeper to your project dependencies:
 
 [source,clj,subs="normal"]
 ----
-org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
+include::./deps.edn[tags=KakfaDeps]
 ----
 
 See the below example code:

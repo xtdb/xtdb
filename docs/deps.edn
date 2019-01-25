@@ -1,0 +1,17 @@
+{:deps
+ {
+  ;; tag::CruxDep[]
+  juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
+  ;; end::CruxDep[]
+
+  ;; tag::KakfaDeps[]
+  org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
+  org.apache.zookeeper/zookeeper {:mvn/version "3.4.13"
+                                  :exclusions [io.netty/netty
+                                               jline
+                                               org.apache.yetus/audience-annotations
+                                               org.slf4j/slf4j-log4j12
+                                               log4j]}
+  org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
+  ;; end::KakfaDeps[]
+  }}
