@@ -10,23 +10,35 @@ NOTE: TODO: Make this page look and feel nicer
 == REST API
 
 Crux offers a small REST API that allows one to use Crux in a
-conventional SaaS way, deploying Kafka and query nodes into AWS
-and interacting with Crux over HTTP. This mode does not support all
+conventional SaaS way, deploying Kafka and query nodes into AWS and
+interacting with Crux over HTTP. This mode does not support all
 features.
 
-When using the REST API, the user doesn’t interact directly with Kafka, but calls one of the query
-nodes (potentially behind a load balancer) over HTTP to interact with
-Crux. As the query nodes might be at different points in the index, and
-different queries might go to differnet nodes, this may cause read consistency issues.
+When using the REST API, the user doesn’t interact directly with
+Kafka, but calls one of the query nodes (potentially behind a load
+balancer) over HTTP to interact with Crux. As the query nodes might be
+at different points in the index, and different queries might go to
+differnet nodes, this may cause read consistency issues.
 
 The REST API also provides an experimental endpoint for SPARQL 1.1
-Protocol queries under `/sparql/`, rewriting the query into the Crux datalog dialect. Only a small subset of SPARQL is
-supported, and no other RDF features are available.
+Protocol queries under `/sparql/`, rewriting the query into the Crux
+datalog dialect. Only a small subset of SPARQL is supported, and no
+other RDF features are available.
 
-=== Endpoints
+.API
+[#table-conversion%header,cols="d,d,d"]
+|===
+|uri|method|description
+|<<#home,`/`>>|GET|returns various details about the state of the database
+|<<#document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
+|<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional business-time/transaction-time co-ordinates
+|===
 
-`/`:: GET: returns various details about the state of the database. Can be used as a health check.
-+
+[#home]
+=== GET `/`
+
+Returns various details about the state of the database. Can be used as a health check.
+
 [source,bash]
 ----
 curl -X GET $nodeURL/
@@ -47,10 +59,14 @@ curl -X GET $nodeURL/
        :time #inst "2019-01-08T11:06:41.869-00:00",
        :lag 0}}}
 ----
+
 NOTE: `estimate-num-keys` is an (over)estimate of the number of transactions in the log (each of which is a key in RocksDB). RocksDB https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ[does not provide] an exact key count.
 
-`/document/[content-hash]`:: GET or POST: returns the document stored under that hash, if it exists.
-+
+[#document]
+=== GET/POST `/document/[content-hash]`
+
+Returns the document stored under that hash, if it exists.
+
 [source,bash]
 ----
 curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
@@ -61,8 +77,11 @@ curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
 ----
 NOTE: Hashes for older versions of a document can be obtained with `/history`, under the `:crux.db/content-hash` keys.
 
-`/entity`:: POST: takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the value stored under that key at those times.
-+
+[#entity]
+=== POST `/entity`
+
+Takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the value stored under that key at those times.
+
 [source,bash]
 ----
 curl -X POST \
@@ -70,10 +89,12 @@ curl -X POST \
      -d '{:eid :tommy}' \
      $nodeURL/entity
 ----
+
 [source,clj]
 ----
 {:crux.db/id :tommy, :name "Tommy", :last-name "Petrov"}
 ----
+
 [source,bash]
 ----
 curl -X POST \
@@ -81,13 +102,16 @@ curl -X POST \
      -d '{:eid :tommy :business-time #inst "1999-01-08T14:03:27.254-00:00"}' \
      $nodeURL/entity
 ----
+
 [source,clj]
 ----
 nil
 ----
 
-`/entity-tx`:: POST: takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
-+
+=== POST `/entity-tx`
+
+Takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
+
 [source,bash]
 ----
 curl -X POST \
