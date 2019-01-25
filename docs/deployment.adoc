@@ -1,5 +1,11 @@
 = Deployment
 
+NOTE: TODO: Considering moving this into the user-guide
+
+NOTE: TODO: Make an index of uris and show at the top, in a section called index
+
+NOTE: TODO: Make this page look and feel nicer
+
 [#rest]
 == REST API
 
