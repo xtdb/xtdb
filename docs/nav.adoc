@@ -1,5 +1,5 @@
-* <<setup.adoc#,Setting Up>>
 * <<user_guide.adoc#,User Guide>>
+* <<setup.adoc#,Setting Up>>
 * <<deployment.adoc#,Deployment>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<faq.adoc#,FAQ>>

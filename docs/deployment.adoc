@@ -1,5 +1,6 @@
 = Deployment
 
+[#rest]
 == REST API
 
 Crux offers a small REST API that allows one to use Crux in a

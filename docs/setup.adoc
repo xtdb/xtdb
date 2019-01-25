@@ -22,16 +22,19 @@ include::./deps.edn[tags=CruxDep]
 NOTE: Depending on your setup, other dependencies will be
 required, as described below.
 
+[#standalone]
 == Standalone
 
-Using Crux standalone is the best way to get started. This guide contains simple steps transacting some data and running a simple query.
+Using Crux standalone is the best way to get started. Once you've
+start a standalone Crux instance as described below, you can then
+follow the <<user_guide#getting-started-example,getting started
+example>>.
 
 === Start a REPL
 
 Clone the https://github.com/juxt/crux[repo] and fire up a REPL in the
 project.
 
-[#standalone]
 === Start the standalone system:
 
 NOTE: TODO: rewrite this bit to use the Java API via Clojure interop
@@ -45,32 +48,25 @@ For the purposes of this Hello World, we are using the simplest
 configuration of Crux, where all the pluggable components are
 in-memory constituents. There is no Kafka or RocksDB to worry about.
 
+The system will contain a `kv-store` that you can use for query purposes:
+
+[source,clj]
+----
+(:kv-store system)
+----
+
+And a `tx-log` that you can use to transact data into Crux:
+
+[source,clj]
+----
+(:tx-log system)
+----
+
 You can later stop the system if you wish:
 
 [source,clj]
 ----
 include::./examples.clj[tags=close-system]
-----
-
-=== Write a transaction:
-
-[source,clj]
-----
-include::./examples.clj[tags=submit-tx]
-----
-
-=== Make a query:
-
-[source,clj]
-----
-include::./examples.clj[tags=query]
-----
-
-You should get:
-
-[source,clj]
-----
-include::./examples.clj[tags=should-get]
 ----
 
 == Kafka
@@ -147,7 +143,8 @@ remotely via REST.
 include::./examples.clj[tags=http-setup]
 ----
 
-NOTE: TODO, get some examples of calling the HTTP server.
+Visit the guide on using the <<deployment#rest,REST api>> for examples
+of how to interact with Crux over http.
 
 Close the server:
 
