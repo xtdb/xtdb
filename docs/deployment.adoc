@@ -2,8 +2,6 @@
 
 NOTE: TODO: Considering moving this into the user-guide
 
-NOTE: TODO: Make an index of uris and show at the top, in a section called index
-
 NOTE: TODO: Make this page look and feel nicer
 
 [#rest]
@@ -32,6 +30,13 @@ other RDF features are available.
 |<<#home,`/`>>|GET|returns various details about the state of the database
 |<<#document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
 |<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional business-time/transaction-time co-ordinates
+|<<#entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
+|<<#history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
+|<<#query, `/query`>>|POST|Takes a datalog query and returns its results
+|<<#query-stream, `/query-stream`>>|POST| Same as `/query` but the results are streamed
+|<<#sync, `/sync`>>|GET| Wait until the Kafka consumer's lag is back to 0
+|<<#tx-log, `/tx-log`>>|GET| Returns a list of all transactions
+|<<#tx-log-post, `/tx-log`>>|POST|The "write" endpoint, to post transactions.
 |===
 
 [#home]
@@ -80,7 +85,9 @@ NOTE: Hashes for older versions of a document can be obtained with `/history`, u
 [#entity]
 === POST `/entity`
 
-Takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the value stored under that key at those times.
+Takes a key and, optionally, a `:business-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
+
+See <<bitemp.adoc#,bitemporality explained>> for more information.
 
 [source,bash]
 ----
@@ -108,9 +115,12 @@ curl -X POST \
 nil
 ----
 
+[#entity-tx]
 === POST `/entity-tx`
 
-Takes a key and, optionally, <<bitemp.adoc#,a `:business-time` and/or `:transact-time`>> (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
+Takes a key and, optionally, `:business-time` and/or `:transact-time` (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
+
+See <<bitemp.adoc, #bitemporality explained>> for more information.
 
 [source,bash]
 ----
@@ -128,12 +138,16 @@ curl -X POST \
  :crux.tx/tx-time #inst "2019-01-08T16:34:47.738-00:00"}
 ----
 
-`/history/[:key]`:: GET or POST: returns the transaction history of a key, from newest to oldest transaction time.
-+
+[#history]
+=== GET/POST `/history/[:key]`
+
+Returns the transaction history of a key, from newest to oldest transaction time.
+
 [source,bash]
 ----
 curl -X GET $nodeURL/history/:ivan
 ----
+
 [source,clj]
 ----
 [{:crux.db/id "a15f8b81a160b4eebe5c84e9e3b65c87b9b2f18e",
@@ -145,8 +159,11 @@ curl -X GET $nodeURL/history/:ivan
  {...}]
 ----
 
-`/query`:: POST: takes a datalog query and returns its results.
-+
+[#query]
+=== POST `/query`
+
+Takes a datalog query and returns its results.
+
 [source,bash]
 ----
 curl -X POST \
@@ -154,30 +171,42 @@ curl -X POST \
      -d '{:query {:find [e] :where [[e :last-name "Petrov"]]}}' \
      $nodeURL/query
 ----
+
 [source,clj]
 ----
 #{[:boris][:ivan]}
 ----
 
-`/query-stream`:: POST: same as `/query` but the results are streamed.
+[#query-stream]
+=== POST `/query-stream`
 
-`/sync`:: GET: Waits until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in miliseconds. Returns the transaction time of the most recent transaction.
-+
+Same as `/query` but the results are streamed.
+
+[#sync]
+=== GET `/sync`
+
+Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in miliseconds. Returns the transaction time of the most recent transaction.
+
 [source,bash]
 ----
 curl -X GET $nodeURL/sync?timeout=500
 ----
+
 [source,clj]
 ----
 #inst "2019-01-08T11:06:41.869-00:00"
 ----
 
-`/tx-log`:: GET: returns a list of all transactions, from oldest to newest transaction time.
-+
+[#tx-log]
+=== GET `/tx-log`
+
+Returns a list of all transactions, from oldest to newest transaction time.
+
 [source,bash]
 ----
 curl -X GET $nodeURL/tx-log
 ----
+
 [source,clj]
 ----
 ({:crux.tx/tx-time #inst "2019-01-07T15:11:13.411-00:00",
@@ -189,7 +218,11 @@ curl -X GET $nodeURL/tx-log
  {:crux.tx/tx-time #inst "2019-01-07T15:11:32.284-00:00",
   ...})
 ----
-POST: takes a vector of transactions (any combination of `:put`, `:delete`, `:cas` and `:evict`) and executes them in order. This is the only "write" endpoint.
+
+[#tx-log-post]
+=== POST `/tx-log`
+
+Takes a vector of transactions (any combination of `:put`, `:delete`, `:cas` and `:evict`) and executes them in order. This is the only "write" endpoint.
 
 [source,bash]
 ----
