@@ -1,0 +1,172 @@
+= Getting Started
+
+== Dependency
+
+As Crux is in development, the best route is to clone the
+https://github.com/juxt/crux[GitHub repo].
+
+To use Crux in other projects, add it to your local Maven repository
+by running:
+
+----
+lein install
+----
+
+To add Crux as a project dependency:
+
+[source,clj]
+----
+include::./deps.edn[tags=CruxDep]
+----
+
+NOTE: Depending on your setup, other dependencies will be
+required, as described below.
+
+== Standalone
+
+Using Crux standalone is the best way to get started. This guide contains simple steps transacting some data and running a simple query.
+
+=== Start a REPL
+
+Clone the https://github.com/juxt/crux[repo] and fire up a REPL in the
+project.
+
+[#standalone]
+=== Start the standalone system:
+
+NOTE: TODO: rewrite this bit to use the Java API via Clojure interop
+
+[source,clj]
+----
+include::./examples.clj[tags=start-system]
+----
+
+For the purposes of this Hello World, we are using the simplest
+configuration of Crux, where all the pluggable components are
+in-memory constituents. There is no Kafka or RocksDB to worry about.
+
+You can later stop the system if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=close-system]
+----
+
+=== Write a transaction:
+
+[source,clj]
+----
+include::./examples.clj[tags=submit-tx]
+----
+
+=== Make a query:
+
+[source,clj]
+----
+include::./examples.clj[tags=query]
+----
+
+You should get:
+
+[source,clj]
+----
+include::./examples.clj[tags=should-get]
+----
+
+== Kafka
+
+When using Crux for real, it's recommended to use Kafka with
+Crux. This is to make use of Kafka as a replayable and consumable log,
+that Crux nodes will use for ingestion to build their local query
+indices.
+
+You can setup Kafka yourself to run outside of Crux, or Crux ships
+with the option of running an embedded Kafka.
+
+If you want to play around with Crux without using Kafka, you can try
+using Crux <<#standalone,standalone>> which uses in-memory event logs.
+
+=== Embedded Kafka
+
+Add Kafka and Zookeeper to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=KakfaDeps]
+----
+
+See the below example code:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-example]
+----
+
+You can later stop the Embedded Kafka if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-close]
+----
+
+== Crux Node
+
+By default Crux uses RocksDB as the underlying Key/Value store, that
+Crux nodes use to house their query indices.
+
+Therefore, you'll need the Rocks dependency:
+
+[source,clj,subs="normal"]
+----
+org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
+----
+
+[source,clj]
+----
+include::./examples.clj[tags=ln-example]
+----
+
+As per usual, you can close the local node when you're finished:
+
+[source,clj]
+----
+include::./examples.clj[tags=ln-close]
+----
+
+NOTE: TODO: show how you'd use the in-mem KV to skip rocks, provide a
+link in this intro.
+
+== Http
+
+Crux can be used programmatically as a library, but Crux also ships
+with an embedded http server, that allows clients to use the API
+remotely via REST.
+
+[source,clj]
+----
+include::./examples.clj[tags=http-setup]
+----
+
+NOTE: TODO, get some examples of calling the HTTP server.
+
+Close the server:
+
+[source,clj]
+----
+include::./examples.clj[tags=http-close]
+----
+
+== Embedded
+
+To see an example of a wired up embedded Crux, see an
+https://github.com/juxt/crux/blob/master/docs/example_system.clj[example
+Integrant system].
+
+NOTE: TODO, show how to actually use this system (transact and run
+queries).
+
+== Configuration
+
+=== K/V Store
+
+Supported KV stores are RocksDB, LMDB and an in-memory store.
