@@ -24,8 +24,8 @@
 
   (^long capacity [this]))
 
-(def ^:private ^:const default-chunk-size (* 1024 1024))
-(def ^:private ^:const large-buffer-size (* 256 1024))
+(def ^:private ^:const default-chunk-size (* 128 1024))
+(def ^:private ^:const large-buffer-size (quot default-chunk-size 4))
 
 (def ^:private ^ThreadLocal chunk-tl
   (ThreadLocal/withInitial
