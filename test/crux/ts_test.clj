@@ -46,9 +46,9 @@
                                                            [:crux.tx/put
                                                             id
                                                             {:crux.db/id id
-                                                             :device-id device-id
-                                                             :location location
-                                                             :environment environment}]))]
+                                                             :location/device-id device-id
+                                                             :location/location location
+                                                             :location/environment environment}]))]
                                 (db/submit-tx tx-log location-tx-ops)
                                 (->> (line-seq conditions-in)
                                      (partition 10000)
@@ -57,7 +57,7 @@
                                         (db/submit-tx
                                          tx-log
                                          (vec (for [condition chunk
-                                                    :let [[time device-id temprature humidity] (str/split chunk #",")
+                                                    :let [[time device-id temprature humidity] (str/split condition #",")
                                                           id (keyword "condition" device-id)
                                                           decide-id (keyword device-id)
                                                           time (inst/read-instant-date
@@ -67,10 +67,10 @@
                                                 [:crux.tx/put
                                                  id
                                                  {:crux.db/id id
-                                                  :time time
-                                                  :device-id device-id
-                                                  :temprature (Double/parseDouble temprature)
-                                                  :humidity (Double/parseDouble humidity)}
+                                                  :condition/time time
+                                                  :condition/device-id device-id
+                                                  :condition/temprature (Double/parseDouble temprature)
+                                                  :condition/humidity (Double/parseDouble humidity)}
                                                  time])))
                                         (+ n (count chunk)))
                                       (count location-tx-ops))))))
@@ -109,10 +109,10 @@
               [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000009 61.000000000000014 49.399999999999906]]
              (q/q (q/db f/*kv*)
                   '{:find [time device-id temprature humidity]
-                    :where [[c :time time]
-                            [c :device-id device-id]
-                            [c :temprature temprature]
-                            [c :humidity humidity]]
+                    :where [[c :condition/time time]
+                            [c :condition/device-id device-id]
+                            [c :condition/temprature temprature]
+                            [c :condition/humidity humidity]]
                     :order-by [[time :desc]]
                     :limit 10})))
     (t/is true "skipping")))
