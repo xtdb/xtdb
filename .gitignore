@@ -13,6 +13,7 @@ target
 /docs/docs.zip
 /docs/javadoc
 /test/watdiv/data
+/test/ts/data
 /docs/nav.html
 /pom.xml
 /docs/img/diagram-classes.png

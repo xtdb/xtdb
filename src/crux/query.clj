@@ -1003,8 +1003,11 @@
 (defn normalize-query [q]
   (cond
     (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
-                                            (partition-all 2 ))]
-                           [k (vec v)]))
+                                            (partition-all 2))]
+                           [k (if (and (nat-int? (first v))
+                                       (= 1 (count v)))
+                                (first v)
+                                (vec v))]))
     (string? q) (normalize-query (edn/read-string q))
     :else
     q))
