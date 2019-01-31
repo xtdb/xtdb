@@ -23,6 +23,52 @@
       (println "Using KV backend:" f/*kv-backend*))
     (f)))
 
+(def ^:const conditions-chunk-size 10000)
+
+(defn submit-ts-weather-data
+  ([tx-log]
+   (submit-ts-weather-data tx-log (io/resource weather-locations-csv-resource) (io/resource weather-conditions-csv-resource)))
+  ([tx-log locations-resource conditions-resource]
+   (with-open [locations-in (io/reader locations-resource)
+               conditions-in (io/reader conditions-resource)]
+     (let [location-tx-ops (vec (for [location (line-seq locations-in)
+                                      :let [[device-id location environment] (str/split location #",")
+                                            id (keyword "location" device-id)
+                                            device-id (keyword device-id)
+                                            location (keyword location)
+                                            environment (keyword environment)]]
+                                  [:crux.tx/put
+                                   id
+                                   {:crux.db/id id
+                                    :location/device-id device-id
+                                    :location/location location
+                                    :location/environment environment}]))]
+       (db/submit-tx tx-log location-tx-ops)
+       (->> (line-seq conditions-in)
+            (partition conditions-chunk-size)
+            (reduce
+             (fn [n chunk]
+               (db/submit-tx
+                tx-log
+                (vec (for [condition chunk
+                           :let [[time device-id temprature humidity] (str/split condition #",")
+                                 id (keyword "condition" device-id)
+                                 decide-id (keyword device-id)
+                                 time (inst/read-instant-date
+                                       (-> time
+                                           (str/replace " " "T")
+                                           (str/replace #"-(\d\d)$" ".000-$1:00")))]]
+                       [:crux.tx/put
+                        id
+                        {:crux.db/id id
+                         :condition/time time
+                         :condition/device-id device-id
+                         :condition/temprature (Double/parseDouble temprature)
+                         :condition/humidity (Double/parseDouble humidity)}
+                        time])))
+               (+ n (count chunk)))
+             (count location-tx-ops)))))))
+
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
     (let [tx-topic "test-ts-tx"
@@ -35,45 +81,7 @@
       (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
       (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
       (let [submit-future (future
-                            (with-open [locations-in (io/reader (io/resource weather-locations-csv-resource))
-                                        conditions-in (io/reader (io/resource weather-conditions-csv-resource))]
-                              (let [location-tx-ops (vec (for [location (line-seq locations-in)
-                                                               :let [[device-id location environment] (str/split location #",")
-                                                                     id (keyword "location" device-id)
-                                                                     device-id (keyword device-id)
-                                                                     location (keyword location)
-                                                                     environment (keyword environment)]]
-                                                           [:crux.tx/put
-                                                            id
-                                                            {:crux.db/id id
-                                                             :location/device-id device-id
-                                                             :location/location location
-                                                             :location/environment environment}]))]
-                                (db/submit-tx tx-log location-tx-ops)
-                                (->> (line-seq conditions-in)
-                                     (partition 10000)
-                                     (reduce
-                                      (fn [n chunk]
-                                        (db/submit-tx
-                                         tx-log
-                                         (vec (for [condition chunk
-                                                    :let [[time device-id temprature humidity] (str/split condition #",")
-                                                          id (keyword "condition" device-id)
-                                                          decide-id (keyword device-id)
-                                                          time (inst/read-instant-date
-                                                                (-> time
-                                                                    (str/replace " " "T")
-                                                                    (str/replace #"-(\d\d)$" ".000-$1:00")))]]
-                                                [:crux.tx/put
-                                                 id
-                                                 {:crux.db/id id
-                                                  :condition/time time
-                                                  :condition/device-id device-id
-                                                  :condition/temprature (Double/parseDouble temprature)
-                                                  :condition/humidity (Double/parseDouble humidity)}
-                                                 time])))
-                                        (+ n (count chunk)))
-                                      (count location-tx-ops))))))
+                            (submit-ts-weather-data tx-log))
             consume-args {:indexer indexer
                           :consumer f/*consumer*
                           :pending-txs-state (atom [])
