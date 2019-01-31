@@ -53,7 +53,7 @@
                 (vec (for [condition chunk
                            :let [[time device-id temprature humidity] (str/split condition #",")
                                  id (keyword "condition" device-id)
-                                 decide-id (keyword device-id)
+                                 decide-id (keyword "location" device-id)
                                  time (inst/read-instant-date
                                        (-> time
                                            (str/replace " " "T")
