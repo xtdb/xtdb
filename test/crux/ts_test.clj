@@ -23,7 +23,7 @@
       (println "Using KV backend:" f/*kv-backend*))
     (f)))
 
-(def ^:const conditions-chunk-size 10000)
+(def ^:const conditions-chunk-size 100)
 
 (defn submit-ts-weather-data
   ([tx-log]
