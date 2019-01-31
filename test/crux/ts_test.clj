@@ -34,13 +34,11 @@
      (let [location-tx-ops (vec (for [location (line-seq locations-in)
                                       :let [[device-id location environment] (str/split location #",")
                                             id (keyword "location" device-id)
-                                            device-id (keyword device-id)
                                             location (keyword location)
                                             environment (keyword environment)]]
                                   [:crux.tx/put
                                    id
                                    {:crux.db/id id
-                                    :location/device-id device-id
                                     :location/location location
                                     :location/environment environment}]))]
        (db/submit-tx tx-log location-tx-ops)
