@@ -629,7 +629,7 @@
     (build root unknown-id)
     m))
 
-(def ^:const default-chunk-size 100000)
+(def ^:const default-chunk-size 1000000)
 
 (defn transact-rdf-triples
   ([kv triples]
