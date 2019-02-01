@@ -8,7 +8,8 @@
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.kafka :as k]
-            [crux.fixtures :as f]))
+            [crux.fixtures :as f])
+  (:import java.math.RoundingMode))
 
 (def ^:const weather-locations-csv-resource "ts/data/weather_med_locations.csv")
 (def ^:const weather-conditions-csv-resource "ts/data/weather_med_conditions.csv")
@@ -176,6 +177,79 @@
 ;; 2016-12-06 02:58:00-05 | weather-pro-000017 | arctic-000001 |       35.29 |    50.59
 ;; 2016-12-06 02:58:00-05 | weather-pro-000019 | arctic-000002 |       36.09 |    48.80
 ;; (10 rows)
+
+;; NOTE: Does not work with range, needs exact match
+
+(defn trunc ^double [d ^long scale]
+  (.doubleValue (.setScale (bigdec d) scale RoundingMode/HALF_UP)))
+
+(t/deftest weather-last-10-readings-from-outside-locations-test
+  (if run-ts-weather-tests?
+    (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000001
+               :swamp-000000
+               83.80
+               87.70]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000002
+               :field-000000
+               82.50
+               82.40]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000003
+               :field-000001
+               83.00
+               82.10]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000004
+               :field-000002
+               81.40
+               82.30]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000005
+               :arctic-000000
+               36.60
+               55.30]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000006
+               :swamp-000001
+               82.40
+               90.40]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000007
+               :swamp-000002
+               84.60
+               94.40]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000009
+               :swamp-000003
+               82.80
+               82.40]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000011
+               :field-000003
+               81.20
+               82.90]
+              [#inst "2016-12-06T02:58:00.000-05:00"
+               :location/weather-pro-000013
+               :arctic-000001
+               35.90
+               52.20]]
+             (for [[time device-id location temprature humidity]
+                   (q/q (q/db f/*kv*)
+                        '{:find [time device-id location temprature humidity]
+                          :where [[c :condition/time time]
+                                  [c :condition/time #inst "2016-12-06T07:58:00.000-00:00"]
+                                  [c :condition/device-id device-id]
+                                  [c :condition/temprature temprature]
+                                  [c :condition/humidity humidity]
+                                  [device-id :location/location location]
+                                  [device-id :location/environment :outside]]
+                          :order-by [[time :desc] [device-id :asc]]
+                          :limit 10
+                          :timeout 120000})]
+               [time device-id location (trunc temprature 2) (trunc humidity 2)])))
+    (t/is true "skipping")))
 
 ;; Hourly average, min, and max temperatures for "field" locations
 
