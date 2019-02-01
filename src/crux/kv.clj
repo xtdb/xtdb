@@ -27,6 +27,9 @@
   (kv-name [this]))
 ;; end::KvStore[]
 
+(s/def ::db-dir string?)
+(s/def ::sync? boolean?)
+
 (defn require-and-ensure-kv-record ^Class [record-class-name]
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))

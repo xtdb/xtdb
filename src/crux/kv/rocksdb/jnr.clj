@@ -28,6 +28,8 @@
   (^jnr.ffi.Pointer rocksdb_writeoptions_create [])
   (^void rocksdb_writeoptions_disable_WAL [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
                                            ^byte disable])
+  (^void rocksdb_writeoptions_set_sync [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                        ^byte v])
   (^void rocksdb_writeoptions_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
 
   (^jnr.ffi.Pointer rocksdb_open [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
@@ -173,14 +175,14 @@
 (s/def ::db-options string?)
 
 (s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+                         :opt-un [:crux.kv/sync?]
                          :opt [::db-options]))
 
 (def ^:private rocksdb_lz4_compression 4)
 
 (defrecord RocksJNRKv [db-dir]
   kv/KvStore
-  (open [this {:keys [db-dir
-                      crux.kv.rocksdb.jnr/db-options] :as options}]
+  (open [this {:keys [db-dir sync? crux.kv.rocksdb.jnr/db-options] :as options}]
     (init-rocksdb-jnr!)
     (s/assert ::options options)
     (let [opts (.rocksdb_options_create rocksdb)
@@ -199,7 +201,9 @@
                  (.rocksdb_options_destroy rocksdb opts)
                  (throw t)))
           write-options (.rocksdb_writeoptions_create rocksdb)]
-      (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1)
+      (if sync?
+        (.rocksdb_writeoptions_set_sync rocksdb write-options 1)
+        (.rocksdb_writeoptions_disable_WAL rocksdb write-options 1))
       (assoc this
              :db-dir db-dir
              :db db

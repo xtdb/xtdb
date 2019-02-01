@@ -53,6 +53,7 @@
 (s/def ::db-options #(instance? Options %))
 
 (s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+                         :opt-un [:crux.kv/sync?]
                          :opt [::db-options]))
 
 (def ^:private default-block-cache-size (* 128 1024 1024))
@@ -70,7 +71,7 @@
 
 (defrecord RocksKv [db-dir]
   kv/KvStore
-  (open [this {:keys [db-dir ^Options crux.kv.rocksdb/db-options] :as options}]
+  (open [this {:keys [db-dir sync? ^Options crux.kv.rocksdb/db-options] :as options}]
     (s/assert ::options options)
     (RocksDB/loadLibrary)
     (let [opts (doto (or db-options (Options.))
@@ -82,13 +83,16 @@
                                                       (.mkdirs))))
                (catch Throwable t
                  (.close opts)
-                 (throw t)))]
+                 (throw t)))
+          write-opts (WriteOptions.)]
+      (if sync?
+        (.setSync write-opts true)
+        (.setDisableWAL write-opts true))
       (assoc this
              :db-dir db-dir
              :db db
              :options opts
-             :write-options (doto (WriteOptions.)
-                              (.setDisableWAL true)))))
+             :write-options write-opts)))
 
   (new-snapshot [{:keys [^RocksDB db]}]
     (let [snapshot (.getSnapshot db)]

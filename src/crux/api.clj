@@ -165,9 +165,10 @@
 
   NOTE: requires any KV store dependencies on the classpath. The
   crux.kv.memdb.MemKv KV backend works without additional dependencies."
-  ^ICruxSystem [{:keys [db-dir kv-backend] :as options}]
+  ^ICruxSystem [{:keys [db-dir sync? kv-backend] :as options
+                 :or {sync? true}}]
   (require 'crux.bootstrap)
-  (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) options)
+  (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) (merge {:sync? sync?} options))
         tx-log (tx/->KvTxLog kv-store)
         object-store (lru/new-cached-object-store kv-store)
         indexer (tx/->KvIndexer kv-store tx-log object-store)]

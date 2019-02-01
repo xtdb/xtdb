@@ -102,6 +102,17 @@
       (finally
         (cio/delete-dir backup-dir)))))
 
+(t/deftest test-sanity-check-can-start-with-sync-enabled
+  (let [sync-dir (cio/create-tmpdir "kv-store-sync")]
+    (try
+      (with-open [sync-kv (b/start-kv-store {:db-dir (str sync-dir)
+                                             :sync? true
+                                             :kv-backend f/*kv-backend*})]
+        (kv/store sync-kv [[(bu/long->bytes 1) (.getBytes "Crux")]])
+        (t/is (= "Crux" (String. ^bytes (value sync-kv (bu/long->bytes 1))))))
+      (finally
+        (cio/delete-dir sync-dir)))))
+
 ;; TODO: These helpers convert back and forth to bytes, would be good
 ;; to get rid of this, but that requires changing removing the byte
 ;; arrays above in the tests. The tested code uses buffers internally.

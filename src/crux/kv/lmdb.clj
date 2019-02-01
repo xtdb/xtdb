@@ -145,11 +145,12 @@
           (when-not (= LMDB/MDB_NOTFOUND rc)
             (success? rc)))))))
 
-(def default-env-flags (bit-or LMDB/MDB_WRITEMAP
-                               LMDB/MDB_MAPASYNC
-                               LMDB/MDB_NOMETASYNC
-                               LMDB/MDB_NOTLS
-                               LMDB/MDB_NORDAHEAD))
+(def ^:const default-env-flags (bit-or LMDB/MDB_WRITEMAP
+                                       LMDB/MDB_NOTLS
+                                       LMDB/MDB_NORDAHEAD))
+
+(def ^:const no-sync-env-flags (bit-or LMDB/MDB_MAPASYNC
+                                       LMDB/MDB_NOMETASYNC))
 
 (defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
   kv/KvIterator
@@ -190,6 +191,7 @@
 (s/def ::env-flags nat-int?)
 
 (s/def ::options (s/keys :req-un [:crux.kv/db-dir]
+                         :opt-un [:crux.kv/sync?]
                          :opt [::env-flags]))
 
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
@@ -197,9 +199,13 @@
 
 (defrecord LMDBKv [db-dir env env-flags dbi]
   kv/KvStore
-  (open [this {:keys [db-dir crux.kv.lmdb/env-flags] :as options}]
+  (open [this {:keys [db-dir sync? crux.kv.lmdb/env-flags] :as options}]
     (s/assert ::options options)
-    (let [env-flags (or env-flags default-env-flags)
+    (let [env-flags (or env-flags
+                        (bit-or default-env-flags
+                                (if sync?
+                                  0
+                                  no-sync-env-flags)))
           env (env-create)]
       (try
         (env-open env db-dir env-flags)
