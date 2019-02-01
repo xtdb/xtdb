@@ -4,12 +4,15 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.db :as db]
+            [crux.kv :as kv]
             [crux.tx :as tx]
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.kafka :as k]
             [crux.fixtures :as f])
-  (:import java.math.RoundingMode))
+  (:import java.math.RoundingMode
+           java.util.Date
+           java.time.temporal.ChronoUnit))
 
 (def ^:const weather-locations-csv-resource "ts/data/weather_med_locations.csv")
 (def ^:const weather-conditions-csv-resource "ts/data/weather_med_conditions.csv")
@@ -127,10 +130,10 @@
               [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000008 58.30000000000005,40.4]
               [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000009 82.80000000000047,82.40000000000013]]
              (q/q (q/db f/*kv*)
-                  '{:find [time device-id temprature humidity]
+                  '{:find [time device-id temperature humidity]
                     :where [[c :condition/time time]
                             [c :condition/device-id device-id]
-                            [c :condition/temprature temprature]
+                            [c :condition/temprature temperature]
                             [c :condition/humidity humidity]
                             [(>= time #inst "2016-12-06T07:58:00.000-00:00")]]
                     :order-by [[time :desc] [device-id :asc]]
@@ -235,20 +238,20 @@
                :arctic-000001
                35.90
                52.20]]
-             (for [[time device-id location temprature humidity]
+             (for [[time device-id location temperature humidity]
                    (q/q (q/db f/*kv*)
-                        '{:find [time device-id location temprature humidity]
+                        '{:find [time device-id location temperature humidity]
                           :where [[c :condition/time time]
                                   [c :condition/time #inst "2016-12-06T07:58:00.000-00:00"]
                                   [c :condition/device-id device-id]
-                                  [c :condition/temprature temprature]
+                                  [c :condition/temprature temperature]
                                   [c :condition/humidity humidity]
                                   [device-id :location/location location]
                                   [device-id :location/environment :outside]]
                           :order-by [[time :desc] [device-id :asc]]
                           :limit 10
                           :timeout 120000})]
-               [time device-id location (trunc temprature 2) (trunc humidity 2)])))
+               [time device-id location (trunc temperature 2) (trunc humidity 2)])))
     (t/is true "skipping")))
 
 ;; Hourly average, min, and max temperatures for "field" locations
@@ -290,6 +293,40 @@
 ;; 2016-11-16 05:00:00-05 |    78.39 |    69.49 |    83.60
 ;; 2016-11-16 06:00:00-05 |    78.42 |    69.49 |    84.40
 ;; (24 rows)
+
+;; TODO: Using the field- filter slows everything down. Add in the
+;; actual results.
+
+(defn kw-starts-with? [kw prefix]
+  (str/starts-with? (name kw) prefix))
+
+(t/deftest weather-hourly-average-min-max-temperatures-for-field-locations
+  (if run-ts-weather-tests?
+    (t/is (= []
+             (with-open [snapshot (kv/new-snapshot f/*kv*)]
+               (->> (for [[time temperature]
+                          (q/q (q/db f/*kv*)
+                               snapshot
+                               '{:find [time temperature]
+                                 :where [[c :condition/time time]
+                                         [c :condition/temprature temperature]
+                                         [c :condition/device-id device-id]
+                                         [device-id :location/location location]
+                                         [(crux.ts-test/kw-starts-with? location "field-")]
+                                         [(< time #inst "2016-11-17")]]
+                                 :order-by [[time :asc]]
+                                 :timeout 120000})]
+                      [(Date/from (.truncatedTo (.toInstant ^Date time) ChronoUnit/HOURS))
+                       temperature])
+                    (partition-by first)
+                    (take 24)
+                    (mapv (fn [group]
+                            (let [vals (sort (mapv second group))]
+                              [(ffirst group)
+                               (trunc (/ (reduce + vals) (count group)) 2)
+                               (trunc (first vals) 2)
+                               (trunc (last vals) 2)])))))))
+    (t/is true "skipping")))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
 ;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_med.tar.gz
