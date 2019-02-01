@@ -23,7 +23,7 @@
       (println "Using KV backend:" f/*kv-backend*))
     (f)))
 
-(def ^:const conditions-chunk-size 100)
+(def ^:const conditions-chunk-size 1000)
 
 (defn submit-ts-weather-data
   ([tx-log]
@@ -48,22 +48,30 @@
              (fn [n chunk]
                (db/submit-tx
                 tx-log
-                (vec (for [condition chunk
+                (->> (for [condition chunk
                            :let [[time device-id temprature humidity] (str/split condition #",")
-                                 id (keyword "condition" device-id)
-                                 device-id (keyword "location" device-id)
                                  time (inst/read-instant-date
                                        (-> time
                                            (str/replace " " "T")
-                                           (str/replace #"-(\d\d)$" ".000-$1:00")))]]
-                       [:crux.tx/put
-                        id
-                        {:crux.db/id id
-                         :condition/time time
-                         :condition/device-id device-id
-                         :condition/temprature (Double/parseDouble temprature)
-                         :condition/humidity (Double/parseDouble humidity)}
-                        time])))
+                                           (str/replace #"-(\d\d)$" ".000-$1:00")))
+                                 ts-id (keyword "condition" (str device-id "_" (inst-ms time)))
+                                 current-id (keyword "current-condition" device-id)
+                                 location-device-id (keyword "location" device-id)]]
+                       [[:crux.tx/put
+                         ts-id
+                         {:crux.db/id ts-id
+                          :condition/time time
+                          :condition/device-id location-device-id
+                          :condition/temprature (Double/parseDouble temprature)
+                          :condition/humidity (Double/parseDouble humidity)}
+                         time]
+                        [:crux.tx/put
+                         current-id
+                         {:crux.db/id current-id
+                          :current-condition/device-id location-device-id
+                          :current-condition/condition ts-id}
+                         time]])
+                     (reduce into [])))
                (+ n (count chunk)))
              (count location-tx-ops)))))))
 
