@@ -107,27 +107,32 @@
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-weather
 ;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_med.tar.gz
 
-;; TODO: Doesn't work, as this isn't really how Crux works.
+;; NOTE: Results in link above doesn't match actual data, test is
+;; adjusted for this.
+
+;; TODO: Without a date range this is extremely slow as it has to read
+;; everything and then reverse it.
 
 (t/deftest weather-last-10-readings-test
   (if run-ts-weather-tests?
-    (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000000 84.10000000000034 83.70000000000053]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000001 35.999999999999915 51.79999999999994]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000002 68.90000000000006 63.09999999999999]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000003 83.70000000000041 84.69999999999989]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000004 83.10000000000039 84.00000000000051]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000005 85.10000000000034 81.70000000000017]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000006 61.09999999999999 49.800000000000026]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000007 82.9000000000004 84.80000000000047]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000008 58.599999999999966 40.2]
-              [#inst "2016-12-06T02:58:00.000-05:00" :weather-pro-000009 61.000000000000014 49.399999999999906]]
+    (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000000 60.2 52.500000000000064]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000001 83.80000000000041 87.69999999999993]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000002 82.50000000000043 82.4000000000006]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000003 83.0000000000004 82.10000000000062]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000004 81.40000000000049 82.30000000000061]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000005 36.59999999999992 55.29999999999999]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000006 82.40000000000049,90.40000000000029]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000007 84.60000000000036,94.39999999999971]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000008 58.30000000000005,40.4]
+              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000009 82.80000000000047,82.40000000000013]]
              (q/q (q/db f/*kv*)
                   '{:find [time device-id temprature humidity]
                     :where [[c :condition/time time]
                             [c :condition/device-id device-id]
                             [c :condition/temprature temprature]
-                            [c :condition/humidity humidity]]
-                    :order-by [[time :desc]]
+                            [c :condition/humidity humidity]
+                            [(>= time #inst "2016-12-06T07:58:00.000-00:00")]]
+                    :order-by [[time :desc] [device-id :asc]]
                     :limit 10})))
     (t/is true "skipping")))
 
