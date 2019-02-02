@@ -52,30 +52,22 @@
              (fn [n chunk]
                (db/submit-tx
                 tx-log
-                (->> (for [condition chunk
-                           :let [[time device-id temprature humidity] (str/split condition #",")
-                                 time (inst/read-instant-date
-                                       (-> time
-                                           (str/replace " " "T")
-                                           (str/replace #"-(\d\d)$" ".000-$1:00")))
-                                 ts-id (keyword "condition" (str device-id "_" (inst-ms time)))
-                                 current-id (keyword "current-condition" device-id)
-                                 location-device-id (keyword "location" device-id)]]
-                       [[:crux.tx/put
-                         ts-id
-                         {:crux.db/id ts-id
-                          :condition/time time
-                          :condition/device-id location-device-id
-                          :condition/temprature (Double/parseDouble temprature)
-                          :condition/humidity (Double/parseDouble humidity)}
-                         time]
-                        [:crux.tx/put
-                         current-id
-                         {:crux.db/id current-id
-                          :current-condition/device-id location-device-id
-                          :current-condition/condition ts-id}
-                         time]])
-                     (reduce into [])))
+                (for [condition chunk
+                      :let [[time device-id temprature humidity] (str/split condition #",")
+                            time (inst/read-instant-date
+                                  (-> time
+                                      (str/replace " " "T")
+                                      (str/replace #"-(\d\d)$" ".000-$1:00")))
+                            condition-id (keyword "condition" device-id)
+                            location-device-id (keyword "location" device-id)]]
+                  [:crux.tx/put
+                   condition-id
+                   {:crux.db/id condition-id
+                    :condition/time time
+                    :condition/device-id location-device-id
+                    :condition/temprature (Double/parseDouble temprature)
+                    :condition/humidity (Double/parseDouble humidity)}
+                   time]))
                (+ n (count chunk)))
              (count location-tx-ops)))))))
 
