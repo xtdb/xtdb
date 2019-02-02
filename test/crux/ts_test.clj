@@ -117,6 +117,33 @@
 ;; TODO: Without a date range this is extremely slow as it has to read
 ;; everything and then reverse it.
 
+;; Using lower level APIs, much faster. Doesn't use time line but
+;; actual history, so extra current-condition structure isn't really
+;; needed.  Note that the AEV index is slower than necessary, as it
+;; could skip straight to the right version as it knows this from the
+;; entity. Currently this degrades with history size. This requires
+;; swapping position of value and content hash in the index. Similar
+;; issue would be there for AVE, but this already uses the content
+;; hash to directly jump to the right version, if it exists.
+(comment
+  (time
+   (let [db (q/db (:kv-store system))]
+     (with-open [snapshot (kv/new-snapshot (:kv-store system))]
+       (sort-by :crux.db/id
+                (for [c (vals (crux.db/get-objects (:object-store system) snapshot
+                                                   (vec (for [eid [:current-condition/weather-pro-000000
+                                                                   :current-condition/weather-pro-000001
+                                                                   :current-condition/weather-pro-000002
+                                                                   :current-condition/weather-pro-000003
+                                                                   :current-condition/weather-pro-000004
+                                                                   :current-condition/weather-pro-000005
+                                                                   :current-condition/weather-pro-000006
+                                                                   :current-condition/weather-pro-000007
+                                                                   :current-condition/weather-pro-000008
+                                                                   :current-condition/weather-pro-000009]]
+                                                          (:content-hash (first (crux.index/entity-history snapshot eid 1)))))))]
+                  (q/entity db (:current-condition/condition c))))))))
+
 (t/deftest weather-last-10-readings-test
   (if run-ts-weather-tests?
     (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000000 60.2 52.500000000000064]
