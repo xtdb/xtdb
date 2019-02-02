@@ -1,5 +1,9 @@
 = Getting Started
 
+NOTE: TODO, drop the approach of doing a `lein install` to play with
+Crux. Walk users through the minimal dependency setup to get a
+kafka-less instance running so that they can play with it.
+
 == Dependency
 
 As Crux is in development, the best route is to clone the
@@ -83,6 +87,10 @@ If you want to play around with Crux without using Kafka, you can try
 using Crux <<#standalone,standalone>> which uses in-memory event logs.
 
 === Embedded Kafka
+
+NOTE: TODO, write up the simple case of connecting to a running Kakfa
+- go through the steps outlined in
+https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html
 
 Add Kafka and Zookeeper to your project dependencies:
 
