@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.db :as db]
+            [crux.index :as idx]
             [crux.kv :as kv]
             [crux.tx :as tx]
             [crux.lru :as lru]
@@ -121,20 +122,20 @@
   (time
    (let [db (q/db (:kv-store system))]
      (with-open [snapshot (kv/new-snapshot (:kv-store system))]
-       (sort-by :crux.db/id
-                (for [c (vals (crux.db/get-objects (:object-store system) snapshot
-                                                   (vec (for [eid [:current-condition/weather-pro-000000
-                                                                   :current-condition/weather-pro-000001
-                                                                   :current-condition/weather-pro-000002
-                                                                   :current-condition/weather-pro-000003
-                                                                   :current-condition/weather-pro-000004
-                                                                   :current-condition/weather-pro-000005
-                                                                   :current-condition/weather-pro-000006
-                                                                   :current-condition/weather-pro-000007
-                                                                   :current-condition/weather-pro-000008
-                                                                   :current-condition/weather-pro-000009]]
-                                                          (:content-hash (first (crux.index/entity-history snapshot eid 1)))))))]
-                  (q/entity db (:current-condition/condition c))))))))
+       (->> (for [eid [:condition/weather-pro-000000
+                       :condition/weather-pro-000001
+                       :condition/weather-pro-000002
+                       :condition/weather-pro-000003
+                       :condition/weather-pro-000004
+                       :condition/weather-pro-000005
+                       :condition/weather-pro-000006
+                       :condition/weather-pro-000007
+                       :condition/weather-pro-000008
+                       :condition/weather-pro-000009]]
+              (:content-hash (first (idx/entity-history snapshot eid 1))))
+            (db/get-objects (:object-store system) snapshot)
+            (vals)
+            (sort-by :crux.db/id))))))
 
 (t/deftest weather-last-10-readings-test
   (if run-ts-weather-tests?

@@ -8,6 +8,7 @@
             [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
+            [crux.db :as db]
             [crux.index :as idx]
             [crux.kafka.embedded :as ek]
             [crux.kv :as kv]
@@ -16,7 +17,8 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.memory :as mem]
-            [crux.rdf :as rdf])
+            [crux.rdf :as rdf]
+            [crux.query :as q])
   (:import [crux.api LocalNode ICruxSystem]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
