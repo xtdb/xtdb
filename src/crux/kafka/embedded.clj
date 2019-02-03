@@ -4,7 +4,7 @@
   Requires org.apache.kafka/kafka_2.11 and
   org.apache.zookeeper/zookeeper on the classpath."
   (:require [clojure.java.io :as io]
-            [crux.io]
+            [crux.io :as cio]
             [clojure.spec.alpha :as s])
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
@@ -44,6 +44,7 @@
   (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir]
    (start-zookeeper data-dir default-zookeeper-port))
   (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir ^long port]
+   (cio/delete-dir data-dir)
    (let [tick-time 500
          max-connections 16
          server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
