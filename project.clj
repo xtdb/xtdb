@@ -9,7 +9,7 @@
                  [org.slf4j/slf4j-api "1.7.25"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 [org.agrona/agrona "0.9.29"]
+                 [org.agrona/agrona "0.9.31"]
                  ;; Provided dependencies included in uberjar.
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
@@ -21,8 +21,8 @@
                  [org.lwjgl/lwjgl-lmdb "3.2.1" :scope "provided"]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.2" :exclusions [commons-io] :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.2" :scope "provided"]]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3" :exclusions [commons-io] :scope "provided"]
+                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.3" :scope "provided"]]
   :profiles { ;; Provided dependencies excluded from uberjar.
              :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.0"]
                                        [org.apache.zookeeper/zookeeper "3.4.13"
@@ -46,10 +46,10 @@
                                                 org.ow2.asm/asm-tree
                                                 org.ow2.asm/asm-util]]
                                   [com.github.ben-manes.caffeine/caffeine "2.6.2"]
-                                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.2"]
-                                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.2"
+                                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.3"]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.3"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
-                                  [org.eclipse.rdf4j/rdf4j-repository-sparql "2.4.2"]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sparql "2.4.3"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]
