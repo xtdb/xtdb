@@ -15,6 +15,7 @@
 ;; Based on:
 ;; https://github.com/pingles/clj-kafka/blob/master/test/clj_kafka/test/utils.clj
 ;; https://github.com/chbatey/kafka-unit/blob/master/src/main/java/info/batey/kafka/unit/KafkaUnit.java
+;; https://github.com/apache/curator/blob/master/curator-test/src/main/java/org/apache/curator/test/TestingZooKeeperMain.java
 
 (def ^:dynamic ^String *host* "localhost")
 (def ^:dynamic ^String *broker-id* "0")
