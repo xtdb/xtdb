@@ -9,7 +9,7 @@
   (:import [kafka.server
             KafkaConfig KafkaServerStartable]
            [org.apache.zookeeper.server
-            ServerCnxnFactory ServerCnxnFactory ZooKeeperServer]
+            ServerCnxnFactory ZooKeeperServer]
            java.io.Closeable))
 
 ;; Based on:
@@ -50,7 +50,15 @@
        (.startup server)))))
 
 (defn stop-zookeeper [^ServerCnxnFactory server-cnxn-factory]
-  (some-> ^ServerCnxnFactory server-cnxn-factory .shutdown))
+  (when server-cnxn-factory
+    (.shutdown server-cnxn-factory)
+    (when-let [server ^ZooKeeperServer (.invoke (doto (.getDeclaredMethod ServerCnxnFactory
+                                                                          "getZooKeeperServer"
+                                                                          (make-array Class 0))
+                                                  (.setAccessible true))
+                                                server-cnxn-factory (object-array 0))]
+      (.shutdown server)
+      (some-> (.getZKDatabase server) (.close)))))
 
 (defrecord EmbeddedKafka [zookeeper kafka options]
   Closeable
