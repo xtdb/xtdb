@@ -96,7 +96,8 @@
                                           :as options}]
   (-> (kv/new-kv-store kv-backend)
       (lru/new-cache-providing-kv-store)
-      (kv/open options)))
+      (kv/open options)
+      (idx/check-and-store-index-version)))
 
 (defn- read-kafka-properties-file [f]
   (when f

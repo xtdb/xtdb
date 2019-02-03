@@ -15,18 +15,18 @@
 
 ;; Indexes
 
+(def ^:const index-version 1)
+(def ^:const index-version-size Long/BYTES)
+
 (def ^:const index-id-size Byte/BYTES)
 
 (def ^:const ^:private content-hash->doc-index-id 0)
-
 (def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
 (def ^:const ^:private attribute+entity+value+content-hash-index-id 2)
-
 (def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 3)
-
 (def ^:const ^:private meta-key->value-index-id 4)
-
 (def ^:const ^:private tx-id->tx-index-id 5)
+(def ^:const ^:private index-version-index-id 6)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
@@ -509,3 +509,17 @@
     (assert (= tx-id->tx-index-id index-id))
     {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
      :crux.tx/tx-time (Date. (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))
+
+(defn encode-index-version-key-to ^MutableDirectBuffer [^MutableDirectBuffer b]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
+    (.putByte b 0 index-version-index-id)
+    (mem/limit-buffer b index-id-size)))
+
+(defn encode-index-version-value-to ^MutableDirectBuffer [^MutableDirectBuffer b ^long version]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-version-size))]
+    (doto b
+      (.putLong 0 version ByteOrder/BIG_ENDIAN))
+    (mem/limit-buffer b index-version-size)))
+
+(defn decode-index-version-value-from ^long [^MutableDirectBuffer b]
+  (.getLong b 0 ByteOrder/BIG_ENDIAN))

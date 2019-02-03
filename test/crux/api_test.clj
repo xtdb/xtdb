@@ -21,7 +21,7 @@
   (t/testing "status"
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
-              :crux.kv/estimate-num-keys 0
+              :crux.kv/estimate-num-keys 1
               :crux.tx-log/consumer-state nil}
              (dissoc (.status f/*api*) :crux.kv/size))))
 
