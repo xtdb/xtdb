@@ -7,7 +7,7 @@ target
 *.log
 /setprofiler.sh
 /data
-/dev-storage
+/dev-storage*
 /website/aero-deploy.tar.gz
 /docs/index.html
 /docs/docs.zip

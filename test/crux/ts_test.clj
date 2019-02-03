@@ -14,8 +14,8 @@
            java.util.Date
            java.time.temporal.ChronoUnit))
 
-(def ^:const weather-locations-csv-resource "ts/data/weather_med_locations.csv")
-(def ^:const weather-conditions-csv-resource "ts/data/weather_med_conditions.csv")
+(def ^:const weather-locations-csv-resource "ts/data/weather_small_locations.csv")
+(def ^:const weather-conditions-csv-resource "ts/data/weather_small_conditions.csv")
 
 (def run-ts-weather-tests? (boolean (and (io/resource weather-locations-csv-resource)
                                          (io/resource weather-conditions-csv-resource)
@@ -52,22 +52,22 @@
              (fn [n chunk]
                (db/submit-tx
                 tx-log
-                (for [condition chunk
-                      :let [[time device-id temprature humidity] (str/split condition #",")
-                            time (inst/read-instant-date
-                                  (-> time
-                                      (str/replace " " "T")
-                                      (str/replace #"-(\d\d)$" ".000-$1:00")))
-                            condition-id (keyword "condition" device-id)
-                            location-device-id (keyword "location" device-id)]]
-                  [:crux.tx/put
-                   condition-id
-                   {:crux.db/id condition-id
-                    :condition/time time
-                    :condition/device-id location-device-id
-                    :condition/temprature (Double/parseDouble temprature)
-                    :condition/humidity (Double/parseDouble humidity)}
-                   time]))
+                (vec (for [condition chunk
+                           :let [[time device-id temprature humidity] (str/split condition #",")
+                                 time (inst/read-instant-date
+                                       (-> time
+                                           (str/replace " " "T")
+                                           (str/replace #"-(\d\d)$" ".000-$1:00")))
+                                 condition-id (keyword "condition" device-id)
+                                 location-device-id (keyword "location" device-id)]]
+                       [:crux.tx/put
+                        condition-id
+                        {:crux.db/id condition-id
+                         :condition/time time
+                         :condition/device-id location-device-id
+                         :condition/temprature (Double/parseDouble temprature)
+                         :condition/humidity (Double/parseDouble humidity)}
+                        time])))
                (+ n (count chunk)))
              (count location-tx-ops)))))))
 
@@ -93,7 +93,7 @@
         (while (not= {:txs 0 :docs 0}
                      (k/consume-and-index-entities
                       (assoc consume-args :timeout 100))))
-        (t/is (= 15001000 @submit-future))
+        (t/is (= 1001000 @submit-future))
         (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))
       (f))
     (f)))
@@ -101,7 +101,7 @@
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-kv-backend-from-env f/with-kv-store with-ts-weather-data)
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-weather
-;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_med.tar.gz
+;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
 
 ;; NOTE: Results in link above doesn't match actual data, test is
 ;; adjusted for this.
@@ -348,7 +348,7 @@
     (t/is true "skipping")))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
-;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_med.tar.gz
+;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
 
 ;; 10 most recent battery temperature readings for charging devices
 
