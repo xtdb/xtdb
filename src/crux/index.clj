@@ -409,18 +409,24 @@
 
 ;; Utils
 
-(defn check-and-store-index-version [kv]
+(defn current-index-version [kv]
   (with-open [snapshot (kv/new-snapshot kv)
               i (kv/new-iterator snapshot)]
     (let [seek-k (c/encode-index-version-key-to nil)]
-      (if-let [k (kv/seek (new-prefix-kv-iterator i seek-k) seek-k)]
-        (let [index-version (c/decode-index-version-value-from (kv/value i))]
-          (when (not= c/index-version index-version)
-            (throw (IllegalStateException.
-                    (str "Index version on disk: " index-version " does not match index version of code: " c/index-version)))))
-        (kv/store kv [[(c/encode-index-version-key-to nil)
-                       (c/encode-index-version-value-to nil c/index-version)]]))))
+      (when-let [k (kv/seek (new-prefix-kv-iterator i seek-k) seek-k)]
+        (c/decode-index-version-value-from (kv/value i))))))
+
+(defn check-and-store-index-version [kv]
+  (if-let [index-version (current-index-version kv)]
+    (when (not= c/index-version index-version)
+      (throw (IllegalStateException.
+              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
+    (kv/store kv [[(c/encode-index-version-key-to nil)
+                   (c/encode-index-version-value-to nil c/index-version)]]))
   kv)
+
+(defn index-status [kv]
+  {:crux.index/index-version (current-index-version kv)})
 
 ;; NOTE: We need to copy the keys and values here, as the originals
 ;; returned by the iterator will (may) get invalidated by the next

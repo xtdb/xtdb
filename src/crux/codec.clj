@@ -15,6 +15,7 @@
 
 ;; Indexes
 
+;; NOTE: Must be updated when existing indexes change structure.
 (def ^:const index-version 1)
 (def ^:const index-version-size Long/BYTES)
 

@@ -11,5 +11,6 @@
 (defn status-map [{:keys [kv-store indexer consumer-config]} {:keys [tx-topic] :as options}]
   (merge
    (kv/kv-status kv-store)
+   (idx/index-status kv-store)
    (k/zk-status consumer-config)
    (k/consumer-status indexer)))
