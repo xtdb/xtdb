@@ -54,7 +54,7 @@
                (db/submit-tx
                 tx-log
                 (vec (for [condition chunk
-                           :let [[time device-id temprature humidity] (str/split condition #",")
+                           :let [[time device-id temperature humidity] (str/split condition #",")
                                  time (inst/read-instant-date
                                        (-> time
                                            (str/replace " " "T")
@@ -66,7 +66,7 @@
                         {:crux.db/id condition-id
                          :condition/time time
                          :condition/device-id location-device-id
-                         :condition/temprature (Double/parseDouble temprature)
+                         :condition/temperature (Double/parseDouble temperature)
                          :condition/humidity (Double/parseDouble humidity)}
                         time])))
                (+ n (count chunk)))
@@ -107,55 +107,63 @@
 ;; NOTE: Results in link above doesn't match actual data, test is
 ;; adjusted for this.
 
-;; TODO: Without a date range this is extremely slow as it has to read
-;; everything and then reverse it.
+;; NOTE: Does not work with range, takes latest values.
 
-;; Using lower level APIs, much faster. Doesn't use time line but
-;; actual history, so extra current-condition structure isn't really
-;; needed.  Note that the AEV index is slower than necessary, as it
-;; could skip straight to the right version as it knows this from the
+;; NOTE: the AEV index is slower than necessary, as it could skip
+;; straight to the right version as it knows this from the
 ;; entity. Currently this degrades with history size. This requires
 ;; swapping position of value and content hash in the index. Similar
 ;; issue would be there for AVE, but this already uses the content
 ;; hash to directly jump to the right version, if it exists.
-(comment
-  (time
-   (let [db (q/db (:kv-store system))]
-     (with-open [snapshot (kv/new-snapshot (:kv-store system))]
-       (->> (for [eid [:condition/weather-pro-000000
-                       :condition/weather-pro-000001
-                       :condition/weather-pro-000002
-                       :condition/weather-pro-000003
-                       :condition/weather-pro-000004
-                       :condition/weather-pro-000005
-                       :condition/weather-pro-000006
-                       :condition/weather-pro-000007
-                       :condition/weather-pro-000008
-                       :condition/weather-pro-000009]]
-              (:content-hash (first (idx/entity-history snapshot eid 1))))
-            (db/get-objects (:object-store system) snapshot)
-            (vals)
-            (sort-by :crux.db/id))))))
 
 (t/deftest weather-last-10-readings-test
   (if run-ts-weather-tests?
-    (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000000 60.2 52.500000000000064]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000001 83.80000000000041 87.69999999999993]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000002 82.50000000000043 82.4000000000006]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000003 83.0000000000004 82.10000000000062]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000004 81.40000000000049 82.30000000000061]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000005 36.59999999999992 55.29999999999999]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000006 82.40000000000049,90.40000000000029]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000007 84.60000000000036,94.39999999999971]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000008 58.30000000000005,40.4]
-              [#inst "2016-12-06T02:58:00.000-05:00" :location/weather-pro-000009 82.80000000000047,82.40000000000013]]
+    (t/is (= [[#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000000
+               42.0
+               54.600000000000094]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000001
+               42.0
+               54.49999999999998]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000002
+               42.0
+               55.200000000000074]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000003
+               42.0
+               52.70000000000004]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000004
+               70.00000000000004
+               49.000000000000014]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000005
+               70.30000000000014
+               48.60000000000001]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000006
+               42.0
+               50.00000000000003]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000007
+               69.89999999999998
+               49.50000000000002]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000008
+               42.0
+               53.70000000000008]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000009
+               91.0
+               92.40000000000006]]
              (q/q (q/db f/*kv*)
                   '{:find [time device-id temperature humidity]
                     :where [[c :condition/time time]
                             [c :condition/device-id device-id]
-                            [c :condition/temprature temperature]
-                            [c :condition/humidity humidity]
-                            [(>= time #inst "2016-12-06T07:58:00.000-00:00")]]
+                            [c :condition/temperature temperature]
+                            [c :condition/humidity humidity]]
                     :order-by [[time :desc] [device-id :asc]]
                     :limit 10})))
     (t/is true "skipping")))
@@ -201,70 +209,69 @@
 ;; 2016-12-06 02:58:00-05 | weather-pro-000019 | arctic-000002 |       36.09 |    48.80
 ;; (10 rows)
 
-;; NOTE: Does not work with range, needs exact match
+;; NOTE: Does not work with range, takes latest values.
 
 (defn trunc ^double [d ^long scale]
   (.doubleValue (.setScale (bigdec d) scale RoundingMode/HALF_UP)))
 
 (t/deftest weather-last-10-readings-from-outside-locations-test
   (if run-ts-weather-tests?
-    (t/is (= [[#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000001
-               :swamp-000000
-               83.80
-               87.70]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000002
-               :field-000000
-               82.50
-               82.40]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000003
-               :field-000001
-               83.00
-               82.10]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000004
-               :field-000002
-               81.40
-               82.30]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000005
+    (t/is (= [[#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000000
                :arctic-000000
-               36.60
-               55.30]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000006
-               :swamp-000001
-               82.40
-               90.40]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000007
-               :swamp-000002
-               84.60
-               94.40]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000009
-               :swamp-000003
-               82.80
-               82.40]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000011
-               :field-000003
-               81.20
-               82.90]
-              [#inst "2016-12-06T02:58:00.000-05:00"
-               :location/weather-pro-000013
+               42.0
+               54.6]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000001
                :arctic-000001
-               35.90
-               52.20]]
+               42.0
+               54.5]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000002
+               :arctic-000002
+               42.0
+               55.2]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000003
+               :arctic-000003
+               42.0
+               52.7]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000006
+               :arctic-000004
+               42.0
+               50.0]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000008
+               :arctic-000005
+               42.0
+               53.7]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000009
+               :swamp-000000
+               91.0
+               92.4]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000012
+               :swamp-000001
+               91.0
+               94.3]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000017
+               :swamp-000002
+               91.0
+               90.5]
+              [#inst "2016-11-16T21:18:00.000-00:00"
+               :location/weather-pro-000018
+               :swamp-000003
+               91.0
+               96.9]]
              (for [[time device-id location temperature humidity]
                    (q/q (q/db f/*kv*)
                         '{:find [time device-id location temperature humidity]
                           :where [[c :condition/time time]
-                                  [c :condition/time #inst "2016-12-06T07:58:00.000-00:00"]
                                   [c :condition/device-id device-id]
-                                  [c :condition/temprature temperature]
+                                  [c :condition/temperature temperature]
                                   [c :condition/humidity humidity]
                                   [device-id :location/location location]
                                   [device-id :location/environment :outside]]
@@ -314,38 +321,63 @@
 ;; 2016-11-16 06:00:00-05 |    78.42 |    69.49 |    84.40
 ;; (24 rows)
 
-;; TODO: Using the field- filter slows everything down. Add in the
-;; actual results.
+;; TODO: Reading of history and documents could be made lazy via merge
+;; sort. Would require one iterator per entity though to be open for
+;; its history seq.
+
+;; NOTE: Assumes locations are stable over time.
 
 (defn kw-starts-with? [kw prefix]
   (str/starts-with? (name kw) prefix))
 
 (t/deftest weather-hourly-average-min-max-temperatures-for-field-locations
   (if run-ts-weather-tests?
-    (t/is (= []
+    (t/is (= [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
+              [#inst "2016-11-15T13:00:00.000-00:00" 74.43 68.7 80.4]
+              [#inst "2016-11-15T14:00:00.000-00:00" 75.44 69.5 81.4]
+              [#inst "2016-11-15T15:00:00.000-00:00" 76.47 70.5 82.7]
+              [#inst "2016-11-15T16:00:00.000-00:00" 77.48 71.5 83.4]
+              [#inst "2016-11-15T17:00:00.000-00:00" 78.46 72.5 84.6]
+              [#inst "2016-11-15T18:00:00.000-00:00" 79.45 73.5 85.5]
+              [#inst "2016-11-15T19:00:00.000-00:00" 80.42 74.8 86.5]
+              [#inst "2016-11-15T20:00:00.000-00:00" 81.41 75.6 87.4]
+              [#inst "2016-11-15T21:00:00.000-00:00" 82.42 76.1 88.4]
+              [#inst "2016-11-15T22:00:00.000-00:00" 83.4 77.0 89.5]
+              [#inst "2016-11-15T23:00:00.000-00:00" 84.38 78.3 90.0]
+              [#inst "2016-11-16T00:00:00.000-00:00" 85.35 79.3 90.0]
+              [#inst "2016-11-16T01:00:00.000-00:00" 85.27 78.8 90.0]
+              [#inst "2016-11-16T02:00:00.000-00:00" 84.26 77.7 89.4]
+              [#inst "2016-11-16T03:00:00.000-00:00" 83.25 76.5 88.5]
+              [#inst "2016-11-16T04:00:00.000-00:00" 82.24 75.3 87.9]
+              [#inst "2016-11-16T05:00:00.000-00:00" 81.23 74.1 87.2]
+              [#inst "2016-11-16T06:00:00.000-00:00" 80.21 72.6 86.3]
+              [#inst "2016-11-16T07:00:00.000-00:00" 79.19 71.5 84.9]
+              [#inst "2016-11-16T08:00:00.000-00:00" 78.17 71.1 84.2]
+              [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
+              [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
+              [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
              (with-open [snapshot (kv/new-snapshot f/*kv*)]
-               (->> (for [[time temperature]
-                          (q/q (q/db f/*kv*)
-                               snapshot
-                               '{:find [time temperature]
-                                 :where [[c :condition/time time]
-                                         [c :condition/temprature temperature]
-                                         [c :condition/device-id device-id]
-                                         [device-id :location/location location]
-                                         [(crux.ts-test/kw-starts-with? location "field-")]
-                                         [(< time #inst "2016-11-17")]]
-                                 :order-by [[time :asc]]
-                                 :timeout 120000})]
-                      [(Date/from (.truncatedTo (.toInstant ^Date time) ChronoUnit/HOURS))
-                       temperature])
-                    (partition-by first)
-                    (take 24)
-                    (mapv (fn [group]
-                            (let [vals (sort (mapv second group))]
-                              [(ffirst group)
-                               (trunc (/ (reduce + vals) (count group)) 2)
-                               (trunc (first vals) 2)
-                               (trunc (last vals) 2)])))))))
+               (let [object-store (lru/new-cached-object-store f/*kv*)
+                     condition-ids (->> (q/q (q/db f/*kv*)
+                                             '{:find [c]
+                                               :where [[c :condition/device-id device-id]
+                                                       [device-id :location/location location]
+                                                       [(crux.ts-test/kw-starts-with? location "field-")]]
+                                               :timeout 120000})
+                                        (reduce into []))]
+                 (->> (for [c condition-ids
+                            {:keys [content-hash]} (idx/entity-history snapshot c)]
+                        (-> (db/get-single-object object-store snapshot content-hash)
+                            (update :condition/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                      (sort-by :condition/time)
+                      (partition-by :condition/time)
+                      (take 24)
+                      (mapv (fn [group]
+                              (let [temperatures (sort (mapv :condition/temperature group))]
+                                [(:condition/time (first group))
+                                 (trunc (/ (reduce + temperatures) (count group)) 2)
+                                 (trunc (first temperatures) 2)
+                                 (trunc (last temperatures) 2)]))))))))
     (t/is true "skipping")))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices

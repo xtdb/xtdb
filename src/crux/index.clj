@@ -505,17 +505,20 @@
                     (distinct))]
       (entities-at snapshot eids business-time transact-time))))
 
+(defn entity-history-seq [i eid]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid))]
+    (for [[k v] (all-keys-in-prefix i seek-k true)]
+      (-> (c/decode-entity+bt+tt+tx-id-key-from k)
+          (enrich-entity-tx v)))))
+
 (defn entity-history
   ([snapshot eid]
    (entity-history snapshot eid Long/MAX_VALUE))
   ([snapshot eid n]
    (with-open [i (kv/new-iterator snapshot)]
-     (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid))]
-       (->> (for [[k v] (all-keys-in-prefix i seek-k true)]
-              (-> (c/decode-entity+bt+tt+tx-id-key-from k)
-                  (enrich-entity-tx v)))
-            (take n)
-            (vec))))))
+     (->> (entity-history-seq i eid)
+          (take n)
+          (vec)))))
 
 ;; Join
 
