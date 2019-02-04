@@ -181,6 +181,22 @@
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
 
+(defn- history-ascending [^ICruxSystem local-node request]
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+        db (db-for-request local-node body)
+        snapshot (.newSnapshot db)
+        history (.historyAscending db snapshot (c/new-id eid))]
+    (-> (streamed-edn-response snapshot history)
+        (add-last-modified (tx/latest-completed-tx-time (:indexer local-node))))))
+
+(defn- history-descending [^ICruxSystem local-node request]
+  (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
+        db (db-for-request local-node body)
+        snapshot (.newSnapshot db)
+        history (.historyDescending db snapshot (c/new-id eid))]
+    (-> (streamed-edn-response snapshot history)
+        (add-last-modified (tx/latest-completed-tx-time (:indexer local-node))))))
+
 (defn- transact [^ICruxSystem local-node request]
   (let [tx-ops (body->edn request)
         {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx local-node tx-ops)]
@@ -228,6 +244,12 @@
 
     [#"^/history/.+$" [:get :post]]
     (history local-node request)
+
+    [#"^/history-ascending/$" [:post]]
+    (history-ascending local-node request)
+
+    [#"^/history-ascending/$" [:post]]
+    (history-descending local-node request)
 
     [#"^/query$" [:post]]
     (query local-node request)

@@ -298,6 +298,20 @@
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
+  (historyAscending [this snapshot eid]
+    (let [in (api-request-sync (str url "/history-ascending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (register-stream-with-remote-stream! snapshot in)
+      (edn-list->lazy-seq in)))
+
+  (historyDescending [this snapshot eid]
+    (let [in (api-request-sync (str url "/history-descending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (register-stream-with-remote-stream! snapshot in)
+      (edn-list->lazy-seq in)))
+
   (businessTime [_]
     business-time)
 

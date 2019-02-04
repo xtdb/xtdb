@@ -1110,6 +1110,12 @@
   (q [this snapshot q]
     (crux.query/q this snapshot q))
 
+  (historyAscending [this snapshot eid]
+    (map c/entity-tx->edn (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid business-time transact-time)))
+
+  (historyDescending [this snapshot eid]
+    (map c/entity-tx->edn (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid business-time transact-time)))
+
   (businessTime [_]
     business-time)
 

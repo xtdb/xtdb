@@ -30,7 +30,9 @@ public interface ICruxDatasource {
     /**
      * Returns a new snapshot allowing for lazy query results in a
      * try-with-resources block using {@link #q(Closeable snapshot,
-     * Object query)}.
+     * Object query)}. Can also be used for {@link
+     * #historyAscending(Closeable snapshot, Object eid)} and {@link
+     * #historyDescending(Closeable snapshot, Object eid)}
      *
      * @return an implementation specific snapshot
      */
@@ -52,6 +54,26 @@ public interface ICruxDatasource {
      * @return         a lazy sequence of result tuples.
      */
     public Iterable<List> q(Closeable snapshot, Object query);
+
+    /**
+     * Retrieves entity history lazily in chronological order from and
+     * including the business time of the db.
+     *
+     * @param snapshot a snapshot from {@link #newSnapshot()}.
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         a lazy sequence of history.
+     */
+    public Iterable<Map> historyAscending(Closeable snapshot, Object eid);
+
+    /**
+     * Retrieves entity history lazily in reverse chronological order
+     * from and including the business time of the db.
+     *
+     * @param snapshot a snapshot from {@link #newSnapshot()}.
+     * @param eid      an object that can be coerced into an entity id.
+     * @return         a lazy sequence of history.
+     */
+    public Iterable<Map> historyDescending(Closeable snapshot, Object eid);
 
     /**
      * The business time of this db.
