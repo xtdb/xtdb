@@ -17,7 +17,7 @@
            org.apache.kafka.common.errors.TopicExistsException
            org.apache.kafka.common.TopicPartition))
 
-(s/def ::bootstrap-servers (s/and string? #(re-matches #"\w+:\d+(,\w+:\d+)*" %)))
+(s/def ::bootstrap-servers string?)
 (s/def ::group-id string?)
 (s/def ::topic string?)
 (s/def ::partitions pos-int?)
