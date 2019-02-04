@@ -1161,42 +1161,30 @@
 ;; run 3: 8690 37.78260869565217
 
 (comment
-  (def c (read-string (slurp "test/watdiv/watdiv_crux.edn")))
   (swap! (:cache-state (:kv-store system)) empty)
-  (doseq [{:keys [idx query crux-results crux-time]} (remove #(> 1000 (:crux-time %)) (remove :crux-error c))]
-    (prn :idx idx)
-    (prn query)
-    (prn :previous-results crux-results)
-    (prn :prevous-time crux-time)
-    (dotimes [n 3]
-      (let [start (System/currentTimeMillis)]
-        (assert (= crux-results
-                   (count (.q (.db system)
-                              (crux.sparql/sparql->datalog query)))))
-        (prn :run n (- (System/currentTimeMillis) start)))))
-
-  (swap! (:cache-state (:kv-store system)) empty)
-
   (crux.query/query-plan-for (crux.sparql/sparql->datalog
                               "")
                              (crux.index/read-meta (:kv-store system) :crux.kv/stats))
-
-  (let [total (atom 0)
-        qs (remove :crux-error c)]
-    (doseq [{:keys [idx query crux-results crux-time]} qs]
-      (prn :idx idx)
-      (prn query)
-      (prn :previous-results crux-results)
-      (prn :prevous-time crux-time)
-      (dotimes [n 1]
-        (let [start (System/currentTimeMillis)]
-          (assert (= crux-results
-                     (count (.q (.db system)
-                                (crux.sparql/sparql->datalog query)))))
-          (let [t (- (System/currentTimeMillis) start)]
-            (swap! total + t)
-            (prn :run n t)))))
-    (prn @total (/ @total (double (count qs))))))
+  (defn run-watdiv-reference
+    ([]
+     (run-watdiv-reference (io/resource "watdiv/watdiv_crux.edn") #{35 67}))
+    ([resource skip?]
+     (let [times (mapv
+                  (fn [{:keys [idx query crux-results]}]
+                    (let [start (System/currentTimeMillis)]
+                      (try
+                        (let [result (count (.q (.db system)
+                                                (crux.sparql/sparql->datalog query)))]
+                          (assert (= crux-results result)
+                                  (pr-str [idx crux-results result])))
+                        (catch Throwable t
+                          (prn idx t)))
+                      (- (System/currentTimeMillis) start)))
+                  (->> (read-string (slurp resource))
+                       (remove :crux-error)
+                       (remove (comp skip? :idx))))
+           total (reduce + times)]
+       {:total total :average (/ total (double (count times)))}))))
 
 ;; Destructure costs:
 
