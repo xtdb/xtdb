@@ -164,6 +164,9 @@
   (next [this]
     (cursor->key (.cursor cursor) kv dv LMDB/MDB_NEXT))
 
+  (prev [this]
+    (cursor->key (.cursor cursor) kv dv LMDB/MDB_PREV))
+
   (value [this]
     (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))
 

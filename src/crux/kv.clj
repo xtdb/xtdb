@@ -9,6 +9,7 @@
 (defprotocol KvIterator
   (seek [this k])
   (next [this])
+  (prev [this])
   (value [this])
   (refresh [this]))
 

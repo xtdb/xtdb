@@ -77,6 +77,7 @@
                                              ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options])
   (^byte rocksdb_iter_valid [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter])
   (^void rocksdb_iter_next [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter])
+  (^void rocksdb_iter_prev [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter])
   (^void rocksdb_iter_seek [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter
                             ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} k
                             ^{jnr.ffi.types.size_t true  :tag long} klen])
@@ -146,6 +147,10 @@
 
   (next [this]
     (.rocksdb_iter_next rocksdb i)
+    (iterator->key i len-out))
+
+  (prev [this]
+    (.rocksdb_iter_prev rocksdb i)
     (iterator->key i len-out))
 
   (value [this]

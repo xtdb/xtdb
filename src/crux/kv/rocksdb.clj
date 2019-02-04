@@ -29,6 +29,10 @@
     (.next i)
     (iterator->key i))
 
+  (prev [this]
+    (.prev i)
+    (iterator->key i))
+
   (value [this]
     (mem/on-heap-buffer (.value i)))
 

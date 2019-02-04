@@ -31,15 +31,21 @@
 (defrecord MemKvIterator [^Box db cursor eb]
   kv/KvIterator
   (kv/seek [this k]
-    (let [[x & xs] (subseq (.val db) >= (mem/ensure-off-heap k eb))]
+    (let [[x & xs] (subseq (.val db) >= (mem/as-buffer k))]
       (some->> (reset! cursor {:first x :rest xs})
                :first
                (key))))
+
   (kv/next [this]
     (some->> (swap! cursor (fn [{[x & xs] :rest}]
                              {:first x :rest xs}))
              :first
              (key)))
+
+  (kv/prev [this]
+    (when-let [prev (first (rsubseq (.val db) < (key (:first @cursor))))]
+      (kv/seek this (key prev))))
+
   (kv/value [this]
     (some->> @cursor
              :first
