@@ -94,10 +94,14 @@
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend]
                                           :as options}]
-  (-> (kv/new-kv-store kv-backend)
-      (lru/new-cache-providing-kv-store)
-      (kv/open options)
-      (idx/check-and-store-index-version)))
+  (let [kv (-> (kv/new-kv-store kv-backend)
+               (lru/new-cache-providing-kv-store)
+               (kv/open options))]
+    (try
+      (idx/check-and-store-index-version kv)
+      (catch Throwable t
+        (.close ^Closeable kv)
+        (throw t)))))
 
 (defn- read-kafka-properties-file [f]
   (when f
