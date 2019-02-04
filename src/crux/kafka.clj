@@ -31,6 +31,7 @@
 (def default-producer-config
   {"enable.idempotence" "true"
    "acks" "all"
+   "compression.type" "zstd"
    "key.serializer" (.getName NippySerializer)
    "value.serializer" (.getName NippySerializer)})
 
