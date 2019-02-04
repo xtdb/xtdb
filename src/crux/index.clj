@@ -172,7 +172,7 @@
                             (kv/seek i))]
         (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
           (if (= ::deleted-entity placeholder)
-            (db/next-values this)
+            (recur)
             placeholder))))))
 
 (defn new-doc-attribute-entity-value-entity-index [snapshot attr entity-as-of-idx]
