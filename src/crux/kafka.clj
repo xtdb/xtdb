@@ -52,8 +52,7 @@
 
 (defn create-producer
   ^org.apache.kafka.clients.producer.KafkaProducer [config]
-  (doto (KafkaProducer. ^Map (merge default-producer-config config))
-    (.initTransactions)))
+  (KafkaProducer. ^Map (merge default-producer-config config)))
 
 (defn create-consumer
   ^org.apache.kafka.clients.consumer.KafkaConsumer [config]
@@ -103,7 +102,6 @@
          (.send producer)))
 
   (submit-tx [this tx-ops]
-    (.beginTransaction producer)
     (try
       (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
@@ -116,14 +114,10 @@
                                     (-> (.headers) (.add (str :crux.tx/docs)
                                                          (nippy/fast-freeze (set (keys content-hash->doc))))))
                                   (.send producer))]
-          (.commitTransaction producer)
           (delay
            (let [record-meta ^RecordMetadata @tx-send-future]
              {:crux.tx/tx-id (.offset record-meta)
-              :crux.tx/tx-time (Date. (.timestamp record-meta))}))))
-      (catch Throwable t
-        (.abortTransaction producer)
-        (throw t))))
+              :crux.tx/tx-time (Date. (.timestamp record-meta))}))))))
 
   (new-tx-log-context [this]
     (create-consumer (assoc kafka-config "enable.auto.commit" "false")))
@@ -160,13 +154,13 @@
                                   :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
                                                                                   (sort-by #(.offset ^ConsumerRecord %))
                                                                                   (last))
-                                        position (.position consumer partition)
-                                        latest-position (get end-offsets partition)
-                                        lag (- latest-position position)]]
+                                        next-offset (inc (.offset last-record-in-batch))
+                                        end-offset (get end-offsets partition)
+                                        lag (- end-offset next-offset)]]
                               (do (when-not (zero? lag)
-                                    (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
+                                    (log/warn "Falling behind" (str partition) "at:" next-offset "end:" end-offset))
                                   [(topic-partition-meta-key partition)
-                                   {:offset (.offset last-record-in-batch)
+                                   {:next-offset next-offset
                                     :time (Date. (.timestamp last-record-in-batch))
                                     :lag lag}]))
                             (into stored-consumer-state))]
@@ -182,7 +176,7 @@
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
     (doseq [^TopicPartition partition partitions]
-      (if-let [offset (get-in consumer-state [(topic-partition-meta-key partition) :offset])]
+      (if-let [offset (get-in consumer-state [(topic-partition-meta-key partition) :next-offset])]
         (.seek consumer partition offset)
         (.seekToBeginning consumer [partition])))))
 

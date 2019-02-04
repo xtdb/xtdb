@@ -26,9 +26,7 @@
 
     (k/create-topic f/*admin-client* topic 1 1 {})
 
-    (.beginTransaction f/*producer*)
     @(.send f/*producer* (ProducerRecord. topic person))
-    (.commitTransaction f/*producer*)
 
     (.assign f/*consumer* partitions)
     (let [records (.poll f/*consumer* (Duration/ofMillis 10000))]

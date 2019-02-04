@@ -124,8 +124,7 @@
   (s/assert ::options options)
   (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
                             (read-kafka-properties-file kafka-properties-file))
-        producer-config (merge {"transactional.id" (:group-id options)}
-                               kafka-config)
+        producer-config kafka-config
         consumer-config (merge {"group.id" (:group-id options)}
                                kafka-config)]
     (with-open [kv-store (start-kv-store options)
