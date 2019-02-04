@@ -434,9 +434,11 @@
 
 (defn encode-entity+bt+tt+tx-id-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+bt+tt+tx-id-key-to nil empty-buffer nil nil nil))
+   (encode-entity+bt+tt+tx-id-key-to b empty-buffer nil nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
-   (encode-entity+bt+tt+tx-id-key-to nil entity nil nil nil))
+   (encode-entity+bt+tt+tx-id-key-to b entity nil nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity business-time]
+   (encode-entity+bt+tt+tx-id-key-to b entity business-time nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date business-time ^Date transact-time ^Long tx-id]
    (assert (or (= id-size (.capacity entity))
                (zero? (.capacity entity))))

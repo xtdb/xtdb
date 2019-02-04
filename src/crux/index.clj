@@ -7,7 +7,7 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream]
-           [java.util Arrays Collections Comparator]
+           [java.util Arrays Collections Comparator Date]
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer]
            org.agrona.io.DirectBufferInputStream
@@ -490,6 +490,40 @@
     (for [[k v] (all-keys-in-prefix i seek-k true)]
       (-> (c/decode-entity+bt+tt+tx-id-key-from k)
           (enrich-entity-tx v)))))
+
+(defn- entity-history-step [i seek-k f-cons f-next]
+  (lazy-seq
+   (let [k (f-cons)]
+     (when (and k (mem/buffers=? seek-k k (+ c/index-id-size c/id-size)))
+       (cons
+        (-> (c/decode-entity+bt+tt+tx-id-key-from k)
+            (safe-entity-tx)
+            (enrich-entity-tx (kv/value i)))
+        (entity-history-step i seek-k f-next f-next))))))
+
+(defn entity-history-seq-ascending [i eid ^Date from-business-time ^Date transaction-time]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid) from-business-time)]
+    (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/prev i))
+         (drop-while (fn [^EntityTx entity-tx]
+                       (neg? (compare (.bt entity-tx) from-business-time))))
+         (partition-by :bt)
+         (map (fn [group]
+                (->> group
+                     (drop-while (fn [^EntityTx entity-tx]
+                                   (pos? (compare (.tt entity-tx) transaction-time))))
+                     (first))))
+         (remove nil?))))
+
+(defn entity-history-seq-descending [i eid ^Date from-business-time ^Date transaction-time]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid) from-business-time)]
+    (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
+         (partition-by :bt)
+         (map (fn [group]
+                (->> group
+                     (drop-while (fn [^EntityTx entity-tx]
+                                   (pos? (compare (.tt entity-tx) transaction-time))))
+                     (first))))
+         (remove nil?))))
 
 (defn entity-history
   ([snapshot eid]

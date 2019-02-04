@@ -181,6 +181,14 @@
         (finally
           (.unlock lock stamp)))))
 
+  (prev [_]
+    (let [stamp (.readLock lock)]
+      (try
+        (ensure-iterator-open closed-state)
+        (kv/prev i)
+        (finally
+          (.unlock lock stamp)))))
+
   (value [_]
     (let [stamp (.readLock lock)]
       (try
