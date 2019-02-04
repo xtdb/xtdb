@@ -1111,10 +1111,12 @@
     (crux.query/q this snapshot q))
 
   (historyAscending [this snapshot eid]
-    (map c/entity-tx->edn (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid business-time transact-time)))
+    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid business-time transact-time)]
+      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
   (historyDescending [this snapshot eid]
-    (map c/entity-tx->edn (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid business-time transact-time)))
+    (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid business-time transact-time)]
+      (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
   (businessTime [_]
     business-time)

@@ -485,12 +485,6 @@
                     (distinct))]
       (entities-at snapshot eids business-time transact-time))))
 
-(defn entity-history-seq [i eid]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid))]
-    (for [[k v] (all-keys-in-prefix i seek-k true)]
-      (-> (c/decode-entity+bt+tt+tx-id-key-from k)
-          (enrich-entity-tx v)))))
-
 (defn- entity-history-step [i seek-k f-cons f-next]
   (lazy-seq
    (let [k (f-cons)]
@@ -502,7 +496,7 @@
         (entity-history-step i seek-k f-next f-next))))))
 
 (defn entity-history-seq-ascending [i eid ^Date from-business-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid) from-business-time)]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) from-business-time)]
     (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
                                           (if (mem/buffers=? seek-k k (+ c/index-id-size c/id-size))
                                             k
@@ -518,7 +512,7 @@
          (remove nil?))))
 
 (defn entity-history-seq-descending [i eid ^Date from-business-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl) (c/->id-buffer eid) from-business-time)]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) from-business-time)]
     (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
          (partition-by :bt)
          (map (fn [group]
@@ -527,6 +521,12 @@
                                    (pos? (compare (.tt entity-tx) transaction-time))))
                      (first))))
          (remove nil?))))
+
+(defn entity-history-seq [i eid]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid))]
+    (for [[k v] (all-keys-in-prefix i seek-k true)]
+      (-> (c/decode-entity+bt+tt+tx-id-key-from k)
+          (enrich-entity-tx v)))))
 
 (defn entity-history
   ([snapshot eid]
