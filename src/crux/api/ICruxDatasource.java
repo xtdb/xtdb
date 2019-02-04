@@ -58,7 +58,7 @@ public interface ICruxDatasource {
     /**
      * Retrieves entity history lazily in chronological order from and
      * including the business time of the db while respecting
-     * transaction time.
+     * transaction time. Includes the documents.
      *
      * @param snapshot a snapshot from {@link #newSnapshot()}.
      * @param eid      an object that can be coerced into an entity id.
@@ -69,7 +69,7 @@ public interface ICruxDatasource {
     /**
      * Retrieves entity history lazily in reverse chronological order
      * from and including the business time of the db while respecting
-     * transaction time.
+     * transaction time. Includes the documents.
      *
      * @param snapshot a snapshot from {@link #newSnapshot()}.
      * @param eid      an object that can be coerced into an entity id.

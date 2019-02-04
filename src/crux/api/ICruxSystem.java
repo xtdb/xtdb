@@ -50,7 +50,8 @@ public interface ICruxSystem extends Closeable {
 
     /**
      * Returns the transaction history of an entity, in reverse
-     * chronological order.
+     * chronological order. Includes corrections, but does not include
+     * the actual documents.
      *
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.
