@@ -157,18 +157,17 @@
         end-offsets (.endOffsets consumer partitions)
         stored-consumer-state (or (db/read-index-meta indexer :crux.tx-log/consumer-state) {})
         consumer-state (->> (for [^TopicPartition partition partitions
-                                  :let [position (.position consumer partition)
+                                  :let [^ConsumerRecord last-record-in-batch (->> (get partition->records partition)
+                                                                                  (sort-by #(.offset ^ConsumerRecord %))
+                                                                                  (last))
+                                        position (.position consumer partition)
                                         latest-position (get end-offsets partition)
                                         lag (- latest-position position)]]
                               (do (when-not (zero? lag)
                                     (log/warn "Falling behind" (str partition) "at:" position "latest:" latest-position))
                                   [(topic-partition-meta-key partition)
-                                   {:offset position
-                                    :time (->>  (get partition->records partition)
-                                                (map #(.timestamp ^ConsumerRecord %))
-                                                (reduce max)
-                                                (long)
-                                                (Date.))
+                                   {:offset (.offset last-record-in-batch)
+                                    :time (Date. (.timestamp last-record-in-batch))
                                     :lag lag}]))
                             (into stored-consumer-state))]
     (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))
@@ -211,6 +210,8 @@
             (.resume consumer [tx-topic-partition]))
         records (.poll consumer (Duration/ofMillis timeout))
         doc-records (vec (.records records (str doc-topic)))
+        _ (doseq [record doc-records]
+            (index-doc-record indexer record))
         tx-records (vec (.records records (str tx-topic)))
         pending-tx-records (swap! pending-txs-state into tx-records)
         tx-records (->> pending-tx-records
@@ -230,13 +231,11 @@
                                      (log/debug "Pausing" tx-topic)
                                      (.pause consumer [tx-topic-partition]))
                                    (log/info "Delaying indexing of tx" tx-id (pr-str tx-time) "pending:" (count pending-tx-records))))
-                             ready?))))
-        records (concat doc-records tx-records)]
-    (doseq [record doc-records]
-      (index-doc-record indexer record))
+                             ready?)))
+                        (vec))]
     (doseq [record tx-records]
       (index-tx-record indexer record))
-    (when (seq records)
+    (when-let [records (seq (concat doc-records tx-records))]
       (update-stored-consumer-state indexer consumer records)
       (swap! pending-txs-state (comp vec (partial drop (count tx-records)))))
     {:txs (count tx-records)

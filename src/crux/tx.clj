@@ -151,6 +151,7 @@
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (for [tx-op tx-ops]
                                  (tx-command object-store snapshot tx-log tx-op tx-time tx-id))]
+        (log/debug "Indexing tx-id:" tx-id "tx-ops:" (count tx-ops))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
                    (pre-commit-fn))
