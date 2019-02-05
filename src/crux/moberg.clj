@@ -21,13 +21,7 @@
 
 (def ^:private ^:const idx-id-size Byte/BYTES)
 
-(def ^:private ^ThreadLocal seek-buffer-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (ExpandableDirectByteBuffer.)))))
-
-(def ^:private ^ThreadLocal write-buffer-tl
+(def ^:private ^ThreadLocal topic-key-buffer-tl
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
@@ -39,18 +33,24 @@
                           c/empty-buffer)
         topic (c/->id-buffer topic)]
     (mem/limit-buffer
-     (doto ^MutableDirectBuffer (.get seek-buffer-tl)
+     (doto ^MutableDirectBuffer (.get topic-key-buffer-tl)
        (.putByte 0 message-idx)
        (.putBytes idx-id-size topic 0 c/id-size)
        (.putLong (+ idx-id-size c/id-size) message-id ByteOrder/BIG_ENDIAN)
        (.putBytes (+ idx-id-size c/id-size Long/BYTES) k 0 (.capacity k)))
      (+ idx-id-size c/id-size Long/BYTES (.capacity k)))))
 
+(def ^:private ^ThreadLocal reverse-key-key-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
 (defn- reverse-key-key ^org.agrona.DirectBuffer [topic k]
   (let [topic (c/->id-buffer topic)
         k (c/->id-buffer k)]
     (mem/limit-buffer
-     (doto ^MutableDirectBuffer (.get seek-buffer-tl)
+     (doto ^MutableDirectBuffer (.get reverse-key-key-buffer-tl)
        (.putByte 0 reverse-key-idx)
        (.putBytes idx-id-size topic 0 c/id-size)
        (.putBytes (+ idx-id-size c/id-size) k 0 (.capacity k)))
@@ -60,17 +60,21 @@
   (when (pos? (.capacity buffer))
     (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buffer)))))
 
-(defn- compact-topic [kv topic k new-message-k]
-  (with-open [snapshot (kv/new-snapshot kv)
-              i (kv/new-iterator snapshot)]
-    (let [seek-k (reverse-key-key topic k)
-          compacted-k (when-let [found-k (kv/seek i seek-k)]
+(deftype CompactKVsAndKey [kvs key])
+
+(defn- compact-topic-kvs+compact-k ^crux.moberg.CompactKVsAndKey [kv topic k new-message-k]
+  (if k
+    (with-open [snapshot (kv/new-snapshot kv)
+                i (kv/new-iterator snapshot)]
+      (let [seek-k (reverse-key-key topic k)
+            compact-k (when-let [found-k (kv/seek i seek-k)]
                         (when (mem/buffers=? found-k seek-k)
                           (kv/value i)))]
-      (kv/store kv (cond-> [[seek-k new-message-k]]
-                     compacted-k (conj [compacted-k c/empty-buffer])))
-      (when compacted-k
-        (kv/delete kv [compacted-k])))))
+        (CompactKVsAndKey.
+         (cond-> [[seek-k new-message-k]]
+           compact-k (conj [compact-k c/empty-buffer]))
+         compact-k)))
+    (CompactKVsAndKey. [] nil)))
 
 (def ^:private topic+date->count (atom {}))
 (def ^:private ^:const seq-size 10)
@@ -88,6 +92,12 @@
       (recur topic)
       (MessageId. message-time (bit-or (bit-shift-left (.getTime message-time) 10) seq)))))
 
+(def ^:private ^ThreadLocal send-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer.)))))
+
 (defn send-message
   ([kv topic v]
    (send-message kv topic nil v nil))
@@ -97,20 +107,23 @@
    (let [id (next-message-id topic)
          message-time (.time id)
          message-id (.id id)
-         message-k (topic-key topic message-id k)]
-     (kv/store kv [[message-k
-                    (mem/with-buffer-out
-                      (.get write-buffer-tl)
-                      (fn [^DataOutput out]
-                        (nippy/freeze-to-out! out (cond-> {:crux.moberg/body v
-                                                           :crux.moberg/topic topic
-                                                           :crux.moberg/message-id message-id
-                                                           :crux.moberg/message-time message-time}
-                                                    k (assoc :crux.moberg/key k)
-                                                    headers (assoc :crux.moberg/headers headers))))
-                      false)]])
-     (when k
-       (compact-topic kv topic k (mem/copy-buffer message-k)))
+         message-k (topic-key topic message-id k)
+         compact-kvs+k (compact-topic-kvs+compact-k kv topic k message-k)]
+     (kv/store kv (concat
+                   (.kvs compact-kvs+k)
+                   [[message-k
+                     (mem/with-buffer-out
+                       (.get send-buffer-tl)
+                       (fn [^DataOutput out]
+                         (nippy/freeze-to-out! out (cond-> {:crux.moberg/body v
+                                                            :crux.moberg/topic topic
+                                                            :crux.moberg/message-id message-id
+                                                            :crux.moberg/message-time message-time}
+                                                     k (assoc :crux.moberg/key k)
+                                                     headers (assoc :crux.moberg/headers headers))))
+                       false)]]))
+     (when-let [compact-k (.key compact-kvs+k)]
+       (kv/delete kv [compact-k]))
      {:crux.moberg/message-id message-id
       :crux.moberg/message-time message-time})))
 
