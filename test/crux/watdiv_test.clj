@@ -35,6 +35,7 @@
 
 ;; Needs the following files downloaded and unpacked under test/watdiv/data
 ;; in the project root:
+;; this can be done by running the script bench/bin/download_watdiv_files.sh
 
 ;; https://dsg.uwaterloo.ca/watdiv/watdiv.10M.tar.bz2
 ;; https://dsg.uwaterloo.ca/watdiv/stress-workloads.tar.gz
