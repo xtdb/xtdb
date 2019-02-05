@@ -50,7 +50,7 @@
    (start-zookeeper data-dir default-zookeeper-port))
   (^org.apache.zookeeper.server.ServerCnxnFactory [data-dir ^long port]
    (cio/delete-dir data-dir)
-   (let [tick-time 500
+   (let [tick-time 2000
          max-connections 16
          server (ZooKeeperServer. (io/file data-dir) (io/file data-dir) tick-time)]
      (doto (ServerCnxnFactory/createFactory port max-connections)
