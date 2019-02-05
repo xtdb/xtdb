@@ -9,11 +9,7 @@
             [crux.io :as cio])
   (:import [java.io Closeable]))
 
-(defn without-index-version [f]
-  (kv/delete f/*kv* [(byte-array [@#'c/index-version-index-id])])
-  (f))
-
-(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store without-index-version)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store f/without-index-version)
 
 (declare value seek seek-and-iterate)
 

@@ -3,11 +3,13 @@
             [clojure.java.io :as io]
             [crux.api :as api]
             [crux.bootstrap :as b]
+            [crux.codec :as c]
             [crux.db :as db]
             [crux.http-server :as srv]
             [crux.io :as cio]
             [crux.kafka.embedded :as ek]
             [crux.kafka :as k]
+            [crux.kv :as kv]
             [crux.tx :as tx])
   (:import java.io.Closeable
            [java.util Properties UUID]
@@ -93,6 +95,10 @@
 (defn with-each-kv-store-implementation [f]
   (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-rocksdb-jnr with-lmdb]]
     (with-kv-store-implementation f)))
+
+(defn without-index-version [f]
+  (kv/delete *kv* [(byte-array [@#'c/index-version-index-id])])
+  (f))
 
 (def ^:dynamic *kafka-bootstrap-servers*)
 
