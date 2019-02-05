@@ -245,10 +245,10 @@
     [#"^/history/.+$" [:get :post]]
     (history local-node request)
 
-    [#"^/history-ascending/$" [:post]]
+    [#"^/history-ascending$" [:post]]
     (history-ascending local-node request)
 
-    [#"^/history-ascending/$" [:post]]
+    [#"^/history-descending$" [:post]]
     (history-descending local-node request)
 
     [#"^/query$" [:post]]

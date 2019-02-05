@@ -1151,5 +1151,8 @@
                         (or business-time now)
                         (or transact-time now)))))
 
-(defn submitted-tx-updated-entity? [kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} eid]
-  (= tx-id (:crux.tx/tx-id (entity-tx (db kv tx-time tx-time) eid))))
+(defn submitted-tx-updated-entity?
+  ([kv {:crux.tx/keys [tx-time] :as submitted-tx} eid]
+   (submitted-tx-updated-entity? kv submitted-tx tx-time eid))
+  ([kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} business-time eid]
+   (= tx-id (:crux.tx/tx-id (entity-tx (db kv business-time tx-time) eid)))))

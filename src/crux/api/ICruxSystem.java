@@ -83,6 +83,17 @@ public interface ICruxSystem extends Closeable {
      */
     public boolean hasSubmittedTxUpdatedEntity(Map submittedTx, Object eid);
 
+    /**
+     * Checks if a submitted tx did correct an entity as of business
+     * time.
+     *
+     * @param submittedTx  must be a map returned from {@link
+     * #submitTx(List txOps)}.
+     * @param businessTime business time of correction to check.
+     * @param eid          an object that can be coerced into an entity id.
+     * @return             true if the entity was updated in this transaction.
+     */
+    public boolean hasSubmittedTxCorrectedEntity(Map submittedTx, Date businessTime, Object eid);
 
     /**
      * Returns a new transaction log context allowing for lazy reading

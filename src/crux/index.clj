@@ -496,16 +496,15 @@
         (entity-history-step i seek-k f-next f-next))))))
 
 (defn entity-history-seq-ascending [i eid ^Date from-business-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) from-business-time)]
+  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-business-time))))]
     (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
-                                          (if (mem/buffers=? seek-k k (+ c/index-id-size c/id-size))
-                                            k
-                                            (kv/prev i))) #(kv/prev i))
+                                          (kv/prev i)) #(kv/prev i))
          (drop-while (fn [^EntityTx entity-tx]
                        (neg? (compare (.bt entity-tx) from-business-time))))
          (partition-by :bt)
          (map (fn [group]
                 (->> group
+                     (reverse)
                      (drop-while (fn [^EntityTx entity-tx]
                                    (pos? (compare (.tt entity-tx) transaction-time))))
                      (first))))

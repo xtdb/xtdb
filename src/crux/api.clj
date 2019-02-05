@@ -45,9 +45,12 @@
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 
-  (hasSubmittedTxUpdatedEntity [_ submitted-tx eid]
+  (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
+    (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
+
+  (hasSubmittedTxCorrectedEntity [_ submitted-tx business-time eid]
     (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
-    (q/submitted-tx-updated-entity? kv-store submitted-tx eid))
+    (q/submitted-tx-updated-entity? kv-store submitted-tx business-time eid))
 
   (newTxLogContext [_]
     (db/new-tx-log-context tx-log))
@@ -141,6 +144,9 @@
 
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxUpdatedEntity ^LocalNode (map->LocalNode this) submitted-tx eid))
+
+  (hasSubmittedTxCorrectedEntity [this submitted-tx business-time eid]
+    (.hasSubmittedTxCorrectedEntity ^LocalNode (map->LocalNode this) submitted-tx business-time eid))
 
   (newTxLogContext [this]
     (.newTxLogContext ^LocalNode (map->LocalNode this)))
@@ -342,7 +348,10 @@
     (api-request-sync (str url "/tx-log") tx-ops))
 
   (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
-    (= tx-id (:crux.tx/tx-id (.entityTx (.db this tx-time tx-time) eid))))
+    (.hasSubmittedTxCorrectedEntity this submitted-tx tx-time eid))
+
+  (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} business-time eid]
+    (= tx-id (:crux.tx/tx-id (.entityTx (.db this business-time tx-time) eid))))
 
   (newTxLogContext [_]
     (->RemoteApiStream (atom [])))
