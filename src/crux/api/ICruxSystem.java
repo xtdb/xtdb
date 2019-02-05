@@ -96,15 +96,6 @@ public interface ICruxSystem extends Closeable {
     public boolean hasSubmittedTxCorrectedEntity(Map submittedTx, Date businessTime, Object eid);
 
     /**
-     * Returns a new transaction log context allowing for lazy reading
-     * of the transaction log in a try-with-resources block using
-     * {@link #txLog(Closeable txLogContext)}.
-     *
-     * @return an implementation specific context.
-     */
-    public Closeable newTxLogContext();
-
-    /**
      * Blocks until the node has caught up indexing. Will throw an
      * exception on timeout. The returned date is the latest index
      * time when this node has caught up as of this call. This can be
@@ -115,6 +106,16 @@ public interface ICruxSystem extends Closeable {
      * @return        the latest known transaction time.
      */
     public Date sync(Duration timeout);
+
+    /**
+     * Returns a new transaction log context allowing for lazy reading
+     * of the transaction log in a try-with-resources block using
+     * {@link #txLog(Closeable txLogContext, Long fromTxId, boolean
+     * withDocuments)}.
+     *
+     * @return an implementation specific context.
+     */
+    public Closeable newTxLogContext();
 
     /**
      * Reads the transaction log lazily. Optionally includes
