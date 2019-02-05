@@ -28,8 +28,11 @@
    "port" (str default-kafka-port)
    "broker.id" *broker-id*
    "num.io.threads" "2"
-   "num.networkd.threads" "2"
+   "num.network.threads" "2"
+   "log.cleaner.dedupe.buffer.size" "1048577"
+   "offsets.topic.num.partitions" "1"
    "offsets.topic.replication.factor" "1"
+   "transaction.state.log.num.partitions" "1"
    "transaction.state.log.replication.factor" "1"
    "transaction.state.log.min.isr" "1"
    "auto.create.topics.enable" "false"})
