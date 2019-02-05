@@ -2,13 +2,18 @@
   (:require [clojure.test :as t]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
+            [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.io :as cio])
   (:import [java.io Closeable]))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
+(defn without-index-version [f]
+  (kv/delete f/*kv* [(byte-array [@#'c/index-version-index-id])])
+  (f))
+
+(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store without-index-version)
 
 (declare value seek seek-and-iterate)
 
@@ -113,6 +118,19 @@
         (t/is (= "Crux" (String. ^bytes (value sync-kv (bu/long->bytes 1))))))
       (finally
         (cio/delete-dir sync-dir)))))
+
+(t/deftest test-prev-and-next []
+  (doseq [[^String k v] {"a" 1 "c" 3}]
+    (kv/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
+
+  (with-open [snapshot (kv/new-snapshot f/*kv*)
+              i (kv/new-iterator snapshot)]
+    (t/testing "seek returns next valid key"
+      (let [k (kv/seek i (mem/as-buffer (.getBytes "b")))]
+        (t/is (= ["c" 3] [(String. (mem/->on-heap k)) (bu/bytes->long (mem/->on-heap (kv/value i)))]))))
+    (t/testing "prev, iterators aren't bidirectional"
+      (t/is (= "a" (String. (mem/->on-heap (kv/prev i)))))
+      (t/is (nil? (kv/prev i))))))
 
 ;; TODO: These helpers convert back and forth to bytes, would be good
 ;; to get rid of this, but that requires changing removing the byte
