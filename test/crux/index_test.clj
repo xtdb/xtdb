@@ -384,7 +384,7 @@
                                [:crux.tx/put :petr tx2-petr tx2-business-time]])]
 
     (with-open [tx-log-context (db/new-tx-log-context tx-log)]
-      (let [log (db/tx-log tx-log tx-log-context)]
+      (let [log (db/tx-log tx-log tx-log-context nil)]
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
                    :crux.tx/tx-time tx1-tx-time

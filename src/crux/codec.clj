@@ -497,6 +497,8 @@
 (defn encode-tx-log-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
    (encode-tx-log-key-to b nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b tx-id]
+   (encode-tx-log-key-to b tx-id nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^Long tx-id ^Date tx-time]
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size (maybe-long-size tx-id) (maybe-long-size tx-time))))]
      (.putByte b 0 tx-id->tx-index-id)

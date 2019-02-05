@@ -416,6 +416,8 @@
   ([i prefix]
    (all-keys-in-prefix i prefix false))
   ([i ^DirectBuffer prefix entries?]
+   (all-keys-in-prefix i prefix prefix entries?))
+  ([i ^DirectBuffer seek-k prefix entries?]
    ((fn step [f-cons f-next]
       (lazy-seq
        (let [k (f-cons)]
@@ -424,7 +426,7 @@
                    [(mem/copy-buffer k)
                     (mem/copy-buffer (kv/value i))]
                    (mem/copy-buffer k)) (step f-next f-next))))))
-    #(kv/seek i prefix) #(kv/next i))))
+    #(kv/seek i seek-k) #(kv/next i))))
 
 (defn idx->seq [idx]
   (when-let [result (db/seek-values idx nil)]

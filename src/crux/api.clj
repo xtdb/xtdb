@@ -2,6 +2,7 @@
   "Public API for Crux."
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
+            [clojure.string :as str]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -55,8 +56,14 @@
   (newTxLogContext [_]
     (db/new-tx-log-context tx-log))
 
-  (txLog [_ tx-log-context]
-    (db/tx-log tx-log tx-log-context))
+  (txLog [_ tx-log-context from-tx-id with-documents?]
+    (for [tx-log-entry (db/tx-log tx-log tx-log-context from-tx-id)]
+      (if with-documents?
+        (update tx-log-entry
+                :crux.tx/tx-ops
+                #(with-open [snapshot (kv/new-snapshot kv-store)]
+                   (tx/enrich-tx-ops-with-documents snapshot object-store %)))
+        tx-log-entry)))
 
   (sync [_ timeout]
     (tx/await-no-consumer-lag indexer (or (some-> timeout (.toMillis))
@@ -151,8 +158,8 @@
   (newTxLogContext [this]
     (.newTxLogContext ^LocalNode (map->LocalNode this)))
 
-  (txLog [this tx-log-context]
-    (.txLog ^LocalNode (map->LocalNode this) tx-log-context))
+  (txLog [this tx-log-context from-tx-id with-documents?]
+    (.txLog ^LocalNode (map->LocalNode this) tx-log-context from-tx-id with-documents?))
 
   (sync [this timeout]
     (.sync ^LocalNode (map->LocalNode this) timeout))
@@ -356,8 +363,15 @@
   (newTxLogContext [_]
     (->RemoteApiStream (atom [])))
 
-  (txLog [_ tx-log-context]
-    (let [in (api-request-sync (str url "/tx-log")
+  (txLog [_ tx-log-context from-tx-id with-documents?]
+    (let [params (->> [(when from-tx-id
+                         (str "from-tx-id=" from-tx-id))
+                       (when with-documents?
+                         (str "with-documents=" with-documents?))]
+                      (remove nil?)
+                      (str/join "&"))
+          in (api-request-sync (cond-> (str url "/tx-log")
+                                 (seq params) (str "?" params))
                                nil
                                {:method :get
                                 :as :stream})]

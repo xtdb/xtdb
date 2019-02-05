@@ -28,7 +28,7 @@
   (submit-doc [this content-hash doc])
   (submit-tx [this tx-ops])
   (new-tx-log-context ^java.io.Closeable [this])
-  (tx-log [this tx-log-context]))
+  (tx-log [this tx-log-context from-tx-id]))
 ;; end::TxLog[]
 
 ;; NOTE: The snapshot parameter here is an optimisation to avoid keep

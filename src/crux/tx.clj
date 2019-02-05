@@ -215,9 +215,9 @@
   (new-tx-log-context [this]
     (kv/new-snapshot kv))
 
-  (tx-log [this tx-log-context]
+  (tx-log [this tx-log-context from-tx-id]
     (let [i (kv/new-iterator tx-log-context)]
-      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil) true)]
+      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
         (assoc (c/decode-tx-log-key-from k)
                :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
 

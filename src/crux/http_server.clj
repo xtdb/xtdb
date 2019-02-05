@@ -206,8 +206,11 @@
 
 ;; TODO: Could add from date parameter.
 (defn- tx-log [^ICruxSystem local-node request]
-  (let [ctx (.newTxLogContext local-node)
-        result (.txLog local-node ctx)]
+  (let [with-documents? (Boolean/parseBoolean (get-in request [:query-params "with-documents"]))
+        from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
+                            (Long/parseLong))
+        ctx (.newTxLogContext local-node)
+        result (.txLog local-node ctx from-tx-id with-documents?)]
     (-> (streamed-edn-response ctx result)
         (add-last-modified (tx/latest-completed-tx-time (:indexer local-node))))))
 

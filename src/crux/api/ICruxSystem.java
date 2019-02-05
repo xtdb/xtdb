@@ -117,10 +117,15 @@ public interface ICruxSystem extends Closeable {
     public Date sync(Duration timeout);
 
     /**
-     * Reads the transaction log lazily.
+     * Reads the transaction log lazily. Optionally includes
+     * documents, which allow the contents under the :crux.tx/tx-ops
+     * key to be piped into {@link #submitTx(List txOps)} of another
+     * Crux instance.
      *
-     * @param txLogContext a context from {@link #newTxLogContext()}.
-     * @return             a lazy sequence of the transaction log.
+     * @param txLogContext     a context from {@link #newTxLogContext()}.
+     * @param fromTxId         optional transaction id to start from.
+     * @param withDocuments    should the documents be included?
+     * @return                 a lazy sequence of the transaction log.
      */
-    public Iterable<List> txLog(Closeable txLogContext);
+    public Iterable<List> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments);
 }

@@ -123,10 +123,13 @@
   (new-tx-log-context [this]
     (create-consumer (assoc kafka-config "enable.auto.commit" "false")))
 
-  (tx-log [this tx-topic-consumer]
-    (let [tx-topic-consumer ^KafkaConsumer tx-topic-consumer]
-      (.assign tx-topic-consumer [(TopicPartition. tx-topic 0)])
-      (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer))
+  (tx-log [this tx-topic-consumer from-tx-id]
+    (let [tx-topic-consumer ^KafkaConsumer tx-topic-consumer
+          tx-topic-partition (TopicPartition. tx-topic 0)]
+      (.assign tx-topic-consumer [tx-topic-partition])
+      (if from-tx-id
+        (.seek tx-topic-consumer tx-topic-partition from-tx-id)
+        (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
       ((fn step []
          (lazy-seq
           (when-let [records (seq (.poll tx-topic-consumer (Duration/ofMillis 1000)))]
