@@ -221,6 +221,13 @@
         (assoc (c/decode-tx-log-key-from k)
                :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
 
+(defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
+  (vec (for [op tx-ops]
+         (vec (for [x op]
+                (or (when (satisfies? c/IdToBuffer x)
+                      (db/get-single-object object-store snapshot x))
+                    x))))))
+
 (def ^:const default-await-tx-timeout 10000)
 
 (s/def :crux.tx-log/await-tx-timeout nat-int?)
