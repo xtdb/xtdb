@@ -35,26 +35,20 @@
       false)))
 
 (when-not (bound? #'id-hash)
-  (try
-    (if (and (= "SHA1" id-hash-algorithm)
-             byte-utils-sha1-enabled?)
-      (do (log/info "Using ByteUtils/sha1 for ID hashing.")
-          (def id-hash (fn [to from]
-                         (ByteUtils/sha1 to from))))
-      (if-let [openssl-id-hash-buffer (and openssl-enabled?
-                                           (jnr-available?)
-                                           (requiring-resolve 'crux.hash.jnr/openssl-id-hash-buffer))]
-        (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
-            (def id-hash openssl-id-hash-buffer))
-        (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
-                                            (jnr-available?)
-                                            (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer))]
-          (do (log/info "Using libgcrypt for ID hashing.")
-              (def id-hash gcrypt-id-hash-buffer))
-          (do (log/info "Using java.security.MessageDigest for ID hashing.")
-              (def id-hash message-digest-id-hash-buffer)))))
-    (catch Throwable t
-      (if (instance? UnsatisfiedLinkError (.getCause t))
-        (log/warn "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing.")
-        (log/error t "Could not load libgcrypt or libcrypt, falling back to java.security.MessageDigest for ID hashing."))
-      (def id-hash message-digest-id-hash-buffer))))
+  (if (and (= "SHA1" id-hash-algorithm)
+           byte-utils-sha1-enabled?)
+    (do (log/info "Using ByteUtils/sha1 for ID hashing.")
+        (def id-hash (fn [to from]
+                       (ByteUtils/sha1 to from))))
+    (if-let [openssl-id-hash-buffer (and openssl-enabled?
+                                         (jnr-available?)
+                                         (some-> (requiring-resolve 'crux.hash.jnr/openssl-id-hash-buffer) (deref)))]
+      (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
+          (def id-hash openssl-id-hash-buffer))
+      (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
+                                          (jnr-available?)
+                                          (some-> (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer) (deref)))]
+        (do (log/info "Using libgcrypt for ID hashing.")
+            (def id-hash gcrypt-id-hash-buffer))
+        (do (log/info "Using java.security.MessageDigest for ID hashing.")
+            (def id-hash message-digest-id-hash-buffer))))))
