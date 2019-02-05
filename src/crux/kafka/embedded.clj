@@ -27,6 +27,8 @@
   {"host" *host*
    "port" (str default-kafka-port)
    "broker.id" *broker-id*
+   "num.io.threads" "2"
+   "num.networkd.threads" "2"
    "offsets.topic.replication.factor" "1"
    "transaction.state.log.replication.factor" "1"
    "transaction.state.log.min.isr" "1"
