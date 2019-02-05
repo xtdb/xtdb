@@ -91,5 +91,17 @@
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
              (Level/valueOf (name level))))
 
+;; Usage, create a dev/$USER.clj file like this, and add it to
+;; .gitignore:
+
+;; Optional, helps when evaluating buffer in Emacs, will be evaluated
+;; in the context of the dev ns:
+;; (ns dev)
+;; ;; Override the storage dir:
+;; (def storage-dir "foo")
+;; ;; And override some options:
+;; (def dev-options (merge (dev-option-defaults storage-dir)
+;;                         {:server-port 9090}))
+
 (when (io/resource (str (System/getenv "USER") ".clj"))
   (load (System/getenv "USER")))
