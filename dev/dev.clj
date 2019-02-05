@@ -25,14 +25,18 @@
            java.io.Closeable))
 
 (def storage-dir "dev-storage")
-(def dev-options {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
-                  :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
-                  :crux.kafka.embedded/kafka-port 9092
-                  :dev/embed-kafka? true
-                  :dev/http-server? true
-                  :db-dir (str storage-dir "/data")
-                  :bootstrap-servers "localhost:9092"
-                  :server-port 3000})
+
+(defn dev-option-defaults [storage-dir]
+  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+   :crux.kafka.embedded/kafka-port 9092
+   :dev/embed-kafka? true
+   :dev/http-server? true
+   :db-dir (str storage-dir "/data")
+   :bootstrap-servers "localhost:9092"
+   :server-port 3000})
+
+(def dev-options (dev-option-defaults storage-dir))
 
 (def ^ICruxSystem system)
 
@@ -86,3 +90,6 @@
 (defn set-log-level! [ns level]
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
              (Level/valueOf (name level))))
+
+(when (io/resource (str (System/getenv "USER") ".clj"))
+  (load (System/getenv "USER")))
