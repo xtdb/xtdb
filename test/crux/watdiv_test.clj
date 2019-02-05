@@ -85,7 +85,8 @@
 ;; takes forever in Crux).
 
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
-(def ^:const watdiv-num-queries (System/getenv "CRUX_WATDIV_NUM_QUERIES"))
+(def ^:const watdiv-num-queries (some-> (System/getenv "CRUX_WATDIV_NUM_QUERIES")
+                                        Integer/parseInt))
 (def ^:const watdiv-indexes (some-> (System/getenv "CRUX_WATDIV_IDS")
                                     (str/split #"\s*,\s+")
                                     (->> (map #(Long/parseLong %))
@@ -408,8 +409,8 @@
 (t/deftest watdiv-stress-test-1
   (if run-watdiv-tests?
     (time
-     (with-open [desc-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.desc"))
-                 sparql-in (io/reader (io/resource "watdiv/watdiv-stress-100/test.1.sparql"))
+     (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
+                 sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))
                  out (io/writer (io/file (format "target/watdiv_%s.edn" (System/currentTimeMillis))))]
        (.write out "[\n")
        (doseq [[idx [d q]] (->> (cond->> (map vector (line-seq desc-in) (line-seq sparql-in))
