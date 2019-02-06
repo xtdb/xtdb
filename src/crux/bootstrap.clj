@@ -92,13 +92,19 @@
                       {:key k :value v}))))
 
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
-                                                 kv-backend]
-                                          :as options}]
+                                                 kv-backend
+                                                 sync?
+                                                 crux.index/check-and-store-index-version]
+                                          :as options
+                                          :or {check-and-store-index-version true}}]
+  (s/assert :crux.kv/options options)
   (let [kv (-> (kv/new-kv-store kv-backend)
                (lru/new-cache-providing-kv-store)
                (kv/open options))]
     (try
-      (idx/check-and-store-index-version kv)
+      (if check-and-store-index-version
+        (idx/check-and-store-index-version kv)
+        kv)
       (catch Throwable t
         (.close ^Closeable kv)
         (throw t)))))

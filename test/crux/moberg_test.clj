@@ -5,7 +5,7 @@
             [crux.kv :as kv]
             [crux.moberg :as moberg]))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store f/without-index-version)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
 
 (t/deftest test-can-send-and-receive-message
   (let [{:crux.moberg/keys [message-id message-time]

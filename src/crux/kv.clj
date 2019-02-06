@@ -29,7 +29,13 @@
 ;; end::KvStore[]
 
 (s/def ::db-dir string?)
+(s/def ::kv-backend string?)
 (s/def ::sync? boolean?)
+(s/def :crux.index/check-and-store-index-version boolean?)
+
+(s/def ::options (s/keys :req-un [::db-dir ::kv-backend]
+                         :opt-un [::sync?]
+                         :opt [:crux.index/check-and-store-index-version]))
 
 (defn require-and-ensure-kv-record ^Class [record-class-name]
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]

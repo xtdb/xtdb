@@ -62,11 +62,18 @@
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
+(def ^:dynamic *check-and-store-index-version* true)
+
+(defn without-kv-index-version [f]
+  (binding [*check-and-store-index-version* false]
+    (f)))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
     (try
-      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir) :kv-backend *kv-backend*})]
+      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir)
+                                        :kv-backend *kv-backend*
+                                        :crux.index/check-and-store-index-version *check-and-store-index-version*})]
         (with-open [*kv* ^Closeable *kv*]
           (f)))
       (finally
@@ -95,10 +102,6 @@
 (defn with-each-kv-store-implementation [f]
   (doseq [with-kv-store-implementation [with-memdb with-rocksdb with-rocksdb-jnr with-lmdb]]
     (with-kv-store-implementation f)))
-
-(defn without-index-version [f]
-  (kv/delete *kv* [(byte-array [@#'c/index-version-index-id])])
-  (f))
 
 (def ^:dynamic *kafka-bootstrap-servers*)
 
