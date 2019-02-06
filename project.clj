@@ -6,7 +6,6 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/tools.cli "0.4.1"]
                  [org.clojure/tools.logging "0.4.1"]
-                 [org.slf4j/slf4j-api "1.7.25"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.agrona/agrona "0.9.31"]
