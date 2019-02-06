@@ -19,3 +19,5 @@ target
 /docs/img/diagram-classes.png
 /docs/.asciidoctor/
 /dev/hraberg.clj
+
+/example/standalone_webservice/data/*
