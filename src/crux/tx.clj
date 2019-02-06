@@ -133,6 +133,7 @@
 
   db/Indexer
   (index-doc [_ content-hash doc]
+    (log/debug "Indexing doc:" content-hash)
     (when (and doc (not (contains? doc :crux.db/id)))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
@@ -229,14 +230,14 @@
 (defrecord EventTxLog [event-log-kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (moberg/send-message event-log-kv :crux-event-log doc content-hash {::sub-topic :docs}))
+    (moberg/send-message event-log-kv :crux-event-log content-hash doc {::sub-topic :docs}))
 
   (submit-tx [this tx-ops]
     (let [conformed-tx-ops (conform-tx-ops tx-ops)]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (let [{:crux.moberg/keys [message-id message-time]}
-            (moberg/send-message event-log-kv :crux-event-log conformed-tx-ops nil {::sub-topic :txs})]
+            (moberg/send-message event-log-kv :crux-event-log nil conformed-tx-ops {::sub-topic :txs})]
         (delay {:crux.tx/tx-id message-id
                 :crux.tx/tx-time message-time}))))
 
@@ -260,39 +261,44 @@
   (while @running?
     (with-open [snapshot (kv/new-snapshot event-log-kv)
                 i (kv/new-iterator snapshot)]
-      (let [next-offset (get-in (db/read-index-meta indexer :crux-tx-log/consumer-state)
+      (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
                                 [:crux.event-log/crux-event-log
                                  :next-offset])]
+        (log/debug "Consuming from:" next-offset)
         (if-let [m (moberg/seek-message i :crux-event-log (or next-offset 0))]
           (let [last-message (->> (repeatedly #(moberg/next-message i :crux-event-log))
                                   (take-while identity)
                                   (cons m)
                                   (take batch-size)
                                   (reduce (fn [last-message m]
-                                            (case (get-in m [:crux.moberg/header ::sub-topic])
+                                            (log/debug "Consuming message:" (pr-str m))
+                                            (case (get-in m [:crux.moberg/headers ::sub-topic])
                                               :docs
-                                              (db/index-doc indexer (:curx.moberg/key m) (:crux.moberg/body m))
+                                              (db/index-doc indexer (:crux.moberg/key m) (:crux.moberg/body m))
                                               :txs
                                               (db/index-tx indexer
                                                            (:crux.moberg/body m)
                                                            (:crux.moberg/message-time m)
                                                            (:crux.moberg/message-id m)))
                                             m)
-                                          nil))]
-            (db/store-index-meta indexer
-                                 :crux.tx-log/consumer-state
-                                 {:crux.event-log/crux-event-log
-                                  {:lag (- (long (moberg/end-message-id event-log-kv :crux-event-log))
-                                           (long (:crux.moberg/message-id last-message)))
-                                   :next-offset (inc (long (:crux.moberg/message-id last-message)))
-                                   :time (:crux.moberg/message-time last-message)}}))
+                                          nil))
+                consumer-state {:crux.event-log/crux-event-log
+                                {:lag (- (long (moberg/end-message-id event-log-kv :crux-event-log))
+                                         (long (:crux.moberg/message-id last-message)))
+                                 :next-offset (inc (long (:crux.moberg/message-id last-message)))
+                                 :time (:crux.moberg/message-time last-message)}}]
+            (log/debug "Event log consumer state:" (pr-str consumer-state))
+            (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))
           (Thread/sleep idle-sleep-ms))))))
 
 (defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer]
   (let [running? (atom true)
-        worker-thread (doto (Thread. #(event-log-consumer-main-loop {:running? running?
-                                                                     :event-log-kv event-log-kv
-                                                                     :indexer indexer})
+        worker-thread (doto (Thread. #(try
+                                        (event-log-consumer-main-loop {:running? running?
+                                                                       :event-log-kv event-log-kv
+                                                                       :indexer indexer})
+                                        (catch Throwable t
+                                          (log/error t "Event log consumer threw exception, consumption has stopped:")))
                                      "crux.tx.event-log-consumer-thread")
                         (.start))]
     (reify Closeable
