@@ -20,3 +20,10 @@ spec:
         image: juxt/crux-standalone-webservice:latest
         ports:
         - containerPort: 8080
+        volumeMounts:
+        - mountPath: "/usr/src/app/data"
+          name: my-crux-volume
+      volumes:
+      - name: my-crux-volume
+        persistentVolumeClaim:
+          claimName: crux-volume
