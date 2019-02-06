@@ -11,7 +11,7 @@
              :crux/local-node {:db-dir "dev-storage/data"
                                :bootstrap-servers "localhost:9092"
                                :embedded-kafka (ig/ref :crux/embedded-kafka)}
-             :crux/http-server :local-node (ig/ref :crux/local-node)})
+             :crux/http-server {:local-node (ig/ref :crux/local-node)}})
 
 (defmethod ig/init-key :crux/local-node [_ opts]
   (api/start-local-node opts))
@@ -22,8 +22,8 @@
 (defmethod ig/init-key :crux/embedded-kafka [_ opts]
   (ek/start-embedded-kafka opts))
 
-(defmethod ig/halt-key! :crux/embedded-kafka [_ ^java.io.Closeable embedded-kafka]
-  (.close embedded-kafka))
+(defmethod ig/halt-key! :crux/embedded-kafka [_ ^java.io.Closeable closeable]
+  (.close closeable))
 
 (defmethod ig/init-key :crux/http-server [_ {:keys [local-node port] :as opts}]
   (log/infof "Firing up http %s" opts)
