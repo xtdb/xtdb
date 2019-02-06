@@ -86,7 +86,7 @@
 (defn- message-id->message-time ^java.util.Date [^long message-id]
   (Date. (bit-shift-right message-id seq-size)))
 
-(deftype Message [body topic ^long message-id message-time key headers])
+(deftype Message [body topic ^long message-id ^Date message-time key headers])
 
 (defn message->edn [^Message m]
   (cond-> {::body (.body m)
@@ -112,7 +112,7 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(deftype SentMessage [^long message-id message-time])
+(deftype SentMessage [^long message-id ^Date message-time])
 
 (defn sent-message->edn [^SentMessage m]
   {::message-id (.message-id m)
