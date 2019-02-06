@@ -20,7 +20,7 @@
                        :crux.moberg/body "Hello World"}) (moberg/seek-message i :my-topic)))
       (t/is (nil? (moberg/next-message i :my-topic))))
 
-    (t/is (= message-id (moberg/end-message-id f/*kv* :my-topic)))))
+    (t/is (= (inc message-id) (moberg/end-message-id f/*kv* :my-topic)))))
 
 (t/deftest test-can-send-and-receive-message-on-two-topics
   (let [my-topic-message (moberg/send-message f/*kv* :my-topic "Hello World")

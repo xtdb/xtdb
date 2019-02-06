@@ -282,10 +282,14 @@
                                                            (:crux.moberg/message-id m)))
                                             m)
                                           nil))
+                end-offset (long (moberg/end-message-id event-log-kv ::event-log))
+                next-offset (inc (long (:crux.moberg/message-id last-message)))
+                lag (- end-offset next-offset)
+                _ (when (pos? lag)
+                    (log/warn "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
                 consumer-state {::event-log
-                                {:lag (- (long (moberg/end-message-id event-log-kv ::event-log))
-                                         (long (:crux.moberg/message-id last-message)))
-                                 :next-offset (inc (long (:crux.moberg/message-id last-message)))
+                                {:lag lag
+                                 :next-offset next-offset
                                  :time (:crux.moberg/message-time last-message)}}]
             (log/debug "Event log consumer state:" (pr-str consumer-state))
             (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))

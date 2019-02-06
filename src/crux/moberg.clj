@@ -150,7 +150,7 @@
       (if (kv/seek i seek-k)
         (when-let [k ^DirectBuffer (kv/prev i)]
           (when (mem/buffers=? k seek-k (+ idx-id-size c/id-size))
-            (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN)))
+            (inc (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))))
         (do (kv/store kv [[(topic-key topic Long/MAX_VALUE nil)
                            c/empty-buffer]])
             (end-message-id kv topic))))))
