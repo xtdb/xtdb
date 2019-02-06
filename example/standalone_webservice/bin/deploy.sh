@@ -2,6 +2,5 @@
 
 set -e
 
-kubectl apply -f kubernetes_templates/volume_claim.yml -n crux
 kubectl apply -f kubernetes_templates/app_deployment.yml -n crux
 kubectl apply -f kubernetes_templates/app_service.yml -n crux

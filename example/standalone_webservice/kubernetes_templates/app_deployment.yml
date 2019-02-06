@@ -1,10 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: crux-standalone-webservice
   labels:
     app: crux-standalone-webservice
 spec:
+  serviceName: crux-standalone-webservice-service
   replicas: 1
   selector:
     matchLabels:
@@ -13,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-standalone-webservice
-        date: "1549289984"
+        date: "1549289995"
     spec:
       containers:
       - name: crux-standalone-webservice
@@ -22,8 +23,12 @@ spec:
         - containerPort: 8080
         volumeMounts:
         - mountPath: "/usr/src/app/data"
-          name: my-crux-volume
-      volumes:
-      - name: my-crux-volume
-        persistentVolumeClaim:
-          claimName: crux-volume
+          name: my-crux-volume-2
+  volumeClaimTemplates:
+    - metadata:
+        name: my-crux-volume-2
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+               storage: 1Gi

@@ -2,7 +2,8 @@
   (:require [crux.api :as crux]
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
-            [yada.resource :refer [resource]]))
+            [yada.resource :refer [resource]]
+            [clojure.java.shell :refer [sh]]))
 
 (defn get-handler
   [ctx {:keys [crux]}]
@@ -13,6 +14,10 @@
          [:h1 "Message Board"]
          [:div
           "here you can post messages :)"]
+         [:div
+          [:pre (:out (sh "ls" "-lh" "data"))]
+          [:pre (:out (sh "lsblk"))]
+          [:pre (:out (sh "pwd"))]]
          [:br]
          [:form {:action "" :method "POST"}
           [:label "Name: "] [:br]
@@ -72,8 +77,8 @@
   (try
     (with-open [crux-system (crux/start-standalone-system
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
-                               :event-log-dir "data/eventlog"
-                               :db-dir "data/db-dir"})]
+                               :event-log-dir "data/eventlog-1"
+                               :db-dir "data/db-dir-1"})]
       (.submitTx
         crux-system
         [[:crux.tx/put :example
