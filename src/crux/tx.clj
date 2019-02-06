@@ -241,8 +241,8 @@
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (let [m (moberg/send-message event-log-kv ::event-log nil conformed-tx-ops {::sub-topic :txs})]
-        (delay {:crux.tx/tx-id (.message-id m)
-                :crux.tx/tx-time (.message-time m)}))))
+        (delay {:crux.tx/tx-id (.id m)
+                :crux.tx/tx-time (.time m)}))))
 
   (new-tx-log-context [this]
     (kv/new-snapshot event-log-kv))

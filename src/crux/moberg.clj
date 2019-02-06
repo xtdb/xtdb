@@ -71,17 +71,17 @@
 (def ^:private ^:const seq-size 10)
 (def ^:private ^:const max-seq-id (dec (bit-shift-left 1 seq-size)))
 
-(deftype MessageId [^Date time ^long id])
+(deftype SentMessage [^Date time ^long id topic])
 
-(defn- next-message-id ^crux.moberg.MessageId [topic]
+(defn- next-message-id ^crux.moberg.SentMessage [topic]
   (let [message-time (Date.)
-        k [topic message-time]
-        seq (long (get (swap! topic+date->count (fn [topic+date->count]
-                                                  {k (inc (long (get topic+date->count k 0)))}))
-                       k))]
+        seq (long (get (swap! topic+date->count
+                              (fn [topic+date->count]
+                                {message-time (inc (long (get topic+date->count message-time 0)))}))
+                       message-time))]
     (if (> seq max-seq-id)
       (recur topic)
-      (MessageId. message-time (bit-or (bit-shift-left (.getTime message-time) seq-size) seq)))))
+      (SentMessage. message-time (bit-or (bit-shift-left (.getTime message-time) seq-size) seq) topic))))
 
 (defn- message-id->message-time ^java.util.Date [^long message-id]
   (Date. (bit-shift-right message-id seq-size)))
@@ -112,11 +112,10 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(deftype SentMessage [^long message-id ^Date message-time])
-
 (defn sent-message->edn [^SentMessage m]
-  {::message-id (.message-id m)
-   ::message-time (.message-time m)})
+  {::message-id (.id m)
+   ::message-time (.time m)
+   ::topic (.topic m)})
 
 (defn send-message
   (^SentMessage [kv topic v]
@@ -142,7 +141,7 @@
                        false)]]))
      (when-let [compact-k (.key compact-kvs+k)]
        (kv/delete kv [compact-k]))
-     (SentMessage. message-id message-time))))
+     id)))
 
 (defn- same-topic? [a b]
   (mem/buffers=? a b (+ idx-id-size c/id-size)))

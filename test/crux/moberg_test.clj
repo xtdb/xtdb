@@ -9,16 +9,16 @@
 
 (t/deftest test-can-send-and-receive-message
   (t/is (zero? (moberg/end-message-id-offset f/*kv* :my-topic)))
-  (let [{:crux.moberg/keys [message-id message-time]
+  (let [{:crux.moberg/keys [message-id message-time topic]
          :as submitted-message} (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))]
     (t/is (integer? message-id))
     (t/is (inst? message-time))
+    (t/is (= :my-topic topic))
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge submitted-message
-                      {:crux.moberg/topic :my-topic
-                       :crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
+                      {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
       (t/is (nil? (moberg/next-message i :my-topic))))
 
     (t/is (= (inc message-id) (moberg/end-message-id-offset f/*kv* :my-topic)))))
@@ -29,15 +29,13 @@
     (with-open [snapshot (kv/new-snapshot f/*kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge my-topic-message
-                      {:crux.moberg/topic :my-topic
-                       :crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
+                      {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
       (t/is (nil? (moberg/next-message i :my-topic))))
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge your-topic-message
-                      {:crux.moberg/topic :your-topic
-                       :crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :your-topic))))
+                      {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :your-topic))))
       (t/is (nil? (moberg/next-message i :your-topic))))))
 
 (t/deftest test-can-send-and-receive-multiple-messages

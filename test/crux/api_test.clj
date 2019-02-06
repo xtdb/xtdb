@@ -13,7 +13,7 @@
            org.eclipse.rdf4j.query.Binding))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster)
-(t/use-fixtures :each f/with-standalone-system-using-event-log)
+(t/use-fixtures :each f/with-each-api-implementation)
 
 (declare execute-sparql)
 
