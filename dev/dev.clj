@@ -33,6 +33,7 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
+   :dev/system-start-fn api/start-local-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
@@ -41,13 +42,13 @@
 
 (def ^ICruxSystem system)
 
-(defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server?] :as options}]
+(defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
-            local-node (doto (api/start-local-node options)
+            local-node (doto (system-start-fn options)
                          (->> (swap! started conj)))
             http-server (when http-server?
                           (srv/start-http-server local-node options))]
