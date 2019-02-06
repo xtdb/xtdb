@@ -26,18 +26,14 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
-(defn- topic-key ^org.agrona.DirectBuffer [topic message-id k]
-  (let [^DirectBuffer k (if k
-                          (c/->id-buffer k)
-                          c/empty-buffer)
-        topic (c/->id-buffer topic)]
+(defn- topic-key ^org.agrona.DirectBuffer [topic message-id]
+  (let [topic (c/->id-buffer topic)]
     (mem/limit-buffer
      (doto ^MutableDirectBuffer (.get topic-key-buffer-tl)
        (.putByte 0 message-idx)
        (.putBytes idx-id-size topic 0 c/id-size)
-       (.putLong (+ idx-id-size c/id-size) message-id ByteOrder/BIG_ENDIAN)
-       (.putBytes (+ idx-id-size c/id-size Long/BYTES) k 0 (.capacity k)))
-     (+ idx-id-size c/id-size Long/BYTES (.capacity k)))))
+       (.putLong (+ idx-id-size c/id-size) message-id ByteOrder/BIG_ENDIAN))
+     (+ idx-id-size c/id-size Long/BYTES))))
 
 (def ^:private ^ThreadLocal reverse-key-key-buffer-tl
   (ThreadLocal/withInitial
@@ -54,10 +50,6 @@
        (.putBytes idx-id-size topic 0 c/id-size)
        (.putBytes (+ idx-id-size c/id-size) k 0 (.capacity k)))
      (+ idx-id-size c/id-size c/id-size))))
-
-(defn- nippy-thaw [^DirectBuffer buffer]
-  (when (pos? (.capacity buffer))
-    (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. buffer)))))
 
 (deftype CompactKVsAndKey [kvs key])
 
@@ -89,7 +81,25 @@
                        k))]
     (if (> seq max-seq-id)
       (recur topic)
-      (MessageId. message-time (bit-or (bit-shift-left (.getTime message-time) 10) seq)))))
+      (MessageId. message-time (bit-or (bit-shift-left (.getTime message-time) seq-size) seq)))))
+
+(defn- message-id->message-time ^java.util.Date [^long message-id]
+  (Date. (bit-shift-right message-id seq-size)))
+
+(defn- nippy-thaw-message [topic message-id ^DirectBuffer buffer]
+  (when (pos? (.capacity buffer))
+    (with-open [in (DataInputStream. (DirectBufferInputStream. buffer))]
+      (let [body (nippy/thaw-from-in! in)
+            k (when (pos? (.available in))
+                (nippy/thaw-from-in! in))
+            headers (when (pos? (.available in))
+                      (nippy/thaw-from-in! in))]
+        (cond-> {::body body
+                 ::topic topic
+                 ::message-id message-id
+                 ::message-time (message-id->message-time message-id)}
+          k (assoc ::key k)
+          headers (assoc ::headers headers))))))
 
 (def ^:private ^ThreadLocal send-buffer-tl
   (ThreadLocal/withInitial
@@ -106,7 +116,7 @@
    (let [id (next-message-id topic)
          message-time (.time id)
          message-id (.id id)
-         message-k (topic-key topic message-id k)
+         message-k (topic-key topic message-id)
          compact-kvs+k (compact-topic-kvs+compact-k kv topic k message-k)]
      (kv/store kv (concat
                    (.kvs compact-kvs+k)
@@ -114,43 +124,47 @@
                      (mem/with-buffer-out
                        (.get send-buffer-tl)
                        (fn [^DataOutput out]
-                         (nippy/freeze-to-out! out (cond-> {:crux.moberg/body v
-                                                            :crux.moberg/topic topic
-                                                            :crux.moberg/message-id message-id
-                                                            :crux.moberg/message-time message-time}
-                                                     k (assoc :crux.moberg/key k)
-                                                     headers (assoc :crux.moberg/headers headers))))
+                         (nippy/freeze-to-out! out v)
+                         (when (or k headers)
+                           (nippy/freeze-to-out! out k)
+                           (nippy/freeze-to-out! out headers)))
                        false)]]))
      (when-let [compact-k (.key compact-kvs+k)]
        (kv/delete kv [compact-k]))
-     {:crux.moberg/message-id message-id
-      :crux.moberg/message-time message-time})))
+     {::message-id message-id
+      ::message-time message-time})))
+
+(defn- same-topic? [a b]
+  (mem/buffers=? a b (+ idx-id-size c/id-size)))
+
+(defn- message-key->message-id ^long [^DirectBuffer k]
+  (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))
 
 (defn next-message [i topic]
-  (let [seek-k (topic-key topic 0 nil)]
-    (when-let [k (kv/next i)]
-      (when (mem/buffers=? k seek-k (+ idx-id-size c/id-size))
-        (or (nippy-thaw (kv/value i))
+  (let [seek-k (topic-key topic 0)]
+    (when-let [k ^DirectBuffer (kv/next i)]
+      (when (same-topic? k seek-k)
+        (or (nippy-thaw-message topic (message-key->message-id k) (kv/value i))
             (recur i topic))))))
 
 (defn seek-message
   ([i topic]
    (seek-message i topic nil))
   ([i topic message-id]
-   (let [seek-k (topic-key topic (or message-id 0) nil)]
-     (when-let [k (kv/seek i seek-k)]
-       (when (mem/buffers=? k seek-k (+ idx-id-size c/id-size))
-         (or (nippy-thaw (kv/value i))
+   (let [seek-k (topic-key topic (or message-id 0))]
+     (when-let [k ^DirectBuffer (kv/seek i seek-k)]
+       (when (same-topic? k seek-k)
+         (or (nippy-thaw-message topic (message-key->message-id k) (kv/value i))
              (next-message i topic)))))))
 
 (defn end-message-id-offset [kv topic]
   (with-open [snapshot (kv/new-snapshot kv)
               i (kv/new-iterator snapshot)]
-    (let [seek-k (topic-key topic Long/MAX_VALUE nil)]
+    (let [seek-k (topic-key topic Long/MAX_VALUE)]
       (if (kv/seek i seek-k)
         (when-let [k ^DirectBuffer (kv/prev i)]
-          (when (mem/buffers=? k seek-k (+ idx-id-size c/id-size))
-            (inc (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))))
-        (do (kv/store kv [[(topic-key topic Long/MAX_VALUE nil)
+          (when (same-topic? k seek-k)
+            (inc (message-key->message-id k))))
+        (do (kv/store kv [[(topic-key topic Long/MAX_VALUE)
                            c/empty-buffer]])
             (end-message-id-offset kv topic))))))

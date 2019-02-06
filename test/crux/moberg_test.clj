@@ -75,6 +75,8 @@
        (dotimes [n n]
          (moberg/send-message f/*kv* :my-topic (str "Hello World-" n))))
 
+      (prn (kv/kv-status f/*kv*))
+
       (time
        (with-open [snapshot (kv/new-snapshot f/*kv*)
                    i (kv/new-iterator snapshot)]
