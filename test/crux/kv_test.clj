@@ -115,6 +115,11 @@
       (finally
         (cio/delete-dir sync-dir)))))
 
+(t/deftest test-sanity-check-can-fsync
+  (kv/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+  (kv/fsync f/*kv*)
+  (t/is (= "Crux" (String. ^bytes (value f/*kv* (bu/long->bytes 1))))))
+
 (t/deftest test-prev-and-next []
   (doseq [[^String k v] {"a" 1 "c" 3}]
     (kv/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))

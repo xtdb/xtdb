@@ -22,6 +22,7 @@
   (new-snapshot ^java.io.Closeable [this])
   (store [this kvs])
   (delete [this ks])
+  (fsync [this])
   (backup [this dir])
   (count-keys [this])
   (db-dir [this])

@@ -8,7 +8,7 @@
             [crux.memory :as mem])
   (:import java.io.Closeable
            clojure.lang.MapEntry
-           [org.rocksdb Checkpoint CompressionType LRUCache Options ReadOptions
+           [org.rocksdb Checkpoint CompressionType FlushOptions LRUCache Options ReadOptions
             RocksDB RocksIterator BlockBasedTableConfig WriteBatch WriteOptions]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -117,6 +117,11 @@
       (doseq [k ks]
         (.delete wb (mem/->on-heap k)))
       (.write db write-options wb)))
+
+  (fsync [{:keys [^RocksDB db]}]
+    (with-open [flush-options (doto (FlushOptions.)
+                                (.setWaitForFlush true))]
+      (.flush db flush-options)))
 
   (backup [{:keys [^RocksDB db]} dir]
     (with-open [checkpoint (Checkpoint/create db)]

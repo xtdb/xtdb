@@ -249,6 +249,9 @@
             (kv/delete this ks))
           (throw e)))))
 
+  (fsync [this]
+    (success? (LMDB/mdb_env_sync env true)))
+
   (backup [_ dir]
     (env-copy env dir))
 

@@ -32,6 +32,15 @@
                                         ^byte v])
   (^void rocksdb_writeoptions_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
 
+
+  (^jnr.ffi.Pointer rocksdb_flushoptions_create [])
+  (^void rocksdb_flushoptions_set_wait [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                        ^byte v])
+  (^void rocksdb_flushoptions_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
+  (^void rocksdb_flush [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} flush_options
+                        ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+
   (^jnr.ffi.Pointer rocksdb_open [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
                                   ^{jnr.ffi.annotations.In true :tag String} name
                                   ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
@@ -250,6 +259,16 @@
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)
+          (check-error errptr-out)))))
+
+  (fsync [{:keys [^Pointer db]}]
+    (let [errptr-out (make-array String 1)
+          flush-options (.rocksdb_flushoptions_create rocksdb)]
+      (try
+        (.rocksdb_flushoptions_set_wait rocksdb flush-options 1)
+        (.rocksdb_flush rocksdb db flush-options errptr-out)
+        (finally
+          (.rocksdb_flushoptions_destroy rocksdb flush-options)
           (check-error errptr-out)))))
 
   (backup [{:keys [^Pointer db]} dir]

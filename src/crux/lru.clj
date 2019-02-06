@@ -269,6 +269,9 @@
   (delete [_ ks]
     (kv/delete kv ks))
 
+  (fsync [_]
+    (kv/fsync kv))
+
   (backup [_ dir]
     (kv/backup kv dir))
 

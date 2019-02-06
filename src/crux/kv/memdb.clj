@@ -96,6 +96,9 @@
   (delete [_ ks]
     (swap! db #(apply dissoc % (map mem/->off-heap ks))))
 
+  (fsync [_]
+    (log/warn "Using fsync on MemKv has no effect."))
+
   (backup [_ dir]
     (let [file (io/file dir)]
       (when (.exists file)
