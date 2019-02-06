@@ -143,7 +143,7 @@
          (or (nippy-thaw (kv/value i))
              (next-message i topic)))))))
 
-(defn end-message-id [kv topic]
+(defn end-message-id-offset [kv topic]
   (with-open [snapshot (kv/new-snapshot kv)
               i (kv/new-iterator snapshot)]
     (let [seek-k (topic-key topic Long/MAX_VALUE nil)]

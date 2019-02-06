@@ -265,7 +265,7 @@
                                 [::event-log
                                  :next-offset])]
         (log/debug "Consuming from:" next-offset)
-        (if-let [m (moberg/seek-message i ::event-log (or next-offset 0))]
+        (if-let [m (moberg/seek-message i ::event-log next-offset)]
           (let [last-message (->> (repeatedly #(moberg/next-message i ::event-log))
                                   (take-while identity)
                                   (cons m)
@@ -282,7 +282,7 @@
                                                            (:crux.moberg/message-id m)))
                                             m)
                                           nil))
-                end-offset (long (moberg/end-message-id event-log-kv ::event-log))
+                end-offset (long (moberg/end-message-id-offset event-log-kv ::event-log))
                 next-offset (inc (long (:crux.moberg/message-id last-message)))
                 lag (- end-offset next-offset)
                 _ (when (pos? lag)
