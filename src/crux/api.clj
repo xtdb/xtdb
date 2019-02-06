@@ -176,7 +176,10 @@
 
 (defn start-standalone-system
   "Creates a minimal standalone system writing the transaction log into
-  its local KV store without relying on Kafka.
+  its local KV store without relying on Kafka. Alternatively, when the
+  event-log-dir option is provided, using two KV stores to enable
+  rebuilding the index from the event log, being more similar to the
+  semantics of Kafka but for a single process only.
 
   Returns a crux.api.StandaloneSystem component that implements
   java.io.Closeable, which allows the system to be stopped by calling
