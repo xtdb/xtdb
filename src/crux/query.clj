@@ -270,7 +270,11 @@
         (idx/update-binary-join-order! binary-idx e-doc-idx v-idx)))))
 
 (defn- triple-joins [triple-clauses var->joins arg-vars stats]
-  (let [triple-clauses (sort-by (comp stats :a) triple-clauses)
+  (let [var->frequency (->> (concat (map :e triple-clauses)
+                                    (map :v triple-clauses))
+                            (filter logic-var?)
+                            (frequencies))
+        triple-clauses (sort-by (comp stats :a) triple-clauses)
         literal-clauses (for [{:keys [e v] :as clause} triple-clauses
                               :when (or (literal? e)
                                         (literal? v))]
@@ -300,9 +304,13 @@
                                                     clause))
                                              clauses))]
                        (if-let [{:keys [e a v]} clause]
-                         (recur (concat join-order [v e])
+                         (recur (->> (sort-by var->frequency [v e])
+                                     (reverse)
+                                     (concat join-order))
                                 (remove #{clause} clauses))
                          join-order)))]
+    (log/debug :triple-joins-var->frequency var->frequency)
+    (log/debug :triple-joins-join-order join-order)
     [(->> join-order
           (distinct)
           (partition 2 1)
