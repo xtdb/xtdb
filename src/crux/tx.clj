@@ -8,6 +8,7 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
+            [crux.moberg :as moberg]
             [taoensso.nippy :as nippy])
   (:import [crux.codec EntityTx Id]
            [java.io Closeable Writer]
@@ -189,6 +190,8 @@
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
+;; For dev/testing:
+
 (defrecord KvTxLog [kv]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -220,6 +223,82 @@
       (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
         (assoc (c/decode-tx-log-key-from k)
                :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
+
+;; For StandaloneSystem.
+
+(defrecord EventTxLog [event-log-kv]
+  db/TxLog
+  (submit-doc [this content-hash doc]
+    (moberg/send-message event-log-kv :crux-event-log doc content-hash {::sub-topic :docs}))
+
+  (submit-tx [this tx-ops]
+    (let [conformed-tx-ops (conform-tx-ops tx-ops)]
+      (doseq [doc (tx-ops->docs tx-ops)]
+        (db/submit-doc this (str (c/new-id doc)) doc))
+      (let [{:crux.moberg/keys [message-id message-time]}
+            (moberg/send-message event-log-kv :crux-event-log conformed-tx-ops nil {::sub-topic :txs})]
+        (delay {:crux.tx/tx-id message-id
+                :crux.tx/tx-time message-time}))))
+
+  (new-tx-log-context [this]
+    (kv/new-snapshot event-log-kv))
+
+  (tx-log [this tx-log-context from-tx-id]
+    (let [i (kv/new-iterator tx-log-context)]
+      (when-let [m (moberg/seek-message i :crux-event-log from-tx-id)]
+        (for [m (->> (repeatedly #(moberg/next-message i :crux-event-log))
+                     (take-while identity)
+                     (cons m))
+              :when (= :txs (get-in m [:crux.moberg/headers ::sub-topic]))]
+          {:crux.tx/tx-ops (:crux.moberg/body m)
+           :crux.tx/tx-id (:crux.moberg/message-id m)
+           :crux.tx/tx-time (:crux.moberg/message-time m)})))))
+
+(defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
+                                      :or {batch-size 100
+                                           idle-sleep-ms 100}}]
+  (while @running?
+    (with-open [snapshot (kv/new-snapshot event-log-kv)
+                i (kv/new-iterator snapshot)]
+      (let [next-offset (get-in (db/read-index-meta indexer :crux-tx-log/consumer-state)
+                                [:crux.event-log/crux-event-log
+                                 :next-offset])]
+        (if-let [m (moberg/seek-message i :crux-event-log (or next-offset 0))]
+          (let [last-message (->> (repeatedly #(moberg/next-message i :crux-event-log))
+                                  (take-while identity)
+                                  (cons m)
+                                  (take batch-size)
+                                  (reduce (fn [last-message m]
+                                            (case (get-in m [:crux.moberg/header ::sub-topic])
+                                              :docs
+                                              (db/index-doc indexer (:curx.moberg/key m) (:crux.moberg/body m))
+                                              :txs
+                                              (db/index-tx indexer
+                                                           (:crux.moberg/body m)
+                                                           (:crux.moberg/message-time m)
+                                                           (:crux.moberg/message-id m)))
+                                            m)
+                                          nil))]
+            (db/store-index-meta indexer
+                                 :crux.tx-log/consumer-state
+                                 {:crux.event-log/crux-event-log
+                                  {:lag (- (long (moberg/end-message-id event-log-kv :crux-event-log))
+                                           (long (:crux.moberg/message-id last-message)))
+                                   :next-offset (inc (long (:crux.moberg/message-id last-message)))
+                                   :time (:crux.moberg/message-time last-message)}}))
+          (Thread/sleep idle-sleep-ms))))))
+
+(defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer]
+  (let [running? (atom true)
+        worker-thread (doto (Thread. #(event-log-consumer-main-loop {:running? running?
+                                                                     :event-log-kv event-log-kv
+                                                                     :indexer indexer})
+                                     "crux.tx.event-log-consumer-thread")
+                        (.start))]
+    (reify Closeable
+      (close [_]
+        (reset! running? false)
+        (.join worker-thread)))))
 
 (defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
   (vec (for [op tx-ops]

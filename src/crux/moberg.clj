@@ -1,6 +1,5 @@
 (ns crux.moberg
   (:require [crux.codec :as c]
-            [crux.io :as cio]
             [crux.memory :as mem]
             [crux.kv :as kv]
             [taoensso.nippy :as nippy])
