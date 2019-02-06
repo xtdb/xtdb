@@ -153,4 +153,4 @@
             (inc (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))))
         (do (kv/store kv [[(topic-key topic Long/MAX_VALUE nil)
                            c/empty-buffer]])
-            (end-message-id kv topic))))))
+            (end-message-id-offset kv topic))))))
