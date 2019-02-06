@@ -28,6 +28,7 @@
   (try
     (with-open [crux-system (crux/start-standalone-system
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
+                               :event-log-dir "data-eventlog"
                                :db-dir "data"})]
       (.submitTx
         crux-system
