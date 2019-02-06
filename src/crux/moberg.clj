@@ -160,11 +160,11 @@
 (defn end-message-id-offset [kv topic]
   (with-open [snapshot (kv/new-snapshot kv)
               i (kv/new-iterator snapshot)]
-    (let [seek-k (topic-key topic Long/MAX_VALUE)]
-      (if (kv/seek i seek-k)
+    (let [seek-k (topic-key topic Long/MAX_VALUE)
+          k (kv/seek i seek-k)]
+      (if (and k (same-topic? seek-k k))
         (when-let [k ^DirectBuffer (kv/prev i)]
           (when (same-topic? k seek-k)
             (inc (message-key->message-id k))))
-        (do (kv/store kv [[(topic-key topic Long/MAX_VALUE)
-                           c/empty-buffer]])
+        (do (kv/store kv [[seek-k c/empty-buffer]])
             (end-message-id-offset kv topic))))))
