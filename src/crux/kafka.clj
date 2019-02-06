@@ -144,9 +144,6 @@
 (defn- topic-partition-meta-key [^TopicPartition partition]
   (keyword "crux.kafka.topic-partition" (str partition)))
 
-(defn consumer-status [indexer]
-  {:crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)})
-
 (defn- update-stored-consumer-state [indexer ^KafkaConsumer consumer records]
   (let [partition->records (group-by (fn [^ConsumerRecord r]
                                        (TopicPartition. (.topic r)

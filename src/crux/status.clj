@@ -4,7 +4,8 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.kv :as kv]))
+            [crux.kv :as kv]
+            [crux.tx :as tx]))
 
 ;; TODO: Rethink this, creates explicit dependencies on various
 ;; subsystems, better if they could report back status themselves.
@@ -13,4 +14,4 @@
    (kv/kv-status kv-store)
    (idx/index-status kv-store)
    (k/zk-status consumer-config)
-   (k/consumer-status indexer)))
+   (tx/consumer-status indexer)))
