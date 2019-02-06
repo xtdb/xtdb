@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crux-standalone-webservice
+  labels:
+    app: crux-standalone-webservice
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crux-standalone-webservice
+  template:
+    metadata:
+      labels:
+        app: crux-standalone-webservice
+        date: "1549289980"
+    spec:
+      containers:
+      - name: crux-standalone-webservice
+        image: juxt/crux-standalone-webservice:latest
+        ports:
+        - containerPort: 8080
