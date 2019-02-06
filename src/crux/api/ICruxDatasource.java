@@ -1,6 +1,7 @@
 package crux.api;
 
 import java.io.Closeable;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -42,9 +43,9 @@ public interface ICruxDatasource {
      * Queries the db.
      *
      * @param query the query in map, vector or string form.
-     * @return      a set of result tuples.
+     * @return      a set or vector of result tuples.
      */
-    public Set<List> q(Object query);
+    public Collection<List> q(Object query);
 
     /**
      * Queries the db lazily.
