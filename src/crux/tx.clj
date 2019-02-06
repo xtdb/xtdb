@@ -227,6 +227,9 @@
 
 ;; For StandaloneSystem.
 
+(s/def :crux.tx/event-log-dir string?)
+(s/def ::event-log-sync-interval-ms nat-int?)
+
 (defrecord EventTxLog [event-log-kv]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -295,7 +298,7 @@
             (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))
           (Thread/sleep idle-sleep-ms))))))
 
-(defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer]
+(defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer event-log-sync-interval-ms]
   (let [running? (atom true)
         worker-thread (doto (Thread. #(try
                                         (event-log-consumer-main-loop {:running? running?
@@ -304,11 +307,22 @@
                                         (catch Throwable t
                                           (log/error t "Event log consumer threw exception, consumption has stopped:")))
                                      "crux.tx.event-log-consumer-thread")
-                        (.start))]
+                        (.start))
+        fsync-thread (when event-log-sync-interval-ms
+                       (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
+                       (doto (Thread. #(while @running?
+                                         (try
+                                           (Thread/sleep event-log-sync-interval-ms)
+                                           (kv/fsync event-log-kv)
+                                           (catch Throwable t
+                                             (log/error t "Event log fsync threw exception:"))))
+                                      "crux.tx.event-log-fsync-thread")
+                         (.start)))]
     (reify Closeable
       (close [_]
         (reset! running? false)
-        (.join worker-thread)))))
+        (.join worker-thread)
+        (some-> fsync-thread (.join))))))
 
 (defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
   (vec (for [op tx-ops]

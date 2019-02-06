@@ -170,9 +170,9 @@
     (doseq [c [event-log-consumer event-log-kv-store kv-store]]
       (cio/try-close c))))
 
-(s/def ::event-log-dir string?)
 (s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
-                                    :opt-un [:crux.kv/sync? ::event-log-dir]))
+                                    :opt-un [:crux.kv/sync? :crux.tx/event-log-dir]
+                                    :opt [:crux.tx/event-log-sync-interval-ms]))
 
 (defn start-standalone-system
   "Creates a minimal standalone system writing the transaction log into
@@ -187,18 +187,19 @@
 
   NOTE: requires any KV store dependencies on the classpath. The
   crux.kv.memdb.MemKv KV backend works without additional dependencies."
-  ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir] :as options}]
+  ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir crux.tx/event-log-sync-interval-ms] :as options}]
   (s/assert ::standalone-options options)
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store)
                   (merge (when-not event-log-dir
                            {:sync? true})
                          options))
+        event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))
         event-log-kv-store (when event-log-dir
                              ((resolve 'crux.bootstrap/start-kv-store)
                               {:db-dir event-log-dir
                                :kv-backend kv-backend
-                               :sync? true
+                               :sync? event-log-sync?
                                :crux.index/check-and-store-index-version false}))
         tx-log (if event-log-kv-store
                  (tx/->EventTxLog event-log-kv-store)
@@ -206,7 +207,8 @@
         object-store (lru/new-cached-object-store kv-store)
         indexer (tx/->KvIndexer kv-store tx-log object-store)
         event-log-consumer (when event-log-kv-store
-                             (tx/start-event-log-consumer event-log-kv-store indexer))]
+                             (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
+                                                                                       event-log-sync-interval-ms)))]
     (map->StandaloneSystem {:kv-store kv-store
                             :event-log-kv-store event-log-kv-store
                             :tx-log tx-log
