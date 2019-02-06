@@ -1070,6 +1070,10 @@
                :when (not (contains? var->bindings var))]
          (throw (IllegalArgumentException.
                  (str "Find refers to unknown variable: " var))))
+       (doseq [{:keys [var]} order-by
+               :when (not (contains? var->bindings var))]
+         (throw (IllegalArgumentException.
+                 (str "Order by refers to unknown variable: " var))))
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
