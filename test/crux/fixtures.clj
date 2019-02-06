@@ -189,6 +189,21 @@
       (finally
         (cio/delete-dir db-dir)))))
 
+(defn with-standalone-system-using-event-log [f]
+  (assert (not (bound? #'*kv*)))
+  (let [db-dir (str (cio/create-tmpdir "kv-store"))
+        event-log-dir (str (cio/create-tmpdir "event-log-dir"))
+        options {:db-dir db-dir
+                 :event-log-dir event-log-dir
+                 :kv-backend *kv-backend*}]
+    (try
+      (with-open [standalone-system (Crux/startStandaloneSystem options)]
+        (binding [*api* standalone-system]
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)
+        (cio/delete-dir event-log-dir)))))
+
 (defn with-api-client [f]
   (assert (bound? #'*api-url*))
   (with-open [api-client (Crux/newApiClient *api-url*)]
@@ -200,6 +215,8 @@
     (with-local-node f))
   (t/testing "Local API StandaloneSystem"
     (with-standalone-system f))
+  (t/testing "Local API StandaloneSystem using event log"
+    (with-standalone-system-using-event-log f))
   (t/testing "Remote API"
     (with-local-node
       #(with-api-client f))))

@@ -135,9 +135,9 @@
 
 (defn seek-message
   ([i topic]
-   (seek-message i topic 0))
+   (seek-message i topic nil))
   ([i topic message-id]
-   (let [seek-k (topic-key topic message-id nil)]
+   (let [seek-k (topic-key topic (or message-id 0) nil)]
      (when-let [k (kv/seek i seek-k)]
        (when (mem/buffers=? k seek-k (+ idx-id-size c/id-size))
          (or (nippy-thaw (kv/value i))

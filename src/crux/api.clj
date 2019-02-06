@@ -3,6 +3,7 @@
   (:require [clojure.tools.logging :as log]
             [clojure.edn :as edn]
             [clojure.string :as str]
+            [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -126,7 +127,7 @@
 ;; Standalone System
 
 
-(defrecord StandaloneSystem [kv-store tx-log options]
+(defrecord StandaloneSystem [kv-store event-log-kv-store event-log-consumer tx-log options]
   ICruxSystem
   (db [this]
     (.db ^LocalNode (map->LocalNode this)))
@@ -166,7 +167,12 @@
 
   Closeable
   (close [_]
-    (.close ^Closeable kv-store)))
+    (doseq [c [event-log-consumer event-log-kv-store kv-store]]
+      (cio/try-close c))))
+
+(s/def ::event-log-dir string?)
+(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
+                                    :opt-un [:crux.kv/sync? ::event-log-dir]))
 
 (defn start-standalone-system
   "Creates a minimal standalone system writing the transaction log into
@@ -178,17 +184,32 @@
 
   NOTE: requires any KV store dependencies on the classpath. The
   crux.kv.memdb.MemKv KV backend works without additional dependencies."
-  ^ICruxSystem [{:keys [db-dir sync? kv-backend] :as options
-                 :or {sync? true}}]
+  ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir] :as options}]
+  (s/assert ::standalone-options options)
   (require 'crux.bootstrap)
-  (let [kv-store ((resolve 'crux.bootstrap/start-kv-store) (merge {:sync? sync?} options))
-        tx-log (tx/->KvTxLog kv-store)
+  (let [kv-store ((resolve 'crux.bootstrap/start-kv-store)
+                  (merge (when-not event-log-dir
+                           {:sync? true})
+                         options))
+        event-log-kv-store (when event-log-dir
+                             ((resolve 'crux.bootstrap/start-kv-store)
+                              {:db-dir event-log-dir
+                               :kv-backend kv-backend
+                               :sync? true
+                               :crux.index/check-and-store-index-version false}))
+        tx-log (if event-log-kv-store
+                 (tx/->EventTxLog event-log-kv-store)
+                 (tx/->KvTxLog kv-store))
         object-store (lru/new-cached-object-store kv-store)
-        indexer (tx/->KvIndexer kv-store tx-log object-store)]
+        indexer (tx/->KvIndexer kv-store tx-log object-store)
+        event-log-consumer (when event-log-kv-store
+                             (tx/start-event-log-consumer event-log-kv-store indexer))]
     (map->StandaloneSystem {:kv-store kv-store
+                            :event-log-kv-store event-log-kv-store
                             :tx-log tx-log
                             :object-store object-store
                             :indexer indexer
+                            :event-log-consumer event-log-consumer
                             :options options})))
 
 ;; Remote API

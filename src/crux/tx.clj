@@ -230,14 +230,14 @@
 (defrecord EventTxLog [event-log-kv]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (moberg/send-message event-log-kv :crux-event-log content-hash doc {::sub-topic :docs}))
+    (moberg/send-message event-log-kv ::event-log content-hash doc {::sub-topic :docs}))
 
   (submit-tx [this tx-ops]
     (let [conformed-tx-ops (conform-tx-ops tx-ops)]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (let [{:crux.moberg/keys [message-id message-time]}
-            (moberg/send-message event-log-kv :crux-event-log nil conformed-tx-ops {::sub-topic :txs})]
+            (moberg/send-message event-log-kv ::event-log nil conformed-tx-ops {::sub-topic :txs})]
         (delay {:crux.tx/tx-id message-id
                 :crux.tx/tx-time message-time}))))
 
@@ -246,8 +246,8 @@
 
   (tx-log [this tx-log-context from-tx-id]
     (let [i (kv/new-iterator tx-log-context)]
-      (when-let [m (moberg/seek-message i :crux-event-log from-tx-id)]
-        (for [m (->> (repeatedly #(moberg/next-message i :crux-event-log))
+      (when-let [m (moberg/seek-message i ::event-log from-tx-id)]
+        (for [m (->> (repeatedly #(moberg/next-message i ::event-log))
                      (take-while identity)
                      (cons m))
               :when (= :txs (get-in m [:crux.moberg/headers ::sub-topic]))]
@@ -262,11 +262,11 @@
     (with-open [snapshot (kv/new-snapshot event-log-kv)
                 i (kv/new-iterator snapshot)]
       (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
-                                [:crux.event-log/crux-event-log
+                                [::event-log
                                  :next-offset])]
         (log/debug "Consuming from:" next-offset)
-        (if-let [m (moberg/seek-message i :crux-event-log (or next-offset 0))]
-          (let [last-message (->> (repeatedly #(moberg/next-message i :crux-event-log))
+        (if-let [m (moberg/seek-message i ::event-log (or next-offset 0))]
+          (let [last-message (->> (repeatedly #(moberg/next-message i ::event-log))
                                   (take-while identity)
                                   (cons m)
                                   (take batch-size)
@@ -282,8 +282,8 @@
                                                            (:crux.moberg/message-id m)))
                                             m)
                                           nil))
-                consumer-state {:crux.event-log/crux-event-log
-                                {:lag (- (long (moberg/end-message-id event-log-kv :crux-event-log))
+                consumer-state {::event-log
+                                {:lag (- (long (moberg/end-message-id event-log-kv ::event-log))
                                          (long (:crux.moberg/message-id last-message)))
                                  :next-offset (inc (long (:crux.moberg/message-id last-message)))
                                  :time (:crux.moberg/message-time last-message)}}]
