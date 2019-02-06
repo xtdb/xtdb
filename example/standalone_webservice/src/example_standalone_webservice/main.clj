@@ -11,6 +11,8 @@
       (html
         [:div
          [:h1 "Message Board"]
+         [:div
+          "here you can post messages :)"]
          [:br]
          [:form {:action "" :method "POST"}
           [:label "Name: "] [:br]
@@ -70,8 +72,8 @@
   (try
     (with-open [crux-system (crux/start-standalone-system
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
-                               :event-log-dir "data-eventlog"
-                               :db-dir "data"})]
+                               :event-log-dir "data/eventlog"
+                               :db-dir "data/db-dir"})]
       (.submitTx
         crux-system
         [[:crux.tx/put :example
