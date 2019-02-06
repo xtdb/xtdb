@@ -86,6 +86,16 @@
 (defn- message-id->message-time ^java.util.Date [^long message-id]
   (Date. (bit-shift-right message-id seq-size)))
 
+(deftype Message [body topic ^long message-id message-time key headers])
+
+(defn message->edn [^Message m]
+  (cond-> {::body (.body m)
+           ::topic (.topic m)
+           ::message-id (.message-id m)
+           ::message-time (.message-time m)}
+    (.key m) (assoc ::key (.key m))
+    (.headers m) (assoc ::headers (.headers m))))
+
 (defn- nippy-thaw-message [topic message-id ^DirectBuffer buffer]
   (when (pos? (.capacity buffer))
     (with-open [in (DataInputStream. (DirectBufferInputStream. buffer))]
@@ -94,12 +104,7 @@
                 (nippy/thaw-from-in! in))
             headers (when (pos? (.available in))
                       (nippy/thaw-from-in! in))]
-        (cond-> {::body body
-                 ::topic topic
-                 ::message-id message-id
-                 ::message-time (message-id->message-time message-id)}
-          k (assoc ::key k)
-          headers (assoc ::headers headers))))))
+        (Message. body topic message-id (message-id->message-time message-id) k headers)))))
 
 (def ^:private ^ThreadLocal send-buffer-tl
   (ThreadLocal/withInitial
@@ -107,12 +112,18 @@
      (get [_]
        (ExpandableDirectByteBuffer.)))))
 
+(deftype SentMessage [^long message-id message-time])
+
+(defn sent-message->edn [^SentMessage m]
+  {::message-id (.message-id m)
+   ::message-time (.message-time m)})
+
 (defn send-message
-  ([kv topic v]
+  (^SentMessage [kv topic v]
    (send-message kv topic nil v nil))
-  ([kv topic k v]
+  (^SentMessage [kv topic k v]
    (send-message kv topic k v nil))
-  ([kv topic k v headers]
+  (^SentMessage [kv topic k v headers]
    (let [id (next-message-id topic)
          message-time (.time id)
          message-id (.id id)
@@ -131,8 +142,7 @@
                        false)]]))
      (when-let [compact-k (.key compact-kvs+k)]
        (kv/delete kv [compact-k]))
-     {::message-id message-id
-      ::message-time message-time})))
+     (SentMessage. message-id message-time))))
 
 (defn- same-topic? [a b]
   (mem/buffers=? a b (+ idx-id-size c/id-size)))
@@ -140,7 +150,7 @@
 (defn- message-key->message-id ^long [^DirectBuffer k]
   (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))
 
-(defn next-message [i topic]
+(defn next-message ^crux.moberg.Message [i topic]
   (let [seek-k (topic-key topic 0)]
     (when-let [k ^DirectBuffer (kv/next i)]
       (when (same-topic? k seek-k)
@@ -148,23 +158,24 @@
             (recur i topic))))))
 
 (defn seek-message
-  ([i topic]
+  (^crux.moberg.Message [i topic]
    (seek-message i topic nil))
-  ([i topic message-id]
+  (^crux.moberg.Message [i topic message-id]
    (let [seek-k (topic-key topic (or message-id 0))]
      (when-let [k ^DirectBuffer (kv/seek i seek-k)]
        (when (same-topic? k seek-k)
          (or (nippy-thaw-message topic (message-key->message-id k) (kv/value i))
              (next-message i topic)))))))
 
-(defn end-message-id-offset [kv topic]
+(defn end-message-id-offset ^long [kv topic]
   (with-open [snapshot (kv/new-snapshot kv)
               i (kv/new-iterator snapshot)]
     (let [seek-k (topic-key topic Long/MAX_VALUE)
           k (kv/seek i seek-k)]
       (if (and k (same-topic? seek-k k))
-        (when-let [k ^DirectBuffer (kv/prev i)]
-          (when (same-topic? k seek-k)
-            (inc (message-key->message-id k))))
+        (or (when-let [k ^DirectBuffer (kv/prev i)]
+              (when (same-topic? k seek-k)
+                (inc (message-key->message-id k))))
+            0)
         (do (kv/store kv [[seek-k c/empty-buffer]])
             (end-message-id-offset kv topic))))))

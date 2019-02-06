@@ -11,6 +11,7 @@
             [crux.moberg :as moberg]
             [taoensso.nippy :as nippy])
   (:import [crux.codec EntityTx Id]
+           [crux.moberg Message]
            [java.io Closeable Writer]
            java.util.concurrent.TimeoutException
            java.util.Date))
@@ -239,10 +240,9 @@
     (let [conformed-tx-ops (conform-tx-ops tx-ops)]
       (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
-      (let [{:crux.moberg/keys [message-id message-time]}
-            (moberg/send-message event-log-kv ::event-log nil conformed-tx-ops {::sub-topic :txs})]
-        (delay {:crux.tx/tx-id message-id
-                :crux.tx/tx-time message-time}))))
+      (let [m (moberg/send-message event-log-kv ::event-log nil conformed-tx-ops {::sub-topic :txs})]
+        (delay {:crux.tx/tx-id (.message-id m)
+                :crux.tx/tx-time (.message-time m)}))))
 
   (new-tx-log-context [this]
     (kv/new-snapshot event-log-kv))
@@ -250,13 +250,13 @@
   (tx-log [this tx-log-context from-tx-id]
     (let [i (kv/new-iterator tx-log-context)]
       (when-let [m (moberg/seek-message i ::event-log from-tx-id)]
-        (for [m (->> (repeatedly #(moberg/next-message i ::event-log))
-                     (take-while identity)
-                     (cons m))
-              :when (= :txs (get-in m [:crux.moberg/headers ::sub-topic]))]
-          {:crux.tx/tx-ops (:crux.moberg/body m)
-           :crux.tx/tx-id (:crux.moberg/message-id m)
-           :crux.tx/tx-time (:crux.moberg/message-time m)})))))
+        (for [^Message m (->> (repeatedly #(moberg/next-message i ::event-log))
+                              (take-while identity)
+                              (cons m))
+              :when (= :txs (get (.headers m) ::sub-topic))]
+          {:crux.tx/tx-ops (.body m)
+           :crux.tx/tx-id (.message-id m)
+           :crux.tx/tx-time (.message-time m)})))))
 
 (defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100
@@ -269,31 +269,31 @@
                                  :next-offset])]
         (if-let [m (moberg/seek-message i ::event-log next-offset)]
           (let [_ (log/debug "Consuming from:" next-offset)
-                last-message (->> (repeatedly #(moberg/next-message i ::event-log))
-                                  (take-while identity)
-                                  (cons m)
-                                  (take batch-size)
-                                  (reduce (fn [last-message m]
-                                            (log/debug "Consuming message:" (pr-str m))
-                                            (case (get-in m [:crux.moberg/headers ::sub-topic])
-                                              :docs
-                                              (db/index-doc indexer (:crux.moberg/key m) (:crux.moberg/body m))
-                                              :txs
-                                              (db/index-tx indexer
-                                                           (:crux.moberg/body m)
-                                                           (:crux.moberg/message-time m)
-                                                           (:crux.moberg/message-id m)))
-                                            m)
-                                          nil))
-                end-offset (long (moberg/end-message-id-offset event-log-kv ::event-log))
-                next-offset (inc (long (:crux.moberg/message-id last-message)))
+                ^Message last-message (->> (repeatedly #(moberg/next-message i ::event-log))
+                                           (take-while identity)
+                                           (cons m)
+                                           (take batch-size)
+                                           (reduce (fn [last-message ^Message m]
+                                                     (log/debug "Consuming message:" (pr-str (moberg/message->edn m)))
+                                                     (case (get (.headers m) ::sub-topic)
+                                                       :docs
+                                                       (db/index-doc indexer (.key m) (.body m))
+                                                       :txs
+                                                       (db/index-tx indexer
+                                                                    (.body m)
+                                                                    (.message-time m)
+                                                                    (.message-id m)))
+                                                     m)
+                                                   nil))
+                end-offset (moberg/end-message-id-offset event-log-kv ::event-log)
+                next-offset (inc (long (.message-id last-message)))
                 lag (- end-offset next-offset)
                 _ (when (pos? lag)
                     (log/warn "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
                 consumer-state {::event-log
                                 {:lag lag
                                  :next-offset next-offset
-                                 :time (:crux.moberg/message-time last-message)}}]
+                                 :time (.message-time last-message)}}]
             (log/debug "Event log consumer state:" (pr-str consumer-state))
             (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))
           (Thread/sleep idle-sleep-ms))))))
