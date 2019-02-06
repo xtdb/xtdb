@@ -86,6 +86,15 @@ with the option of running an embedded Kafka.
 If you want to play around with Crux without using Kafka, you can try
 using Crux <<#standalone,standalone>> which uses in-memory event logs.
 
+=== Docker
+
+An easy way to fire up a local Kafka and Zookeeper is via
+Kafka. Follow
+https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html[this
+guide] on the confluent docs for how to do this.
+
+NOTE: TODO complete this
+
 === Embedded Kafka
 
 NOTE: TODO, write up the simple case of connecting to a running Kakfa
