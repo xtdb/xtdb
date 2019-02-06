@@ -22,7 +22,8 @@
   (:import [crux.api Crux LocalNode ICruxSystem]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
-           java.io.Closeable))
+           java.io.Closeable
+           java.util.Date))
 
 (def storage-dir "dev-storage")
 

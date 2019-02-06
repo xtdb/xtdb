@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [crux.db :as db]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv :as kv]
             [crux.tx :as tx]
             [crux.lru :as lru]
@@ -356,28 +357,29 @@
               [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
               [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
               [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
-             (with-open [snapshot (kv/new-snapshot f/*kv*)]
-               (let [object-store (lru/new-cached-object-store f/*kv*)
-                     condition-ids (->> (q/q (q/db f/*kv*)
-                                             '{:find [c]
-                                               :where [[c :condition/device-id device-id]
-                                                       [device-id :location/location location]
-                                                       [(crux.ts-test/kw-starts-with? location "field-")]]
-                                               :timeout 120000})
-                                        (reduce into []))]
-                 (->> (for [c condition-ids
-                            {:keys [content-hash]} (idx/entity-history snapshot c)]
-                        (-> (db/get-single-object object-store snapshot content-hash)
-                            (update :condition/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                      (sort-by :condition/time)
+             (let [kv f/*kv*
+                   condition-ids (->> (.q (q/db kv)
+                                          '{:find [c]
+                                            :where [[c :condition/device-id device-id]
+                                                    [device-id :location/location location]
+                                                    [(crux.ts-test/kw-starts-with? location "field-")]]
+                                            :timeout 120000})
+                                      (reduce into []))
+                   db (q/db kv #inst "1970")]
+               (with-open [snapshot (.newSnapshot db)]
+                 (->> (for [c condition-ids]
+                        (for [{:keys [crux.db/doc]} (.historyAscending db snapshot c)]
+                          (update doc :condition/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                      (cio/merge-sort (fn [a b]
+                                        (compare (:condition/time a) (:condition/time b))))
                       (partition-by :condition/time)
                       (take 24)
                       (mapv (fn [group]
                               (let [temperatures (sort (mapv :condition/temperature group))]
                                 [(:condition/time (first group))
-                                 (trunc (/ (reduce + temperatures) (count group)) 2)
-                                 (trunc (first temperatures) 2)
-                                 (trunc (last temperatures) 2)]))))))))
+                                 (crux.ts-test/trunc (/ (reduce + temperatures) (count group)) 2)
+                                 (crux.ts-test/trunc (first temperatures) 2)
+                                 (crux.ts-test/trunc (last temperatures) 2)]))))))))
     (t/is true "skipping")))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices

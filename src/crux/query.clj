@@ -1144,17 +1144,17 @@
                             :opt-un [:crux.lru/doc-cache-size]))
 
 (defn db
-  ([kv]
+  (^crux.api.ICruxDatasource [kv]
    (db kv nil nil {}))
-  ([kv business-time]
+  (^crux.api.ICruxDatasource [kv business-time]
    (db kv business-time nil {}))
-  ([kv business-time transact-time]
+  (^crux.api.ICruxDatasource [kv business-time transact-time]
    (db kv business-time transact-time {}))
-  ([kv business-time transact-time {:keys [crux.query/query-cache-size
-                                           doc-cache-size]
-                                    :or {query-cache-size default-query-cache-size
-                                         doc-cache-size lru/default-doc-cache-size}
-                                    :as options}]
+  (^crux.api.ICruxDatasource [kv business-time transact-time {:keys [crux.query/query-cache-size
+                                                                     doc-cache-size]
+                                                              :or {query-cache-size default-query-cache-size
+                                                                   doc-cache-size lru/default-doc-cache-size}
+                                                              :as options}]
    (s/assert ::db-options options)
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
