@@ -20,7 +20,7 @@
                  [org.lwjgl/lwjgl-lmdb "3.2.1" :scope "provided"]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3" :exclusions [commons-io] :scope "provided"]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.3" :scope "provided"]]
   :profiles { ;; Provided dependencies excluded from uberjar.
              :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.0"]
@@ -30,7 +30,7 @@
                                                      org.apache.yetus/audience-annotations
                                                      org.slf4j/slf4j-log4j12
                                                      log4j]]
-                                       [clj-http "3.9.1" :exclusions [commons-io]]
+                                       [clj-http "3.9.1"]
                                        [http-kit "2.3.0"]]}
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]

@@ -8,7 +8,7 @@ jobs:
     docker:
       # CircleCI maintains a library of pre-built images
       # documented at https://circleci.com/docs/2.0/circleci-images/
-      - image: circleci/clojure:lein-2.8.1
+      - image: circleci/clojure:lein-2.8.3
 
 
     working_directory: ~/crux
