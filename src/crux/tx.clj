@@ -338,8 +338,8 @@
 
 (s/def :crux.tx-log/await-tx-timeout nat-int?)
 
-(defn latest-completed-tx-time [indexer]
-  (let [consumer-states (->> (db/read-index-meta indexer :crux.tx-log/consumer-state)
+(defn latest-completed-tx-time [consumer-state]
+  (let [consumer-states (->> consumer-state
                              (vals)
                              (sort-by :time))
         consumer-states-without-lag (filter (comp zero? :lag) consumer-states)]
@@ -356,7 +356,7 @@
                              (reduce max 0))]
     (if (cio/wait-while #(pos? (or (long (max-lag-fn)) Long/MAX_VALUE))
                         await-tx-timeout)
-      (latest-completed-tx-time indexer)
+      (latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))
       (throw (TimeoutException.
               (str "Timed out waiting for index to catch up, lag is: " (max-lag-fn)))))))
 
@@ -364,7 +364,8 @@
                                             :or {await-tx-timeout default-await-tx-timeout}}]
   (let [seen-tx-time (atom (Date. 0))]
     (if (cio/wait-while #(pos? (compare transact-time
-                                        (let [completed-tx-time (or (latest-completed-tx-time indexer)
+                                        (let [completed-tx-time (or (latest-completed-tx-time
+                                                                     (db/read-index-meta indexer :crux.tx-log/consumer-state))
                                                                     (Date. 0))]
                                           (reset! seen-tx-time completed-tx-time)
                                           completed-tx-time)))

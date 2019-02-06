@@ -187,7 +187,7 @@
         snapshot (.newSnapshot db)
         history (.historyAscending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (tx/latest-completed-tx-time (:indexer crux-system))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
 
 (defn- history-descending [^ICruxSystem crux-system request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
@@ -195,7 +195,7 @@
         snapshot (.newSnapshot db)
         history (.historyDescending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (tx/latest-completed-tx-time (:indexer crux-system))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
 
 (defn- transact [^ICruxSystem crux-system request]
   (let [tx-ops (body->edn request)
@@ -212,7 +212,7 @@
         ctx (.newTxLogContext crux-system)
         result (.txLog crux-system ctx from-tx-id with-documents?)]
     (-> (streamed-edn-response ctx result)
-        (add-last-modified (tx/latest-completed-tx-time (:indexer crux-system))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
 
 (defn- sync-handler [^ICruxSystem crux-system request]
   (let [timeout (some->> (get-in request [:query-params "timeout"])

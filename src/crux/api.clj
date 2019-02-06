@@ -21,11 +21,11 @@
 (defrecord LocalNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
-    (let [tx-time (tx/latest-completed-tx-time indexer)]
+    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store tx-time tx-time options)))
 
   (db [_ business-time]
-    (let [tx-time (tx/latest-completed-tx-time indexer)]
+    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store business-time tx-time options)))
 
   (db [_ business-time transact-time]
