@@ -19,7 +19,7 @@
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import [crux.api LocalNode ICruxSystem]
+  (:import [crux.api Crux LocalNode ICruxSystem]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
            java.io.Closeable))

@@ -267,9 +267,9 @@
       (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
                                 [::event-log
                                  :next-offset])]
-        (log/debug "Consuming from:" next-offset)
         (if-let [m (moberg/seek-message i ::event-log next-offset)]
-          (let [last-message (->> (repeatedly #(moberg/next-message i ::event-log))
+          (let [_ (log/debug "Consuming from:" next-offset)
+                last-message (->> (repeatedly #(moberg/next-message i ::event-log))
                                   (take-while identity)
                                   (cons m)
                                   (take batch-size)
