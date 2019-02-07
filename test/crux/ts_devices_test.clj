@@ -252,5 +252,34 @@
 
 (t/deftest test-min-max-battery-level-per-hour-for-pinto-or-focus-devices
   (if run-ts-devices-tests?
-    (t/is true)
+    (t/is (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
+              [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
+              [#inst "2016-11-15T14:00:00.000-00:00" 9.0 100.0]
+              [#inst "2016-11-15T15:00:00.000-00:00" 6.0 100.0]
+              [#inst "2016-11-15T16:00:00.000-00:00" 6.0 100.0]
+              [#inst "2016-11-15T17:00:00.000-00:00" 6.0 100.0]
+              [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
+              [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
+              [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
+             (let [kv f/*kv*
+                   reading-ids (->> (.q (q/db kv)
+                                        '{:find [r]
+                                          :where [[r :reading/device-id device-id]
+                                                  (or [device-id :device-info/model "pinto"]
+                                                      [device-id :device-info/model "focus"])]})
+                                    (reduce into []))
+                   db (q/db kv #inst "1970")]
+               (with-open [snapshot (.newSnapshot db)]
+                 (->> (for [r reading-ids]
+                        (for [{:keys [crux.db/doc]} (.historyAscending db snapshot r)]
+                          (update doc :reading/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                      (cio/merge-sort (fn [a b]
+                                        (compare (:reading/time a) (:reading/time b))))
+                      (partition-by :reading/time)
+                      (take 12)
+                      (mapv (fn [group]
+                              (let [battery-levels (sort (mapv :reading/battery-level group))]
+                                [(:reading/time (first group))
+                                 (first battery-levels)
+                                 (last battery-levels)]))))))))
     (t/is true)))
