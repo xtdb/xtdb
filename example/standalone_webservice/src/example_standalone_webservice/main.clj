@@ -80,13 +80,14 @@
              :produces "text/html"
              :response #(post-handler % system)}}}))
 
+(def index-dir "data/db-dir-1")
+(def log-dir "data/eventlog-1")
 (defn -main []
   (try
     (with-open [crux-system (crux/start-standalone-system
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
-                               :event-log-dir "data/eventlog-1"
-                               :db-dir "data/db-dir-1"
-                               :sync? true})]
+                               :event-log-dir log-dir
+                               :db-dir index-dir})]
       (.submitTx
         crux-system
         [[:crux.tx/put :example
@@ -101,7 +102,7 @@
 
       (.join (Thread/currentThread)))
     (catch IndexVersionOutOfSyncException e
-      (crux-io/delete-dir "data/db-dir-1")
+      (crux-io/delete-dir index-dir)
       (-main))
     (catch Exception e
       (println "what happened" e))))
