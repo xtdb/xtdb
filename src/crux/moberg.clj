@@ -71,20 +71,57 @@
 (def ^:private ^:const seq-size 10)
 (def ^:private ^:const max-seq-id (dec (bit-shift-left 1 seq-size)))
 
-(deftype SentMessage [^Date time ^long id topic])
-
-(defn- next-message-id ^crux.moberg.SentMessage [topic]
-  (let [message-time (Date.)
-        seq (long (get (swap! topic+date->count
-                              (fn [topic+date->count]
-                                {message-time (inc (long (get topic+date->count message-time 0)))}))
-                       message-time))]
-    (if (> seq max-seq-id)
-      (recur topic)
-      (SentMessage. message-time (bit-or (bit-shift-left (.getTime message-time) seq-size) seq) topic))))
+(defn- same-topic? [a b]
+  (mem/buffers=? a b (+ idx-id-size c/id-size)))
 
 (defn- message-id->message-time ^java.util.Date [^long message-id]
   (Date. (bit-shift-right message-id seq-size)))
+
+(defn- message-key->message-id ^long [^DirectBuffer k]
+  (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))
+
+(defn end-message-id-offset ^long [kv topic]
+  (with-open [snapshot (kv/new-snapshot kv)
+              i (kv/new-iterator snapshot)]
+    (let [seek-k (topic-key topic Long/MAX_VALUE)
+          k (kv/seek i seek-k)]
+      (if (and k (same-topic? seek-k k))
+        (or (when-let [k ^DirectBuffer (kv/prev i)]
+              (when (same-topic? k seek-k)
+                (inc (message-key->message-id k))))
+            1)
+        (do (kv/store kv [[seek-k c/empty-buffer]])
+            (end-message-id-offset kv topic))))))
+
+(deftype SentMessage [^Date time ^long id topic])
+
+(defn- now ^java.util.Date []
+  (Date.))
+
+(def ^:const detect-clock-drift? (not (Boolean/parseBoolean (System/getenv "CRUX_NO_CLOCK_DRIFT_CHECK"))))
+
+(defn- next-message-id ^crux.moberg.SentMessage [kv topic]
+  (let [message-time (now)
+        seq (long (get (swap! topic+date->count
+                              (fn [topic+date->count]
+                                {message-time (inc (long (get topic+date->count message-time 0)))}))
+                       message-time))
+        message-id (bit-or (bit-shift-left (.getTime message-time) seq-size) seq)
+        end-message-id (when detect-clock-drift?
+                         (end-message-id-offset kv topic))]
+    (cond
+      (and detect-clock-drift? (< message-id (long end-message-id)))
+      (throw (IllegalStateException.
+              (str "Clock has moved backwards in time, message id: " message-id
+                   " was generated using " (pr-str message-time)
+                   " lowest valid next id: " end-message-id
+                   " was generated using " (pr-str (message-id->message-time end-message-id)))))
+
+      (> seq max-seq-id)
+      (recur kv topic)
+
+      :else
+      (SentMessage. message-time message-id topic))))
 
 (deftype Message [body topic ^long message-id ^Date message-time key headers])
 
@@ -123,7 +160,7 @@
   (^SentMessage [kv topic k v]
    (send-message kv topic k v nil))
   (^SentMessage [kv topic k v headers]
-   (let [id (next-message-id topic)
+   (let [id (next-message-id kv topic)
          message-time (.time id)
          message-id (.id id)
          message-k (topic-key topic message-id)
@@ -143,12 +180,6 @@
        (kv/delete kv [compact-k]))
      id)))
 
-(defn- same-topic? [a b]
-  (mem/buffers=? a b (+ idx-id-size c/id-size)))
-
-(defn- message-key->message-id ^long [^DirectBuffer k]
-  (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))
-
 (defn next-message ^crux.moberg.Message [i topic]
   (let [seek-k (topic-key topic 0)]
     (when-let [k ^DirectBuffer (kv/next i)]
@@ -165,16 +196,3 @@
        (when (same-topic? k seek-k)
          (or (nippy-thaw-message topic (message-key->message-id k) (kv/value i))
              (next-message i topic)))))))
-
-(defn end-message-id-offset ^long [kv topic]
-  (with-open [snapshot (kv/new-snapshot kv)
-              i (kv/new-iterator snapshot)]
-    (let [seek-k (topic-key topic Long/MAX_VALUE)
-          k (kv/seek i seek-k)]
-      (if (and k (same-topic? seek-k k))
-        (or (when-let [k ^DirectBuffer (kv/prev i)]
-              (when (same-topic? k seek-k)
-                (inc (message-key->message-id k))))
-            1)
-        (do (kv/store kv [[seek-k c/empty-buffer]])
-            (end-message-id-offset kv topic))))))

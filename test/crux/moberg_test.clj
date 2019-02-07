@@ -23,6 +23,22 @@
 
     (t/is (= (inc message-id) (moberg/end-message-id-offset f/*kv* :my-topic)))))
 
+(t/deftest test-detects-backwards-clock-drift
+  (let [{:crux.moberg/keys [message-id message-time]
+         :as submitted-message} (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))]
+    (t/is (= (inc message-id) (moberg/end-message-id-offset f/*kv* :my-topic)))
+
+    (with-redefs [crux.moberg/now (fn [] #inst "2019")]
+      (t/is (thrown-with-msg?
+             IllegalStateException
+             (re-pattern (str "Clock has moved backwards in time, message id: "
+                              1583412019200001
+                              " was generated using " (pr-str #inst "2019")
+                              " lowest valid next id: "
+                              (inc message-id)
+                              " was generated using " (pr-str message-time)))
+             (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World")))))))
+
 (t/deftest test-can-send-and-receive-message-on-two-topics
   (let [my-topic-message (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))
         your-topic-message (moberg/sent-message->edn (moberg/send-message f/*kv* :your-topic "Hello World"))]
