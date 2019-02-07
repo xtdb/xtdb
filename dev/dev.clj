@@ -105,5 +105,17 @@
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
 ;;                         {:server-port 9090}))
 
+;; Example to use a standalone system with the normal Crux dev
+;; workflow:
+
+;; (ns dev)
+;; (def storage-dir "dev-storage-standalone")
+;; (def dev-options (merge (dev-option-defaults storage-dir)
+;;                         {:event-log-dir (str storage-dir "/event-log")
+;;                          :crux.tx/event-log-sync-interval-ms 5000
+;;                          :dev/embed-kafka? false
+;;                          :dev/http-server? false
+;;                          :dev/system-start-fn api/start-standalone-system}))
+
 (when (io/resource (str (System/getenv "USER") ".clj"))
   (load (System/getenv "USER")))
