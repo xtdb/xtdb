@@ -33,22 +33,22 @@
    {:keys [backup-dir] :as backup-options}]
   (locking crux-system
     (let [backup-dir (io/file backup-dir)
-          checkpoint-dir #(io/file backup-dir "checkpoint")
-          compressed-checkpoint #(io/file backup-dir (format "checkpoint.zip"))]
+          checkpoint-dir (io/file backup-dir "checkpoint")
+          compressed-checkpoint (io/file backup-dir (format "checkpoint.zip"))]
       (when-not (.exists backup-dir) (.mkdir backup-dir))
-      (crux-io/delete-dir (checkpoint-dir))
-      (.mkdir (checkpoint-dir))
-      (when (.exists (compressed-checkpoint)) (.delete (compressed-checkpoint)))
-      (log/infof "creating checkpoint for crux backup: %s" (.getPath (checkpoint-dir)))
+      (crux-io/delete-dir checkpoint-dir)
+      (.mkdir checkpoint-dir)
+      (when (.exists compressed-checkpoint) (.delete compressed-checkpoint))
+      (log/infof "creating checkpoint for crux backup: %s" (.getPath checkpoint-dir))
 
-      (kv/backup kv-store (io/file (checkpoint-dir) "kv-store"))
+      (kv/backup kv-store (io/file checkpoint-dir "kv-store"))
       (when event-log-kv-store
-        (kv/backup event-log-kv-store (io/file (checkpoint-dir) "event-log-kv-store")))
+        (kv/backup event-log-kv-store (io/file checkpoint-dir "event-log-kv-store")))
 
-      (zip-folder (checkpoint-dir) (compressed-checkpoint))
+      (zip-folder checkpoint-dir compressed-checkpoint)
 
       (upload-to-backend
-        (merge backup-options {:checkpoint-file (compressed-checkpoint)})))))
+        (merge backup-options {:checkpoint-file compressed-checkpoint})))))
 
 (defmethod upload-to-backend :file
   [{:keys [file/path file/replace? checkpoint-file]
