@@ -86,7 +86,7 @@
     (let [{:keys [^long txn]} tx
           ip (.mallocInt stack 1)
           ^CharSequence name nil]
-      (success? (LMDB/mdb_dbi_open txn  name 0 ip))
+      (success? (LMDB/mdb_dbi_open txn name 0 ip))
       (.get ip 0))))
 
 (defrecord LMDBCursor [^long cursor]

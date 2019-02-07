@@ -6,7 +6,7 @@
   (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
            java.util.function.Supplier
-           [java.io DataInputStream DataOutput]
+           [java.io Closeable DataInputStream DataOutput]
            java.nio.ByteOrder
            java.util.Date))
 
@@ -53,16 +53,13 @@
 
 (deftype CompactKVsAndKey [kvs key])
 
-(defn- compact-topic-kvs+compact-k ^crux.moberg.CompactKVsAndKey [kv topic k new-message-k]
-  (if k
-    (with-open [snapshot (kv/new-snapshot kv)]
-      (let [seek-k (reverse-key-key topic k)
-            compact-k (kv/get-value snapshot seek-k)]
-        (CompactKVsAndKey.
-         (cond-> [[seek-k new-message-k]]
-           compact-k (conj [compact-k c/empty-buffer]))
-         compact-k)))
-    (CompactKVsAndKey. [] nil)))
+(defn- compact-topic-kvs+compact-k ^crux.moberg.CompactKVsAndKey [snapshot topic k new-message-k]
+  (let [seek-k (reverse-key-key topic k)
+        compact-k (kv/get-value snapshot seek-k)]
+    (CompactKVsAndKey.
+     (cond-> [[seek-k new-message-k]]
+       compact-k (conj [compact-k c/empty-buffer]))
+     compact-k)))
 
 (def ^:private topic+date->count (atom {}))
 (def ^:private ^:const seq-size 10)
@@ -157,25 +154,30 @@
   (^SentMessage [kv topic k v]
    (send-message kv topic k v nil))
   (^SentMessage [kv topic k v headers]
-   (let [id (next-message-id kv topic)
-         message-time (.time id)
-         message-id (.id id)
-         message-k (topic-key topic message-id)
-         compact-kvs+k (compact-topic-kvs+compact-k kv topic k message-k)]
-     (kv/store kv (concat
-                   (.kvs compact-kvs+k)
-                   [[message-k
-                     (mem/with-buffer-out
-                       (.get send-buffer-tl)
-                       (fn [^DataOutput out]
-                         (nippy/freeze-to-out! out v)
-                         (when (or k headers)
-                           (nippy/freeze-to-out! out k)
-                           (nippy/freeze-to-out! out headers)))
-                       false)]]))
-     (when-let [compact-k (.key compact-kvs+k)]
-       (kv/delete kv [compact-k]))
-     id)))
+   (with-open [^Closeable snapshot (if k
+                                     (kv/new-snapshot kv)
+                                     (reify Closeable
+                                       (close [_])))]
+     (let [id (next-message-id kv topic)
+           message-time (.time id)
+           message-id (.id id)
+           message-k (topic-key topic message-id)
+           compact-kvs+k (when k
+                           (compact-topic-kvs+compact-k snapshot topic k message-k))]
+       (kv/store kv (concat
+                     (some->> compact-kvs+k (.kvs))
+                     [[message-k
+                       (mem/with-buffer-out
+                         (.get send-buffer-tl)
+                         (fn [^DataOutput out]
+                           (nippy/freeze-to-out! out v)
+                           (when (or k headers)
+                             (nippy/freeze-to-out! out k)
+                             (nippy/freeze-to-out! out headers)))
+                         false)]]))
+       (when-let [compact-k (some-> compact-kvs+k (.key))]
+         (kv/delete kv [compact-k]))
+       id))))
 
 (defn next-message ^crux.moberg.Message [i topic]
   (let [seek-k (topic-key topic 0)]

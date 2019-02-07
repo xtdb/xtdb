@@ -58,6 +58,16 @@
                                  ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_close [^jnr.ffi.Pointer db])
 
+  (^jnr.ffi.Pointer rocksdb_get_pinned [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
+                                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} key
+                                        ^{jnr.ffi.types.size_t true  :tag long} keylen
+                                        ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^jnr.ffi.Pointer rocksdb_pinnableslice_value [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} v
+                                                 ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} vlen])
+  (^void rocksdb_pinnableslice_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} v])
+
+
   (^jnr.ffi.Pointer rocksdb_checkpoint_object_create [^jnr.ffi.Pointer db
                                                       ^"[Ljava.lang.String;" errptr])
   (^void rocksdb_checkpoint_create [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} checkpoint
@@ -180,7 +190,7 @@
   (close [this]
     (.rocksdb_iter_destroy rocksdb i)))
 
-(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot ^ExpandableDirectByteBuffer eb ^Pointer len-out]
+(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot ^ExpandableDirectByteBuffer eb ^Pointer len-out pinned]
   kv/KvSnapshot
   (new-iterator [this]
     (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
@@ -190,13 +200,17 @@
   (get-value [this k]
     (let [k (mem/ensure-off-heap k eb)
           errptr-out (make-array String 1)
-          v (.rocksdb_get rocksdb db read-options (buffer->pointer k) (.capacity k) len-out errptr-out)]
+          p (.rocksdb_get_pinned rocksdb db read-options (buffer->pointer k) (.capacity k) errptr-out)]
       (check-error errptr-out)
-      (when v
-        (pointer+len->buffer v len-out))))
+      (when p
+        (do (swap! pinned conj p)
+            (-> (.rocksdb_pinnableslice_value rocksdb p len-out)
+                (pointer+len->buffer len-out))))))
 
   Closeable
   (close [_]
+    (doseq [p @pinned]
+      (.rocksdb_pinnableslice_destroy rocksdb p))
     (.rocksdb_readoptions_destroy rocksdb read-options)
     (.rocksdb_release_snapshot rocksdb db snapshot)))
 
@@ -250,7 +264,8 @@
                             read-options
                             snapshot
                             (ExpandableDirectByteBuffer.)
-                            (Memory/allocateTemporary rt NativeType/ULONG))))
+                            (Memory/allocateTemporary rt NativeType/ULONG)
+                            (atom []))))
 
   (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
     (let [wb (.rocksdb_writebatch_create rocksdb)
