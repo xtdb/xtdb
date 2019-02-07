@@ -1,4 +1,4 @@
-(ns crux.ts-test
+(ns crux.ts-weather-test
   (:require [clojure.test :as t]
             [clojure.instant :as inst]
             [clojure.java.io :as io]
@@ -15,6 +15,12 @@
   (:import java.math.RoundingMode
            java.util.Date
            java.time.temporal.ChronoUnit))
+
+;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-weather
+;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
+
+;; NOTE: Results in link above doesn't match actual data, test is
+;; adjusted for this.
 
 (def ^:const weather-locations-csv-resource "ts/data/weather_small_locations.csv")
 (def ^:const weather-conditions-csv-resource "ts/data/weather_small_conditions.csv")
@@ -75,8 +81,8 @@
 
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
-    (let [tx-topic "test-ts-tx"
-          doc-topic "test-ts-doc"
+    (let [tx-topic "ts-weather-test-tx"
+          doc-topic "ts-weather-test-doc"
           tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
           object-store (lru/new-cached-object-store f/*kv*)
           indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
@@ -102,12 +108,6 @@
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-kv-backend-from-env f/with-kv-store with-ts-weather-data)
 
-;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-weather
-;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
-
-;; NOTE: Results in link above doesn't match actual data, test is
-;; adjusted for this.
-
 ;; NOTE: Does not work with range, takes latest values.
 
 ;; NOTE: the AEV index is slower than necessary, as it could skip
@@ -116,6 +116,24 @@
 ;; swapping position of value and content hash in the index. Similar
 ;; issue would be there for AVE, but this already uses the content
 ;; hash to directly jump to the right version, if it exists.
+
+;; Last 10 readings
+
+;; SELECT * FROM conditions c ORDER BY time DESC LIMIT 10;
+
+;; time                   |     device_id      |    temperature     |      humidity
+;; -----------------------+--------------------+--------------------+--------------------
+;; 2016-12-06 02:58:00-05 | weather-pro-000000 |  84.10000000000034 |  83.70000000000053
+;; 2016-12-06 02:58:00-05 | weather-pro-000001 | 35.999999999999915 |  51.79999999999994
+;; 2016-12-06 02:58:00-05 | weather-pro-000002 |  68.90000000000006 |  63.09999999999999
+;; 2016-12-06 02:58:00-05 | weather-pro-000003 |  83.70000000000041 |  84.69999999999989
+;; 2016-12-06 02:58:00-05 | weather-pro-000004 |  83.10000000000039 |  84.00000000000051
+;; 2016-12-06 02:58:00-05 | weather-pro-000005 |  85.10000000000034 |  81.70000000000017
+;; 2016-12-06 02:58:00-05 | weather-pro-000006 |  61.09999999999999 | 49.800000000000026
+;; 2016-12-06 02:58:00-05 | weather-pro-000007 |   82.9000000000004 |  84.80000000000047
+;; 2016-12-06 02:58:00-05 | weather-pro-000008 | 58.599999999999966 |               40.2
+;; 2016-12-06 02:58:00-05 | weather-pro-000009 | 61.000000000000014 | 49.399999999999906
+;; (10 rows)
 
 (t/deftest weather-last-10-readings-test
   (if run-ts-weather-tests?
@@ -168,24 +186,6 @@
                     :order-by [[time :desc] [device-id :asc]]
                     :limit 10})))
     (t/is true "skipping")))
-
-;; Last 10 readings
-
-;; SELECT * FROM conditions c ORDER BY time DESC LIMIT 10;
-
-;; time                   |     device_id      |    temperature     |      humidity
-;; -----------------------+--------------------+--------------------+--------------------
-;; 2016-12-06 02:58:00-05 | weather-pro-000000 |  84.10000000000034 |  83.70000000000053
-;; 2016-12-06 02:58:00-05 | weather-pro-000001 | 35.999999999999915 |  51.79999999999994
-;; 2016-12-06 02:58:00-05 | weather-pro-000002 |  68.90000000000006 |  63.09999999999999
-;; 2016-12-06 02:58:00-05 | weather-pro-000003 |  83.70000000000041 |  84.69999999999989
-;; 2016-12-06 02:58:00-05 | weather-pro-000004 |  83.10000000000039 |  84.00000000000051
-;; 2016-12-06 02:58:00-05 | weather-pro-000005 |  85.10000000000034 |  81.70000000000017
-;; 2016-12-06 02:58:00-05 | weather-pro-000006 |  61.09999999999999 | 49.800000000000026
-;; 2016-12-06 02:58:00-05 | weather-pro-000007 |   82.9000000000004 |  84.80000000000047
-;; 2016-12-06 02:58:00-05 | weather-pro-000008 | 58.599999999999966 |               40.2
-;; 2016-12-06 02:58:00-05 | weather-pro-000009 | 61.000000000000014 | 49.399999999999906
-;; (10 rows)
 
 ;; Last 10 readings from 'outside' locations
 
@@ -381,70 +381,3 @@
                                  (crux.ts-test/trunc (first temperatures) 2)
                                  (crux.ts-test/trunc (last temperatures) 2)]))))))))
     (t/is true "skipping")))
-
-;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
-;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
-
-;; 10 most recent battery temperature readings for charging devices
-
-;; SELECT time, device_id, battery_temperature
-;; FROM readings
-;; WHERE battery_status = 'charging'
-;; ORDER BY time DESC LIMIT 10;
-
-;; time                   | device_id  | battery_temperature
-;; -----------------------+------------+---------------------
-;; 2016-11-15 23:39:30-05 | demo004887 |                99.3
-;; 2016-11-15 23:39:30-05 | demo004882 |               100.8
-;; 2016-11-15 23:39:30-05 | demo004862 |                95.7
-;; 2016-11-15 23:39:30-05 | demo004844 |                95.5
-;; 2016-11-15 23:39:30-05 | demo004841 |                95.4
-;; 2016-11-15 23:39:30-05 | demo004804 |               101.6
-;; 2016-11-15 23:39:30-05 | demo004784 |               100.6
-;; 2016-11-15 23:39:30-05 | demo004760 |                99.1
-;; 2016-11-15 23:39:30-05 | demo004731 |                97.9
-;; 2016-11-15 23:39:30-05 | demo004729 |                99.6
-;; (10 rows)
-
-;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
-
-;; SELECT time, readings.device_id, cpu_avg_1min,
-;; battery_level, battery_status, device_info.model
-;; FROM readings
-;; JOIN device_info ON readings.device_id = device_info.device_id
-;; WHERE battery_level < 33 AND battery_status = 'discharging'
-;; ORDER BY cpu_avg_1min DESC, time DESC LIMIT 5;
-
-;; time                   | device_id  | cpu_avg_1min | battery_level | battery_status |  model
-;; -----------------------+------------+--------------+---------------+----------------+---------
-;; 2016-11-15 23:30:00-05 | demo003764 |        98.99 |            32 | discharging    | focus
-;; 2016-11-15 22:54:30-05 | demo001935 |        98.99 |            30 | discharging    | pinto
-;; 2016-11-15 19:10:30-05 | demo000695 |        98.99 |            23 | discharging    | focus
-;; 2016-11-15 16:46:00-05 | demo002784 |        98.99 |            18 | discharging    | pinto
-;; 2016-11-15 14:58:30-05 | demo004978 |        98.99 |            22 | discharging    | mustang
-;; (5 rows)
-
-;; SELECT date_trunc('hour', time) "hour",
-;; min(battery_level) min_battery_level,
-;; max(battery_level) max_battery_level
-;; FROM readings r
-;; WHERE r.device_id IN (
-;;     SELECT DISTINCT device_id FROM device_info
-;;     WHERE model = 'pinto' OR model = 'focus'
-;; ) GROUP BY "hour" ORDER BY "hour" ASC LIMIT 12;
-
-;; hour                   | min_battery_level | max_battery_level
-;; -----------------------+-------------------+-------------------
-;; 2016-11-15 07:00:00-05 |                17 |                99
-;; 2016-11-15 08:00:00-05 |                11 |                98
-;; 2016-11-15 09:00:00-05 |                 6 |                97
-;; 2016-11-15 10:00:00-05 |                 6 |                97
-;; 2016-11-15 11:00:00-05 |                 6 |                97
-;; 2016-11-15 12:00:00-05 |                 6 |                97
-;; 2016-11-15 13:00:00-05 |                 6 |                97
-;; 2016-11-15 14:00:00-05 |                 6 |                98
-;; 2016-11-15 15:00:00-05 |                 6 |               100
-;; 2016-11-15 16:00:00-05 |                 6 |               100
-;; 2016-11-15 17:00:00-05 |                 6 |               100
-;; 2016-11-15 18:00:00-05 |                 6 |               100
-;; (12 rows)
