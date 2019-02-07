@@ -1,9 +1,12 @@
 (ns example-standalone-webservice.main
   (:require [crux.api :as crux]
+            [crux.codec :refer [index-version]]
+            [crux.io :as crux-io]
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
             [yada.resource :refer [resource]]
-            [clojure.java.shell :refer [sh]]))
+            [clojure.java.shell :refer [sh]])
+  (:import [crux.api IndexVersionOutOfSyncException]))
 
 (defn get-handler
   [ctx {:keys [crux]}]
@@ -15,6 +18,10 @@
          [:div
           "here you can post messages :)"]
          [:div
+          [:pre "Status: " (pr-str (.status crux))]
+          [:pre "Index-version:" index-version]
+          [:pre "Db-index: " (crux.index/current-index-version
+                               (:kv-store crux))]
           [:pre (:out (sh "ls" "-lh" "data"))]
           [:pre (:out (sh "lsblk"))]
           [:pre (:out (sh "pwd"))]]
@@ -78,7 +85,8 @@
     (with-open [crux-system (crux/start-standalone-system
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
                                :event-log-dir "data/eventlog-1"
-                               :db-dir "data/db-dir-1"})]
+                               :db-dir "data/db-dir-1"
+                               :sync? true})]
       (.submitTx
         crux-system
         [[:crux.tx/put :example
@@ -92,5 +100,8 @@
           {:port port}))
 
       (.join (Thread/currentThread)))
+    (catch IndexVersionOutOfSyncException e
+      (crux-io/delete-dir "data/db-dir-1")
+      (-main))
     (catch Exception e
       (println "what happened" e))))

@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-standalone-webservice
-        date: "1549289995"
+        date: "1549290001"
     spec:
       containers:
       - name: crux-standalone-webservice
