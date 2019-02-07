@@ -5,14 +5,14 @@
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
-    (let [values (shuffle [nil -1 0 1])
+    (let [values (shuffle [nil -33 -1 0 1 33])
           value+buffer (for [v values]
                          [v (c/->value-buffer v)])]
       (t/is (= (sort-by first value+buffer)
                (sort-by second mem/buffer-comparator value+buffer)))))
 
   (t/testing "doubles"
-    (let [values (shuffle [nil -1.0 0.0 1.0])
+    (let [values (shuffle [nil -33.0 -1.0 0.0 1.0 33.0])
           value+buffer (for [v values]
                          [v (c/->value-buffer v)])]
       (t/is (= (sort-by first value+buffer)

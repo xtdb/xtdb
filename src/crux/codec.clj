@@ -101,7 +101,7 @@
       (mem/limit-buffer
        (doto to
          (.putByte 0 double-value-type-id)
-         (.putLong value-type-id-size l))
+         (.putLong value-type-id-size l ByteOrder/BIG_ENDIAN))
        (+ value-type-id-size Long/BYTES))))
 
   Date
