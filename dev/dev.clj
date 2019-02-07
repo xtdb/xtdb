@@ -112,7 +112,7 @@
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
 ;;                         {:event-log-dir (str storage-dir "/event-log")
-;;                          :crux.tx/event-log-sync-interval-ms 5000
+;;                          :crux.tx/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
 ;;                          :dev/system-start-fn api/start-standalone-system}))
