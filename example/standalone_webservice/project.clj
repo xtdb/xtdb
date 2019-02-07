@@ -7,9 +7,8 @@
                  [juxt/crux "0.1.0-SNAPSHOT"]
                  [yada "1.3.0-alpha7"]
                  [hiccup "2.0.0-alpha2"]
-
-                 [org.apache.kafka/kafka_2.11 "2.1.0"]
-                 [org.rocksdb/rocksdbjni "5.17.2"]]
+                 [org.rocksdb/rocksdbjni "5.17.2"]
+                 [ch.qos.logback/logback-classic "1.2.3"]]
   :main example-standalone-webservice.main
   :jvm-opts ~(vec (remove nil?
                           [(when-let [f (System/getenv "YOURKIT_AGENT")]

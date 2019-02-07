@@ -5,9 +5,7 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.index :as idx]
-            [crux.kafka :as k]
             [crux.kv :as kv]
-            [crux.kafka.nippy]
             [crux.lru :as lru]
             [crux.tx :as tx]
             [clojure.string :as str])
@@ -117,40 +115,47 @@
 ;; Inspired by
 ;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
 
-(defn start-system
-  [{:keys [bootstrap-servers
-           group-id
-           tx-topic
-           doc-topic
-           server-port
-           kafka-properties-file]
-    :as options}
-   with-system-fn]
-  (log/info "starting system")
+;; TODO: Clean this up and split into proper namespaces and remove
+;; eval again while ensuring Kafka doesn't get required in Standalone
+;; mode.
+(defn start-system [options with-system-fn]
   (s/assert ::options options)
-  (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
-                            (read-kafka-properties-file kafka-properties-file))
-        producer-config kafka-config
-        consumer-config (merge {"group.id" (:group-id options)}
-                               kafka-config)]
-    (with-open [kv-store (start-kv-store options)
-                producer (k/create-producer producer-config)
-                tx-log ^Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                object-store ^Closeable (lru/new-cached-object-store kv-store)
-                indexer ^Closeable (tx/->KvIndexer kv-store tx-log object-store)
-                admin-client (k/create-admin-client kafka-config)
-                indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
-      (log/info "system started")
-      (with-system-fn
-        {:kv-store kv-store
-         :tx-log tx-log
-         :producer producer
-         :consumer-config consumer-config
-         :object-store object-store
-         :indexer indexer
-         :admin-client admin-client
-         :indexing-consumer indexing-consumer})
-      (log/info "stopping system")))
+  (require 'crux.kafka)
+  (binding [*ns* (find-ns 'crux.bootstrap)]
+    ((eval '(fn start-system-internal [{:keys [bootstrap-servers
+                                               group-id
+                                               tx-topic
+                                               doc-topic
+                                               server-port
+                                               kafka-properties-file]
+                                        :as options}
+                                       with-system-fn]
+              (log/info "starting system")
+              (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
+                                        (read-kafka-properties-file kafka-properties-file))
+                    producer-config kafka-config
+                    consumer-config (merge {"group.id" (:group-id options)}
+                                           kafka-config)]
+                (with-open [kv-store (start-kv-store options)
+                            producer (crux.kafka/create-producer producer-config)
+                            tx-log ^java.io.Closeable (crux.kafka/->KafkaTxLog producer tx-topic doc-topic kafka-config)
+                            object-store ^java.io.Closeable (lru/new-cached-object-store kv-store)
+                            indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
+                            admin-client (crux.kafka/create-admin-client kafka-config)
+                            indexing-consumer (crux.kafka/start-indexing-consumer admin-client consumer-config indexer options)]
+                  (log/info "system started")
+                  (with-system-fn
+                    {:kv-store kv-store
+                     :tx-log tx-log
+                     :producer producer
+                     :consumer-config consumer-config
+                     :object-store object-store
+                     :indexer indexer
+                     :admin-client admin-client
+                     :indexing-consumer indexing-consumer})
+                  (log/info "stopping system")))))
+     options
+     with-system-fn))
   (log/info "system stopped"))
 
 ;; NOTE: This isn't registered until the system manages to start up

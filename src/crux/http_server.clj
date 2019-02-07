@@ -80,7 +80,8 @@
 
 (defn- status [^ICruxSystem crux-system]
   (let [status-map (.status crux-system)]
-    (if (:crux.zk/zk-active? status-map)
+    (if (or (not (contains? status-map :crux.zk/zk-active?))
+            (:crux.zk/zk-active? status-map))
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}

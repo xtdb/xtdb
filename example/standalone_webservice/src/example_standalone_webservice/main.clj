@@ -1,12 +1,12 @@
 (ns example-standalone-webservice.main
-  (:require [crux.api :as crux]
-            [crux.codec :refer [index-version]]
+  (:require [crux.codec :refer [index-version]]
             [crux.io :as crux-io]
+            [clojure.tools.logging :as log]
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
             [yada.resource :refer [resource]]
             [clojure.java.shell :refer [sh]])
-  (:import [crux.api IndexVersionOutOfSyncException]))
+  (:import [crux.api Crux IndexVersionOutOfSyncException]))
 
 (defn get-handler
   [ctx {:keys [crux]}]
@@ -55,13 +55,13 @@
   (let [{:keys [name message]} (:form (:parameters ctx))]
     (let [id (java.util.UUID/randomUUID)]
       (.submitTx
-        crux
-        [[:crux.tx/put
-          id
-          {:crux.db/id id
-           :message-post/created (java.util.Date.)
-           :message-post/name name
-           :message-post/message message}]]))
+       crux
+       [[:crux.tx/put
+         id
+         {:crux.db/id id
+          :message-post/created (java.util.Date.)
+          :message-post/name name
+          :message-post/message message}]]))
 
     (assoc (:response ctx)
            :status 302
@@ -84,7 +84,7 @@
 (def log-dir "data/eventlog-1")
 (defn -main []
   (try
-    (with-open [crux-system (crux/start-standalone-system
+    (with-open [crux-system (Crux/startStandaloneSystem
                               {:kv-backend "crux.kv.rocksdb.RocksKv"
                                :event-log-dir log-dir
                                :db-dir index-dir})]
@@ -95,7 +95,7 @@
            :example-value "hello world"}]])
 
       (let [port 8080]
-        (println "started webserver on port:" port)
+        (log/info "started webserver on port:" port)
         (listener
           (application-resource {:crux crux-system})
           {:port port}))
@@ -105,4 +105,4 @@
       (crux-io/delete-dir index-dir)
       (-main))
     (catch Exception e
-      (println "what happened" e))))
+      (log/error e "what happened"))))

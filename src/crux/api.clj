@@ -11,6 +11,7 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.query :as q]
+            [crux.status :as status]
             [crux.tx :as tx])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Duration
@@ -41,8 +42,7 @@
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
   (status [this]
-    (require 'crux.status)
-    ((resolve 'crux.status/status-map) this options))
+    (status/status-map this options))
 
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
@@ -86,8 +86,9 @@
   java.io.Closeable, which allows the system to be stopped by calling
   close.
 
-  NOTE: requires any KV store dependencies on the classpath. The
-  crux.kv.memdb.MemKv KV backend works without additional dependencies.
+  NOTE: requires any KV store dependencies and kafka-clients on the
+  classpath. The crux.kv.memdb.MemKv KV backend works without
+  additional dependencies.
 
   The HTTP API can be started by passing the LocalNode to
   crux.http-server/start-http-server. This will require further

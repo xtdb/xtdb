@@ -1,10 +1,11 @@
 (ns crux.kafka
-  (:require [crux.db :as db]
+  (:require [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.codec :as c]
+            [crux.db :as db]
+            [crux.kafka.nippy]
             [crux.kv :as kv]
             [crux.tx :as tx]
-            [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
