@@ -7,8 +7,6 @@
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import java.io.Closeable
-           org.agrona.concurrent.UnsafeBuffer
-           [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            clojure.lang.Box))
 
 (defn- persist-db [dir db]
@@ -28,7 +26,7 @@
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
 ;; unusable in practice.
-(defrecord MemKvIterator [^Box db cursor eb]
+(defrecord MemKvIterator [^Box db cursor]
   kv/KvIterator
   (kv/seek [this k]
     (let [[x & xs] (subseq (.val db) >= (mem/as-buffer k))]
@@ -60,7 +58,10 @@
 (defrecord MemKvSnapshot [db]
   kv/KvSnapshot
   (new-iterator [_]
-    (->MemKvIterator (Box. db) (atom {:rest (seq db)}) (ExpandableDirectByteBuffer.)))
+    (->MemKvIterator (Box. db) (atom {:rest (seq db)})))
+
+  (get-value [_ k]
+    (get db (mem/as-buffer k)))
 
   Closeable
   (close [_]))

@@ -49,6 +49,9 @@
   (new-iterator [this]
     (->RocksKvIterator (.newIterator db read-options)))
 
+  (get-value [this k]
+    (mem/on-heap-buffer (.get db (mem/->on-heap k))))
+
   Closeable
   (close [_]
     (.close read-options)

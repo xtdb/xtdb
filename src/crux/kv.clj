@@ -14,7 +14,8 @@
   (refresh [this]))
 
 (defprotocol KvSnapshot
-  (new-iterator ^java.io.Closeable [this]))
+  (new-iterator ^java.io.Closeable [this])
+  (get-value [this k]))
 
 ;; tag::KvStore[]
 (defprotocol KvStore

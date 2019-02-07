@@ -232,6 +232,9 @@
         (swap! iterators-state conj i)
         i)))
 
+  (get-value [_ k]
+    (kv/get-value snapshot k))
+
   Closeable
   (close [_]
     (doseq [^CachedIterator i @iterators-state]

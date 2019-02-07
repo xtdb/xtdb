@@ -145,6 +145,16 @@
           (when-not (= LMDB/MDB_NOTFOUND rc)
             (success? rc)))))))
 
+(defn- tx-get [dbi ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb k]
+  (let [k (mem/ensure-off-heap k eb)
+        kv (-> kv
+               (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
+               (.mv_size (.capacity k)))
+        rc (LMDB/mdb_get (.txn tx) dbi kv dv)]
+    (when-not (= LMDB/MDB_NOTFOUND rc)
+      (success? rc)
+      (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))))
+
 (def ^:const default-env-flags (bit-or LMDB/MDB_WRITEMAP
                                        LMDB/MDB_NOTLS
                                        LMDB/MDB_NORDAHEAD))
@@ -178,7 +188,7 @@
   (close [_]
     (.close cursor)))
 
-(defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx]
+(defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx  ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
   kv/KvSnapshot
   (new-iterator [_]
     (->LMDBKvIterator (new-cursor dbi (.txn tx))
@@ -186,6 +196,9 @@
                       (MDBVal/create)
                       (MDBVal/create)
                       (ExpandableDirectByteBuffer.)))
+
+  (get-value [_ k]
+    (tx-get dbi tx kv dv eb k))
 
   Closeable
   (close [_]
@@ -223,7 +236,10 @@
 
   (new-snapshot [_]
     (let [tx (new-transaction env LMDB/MDB_RDONLY)]
-      (->LMDBKvSnapshot env dbi tx)))
+      (->LMDBKvSnapshot env dbi tx
+                        (MDBVal/create)
+                        (MDBVal/create)
+                        (ExpandableDirectByteBuffer.))))
 
   (store [this kvs]
     (try

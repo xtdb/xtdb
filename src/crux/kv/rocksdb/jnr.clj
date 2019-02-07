@@ -50,6 +50,12 @@
                         ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
                         ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} batch
                         ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
+  (^jnr.ffi.Pointer rocksdb_get [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} db
+                                 ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
+                                 ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} key
+                                 ^{jnr.ffi.types.size_t true  :tag long} keylen
+                                 ^{jnr.ffi.annotations.Out true :tag jnr.ffi.Pointer} vlen
+                                 ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_close [^jnr.ffi.Pointer db])
 
   (^jnr.ffi.Pointer rocksdb_checkpoint_object_create [^jnr.ffi.Pointer db
@@ -174,12 +180,19 @@
   (close [this]
     (.rocksdb_iter_destroy rocksdb i)))
 
-(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot]
+(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot ^ExpandableDirectByteBuffer eb ^Pointer len-out]
   kv/KvSnapshot
   (new-iterator [this]
     (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
                           (ExpandableDirectByteBuffer.)
                           (Memory/allocateTemporary rt NativeType/ULONG)))
+
+  (get-value [this k]
+    (let [k (mem/ensure-off-heap k eb)
+          errptr-out (make-array String 1)
+          v (.rocksdb_get rocksdb db read-options (buffer->pointer k) (.capacity k) len-out errptr-out)]
+      (check-error errptr-out)
+      (pointer+len->buffer v len-out)))
 
   Closeable
   (close [_]
@@ -231,7 +244,9 @@
       (.rocksdb_readoptions_set_snapshot rocksdb read-options snapshot)
       (->RocksJNRKvSnapshot db
                             read-options
-                            snapshot)))
+                            snapshot
+                            (ExpandableDirectByteBuffer.)
+                            (Memory/allocateTemporary rt NativeType/ULONG))))
 
   (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
     (let [wb (.rocksdb_writebatch_create rocksdb)

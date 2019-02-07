@@ -120,6 +120,11 @@
   (kv/fsync f/*kv*)
   (t/is (= "Crux" (String. ^bytes (value f/*kv* (bu/long->bytes 1))))))
 
+(t/deftest test-can-get-from-snapshot
+  (kv/store f/*kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+  (with-open [snapshot (kv/new-snapshot f/*kv*)]
+    (t/is (= "Crux" (String. (mem/->on-heap (kv/get-value snapshot (bu/long->bytes 1))))))))
+
 (t/deftest test-prev-and-next []
   (doseq [[^String k v] {"a" 1 "c" 3}]
     (kv/store f/*kv* [[(.getBytes k) (bu/long->bytes v)]]))
