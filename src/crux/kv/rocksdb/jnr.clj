@@ -192,7 +192,8 @@
           errptr-out (make-array String 1)
           v (.rocksdb_get rocksdb db read-options (buffer->pointer k) (.capacity k) len-out errptr-out)]
       (check-error errptr-out)
-      (pointer+len->buffer v len-out)))
+      (when v
+        (pointer+len->buffer v len-out))))
 
   Closeable
   (close [_]
