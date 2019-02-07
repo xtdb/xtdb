@@ -274,7 +274,8 @@
                                     (map :v triple-clauses))
                             (filter logic-var?)
                             (frequencies))
-        triple-clauses (sort-by (comp stats :a) triple-clauses)
+        triple-clauses (sort-by (fn [{:keys [a]}]
+                                  (get stats a 0)) triple-clauses)
         literal-clauses (for [{:keys [e v] :as clause} triple-clauses
                               :when (or (literal? e)
                                         (literal? v))]
