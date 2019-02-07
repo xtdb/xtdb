@@ -362,7 +362,7 @@
                                           '{:find [c]
                                             :where [[c :condition/device-id device-id]
                                                     [device-id :location/location location]
-                                                    [(crux.ts-test/kw-starts-with? location "field-")]]
+                                                    [(crux.ts-weather-test/kw-starts-with? location "field-")]]
                                             :timeout 120000})
                                       (reduce into []))
                    db (q/db kv #inst "1970")]
@@ -377,7 +377,7 @@
                       (mapv (fn [group]
                               (let [temperatures (sort (mapv :condition/temperature group))]
                                 [(:condition/time (first group))
-                                 (crux.ts-test/trunc (/ (reduce + temperatures) (count group)) 2)
-                                 (crux.ts-test/trunc (first temperatures) 2)
-                                 (crux.ts-test/trunc (last temperatures) 2)]))))))))
+                                 (trunc (/ (reduce + temperatures) (count group)) 2)
+                                 (trunc (first temperatures) 2)
+                                 (trunc (last temperatures) 2)]))))))))
     (t/is true "skipping")))
