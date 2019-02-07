@@ -390,11 +390,9 @@
 ;; Utils
 
 (defn current-index-version [kv]
-  (with-open [snapshot (kv/new-snapshot kv)
-              i (kv/new-iterator snapshot)]
-    (let [seek-k (c/encode-index-version-key-to nil)]
-      (when-let [k (kv/seek (new-prefix-kv-iterator i seek-k) seek-k)]
-        (c/decode-index-version-value-from (kv/value i))))))
+  (with-open [snapshot (kv/new-snapshot kv)]
+    (some->> (kv/get-value snapshot (c/encode-index-version-key-to nil))
+             (c/decode-index-version-value-from))))
 
 (defn check-and-store-index-version [kv]
   (if-let [index-version (current-index-version kv)]

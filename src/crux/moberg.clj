@@ -55,12 +55,9 @@
 
 (defn- compact-topic-kvs+compact-k ^crux.moberg.CompactKVsAndKey [kv topic k new-message-k]
   (if k
-    (with-open [snapshot (kv/new-snapshot kv)
-                i (kv/new-iterator snapshot)]
+    (with-open [snapshot (kv/new-snapshot kv)]
       (let [seek-k (reverse-key-key topic k)
-            compact-k (when-let [found-k (kv/seek i seek-k)]
-                        (when (mem/buffers=? found-k seek-k)
-                          (kv/value i)))]
+            compact-k (kv/get-value snapshot seek-k)]
         (CompactKVsAndKey.
          (cond-> [[seek-k new-message-k]]
            compact-k (conj [compact-k c/empty-buffer]))
