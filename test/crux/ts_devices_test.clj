@@ -140,7 +140,23 @@
 
 (t/deftest test-10-most-recent-battery-readeings-for-charging-devices
   (if run-ts-devices-tests?
-    (t/is true)
+    (t/is (= [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000998 93.1]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000997 90.7]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000996 92.8]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000995 91.9]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000994 92.0]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000993 92.8]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
+              [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])
+          (.q (q/db f/*kv*)
+              '{:find [time device-id battery-temperature]
+                :where [[r :reading/time time]
+                        [r :reading/device-id device-id]
+                        [r :reading/battery-temperature battery-temperature]]
+                :order-by [[time :desc] [device-id :desc]]
+                :limit 10}))
     (t/is true)))
 
 ;; Busiest devices (1 min avg) whose battery level is below 33% and is not charging
