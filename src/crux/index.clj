@@ -84,7 +84,7 @@
 
 (mem/defvo DocAttributeValueEntityEntityIndexState [peek])
 
-(defn- attribute-value-entity-entity+value [i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
     (let [limit (- (mem/capacity k) c/id-size)]
       (set! (.peek peek-state) (mem/inc-unsigned-buffer! (mem/limit-buffer (mem/copy-buffer k limit peek-eb) limit))))
@@ -99,9 +99,8 @@
                              value
                              eid-buffer
                              (c/->id-buffer (.content-hash entity-tx)))]
-              (when-let [found-k (kv/seek i version-k)]
-                (when (mem/buffers=? version-k found-k)
-                  [eid-buffer entity-tx])))))
+              (when (kv/get-value snapshot version-k)
+                [eid-buffer entity-tx]))))
         (when-let [k (some->> (.peek peek-state) (kv/seek i))]
           (recur k)))))
 
@@ -112,7 +111,7 @@
         prefix (c/encode-attribute+value+entity+content-hash-key-to prefix-eb attr value)]
     (ValueAndPrefixIterator. value (new-prefix-kv-iterator i prefix))))
 
-(defrecord DocAttributeValueEntityEntityIndex [i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
+(defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   db/Index
   (seek-values [this k]
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
@@ -124,17 +123,17 @@
                          value
                          (or k c/empty-buffer))
                         (kv/seek i))]
-        (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-eb peek-state))))
+        (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state))))
 
   (next-values [this]
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
           value (.value value+prefix-iterator)
           i (.prefix-iterator value+prefix-iterator)]
       (when-let [k (some->> (.peek peek-state) (kv/seek i))]
-        (attribute-value-entity-entity+value i k attr value entity-as-of-idx peek-eb peek-state)))))
+        (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
 
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
-  (->DocAttributeValueEntityEntityIndex (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
+  (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
                                         (->DocAttributeValueEntityEntityIndexState nil)))
 
@@ -294,11 +293,11 @@
 
 (defn read-meta [kv k]
   (let [seek-k (c/encode-meta-key-to (.get seek-buffer-tl) (c/->id-buffer k))]
-    (with-open [snapshot (kv/new-snapshot kv)
-                i (kv/new-iterator snapshot)]
-      (when-let [k (kv/seek i seek-k)]
-        (when (mem/buffers=? seek-k k)
-          (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i)))))))))
+    (with-open [snapshot (kv/new-snapshot kv)]
+      (some->> (kv/get-value snapshot seek-k)
+               (DirectBufferInputStream.)
+               (DataInputStream.)
+               (nippy/thaw-from-in!)))))
 
 ;; Object Store
 
@@ -358,22 +357,20 @@
 
   db/ObjectStore
   (get-single-object [this snapshot k]
-    (with-open [i (kv/new-iterator snapshot)]
-      (let [doc-key (c/->id-buffer k)
-            seek-k (c/encode-doc-key-to (.get seek-buffer-tl) doc-key)
-            k (kv/seek i seek-k)]
-        (when (and k (mem/buffers=? seek-k k))
-          (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))))))
+    (let [doc-key (c/->id-buffer k)
+          seek-k (c/encode-doc-key-to (.get seek-buffer-tl) doc-key)]
+      (some->> (kv/get-value snapshot seek-k)
+               (DirectBufferInputStream.)
+               (DataInputStream.)
+               (nippy/thaw-from-in!))))
 
   (get-objects [this snapshot ks]
-    (with-open [i (kv/new-iterator snapshot)]
-      (->> (for [k ks
-                 :let [seek-k (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
-                       k (kv/seek i seek-k)]
-                 :when (and k (mem/buffers=? seek-k k))]
-             [(c/safe-id (c/decode-doc-key-from k))
-              (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. (kv/value i))))])
-           (into {}))))
+    (->> (for [k ks
+               :let [seek-k (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
+                     v (kv/get-value snapshot seek-k)]
+               :when v]
+           [k (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))])
+         (into {})))
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
@@ -611,9 +608,8 @@
                      (c/->id-buffer (.eid entity-tx))
                      (c/->id-buffer (.content-hash entity-tx))
                      v)]
-      (with-open [i (new-prefix-kv-iterator (kv/new-iterator snapshot) version-k)]
-        (when (kv/seek i version-k)
-          entity-tx)))))
+      (when (kv/get-value snapshot  version-k)
+        entity-tx))))
 
 (mem/defvo UnaryJoinIteratorsThunkFnState [thunk])
 (mem/defvo UnaryJoinIteratorsThunkState [iterators ^long index])

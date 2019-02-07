@@ -239,7 +239,7 @@
                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                      (c/->id-buffer content-hash)
                                      (c/->value-buffer "Pablo"))]]
-              (t/is (mem/buffers=? version-k (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k))))))))
+              (t/is (kv/get-value snapshot version-k)))))))
 
     (t/testing "can evict entity"
       (let [new-business-time #inst "2018-05-23"
@@ -264,7 +264,7 @@
                                            (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
                                            (c/->id-buffer content-hash)
                                            (c/->value-buffer "Pablo"))]]
-                    (t/is (nil? (kv/seek (idx/new-prefix-kv-iterator i version-k) version-k)))))))))))))
+                    (t/is (nil? (kv/get-value snapshot version-k)))))))))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
   (let [tx-log (tx/->KvTxLog f/*kv*)

@@ -150,9 +150,9 @@
       [(mem/->on-heap k) (mem/->on-heap (kv/value i))])))
 
 (defn value [kvs seek-k]
-  (let [[k v] (seek kvs seek-k)]
-    (when (and k (bu/bytes=? seek-k k))
-      (mem/->on-heap v))))
+  (with-open [snapshot (kv/new-snapshot kvs)]
+    (some-> (kv/get-value snapshot seek-k)
+            (mem/->on-heap))))
 
 (defn seek-and-iterate [kvs key-pred seek-k]
   (with-open [snapshot (kv/new-snapshot kvs)
