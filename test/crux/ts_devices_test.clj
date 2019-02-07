@@ -177,9 +177,52 @@
 ;; 2016-11-15 14:58:30-05 | demo004978 |        98.99 |            22 | discharging    | mustang
 ;; (5 rows)
 
+;; TODO: This test doesn't only does current time slice, which isn't
+;; valid for this example.
 (t/deftest test-busiest-devices-1-min-avg-whoste-battery-evel-is-below-33-percent-and-is-not-charging
   (if run-ts-devices-tests?
-    (t/is true)
+    (t/is (= [[#inst "2016-11-15T20:19:30.000-00:00"
+               :device-info/demo000818
+               33.45
+               26.0
+               :discharging
+               "focus"]
+              [#inst "2016-11-15T20:19:30.000-00:00"
+               :device-info/demo000278
+               32.59
+               14.0
+               :discharging
+               "focus"]
+              [#inst "2016-11-15T20:19:30.000-00:00"
+               :device-info/demo000418
+               32.11
+               18.0
+               :discharging
+               "mustang"]
+              [#inst "2016-11-15T20:19:30.000-00:00"
+               :device-info/demo000942
+               31.72
+               26.0
+               :discharging
+               "pinto"]
+              [#inst "2016-11-15T20:19:30.000-00:00"
+               :device-info/demo000800
+               31.34
+               25.0
+               :discharging
+               "focus"]])
+          (.q (q/db f/*kv*)
+              '{:find [time device-id cpu-avg-1min battery-level battery-status model]
+                :where [[r :reading/time time]
+                        [r :reading/device-id device-id]
+                        [r :reading/cpu-avg-1min cpu-avg-1min]
+                        [r :reading/battery-level battery-level]
+                        [(< battery-level 33.0)]
+                        [r :reading/battery-status :discharging]
+                        [r :reading/battery-status battery-status]
+                        [device-id :device-info/model model]]
+                :order-by [[cpu-avg-1min :desc] [time :desc]]
+                :limit 5}))
     (t/is true)))
 
 ;; SELECT date_trunc('hour', time) "hour",
