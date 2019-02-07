@@ -8,7 +8,7 @@
 (t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
 
 (t/deftest test-can-send-and-receive-message
-  (t/is (zero? (moberg/end-message-id-offset f/*kv* :my-topic)))
+  (t/is (= 1 (moberg/end-message-id-offset f/*kv* :my-topic)))
   (let [{:crux.moberg/keys [message-id message-time topic]
          :as submitted-message} (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))]
     (t/is (integer? message-id))

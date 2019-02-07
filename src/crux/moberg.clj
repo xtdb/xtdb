@@ -175,6 +175,6 @@
         (or (when-let [k ^DirectBuffer (kv/prev i)]
               (when (same-topic? k seek-k)
                 (inc (message-key->message-id k))))
-            0)
+            1)
         (do (kv/store kv [[seek-k c/empty-buffer]])
             (end-message-id-offset kv topic))))))
