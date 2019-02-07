@@ -172,7 +172,8 @@
 
 (s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
                                     :opt-un [:crux.kv/sync? :crux.tx/event-log-dir]
-                                    :opt [:crux.tx/event-log-sync-interval-ms]))
+                                    :opt [:crux.tx/event-log-sync-interval-ms
+                                          :crux.tx/event-log-kv-backend]))
 
 (defn start-standalone-system
   "Creates a minimal standalone system writing the transaction log into
@@ -187,7 +188,8 @@
 
   NOTE: requires any KV store dependencies on the classpath. The
   crux.kv.memdb.MemKv KV backend works without additional dependencies."
-  ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir crux.tx/event-log-sync-interval-ms] :as options}]
+  ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir
+                        crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options}]
   (s/assert ::standalone-options options)
   (require 'crux.bootstrap)
   (let [kv-store ((resolve 'crux.bootstrap/start-kv-store)
@@ -198,7 +200,7 @@
         event-log-kv-store (when event-log-dir
                              ((resolve 'crux.bootstrap/start-kv-store)
                               {:db-dir event-log-dir
-                               :kv-backend kv-backend
+                               :kv-backend (or event-log-kv-backend kv-backend)
                                :sync? event-log-sync?
                                :crux.index/check-and-store-index-version false}))
         tx-log (if event-log-kv-store

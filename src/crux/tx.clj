@@ -228,7 +228,8 @@
 
 ;; For StandaloneSystem.
 
-(s/def :crux.tx/event-log-dir string?)
+(s/def ::event-log-dir string?)
+(s/def ::event-log-kv-backend :crux.kv/kv-backend)
 (s/def ::event-log-sync-interval-ms nat-int?)
 
 (defrecord EventTxLog [event-log-kv]
