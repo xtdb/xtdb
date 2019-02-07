@@ -11,6 +11,7 @@
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer]
            org.agrona.io.DirectBufferInputStream
+           [crux.api IndexVersionOutOfSyncException]
            [crux.codec EntityTx Id]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -394,8 +395,8 @@
 (defn check-and-store-index-version [kv]
   (if-let [index-version (current-index-version kv)]
     (when (not= c/index-version index-version)
-      (throw (IllegalStateException.
-              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
+      (throw (IndexVersionOutOfSyncException.
+               (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
     (kv/store kv [[(c/encode-index-version-key-to nil)
                    (c/encode-index-version-value-to nil c/index-version)]]))
   kv)
