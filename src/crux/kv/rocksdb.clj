@@ -5,6 +5,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]
+            [crux.kv.rocksdb.loader]
             [crux.memory :as mem])
   (:import java.io.Closeable
            clojure.lang.MapEntry

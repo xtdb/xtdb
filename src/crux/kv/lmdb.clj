@@ -35,7 +35,7 @@
 ;; transactions. See: https://github.com/dw/py-lmdb/issues/113
 (defn- increase-mapsize [env ^long factor]
   (with-open [stack (MemoryStack/stackPush)]
-    (let [info (MDBEnvInfo/callocStack stack)]
+    (let [info (MDBEnvInfo/mallocStack stack)]
       (success? (LMDB/mdb_env_info env info))
       (let [new-mapsize (* factor (.me_mapsize info))]
         (log/debug "Increasing mapsize to:" new-mapsize)
@@ -131,7 +131,7 @@
   (with-open [stack (MemoryStack/stackPush)
               tx (new-transaction env 0)]
     (let [{:keys [^long txn]} tx
-          kv (MDBVal/callocStack stack)
+          kv (MDBVal/mallocStack stack)
           kb (ExpandableDirectByteBuffer.)
           ks (if (bytes? (first ks))
                (sort bu/bytes-comparator ks)
@@ -145,15 +145,17 @@
           (when-not (= LMDB/MDB_NOTFOUND rc)
             (success? rc)))))))
 
-(defn- tx-get [dbi ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb k]
-  (let [k (mem/ensure-off-heap k eb)
-        kv (-> kv
-               (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
-               (.mv_size (.capacity k)))
-        rc (LMDB/mdb_get (.txn tx) dbi kv dv)]
-    (when-not (= LMDB/MDB_NOTFOUND rc)
-      (success? rc)
-      (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))))
+(defn- tx-get [dbi ^LMDBTransaction tx k]
+  (with-open [stack (MemoryStack/stackPush)]
+    (let [k (mem/->off-heap k)
+          kv (-> (MDBVal/mallocStack stack)
+                 (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
+                 (.mv_size (.capacity k)))
+          dv (MDBVal/mallocStack stack)
+          rc (LMDB/mdb_get (.txn tx) dbi kv dv)]
+      (when-not (= LMDB/MDB_NOTFOUND rc)
+        (success? rc)
+        (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv))))))
 
 (def ^:const default-env-flags (bit-or LMDB/MDB_WRITEMAP
                                        LMDB/MDB_NOTLS
@@ -188,7 +190,7 @@
   (close [_]
     (.close cursor)))
 
-(defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx  ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
+(defrecord LMDBKvSnapshot [env dbi ^LMDBTransaction tx]
   kv/KvSnapshot
   (new-iterator [_]
     (->LMDBKvIterator (new-cursor dbi (.txn tx))
@@ -198,7 +200,7 @@
                       (ExpandableDirectByteBuffer.)))
 
   (get-value [_ k]
-    (tx-get dbi tx kv dv eb k))
+    (tx-get dbi tx k))
 
   Closeable
   (close [_]
@@ -236,10 +238,7 @@
 
   (new-snapshot [_]
     (let [tx (new-transaction env LMDB/MDB_RDONLY)]
-      (->LMDBKvSnapshot env dbi tx
-                        (MDBVal/create)
-                        (MDBVal/create)
-                        (ExpandableDirectByteBuffer.))))
+      (->LMDBKvSnapshot env dbi tx)))
 
   (store [this kvs]
     (try
@@ -274,7 +273,7 @@
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
                 tx (new-transaction env LMDB/MDB_RDONLY)]
-      (let [stat (MDBStat/callocStack stack)]
+      (let [stat (MDBStat/mallocStack stack)]
         (LMDB/mdb_stat (.txn tx) dbi stat)
         (.ms_entries stat))))
 

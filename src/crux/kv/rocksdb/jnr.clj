@@ -8,11 +8,11 @@
             [clojure.spec.alpha :as s]
             [crux.io :as cio]
             [crux.kv :as kv]
+            [crux.kv.rocksdb.loader]
             [crux.memory :as mem])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           org.rocksdb.util.Environment
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -114,19 +114,8 @@
                                  ^{jnr.ffi.annotations.Out true :tag "[Ljava.lang.String;"} errptr])
   (^void rocksdb_iter_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} iter]))
 
-(defn- extract-rocksdb-native-lib [to-dir]
-  (let [lib-name (Environment/getJniLibraryFileName "rocksdb")
-        f (io/file to-dir lib-name)]
-    (io/make-parents f)
-    (with-open [in (io/input-stream (io/resource lib-name))
-                out (io/output-stream f)]
-      (io/copy in out))
-    f))
-
 (defn- load-rocksdb-native-lib ^crux.kv.rocksdb.jnr.RocksDB []
-  (let [tmp (cio/create-tmpdir "jnr_rocksdb")
-        f (extract-rocksdb-native-lib tmp)]
-    (.load (LibraryLoader/create RocksDB) (str f))))
+  (.load (LibraryLoader/create RocksDB) crux.kv.rocksdb.loader/rocksdb-library-path))
 
 (def ^:private ^RocksDB rocksdb)
 (def ^:private ^jnr.ffi.Runtime rt)
@@ -160,7 +149,7 @@
     (let [p-k (.rocksdb_iter_key rocksdb i len-out)]
       (pointer+len->buffer p-k len-out))))
 
-(defn- buffer->pointer ^jnr.ffi.Pointer [^MutableDirectBuffer b]
+(defn- buffer->pointer ^jnr.ffi.Pointer [^DirectBuffer b]
   (Pointer/wrap rt (.addressOffset b)))
 
 (defrecord RocksJNRKvIterator [^Pointer i ^ExpandableDirectByteBuffer eb ^Pointer len-out]
@@ -190,7 +179,7 @@
   (close [this]
     (.rocksdb_iter_destroy rocksdb i)))
 
-(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot ^ExpandableDirectByteBuffer eb ^Pointer len-out pinned]
+(defrecord RocksJNRKvSnapshot [^Pointer db ^Pointer read-options ^Pointer snapshot pinned]
   kv/KvSnapshot
   (new-iterator [this]
     (->RocksJNRKvIterator (.rocksdb_create_iterator rocksdb db read-options)
@@ -198,14 +187,19 @@
                           (Memory/allocateTemporary rt NativeType/ULONG)))
 
   (get-value [this k]
-    (let [k (mem/ensure-off-heap k eb)
+    (let [k (mem/->off-heap k)
           errptr-out (make-array String 1)
           p (.rocksdb_get_pinned rocksdb db read-options (buffer->pointer k) (.capacity k) errptr-out)]
-      (check-error errptr-out)
+      (try
+        (check-error errptr-out)
+        (catch Throwable t
+          (some->> p (.rocksdb_pinnableslice_destroy rocksdb))
+          (throw t)))
       (when p
-        (do (swap! pinned conj p)
-            (-> (.rocksdb_pinnableslice_value rocksdb p len-out)
-                (pointer+len->buffer len-out))))))
+        (swap! pinned conj p)
+        (let [len-out (Memory/allocateTemporary rt NativeType/ULONG)]
+          (-> (.rocksdb_pinnableslice_value rocksdb p len-out)
+              (pointer+len->buffer len-out))))))
 
   Closeable
   (close [_]
@@ -263,8 +257,6 @@
       (->RocksJNRKvSnapshot db
                             read-options
                             snapshot
-                            (ExpandableDirectByteBuffer.)
-                            (Memory/allocateTemporary rt NativeType/ULONG)
                             (atom []))))
 
   (store [{:keys [^Pointer db ^Pointer write-options]} kvs]
