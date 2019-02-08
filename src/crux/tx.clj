@@ -345,9 +345,6 @@
                       (db/get-single-object object-store snapshot x))
                     x))))))
 
-(defn consumer-status [indexer]
-  {:crux.tx-log/consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)})
-
 (def ^:const default-await-tx-timeout 10000)
 
 (s/def :crux.tx-log/await-tx-timeout nat-int?)
