@@ -91,6 +91,7 @@
                       {:key k :value v}))))
 
 (defn start-system-from-command-line [args]
+  (b/install-uncaught-exception-handler!)
   (let [{:keys [options
                 errors
                 summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
@@ -115,9 +116,3 @@
              (with-open [http-server ^Closeable (srv/start-http-server
                                                  kv-store tx-log indexer consumer-config options)]
                @(shutdown-hook-promise))))))))
-
-(when-not (Thread/getDefaultUncaughtExceptionHandler)
-  (Thread/setDefaultUncaughtExceptionHandler
-   (reify Thread$UncaughtExceptionHandler
-     (uncaughtException [_ thread throwable]
-       (log/error throwable "Uncaught exception:")))))

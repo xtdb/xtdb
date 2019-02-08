@@ -94,6 +94,8 @@
   (.setLevel ^Logger (LoggerFactory/getLogger (name ns))
              (Level/valueOf (name level))))
 
+(b/install-uncaught-exception-handler!)
+
 ;; Usage, create a dev/$USER.clj file like this, and add it to
 ;; .gitignore:
 

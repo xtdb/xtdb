@@ -1,5 +1,6 @@
 (ns crux.bootstrap
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
@@ -11,6 +12,21 @@
   (:import java.io.Closeable
            java.net.InetAddress
            crux.api.ICruxSystem))
+
+(s/check-asserts true)
+
+(def default-options {:bootstrap-servers "localhost:9092"
+                      :group-id (.getHostName (InetAddress/getLocalHost))
+                      :tx-topic "crux-transaction-log"
+                      :doc-topic "crux-docs"
+                      :create-topics true
+                      :doc-partitions 1
+                      :replication-factor 1
+                      :db-dir "data"
+                      :kv-backend "crux.kv.rocksdb.RocksKv"
+                      :server-port 3000
+                      :await-tx-timeout 10000
+                      :doc-cache-size (* 128 1024)})
 
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxSystem
@@ -68,21 +84,6 @@
     (some-> close-promise (deliver true))
     (some-> node-thread (.join))))
 
-(def default-options {:bootstrap-servers "localhost:9092"
-                      :group-id (.getHostName (InetAddress/getLocalHost))
-                      :tx-topic "crux-transaction-log"
-                      :doc-topic "crux-docs"
-                      :create-topics true
-                      :doc-partitions 1
-                      :replication-factor 1
-                      :db-dir "data"
-                      :kv-backend "crux.kv.rocksdb.RocksKv"
-                      :server-port 3000
-                      :await-tx-timeout 10000
-                      :doc-cache-size (* 128 1024)})
-
-(s/check-asserts true)
-
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend
                                                  sync?
@@ -100,3 +101,10 @@
       (catch Throwable t
         (.close ^Closeable kv)
         (throw t)))))
+
+(defn install-uncaught-exception-handler! []
+  (when-not (Thread/getDefaultUncaughtExceptionHandler)
+    (Thread/setDefaultUncaughtExceptionHandler
+     (reify Thread$UncaughtExceptionHandler
+       (uncaughtException [_ thread throwable]
+         (log/error throwable "Uncaught exception:"))))))
