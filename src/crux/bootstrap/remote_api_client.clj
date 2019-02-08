@@ -1,0 +1,204 @@
+(ns crux.bootstrap.remote-api-client
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
+            [crux.io :as cio]
+            [crux.query :as q])
+  (:import [java.io Closeable InputStreamReader IOException PushbackReader]
+           java.time.Duration
+           [crux.api Crux ICruxSystem ICruxDatasource]))
+
+(defn- edn-list->lazy-seq [in]
+  (let [in (PushbackReader. (InputStreamReader. in))
+        open-paren \(]
+    (when-not (= (int open-paren) (.read in))
+      (throw (RuntimeException. "Expected delimiter: (")))
+    (->> (repeatedly #(try
+                        (edn/read {:eof ::eof} in)
+                        (catch RuntimeException e
+                          (if (= "Unmatched delimiter: )" (.getMessage e))
+                            ::eof
+                            (throw e)))))
+         (take-while #(not= ::eof %)))))
+
+(def ^{:doc "Can be rebound using binding or alter-var-root to a
+  function that takes a request map and returns a response
+  map. The :body for POSTs will be provided as an EDN string by the
+  caller. Should return the result body as a string by default, or as
+  a stream when the :as :stream option is set.
+
+  Will be called with :url, :method, :body, :headers and
+  optionally :as with the value :stream.
+
+  Expects :body, :status and :headers in the response map. Should not
+  throw exceptions based on status codes of completed requests.
+
+  Defaults to using clj-http or http-kit if available."
+       :dynamic true}
+  *internal-http-request-fn*)
+
+(defn- init-intrnal-http-request-fn []
+  (when (not (bound? #'*internal-http-request-fn*))
+    (alter-var-root
+     #'*internal-http-request-fn*
+     (constantly
+      (binding [*warn-on-reflection* false]
+        (or (try
+              (require 'clj-http.client)
+              (let [f (resolve 'clj-http.client/request)]
+                (fn [opts]
+                  (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
+              (catch IOException not-found))
+            (try
+              (require 'org.httpkit.client)
+              (let [f (resolve 'org.httpkit.client/request)]
+                (fn [opts]
+                  (let [{:keys [error] :as result} @(f (merge {:as :text} opts))]
+                    (if error
+                      (throw error)
+                      result))))
+              (catch IOException not-found))
+            (fn [_]
+              (throw (IllegalStateException. "No supported HTTP client found.")))))))))
+
+(defn- api-request-sync
+  ([url body]
+   (api-request-sync url body {}))
+  ([url body opts]
+   (let [{:keys [body status headers]
+          :as result}
+         (*internal-http-request-fn* (merge {:url url
+                                             :method :post
+                                             :headers (when body
+                                                        {"Content-Type" "application/edn"})
+                                             :body (some-> body pr-str)}
+                                            opts))]
+     (cond
+       (= 404 status)
+       nil
+
+       (and (<= 200 status) (< status 400)
+            (= "application/edn" (:content-type headers)))
+       (if (string? body)
+         (edn/read-string body)
+         body)
+
+       :else
+       (throw (ex-info (str "HTTP status " status) result))))))
+
+(defrecord RemoteApiStream [streams-state]
+  Closeable
+  (close [_]
+    (doseq [stream @streams-state]
+      (.close ^Closeable stream))))
+
+(defn- register-stream-with-remote-stream! [snapshot in]
+  (swap! (:streams-state snapshot) conj in))
+
+(defn- as-of-map [{:keys [business-time transact-time] :as datasource}]
+  (cond-> {}
+    business-time (assoc :business-time business-time)
+    transact-time (assoc :transact-time transact-time)))
+
+(defrecord RemoteDatasource [url business-time transact-time]
+  ICruxDatasource
+  (entity [this eid]
+    (api-request-sync (str url "/entity")
+                      (assoc (as-of-map this) :eid eid)))
+
+  (entityTx [this eid]
+    (api-request-sync (str url "/entity-tx")
+                      (assoc (as-of-map this) :eid eid)))
+
+  (newSnapshot [this]
+    (->RemoteApiStream (atom [])))
+
+  (q [this q]
+    (api-request-sync (str url "/query")
+                      (assoc (as-of-map this)
+                             :query (q/normalize-query q))))
+
+  (q [this snapshot q]
+    (let [in (api-request-sync (str url "/query-stream")
+                               (assoc (as-of-map this)
+                                      :query (q/normalize-query q))
+                               {:as :stream})]
+      (register-stream-with-remote-stream! snapshot in)
+      (edn-list->lazy-seq in)))
+
+  (historyAscending [this snapshot eid]
+    (let [in (api-request-sync (str url "/history-ascending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (register-stream-with-remote-stream! snapshot in)
+      (edn-list->lazy-seq in)))
+
+  (historyDescending [this snapshot eid]
+    (let [in (api-request-sync (str url "/history-descending")
+                               (assoc (as-of-map this) :eid eid)
+                               {:as :stream})]
+      (register-stream-with-remote-stream! snapshot in)
+      (edn-list->lazy-seq in)))
+
+  (businessTime [_]
+    business-time)
+
+  (transactionTime [_]
+    transact-time))
+
+(defrecord RemoteApiClient [url]
+  ICruxSystem
+  (db [_]
+    (->RemoteDatasource url nil nil))
+
+  (db [_ business-time]
+    (->RemoteDatasource url business-time nil))
+
+  (db [_ business-time transact-time]
+    (->RemoteDatasource url business-time transact-time))
+
+  (document [_ content-hash]
+    (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
+
+  (history [_ eid]
+    (api-request-sync (str url "/history/" eid) nil {:method :get}))
+
+  (status [_]
+    (api-request-sync url nil {:method :get}))
+
+  (submitTx [_ tx-ops]
+    (api-request-sync (str url "/tx-log") tx-ops))
+
+  (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
+    (.hasSubmittedTxCorrectedEntity this submitted-tx tx-time eid))
+
+  (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} business-time eid]
+    (= tx-id (:crux.tx/tx-id (.entityTx (.db this business-time tx-time) eid))))
+
+  (newTxLogContext [_]
+    (->RemoteApiStream (atom [])))
+
+  (txLog [_ tx-log-context from-tx-id with-documents?]
+    (let [params (->> [(when from-tx-id
+                         (str "from-tx-id=" from-tx-id))
+                       (when with-documents?
+                         (str "with-documents=" with-documents?))]
+                      (remove nil?)
+                      (str/join "&"))
+          in (api-request-sync (cond-> (str url "/tx-log")
+                                 (seq params) (str "?" params))
+                               nil
+                               {:method :get
+                                :as :stream})]
+      (register-stream-with-remote-stream! tx-log-context in)
+      (edn-list->lazy-seq in)))
+
+  (sync [_ timeout]
+    (api-request-sync (cond-> (str url "/sync")
+                        timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
+
+  Closeable
+  (close [_]))
+
+(defn new-api-client ^ICruxSystem [url]
+  (init-intrnal-http-request-fn)
+  (->RemoteApiClient url))

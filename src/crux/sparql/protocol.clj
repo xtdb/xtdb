@@ -5,7 +5,6 @@
   classpath."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
             [crux.rdf :as rdf]
             [crux.sparql :as sparql]
             [ring.util.request :as req]

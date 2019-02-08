@@ -1,4 +1,5 @@
-(ns crux.kv.rocksdb.loader
+(ns ^{:clojure.tools.namespace.repl/load false}
+    crux.kv.rocksdb.loader
   (:require [clojure.java.io :as io]
             [crux.io :as cio])
   (:import org.rocksdb.util.Environment

@@ -2,5 +2,4 @@
   (:gen-class))
 
 (defn -main [& args]
-  (require 'crux.bootstrap)
-  ((resolve 'crux.bootstrap/start-system-from-command-line) args))
+  ((requiring-resolve 'crux.bootstrap.cli/start-system-from-command-line) args))

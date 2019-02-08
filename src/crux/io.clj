@@ -5,9 +5,9 @@
             [taoensso.nippy :as nippy])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
            [java.nio.file.attribute FileAttribute]
-           [java.io Closeable DataInputStream DataOutputStream File IOException]
+           [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang.ref ReferenceQueue PhantomReference]
-           [java.util Comparator Date IdentityHashMap PriorityQueue]
+           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
            [java.net ServerSocket]))
 
 (s/def ::port (s/int-in 1 65536))
@@ -108,6 +108,11 @@
               false
               (recur)))
         true))))
+
+(defn load-properties [^Reader in]
+  (->> (doto (Properties.)
+         (.load in))
+       (into {})))
 
 ;; External Merge Sort
 

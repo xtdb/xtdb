@@ -1,93 +1,87 @@
 (ns crux.bootstrap
-  (:require [clojure.java.io :as io]
-            [clojure.pprint :as pp]
-            [clojure.tools.cli :as cli]
-            [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [crux.codec :as c]
+            [crux.db :as db]
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.lru :as lru]
-            [crux.tx :as tx]
-            [clojure.string :as str])
-  (:import clojure.lang.IPersistentMap
-           [java.io Closeable Reader]
+            [crux.query :as q]
+            [crux.status :as status]
+            [crux.tx :as tx])
+  (:import java.io.Closeable
            java.net.InetAddress
-           java.util.Properties))
+           crux.api.ICruxSystem))
 
-(def cli-options
-  [;; Kafka
-   ["-b" "--bootstrap-servers BOOTSTRAP_SERVERS" "Kafka bootstrap servers"
-    :default "localhost:9092"]
-   [nil "--kafka-properties-file KAFKA_PROPERTIES_FILE" "Kafka properties file for shared connection properties"]
-   ["-g" "--group-id GROUP_ID" "Kafka group.id for this node"
-    :default (.getHostName (InetAddress/getLocalHost))]
-   ["-t" "--tx-topic TOPIC" "Kafka topic for the Crux transaction log"
-    :default "crux-transaction-log"]
-   ["-o" "--doc-topic TOPIC" "Kafka topic for the Crux documents"
-    :default "crux-docs"]
-   ["-c" "--[no-]create-topics" "Should Crux create Kafka topics"
-    :default true]
-   ["-p" "--doc-partitions PARTITIONS" "Kafka partitions for the Crux documents topic"
-    :default 1
-    :parse-fn #(Long/parseLong %)]
-   ["-r" "--replication-factor FACTOR" "Kafka topic replication factor"
-    :default 1
-    :parse-fn #(Long/parseLong %)]
+(defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
+  ICruxSystem
+  (db [_]
+    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (q/db kv-store tx-time tx-time options)))
 
-   ;; KV
-   ["-d" "--db-dir DB_DIR" "KV storage directory"
-    :default "data"]
-   ["-k" "--kv-backend KV_BACKEND" "KV storage backend: crux.kv.rocksdb.RocksKv, crux.kv.lmdb.LMDBKv or crux.kv.memdb.MemKv"
-    :default "crux.kv.rocksdb.RocksKv"
-    :validate [#'kv/require-and-ensure-kv-record "Unknown storage backend"]]
+  (db [_ business-time]
+    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (q/db kv-store business-time tx-time options)))
 
-   ;; HTTP
-   ["-s" "--server-port SERVER_PORT" "Port on which to run the HTTP server"
-    :default 3000
-    :parse-fn #(Long/parseLong %)]
+  (db [_ business-time transact-time]
+    (tx/await-tx-time indexer transact-time options)
+    (q/db kv-store business-time transact-time options))
 
-   ;; Query
-   ["-w" "--await-tx-timeout TIMEOUT" "Maximum time in ms to wait for transact time specified at query"
-    :default 10000
-    :parse-fn #(Long/parseLong %)]
-   ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
-    :default (* 128 1024)
-    :parse-fn #(Long/parseLong %)]
+  (document [_ content-hash]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (db/get-single-object object-store snapshot (c/new-id content-hash))))
 
-   ["-h" "--help"]])
+  (history [_ eid]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
+
+  (status [this]
+    (status/status-map this options))
+
+  (submitTx [_ tx-ops]
+    @(db/submit-tx tx-log tx-ops))
+
+  (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
+    (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
+
+  (hasSubmittedTxCorrectedEntity [_ submitted-tx business-time eid]
+    (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
+    (q/submitted-tx-updated-entity? kv-store submitted-tx business-time eid))
+
+  (newTxLogContext [_]
+    (db/new-tx-log-context tx-log))
+
+  (txLog [_ tx-log-context from-tx-id with-documents?]
+    (for [tx-log-entry (db/tx-log tx-log tx-log-context from-tx-id)]
+      (if with-documents?
+        (update tx-log-entry
+                :crux.tx/tx-ops
+                #(with-open [snapshot (kv/new-snapshot kv-store)]
+                   (tx/enrich-tx-ops-with-documents snapshot object-store %)))
+        tx-log-entry)))
+
+  (sync [_ timeout]
+    (tx/await-no-consumer-lag indexer (or (some-> timeout (.toMillis))
+                                          (:crux.tx-log/await-tx-timeout options))))
+
+  Closeable
+  (close [_]
+    (some-> close-promise (deliver true))
+    (some-> node-thread (.join))))
+
+(def default-options {:bootstrap-servers "localhost:9092"
+                      :group-id (.getHostName (InetAddress/getLocalHost))
+                      :tx-topic "crux-transaction-log"
+                      :doc-topic "crux-docs"
+                      :create-topics true
+                      :doc-partitions 1
+                      :replication-factor 1
+                      :db-dir "data"
+                      :kv-backend "crux.kv.rocksdb.RocksKv"
+                      :server-port 3000
+                      :await-tx-timeout 10000
+                      :doc-cache-size (* 128 1024)})
 
 (s/check-asserts true)
-
-(s/def :crux.http-server/server-port :crux.io/port)
-
-(s/def ::options (s/keys :opt-un [:crux.kafka/bootstrap-servers
-                                  :crux.kafka/group-id
-                                  :crux.kafka/tx-topic
-                                  :crux.kafka/doc-topic
-                                  :crux.kafka/doc-partitions
-                                  :crux.kaka/create-topics
-                                  :crux.kafka/replication-factor
-                                  :crux.kv/db-dir
-                                  :crux.kv/kv-backend
-                                  :crux.http-server/server-port
-                                  :crux.tx-log/await-tx-timeout
-                                  :crux.lru/doc-cache-size]))
-
-(def default-options (:options (cli/parse-opts [] cli-options)))
-
-(defn- load-properties [^Reader in]
-  (->> (doto (Properties.)
-         (.load in))
-       (into {})))
-
-(defn- parse-pom-version []
-  (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux/pom.properties"))]
-    (load-properties in)))
-
-(defn- options->table [options]
-  (with-out-str
-    (pp/print-table (for [[k v] options]
-                      {:key k :value v}))))
 
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend
@@ -106,115 +100,3 @@
       (catch Throwable t
         (.close ^Closeable kv)
         (throw t)))))
-
-(defn- read-kafka-properties-file [f]
-  (when f
-    (with-open [in (io/reader (io/file f))]
-      (load-properties in))))
-
-;; Inspired by
-;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
-
-;; TODO: Clean this up and split into proper namespaces and remove
-;; eval again while ensuring Kafka doesn't get required in Standalone
-;; mode.
-(defn start-system [options with-system-fn]
-  (s/assert ::options options)
-  (require 'crux.kafka)
-  (binding [*ns* (find-ns 'crux.bootstrap)]
-    ((eval '(fn start-system-internal [{:keys [bootstrap-servers
-                                               group-id
-                                               tx-topic
-                                               doc-topic
-                                               server-port
-                                               kafka-properties-file]
-                                        :as options}
-                                       with-system-fn]
-              (log/info "starting system")
-              (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
-                                        (read-kafka-properties-file kafka-properties-file))
-                    producer-config kafka-config
-                    consumer-config (merge {"group.id" (:group-id options)}
-                                           kafka-config)]
-                (with-open [kv-store (start-kv-store options)
-                            producer (crux.kafka/create-producer producer-config)
-                            tx-log ^java.io.Closeable (crux.kafka/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                            object-store ^java.io.Closeable (lru/new-cached-object-store kv-store)
-                            indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
-                            admin-client (crux.kafka/create-admin-client kafka-config)
-                            indexing-consumer (crux.kafka/start-indexing-consumer admin-client consumer-config indexer options)]
-                  (log/info "system started")
-                  (with-system-fn
-                    {:kv-store kv-store
-                     :tx-log tx-log
-                     :producer producer
-                     :consumer-config consumer-config
-                     :object-store object-store
-                     :indexer indexer
-                     :admin-client admin-client
-                     :indexing-consumer indexing-consumer})
-                  (log/info "stopping system")))))
-     options
-     with-system-fn))
-  (log/info "system stopped"))
-
-;; NOTE: This isn't registered until the system manages to start up
-;; cleanly, so ctrl-c keeps working as expected in case the system
-;; fails to start.
-(defn- shutdown-hook-promise []
-  (let [main-thread (Thread/currentThread)
-        shutdown? (promise)]
-    (.addShutdownHook (Runtime/getRuntime)
-                      (Thread. (fn []
-                                 (let [shutdown-ms 10000]
-                                   (deliver shutdown? true)
-                                   (shutdown-agents)
-                                   (.join main-thread shutdown-ms)
-                                   (when (.isAlive main-thread)
-                                     (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
-                                     (.halt (Runtime/getRuntime) 1))))
-                               "crux.bootstrap.shutdown-hook-thread"))
-    shutdown?))
-
-(def env-prefix "CRUX_")
-
-(defn- options-from-env []
-  (->> (for [id (keys default-options)
-             :let [env-var (str env-prefix (str/replace (str/upper-case (name id)) "-" "_"))
-                   v (System/getenv env-var)]
-             :when v]
-         [(str "--" (name id)) v])
-       (apply concat)))
-
-(defn start-system-from-command-line [args]
-  (let [{:keys [options
-                errors
-                summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
-        {:strs [version
-                revision]} (parse-pom-version)]
-    (cond
-      (:help options)
-      (println summary)
-
-      errors
-      (binding [*out* *err*]
-        (doseq [error errors]
-          (println error))
-        (System/exit 1))
-
-      :else
-      (do (log/infof "Crux version: %s revision: %s" version revision)
-          (log/info "options:" (options->table options))
-          (start-system
-           options
-           (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-system}]
-             (require 'crux.http-server)
-             (with-open [http-server ^Closeable ((resolve 'crux.http-server/start-http-server)
-                                                 kv-store tx-log indexer consumer-config options)]
-               @(shutdown-hook-promise))))))))
-
-(when-not (Thread/getDefaultUncaughtExceptionHandler)
-  (Thread/setDefaultUncaughtExceptionHandler
-   (reify Thread$UncaughtExceptionHandler
-     (uncaughtException [_ thread throwable]
-       (log/error throwable "Uncaught exception:")))))

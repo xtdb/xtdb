@@ -5,8 +5,9 @@
             [clojure.tools.namespace.repl :as tn]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [crux.api :as api]
             [crux.bootstrap :as b]
+            [crux.bootstrap.local-node :as local-node]
+            [crux.bootstrap.standalone :as standalone]
             [crux.byte-utils :as bu]
             [crux.db :as db]
             [crux.index :as idx]
@@ -19,7 +20,7 @@
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import [crux.api Crux LocalNode ICruxSystem]
+  (:import [crux.api Crux ICruxSystem]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
            java.io.Closeable
@@ -33,7 +34,7 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/system-start-fn api/start-local-node
+   :dev/system-start-fn local-node/start-local-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
@@ -42,7 +43,7 @@
 
 (def ^ICruxSystem system)
 
-(defn start-dev-system ^crux.api.LocalNode [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
+(defn start-dev-system ^crux.api.ICruxSystem [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
@@ -60,7 +61,7 @@
           (cio/try-close c))
         (throw t)))))
 
-(defn stop-dev-system ^crux.api.LocalNode [{:keys [http-server embedded-kafka] :as system}]
+(defn stop-dev-system ^crux.api.ICruxSystem [{:keys [http-server embedded-kafka] :as system}]
   (doseq [c [http-server system embedded-kafka]]
     (cio/try-close c)))
 
@@ -115,7 +116,7 @@
 ;;                          :crux.tx/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
-;;                          :dev/system-start-fn api/start-standalone-system}))
+;;                          :dev/system-start-fn standalone/start-standalone-system}))
 
 (when (io/resource (str (System/getenv "USER") ".clj"))
   (load (System/getenv "USER")))

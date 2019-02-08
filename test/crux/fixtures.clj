@@ -1,7 +1,6 @@
 (ns crux.fixtures
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]

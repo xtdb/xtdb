@@ -4,12 +4,12 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [org.clojure/tools.cli "0.4.1"]
                  [org.clojure/tools.logging "0.4.1"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
                  [org.agrona/agrona "0.9.32"]
                  ;; Provided dependencies included in uberjar.
+                 [org.clojure/tools.cli "0.4.1" :scope "provided"]
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]

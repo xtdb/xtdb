@@ -1,13 +1,13 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
+            [crux.bootstrap.standalone]
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
-           crux.api.StandaloneSystem
+           crux.bootstrap.standalone.StandaloneSystem
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))

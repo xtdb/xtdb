@@ -13,9 +13,9 @@
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
             [crux.codec :as c]
             [crux.io :as cio]
+            [crux.bootstrap :as b]
             [crux.kafka]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
@@ -287,6 +287,8 @@
   (close [_]
     (.stop server)))
 
+;; TODO: The direct dependency on LocalNode here will go.
+
 (defn start-http-server
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.ICruxSystem or its
@@ -306,9 +308,9 @@
   (^crux.http_server.HTTPServer
    [kv-store tx-log indexer consumer-config {:keys [server-port]
                                              :as options}]
-   (start-http-server (api/map->LocalNode {:kv-store kv-store
-                                           :tx-log tx-log
-                                           :indexer indexer
-                                           :consumer-config consumer-config
-                                           :options options})
+   (start-http-server (b/map->CruxNode {:kv-store kv-store
+                                        :tx-log tx-log
+                                        :indexer indexer
+                                        :consumer-config consumer-config
+                                        :options options})
                       options)))
