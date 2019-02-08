@@ -1,5 +1,6 @@
 (ns crux.bootstrap.standalone
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
@@ -65,28 +66,37 @@
 (defn start-standalone-system ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir
                                                     crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options}]
   (s/assert ::standalone-options options)
-  (let [kv-store (b/start-kv-store
-                  (merge (when-not event-log-dir
-                           {:sync? true})
-                         options))
-        event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))
-        event-log-kv-store (when event-log-dir
-                             (b/start-kv-store
-                              {:db-dir event-log-dir
-                               :kv-backend (or event-log-kv-backend kv-backend)
-                               :sync? event-log-sync?
-                               :crux.index/check-and-store-index-version false}))
-        tx-log (if event-log-kv-store
-                 (tx/->EventTxLog event-log-kv-store)
-                 (tx/->KvTxLog kv-store))
-        object-store (lru/new-cached-object-store kv-store)
-        indexer (tx/->KvIndexer kv-store tx-log object-store)
-        event-log-consumer (when event-log-kv-store
-                             (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
-                                                                                       event-log-sync-interval-ms)))]
-    (map->StandaloneSystem {:kv-store kv-store
-                            :tx-log tx-log
-                            :object-store object-store
-                            :indexer indexer
-                            :event-log-consumer event-log-consumer
-                            :options options})))
+  (let [started (atom [])]
+    (try
+      (let [kv-store (doto (b/start-kv-store
+                            (merge (when-not event-log-dir
+                                     {:sync? true})
+                                   options))
+                       (->> (swap! started conj)))
+            event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))
+            event-log-kv-store (when event-log-dir
+                                 (doto (b/start-kv-store
+                                        {:db-dir event-log-dir
+                                         :kv-backend (or event-log-kv-backend kv-backend)
+                                         :sync? event-log-sync?
+                                         :crux.index/check-and-store-index-version false})
+                                   (->> (swap! started conj))))
+            tx-log (if event-log-kv-store
+                     (tx/->EventTxLog event-log-kv-store)
+                     (do (log/warn "Using index KV store as event log, not suitable for production environments.")
+                         (tx/->KvTxLog kv-store)))
+            object-store (lru/new-cached-object-store kv-store)
+            indexer (tx/->KvIndexer kv-store tx-log object-store)
+            event-log-consumer (when event-log-kv-store
+                                 (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
+                                                                                           event-log-sync-interval-ms)))]
+        (map->StandaloneSystem {:kv-store kv-store
+                                :tx-log tx-log
+                                :object-store object-store
+                                :indexer indexer
+                                :event-log-consumer event-log-consumer
+                                :options options}))
+      (catch Throwable t
+        (doseq [c (reverse @started)]
+          (cio/try-close c))
+        (throw t))))  )

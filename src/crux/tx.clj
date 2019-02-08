@@ -319,7 +319,7 @@
                                                                        :event-log-kv event-log-kv
                                                                        :indexer indexer})
                                         (catch Throwable t
-                                          (log/error t "Event log consumer threw exception, consumption has stopped:")))
+                                          (log/fatal t "Event log consumer threw exception, consumption has stopped:")))
                                      "crux.tx.event-log-consumer-thread")
                         (.start))
         fsync-thread (when event-log-sync-interval-ms
