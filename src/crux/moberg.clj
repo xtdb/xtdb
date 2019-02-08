@@ -5,6 +5,7 @@
             [taoensso.nippy :as nippy])
   (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
+           crux.api.NonMonotonicTimeException
            java.util.function.Supplier
            [java.io Closeable DataInputStream DataOutput]
            java.nio.ByteOrder
@@ -105,7 +106,7 @@
                          (end-message-id-offset kv topic))]
     (cond
       (and detect-clock-drift? (< message-id (long end-message-id)))
-      (throw (IllegalStateException.
+      (throw (NonMonotonicTimeException.
               (str "Clock has moved backwards in time, message id: " message-id
                    " was generated using " (pr-str message-time)
                    " lowest valid next id: " end-message-id

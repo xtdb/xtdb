@@ -3,7 +3,8 @@
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.kv :as kv]
-            [crux.moberg :as moberg]))
+            [crux.moberg :as moberg])
+  (:import crux.api.NonMonotonicTimeException))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
 
@@ -30,7 +31,7 @@
 
     (with-redefs [crux.moberg/now (fn [] #inst "2019")]
       (t/is (thrown-with-msg?
-             IllegalStateException
+             NonMonotonicTimeException
              (re-pattern (str "Clock has moved backwards in time, message id: "
                               1583412019200001
                               " was generated using " (pr-str #inst "2019")
