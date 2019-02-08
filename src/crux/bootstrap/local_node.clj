@@ -11,7 +11,6 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.query :as q]
-            [crux.status :as status]
             [crux.tx :as tx])
   (:import java.io.Closeable
            crux.api.ICruxSystem))

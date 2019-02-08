@@ -9,6 +9,7 @@
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.moberg :as moberg]
+            [crux.status :as status]
             [taoensso.nippy :as nippy])
   (:import [crux.codec EntityTx Id]
            [crux.moberg Message]
@@ -177,7 +178,12 @@
     (idx/store-meta kv k v))
 
   (read-index-meta [_ k]
-    (idx/read-meta kv k)))
+    (idx/read-meta kv k))
+
+  status/Status
+  (status-map [this]
+    {:crux.index/index-version (idx/current-index-version kv)
+     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
 (defn conform-tx-ops [tx-ops]
   (s/assert ::tx-ops tx-ops)
@@ -224,7 +230,10 @@
     (let [i (kv/new-iterator tx-log-context)]
       (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
         (assoc (c/decode-tx-log-key-from k)
-               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v)))))))
+               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
+
+  Closeable
+  (close [_]))
 
 ;; For StandaloneSystem.
 
@@ -257,7 +266,11 @@
               :when (= :txs (get (.headers m) ::sub-topic))]
           {:crux.tx/tx-ops (.body m)
            :crux.tx/tx-id (.message-id m)
-           :crux.tx/tx-time (.message-time m)})))))
+           :crux.tx/tx-time (.message-time m)}))))
+
+  Closeable
+  (close [_]
+    (.close ^Closeable event-log-kv)))
 
 (defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100

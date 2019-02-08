@@ -5,6 +5,7 @@
             [crux.db :as db]
             [crux.kafka.nippy]
             [crux.kv :as kv]
+            [crux.status :as status]
             [crux.tx :as tx]
             [taoensso.nippy :as nippy])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
@@ -253,6 +254,16 @@
                   (seek-to-stored-offsets indexer consumer partitions)))))
 
 (defrecord IndexingConsumer [running? ^Thread worker-thread consumer-config indexer options]
+  status/Status
+  (status-map [_]
+    {:crux.zk/zk-active?
+     (try
+       (with-open [^KafkaConsumer consumer (create-consumer (merge consumer-config {"default.api.timeout.ms" (int 1000)}))]
+         (boolean (.listTopics consumer)))
+       (catch Exception e
+         (log/debug e "Could not list Kafka topics:")
+         false))})
+
   Closeable
   (close [_]
     (reset! running? false)

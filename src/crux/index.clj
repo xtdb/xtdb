@@ -394,12 +394,11 @@
     (when (not= c/index-version index-version)
       (throw (IndexVersionOutOfSyncException.
               (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
-    (kv/store kv [[(c/encode-index-version-key-to nil)
-                   (c/encode-index-version-value-to nil c/index-version)]]))
+    (doto kv
+      (kv/store [[(c/encode-index-version-key-to nil)
+                  (c/encode-index-version-value-to nil c/index-version)]])
+      (kv/fsync)))
   kv)
-
-(defn index-status [kv]
-  {:crux.index/index-version (current-index-version kv)})
 
 ;; NOTE: We need to copy the keys and values here, as the originals
 ;; returned by the iterator will (may) get invalidated by the next

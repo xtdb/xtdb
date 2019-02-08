@@ -35,7 +35,7 @@
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
   (status [this]
-    (status/status-map this options))
+    (apply merge (map status/status-map (vals this))))
 
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))

@@ -8,15 +8,12 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.query :as q]
-            [crux.status :as status]
             [crux.tx :as tx])
   (:import java.io.Closeable
            crux.api.ICruxSystem
            crux.bootstrap.CruxNode))
 
-;; TODO: The direct dependency on LocalNode here will go.
-
-(defrecord StandaloneSystem [kv-store event-log-kv-store event-log-consumer tx-log options]
+(defrecord StandaloneSystem [kv-store event-log-consumer tx-log options]
   ICruxSystem
   (db [this]
     (.db ^CruxNode (b/map->CruxNode this)))
@@ -34,7 +31,8 @@
     (.history ^CruxNode (b/map->CruxNode this) eid))
 
   (status [this]
-    (.status ^CruxNode (b/map->CruxNode this)))
+    (-> (.status ^CruxNode (b/map->CruxNode this))
+        (assoc :crux.zk/zk-active? false)))
 
   (submitTx [this tx-ops]
     (.submitTx ^CruxNode (b/map->CruxNode this) tx-ops))
@@ -56,7 +54,7 @@
 
   Closeable
   (close [_]
-    (doseq [c [event-log-consumer event-log-kv-store kv-store]]
+    (doseq [c [event-log-consumer tx-log kv-store]]
       (cio/try-close c))))
 
 (s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
@@ -87,7 +85,6 @@
                              (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
                                                                                        event-log-sync-interval-ms)))]
     (map->StandaloneSystem {:kv-store kv-store
-                            :event-log-kv-store event-log-kv-store
                             :tx-log tx-log
                             :object-store object-store
                             :indexer indexer
