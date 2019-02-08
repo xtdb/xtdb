@@ -76,7 +76,7 @@
             (str/join ", " ))
        "]}}"))
 
-(defn sparql-query [^ICruxSystem local-node request]
+(defn sparql-query [^ICruxSystem crux-system request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])
@@ -91,7 +91,7 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          db (.db local-node)
+          db (.db crux-system)
           results (.q db query-map)]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
