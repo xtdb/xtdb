@@ -271,15 +271,15 @@
                    db (q/db kv #inst "1970")]
                (with-open [snapshot (.newSnapshot db)]
                  (->> (for [r reading-ids]
-                        (for [{:keys [crux.db/doc]} (.historyAscending db snapshot r)]
-                          (update doc :reading/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                        (for [entity-tx (.historyAscending db snapshot r)]
+                          (update entity-tx :crux.db/business-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                       (cio/merge-sort (fn [a b]
-                                        (compare (:reading/time a) (:reading/time b))))
-                      (partition-by :reading/time)
+                                        (compare (:crux.db/business-time a) (:crux.db/business-time b))))
+                      (partition-by :crux.db/business-time)
                       (take 12)
                       (mapv (fn [group]
-                              (let [battery-levels (sort (mapv :reading/battery-level group))]
-                                [(:reading/time (first group))
+                              (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
+                                [(:crux.db/business-time (first group))
                                  (first battery-levels)
                                  (last battery-levels)]))))))))
     (t/is true)))

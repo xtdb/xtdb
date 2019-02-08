@@ -368,15 +368,15 @@
                    db (q/db kv #inst "1970")]
                (with-open [snapshot (.newSnapshot db)]
                  (->> (for [c condition-ids]
-                        (for [{:keys [crux.db/doc]} (.historyAscending db snapshot c)]
-                          (update doc :condition/time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                        (for [entity-tx (.historyAscending db snapshot c)]
+                          (update entity-tx :crux.db/business-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                       (cio/merge-sort (fn [a b]
-                                        (compare (:condition/time a) (:condition/time b))))
-                      (partition-by :condition/time)
+                                        (compare (:crux.db/business-time a) (:crux.db/business-time b))))
+                      (partition-by :crux.db/business-time)
                       (take 24)
                       (mapv (fn [group]
-                              (let [temperatures (sort (mapv :condition/temperature group))]
-                                [(:condition/time (first group))
+                              (let [temperatures (sort (mapv (comp :condition/temperature :crux.db/doc) group))]
+                                [(:crux.db/business-time (first group))
                                  (trunc (/ (reduce + temperatures) (count group)) 2)
                                  (trunc (first temperatures) 2)
                                  (trunc (last temperatures) 2)]))))))))
