@@ -12,8 +12,7 @@
             [crux.query :as q]
             [crux.kafka :as k]
             [crux.fixtures :as f])
-  (:import java.math.RoundingMode
-           java.util.Date
+  (:import java.util.Date
            java.time.temporal.ChronoUnit))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices

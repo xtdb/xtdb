@@ -353,9 +353,6 @@
     (update-predicate-stats kv - normalized-doc)))
 
 (defrecord KvObjectStore [kv]
-  Closeable
-  (close [_])
-
   db/ObjectStore
   (get-single-object [this snapshot k]
     (let [doc-key (c/->id-buffer k)
@@ -396,7 +393,7 @@
   (if-let [index-version (current-index-version kv)]
     (when (not= c/index-version index-version)
       (throw (IndexVersionOutOfSyncException.
-               (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
+              (str "Index version on disk: " index-version " does not match index version of code: " c/index-version))))
     (kv/store kv [[(c/encode-index-version-key-to nil)
                    (c/encode-index-version-value-to nil c/index-version)]]))
   kv)
