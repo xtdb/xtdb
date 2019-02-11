@@ -14,7 +14,8 @@
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q]
-            [taoensso.nippy :as nippy]))
+            [taoensso.nippy :as nippy])
+  (:import java.util.Date))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
@@ -364,6 +365,33 @@
                        (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
                            (first)
                            (select-keys [:tx-id :content-hash])))))))))))
+
+;; TODO: This test just shows that this is an issue, if we fix it it
+;; should start failing.
+(t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
+  (let [tx-log (tx/->KvTxLog f/*kv*)
+        ivan {:crux.db/id :ivan :name "Ivan"}
+        start-business-time #inst "2019"
+        number-of-versions 1000]
+
+    @(db/submit-tx tx-log (vec (for [n (range number-of-versions)]
+                                 [:crux.tx/put :ivan (assoc ivan :verison n) (Date. (+ (.getTime start-business-time) (inc (long n))))])))
+
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (let [baseline-time (let [start-time (System/nanoTime)
+                                business-time (Date. (+ (.getTime start-business-time) number-of-versions))]
+                            (t/testing "last version of entity is visible at now"
+                              (t/is (= business-time (-> (idx/entities-at snapshot [:ivan] business-time (Date.))
+                                                         (first)
+                                                         :bt))))
+                            (- (System/nanoTime) start-time))]
+
+        (let [start-time (System/nanoTime)
+              business-time (Date. (+ (.getTime start-business-time) number-of-versions))]
+          (t/testing "no version is visible before transactions"
+            (t/is (nil? (idx/entities-at snapshot [:ivan] business-time business-time)))
+            (let [corrections-time (- (System/nanoTime) start-time)]
+              (t/is (<= baseline-time corrections-time) "Would fail if we fix #144, so we want this to fail eventually."))))))))
 
 (t/deftest test-can-read-kv-tx-log
   (let [tx-log (tx/->KvTxLog f/*kv*)
