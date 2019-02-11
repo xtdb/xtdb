@@ -96,7 +96,7 @@
       (catch Env$MapFullException e
         (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
           (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
-            (throw (IllegalStateException. "Too large size of keys to delete at once.")))
+            (throw (IllegalStateException. "Too large size of keys to store at once.")))
           (increase-mapsize env *mapsize-increase-factor*)
           (kv/store this kvs)))))
 
