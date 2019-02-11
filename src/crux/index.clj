@@ -397,7 +397,7 @@
     (.mkdirs (io/file file-object-store-dir))
     (assoc this :dir file-object-store-dir))
 
-  (get-single-object [this snapshot k]
+  (get-single-object [this _ k]
     (let [doc-key (str (c/new-id k))
           doc-file (io/file dir doc-key)]
       (when (.exists doc-file)
