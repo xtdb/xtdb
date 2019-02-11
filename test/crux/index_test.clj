@@ -366,8 +366,10 @@
                            (first)
                            (select-keys [:tx-id :content-hash])))))))))))
 
-;; TODO: This test just shows that this is an issue, if we fix it it
-;; should start failing.
+;; TODO: This test just shows that this is an issue, if we fix the
+;; underlying issue this test should start failing. We can then change
+;; the second assertion if we want to keep it around to ensure it
+;; keeps working.
 (t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
   (let [tx-log (tx/->KvTxLog f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
