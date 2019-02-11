@@ -280,8 +280,8 @@
   (db-dir [this]
     (str db-dir))
 
-  (kv-name [_]
-    "crux.rocksdb.LMDBKv")
+  (kv-name [this]
+    (.getName (class this)))
 
   Closeable
   (close [_]
