@@ -18,6 +18,7 @@
                  [org.lwjgl/lwjgl "3.2.1" :classifier "natives-macos" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.1" :classifier "natives-macos" :native-prefix "" :scope "provided"]
                  [org.lwjgl/lwjgl-lmdb "3.2.1" :scope "provided"]
+                 [org.lmdbjava/lmdbjava "0.6.3" :exclusions [com.github.jnr/jffi]]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3" :scope "provided"]
