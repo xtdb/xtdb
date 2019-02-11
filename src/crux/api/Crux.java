@@ -37,8 +37,10 @@ public class Crux {
      *
      * @param options see crux.bootstrap/cli-options.
      * @return        the started local node.
+     * @throws IndexVersionOutOfSyncException if the index needs
+     * rebuilding.
      */
-    public static ICruxSystem startLocalNode(Map options) {
+    public static ICruxSystem startLocalNode(Map options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.local-node"));
         return (ICruxSystem) Clojure.var("crux.bootstrap.local-node/start-local-node").invoke(options);
     }
@@ -60,8 +62,13 @@ public class Crux {
      *
      * @param options see crux.bootstrap/start-kv-store.
      * @return        a standalone system.
+     * @throws IndexVersionOutOfSyncException if the index needs
+     * rebuilding.
+     * @throws NonMonotonicTimeException if the clock has moved
+     * backwards since last run. Only applicable when using the event
+     * log.
      */
-    public static ICruxSystem startStandaloneSystem(Map options) {
+    public static ICruxSystem startStandaloneSystem(Map options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.standalone"));
         return (ICruxSystem) Clojure.var("crux.bootstrap.standalone/start-standalone-system").invoke(options);
     }
