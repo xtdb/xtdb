@@ -1146,21 +1146,21 @@
 
 (defn db
   (^crux.api.ICruxDatasource [kv]
-   (db kv nil nil {}))
+   (db kv nil nil nil {}))
   (^crux.api.ICruxDatasource [kv business-time]
-   (db kv business-time nil {}))
+   (db kv nil business-time nil {}))
   (^crux.api.ICruxDatasource [kv business-time transact-time]
-   (db kv business-time transact-time {}))
-  (^crux.api.ICruxDatasource [kv business-time transact-time {:keys [crux.query/query-cache-size
-                                                                     doc-cache-size]
-                                                              :or {query-cache-size default-query-cache-size
-                                                                   doc-cache-size lru/default-doc-cache-size}
-                                                              :as options}]
+   (db kv nil business-time transact-time {}))
+  (^crux.api.ICruxDatasource [kv object-store business-time transact-time {:keys [crux.query/query-cache-size
+                                                                                  doc-cache-size]
+                                                                           :or {query-cache-size default-query-cache-size
+                                                                                doc-cache-size lru/default-doc-cache-size}
+                                                                           :as options}]
    (s/assert ::db-options options)
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache query-cache-size)
-                        (lru/new-cached-object-store kv doc-cache-size)
+                        (or object-store (lru/new-cached-object-store kv doc-cache-size))
                         (or business-time now)
                         (or transact-time now)))))
 

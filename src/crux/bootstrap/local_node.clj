@@ -43,7 +43,8 @@
                           tx-topic
                           doc-topic
                           server-port
-                          kafka-properties-file]
+                          kafka-properties-file
+                          doc-cache-size]
                    :as options}
                   with-system-fn]
   (s/assert ::options options)
@@ -56,7 +57,7 @@
     (with-open [kv-store (b/start-kv-store options)
                 producer (k/create-producer producer-config)
                 tx-log ^java.io.Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                object-store ^java.io.Closeable (lru/new-cached-object-store kv-store)
+                object-store ^java.io.Closeable (lru/new-cached-object-store kv-store doc-cache-size)
                 indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-config)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]

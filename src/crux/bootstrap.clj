@@ -32,15 +32,15 @@
   ICruxSystem
   (db [_]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store tx-time tx-time options)))
+      (q/db kv-store object-store tx-time tx-time options)))
 
   (db [_ business-time]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store business-time tx-time options)))
+      (q/db kv-store object-store business-time tx-time options)))
 
   (db [_ business-time transact-time]
     (tx/await-tx-time indexer transact-time options)
-    (q/db kv-store business-time transact-time options))
+    (q/db kv-store object-store business-time transact-time options))
 
   (document [_ content-hash]
     (with-open [snapshot (kv/new-snapshot kv-store)]
