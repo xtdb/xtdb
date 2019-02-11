@@ -131,8 +131,11 @@
       (.flush db flush-options)))
 
   (backup [{:keys [^RocksDB db]} dir]
-    (with-open [checkpoint (Checkpoint/create db)]
-      (.createCheckpoint checkpoint (.getAbsolutePath (io/file dir)))))
+    (let [dir (io/file dir)]
+      (when (.exists dir)
+        (throw (IllegalArgumentException. (str "Directory exists: " (.getAbsolutePath dir)))))
+      (with-open [checkpoint (Checkpoint/create db)]
+        (.createCheckpoint checkpoint (.getAbsolutePath dir)))))
 
   (count-keys [{:keys [^RocksDB db]}]
     (-> (.getProperty db "rocksdb.estimate-num-keys")

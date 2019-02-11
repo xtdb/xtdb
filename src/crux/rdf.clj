@@ -145,7 +145,7 @@
 
                                 :else #{x o}))))
               (catch IllegalArgumentException e
-                (log/debug e "Could not turn RDF statement into Clojure:" statement)
+                (log/warn "Could not turn RDF statement into Clojure:" statement)
                 m)))
           (transient {:crux.db/id (rdf->clj (.getSubject statement))}))
          (persistent!))))
