@@ -1,12 +1,14 @@
 (ns crux.index
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
             [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream]
+  (:import [java.io Closeable DataInputStream DataOutputStream File FileInputStream FileOutputStream]
            [java.util Arrays Collections Comparator Date]
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer]
@@ -381,6 +383,46 @@
   (delete-objects [this ks]
     (kv/delete kv (for [k ks]
                     (c/encode-doc-key-to nil (c/->id-buffer k)))))
+
+  Closeable
+  (close [_]))
+
+(s/def ::file-object-store-dir string?)
+(s/def ::file-object-store-options (s/keys :req [::file-object-store-dir]))
+
+(defrecord FileObjectStore [dir]
+  db/ObjectStore
+  (init [this _ {:keys [crux.index/file-object-store-dir] :as options}]
+    (s/assert ::file-object-store-options options)
+    (.mkdirs (io/file file-object-store-dir))
+    (assoc this :dir file-object-store-dir))
+
+  (get-single-object [this snapshot k]
+    (let [doc-key (str (c/new-id k))
+          doc-file (io/file dir doc-key)]
+      (when (.exists doc-file)
+        (with-open [in (FileInputStream. doc-file)]
+          (some->> in
+                   (DataInputStream.)
+                   (nippy/thaw-from-in!))))))
+
+  (get-objects [this _ ks]
+    (->> (for [k ks
+               :let [v (db/get-single-object this _ k)]
+               :when v]
+           [k v])
+         (into {})))
+
+  (put-objects [this kvs]
+    (doseq [[k v] kvs
+            :let [doc-key (str (c/new-id k))]]
+      (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
+        (nippy/freeze-to-out! out v))))
+
+  (delete-objects [this ks]
+    (doseq [k ks
+            :let [doc-key (str (c/new-id k))]]
+      (.delete (io/file dir doc-key))))
 
   Closeable
   (close [_]))
