@@ -1,5 +1,6 @@
 (ns crux.bootstrap.cli
   (:require [clojure.java.io :as io]
+            [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
@@ -55,6 +56,11 @@
     :default (:object-store b/default-options)
     :validate [#'db/require-and-ensure-object-store-record "Unknown object store"]]
 
+   ;; Extra
+   ["-x" "--extra-edn-options EDN_OPTIONS" "Extra options as an quoted EDN map."
+    :default nil
+    :parse-fn edn/read-string]
+
    ["-h" "--help"]])
 
 ;; NOTE: This isn't registered until the system manages to start up
@@ -99,6 +105,7 @@
   (let [{:keys [options
                 errors
                 summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
+        options (merge (dissoc options :extra-edn-options) (:extra-edn-options options))
         {:strs [version
                 revision]} (parse-pom-version)]
     (cond
