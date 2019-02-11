@@ -41,18 +41,11 @@
                          :opt [:crux.index/check-and-store-index-version]))
 
 (defn require-and-ensure-kv-record ^Class [record-class-name]
-  (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
-    (require (symbol record-ns))
-    (let [record-class ^Class (eval (symbol record-class-name))]
-      (when (and (extends? (eval 'crux.kv/KvStore) record-class)
-                 (.isAssignableFrom ^Class IRecord record-class))
-        record-class))))
+  (cio/require-and-ensure-record 'crux.kv/KvStore record-class-name))
 
 (defn new-kv-store ^java.io.Closeable [kv-backend]
-  (let [kv-record-class (require-and-ensure-kv-record kv-backend)]
-    (.invoke (.getMethod kv-record-class "create"
-                         (into-array [clojure.lang.IPersistentMap]))
-             nil (object-array [{}]))))
+  (->> (require-and-ensure-kv-record kv-backend)
+       (cio/new-record)))
 
 (extend-protocol status/Status
   crux.kv.KvStore

@@ -1,4 +1,6 @@
 (ns crux.db
+  (:require [clojure.spec.alpha :as s]
+            [crux.io :as cio])
   (:import java.io.Closeable))
 
 ;; tag::Index[]
@@ -37,8 +39,18 @@
 ;; hide it.
 ;; tag::ObjectStore[]
 (defprotocol ObjectStore
+  (init [this partial-system options])
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
   (put-objects [this kvs])
   (delete-objects [this kvs]))
 ;; end::ObjectStore[]
+
+(s/def ::object-store string?)
+
+(defn require-and-ensure-object-store-record [object-store]
+  (cio/require-and-ensure-record 'crux.db/ObjectStore object-store))
+
+(defn new-object-store ^java.io.Closeable [object-store]
+  (->> (require-and-ensure-object-store-record object-store)
+       (cio/new-record)))

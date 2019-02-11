@@ -5,6 +5,7 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
+            [crux.db :as db]
             [crux.bootstrap.local-node :as ln]
             [crux.http-server :as srv]
             [crux.io :as cio]
@@ -50,6 +51,9 @@
    ["-z" "--doc-cache-size SIZE" "Limit of number of documents in the query document cache"
     :default (:doc-cache-size b/default-options)
     :parse-fn #(Long/parseLong %)]
+   ["-j" "--object-store OBJECT_STORE" "Type of object store to use."
+    :default (:object-store b/default-options)
+    :validate [#'db/require-and-ensure-object-store-record "Unknown object store"]]
 
    ["-h" "--help"]])
 

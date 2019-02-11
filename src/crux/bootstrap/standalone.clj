@@ -59,12 +59,13 @@
       (cio/try-close c))))
 
 (s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
-                                    :opt-un [:crux.kv/sync? :crux.tx/event-log-dir :crux.lru/doc-cache-size]
+                                    :opt-un [:crux.kv/sync? :crux.tx/event-log-dir :crux.db/object-store :crux.lru/doc-cache-size]
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
 (defn start-standalone-system ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
-                                                    crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options}]
+                                                    crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options
+                                             :or {doc-cache-size (:doc-cache-size b/default-options)}}]
   (s/assert ::standalone-options options)
   (let [started (atom [])]
     (try
@@ -85,7 +86,8 @@
                      (tx/->EventTxLog event-log-kv-store)
                      (do (log/warn "Using index KV store as event log, not suitable for production environments.")
                          (tx/->KvTxLog kv-store)))
-            object-store (lru/new-cached-object-store kv-store doc-cache-size)
+            object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                                                  (b/start-object-store {:kv kv-store} options))
             indexer (tx/->KvIndexer kv-store tx-log object-store)
             event-log-consumer (when event-log-kv-store
                                  (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?

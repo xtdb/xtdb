@@ -8,7 +8,8 @@
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang.ref ReferenceQueue PhantomReference]
            [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
-           [java.net ServerSocket]))
+           [java.net ServerSocket]
+           [clojure.lang IPersistentMap IRecord]))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -113,6 +114,19 @@
   (->> (doto (Properties.)
          (.load in))
        (into {})))
+
+(defn require-and-ensure-record ^Class [protocol record-class-name]
+  (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
+    (require (symbol record-ns))
+    (let [record-class ^Class (eval (symbol record-class-name))]
+      (when (and (extends? (eval protocol) record-class)
+                 (.isAssignableFrom ^Class IRecord record-class))
+        record-class))))
+
+(defn new-record ^clojure.lang.IRecord [^Class record-class]
+  (.invoke (.getMethod record-class "create"
+                       (into-array [IPersistentMap]))
+           nil (object-array [{}])))
 
 ;; External Merge Sort
 

@@ -28,7 +28,8 @@
                                   :crux.kv/kv-backend
                                   :crux.http-server/server-port
                                   :crux.tx-log/await-tx-timeout
-                                  :crux.lru/doc-cache-size]))
+                                  :crux.lru/doc-cache-size
+                                  :crux.db/object-store]))
 
 (defn- read-kafka-properties-file [f]
   (when f
@@ -45,7 +46,8 @@
                           server-port
                           kafka-properties-file
                           doc-cache-size]
-                   :as options}
+                   :as options
+                   :or {doc-cache-size (:doc-cache-size b/default-options)}}
                   with-system-fn]
   (s/assert ::options options)
   (log/info "starting system")
@@ -57,7 +59,8 @@
     (with-open [kv-store (b/start-kv-store options)
                 producer (k/create-producer producer-config)
                 tx-log ^java.io.Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                object-store ^java.io.Closeable (lru/new-cached-object-store kv-store doc-cache-size)
+                object-store ^java.io.Closeable (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                                                                         (b/start-object-store {:kv kv-store} options))
                 indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
                 admin-client (k/create-admin-client kafka-config)
                 indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]

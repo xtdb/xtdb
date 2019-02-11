@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.io :as cio]
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -26,7 +27,8 @@
                       :kv-backend "crux.kv.rocksdb.RocksKv"
                       :server-port 3000
                       :await-tx-timeout 10000
-                      :doc-cache-size (* 128 1024)})
+                      :doc-cache-size (* 128 1024)
+                      :object-store "crux.index.KvObjectStore"})
 
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxSystem
@@ -101,6 +103,13 @@
       (catch Throwable t
         (.close ^Closeable kv)
         (throw t)))))
+
+(defn start-object-store ^java.io.Closeable [partial-system {:keys [object-store]
+                                                             :or {object-store (:object-store default-options)}
+                                                             :as options}]
+  (-> (db/require-and-ensure-object-store-record object-store)
+      (cio/new-record)
+      (db/init partial-system options)))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)

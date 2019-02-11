@@ -354,6 +354,9 @@
 
 (defrecord KvObjectStore [kv]
   db/ObjectStore
+  (init [this {:keys [kv]} options]
+    (assoc this :kv kv))
+
   (get-single-object [this snapshot k]
     (let [doc-key (c/->id-buffer k)
           seek-k (c/encode-doc-key-to (.get seek-buffer-tl) doc-key)]
