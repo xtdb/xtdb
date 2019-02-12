@@ -1,7 +1,8 @@
 (ns crux.codec-test
   (:require [clojure.test :as t]
             [crux.codec :as c]
-            [crux.memory :as mem]))
+            [crux.memory :as mem])
+  (:import crux.codec.Id))
 
 (t/deftest test-ordering-of-values
   (t/testing "longs"
@@ -31,3 +32,9 @@
                          [v (c/->value-buffer v)])]
       (t/is (= (sort-by first value+buffer)
                (sort-by second mem/buffer-comparator value+buffer))))))
+
+(t/deftest test-id-reader
+  (t/is (c/new-id "http://google.com") #crux/id "http://google.com")
+  (t/is "234988566c9a0a9cf952cec82b143bf9c207ac16"
+        (str #crux/id "http://google.com"))
+  (t/is (instance? Id (c/new-id #crux/id "http://google.com"))))

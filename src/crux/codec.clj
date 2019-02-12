@@ -272,6 +272,14 @@
       0
       (mem/compare-buffers (->id-buffer this) (->id-buffer that)))))
 
+(defmethod print-method Id [id ^Writer w]
+  (.write w "#crux/id ")
+  (.write w (str id)))
+
+(defmethod print-dup Id [id ^Writer w]
+  (.write w "#crux/id ")
+  (.write w (str id)))
+
 (def ^:private ^crux.codec.Id nil-id
   (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
 
@@ -311,10 +319,6 @@
   (when id
     (Id. (mem/copy-buffer (.buffer id)) 0)))
 
-(defmethod print-method Id [id ^Writer w]
-  (.write w "#crux/id ")
-  (print-method (str id) w))
-
 (deftype EDNId [hex original-id]
   IdOrBuffer
   (->id-buffer [this]
@@ -350,7 +354,11 @@
 
 (defmethod print-method EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (print-method (str (or (.original-id id) (.hex id))) w))
+  (.write w (str (or (.original-id id) (.hex id)))))
+
+(defmethod print-dup EDNId [^EDNId id ^Writer w]
+  (.write w "#crux/id ")
+  (.write w (str (or (.original-id id) (.hex id)))))
 
 (defn valid-id? [x]
   (try
