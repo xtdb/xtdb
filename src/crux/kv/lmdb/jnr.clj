@@ -6,7 +6,6 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [crux.byte-utils :as bu]
             [crux.kv :as kv]
             [crux.memory :as mem])
   (:import java.io.Closeable
@@ -52,11 +51,11 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(def ^:private default-env-flags [EnvFlags/MDB_WRITEMAP
-                                  EnvFlags/MDB_NOTLS
+(def ^:private default-env-flags [EnvFlags/MDB_NOTLS
                                   EnvFlags/MDB_NORDAHEAD])
 
 (def ^:private no-sync-env-flags [EnvFlags/MDB_MAPASYNC
+                                  EnvFlags/MDB_NOSYNC
                                   EnvFlags/MDB_NOMETASYNC])
 
 (defn- increase-mapsize [^Env env ^long factor]
@@ -103,10 +102,7 @@
   (delete [this ks]
     (try
       (with-open [tx (.txnWrite env)]
-        (let [kb (ExpandableDirectByteBuffer.)
-              ks (if (bytes? (first ks))
-                   (sort bu/bytes-comparator ks)
-                   (sort mem/buffer-comparator ks))]
+        (let [kb (ExpandableDirectByteBuffer.)]
           (doseq [k ks]
             (.delete dbi tx (mem/ensure-off-heap k kb)))
           (.commit tx)))

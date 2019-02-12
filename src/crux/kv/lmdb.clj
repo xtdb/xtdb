@@ -6,11 +6,10 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [crux.byte-utils :as bu]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.memory :as mem])
-  (:import [clojure.lang ExceptionInfo]
+  (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -132,10 +131,7 @@
               tx (new-transaction env 0)]
     (let [{:keys [^long txn]} tx
           kv (MDBVal/mallocStack stack)
-          kb (ExpandableDirectByteBuffer.)
-          ks (if (bytes? (first ks))
-               (sort bu/bytes-comparator ks)
-               (sort mem/buffer-comparator ks))]
+          kb (ExpandableDirectByteBuffer.)]
       (doseq [k ks]
         (let [k (mem/ensure-off-heap k kb)
               kv (-> kv
@@ -157,11 +153,11 @@
         (success? rc)
         (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv))))))
 
-(def ^:const default-env-flags (bit-or LMDB/MDB_WRITEMAP
-                                       LMDB/MDB_NOTLS
+(def ^:const default-env-flags (bit-or LMDB/MDB_NOTLS
                                        LMDB/MDB_NORDAHEAD))
 
 (def ^:const no-sync-env-flags (bit-or LMDB/MDB_MAPASYNC
+                                       LMDB/MDB_NOSYNC
                                        LMDB/MDB_NOMETASYNC))
 
 (defrecord LMDBKvIterator [^LMDBCursor cursor ^LMDBTransaction tx ^MDBVal kv ^MDBVal dv ^ExpandableDirectByteBuffer eb]
