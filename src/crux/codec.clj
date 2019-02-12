@@ -5,7 +5,7 @@
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
            [java.io Closeable Writer]
-           java.net.URI
+           [java.net MalformedURLException URI URL]
            [java.nio ByteOrder ByteBuffer]
            [java.util Arrays Date UUID]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
@@ -148,6 +148,10 @@
   (value->buffer [this to]
     (id->buffer this to))
 
+  URL
+  (value->buffer [this to]
+    (id->buffer this to))
+
   Object
   (value->buffer [this ^MutableDirectBuffer to]
     (if (satisfies? IdToBuffer this)
@@ -173,8 +177,13 @@
     (catch IllegalArgumentException _)))
 
 (defn- maybe-keyword-str [s]
-  (when-let [[_ n] (re-find #"\:(.+)" s)]
+  (when-let [[_ n] (re-find #"^\:(.+)" s)]
     (keyword n)))
+
+(defn- maybe-url-str [s]
+  (try
+    (URL. s)
+    (catch MalformedURLException _)))
 
 (extend-protocol IdToBuffer
   (class (byte-array 0))
@@ -209,6 +218,10 @@
   (id->buffer [this to]
     (id-function to (.getBytes (str (.normalize this)))))
 
+  URL
+  (id->buffer [this to]
+    (id-function to (.getBytes (.toExternalForm this))))
+
   String
   (id->buffer [this to]
     (if (hex-id? this)
@@ -217,9 +230,10 @@
             (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
             to))
       (if-let [id (or (maybe-uuid-str this)
-                      (maybe-keyword-str this))]
+                      (maybe-keyword-str this)
+                      (maybe-url-str this))]
         (id->buffer id to)
-        (throw (IllegalArgumentException. (format "Not a %s hex, keyword or an UUID string: %s" hash/id-hash-algorithm this))))))
+        (throw (IllegalArgumentException. (format "Not a %s hex, keyword, URL or an UUID string: %s" hash/id-hash-algorithm this))))))
 
   IPersistentMap
   (id->buffer [this to]
