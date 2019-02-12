@@ -5,7 +5,8 @@
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
             [yada.resource :refer [resource]]
-            [clojure.java.shell :refer [sh]])
+            [clojure.java.shell :refer [sh]]
+            [example-standalone-webservice.backup :as backup])
   (:import [crux.api Crux IndexVersionOutOfSyncException]))
 
 (defn get-handler
@@ -20,8 +21,6 @@
          [:div
           [:pre "Status: " (pr-str (.status crux))]
           [:pre "Index-version:" index-version]
-          [:pre "Db-index: " (crux.index/current-index-version
-                               (:kv-store crux))]
           [:pre (:out (sh "ls" "-lh" "data"))]
           [:pre (:out (sh "lsblk"))]
           [:pre (:out (sh "pwd"))]]
@@ -82,27 +81,35 @@
 
 (def index-dir "data/db-dir-1")
 (def log-dir "data/eventlog-1")
+
+(def crux-options {:kv-backend "crux.kv.rocksdb.RocksKv"
+                   :event-log-dir log-dir
+                   :db-dir index-dir})
+
+(def backup-options {:backup-dir "backup"
+                     :backend :shell
+                     :shell/backup-script "bin/backup.sh"
+                     :shell/restore-script "bin/restore.sh"})
+
 (defn -main []
   (try
-    (with-open [crux-system (Crux/startStandaloneSystem
-                              {:kv-backend "crux.kv.rocksdb.RocksKv"
-                               :event-log-dir log-dir
-                               :db-dir index-dir})]
-      (.submitTx
-        crux-system
-        [[:crux.tx/put :example
-          {:crux.db/id :example
-           :example-value "hello world"}]])
+    #_(backup/check-and-restore crux-options backup-options)
+    (let [port 8085]
+      (with-open [crux-system (Crux/startStandaloneSystem crux-options)
 
-      (let [port 8080]
-        (log/info "started webserver on port:" port)
-        (listener
-          (application-resource {:crux crux-system})
-          {:port port}))
+                  http-server
+                  (let [l (listener
+                            (application-resource {:crux crux-system})
+                            {:port port})]
+                    (log/info "started webserver on port:" port)
+                    (reify java.io.Closeable
+                      (close [_]
+                        ((:close l)))))]
 
-      (.join (Thread/currentThread)))
+        (backup/backup-current-version crux-system crux-options backup-options)
+        (.join (Thread/currentThread))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main))
     (catch Exception e
-      (log/error e "what happened"))))
+      (log/error e "what happened" (ex-data e)))))
