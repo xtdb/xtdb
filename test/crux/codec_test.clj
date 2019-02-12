@@ -45,4 +45,10 @@
     (t/is (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
           #crux/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
     (t/is (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")
-          #crux/id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
+          #crux/id "234988566c9a0a9cf952cec82b143bf9c207ac16"))
+
+  (t/testing "can embed id in other forms"
+    (t/is (= {:find ['e]
+              :where [['e (c/new-id "http://xmlns.com/foaf/0.1/firstName") "Pablo"]]}
+             '{:find [e]
+               :where [[e #crux/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]}))))
