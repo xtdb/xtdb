@@ -1,4 +1,4 @@
-(ns crux.kv.lmdb.java
+(ns crux.kv.lmdb.jnr
   "LMDB KV backend for Crux (alternative).
 
   Requires org.lmdbjava/lmdbjava on the classpath,
@@ -13,7 +13,7 @@
            org.agrona.ExpandableDirectByteBuffer
            [org.lmdbjava CopyFlags Cursor Dbi DbiFlags DirectBufferProxy Env EnvFlags Env$MapFullException GetOp PutFlags Txn]))
 
-(defrecord LMDBJavaIterator [^Txn tx ^Cursor cursor ^ExpandableDirectByteBuffer eb]
+(defrecord LMDBJNRIterator [^Txn tx ^Cursor cursor ^ExpandableDirectByteBuffer eb]
   kv/KvIterator
   (seek [this k]
     (when (.get cursor (mem/ensure-off-heap k eb) GetOp/MDB_SET_RANGE)
@@ -34,10 +34,10 @@
   (close [_]
     (.close cursor)))
 
-(defrecord LMDBJavaSnapshot [^Dbi dbi ^Txn tx]
+(defrecord LMDBJNRSnapshot [^Dbi dbi ^Txn tx]
   kv/KvSnapshot
   (new-iterator [_]
-    (->LMDBJavaIterator tx (.openCursor dbi tx) (ExpandableDirectByteBuffer.)))
+    (->LMDBJNRIterator tx (.openCursor dbi tx) (ExpandableDirectByteBuffer.)))
 
   (get-value [_ k]
     (.get dbi tx (mem/->off-heap k)))
@@ -64,7 +64,7 @@
     (log/debug "Increasing mapsize to:" new-mapsize)
     (.setMapSize env new-mapsize)))
 
-(defrecord LMDBJavaKv [db-dir ^Env env ^Dbi dbi]
+(defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi]
   kv/KvStore
   (open [this {:keys [db-dir sync? crux.kv.lmdb.java/env-flags] :as options}]
     (s/assert ::options options)
@@ -83,7 +83,7 @@
           (throw t)))))
 
   (new-snapshot [_]
-    (->LMDBJavaSnapshot dbi (.txnRead env)))
+    (->LMDBJNRSnapshot dbi (.txnRead env)))
 
   (store [this kvs]
     (try
