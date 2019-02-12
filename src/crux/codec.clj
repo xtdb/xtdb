@@ -243,7 +243,7 @@
   (id->buffer [this to]
     (id->buffer nil-id-buffer to)))
 
-(deftype Id [^DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
+(deftype Id [^org.agrona.DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBuffer
   (id->buffer [this to]
     (id->buffer buffer to))
@@ -335,7 +335,7 @@
                         (->> (.readFully data-input))))
       0))
 
-(defn encode-doc-key-to ^MutableDirectBuffer [^MutableDirectBuffer b content-hash]
+(defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b content-hash]
   (assert (= id-size (mem/capacity content-hash)))
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
     (mem/limit-buffer
@@ -426,7 +426,7 @@
             value (mem/slice-buffer k (+ index-id-size id-size id-size id-size) value-size)]
         (->EntityValueContentHash entity value content-hash)))))
 
-(defn encode-meta-key-to ^MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
+(defn encode-meta-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer k]
   (assert (= id-size (.capacity k)))
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size id-size)))]
     (mem/limit-buffer
@@ -529,12 +529,12 @@
     {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
      :crux.tx/tx-time (Date. (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))
 
-(defn encode-index-version-key-to ^MutableDirectBuffer [^MutableDirectBuffer b]
+(defn encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
     (.putByte b 0 index-version-index-id)
     (mem/limit-buffer b index-id-size)))
 
-(defn encode-index-version-value-to ^MutableDirectBuffer [^MutableDirectBuffer b ^long version]
+(defn encode-index-version-value-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^long version]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-version-size))]
     (doto b
       (.putLong 0 version ByteOrder/BIG_ENDIAN))
