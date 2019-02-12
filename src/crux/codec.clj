@@ -33,7 +33,7 @@
 
 (def ^:const id-size (+ hash/id-hash-size value-type-id-size))
 
-(def empty-buffer (mem/allocate-buffer 0))
+(def empty-buffer (mem/allocate-unpooled-buffer 0))
 
 (def ^:const ^:private max-string-index-length 128)
 
@@ -57,7 +57,7 @@
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
-(def ^org.agrona.DirectBuffer nil-id-buffer (mem/->off-heap nil-id-bytes))
+(def ^org.agrona.DirectBuffer nil-id-buffer (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
