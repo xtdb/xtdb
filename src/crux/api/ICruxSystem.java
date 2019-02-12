@@ -19,24 +19,24 @@ public interface ICruxSystem extends Closeable {
     public ICruxDatasource db();
 
     /**
-     * Returns a db as of business time. Will return the latest
+     * Returns a db as of valid time. Will return the latest
      * consistent snapshot of the db currently known, but does not
-     * wait for business time to be current. Does not block.
+     * wait for valid time to be current. Does not block.
      *
-     * @param businessTime the business time.
+     * @param validTime    the valid time.
      * @return             the database.
      */
-    public ICruxDatasource db(Date businessTime);
+    public ICruxDatasource db(Date validTime);
 
     /**
-     * Returns a db as of business and transaction time time. Will
+     * Returns a db as of valid and transaction time time. Will
      * block until the transaction time is present in the index.
      *
-     * @param businessTime    the business time.
+     * @param validTime       the valid time.
      * @param transactionTime the transaction time.
      * @return                the database.
      */
-    public ICruxDatasource db(Date businessTime, Date transactionTime);
+    public ICruxDatasource db(Date validTime, Date transactionTime);
 
     /**
      *  Reads a document from the document store based on its
@@ -84,22 +84,22 @@ public interface ICruxSystem extends Closeable {
     public boolean hasSubmittedTxUpdatedEntity(Map submittedTx, Object eid);
 
     /**
-     * Checks if a submitted tx did correct an entity as of business
+     * Checks if a submitted tx did correct an entity as of valid
      * time.
      *
      * @param submittedTx  must be a map returned from {@link
      * #submitTx(List txOps)}.
-     * @param businessTime business time of correction to check.
+     * @param validTime    valid time of correction to check.
      * @param eid          an object that can be coerced into an entity id.
      * @return             true if the entity was updated in this transaction.
      */
-    public boolean hasSubmittedTxCorrectedEntity(Map submittedTx, Date businessTime, Object eid);
+    public boolean hasSubmittedTxCorrectedEntity(Map submittedTx, Date validTime, Object eid);
 
     /**
      * Blocks until the node has caught up indexing. Will throw an
      * exception on timeout. The returned date is the latest index
      * time when this node has caught up as of this call. This can be
-     * used as the second parameter in {@link #db(Date businessTime,
+     * used as the second parameter in {@link #db(Date validTime,
      * Date transactionTime)} for consistent reads.
      *
      * @param timeout max time to wait, can be null for the default.

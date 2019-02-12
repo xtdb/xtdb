@@ -24,7 +24,7 @@
 (def ^:const ^:private content-hash->doc-index-id 0)
 (def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
 (def ^:const ^:private attribute+entity+content-hash+value-index-id 2)
-(def ^:const ^:private entity+bt+tt+tx-id->content-hash-index-id 3)
+(def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
 (def ^:const ^:private meta-key->value-index-id 4)
 (def ^:const ^:private tx-id->tx-index-id 5)
 (def ^:const ^:private index-version-index-id 6)
@@ -432,33 +432,33 @@
     Long/BYTES
     0))
 
-(defn encode-entity+bt+tt+tx-id-key-to
+(defn encode-entity+vt+tt+tx-id-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-entity+bt+tt+tx-id-key-to b empty-buffer nil nil nil))
+   (encode-entity+vt+tt+tx-id-key-to b empty-buffer nil nil nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
-   (encode-entity+bt+tt+tx-id-key-to b entity nil nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity business-time]
-   (encode-entity+bt+tt+tx-id-key-to b entity business-time nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date business-time ^Date transact-time ^Long tx-id]
+   (encode-entity+vt+tt+tx-id-key-to b entity nil nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity valid-time]
+   (encode-entity+vt+tt+tx-id-key-to b entity valid-time nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^Date valid-time ^Date transact-time ^Long tx-id]
    (assert (or (= id-size (.capacity entity))
                (zero? (.capacity entity))))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ index-id-size (mem/capacity entity))
-                                                             business-time (+ Long/BYTES)
+                                                             valid-time (+ Long/BYTES)
                                                              transact-time (+ Long/BYTES)
                                                              tx-id (+ Long/BYTES))))]
-     (.putByte b 0 entity+bt+tt+tx-id->content-hash-index-id)
+     (.putByte b 0 entity+vt+tt+tx-id->content-hash-index-id)
      (.putBytes b index-id-size entity 0 (.capacity entity))
-     (when business-time
-       (.putLong b (+ index-id-size id-size) (date->reverse-time-ms business-time) ByteOrder/BIG_ENDIAN))
+     (when valid-time
+       (.putLong b (+ index-id-size id-size) (date->reverse-time-ms valid-time) ByteOrder/BIG_ENDIAN))
      (when transact-time
        (.putLong b (+ index-id-size id-size Long/BYTES) (date->reverse-time-ms transact-time) ByteOrder/BIG_ENDIAN))
      (when tx-id
        (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
      (->> (+ index-id-size (.capacity entity)
-             (maybe-long-size business-time) (maybe-long-size transact-time) (maybe-long-size tx-id))
+             (maybe-long-size valid-time) (maybe-long-size transact-time) (maybe-long-size tx-id))
           (mem/limit-buffer b)))))
 
-(defrecord EntityTx [^Id eid ^Date bt ^Date tt ^long tx-id ^Id content-hash]
+(defrecord EntityTx [^Id eid ^Date vt ^Date tt ^long tx-id ^Id content-hash]
   IdToBuffer
   (id->buffer [this to]
     (id->buffer eid to)))
@@ -476,21 +476,21 @@
  [data-input]
  (map->EntityTx (nippy/thaw-from-in! data-input)))
 
-(defn decode-entity+bt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+(defn decode-entity+vt+tt+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)))
   (let [index-id (.getByte k 0)]
-    (assert (= entity+bt+tt+tx-id->content-hash-index-id index-id))
+    (assert (= entity+vt+tt+tx-id->content-hash-index-id index-id))
     (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
-          business-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
+          valid-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN))
           transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
-      (->EntityTx entity business-time transact-time tx-id nil))))
+      (->EntityTx entity valid-time transact-time tx-id nil))))
 
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
     {:crux.db/id (str (.eid entity-tx))
      :crux.db/content-hash (str (.content-hash entity-tx))
-     :crux.db/business-time (.bt entity-tx)
+     :crux.db/valid-time (.vt entity-tx)
      :crux.tx/tx-time (.tt entity-tx)
      :crux.tx/tx-id (.tx-id entity-tx)}))
 

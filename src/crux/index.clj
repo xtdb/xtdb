@@ -482,19 +482,19 @@
       (update :eid c/safe-id)
       (update :content-hash c/safe-id)))
 
-(defrecord EntityAsOfIndex [i business-time transact-time eb]
+(defrecord EntityAsOfIndex [i valid-time transact-time eb]
   db/Index
   (db/seek-values [this k]
     (let [prefix-size (+ c/index-id-size c/id-size)
-          seek-k (c/encode-entity+bt+tt+tx-id-key-to
+          seek-k (c/encode-entity+vt+tt+tx-id-key-to
                   (.get seek-buffer-tl)
                   k
-                  business-time
+                  valid-time
                   transact-time
                   nil)]
       (loop [k (kv/seek i seek-k)]
         (when (and k (mem/buffers=? seek-k k prefix-size))
-          (let [entity-tx (safe-entity-tx (c/decode-entity+bt+tt+tx-id-key-from k))
+          (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
                 v (kv/value i)]
             (if (<= (compare (.tt entity-tx) transact-time) 0)
               (when-not (mem/buffers=? c/nil-id-buffer v)
@@ -505,11 +505,11 @@
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))
 
-(defn new-entity-as-of-index [snapshot business-time transact-time]
-  (->EntityAsOfIndex (kv/new-iterator snapshot) business-time transact-time (ExpandableDirectByteBuffer.)))
+(defn new-entity-as-of-index [snapshot valid-time transact-time]
+  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transact-time (ExpandableDirectByteBuffer.)))
 
-(defn entities-at [snapshot eids business-time transact-time]
-  (let [entity-as-of-idx (new-entity-as-of-index snapshot business-time transact-time)]
+(defn entities-at [snapshot eids valid-time transact-time]
+  (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
     (some->> (for [eid eids
                    :let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
                    :when entity-tx]
@@ -517,30 +517,30 @@
              (not-empty)
              (vec))))
 
-(defn all-entities [snapshot business-time transact-time]
+(defn all-entities [snapshot valid-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]
-    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+bt+tt+tx-id-key-to (.get seek-buffer-tl)))
-                    (map (comp :eid c/decode-entity+bt+tt+tx-id-key-from))
+    (let [eids (->> (all-keys-in-prefix i (c/encode-entity+vt+tt+tx-id-key-to (.get seek-buffer-tl)))
+                    (map (comp :eid c/decode-entity+vt+tt+tx-id-key-from))
                     (distinct))]
-      (entities-at snapshot eids business-time transact-time))))
+      (entities-at snapshot eids valid-time transact-time))))
 
 (defn- entity-history-step [i seek-k f-cons f-next]
   (lazy-seq
    (let [k (f-cons)]
      (when (and k (mem/buffers=? seek-k k (+ c/index-id-size c/id-size)))
        (cons
-        (-> (c/decode-entity+bt+tt+tx-id-key-from k)
+        (-> (c/decode-entity+vt+tt+tx-id-key-from k)
             (safe-entity-tx)
             (enrich-entity-tx (kv/value i)))
         (entity-history-step i seek-k f-next f-next))))))
 
-(defn entity-history-seq-ascending [i eid ^Date from-business-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-business-time))))]
+(defn entity-history-seq-ascending [i eid ^Date from-valid-time ^Date transaction-time]
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) (Date. (dec (.getTime from-valid-time))))]
     (->> (entity-history-step i seek-k #(when-let [k (kv/seek i seek-k)]
                                           (kv/prev i)) #(kv/prev i))
          (drop-while (fn [^EntityTx entity-tx]
-                       (neg? (compare (.bt entity-tx) from-business-time))))
-         (partition-by :bt)
+                       (neg? (compare (.vt entity-tx) from-valid-time))))
+         (partition-by :vt)
          (map (fn [group]
                 (->> group
                      (reverse)
@@ -549,10 +549,10 @@
                      (first))))
          (remove nil?))))
 
-(defn entity-history-seq-descending [i eid ^Date from-business-time ^Date transaction-time]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid) from-business-time)]
+(defn entity-history-seq-descending [i eid ^Date from-valid-time ^Date transaction-time]
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid) from-valid-time)]
     (->> (entity-history-step i seek-k #(kv/seek i seek-k) #(kv/next i))
-         (partition-by :bt)
+         (partition-by :vt)
          (map (fn [group]
                 (->> group
                      (drop-while (fn [^EntityTx entity-tx]
@@ -561,9 +561,9 @@
          (remove nil?))))
 
 (defn entity-history-seq [i eid]
-  (let [seek-k (c/encode-entity+bt+tt+tx-id-key-to nil (c/->id-buffer eid))]
+  (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
     (for [[k v] (all-keys-in-prefix i seek-k true)]
-      (-> (c/decode-entity+bt+tt+tx-id-key-from k)
+      (-> (c/decode-entity+vt+tt+tx-id-key-from k)
           (enrich-entity-tx v)))))
 
 (defn entity-history
@@ -642,8 +642,8 @@
 (defn new-or-virtual-index [indexes]
   (->OrVirtualIndex indexes (object-array (count indexes))))
 
-(defn or-known-triple-fast-path [snapshot e a v business-time transact-time]
-  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] business-time transact-time)]
+(defn or-known-triple-fast-path [snapshot e a v valid-time transact-time]
+  (when-let [[^EntityTx entity-tx] (entities-at snapshot [e] valid-time transact-time)]
     (let [version-k (c/encode-attribute+entity+content-hash+value-key-to
                      nil
                      a

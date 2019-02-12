@@ -75,7 +75,7 @@ public class Crux {
 
     /**
      * Creates a new remote API client ICruxSystem. The remote client
-     * requires business and transaction time to be specified for all
+     * requires valid and transaction time to be specified for all
      * calls to {@link ICruxSystem#db()}.
      *
      * NOTE: requires either clj-http or http-kit on the classpath,

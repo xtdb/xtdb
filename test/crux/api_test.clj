@@ -30,10 +30,10 @@
     (t/is (.db f/*api*)))
 
   (t/testing "transaction"
-    (let [business-time (Date.)
+    (let [valid-time (Date.)
           {:keys [crux.tx/tx-time
                   crux.tx/tx-id]
-           :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} business-time]])]
+           :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
       (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
       (t/is (= tx-time (.sync f/*api* nil)))
@@ -115,7 +115,7 @@
           (t/is (= (merge submitted-tx
                           {:crux.db/id (str (c/new-id :ivan))
                            :crux.db/content-hash (str (c/new-id {:crux.db/id :ivan :name "Ivan"}))
-                           :crux.db/business-time business-time})
+                           :crux.db/valid-time valid-time})
                    entity-tx))
           (t/is (= {:crux.db/id :ivan :name "Ivan"} (.document f/*api* (:crux.db/content-hash entity-tx))))
           (t/is (= [entity-tx] (.history f/*api* :ivan)))
@@ -129,7 +129,7 @@
             (t/is (instance? LazySeq result))
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
-                             :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) business-time]])]
+                             :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
             (t/is (realized? result))))
 
@@ -139,7 +139,7 @@
               (t/is (instance? LazySeq result))
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
-                               :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) {:crux.db/id :ivan :name "Ivan"} business-time]])]
+                               :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                        result))
               (t/is (realized? result)))))
 

@@ -27,24 +27,24 @@
 (s/def ::put-op (s/cat :op #{:crux.tx/put}
                        :id ::id
                        :doc ::doc
-                       :start-business-time (s/? inst?)
-                       :end-business-time (s/? inst?)))
+                       :start-valid-time (s/? inst?)
+                       :end-valid-time (s/? inst?)))
 
 (s/def ::delete-op (s/cat :op #{:crux.tx/delete}
                           :id ::id
-                          :start-business-time (s/? inst?)
-                          :end-business-time (s/? inst?)))
+                          :start-valid-time (s/? inst?)
+                          :end-valid-time (s/? inst?)))
 
 (s/def ::cas-op (s/cat :op #{:crux.tx/cas}
                        :id ::id
                        :old-doc ::doc
                        :new-doc ::doc
-                       :at-business-time (s/? inst?)))
+                       :at-valid-time (s/? inst?)))
 
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
                          :id ::id
-                         :start-business-time (s/? inst?)
-                         :end-business-time (s/? inst?)))
+                         :start-valid-time (s/? inst?)
+                         :end-valid-time (s/? inst?)))
 
 (s/def ::tx-op (s/and (s/or :put ::put-op
                             :delete ::delete-op
@@ -62,25 +62,25 @@
         (or (nil? end)
             (neg? (compare % end)))))
 
-(defn- put-delete-kvs [object-store snapshot k start-business-time end-business-time transact-time tx-id content-hash]
+(defn- put-delete-kvs [object-store snapshot k start-valid-time end-valid-time transact-time tx-id content-hash]
   (let [eid (c/new-id k)
-        start-business-time (or start-business-time transact-time)
-        dates-in-history (when end-business-time
-                           (map :bt (idx/entity-history snapshot eid)))
-        dates-to-correct (->> (cons start-business-time dates-in-history)
-                              (filter (in-range-pred start-business-time end-business-time))
+        start-valid-time (or start-valid-time transact-time)
+        dates-in-history (when end-valid-time
+                           (map :vt (idx/entity-history snapshot eid)))
+        dates-to-correct (->> (cons start-valid-time dates-in-history)
+                              (filter (in-range-pred start-valid-time end-valid-time))
                               (into (sorted-set)))]
-    {:kvs (vec (for [business-time dates-to-correct]
-                 [(c/encode-entity+bt+tt+tx-id-key-to
+    {:kvs (vec (for [valid-time dates-to-correct]
+                 [(c/encode-entity+vt+tt+tx-id-key-to
                    nil
                    (c/->id-buffer eid)
-                   business-time
+                   valid-time
                    transact-time
                    tx-id)
                   content-hash]))}))
 
-(defmethod tx-command :crux.tx/put [object-store snapshot tx-log [op k v start-business-time end-business-time] transact-time tx-id]
-  (assoc (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id (c/->id-buffer (c/new-id v)))
+(defmethod tx-command :crux.tx/put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
+  (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
                                doc (db/get-single-object object-store snapshot content-hash)
                                correct-state? (not (nil? doc))]
@@ -88,14 +88,14 @@
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
 
-(defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-business-time end-business-time transact-time tx-id c/nil-id-buffer))
+(defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id c/nil-id-buffer))
 
-(defmethod tx-command :crux.tx/cas [object-store snapshot tx-log [op k old-v new-v at-business-time :as cas-op] transact-time tx-id]
+(defmethod tx-command :crux.tx/cas [object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
-        business-time (or at-business-time transact-time)
+        valid-time (or at-valid-time transact-time)
         {:keys [content-hash]
-         :as entity} (first (idx/entities-at snapshot [eid] business-time transact-time))]
+         :as entity} (first (idx/entities-at snapshot [eid] valid-time transact-time))]
     {:pre-commit-fn #(if (= (c/new-id content-hash)
                             (c/new-id old-v))
                        (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
@@ -104,27 +104,27 @@
                           correct-state?)
                        (do (log/warn "CAS failure:" (pr-str cas-op))
                            false))
-     :kvs [[(c/encode-entity+bt+tt+tx-id-key-to
+     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
              nil
              (c/->id-buffer eid)
-             business-time
+             valid-time
              transact-time
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-business-time end-business-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
-        start-business-time (or start-business-time (.bt ^EntityTx (last history-descending)))
-        end-business-time (or end-business-time transact-time)]
+        start-valid-time (or start-valid-time (.vt ^EntityTx (last history-descending)))
+        end-valid-time (or end-valid-time transact-time)]
     {:post-commit-fn #(when tx-log
                         (doseq [^EntityTx entity-tx history-descending
-                                :when ((in-range-pred start-business-time end-business-time) (.bt entity-tx))]
+                                :when ((in-range-pred start-valid-time end-valid-time) (.vt entity-tx))]
                           (db/submit-doc tx-log (.content-hash entity-tx) nil)))
-     :kvs [[(c/encode-entity+bt+tt+tx-id-key-to
+     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
              nil
              (c/->id-buffer eid)
-             end-business-time
+             end-valid-time
              transact-time
              tx-id)
             c/nil-id-buffer]]}))

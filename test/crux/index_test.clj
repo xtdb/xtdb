@@ -57,38 +57,38 @@
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)
-        business-time #inst "2018-05-21"
+        valid-time #inst "2018-05-21"
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:crux.tx/keys [tx-time tx-id]}
-        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso business-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso valid-time]])
         expected-entities [(c/map->EntityTx {:eid eid
                                              :content-hash content-hash
-                                             :bt business-time
+                                             :vt valid-time
                                              :tt tx-time
                                              :tx-id tx-id})]]
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
-      (t/testing "can see entity at transact and business time"
+      (t/testing "can see entity at transact and valid time"
         (t/is (= expected-entities
                  (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
         (t/is (= expected-entities
                  (idx/all-entities snapshot tx-time tx-time))))
 
-      (t/testing "cannot see entity before business or transact time"
+      (t/testing "cannot see entity before valid or transact time"
         (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" tx-time)))
         (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time #inst "2018-05-20")))
 
         (t/is (empty? (idx/all-entities snapshot #inst "2018-05-20" tx-time)))
         (t/is (empty? (idx/all-entities snapshot tx-time #inst "2018-05-20"))))
 
-      (t/testing "can see entity after business or transact time"
+      (t/testing "can see entity after valid or transact time"
         (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-22" tx-time)))
         (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid eid
                                     :content-hash content-hash
-                                    :bt business-time
+                                    :vt valid-time
                                     :tt tx-time
                                     :tx-id tx-id})]
                  (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
@@ -96,75 +96,75 @@
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
             new-content-hash (c/new-id new-picasso)
-            new-business-time #inst "2018-05-20"
+            new-valid-time #inst "2018-05-20"
             {new-tx-time :crux.tx/tx-time
              new-tx-id :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
                                       :content-hash new-content-hash
-                                      :bt new-business-time
+                                      :vt new-valid-time
                                       :tt new-tx-time
                                       :tx-id new-tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                       :content-hash new-content-hash
-                                      :bt new-business-time
+                                      :vt new-valid-time
                                       :tt new-tx-time
-                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
+                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
             new-content-hash (c/new-id new-picasso)
-            new-business-time #inst "2018-05-22"
+            new-valid-time #inst "2018-05-22"
             {new-tx-time :crux.tx/tx-time
              new-tx-id :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid eid
                                       :content-hash new-content-hash
-                                      :bt new-business-time
+                                      :vt new-valid-time
                                       :tt new-tx-time
                                       :tx-id new-tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                       :content-hash content-hash
-                                      :bt business-time
+                                      :vt valid-time
                                       :tt tx-time
                                       :tx-id tx-id})]
-                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time tx-time)))
+                   (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time)))
           (t/is (= [(c/map->EntityTx {:eid eid
                                       :content-hash new-content-hash
-                                      :bt new-business-time
+                                      :vt new-valid-time
                                       :tt new-tx-time
-                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time))))
+                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time))))
 
-        (t/testing "can correct entity at earlier business time"
+        (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
                 new-content-hash (c/new-id new-picasso)
                 prev-tx-time new-tx-time
                 prev-tx-id new-tx-id
-                new-business-time #inst "2018-05-22"
+                new-valid-time #inst "2018-05-22"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id :crux.tx/tx-id}
-                @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-business-time]])]
+                @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (= [(c/map->EntityTx {:eid eid
                                           :content-hash new-content-hash
-                                          :bt new-business-time
+                                          :vt new-valid-time
                                           :tt new-tx-time
                                           :tx-id new-tx-id})]
-                       (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+                       (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
               (t/is (= [(c/map->EntityTx {:eid eid
                                           :content-hash new-content-hash
-                                          :bt new-business-time
+                                          :vt new-valid-time
                                           :tt new-tx-time
-                                          :tx-id new-tx-id})] (idx/all-entities snapshot new-business-time new-tx-time)))
+                                          :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
@@ -173,15 +173,15 @@
             (t/testing "compare and set does nothing with wrong content hash"
               (let [old-picasso (assoc picasso :baz :boz)
                     {cas-failure-tx-time :crux.tx/tx-time}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
                 (t/is (= cas-failure-tx-time (tx/await-tx-time indexer cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                               :content-hash new-content-hash
-                                              :bt new-business-time
+                                              :vt new-valid-time
                                               :tt new-tx-time
                                               :tx-id new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time cas-failure-tx-time))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time cas-failure-tx-time))))))
 
             (t/testing "compare and set updates with correct content hash"
               (let [old-picasso new-picasso
@@ -189,15 +189,15 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-business-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid eid
                                               :content-hash new-content-hash
-                                              :bt new-business-time
+                                              :vt new-valid-time
                                               :tt new-tx-time
                                               :tx-id new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time))))))
 
             (t/testing "compare and set can update non existing nil entity"
               (let [new-eid (c/new-id :http://dbpedia.org/resource/Pablo2)
@@ -205,25 +205,25 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-business-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid new-eid
                                               :content-hash new-content-hash
-                                              :bt new-business-time
+                                              :vt new-valid-time
                                               :tt new-tx-time
                                               :tx-id new-tx-id})]
-                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-business-time new-tx-time))))))))
+                           (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-valid-time new-tx-time))))))))
 
         (t/testing "can delete entity"
-          (let [new-business-time #inst "2018-05-23"
+          (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id :crux.tx/tx-id}
-                @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-business-time]])]
+                @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
-              (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+              (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] business-time new-tx-time)
+                (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] valid-time new-tx-time)
                                    (first)
                                    :tx-id)))))))))
 
@@ -243,13 +243,13 @@
               (t/is (kv/get-value snapshot version-k)))))))
 
     (t/testing "can evict entity"
-      (let [new-business-time #inst "2018-05-23"
+      (let [new-valid-time #inst "2018-05-23"
             {new-tx-time :crux.tx/tx-time
              new-tx-id :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-business-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
-          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-business-time new-tx-time)))
+          (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
 
           (t/testing "eviction adds to and keeps tx history"
             (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
@@ -273,96 +273,96 @@
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)
-        v1-business-time #inst "2018-11-26"
+        v1-valid-time #inst "2018-11-26"
         {v1-tx-time :crux.tx/tx-time
          v1-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v1-ivan v1-business-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v1-ivan v1-valid-time]])
 
         v2-ivan (assoc ivan :version 2)
-        v2-business-time #inst "2018-11-27"
+        v2-valid-time #inst "2018-11-27"
         {v2-tx-time :crux.tx/tx-time
          v2-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v2-ivan v2-business-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v2-ivan v2-valid-time]])
 
         v3-ivan (assoc ivan :version 3)
-        v3-business-time #inst "2018-11-28"
+        v3-valid-time #inst "2018-11-28"
         {v3-tx-time :crux.tx/tx-time
          v3-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-business-time]])]
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-valid-time]])]
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "first version of entity is visible"
-        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time v3-tx-time)
+        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time v3-tx-time)
                               (first)
                               :tx-id))))
 
       (t/testing "second version of entity is visible"
-        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-business-time v3-tx-time)
+        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-valid-time v3-tx-time)
                               (first)
                               :tx-id))))
 
       (t/testing "third version of entity is visible"
-        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-business-time v3-tx-time)
+        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-valid-time v3-tx-time)
                               (first)
                               :tx-id)))))
 
     (let [corrected-ivan (assoc ivan :version 4)
-          corrected-start-business-time #inst "2018-11-27"
-          corrected-end-business-time #inst "2018-11-29"
+          corrected-start-valid-time #inst "2018-11-27"
+          corrected-end-valid-time #inst "2018-11-29"
           {corrected-tx-time :crux.tx/tx-time
            corrected-tx-id :crux.tx/tx-id}
-          @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-business-time corrected-end-business-time]])]
+          @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-valid-time corrected-end-valid-time]])]
 
       (with-open [snapshot (kv/new-snapshot f/*kv*)]
         (t/testing "first version of entity is still there"
-          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-business-time corrected-tx-time)
+          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time corrected-tx-time)
                                 (first)
                                 :tx-id))))
 
         (t/testing "second version of entity was corrected"
           (t/is (= {:content-hash (c/new-id corrected-ivan)
                     :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v2-business-time corrected-tx-time)
+                   (-> (idx/entities-at snapshot [:ivan] v2-valid-time corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash])))))
 
         (t/testing "third version of entity was corrected"
           (t/is (= {:content-hash (c/new-id corrected-ivan)
                     :tx-id corrected-tx-id}
-                   (-> (idx/entities-at snapshot [:ivan] v3-business-time corrected-tx-time)
+                   (-> (idx/entities-at snapshot [:ivan] v3-valid-time corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash]))))))
 
-      (let [deleted-start-business-time #inst "2018-11-25"
-            deleted-end-business-time #inst "2018-11-28"
+      (let [deleted-start-valid-time #inst "2018-11-25"
+            deleted-end-valid-time #inst "2018-11-28"
             {deleted-tx-time :crux.tx/tx-time
              deleted-tx-id :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-business-time deleted-end-business-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/testing "first version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-business-time deleted-tx-time))))
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-valid-time deleted-tx-time))))
 
           (t/testing "second version of entity was deleted"
-            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-business-time deleted-tx-time))))
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-valid-time deleted-tx-time))))
 
           (t/testing "third version of entity is still there"
             (t/is (= {:content-hash (c/new-id corrected-ivan)
                       :tx-id corrected-tx-id}
-                     (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
+                     (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
                          (first)
                          (select-keys [:tx-id :content-hash])))))))
 
       (t/testing "end range is exclusive"
         (let [{deleted-tx-time :crux.tx/tx-time
                deleted-tx-id :crux.tx/tx-id}
-              @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-business-time v3-business-time]])]
+              @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
 
           (with-open [snapshot (kv/new-snapshot f/*kv*)]
             (t/testing "third version of entity is still there"
               (t/is (= {:content-hash (c/new-id corrected-ivan)
                         :tx-id corrected-tx-id}
-                       (-> (idx/entities-at snapshot [:ivan] v3-business-time deleted-tx-time)
+                       (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
                            (first)
                            (select-keys [:tx-id :content-hash])))))))))))
 
@@ -373,25 +373,25 @@
 (t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
   (let [tx-log (tx/->KvTxLog f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
-        start-business-time #inst "2019"
+        start-valid-time #inst "2019"
         number-of-versions 1000]
 
     @(db/submit-tx tx-log (vec (for [n (range number-of-versions)]
-                                 [:crux.tx/put :ivan (assoc ivan :verison n) (Date. (+ (.getTime start-business-time) (inc (long n))))])))
+                                 [:crux.tx/put :ivan (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (let [baseline-time (let [start-time (System/nanoTime)
-                                business-time (Date. (+ (.getTime start-business-time) number-of-versions))]
+                                valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
-                              (t/is (= business-time (-> (idx/entities-at snapshot [:ivan] business-time (Date.))
+                              (t/is (= valid-time (-> (idx/entities-at snapshot [:ivan] valid-time (Date.))
                                                          (first)
-                                                         :bt))))
+                                                         :vt))))
                             (- (System/nanoTime) start-time))]
 
         (let [start-time (System/nanoTime)
-              business-time (Date. (+ (.getTime start-business-time) number-of-versions))]
+              valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
           (t/testing "no version is visible before transactions"
-            (t/is (nil? (idx/entities-at snapshot [:ivan] business-time business-time)))
+            (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
               (t/is (<= baseline-time corrections-time) "Would fail if we fix #144, so we want this to fail eventually."))))))))
 
@@ -400,29 +400,29 @@
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         tx1-ivan (assoc ivan :version 1)
-        tx1-business-time #inst "2018-11-26"
+        tx1-valid-time #inst "2018-11-26"
         {tx1-id :crux.tx/tx-id
          tx1-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx1-ivan tx1-business-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx1-ivan tx1-valid-time]])
 
         tx2-ivan (assoc ivan :version 2)
         tx2-petr {:crux.db/id :petr :name "Petr"}
-        tx2-business-time #inst "2018-11-27"
+        tx2-valid-time #inst "2018-11-27"
         {tx2-id :crux.tx/tx-id
          tx2-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-business-time]
-                               [:crux.tx/put :petr tx2-petr tx2-business-time]])]
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-valid-time]
+                               [:crux.tx/put :petr tx2-petr tx2-valid-time]])]
 
     (with-open [tx-log-context (db/new-tx-log-context tx-log)]
       (let [log (db/tx-log tx-log tx-log-context nil)]
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
                    :crux.tx/tx-time tx1-tx-time
-                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-business-time]]}
+                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
                   {:crux.tx/tx-id tx2-id
                    :crux.tx/tx-time tx2-tx-time
-                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-business-time]
-                                    [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-business-time]]}]
+                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
+                                    [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
                  log))))))
 
 (t/deftest test-can-perform-unary-join

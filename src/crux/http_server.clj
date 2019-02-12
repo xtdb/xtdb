@@ -99,13 +99,13 @@
         (assoc-in [:headers "Last-Modified"]
                   (rt/format-date (:crux.tx/tx-time (first history)))))))
 
-(defn- db-for-request ^ICruxDatasource [^ICruxSystem crux-system {:keys [business-time transact-time]}]
+(defn- db-for-request ^ICruxDatasource [^ICruxSystem crux-system {:keys [valid-time transact-time]}]
   (cond
-    (and business-time transact-time)
-    (.db crux-system business-time transact-time)
+    (and valid-time transact-time)
+    (.db crux-system valid-time transact-time)
 
-    business-time
-    (.db crux-system business-time)
+    valid-time
+    (.db crux-system valid-time)
 
     ;; TODO: This could also be an error, depending how you see it,
     ;; not supported via the Java API itself.
@@ -136,16 +136,16 @@
       (.close ctx)
       (throw t))))
 
-(s/def ::business-time inst?)
+(s/def ::valid-time inst?)
 (s/def ::transact-time inst?)
 
-(s/def ::query-map (s/and #(set/superset? #{:query :business-time :transact-time} (keys %))
+(s/def ::query-map (s/and #(set/superset? #{:query :valid-time :transact-time} (keys %))
                           (s/keys :req-un [:crux.query/query]
-                                  :opt-un [::business-time
+                                  :opt-un [::valid-time
                                            ::transact-time])))
 
-;; TODO: Potentially require both business and transaction time sent
-;; by the client?
+;; TODO: Potentially require both valid and transaction time sent by
+;; the client?
 (defn- query [^ICruxSystem crux-system request]
   (let [query-map (s/assert ::query-map (body->edn request))
         db (db-for-request crux-system query-map)]
@@ -162,9 +162,9 @@
         (add-last-modified (.transactionTime db)))))
 
 (s/def ::eid c/valid-id?)
-(s/def ::entity-map (s/and #(set/superset? #{:eid :business-time :transact-time} (keys %))
+(s/def ::entity-map (s/and #(set/superset? #{:eid :valid-time :transact-time} (keys %))
                            (s/keys :req-un [::eid]
-                                   :opt-un [::business-time
+                                   :opt-un [::valid-time
                                             ::transact-time])))
 
 ;; TODO: Could support as-of now via path and GET.

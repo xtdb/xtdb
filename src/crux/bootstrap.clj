@@ -36,13 +36,13 @@
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store object-store tx-time tx-time options)))
 
-  (db [_ business-time]
+  (db [_ valid-time]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store object-store business-time tx-time options)))
+      (q/db kv-store object-store valid-time tx-time options)))
 
-  (db [_ business-time transact-time]
+  (db [_ valid-time transact-time]
     (tx/await-tx-time indexer transact-time options)
-    (q/db kv-store object-store business-time transact-time options))
+    (q/db kv-store object-store valid-time transact-time options))
 
   (document [_ content-hash]
     (with-open [snapshot (kv/new-snapshot kv-store)]
@@ -61,9 +61,9 @@
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx (:crux.tx/tx-time submitted-tx) eid))
 
-  (hasSubmittedTxCorrectedEntity [_ submitted-tx business-time eid]
+  (hasSubmittedTxCorrectedEntity [_ submitted-tx valid-time eid]
     (tx/await-tx-time indexer (:crux.tx/tx-time submitted-tx) (:crux.tx-log/await-tx-timeout options))
-    (q/submitted-tx-updated-entity? kv-store submitted-tx business-time eid))
+    (q/submitted-tx-updated-entity? kv-store submitted-tx valid-time eid))
 
   (newTxLogContext [_]
     (db/new-tx-log-context tx-log))

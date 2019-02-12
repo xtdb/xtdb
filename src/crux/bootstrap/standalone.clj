@@ -19,11 +19,11 @@
   (db [this]
     (.db ^CruxNode (b/map->CruxNode this)))
 
-  (db [this business-time]
-    (.db ^CruxNode (b/map->CruxNode this) business-time))
+  (db [this valid-time]
+    (.db ^CruxNode (b/map->CruxNode this) valid-time))
 
-  (db [this business-time transact-time]
-    (.db ^CruxNode (b/map->CruxNode this) business-time transact-time))
+  (db [this valid-time transact-time]
+    (.db ^CruxNode (b/map->CruxNode this) valid-time transact-time))
 
   (document [this content-hash]
     (.document ^CruxNode (b/map->CruxNode this) content-hash))
@@ -41,8 +41,8 @@
   (hasSubmittedTxUpdatedEntity [this submitted-tx eid]
     (.hasSubmittedTxUpdatedEntity ^CruxNode (b/map->CruxNode this) submitted-tx eid))
 
-  (hasSubmittedTxCorrectedEntity [this submitted-tx business-time eid]
-    (.hasSubmittedTxCorrectedEntity ^CruxNode (b/map->CruxNode this) submitted-tx business-time eid))
+  (hasSubmittedTxCorrectedEntity [this submitted-tx valid-time eid]
+    (.hasSubmittedTxCorrectedEntity ^CruxNode (b/map->CruxNode this) submitted-tx valid-time eid))
 
   (newTxLogContext [this]
     (.newTxLogContext ^CruxNode (b/map->CruxNode this)))

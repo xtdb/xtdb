@@ -94,12 +94,12 @@
 (defn- register-stream-with-remote-stream! [snapshot in]
   (swap! (:streams-state snapshot) conj in))
 
-(defn- as-of-map [{:keys [business-time transact-time] :as datasource}]
+(defn- as-of-map [{:keys [valid-time transact-time] :as datasource}]
   (cond-> {}
-    business-time (assoc :business-time business-time)
+    valid-time (assoc :valid-time valid-time)
     transact-time (assoc :transact-time transact-time)))
 
-(defrecord RemoteDatasource [url business-time transact-time]
+(defrecord RemoteDatasource [url valid-time transact-time]
   ICruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/entity")
@@ -139,8 +139,8 @@
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))
 
-  (businessTime [_]
-    business-time)
+  (validTime [_]
+    valid-time)
 
   (transactionTime [_]
     transact-time))
@@ -150,11 +150,11 @@
   (db [_]
     (->RemoteDatasource url nil nil))
 
-  (db [_ business-time]
-    (->RemoteDatasource url business-time nil))
+  (db [_ valid-time]
+    (->RemoteDatasource url valid-time nil))
 
-  (db [_ business-time transact-time]
-    (->RemoteDatasource url business-time transact-time))
+  (db [_ valid-time transact-time]
+    (->RemoteDatasource url valid-time transact-time))
 
   (document [_ content-hash]
     (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
@@ -171,8 +171,8 @@
   (hasSubmittedTxUpdatedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} eid]
     (.hasSubmittedTxCorrectedEntity this submitted-tx tx-time eid))
 
-  (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} business-time eid]
-    (= tx-id (:crux.tx/tx-id (.entityTx (.db this business-time tx-time) eid))))
+  (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} valid-time eid]
+    (= tx-id (:crux.tx/tx-id (.entityTx (.db this valid-time tx-time) eid))))
 
   (newTxLogContext [_]
     (->RemoteApiStream (atom [])))

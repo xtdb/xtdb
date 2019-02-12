@@ -252,12 +252,12 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [business-time transact-time]} binary-idx vars-in-join-order v-var->range-constraints]
+(defn- update-binary-index! [snapshot {:keys [valid-time transact-time]} binary-idx vars-in-join-order v-var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
         v-range-constraints (get v-var->range-constraints v)
-        entity-as-of-idx (idx/new-entity-as-of-index snapshot business-time transact-time)]
+        entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)]
     (if (= (:v names) (first order))
       (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
             e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
@@ -581,9 +581,9 @@
 ;; parent, which is what will be used when walking the tree. Due to
 ;; the way or-join (and rules) work, they likely have to stay as sub
 ;; queries. Recursive rules always have to be sub queries.
-(defn- or-single-e-var-triple-fast-path [snapshot {:keys [business-time transact-time] :as db} {:keys [e a v] :as clause} args]
+(defn- or-single-e-var-triple-fast-path [snapshot {:keys [valid-time transact-time] :as db} {:keys [e a v] :as clause} args]
   (let [entity (get (first args) e)]
-    (when (idx/or-known-triple-fast-path snapshot entity a v business-time transact-time)
+    (when (idx/or-known-triple-fast-path snapshot entity a v valid-time transact-time)
       [])))
 
 (defn- build-branch-index->single-e-var-triple-fast-path-clause-with-buffers [or-branches]
@@ -942,7 +942,7 @@
             (assoc acc id (idx-fn))))
         {})))
 
-(defn- build-sub-query [snapshot {:keys [kv query-cache object-store business-time transact-time] :as db} where args rule-name->rules stats]
+(defn- build-sub-query [snapshot {:keys [kv query-cache object-store valid-time transact-time] :as db} where args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [arg-vars (arg-vars args)
@@ -1098,15 +1098,15 @@
   ([{:keys [kv] :as db} eid]
    (with-open [snapshot (kv/new-snapshot kv)]
      (entity-tx snapshot db eid)))
-  ([snapshot {:keys [business-time transact-time] :as db} eid]
-   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] business-time transact-time)))))
+  ([snapshot {:keys [valid-time transact-time] :as db} eid]
+   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] valid-time transact-time)))))
 
 (defn entity [{:keys [kv object-store] :as db} eid]
   (with-open [snapshot (kv/new-snapshot kv)]
     (let [entity-tx (entity-tx snapshot db eid)]
       (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defrecord QueryDatasource [kv query-cache object-store business-time transact-time]
+(defrecord QueryDatasource [kv query-cache object-store valid-time transact-time]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1124,15 +1124,15 @@
     (crux.query/q this snapshot q))
 
   (historyAscending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid business-time transact-time)]
+    (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
   (historyDescending [this snapshot eid]
-    (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid business-time transact-time)]
+    (for [^EntityTx entity-tx (idx/entity-history-seq-descending (kv/new-iterator snapshot) eid valid-time transact-time)]
       (assoc (c/entity-tx->edn entity-tx) :crux.db/doc (db/get-single-object object-store snapshot (.content-hash entity-tx)))))
 
-  (businessTime [_]
-    business-time)
+  (validTime [_]
+    valid-time)
 
   (transactionTime [_]
     transact-time))
@@ -1147,11 +1147,11 @@
 (defn db
   (^crux.api.ICruxDatasource [kv]
    (db kv nil nil nil {}))
-  (^crux.api.ICruxDatasource [kv business-time]
-   (db kv nil business-time nil {}))
-  (^crux.api.ICruxDatasource [kv business-time transact-time]
-   (db kv nil business-time transact-time {}))
-  (^crux.api.ICruxDatasource [kv object-store business-time transact-time {:keys [crux.query/query-cache-size
+  (^crux.api.ICruxDatasource [kv valid-time]
+   (db kv nil valid-time nil {}))
+  (^crux.api.ICruxDatasource [kv valid-time transact-time]
+   (db kv nil valid-time transact-time {}))
+  (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size
                                                                                   doc-cache-size]
                                                                            :or {query-cache-size default-query-cache-size
                                                                                 doc-cache-size lru/default-doc-cache-size}
@@ -1161,11 +1161,11 @@
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache query-cache-size)
                         (or object-store (lru/new-cached-object-store kv doc-cache-size))
-                        (or business-time now)
+                        (or valid-time now)
                         (or transact-time now)))))
 
 (defn submitted-tx-updated-entity?
   ([kv {:crux.tx/keys [tx-time] :as submitted-tx} eid]
    (submitted-tx-updated-entity? kv submitted-tx tx-time eid))
-  ([kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} business-time eid]
-   (= tx-id (:crux.tx/tx-id (entity-tx (db kv business-time tx-time) eid)))))
+  ([kv {:crux.tx/keys [tx-id tx-time] :as submitted-tx} valid-time eid]
+   (= tx-id (:crux.tx/tx-id (entity-tx (db kv valid-time tx-time) eid)))))

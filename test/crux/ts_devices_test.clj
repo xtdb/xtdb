@@ -271,14 +271,14 @@
                (with-open [snapshot (.newSnapshot db)]
                  (->> (for [r reading-ids]
                         (for [entity-tx (.historyAscending db snapshot r)]
-                          (update entity-tx :crux.db/business-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                          (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                       (cio/merge-sort (fn [a b]
-                                        (compare (:crux.db/business-time a) (:crux.db/business-time b))))
-                      (partition-by :crux.db/business-time)
+                                        (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
+                      (partition-by :crux.db/valid-time)
                       (take 12)
                       (mapv (fn [group]
                               (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
-                                [(:crux.db/business-time (first group))
+                                [(:crux.db/valid-time (first group))
                                  (first battery-levels)
                                  (last battery-levels)]))))))))
     (t/is true)))

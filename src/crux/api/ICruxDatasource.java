@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Represents the database as of a specific business and
+ * Represents the database as of a specific valid and
  * transaction time.
  */
 public interface ICruxDatasource {
@@ -58,7 +58,7 @@ public interface ICruxDatasource {
 
     /**
      * Retrieves entity history lazily in chronological order from and
-     * including the business time of the db while respecting
+     * including the valid time of the db while respecting
      * transaction time. Includes the documents.
      *
      * @param snapshot a snapshot from {@link #newSnapshot()}.
@@ -69,7 +69,7 @@ public interface ICruxDatasource {
 
     /**
      * Retrieves entity history lazily in reverse chronological order
-     * from and including the business time of the db while respecting
+     * from and including the valid time of the db while respecting
      * transaction time. Includes the documents.
      *
      * @param snapshot a snapshot from {@link #newSnapshot()}.
@@ -79,11 +79,11 @@ public interface ICruxDatasource {
     public Iterable<Map> historyDescending(Closeable snapshot, Object eid);
 
     /**
-     * The business time of this db.
+     * The valid time of this db.
      *
-     * @return the business time of this db.
+     * @return the valid time of this db.
      */
-    public Date businessTime();
+    public Date validTime();
 
     /**
      * The transaction time of this db.

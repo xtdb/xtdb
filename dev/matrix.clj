@@ -369,16 +369,16 @@
                    (doto (new-bitmap)
                      (.deserialize in)))))))))))
 
-(defn- root-hash-for-matrix [snapshot ^Date business-time ^Date transaction-time idx-id p-id seek-b]
-  (let [business-time-ms (.getTime business-time)
+(defn- root-hash-for-matrix [snapshot ^Date valid-time ^Date transaction-time idx-id p-id seek-b]
+  (let [valid-time-ms (.getTime valid-time)
         transaction-time-ms (.getTime transaction-time)
-        reverse-business-time-ms (date->reverse-time-ms business-time)
+        reverse-valid-time-ms (date->reverse-time-ms valid-time)
         idx-id (int idx-id)
         seek-k (mem/with-buffer-out seek-b
                  (fn [^DataOutput out]
                    (.writeInt out idx-id)
                    (.writeInt out p-id)
-                   (.writeLong out reverse-business-time-ms)))]
+                   (.writeLong out reverse-valid-time-ms)))]
     (with-open [i (kv/new-iterator snapshot)]
       (let [k ^DirectBuffer (kv/seek i seek-k)]
         (if (within-prefix? seek-k k (* 2 Integer/BYTES))
@@ -449,7 +449,7 @@
   ([snapshot]
    (let [now (cio/next-monotonic-date)]
      (kv->graph snapshot now now node-cache matrix-cache)))
-  ([snapshot business-time transaction-time node-cache matrix-cache]
+  ([snapshot valid-time transaction-time node-cache matrix-cache]
    (let [seek-b (ExpandableDirectByteBuffer.)
          value->id-seek-b (doto (ExpandableDirectByteBuffer.)
                             (.putInt 0 value->id-idx-id ByteOrder/BIG_ENDIAN))
@@ -469,7 +469,7 @@
                                    (reify Function
                                      (apply [_ _]
                                        (let [p-id (.applyAsInt ^ToIntFunction value->id k)]
-                                         (->> (root-hash-for-matrix snapshot business-time transaction-time p->so-idx-id p-id seek-b)
+                                         (->> (root-hash-for-matrix snapshot valid-time transaction-time p->so-idx-id p-id seek-b)
                                               (new-snapshot-matrix snapshot content-hash-b node-cache matrix-cache)))))))
 
                (valAt [this k default]
@@ -481,7 +481,7 @@
                                    (reify Function
                                      (apply [_ _]
                                        (let [p-id (.applyAsInt ^ToIntFunction value->id k)]
-                                         (->> (root-hash-for-matrix snapshot business-time transaction-time p->os-idx-id p-id seek-b)
+                                         (->> (root-hash-for-matrix snapshot valid-time transaction-time p->os-idx-id p-id seek-b)
                                               (new-snapshot-matrix snapshot content-hash-b node-cache matrix-cache)))))))
 
                (valAt [this k default]
@@ -634,17 +634,17 @@
 (defn transact-rdf-triples
   ([kv triples]
    (transact-rdf-triples kv triples nil))
-  ([kv triples business-time]
+  ([kv triples valid-time]
    (with-open [snapshot (kv/new-snapshot kv)]
      (let [transaction-time (cio/next-monotonic-date)
-           business-time (or business-time transaction-time)
+           valid-time (or valid-time transaction-time)
            tx-start-time (.getTime transaction-time)
            b (ExpandableDirectByteBuffer.)
            content-hash-b (doto ^MutableDirectBuffer (mem/allocate-buffer (+ hash/id-hash-size Integer/BYTES))
                             (.putInt 0 node-idx-id ByteOrder/BIG_ENDIAN))
            last-id-state (Box. nil)
            matrix-cache nil
-           {:keys [value->id] :as g} (kv->graph snapshot business-time transaction-time node-cache matrix-cache)
+           {:keys [value->id] :as g} (kv->graph snapshot valid-time transaction-time node-cache matrix-cache)
            seek-b (ExpandableDirectByteBuffer.)
            pending-id-state (Object2IntHashMap. unknown-id)
            id-kvs (->> (for [[s p o] triples
@@ -696,7 +696,7 @@
                                           (fn [^DataOutput out]
                                             (.writeInt out p->so-idx-id)
                                             (.writeInt out p-id)
-                                            (.writeLong out (date->reverse-time-ms business-time))
+                                            (.writeLong out (date->reverse-time-ms valid-time))
                                             (.writeLong out (date->reverse-time-ms transaction-time))))
                                         (.root-hash hash-tree)])]
                                     [(let [hash-tree ^HashTree (build-hash-tree p->os)
@@ -706,7 +706,7 @@
                                           (fn [^DataOutput out]
                                             (.writeInt out p->os-idx-id)
                                             (.writeInt out p-id)
-                                            (.writeLong out (date->reverse-time-ms business-time))
+                                            (.writeLong out (date->reverse-time-ms valid-time))
                                             (.writeLong out (date->reverse-time-ms transaction-time))))
                                         (.root-hash hash-tree)])])))
                              (reduce into [])
