@@ -24,7 +24,7 @@
     (t/is (nil? (value f/*kv* (bu/long->bytes 2))))))
 
 (t/deftest test-can-store-and-delete-all-116 []
-  (let [number-of-entries 1000]
+  (let [number-of-entries 100]
     (kv/store f/*kv* (map (fn [i]
                             [(bu/long->bytes i) (bu/long->bytes (inc i))])
                           (range number-of-entries)))
