@@ -23,18 +23,19 @@
   (t/testing "non existing key"
     (t/is (nil? (value f/*kv* (bu/long->bytes 2))))))
 
-(t/deftest test-can-store-and-delete-all []
-  (kv/store f/*kv* (map (fn [i]
-                          [(bu/long->bytes i) (bu/long->bytes (inc i))])
-                        (range 10)))
-  (doseq [i (range 10)]
-    (t/is (= (inc i) (bu/bytes->long (value f/*kv* (bu/long->bytes i))))))
+(t/deftest test-can-store-and-delete-all-116 []
+  (let [number-of-entries 1000]
+    (kv/store f/*kv* (map (fn [i]
+                            [(bu/long->bytes i) (bu/long->bytes (inc i))])
+                          (range number-of-entries)))
+    (doseq [i (range number-of-entries)]
+      (t/is (= (inc i) (bu/bytes->long (value f/*kv* (bu/long->bytes i))))))
 
-  (t/testing "deleting all keys in random order, including non existent keys"
-    (kv/delete f/*kv* (for [i (shuffle (range 12))]
-                        (bu/long->bytes i)))
-    (doseq [i (range 10)]
-      (t/is (nil? (value f/*kv* (bu/long->bytes i)))))))
+    (t/testing "deleting all keys in random order, including non existent keys"
+      (kv/delete f/*kv* (for [i (shuffle (range (long (* number-of-entries 1.2))))]
+                          (bu/long->bytes i)))
+      (doseq [i (range number-of-entries)]
+        (t/is (nil? (value f/*kv* (bu/long->bytes i))))))))
 
 (t/deftest test-seek-and-iterate-range []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
