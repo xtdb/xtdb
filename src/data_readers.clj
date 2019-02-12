@@ -1,1 +1,1 @@
-{crux/id crux.codec/new-id}
+{crux/id crux.codec/id-edn-reader}

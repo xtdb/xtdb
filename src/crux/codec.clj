@@ -315,6 +315,43 @@
   (.write w "#crux/id ")
   (print-method (str id) w))
 
+(deftype EDNId [hex original-id]
+  IdOrBuffer
+  (->id-buffer [this]
+    (->id-buffer (new-id hex)))
+
+  (new-id [this]
+    (new-id hex))
+
+  IdToBuffer
+  (id->buffer [this to]
+    (id->buffer (new-id hex) to))
+
+  Object
+  (toString [this]
+    hex)
+
+  (equals [this that]
+    (.equals (new-id hex) that))
+
+  (hashCode [this]
+    (.hashCode (new-id hex)))
+
+  IHashEq
+  (hasheq [this]
+    (.hashCode this))
+
+  Comparable
+  (compareTo [this that]
+    (.compareTo (new-id hex) that)))
+
+(defn id-edn-reader ^crux.codec.EDNId [id]
+  (->EDNId (str (new-id id)) id))
+
+(defmethod print-method EDNId [^EDNId id ^Writer w]
+  (.write w "#crux/id ")
+  (print-method (str (or (.original-id id) (.hex id))) w))
+
 (defn valid-id? [x]
   (try
     (->id-buffer x)
