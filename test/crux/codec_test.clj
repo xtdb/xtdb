@@ -51,4 +51,10 @@
     (t/is (= {:find ['e]
               :where [['e (c/new-id "http://xmlns.com/foaf/0.1/firstName") "Pablo"]]}
              '{:find [e]
-               :where [[e #crux/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]}))))
+               :where [[e #crux/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
+
+  (t/testing "string form of URL and keyword are same id"
+    (t/is (= (c/new-id :http://xmlns.com/foaf/0.1/firstName)
+             #crux/id "http://xmlns.com/foaf/0.1/firstName"))
+    (t/is (= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
+             #crux/id ":http://xmlns.com/foaf/0.1/firstName"))))
