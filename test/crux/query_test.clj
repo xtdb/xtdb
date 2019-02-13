@@ -1265,12 +1265,14 @@
     @(db/submit-tx tx-log [[:crux.tx/put :p2
                             {:crux.db/id :p2
                              :entry-pt :SFO
-                             :arrival-time #inst "2018-12-31"}
+                             :arrival-time #inst "2018-12-31"
+                             :departure-time :na}
                             #inst "2018-12-31"]
                            [:crux.tx/put :p3
                             {:crux.db/id :p3
                              :entry-pt :LA
-                             :arrival-time #inst "2018-12-31"}
+                             :arrival-time #inst "2018-12-31"
+                             :departure-time :na}
                             #inst "2018-12-31"]])
     ;; Day 1, nothing happens.
     @(db/submit-tx tx-log [])
@@ -1278,25 +1280,48 @@
     @(db/submit-tx tx-log [[:crux.tx/put :p4
                             {:crux.db/id :p4
                              :entry-pt :NY
-                             :arrival-time #inst "2019-01-02"}
+                             :arrival-time #inst "2019-01-02"
+                             :departure-time :na}
                             #inst "2019-01-02"]])
     ;; Day 3
-    (let [third-day-submitted-tx @(db/submit-tx tx-log [[:crux.tx/delete :p4 #inst "2019-01-03"]])]
+    (let [third-day-submitted-tx @(db/submit-tx tx-log [[:crux.tx/put :p4
+                                                         {:crux.db/id :p4
+                                                          :entry-pt :NY
+                                                          :arrival-time #inst "2019-01-02"
+                                                          :departure-time #inst "2019-01-03"}
+                                                         #inst "2019-01-03"]])]
       ;; Day 4, correction, adding missing trip on new arrival.
       @(db/submit-tx tx-log [[:crux.tx/put :p1
                               {:crux.db/id :p1
                                :entry-pt :NY
-                               :arrival-time #inst "2018-12-31"}
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time :na}
                               #inst "2018-12-31"]
-                             [:crux.tx/delete :p1 #inst "2019-01-03"]
+                             [:crux.tx/put :p1
+                              {:crux.db/id :p1
+                               :entry-pt :NY
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time #inst "2019-01-03"}
+                              #inst "2019-01-03"]
                              [:crux.tx/put :p1
                               {:crux.db/id :p1
                                :entry-pt :LA
-                               :arrival-time #inst "2019-01-04"}
+                               :arrival-time #inst "2019-01-04"
+                               :departure-time :na}
                               #inst "2019-01-04"]
-                             [:crux.tx/delete :p3 #inst "2019-01-04"]])
+                             [:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :LA
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time #inst "2019-01-04"}
+                              #inst "2019-01-04"]])
       ;; Day 5
-      @(db/submit-tx tx-log [[:crux.tx/delete :p2 #inst "2019-01-05"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p2
+                              {:crux.db/id :p2
+                               :entry-pt :SFO
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time #inst "2018-12-31"}
+                              #inst "2019-01-05"]])
       ;; Day 6, nothing happens.
       @(db/submit-tx tx-log [])
       ;; Day 7-12, correction of deletion/departure on day 4. Shows
@@ -1304,43 +1329,60 @@
       @(db/submit-tx tx-log [[:crux.tx/put :p3
                               {:crux.db/id :p3
                                :entry-pt :LA
-                               :arrival-time #inst "2018-12-31"}
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time :na}
                               #inst "2019-01-04"]
-                             [:crux.tx/delete :p3 #inst "2019-01-07"]])
+                             [:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :LA
+                               :arrival-time #inst "2018-12-31"
+                               :departure-time #inst "2019-01-07"}
+                              #inst "2019-01-07"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p3
                               {:crux.db/id :p3
                                :entry-pt :SFO
-                               :arrival-time #inst "2019-01-08"}
+                               :arrival-time #inst "2019-01-08"
+                               :departure-time :na}
                               #inst "2019-01-08"]
                              [:crux.tx/put :p4
                               {:crux.db/id :p4
                                :entry-pt :LA
-                               :arrival-time #inst "2019-01-08"}
+                               :arrival-time #inst "2019-01-08"
+                               :departure-time :na}
                               #inst "2019-01-08"]])
-      @(db/submit-tx tx-log [[:crux.tx/delete :p3 #inst "2019-01-09"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :SFO
+                               :arrival-time #inst "2019-01-08"
+                               :departure-time #inst "2019-01-08"}
+                              #inst "2019-01-09"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p5
                               {:crux.db/id :p5
                                :entry-pt :LA
-                               :arrival-time #inst "2019-01-10"}
+                               :arrival-time #inst "2019-01-10"
+                               :departure-time :na}
                               #inst "2019-01-10"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p7
                               {:crux.db/id :p7
                                :entry-pt :NY
-                               :arrival-time #inst "2019-01-11"}
+                               :arrival-time #inst "2019-01-11"
+                               :departure-time :na}
                               #inst "2019-01-11"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p6
                               {:crux.db/id :p6
                                :entry-pt :NY
-                               :arrival-time #inst "2019-01-12"}
+                               :arrival-time #inst "2019-01-12"
+                               :departure-time :na}
                               #inst "2019-01-12"]])
 
-      (t/is (= #{[:p2 :SFO #inst "2018-12-31"]
-                 [:p3 :LA #inst "2018-12-31"]
-                 [:p4 :NY #inst "2019-01-02"]}
+      (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
+                 [:p3 :LA #inst "2018-12-31" :na]
+                 [:p4 :NY #inst "2019-01-02" :na]}
                (q/q (q/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
-                    '{:find [p entry-pt arrival-time]
+                    '{:find [p entry-pt arrival-time departure-time]
                       :where [[p :entry-pt entry-pt]
-                              [p :arrival-time arrival-time]]}))))))
+                              [p :arrival-time arrival-time]
+                              [p :departure-time departure-time]]}))))))
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
