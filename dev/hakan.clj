@@ -1777,26 +1777,28 @@
         x (bit-and (bit-or x (bit-shift-right x 1)) 0x3333333333333333)
         x (bit-and (bit-or x (bit-shift-right x 2)) 0x0f0f0f0f0f0f0f0f)
         x (bit-and (bit-or x (bit-shift-right x 4)) 0x00ff00ff00ff00ff)
-        x (bit-and (bit-or x (bit-shift-right x 8)) 0x0000ffff0000ffff)]
+        x (bit-and (bit-or x (bit-shift-right x 8)) 0x0000ffff0000ffff)
+        x (bit-and (bit-or x (bit-shift-right x 16)) 0xffffffff)]
     x))
 
 ;; NOTE: we're putting x before y dimension here.
 (defn bit-interleave-ints ^long [^long x ^long y]
-  (bit-or (bit-shift-left (bit-spread-int x) 1)
-          (bit-spread-int y)))
+  (bit-or (bit-shift-left (bit-spread-int (Integer/toUnsignedLong (unchecked-int x))) 1)
+          (bit-spread-int (Integer/toUnsignedLong (unchecked-int y)))))
 
 (defn bit-uninterleave-ints ^ints [^long x]
   (int-array [(bit-unspread-int (bit-shift-right x 1))
               (bit-unspread-int x)]))
 
 (defn bit-interleave-longs ^longs [^long x ^long y]
-  (long-array [(bit-interleave-ints (bit-shift-right x Integer/SIZE)
-                                    (bit-shift-right y Integer/SIZE))
-               (bit-interleave-ints (bit-and (Integer/toUnsignedLong -1) x)
-                                    (bit-and (Integer/toUnsignedLong -1) y))]))
+  (long-array [(bit-interleave-ints (unsigned-bit-shift-right x Integer/SIZE)
+                                    (unsigned-bit-shift-right y Integer/SIZE))
+               (bit-interleave-ints x y)]))
 
 (defn bit-uninterleave-longs ^longs [^longs z]
   (let [z1s ^ints (bit-uninterleave-ints (aget z 0))
         z2s ^ints (bit-uninterleave-ints (aget z 1))]
-    (long-array [(bit-or (bit-shift-left (aget z1s 0) Integer/SIZE) (aget z2s 0))
-                 (bit-or (bit-shift-left (aget z1s 1) Integer/SIZE) (aget z2s 1))])))
+    (long-array [(bit-or (bit-shift-left (Integer/toUnsignedLong (aget z1s 0)) Integer/SIZE)
+                         (Integer/toUnsignedLong (aget z2s 0)))
+                 (bit-or (bit-shift-left (Integer/toUnsignedLong (aget z1s 1)) Integer/SIZE)
+                         (Integer/toUnsignedLong (aget z2s 1)))])))
