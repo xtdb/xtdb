@@ -1757,3 +1757,45 @@
                        (aget x (aget col-ind j)))))
           (aset y i yr))))
     y))
+
+;; Z-curve spike, not fully tested.
+
+;; http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
+(defn bit-spread-int ^long [^long x]
+  (let [x (bit-and (bit-or x (bit-shift-left x 16)) 0x0000ffff0000ffff)
+        x (bit-and (bit-or x (bit-shift-left x 8)) 0x00ff00ff00ff00ff)
+        x (bit-and (bit-or x (bit-shift-left x 4)) 0x0f0f0f0f0f0f0f0f)
+        x (bit-and (bit-or x (bit-shift-left x 2)) 0x3333333333333333)
+        x (bit-and (bit-or x (bit-shift-left x 1)) 0x5555555555555555)]
+    x))
+
+(defn bit-unspread-int ^long [^long x]
+  (let [x (bit-and x 0x5555555555555555)
+        x (bit-and (bit-or x (bit-shift-right x 1)) 0x3333333333333333)
+        x (bit-and (bit-or x (bit-shift-right x 2)) 0x0f0f0f0f0f0f0f0f)
+        x (bit-and (bit-or x (bit-shift-right x 4)) 0x00ff00ff00ff00ff)
+        x (bit-and (bit-or x (bit-shift-right x 8)) 0x0000ffff0000ffff)]
+    x))
+
+(defn bit-interleave-ints ^long [^long x ^long y]
+  (bit-or
+   (bit-spread-int x)
+   (bit-shift-left (bit-spread-int y) 1)))
+
+(defn bit-uninterleave-ints ^ints [^long x]
+  (int-array [(bit-unspread-int x)
+              (bit-unspread-int (bit-shift-right x 1))]))
+
+(defn bit-interleave-longs ^longs [^long x ^long y]
+  (long-array [(bit-interleave-ints (bit-shift-right x Integer/SIZE)
+                                    (bit-shift-right y Integer/SIZE))
+               (bit-interleave-ints (bit-and (Integer/toUnsignedLong -1) x)
+                                    (bit-and (Integer/toUnsignedLong -1) y))]))
+
+(defn bit-uninterleave-longs ^longs [^longs z]
+  (let [z1 (aget z 0)
+        z2 (aget z 1)]
+    (long-array [(bit-or (bit-and z1 0x5555555555555555)
+                         (bit-shift-right (bit-and z2 (.longValue 0xaaaaaaaaaaaaaaaa)) 1))
+                 (bit-or (bit-shift-left (bit-and z2 (.longValue 0xaaaaaaaaaaaaaaaa)) 1)
+                         (bit-and z1 0x5555555555555555))])))
