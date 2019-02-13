@@ -1780,14 +1780,14 @@
         x (bit-and (bit-or x (bit-shift-right x 8)) 0x0000ffff0000ffff)]
     x))
 
+;; NOTE: we're putting x before y dimension here.
 (defn bit-interleave-ints ^long [^long x ^long y]
-  (bit-or
-   (bit-spread-int x)
-   (bit-shift-left (bit-spread-int y) 1)))
+  (bit-or (bit-shift-left (bit-spread-int x) 1)
+          (bit-spread-int y)))
 
 (defn bit-uninterleave-ints ^ints [^long x]
-  (int-array [(bit-unspread-int x)
-              (bit-unspread-int (bit-shift-right x 1))]))
+  (int-array [(bit-unspread-int (bit-shift-right x 1))
+              (bit-unspread-int x)]))
 
 (defn bit-interleave-longs ^longs [^long x ^long y]
   (long-array [(bit-interleave-ints (bit-shift-right x Integer/SIZE)
