@@ -32,7 +32,8 @@
     (.history ^CruxNode (b/map->CruxNode this) eid))
 
   (status [this]
-    (-> (.status ^CruxNode (b/map->CruxNode this))
+    (-> (.status ^CruxNode (dissoc (b/map->CruxNode this)
+                                   :event-log-kv-store))
         (assoc :crux.zk/zk-active? false)))
 
   (submitTx [this tx-ops]
