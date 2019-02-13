@@ -1802,3 +1802,16 @@
                          (Integer/toUnsignedLong (aget z2s 0)))
                  (bit-or (bit-shift-left (Integer/toUnsignedLong (aget z1s 1)) Integer/SIZE)
                          (Integer/toUnsignedLong (aget z2s 1)))])))
+
+(def ^:private ^:const max-unsigned-long 18446744073709551615)
+
+(defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
+  (.add (.multiply (biginteger (aget z 0))
+                   (biginteger max-unsigned-long))
+        (biginteger (aget z 1))))
+
+(defn morton-number->interleaved-longs ^longs [^BigInteger z]
+  (let [d+r (.divideAndRemainder (biginteger z)
+                                 (biginteger max-unsigned-long))]
+    (long-array [(.longValue ^BigInteger (aget d+r 0))
+                 (.longValue ^BigInteger (aget d+r 1))])))
