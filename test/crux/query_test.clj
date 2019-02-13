@@ -1236,6 +1236,10 @@
             (t/testing "earlier submitted txs can still be checked"
               (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan))))))))))
 
+;; https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
+;; This test is based on section 7. Support for complex queries in
+;; bitemporal databases
+
 ;; p1 NY [0,3] [4,now]
 ;; p1 LA [4,now] [4,now]
 ;; p2 SFO [0,now] [0,5]
@@ -1251,68 +1255,92 @@
 ;; p6 NY [12,now] [12,now]
 ;; p7 NY [11,now] [11,now]
 
-;; on day 2 (valid time) as of day 3 (transaction time)
-;; t3, t5, t9 and t10.
-;; p2 SFO, p3 LA, p4 NY, p4 NY (?)
+;; Find all persons who are known to be present in the United States
+;; on day 2 (valid time), as of day 3 (transaction time)
+;; t2 p2 SFO, t5 p3 LA, t9 p4 NY, t10 p4 NY (?)
 
-;; https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
+    ;; Day 0, represented as #inst "2018-12-31"
     @(db/submit-tx tx-log [[:crux.tx/put :p2
                             {:crux.db/id :p2
-                             :entry-pt :SFO}
+                             :entry-pt :SFO
+                             :arrival-time #inst "2018-12-31"}
                             #inst "2018-12-31"]
                            [:crux.tx/put :p3
                             {:crux.db/id :p3
-                             :entry-pt :LA}
+                             :entry-pt :LA
+                             :arrival-time #inst "2018-12-31"}
                             #inst "2018-12-31"]])
+    ;; Day 1, nothing happens.
+    @(db/submit-tx tx-log [])
+    ;; Day 2
     @(db/submit-tx tx-log [[:crux.tx/put :p4
                             {:crux.db/id :p4
-                             :entry-pt :NY}
+                             :entry-pt :NY
+                             :arrival-time #inst "2019-01-02"}
                             #inst "2019-01-02"]])
-
+    ;; Day 3
     (let [third-day-submitted-tx @(db/submit-tx tx-log [[:crux.tx/delete :p4 #inst "2019-01-03"]])]
-      @(db/submit-tx tx-log [[:crux.tx/put :p4
-                            {:crux.db/id :p4
-                             :entry-pt :NY}
-                            #inst "2019-01-02"]])
+      ;; Day 4, correction, adding missing trip on new arrival.
       @(db/submit-tx tx-log [[:crux.tx/put :p1
                               {:crux.db/id :p1
-                               :entry-pt :LA}
+                               :entry-pt :NY
+                               :arrival-time #inst "2018-12-31"}
+                              #inst "2018-12-31"]
+                             [:crux.tx/delete :p1 #inst "2019-01-03"]
+                             [:crux.tx/put :p1
+                              {:crux.db/id :p1
+                               :entry-pt :LA
+                               :arrival-time #inst "2019-01-04"}
                               #inst "2019-01-04"]
-                             [:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :LA}
-                              #inst "2019-01-04"]])
+                             [:crux.tx/delete :p3 #inst "2019-01-04"]])
+      ;; Day 5
       @(db/submit-tx tx-log [[:crux.tx/delete :p2 #inst "2019-01-05"]])
-      @(db/submit-tx tx-log [[:crux.tx/delete :p3 #inst "2019-01-07"]])
+      ;; Day 6, nothing happens.
+      @(db/submit-tx tx-log [])
+      ;; Day 7-12, correction of deletion/departure on day 4. Shows
+      ;; how valid time cannot be the same as arrival time.
       @(db/submit-tx tx-log [[:crux.tx/put :p3
                               {:crux.db/id :p3
-                               :entry-pt :SFO}
+                               :entry-pt :LA
+                               :arrival-time #inst "2018-12-31"}
+                              #inst "2019-01-04"]
+                             [:crux.tx/delete :p3 #inst "2019-01-07"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :SFO
+                               :arrival-time #inst "2019-01-08"}
                               #inst "2019-01-08"]
                              [:crux.tx/put :p4
                               {:crux.db/id :p4
-                               :entry-pt :LA}
+                               :entry-pt :LA
+                               :arrival-time #inst "2019-01-08"}
                               #inst "2019-01-08"]])
+      @(db/submit-tx tx-log [[:crux.tx/delete :p3 #inst "2019-01-09"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p5
                               {:crux.db/id :p5
-                               :entry-pt :LA}
+                               :entry-pt :LA
+                               :arrival-time #inst "2019-01-10"}
                               #inst "2019-01-10"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p7
                               {:crux.db/id :p7
-                               :entry-pt :NY}
+                               :entry-pt :NY
+                               :arrival-time #inst "2019-01-11"}
                               #inst "2019-01-11"]])
       @(db/submit-tx tx-log [[:crux.tx/put :p6
                               {:crux.db/id :p6
-                               :entry-pt :NY}
+                               :entry-pt :NY
+                               :arrival-time #inst "2019-01-12"}
                               #inst "2019-01-12"]])
 
-      (t/is (= #{[:p2 :SFO]
-                 [:p3 :LA]
-                 [:p4 :NY]}
+      (t/is (= #{[:p2 :SFO #inst "2018-12-31"]
+                 [:p3 :LA #inst "2018-12-31"]
+                 [:p4 :NY #inst "2019-01-02"]}
                (q/q (q/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
-                    '{:find [p entry-pt]
-                      :where [[p :entry-pt entry-pt]]}))))))
+                    '{:find [p entry-pt arrival-time]
+                      :where [[p :entry-pt entry-pt]
+                              [p :arrival-time arrival-time]]}))))))
 
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
