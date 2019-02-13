@@ -93,7 +93,7 @@
 
 (defn -main []
   (try
-    #_(backup/check-and-restore crux-options backup-options)
+    (backup/check-and-restore crux-options backup-options)
     (let [port 8085]
       (with-open [crux-system (Crux/startStandaloneSystem crux-options)
 
@@ -106,8 +106,9 @@
                       (close [_]
                         ((:close l)))))]
 
-        (backup/backup-current-version crux-system crux-options backup-options)
-        (.join (Thread/currentThread))))
+        (while (not (.isInterrupted (Thread/currentThread)))
+          (Thread/sleep 5000)
+          (backup/backup-current-version crux-system crux-options backup-options))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main))

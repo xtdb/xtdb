@@ -10,15 +10,16 @@ services:
     command: lein repl :headless :host 0.0.0.0 :port 7888
     ports:
       - "7888:7888"
+      - "8085:8085"
 
     working_dir: /app
     environment:
       - AWS_PROFILE=crux
     volumes:
       # Cache maven dependencies
-      - "~/.m2:/root/.m2"
+      - "/home/patrikk/.m2:/root/.m2"
       # AWS credentials to upload s3 object
-      - "~/.aws:/root/.aws"
+      - "/home/patrikk/.aws:/root/.aws"
       # Mount the application source and target directories
       - ./:/app
       # Run maven inside the application directory

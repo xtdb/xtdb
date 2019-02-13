@@ -15,11 +15,27 @@
 
 (defn check-and-restore
   [{:keys [event-log-dir db-dir] :as system-options}
-   backup-options]
-  (when-not (or (-> event-log-dir io/file .exists)
-                (-> db-dir io/file .exists))
-    (log/info "no existing db on disk trying to restore from backup")
-    ))
+   {:keys [backup-dir] :as backup-options}]
+  (when-not (or (some-> event-log-dir io/file .exists)
+                (some-> db-dir io/file .exists))
+    (let [backup-dir (io/file backup-dir)
+          checkpoint-dir (io/file backup-dir "checkpoint-restore")]
+      (when-not (.exists backup-dir) (.mkdir backup-dir))
+      (crux-io/delete-dir checkpoint-dir)
+      (.mkdir checkpoint-dir)
+      (download-from-backend (merge backup-options {:checkpoint-dir checkpoint-dir}))
+
+      (when db-dir
+        (sh "mkdir" "-p" (.getParent (io/file db-dir)))
+        (sh "mv"
+            (.getPath (io/file checkpoint-dir "backup" "checkpoint" "kv-store"))
+            (.getPath (io/file db-dir))))
+
+      (when event-log-dir
+        (sh "mkdir" "-p" (.getParent (io/file event-log-dir)))
+        (sh "mv"
+            (.getPath (io/file checkpoint-dir "backup" "checkpoint" "event-log-kv-store"))
+            (.getPath (io/file event-log-dir)))))))
 
 (defn backup-current-version
   [{:keys [kv-store event-log-kv-store] :as crux-system}
@@ -50,7 +66,13 @@
     (when-not (= exit 0) (throw (ex-info "backup-script failed" shell-response)))))
 
 (defmethod download-from-backend :shell
-  [_ _])
+  [{:keys [checkpoint-dir backup-dir shell/restore-script]}]
+  (let [{:keys [exit] :as shell-response}
+        (sh restore-script
+            :env (merge {"CHECKPOINT_DIR" (.getPath checkpoint-dir)
+                         "BACKUP_DIR" backup-dir}
+                        (System/getenv)))]
+    (when-not (= exit 0) (throw (ex-info "restore script failed" shell-response)))))
 
 (defmethod upload-to-backend :file
   [{:keys [file/path file/replace? checkpoint-file]

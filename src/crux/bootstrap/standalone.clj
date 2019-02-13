@@ -14,7 +14,7 @@
            crux.api.ICruxSystem
            crux.bootstrap.CruxNode))
 
-(defrecord StandaloneSystem [kv-store event-log-consumer tx-log options]
+(defrecord StandaloneSystem [kv-store event-log-kv-store event-log-consumer tx-log options]
   ICruxSystem
   (db [this]
     (.db ^CruxNode (b/map->CruxNode this)))
@@ -93,6 +93,7 @@
                                  (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
                                                                                            event-log-sync-interval-ms)))]
         (map->StandaloneSystem {:kv-store kv-store
+                                :event-log-kv-store event-log-kv-store
                                 :tx-log tx-log
                                 :object-store object-store
                                 :indexer indexer
