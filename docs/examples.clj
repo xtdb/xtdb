@@ -1,9 +1,9 @@
 (ns examples)
 
 ;; tag::start-system[]
-(require '[crux.api :as api])
+(require '[crux.bootstrap.standalone :as standalone])
 
-(def system (api/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"}))
+(def system (standalone/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"}))
 ;; end::start-system[]
 
 ;; tag::close-system[]
@@ -53,12 +53,12 @@
 ;; end::ek-close[]
 
 ;; tag::ln-example[]
-(require '[crux.api :as api])
+(require '[crux.bootstrap.local-node :as local-node])
 
 (def storage-dir "dev-storage")
 (def local-node-options {:db-dir (str storage-dir "/data")
                          :bootstrap-servers "localhost:9092"})
-(def local-node (api/start-local-node local-node-options))
+(def local-node (local-node/start-local-node local-node-options))
 ;; end::ln-example[]
 
 ;; tag::ln-close[]

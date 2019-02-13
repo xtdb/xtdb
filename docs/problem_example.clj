@@ -1,5 +1,5 @@
 (ns problem-example
-  (:require [crux.api :as api]
+  (:require [crux.bootstrap.standalone :as standalone]
             [clojure.java.io :as io]
             [crux.io :as cio]
             [crux.db :as db]
@@ -10,8 +10,8 @@
 ;; This example was reported as a problem, see the last query not
 ;; returning as expected.
 
-(def system (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
-                                          :db-dir "data"}))
+(def system (standalone/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
+                                                 :db-dir "data"}))
 
 (defn kv [] (:kv-store system))
 
@@ -24,7 +24,7 @@
     :last-name "Picasso"}
    #inst "2018-05-18T09:21:27.966-00:00"]])
 
-;; PUT picasso again at a later business time with a different name
+;; PUT picasso again at a later valid time with a different name
 (def tx
   (db/submit-tx
    (tx/->KvTxLog (kv))
@@ -55,7 +55,7 @@
                [e :last-name last-name]]})
 ;;=> #{["Picasso the great"]}
 
-;; no business time i.e. "now"
+;; no valid time i.e. "now"
 ;; expected: newest version, but got first version
 (q/q (q/db (kv))
      '{:find [last-name]

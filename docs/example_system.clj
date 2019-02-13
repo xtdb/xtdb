@@ -1,6 +1,6 @@
 (ns example-system
   (:require [clojure.tools.logging :as log]
-            [crux.api :as api]
+            [crux.bootstrap.local-node :as local-node]
             [crux.http-server :as srv]
             [crux.kafka.embedded :as ek]
             [integrant.core :as ig]))
@@ -14,7 +14,7 @@
              :crux/http-server {:local-node (ig/ref :crux/local-node)}})
 
 (defmethod ig/init-key :crux/local-node [_ opts]
-  (api/start-local-node opts))
+  (local-node/start-local-node opts))
 
 (defmethod ig/halt-key! :crux/local-node [_ ^java.io.Closeable embedded-kafka]
   (.close embedded-kafka))

@@ -18,9 +18,9 @@ such as RocksDB, sharing the master data living in a master event-log
 
 == Bitemporality
 
-Crux is a bitemporal database, storing both business and
-transaction time. This enables corrections in business time at a later
-transaction time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
+Crux is a bitemporal database, storing both valid and transaction
+time. This enables corrections in valid time at a later transaction
+time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
 
 == Query
 

@@ -94,20 +94,20 @@ disk space. A smaller index also leads to more efficient queries.
 
 How does Crux deal with time?::
 
-  The business time can be set manually per transaction operation,
+  The valid time can be set manually per transaction operation,
 and might already be defined by an upstream system before reaching Crux.
 This also allows to deal with integration concerns like when a message
 queue is down and data arrives later than it should.
 +
-If not set, Crux defaults business time to the transaction time, which
+If not set, Crux defaults valid time to the transaction time, which
 is the `LogAppendTime` assigned by the Kafka broker to the transaction
 record. This time is taken from the local clock of the Kafka broker,
 which acts as the master wall clock time.
 +
 Crux does not rely on clock synchronisation or try to make any
-guarantees about business time. Assigning business time manually needs
+guarantees about valid time. Assigning valid time manually needs
 to be done with care, as there has to be either a clear owner of the
-clock, or that the exact business time ordering between different nodes
+clock, or that the exact valid time ordering between different nodes
 doesn’t strictly matter for the data where it’s used. NTP can mitigate
 this, potentially to an acceptable degree, but it cannot fully guarantee
 ordering between nodes.

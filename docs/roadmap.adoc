@@ -267,9 +267,9 @@ strategy in the first place. As the time line is only valid within a
 single `tx-topic` or shard, coordination between shards needs to happen
 using some other mechanism.
 
-In the simplest case it can be to read the latest known data, but there
-are obvious issues with this. Another approach is to require a
-consistent business time definition across shards, and always issue
-queries with a business time. While this is easy to reason about, it’s
+In the simplest case it can be to read the latest known data, but
+there are obvious issues with this. Another approach is to require a
+consistent valid time definition across shards, and always issue
+queries with a valid time. While this is easy to reason about, it’s
 hard to ensure and achieve for all the normal reasons when it comes to
 make guarantees about time in a distributed system.

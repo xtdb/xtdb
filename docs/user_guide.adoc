@@ -55,11 +55,11 @@ Crux query capability is easiest summarized via an example:
 ----
 
 The `db` is retrieved via a call to `crux.query/db` which optionally
-takes business and transaction time. The call will block until the local
+takes valid and transaction time. The call will block until the local
 index has seen the transaction time, if provided. The `crux.query/q`
 takes 2 or 3 arguments, `db` and `q` but also optionally a `snapshot`
-which is already opened and managed by the caller (using `with-open` for
-example). This version of the call returns a lazy sequence of the
+which is already opened and managed by the caller (using `with-open`
+for example). This version of the call returns a lazy sequence of the
 results, while the other verision provides a set. A snapshot can be
 retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
 
@@ -93,12 +93,12 @@ The four transaction (write) operations are as follows:
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
-The business time is optional and defaults to transaction time, which is
+The valid time is optional and defaults to transaction time, which is
 taken from the Kafka log. Crux currently writes into the past at a
 single point, so to overwrite several versions or a range in time, one
 is required to submit a transaction containing several operations.
 Eviction works a bit differently, and all versions at or before the
-provided business time are evicted.
+provided valid time are evicted.
 
 The hashes are the SHA-1 content hash of the documents. Crux uses an
 attribute `:crux.db/id` on the documents that has to line up with the id
@@ -167,7 +167,7 @@ other RDF features are available.
 |uri|method|description
 |<<#home,`/`>>|GET|returns various details about the state of the database
 |<<#document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
-|<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional business-time/transaction-time co-ordinates
+|<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
 |<<#entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
 |<<#history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
 |<<#query, `/query`>>|POST|Takes a datalog query and returns its results
@@ -223,7 +223,7 @@ NOTE: Hashes for older versions of a document can be obtained with `/history`, u
 [#entity]
 === POST `/entity`
 
-Takes a key and, optionally, a `:business-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
+Takes a key and, optionally, a `:valid-time` and/or `:valid-time` (defaulting to now). Returns the value stored under that key at those times.
 
 See <<bitemp.adoc#,bitemporality explained>> for more information.
 
@@ -244,7 +244,7 @@ curl -X POST \
 ----
 curl -X POST \
      -H "Content-Type: application/edn" \
-     -d '{:eid :tommy :business-time #inst "1999-01-08T14:03:27.254-00:00"}' \
+     -d '{:eid :tommy :valid-time #inst "1999-01-08T14:03:27.254-00:00"}' \
      $nodeURL/entity
 ----
 
@@ -256,7 +256,7 @@ nil
 [#entity-tx]
 === POST `/entity-tx`
 
-Takes a key and, optionally, `:business-time` and/or `:transact-time` (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
+Takes a key and, optionally, `:valid-time` and/or `:transact-time` (defaulting to now). Returns the `:put` or `:cas` transaction that most recently set that key at those times.
 
 See <<bitemp.adoc, #bitemporality explained>> for more information.
 
@@ -271,7 +271,7 @@ curl -X POST \
 ----
 {:crux.db/id "8843d7f92416211de9ebb963ff4ce28125932878",
  :crux.db/content-hash "7af0444315845ab3efdfbdfa516e68952c1486f2",
- :crux.db/business-time #inst "2019-01-08T16:34:47.738-00:00",
+ :crux.db/valid-time #inst "2019-01-08T16:34:47.738-00:00",
  :crux.tx/tx-id 0,
  :crux.tx/tx-time #inst "2019-01-08T16:34:47.738-00:00"}
 ----
@@ -290,7 +290,7 @@ curl -X GET $nodeURL/history/:ivan
 ----
 [{:crux.db/id "a15f8b81a160b4eebe5c84e9e3b65c87b9b2f18e",
   :crux.db/content-hash "c28f6d258397651106b7cb24bb0d3be234dc8bd1",
-  :crux.db/business-time #inst "2019-01-07T14:57:08.462-00:00",
+  :crux.db/valid-time #inst "2019-01-07T14:57:08.462-00:00",
   :crux.tx/tx-id 14,
   :crux.tx/tx-time #inst "2019-01-07T16:51:55.185-00:00"}
 

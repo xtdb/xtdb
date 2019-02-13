@@ -94,5 +94,5 @@ The Indexer writes to these indices when indexing _transactions_:
 [#table-conversion%header,cols="d,d"]
 |===
 |Implementation|Description
-|`entity+business-time+transaction-time+transaction-id`|Use for `as-of` document retrieval
+|`entity+valid-time+transaction-time+transaction-id`|Use for `as-of` document retrieval
 |===
