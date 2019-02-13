@@ -17,9 +17,9 @@ services:
       - AWS_PROFILE=crux
     volumes:
       # Cache maven dependencies
-      - "/home/patrikk/.m2:/root/.m2"
+      - "${HOME}/.m2:/root/.m2"
       # AWS credentials to upload s3 object
-      - "/home/patrikk/.aws:/root/.aws"
+      - "${HOME}/.aws:/root/.aws"
       # Mount the application source and target directories
       - ./:/app
       # Run maven inside the application directory
