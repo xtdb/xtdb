@@ -109,7 +109,7 @@
                         ((:close l)))))]
 
         (while (not (.isInterrupted (Thread/currentThread)))
-          (Thread/sleep 5000)
+          (Thread/sleep (* 1000 60 60 1)) ;; every hour
           (backup/backup-current-version crux-system crux-options backup-options))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
