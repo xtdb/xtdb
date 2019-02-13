@@ -3,25 +3,13 @@
             [crux.bootstrap.local-node :as local-node]
             [crux.http-server :as srv]
             [crux.kafka.embedded :as ek]
+            [crux.db :as db]
+            [crux.query :as q]
             [integrant.core :as ig]
             [crux.kafka :as k]))
 
 (def tx-topic-config
   {"retention.ms" (str Long/MAX_VALUE)})
-
-(comment
-  ;; Follow https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html, then try:
-
-  (let [admin-client (k/create-admin-client {"bootstrap.servers" "localhost:9092"})]
-    (println "Creating Topic")
-    (k/create-topic admin-client "foo-topic" 1 1 tx-topic-config)
-    (println "Topic Created"))
-
-  ;; Theory, the port is not exposed in the confluent setup?
-
-  ;; This validates my issue:
-  ;; https://www.e4developer.com/2018/05/20/how-to-easily-run-kafka-with-docker-for-development/
-)
 
 (def config {:crux/local-node {:db-dir "dev-storage/data"
                                :bootstrap-servers "localhost:9092"}})
@@ -32,7 +20,7 @@
 (defmethod ig/halt-key! :crux/local-node [_ ^java.io.Closeable closeable]
   (.close closeable))
 
-(def system nil)
+(declare system)
 
 (defn start-system []
   (alter-var-root #'system (fn [_] (ig/init config)))
@@ -48,9 +36,13 @@
   (start-system)
 
   (db/submit-tx
-   (:tx-log system)
+   (:tx-log (:crux/local-node system))
    [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
      {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
       :name "Pablo"
       :last-name "Picasso"}
-     #inst "2018-05-18T09:20:27.966-00:00"]]))
+     #inst "2018-05-18T09:20:27.966-00:00"]])
+
+  (q/q (q/db (:kv-store (:crux/local-node system)))
+       '{:find [e]
+         :where [[e :name "Pablo"]]}))

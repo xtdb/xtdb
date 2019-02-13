@@ -75,10 +75,11 @@ include::./examples.clj[tags=close-system]
 
 == Kafka
 
-When using Crux for real, it's recommended to use Kafka with
-Crux. This is to make use of Kafka as a replayable and consumable log,
-that Crux nodes will use for ingestion to build their local query
-indices.
+When using Crux at scale, it's recommended to configure Crux to use
+Kafka.
+
+Crux will use Kafka as a replayable and consumable transaction log,
+injesting the documents in order to build local query indices.
 
 You can setup Kafka yourself to run outside of Crux, or Crux ships
 with the option of running an embedded Kafka.
@@ -86,20 +87,25 @@ with the option of running an embedded Kafka.
 If you want to play around with Crux without using Kafka, you can try
 using Crux <<#standalone,standalone>> which uses in-memory event logs.
 
-=== Docker
+NOTE: TODO Be more explicit local-node (kafka) vs standalone
 
-An easy way to fire up a local Kafka and Zookeeper is via
-Kafka. Follow
-https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html[this
-guide] on the confluent docs for how to do this.
+=== Connecting to Kakfa
 
-NOTE: TODO complete this
+To connect to a running Kafka, simply configure the following property:
+
+[source,clj]
+----
+:bootstrap-servers "localhost:9092"
+----
+
+An easy way to fire up a local Kafka and Zookeeper for testing
+purposes is via
+https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html[Confluent's
+'single node client' guide]. Note you will need to add an additional
+argument when running the Kakfa container: `-p 9092:9092`, and edit
+your hosts file with the entry `127.0.0.1 kafka`.
 
 === Embedded Kafka
-
-NOTE: TODO, write up the simple case of connecting to a running Kakfa
-- go through the steps outlined in
-https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html
 
 Add Kafka and Zookeeper to your project dependencies:
 
