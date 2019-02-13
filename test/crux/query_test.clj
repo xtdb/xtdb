@@ -1236,6 +1236,85 @@
             (t/testing "earlier submitted txs can still be checked"
               (t/is (true? (q/submitted-tx-updated-entity? *kv* submitted-update-tx :ivan))))))))))
 
+;; p1 NY [0,3] [4,now]
+;; p1 LA [4,now] [4,now]
+;; p2 SFO [0,now] [0,5]
+;; p2 SFO [0,5] [5,now]
+;; p3 LA [0,now] [0,4]
+;; p3 LA [0,4] [4,7]
+;; p3 LA [0,7] [7,now]
+;; p3 SFO [8,0] [8,now]
+;; p4 NY [2,now] [2,3]
+;; p4 NY [2,3] [3,now]
+;; p4 LA [8,now] [8,now]
+;; p5 LA [1O,now] [1O,now]
+;; p6 NY [12,now] [12,now]
+;; p7 NY [11,now] [11,now]
+
+
+;; on day 2 (valid time) as of day 3 (transaction time)
+;; t3, t5, t9 and t10.
+;; p2 SFO, p3 LA, p4 NY, p4 NY (?)
+
+;; https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
+(t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
+  (let [tx-log (crux.tx/->KvTxLog *kv*)]
+    @(db/submit-tx tx-log [[:crux.tx/put :p2
+                            {:crux.db/id :p2
+                             :entry-pt :SFO}
+                            #inst "2018-12-31"]
+                           [:crux.tx/put :p3
+                            {:crux.db/id :p3
+                             :entry-pt :LA}
+                            #inst "2018-12-31"]])
+    @(db/submit-tx tx-log [[:crux.tx/put :p4
+                            {:crux.db/id :p4
+                             :entry-pt :NY}
+                            #inst "2019-01-02"]])
+
+    (let [third-day-submitted-tx @(db/submit-tx tx-log [[:crux.tx/delete :p4 #inst "2019-01-03"]])]
+      @(db/submit-tx tx-log [[:crux.tx/put :p4
+                            {:crux.db/id :p4
+                             :entry-pt :NY}
+                            #inst "2019-01-02"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p1
+                              {:crux.db/id :p1
+                               :entry-pt :LA}
+                              #inst "2019-01-04"]
+                             [:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :LA}
+                              #inst "2019-01-04"]])
+      @(db/submit-tx tx-log [[:crux.tx/delete :p2 #inst "2019-01-05"]])
+      @(db/submit-tx tx-log [[:crux.tx/delete :p3 #inst "2019-01-07"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p3
+                              {:crux.db/id :p3
+                               :entry-pt :SFO}
+                              #inst "2019-01-08"]
+                             [:crux.tx/put :p4
+                              {:crux.db/id :p4
+                               :entry-pt :LA}
+                              #inst "2019-01-08"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p5
+                              {:crux.db/id :p5
+                               :entry-pt :LA}
+                              #inst "2019-01-10"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p7
+                              {:crux.db/id :p7
+                               :entry-pt :NY}
+                              #inst "2019-01-11"]])
+      @(db/submit-tx tx-log [[:crux.tx/put :p6
+                              {:crux.db/id :p6
+                               :entry-pt :NY}
+                              #inst "2019-01-12"]])
+
+      (t/is (= #{[:p2 :SFO]
+                 [:p3 :LA]
+                 [:p4 :NY]}
+               (q/q (q/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
+                    '{:find [p entry-pt]
+                      :where [[p :entry-pt entry-pt]]}))))))
+
 ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
 
