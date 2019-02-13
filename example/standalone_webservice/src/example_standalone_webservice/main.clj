@@ -82,19 +82,21 @@
 (def index-dir "data/db-dir-1")
 (def log-dir "data/eventlog-1")
 
-(def crux-options {:kv-backend "crux.kv.rocksdb.RocksKv"
-                   :event-log-dir log-dir
-                   :db-dir index-dir})
+(def crux-options
+  {:kv-backend "crux.kv.rocksdb.RocksKv"
+   :event-log-dir log-dir
+   :db-dir index-dir})
 
-(def backup-options {:backup-dir "backup"
-                     :backend :shell
-                     :shell/backup-script "bin/backup.sh"
-                     :shell/restore-script "bin/restore.sh"})
+(def backup-options
+  {:backend :shell
+   :backup-dir "data/backup"
+   :shell/backup-script "bin/backup.sh"
+   :shell/restore-script "bin/restore.sh"})
 
 (defn -main []
   (try
     (backup/check-and-restore crux-options backup-options)
-    (let [port 8085]
+    (let [port 8080]
       (with-open [crux-system (Crux/startStandaloneSystem crux-options)
 
                   http-server

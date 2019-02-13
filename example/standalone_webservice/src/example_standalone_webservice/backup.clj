@@ -20,6 +20,8 @@
                 (some-> db-dir io/file .exists))
     (let [backup-dir (io/file backup-dir)
           checkpoint-dir (io/file backup-dir "checkpoint-restore")]
+      (log/infof "no data attempting restore from backup"
+                 (.getPath checkpoint-dir))
       (when-not (.exists backup-dir) (.mkdir backup-dir))
       (crux-io/delete-dir checkpoint-dir)
       (.mkdir checkpoint-dir)
@@ -54,7 +56,8 @@
         (kv/backup event-log-kv-store (io/file checkpoint-dir "event-log-kv-store")))
 
       (upload-to-backend
-        (merge backup-options {:checkpoint-dir checkpoint-dir})))))
+        (merge backup-options {:checkpoint-dir checkpoint-dir}))
+      (crux-io/delete-dir checkpoint-dir))))
 
 (defmethod upload-to-backend :shell
   [{:keys [checkpoint-dir backup-dir shell/backup-script]}]

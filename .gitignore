@@ -21,3 +21,5 @@ target
 /dev/hraberg.clj
 
 /example/standalone_webservice/data/*
+/example/standalone_webservice/.nrepl-port
+/example/standalone_webservice/backup/**/*
