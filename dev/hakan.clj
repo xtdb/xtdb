@@ -1760,6 +1760,9 @@
 
 ;; Z-curve spike, not fully tested.
 
+(defn long->binary-str [^long x]
+  (.replace (format "%64s" (Long/toBinaryString x)) \space \0))
+
 ;; http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
 (defn bit-spread-int ^long [^long x]
   (let [x (bit-and (bit-or x (bit-shift-left x 16)) 0x0000ffff0000ffff)
@@ -1793,9 +1796,7 @@
                                     (bit-and (Integer/toUnsignedLong -1) y))]))
 
 (defn bit-uninterleave-longs ^longs [^longs z]
-  (let [z1 (aget z 0)
-        z2 (aget z 1)]
-    (long-array [(bit-or (bit-and z1 0x5555555555555555)
-                         (bit-shift-right (bit-and z2 (.longValue 0xaaaaaaaaaaaaaaaa)) 1))
-                 (bit-or (bit-shift-left (bit-and z2 (.longValue 0xaaaaaaaaaaaaaaaa)) 1)
-                         (bit-and z1 0x5555555555555555))])))
+  (let [z1s ^ints (bit-uninterleave-ints (aget z 0))
+        z2s ^ints (bit-uninterleave-ints (aget z 1))]
+    (long-array [(bit-or (bit-shift-left (aget z1s 0) Integer/SIZE) (aget z2s 0))
+                 (bit-or (bit-shift-left (aget z1s 1) Integer/SIZE) (aget z2s 1))])))
