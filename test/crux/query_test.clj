@@ -1251,7 +1251,6 @@
 ;; p6 NY [12,now] [12,now]
 ;; p7 NY [11,now] [11,now]
 
-
 ;; on day 2 (valid time) as of day 3 (transaction time)
 ;; t3, t5, t9 and t10.
 ;; p2 SFO, p3 LA, p4 NY, p4 NY (?)
