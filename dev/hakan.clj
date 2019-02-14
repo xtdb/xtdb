@@ -1840,7 +1840,7 @@
          bigmin 0
          start start
          end end]
-    (if (= -1 n)
+    (if (zero? n)
       (long-array [litmax bigmin])
       (let [n (dec n)
             bits (inc (unsigned-bit-shift-right n 1))
@@ -1946,7 +1946,7 @@
            bigmin BigInteger/ZERO
            start start
            end end]
-      (if (= -1 n)
+      (if (zero? n)
         [litmax bigmin]
         (let [n (dec n)
               bits (inc (unsigned-bit-shift-right n 1))
