@@ -1811,13 +1811,20 @@
 ;; clear in the paper how one actually makes that step. If they did
 ;; work, this should be enough for the int case, but we need longs.
 
+;; There are tests seemingly related to the paper here, but they don't
+;; show the relation between z and h:
+;; https://github.com/tzaeschke/phtree/blob/master/src/test/java/ch/ethz/globis/phtree/bits/TestIncSuccessor.java
+
 ;; isInI
 (defn within-range-ints? [^long start ^long end ^long z]
   (= (bit-and (bit-or z start) end) z))
 
 ;; inc, z has to already be in range.
 (defn next-in-range [^long start ^long end ^long z]
-  (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start))
+  (let [next-z (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start)]
+    (if (<= next-z z)
+      -1
+      next-z)))
 
 ;; succ, z can be anywhere.
 (defn next-within-range [^long start ^long end ^long z]
@@ -1827,7 +1834,7 @@
         next-z (bit-or z (bit-not end))
         next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
         next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
-    (bit-or (bit-and next-z end) end)))
+    (bit-or (bit-and next-z end) start)))
 
 ;; range 27-102, given 58 should return litmax 55 and bigmin 74.
 ;; We might only need one of them, as we're following a line, not
