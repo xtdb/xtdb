@@ -1899,7 +1899,89 @@
   (assert (Arrays/equals (long-array [55 74])
                          ^longs (hakan/zdiv 27 102 58))))
 
-(def ^:private ^:const max-unsigned-long 18446744073709551615)
+(def ^:private ^:const max-unsigned-long (biginteger 18446744073709551615))
+
+(def ^BigInteger biginteger-max-mask (biginteger 0xffffffffffffffffffffffffffffffff))
+(def ^:const biginteger-bits Long/SIZE)
+
+(defn biginteger-bits-over ^BigInteger [^long x]
+  (.shiftLeft BigInteger/ONE (dec x)))
+
+(defn biginteger-bits-under ^BigInteger [^long x]
+  (.subtract (.shiftLeft BigInteger/ONE (dec x)) BigInteger/ONE))
+
+(defn biginteger-bit-spread ^BigInteger [^BigInteger x]
+  (let [l1 (biginteger (bit-spread-int (.intValue x)))
+        l2 (biginteger (bit-spread-int (.intValue (.shiftRight x Integer/SIZE))))
+        l3 (biginteger (bit-spread-int (.intValue (.shiftRight x (* 2 Integer/SIZE)))))
+        l4 (biginteger (bit-spread-int (.intValue (.shiftRight x (* 3 Integer/SIZE)))))]
+    (.or (.shiftLeft l4 (* 3 Long/SIZE))
+         (.or (.shiftLeft l3 (* 2 Long/SIZE))
+              (.or (.shiftLeft l2 Long/SIZE)
+                   l1)))))
+
+(defn biginteger-bit-unspread ^BigInteger [^BigInteger x]
+  (let [l1 (biginteger (bit-unspread-int (.longValue x)))
+        l2 (biginteger (bit-unspread-int (.longValue (.shiftRight x Long/SIZE))))
+        l3 (biginteger (bit-unspread-int (.longValue (.shiftRight x (* 2 Long/SIZE)))))
+        l4 (biginteger (bit-unspread-int (.longValue (.shiftRight x (* 3 Long/SIZE)))))]
+    (.or (.shiftLeft l4 (* 3 Integer/SIZE))
+         (.or (.shiftLeft l3 (* 2 Integer/SIZE))
+              (.or (.shiftLeft l2 Integer/SIZE)
+                   l1)))))
+
+;; TODO: About 3-4 times slower than primitive version.
+
+(defn biginteger-zload ^BigInteger [^BigInteger z ^BigInteger load ^long bits ^long dim]
+  (let [mask (.not (.shiftLeft (biginteger-bit-spread (.shiftRight biginteger-max-mask (- biginteger-bits bits))) dim))]
+    (.or (.and z mask)
+         (.shiftLeft (biginteger-bit-spread load) dim))))
+
+(defn biginteger-zdiv [^Number start ^Number end ^Number z]
+  (let [start (biginteger start)
+        end (biginteger end)
+        z (biginteger z)]
+    (loop [n (bit-shift-left Long/SIZE 1)
+           litmax BigInteger/ZERO
+           bigmin BigInteger/ZERO
+           start start
+           end end]
+      (if (= -1 n)
+        [litmax bigmin]
+        (let [n (dec n)
+              bits (inc (unsigned-bit-shift-right n 1))
+              dim (bit-and n 1)
+              zb (if (.testBit z n) 1 0)
+              sb (if (.testBit start n) 1 0)
+              eb (if (.testBit end n) 1 0)]
+          (cond
+            (and (= 0 zb) (= 0 sb) (= 0 eb))
+            (recur n litmax bigmin start end)
+
+            (and (= 0 zb) (= 0 sb) (= 1 eb))
+            (recur n litmax (biginteger-zload start (biginteger-bits-over bits) bits dim) start (biginteger-zload end (biginteger-bits-under bits) bits dim))
+
+            (and (= 0 zb) (= 1 sb) (= 0 eb))
+            (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (0 1 0)"))
+
+            (and (= 0 zb) (= 1 sb) (= 1 eb))
+            [litmax start]
+
+            (and (= 1 zb) (= 0 sb) (= 0 eb))
+            [end bigmin]
+
+            (and (= 1 zb) (= 0 sb) (= 1 eb))
+            (recur n (biginteger-zload end (biginteger-bits-under bits) bits dim) bigmin (biginteger-zload start (biginteger-bits-over bits) bits dim) end)
+
+            (and (= 1 zb) (= 1 sb) (= 0 eb))
+            (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (1 1 0)"))
+
+            (and (= 1 zb) (= 1 sb) (= 1 eb))
+            (recur n litmax bigmin start end)))))))
+
+(comment
+  (assert (= [15 36] (hakan/biginteger-zdiv 12 45 19)))
+  (assert (= [55 74] (hakan/biginteger-zdiv 27 102 58))))
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
   (.add (.multiply (biginteger (aget z 0))
