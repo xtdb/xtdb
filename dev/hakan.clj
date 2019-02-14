@@ -1803,6 +1803,117 @@
                  (bit-or (bit-shift-left (Integer/toUnsignedLong (aget z1s 1)) Integer/SIZE)
                          (Integer/toUnsignedLong (aget z2s 1)))])))
 
+;; TODO: Try
+;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
+
+;; NOTE: these don't work, they should operate on the "h" path into
+;; the tree somehow, which is z chopped up in k (2) bits. It's not
+;; clear in the paper how one actually makes that step. If they did
+;; work, this should be enough for the int case, but we need longs.
+
+;; isInI
+(defn within-range-ints? [^long start ^long end ^long z]
+  (= (bit-and (bit-or z start) end) z))
+
+;; inc, z has to already be in range.
+(defn next-in-range [^long start ^long end ^long z]
+  (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start))
+
+;; succ, z can be anywhere.
+(defn next-within-range [^long start ^long end ^long z]
+  (let [mask-start (dec (Long/highestOneBit (bit-or (bit-and (bit-not z) start) 1)))
+        end-high-bit (Long/highestOneBit (bit-or (bit-and z (bit-not end)) 1))
+        mask-end (dec end-high-bit)
+        next-z (bit-or z (bit-not end))
+        next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
+        next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
+    (bit-or (bit-and next-z end) end)))
+
+;; range 27-102, given 58 should return litmax 55 and bigmin 74.
+;; We might only need one of them, as we're following a line, not
+;; doing a range search.
+
+;; From https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
+;; Apache License
+
+;; MAX_DIM is 2, z are long
+  ;; def zdivide(p: Z2, rmin: Z2, rmax: Z2): (Z2, Z2) = {
+  ;;   val (litmax,bigmin) = zdiv(load, MAX_DIM)(p.z, rmin.z, rmax.z)
+  ;;   (new Z2(litmax), new Z2(bigmin))
+  ;; }
+
+;; split is bit-spread-in, MAX_MASK = 0x7fffffff
+  ;; /** Loads either 1000... or 0111... into starting at given bit index of a given dimention */
+  ;; def load(target: Long, p: Long, bits: Int, dim: Int): Long = {
+  ;;   val mask = ~(Z2.split(MAX_MASK >> (MAX_BITS-bits)) << dim)
+  ;;   val wiped = target & mask
+  ;;   wiped | (split(p) << dim)
+;; }
+
+  ;; /**
+  ;;  * Implements the the algorithm defined in: Tropf paper to find:
+  ;;  * LITMAX: maximum z-index in query range smaller than current point, xd
+  ;;  * BIGMIN: minimum z-index in query range greater than current point, xd
+  ;;  *
+  ;;  * @param load: function that knows how to load bits into appropraite dimention of a z-index
+  ;;  * @param xd: z-index that is outside of the query range
+  ;;  * @param rmin: minimum z-index of the query range, inclusive
+  ;;  * @param rmax: maximum z-index of the query range, inclusive
+  ;;  * @return (LITMAX, BIGMIN)
+  ;;  */
+  ;; def zdiv(load: (Long, Long, Int, Int) => Long, dims: Int)(xd: Long, rmin: Long, rmax: Long): (Long, Long) = {
+  ;;   require(rmin < rmax, "min ($rmin) must be less than max $(rmax)")
+  ;;   var zmin: Long = rmin
+  ;;   var zmax: Long = rmax
+  ;;   var bigmin: Long = 0L
+  ;;   var litmax: Long = 0L
+
+  ;;   def bit(x: Long, idx: Int) = {
+  ;;     ((x & (1L << idx)) >> idx).toInt
+  ;;   }
+  ;;   def over(bits: Long)  = (1L << (bits-1))
+  ;;   def under(bits: Long) = (1L << (bits-1)) - 1
+
+  ;;   var i = 64
+  ;;   while (i > 0) {
+  ;;     i -= 1
+
+  ;;     val bits = i/dims+1
+  ;;     val dim  = i%dims
+
+  ;;     ( bit(xd, i), bit(zmin, i), bit(zmax, i) ) match {
+  ;;       case (0, 0, 0) =>
+  ;;         // continue
+
+  ;;       case (0, 0, 1) =>
+  ;;         zmax   = load(zmax, under(bits), bits, dim)
+  ;;         bigmin = load(zmin, over(bits), bits, dim)
+
+  ;;       case (0, 1, 0) =>
+  ;;         // sys.error(s"Not possible, MIN <= MAX, (0, 1, 0)  at index $i")
+
+  ;;       case (0, 1, 1) =>
+  ;;         bigmin = zmin
+  ;;         return (litmax, bigmin)
+
+  ;;       case (1, 0, 0) =>
+  ;;         litmax = zmax
+  ;;         return (litmax, bigmin)
+
+  ;;       case (1, 0, 1) =>
+  ;;         litmax = load(zmax, under(bits), bits, dim)
+  ;;         zmin = load(zmin, over(bits), bits, dim)
+
+  ;;       case (1, 1, 0) =>
+  ;;         // sys.error(s"Not possible, MIN <= MAX, (1, 1, 0) at index $i")
+
+  ;;       case (1, 1, 1) =>
+  ;;         // continue
+  ;;     }
+  ;;   }
+  ;;   (litmax, bigmin)
+  ;; }
+
 (def ^:private ^:const max-unsigned-long 18446744073709551615)
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
