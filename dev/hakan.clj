@@ -2031,15 +2031,12 @@
 
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
-  (.add (.multiply (biginteger (aget z 0))
-                   (biginteger max-unsigned-long))
+  (.or (.shiftLeft (biginteger (aget z 0)) Long/SIZE)
         (biginteger (aget z 1))))
 
 (defn morton-number->interleaved-longs ^longs [^BigInteger z]
-  (let [d+r (.divideAndRemainder (biginteger z)
-                                 (biginteger max-unsigned-long))]
-    (long-array [(.longValue ^BigInteger (aget d+r 0))
-                 (.longValue ^BigInteger (aget d+r 1))])))
+  (long-array [(.longValue (.shiftRight z Long/SIZE))
+               (.longValue z)]))
 
 ;; TODO: Try
 ;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
