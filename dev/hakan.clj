@@ -2000,6 +2000,10 @@
 ;; pivot point is assumed to be the middle? Note that we might not
 ;; need both litmax and bigmin. This is true for all implementations.
 
+;; I think this might implement the building block to execute the
+;; range search algorithm on left hand side of page 75 in
+;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
+
 (defn morton-get-next-address [^Number min ^Number max]
   (let [min (biginteger min)
         max (biginteger max)
