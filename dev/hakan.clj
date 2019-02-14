@@ -1804,39 +1804,6 @@
                  (bit-or (bit-shift-left (Integer/toUnsignedLong (aget z1s 1)) Integer/SIZE)
                          (Integer/toUnsignedLong (aget z2s 1)))])))
 
-;; TODO: Try
-;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
-
-;; NOTE: these don't work, they should operate on the "h" path into
-;; the tree somehow, which is z chopped up in k (2) bits. It's not
-;; clear in the paper how one actually makes that step. If they did
-;; work, this should be enough for the int case, but we need longs.
-
-;; There are tests seemingly related to the paper here, but they don't
-;; show the relation between z and h:
-;; https://github.com/tzaeschke/phtree/blob/master/src/test/java/ch/ethz/globis/phtree/bits/TestIncSuccessor.java
-
-;; isInI
-(defn within-range-ints? [^long start ^long end ^long z]
-  (= (bit-and (bit-or z start) end) z))
-
-;; inc, z has to already be in range.
-(defn next-in-range [^long start ^long end ^long z]
-  (let [next-z (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start)]
-    (if (<= next-z z)
-      -1
-      next-z)))
-
-;; succ, z can be anywhere.
-(defn next-within-range [^long start ^long end ^long z]
-  (let [mask-start (dec (Long/highestOneBit (bit-or (bit-and (bit-not z) start) 1)))
-        end-high-bit (Long/highestOneBit (bit-or (bit-and z (bit-not end)) 1))
-        mask-end (dec end-high-bit)
-        next-z (bit-or z (bit-not end))
-        next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
-        next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
-    (bit-or (bit-and next-z end) start)))
-
 ;; range 27-102 (3,5)-(5,10), given 58 (7,4) should return litmax 55 (5,7) and bigmin 74 (3,8).
 ;; range 12-45 (2,2)-(6,3), given 19 (1,5) should return litmax 15 and bigmin 36.
 ;; We might only need one of them, as we're following a line, not
@@ -1932,7 +1899,6 @@
   (assert (Arrays/equals (long-array [55 74])
                          ^longs (hakan/zdiv 27 102 58))))
 
-
 (def ^:private ^:const max-unsigned-long 18446744073709551615)
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
@@ -1945,3 +1911,36 @@
                                  (biginteger max-unsigned-long))]
     (long-array [(.longValue ^BigInteger (aget d+r 0))
                  (.longValue ^BigInteger (aget d+r 1))])))
+
+;; TODO: Try
+;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
+
+;; NOTE: these don't work, they should operate on the "h" path into
+;; the tree somehow, which is z chopped up in k (2) bits. It's not
+;; clear in the paper how one actually makes that step. If they did
+;; work, this should be enough for the int case, but we need longs.
+
+;; There are tests seemingly related to the paper here, but they don't
+;; show the relation between z and h:
+;; https://github.com/tzaeschke/phtree/blob/master/src/test/java/ch/ethz/globis/phtree/bits/TestIncSuccessor.java
+
+;; isInI
+(defn within-range-ints? [^long start ^long end ^long z]
+  (= (bit-and (bit-or z start) end) z))
+
+;; inc, z has to already be in range.
+(defn next-in-range [^long start ^long end ^long z]
+  (let [next-z (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start)]
+    (if (<= next-z z)
+      -1
+      next-z)))
+
+;; succ, z can be anywhere.
+(defn next-within-range [^long start ^long end ^long z]
+  (let [mask-start (dec (Long/highestOneBit (bit-or (bit-and (bit-not z) start) 1)))
+        end-high-bit (Long/highestOneBit (bit-or (bit-and z (bit-not end)) 1))
+        mask-end (dec end-high-bit)
+        next-z (bit-or z (bit-not end))
+        next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
+        next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
+    (bit-or (bit-and next-z end) start)))
