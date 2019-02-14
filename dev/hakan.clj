@@ -3,7 +3,8 @@
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [crux.rdf :as rdf])
-  (:import [org.ejml.data DMatrix DMatrixRMaj
+  (:import java.util.Arrays
+           [org.ejml.data DMatrix DMatrixRMaj
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
            [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
@@ -1836,90 +1837,101 @@
         next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
     (bit-or (bit-and next-z end) start)))
 
-;; range 27-102, given 58 should return litmax 55 and bigmin 74.
+;; range 27-102 (3,5)-(5,10), given 58 (7,4) should return litmax 55 (5,7) and bigmin 74 (3,8).
+;; range 12-45 (2,2)-(6,3), given 19 (1,5) should return litmax 15 and bigmin 36.
 ;; We might only need one of them, as we're following a line, not
 ;; doing a range search.
 
 ;; From https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
 ;; Apache License
 
-;; MAX_DIM is 2, z are long
-  ;; def zdivide(p: Z2, rmin: Z2, rmax: Z2): (Z2, Z2) = {
-  ;;   val (litmax,bigmin) = zdiv(load, MAX_DIM)(p.z, rmin.z, rmax.z)
-  ;;   (new Z2(litmax), new Z2(bigmin))
-  ;; }
+;; NOTE: Only handles two ints stored in one long for now.  While
+;; based on the code above, its all ultimately based on this paper and
+;; the decision tables on page 76:
+;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
-;; split is bit-spread-in, MAX_MASK = 0x7fffffff
-  ;; /** Loads either 1000... or 0111... into starting at given bit index of a given dimention */
-  ;; def load(target: Long, p: Long, bits: Int, dim: Int): Long = {
-  ;;   val mask = ~(Z2.split(MAX_MASK >> (MAX_BITS-bits)) << dim)
-  ;;   val wiped = target & mask
-  ;;   wiped | (split(p) << dim)
-;; }
+(defn bit-at ^long [^long x ^long n]
+  (bit-and (unsigned-bit-shift-right x n) 1))
 
-  ;; /**
-  ;;  * Implements the the algorithm defined in: Tropf paper to find:
-  ;;  * LITMAX: maximum z-index in query range smaller than current point, xd
-  ;;  * BIGMIN: minimum z-index in query range greater than current point, xd
-  ;;  *
-  ;;  * @param load: function that knows how to load bits into appropraite dimention of a z-index
-  ;;  * @param xd: z-index that is outside of the query range
-  ;;  * @param rmin: minimum z-index of the query range, inclusive
-  ;;  * @param rmax: maximum z-index of the query range, inclusive
-  ;;  * @return (LITMAX, BIGMIN)
-  ;;  */
-  ;; def zdiv(load: (Long, Long, Int, Int) => Long, dims: Int)(xd: Long, rmin: Long, rmax: Long): (Long, Long) = {
-  ;;   require(rmin < rmax, "min ($rmin) must be less than max $(rmax)")
-  ;;   var zmin: Long = rmin
-  ;;   var zmax: Long = rmax
-  ;;   var bigmin: Long = 0L
-  ;;   var litmax: Long = 0L
+(defn bits-over ^long [^long x]
+  (bit-shift-left 1 (dec x)))
 
-  ;;   def bit(x: Long, idx: Int) = {
-  ;;     ((x & (1L << idx)) >> idx).toInt
-  ;;   }
-  ;;   def over(bits: Long)  = (1L << (bits-1))
-  ;;   def under(bits: Long) = (1L << (bits-1)) - 1
+(defn bits-under ^long [^long x]
+  (dec (bit-shift-left 1 (dec x))))
 
-  ;;   var i = 64
-  ;;   while (i > 0) {
-  ;;     i -= 1
+(def ^:const max-mask 0x7fffffff)
+(def ^:const max-bits (dec Integer/SIZE))
 
-  ;;     val bits = i/dims+1
-  ;;     val dim  = i%dims
+(defn zload ^long [^long z ^long load ^long bits ^long dim]
+  (let [mask (bit-not (bit-shift-left (bit-spread-int (unsigned-bit-shift-right max-mask (- max-bits bits))) dim))]
+    (bit-or (bit-and z mask)
+            (bit-shift-left (bit-spread-int load) dim))))
 
-  ;;     ( bit(xd, i), bit(zmin, i), bit(zmax, i) ) match {
+(defn zdiv ^longs [^long start ^long end ^long z]
+  (loop [n Long/SIZE
+         litmax 0
+         bigmin 0
+         start start
+         end end]
+    (if (= -1 n)
+      (long-array [litmax bigmin])
+      (let [n (dec n)
+            bits (inc (unsigned-bit-shift-right n 1))
+            dim (bit-and n 1)
+            zb (bit-at z n)
+            sb (bit-at start n)
+            eb (bit-at end n)]
+        (cond
   ;;       case (0, 0, 0) =>
   ;;         // continue
+          (and (= 0 zb) (= 0 sb) (= 0 eb))
+          (recur n litmax bigmin start end)
 
   ;;       case (0, 0, 1) =>
   ;;         zmax   = load(zmax, under(bits), bits, dim)
   ;;         bigmin = load(zmin, over(bits), bits, dim)
+          (and (= 0 zb) (= 0 sb) (= 1 eb))
+          (recur n litmax (zload start (bits-over bits) bits dim) start (zload end (bit-under bits) bits dim))
 
   ;;       case (0, 1, 0) =>
   ;;         // sys.error(s"Not possible, MIN <= MAX, (0, 1, 0)  at index $i")
+          (and (= 0 zb) (= 1 sb) (= 0 eb))
+          (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (0 1 0)"))
 
   ;;       case (0, 1, 1) =>
   ;;         bigmin = zmin
   ;;         return (litmax, bigmin)
+          (and (= 0 zb) (= 1 sb) (= 1 eb))
+          (long-array [litmax start])
 
   ;;       case (1, 0, 0) =>
   ;;         litmax = zmax
   ;;         return (litmax, bigmin)
+          (and (= 1 zb) (= 0 sb) (= 0 eb))
+          (long-array [end bigmin])
 
   ;;       case (1, 0, 1) =>
   ;;         litmax = load(zmax, under(bits), bits, dim)
   ;;         zmin = load(zmin, over(bits), bits, dim)
+          (and (= 1 zb) (= 0 sb) (= 1 eb))
+          (recur n (zload end (bits-under bits) bits dim) bigmin (zload start (bit-over bits) bits dim) end)
 
   ;;       case (1, 1, 0) =>
   ;;         // sys.error(s"Not possible, MIN <= MAX, (1, 1, 0) at index $i")
+          (and (= 1 zb) (= 1 sb) (= 0 eb))
+          (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (1 1 0)"))
 
   ;;       case (1, 1, 1) =>
   ;;         // continue
-  ;;     }
-  ;;   }
-  ;;   (litmax, bigmin)
-  ;; }
+          (and (= 1 zb) (= 1 sb) (= 1 eb))
+          (recur n litmax bigmin start end))))))
+
+(comment
+  (assert (Arrays/equals (long-array [15 36])
+                         ^longs (hakan/zdiv 12 45 19)))
+  (assert (Arrays/equals (long-array [55 74])
+                         ^longs (hakan/zdiv 27 102 58))))
+
 
 (def ^:private ^:const max-unsigned-long 18446744073709551615)
 
