@@ -1858,7 +1858,7 @@
   ;;         zmax   = load(zmax, under(bits), bits, dim)
   ;;         bigmin = load(zmin, over(bits), bits, dim)
           (and (= 0 zb) (= 0 sb) (= 1 eb))
-          (recur n litmax (zload start (bits-over bits) bits dim) start (zload end (bit-under bits) bits dim))
+          (recur n litmax (zload start (bits-over bits) bits dim) start (zload end (bits-under bits) bits dim))
 
   ;;       case (0, 1, 0) =>
   ;;         // sys.error(s"Not possible, MIN <= MAX, (0, 1, 0)  at index $i")
@@ -1881,7 +1881,7 @@
   ;;         litmax = load(zmax, under(bits), bits, dim)
   ;;         zmin = load(zmin, over(bits), bits, dim)
           (and (= 1 zb) (= 0 sb) (= 1 eb))
-          (recur n (zload end (bits-under bits) bits dim) bigmin (zload start (bit-over bits) bits dim) end)
+          (recur n (zload end (bits-under bits) bits dim) bigmin (zload start (bits-over bits) bits dim) end)
 
   ;;       case (1, 1, 0) =>
   ;;         // sys.error(s"Not possible, MIN <= MAX, (1, 1, 0) at index $i")
@@ -1982,6 +1982,49 @@
 (comment
   (assert (= [15 36] (hakan/biginteger-zdiv 12 45 19)))
   (assert (= [55 74] (hakan/biginteger-zdiv 27 102 58))))
+
+;; NOTE: Based on
+;; https://github.com/hadeaninc/libzinc/blob/master/libzinc/AABB.hh
+;; This file and project lacks license.
+
+(def ^BigInteger morton-2-x-mask (biginteger 0x55555555555555555555555555555555))
+
+;; NOTE: 51,193 should return 107,145. So this is like calling zdiv
+;; with the mid point of min and max (122 in this case). That is, this
+;; algorithm divides space in two parts. One can keep walking parts of
+;; the curve by updating max to litmax or min to bigmin.
+
+;; This is 3-4x faster (and a bit smaller - but have no explanation of
+;; it, but might be possible to figure out by some tracing) than
+;; biginteger-zdiv above, but might not be enough to be usable, as the
+;; pivot point is assumed to be the middle? Note that we might not
+;; need both litmax and bigmin. This is true for all implementations.
+
+(defn morton-get-next-address [^Number min ^Number max]
+  (let [min (biginteger min)
+        max (biginteger max)
+        litmax max
+        bigmin min
+        index (- (inc (* 2 Long/SIZE)) (- (* 2 Long/SIZE) (.bitLength (.xor min max))))
+        mask (.not (.subtract (.shiftLeft BigInteger/ONE (bit-shift-right index 1)) BigInteger/ONE))
+        inc (.shiftLeft BigInteger/ONE (dec (bit-shift-right index 1)))
+        index (rem index 2)
+
+        part (.add (.and ^BigInteger (biginteger-bit-unspread (.shiftRight min index)) mask) inc)
+        bigmin (.and bigmin (.not (.shiftLeft morton-2-x-mask index)))
+        bigmin (.or bigmin (.shiftLeft (biginteger-bit-spread part) index))
+
+        part (.subtract part BigInteger/ONE)
+        litmax (.and litmax (.not (.shiftLeft morton-2-x-mask index)))
+        litmax (.or litmax (.shiftLeft (biginteger-bit-spread part) index))]
+    [litmax bigmin]))
+
+(comment
+  (assert (= [107 145] (morton-get-next-address 51 193)))
+  (assert (= [63 98] (morton-get-next-address 51 107)))
+  (assert (= [99 104] (morton-get-next-address 98 107)))
+  (assert (= [149 192] (morton-get-next-address 145 193))))
+
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
   (.add (.multiply (biginteger (aget z 0))
