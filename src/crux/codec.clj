@@ -401,7 +401,7 @@
   (^org.agrona.MutableDirectBuffer[b attr v]
    (encode-attribute+value+entity+content-hash-key-to b attr v empty-buffer empty-buffer))
   (^org.agrona.MutableDirectBuffer[b attr v entity]
-   (encode-attribute+value+entity+content-hash-key-to b attr v entity  empty-buffer))
+   (encode-attribute+value+entity+content-hash-key-to b attr v entity empty-buffer))
   (^org.agrona.MutableDirectBuffer
    [^MutableDirectBuffer b ^DirectBuffer attr ^DirectBuffer v ^DirectBuffer entity ^DirectBuffer content-hash]
    (assert (= id-size (.capacity attr)))
