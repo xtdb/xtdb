@@ -1,0 +1,142 @@
+body {
+    width: 980px;
+    margin-left: auto;
+    margin-right: auto;
+    font-family: sans-serif;
+}
+
+a {
+    color: #d67214
+}
+
+fieldset {
+    border: none;
+    padding: 0;
+    margin-bottom: 0.2em;
+}
+
+form {
+    padding-bottom: 1em;
+}
+
+label {
+    font-weight: bold;
+}
+
+input, textarea, select {
+    border: 1px solid grey;
+    border-radius: 3px;
+    background: transparent;
+    margin: 0.2em;
+    padding: 0.2em;
+}
+
+input[type=submit] {
+    border: 1.5px solid grey;
+    padding-left: 1em;
+    padding-right: 1em;
+    font-size: 80%;
+}
+
+input[type=submit]:hover,
+input[type=button]:hover {
+    background: #ddd;
+    border: 1.5px solid black;
+    cursor: pointer;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    padding-bottom: 0.4em;
+    border-bottom: 1px solid lightgrey;
+}
+
+h4 small {
+    padding: 0.2em;
+    color: grey;
+    display: block;
+}
+
+label {
+    padding-top: 0.5em;
+    padding-bottom: 0.5em;
+    display: block;
+}
+
+footer {
+    border-top: 1.5px solid grey;
+    margin-top: 5em;
+    padding: 1em;
+    text-align: center;
+}
+
+.comments dl {
+    margin: 0;
+    margin-bottom: 0.2em;
+}
+
+.comments dl dt, .comments dl dd {
+    color: grey;
+    font-size: 80%;
+    display: inline-block;
+    margin: 0;
+    margin-right: 0.2em;
+}
+
+.comments dl dd {
+    color: black;
+    margin-right: 1em;
+}
+
+.comments ul {
+    padding: 0;
+}
+
+.comments li {
+    padding-bottom: 0.5em;
+    list-style: none;
+}
+
+.comments form.edit-comment {
+    width: auto;
+    padding-bottom: 0;
+}
+
+.comments form.edit-comment fieldset {
+    margin-bottom: 0;
+}
+
+.comments .edit-comment textarea {
+    background: #eee;
+    border: 1px solid transparent;
+    cursor: default;
+    resize: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    height: 3em;
+}
+
+.comments .edit-comment:hover textarea {
+    border: 1px solid grey;
+    cursor: text;
+}
+
+.comments .edit-comment input {
+    visibility: hidden;
+}
+
+.comments .edit-comment:hover input[type=submit] {
+    visibility: visible;
+}
+
+.transaction-history table {
+    width: 100%;
+    border-spacing: 0;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.transaction-history table td {
+    padding-top: 0.5em;
+    vertical-align: top;
+}
