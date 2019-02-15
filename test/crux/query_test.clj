@@ -1158,16 +1158,18 @@
 
 ;; TODO: This test doesn't manage to reproduce the bug.
 (t/deftest test-or-bug-146
-  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :extra "Petr"}
-                            {:crux.db/id :oleg :name "Oleg" :extra #inst "1980"}
-                            {:crux.db/id :petr :name "Petr"}])
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :extra "Petr" :age 20}
+                            {:crux.db/id :oleg :name "Oleg" :extra #inst "1980" :age 30}
+                            {:crux.db/id :petr :name "Petr" :age 40}])
 
   (t/testing "Or with non existing attribute in one leg and different types "
-    (t/is (= #{["Ivan" "Petr"]
-               ["Oleg" #inst "1980"]
-               ["Petr" :none]}
-             (q/q (q/db *kv*) '{:find [n x]
+    (t/is (= #{["Ivan" "Petr" 20 :ivan]
+               ["Oleg" #inst "1980" 30 :oleg]
+               ["Petr" :none 40 :petr]}
+             (q/q (q/db *kv*) '{:find [n x a e]
                                 :where [[e :name n]
+                                        [e :age a]
+                                        [e :crux.db/id e]
                                         (or-join [e x]
                                                  [e :extra x]
                                                  (and [(identity :none) x]
