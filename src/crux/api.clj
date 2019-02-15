@@ -32,14 +32,13 @@
 
 (extend-protocol PCruxSystem
   ICruxSystem
-  (db [this]
-    (.db this))
-
-  (db [this ^Date valid-time]
-    (.db this valid-time))
-
-  (db [this ^Date valid-time ^Date transaction-time]
-    (.db this valid-time transaction-time))
+  (db
+    ([this]
+     (.db this))
+    ([this ^Date valid-time]
+     (.db this valid-time))
+    ([this ^Date valid-time ^Date transaction-time]
+     (.db this valid-time transaction-time)))
 
   (document [this content-hash]
     (.document this content-hash))
@@ -98,11 +97,11 @@
   (new-snapshot [this]
     (.newSnapshot this))
 
-  (q [this query]
-    (.q this query))
-
-  (q [this snapshot query]
-    (.q this snapshot query))
+  (q
+    ([this query]
+     (.q this query))
+    ([this snapshot query]
+     (.q this snapshot query)))
 
   (history-ascending [this snapshot eid]
     (.historyAscending this snapshot eid))
