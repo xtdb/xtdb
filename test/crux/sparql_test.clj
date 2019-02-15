@@ -215,7 +215,8 @@ WHERE   { ?x ns:price ?price .
                 (or-join
                  [?mbox ?x]
                  [?x :http://xmlns.com/foaf/0.1/mbox ?mbox]
-                 (and [(identity :crux.sparql/optional) ?mbox] [(identity ?x)]))]}
+                 (and [(identity :crux.sparql/optional) ?mbox]
+                      (not [?x :http://xmlns.com/foaf/0.1/mbox])))]}
              (sparql/sparql->datalog
               "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -230,7 +231,8 @@ WHERE  { ?x foaf:name  ?name .
                 (or-join
                  [?x ?price]
                  (and [?x :http://example.org/ns#price ?price] [(< ?price 30)])
-                 (and [(identity ?x)] [(identity :crux.sparql/optional) ?price]))]}
+                 (and (not [?x :http://example.org/ns#price])
+                      [(identity :crux.sparql/optional) ?price]))]}
              (sparql/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>

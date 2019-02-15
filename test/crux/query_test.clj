@@ -1156,6 +1156,19 @@
                              :where [[e :friend e]
                                      [e :boss b]]}))))
 
+(t/deftest test-or-bug-146
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :boss :petr}
+                            {:crux.db/id :petr :name "Petr"}])
+
+  (t/is (= #{["Ivan" :petr]
+             ["Petr" :none]}
+           (q/q (q/db *kv*) '{:find [n b]
+                              :where [[e :name n]
+                                      (or-join [e b]
+                                               [e :boss b]
+                                               (and [(identity :none) b]
+                                                    (not [e :boss])))]}))))
+
 (t/deftest test-query-and-cas
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
 

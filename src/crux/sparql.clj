@@ -129,6 +129,7 @@
           common-vars (set (mapv str->sparql-var (.getBindingNames (.getLeftArg this))))
           condition (some-> (.getCondition this) (rdf/rdf->clj))
           optional (rdf/rdf->clj (.getRightArg this))
+          optional-attr (second (first optional))
           optional (cond-> optional
                      condition (concat condition))
           optional (if (> (count optional) 1)
@@ -136,7 +137,7 @@
                      optional)
           build-optional-clause (fn [var]
                                   (if (contains? common-vars var)
-                                    [(list 'identity var)]
+                                    (list 'not [var optional-attr])
                                     [(list 'identity ::optional) var]))]
       (conj (rdf/rdf->clj (.getLeftArg this))
             (cons 'or-join (cons or-join-vars

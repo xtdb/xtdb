@@ -303,10 +303,8 @@ WHERE
 
       ;; NOTE: Without post processing the extra optional is correct.
       (t/is (= #{["Becky Smith" 23]
-                 ["Becky Smith" :crux.sparql/optional]
                  ["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
-                 ["John Smith" :crux.sparql/optional]
                  ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
@@ -336,10 +334,8 @@ WHERE
     ?person info:age ?age .
 }"))))
 
-      (t/is (= #{["Becky Smith" :crux.sparql/optional]
-                 ["Sarah Jones" :crux.sparql/optional]
+      (t/is (= #{["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
-                 ["John Smith" :crux.sparql/optional]
                  ["Matt Jones" :crux.sparql/optional]}
                (q/q (q/db f/*kv*)
                     (sparql/sparql->datalog
