@@ -1156,6 +1156,7 @@
                              :where [[e :friend e]
                                      [e :boss b]]}))))
 
+;; TODO: This test doesn't manage to reproduce the bug.
 (t/deftest test-or-bug-146
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :extra "Petr"}
                             {:crux.db/id :oleg :name "Oleg" :extra #inst "1980"}

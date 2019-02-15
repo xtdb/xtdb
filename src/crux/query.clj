@@ -25,7 +25,7 @@
   (symbol? x))
 
 (def ^:private literal? (complement logic-var?))
-(def ^:private db-ident? keyword?)
+(def ^:private db-ident? c/valid-id?)
 
 (defn- expression-spec [sym spec]
   (s/and seq?
@@ -37,7 +37,7 @@
 
 (s/def ::triple (s/and vector? (s/cat :e (some-fn logic-var? db-ident?)
                                       :a db-ident?
-                                      :v (s/? any?))))
+                                      :v (s/? (complement nil?)))))
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
@@ -62,7 +62,7 @@
 
 (s/def ::unify (s/tuple (s/and list?
                                (s/cat :op '#{== !=}
-                                      :args (s/+ any?)))))
+                                      :args (s/+ (complement nil?))))))
 
 (s/def ::args-list (s/coll-of logic-var? :kind vector? :min-count 1))
 
