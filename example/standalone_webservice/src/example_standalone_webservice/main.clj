@@ -108,7 +108,7 @@
               [:tbody
                (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log]
                  [:tr
-                  [:td tx-id]
+                  [:td [:a {:href (str "/?tt=" (format-date tx-time))} tx-id]]
                   [:td (format-date tx-time)]
                   [:td (with-out-str
                          (pp/pprint tx-ops))]])]]]]
