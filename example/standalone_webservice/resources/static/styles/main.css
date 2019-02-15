@@ -31,11 +31,20 @@ input, textarea, select {
     padding: 0.2em;
 }
 
+textarea:invalid, input:invalid {
+    border: 1px solid darkred;
+}
+
 input[type=submit] {
     border: 1.5px solid grey;
     padding-left: 1em;
     padding-right: 1em;
     font-size: 80%;
+}
+
+form:invalid > input[type=submit].primary {
+    pointer-events: none;
+    opacity: 0.6;
 }
 
 input[type=submit]:hover,
@@ -50,7 +59,7 @@ h1, h2, h3, h4, h5, h6 {
     border-bottom: 1px solid lightgrey;
 }
 
-h4 small {
+h2 small {
     padding: 0.2em;
     color: grey;
     display: block;

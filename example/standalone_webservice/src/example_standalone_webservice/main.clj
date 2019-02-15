@@ -21,14 +21,32 @@
   (when d
     (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
 
+(defn- page-head [title]
+  [:head
+   [:meta {:charset "utf-8"}]
+   [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
+   [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]
+   [:title title]])
+
+(defn- footer []
+  [:footer
+   "© 2019 "
+   [:a {:href "https://juxt.pro"} "JUXT"]])
+
+(defn- status-block [crux]
+  [:div.status
+   [:h4 "Status:"]
+   [:pre (with-out-str
+           (pp/pprint (api/status crux)))]])
+
 (defn index-handler
   [ctx {:keys [crux]}]
   (fn [ctx]
     (let [{:strs [vt tt]} (get-in ctx [:parameters :query])
-          vt (if (seq vt)
+          vt (if (not (str/blank? vt))
                (instant/read-instant-date vt)
                (Date.))
-          tt (when tt
+          tt (when (not (str/blank? tt))
                (instant/read-instant-date tt))
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
                    (vec (api/tx-log crux tx-log-cxt nil true)))]
@@ -36,11 +54,7 @@
        "<!DOCTYPE html>"
        (html
         [:html
-         [:head
-          [:meta {:charset "utf-8"}]
-          [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
-          [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]
-          [:title "Message Board"]]
+         (page-head "Message Board")
          [:body
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
@@ -55,9 +69,11 @@
              (when (seq tx-log)
                [:select
                 {:id "tx-time" :name "tt"}
-                (for [{:keys [crux.tx/tx-time]} (reverse tx-log)]
-                  [:option {:value (format-date tx-time)
-                            :selected (= tt tx-time)} (format-date tx-time)])])]
+                [:option {:value ""} "now"]
+                (for [{:keys [crux.tx/tx-time]} (reverse tx-log)
+                      :let [tx-time-str (format-date tx-time)]]
+                  [:option {:value tx-time-str
+                            :selected (= tt tx-time)} tx-time-str])])]
             [:input {:type "submit" :value "Go"}]]]
 
           [:div.comments
@@ -69,22 +85,25 @@
                                 :where [[e :message-post/message m]
                                         [e :message-post/name n]
                                         [e :message-post/created c]
-                                        [e :message-post/edited ed]]})
+                                        (or-join [e ed]
+                                                 [e :message-post/edited ed]
+                                                 (and [(identity :none) ed]
+                                                      (not [e :message-post/edited])))]})
                        (sort-by #(nth % 2)))]
               [:li
                [:dl
                 [:dt "From:"] [:dd name]
                 [:dt "Created:"] [:dd [:a {:href (str "/?vt=" (format-date created))} (format-date created)]]
-                (when (not= created edited)
+                (when (inst? edited)
                   [:dt "Edited:"])
-                (when (not= created edited)
+                (when (inst? edited)
                   [:dd [:a {:href (str "/?vt=" (format-date edited))} (format-date edited)]])]
                [:form.edit-comment {:action (str "/comment/" id) :method "POST"}
                 [:fieldset
                  [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
                  [:input {:type "text" :name "name" :value name :hidden true}]
-                 [:textarea {:id (str "edit-message-" id) :name "message"} message]]
-                [:input {:type "submit" :name "_action" :value "Edit"}]
+                 [:textarea {:id (str "edit-message-" id) :name "message" :required true} message]]
+                [:input.primary {:type "submit" :name "_action" :value "Edit"}]
                 [:input {:type "submit" :name "_action" :value "Delete"}]
                 [:input {:type "submit" :name "_action" :value "Delete History"}]
                 [:input {:type "submit" :name "_action" :value "Evict"}]]])]]
@@ -94,14 +113,30 @@
            [:form {:action "/comment" :method "POST"}
             [:fieldset
              [:label {:for "name"} "Name:"]
-             [:input {:type "text" :id "name" :name "name"}]
+             [:input {:type "text" :id "name" :name "name" :required true}]
              [:label {:for "message"} "Message:"]
-             [:textarea {:cols "40" :rows "10" :id "message" :name "message"}]]
-            [:input {:type "submit" :value "Submit"}]]]
+             [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true}]]
+            [:input.primary {:type "submit" :value "Submit"}]]]
 
+          [:div
+           [:a {:href "tx-log"} "Transaction History"]]
+          (status-block crux)
+          (footer)]])))))
+
+(defn tx-log-handler [ctx {:keys [crux]}]
+  (fn [ctx]
+    (let [tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
+                   (vec (api/tx-log crux tx-log-cxt nil true)))]
+      (str
+       "<!DOCTYPE html>"
+       (html
+        [:html
+         (page-head "Message Board - Transaction History")
+         [:body
+          [:header
+           [:h2 [:a {:href ""} "Transaction History"]
+            [:small "(Earliest first.)"]]]
           [:div.transaction-history
-           [:h4 "Transaction History:"
-            [:small "(Earliest first.)"]]
            [:table
             [:thead
              [:th (str :crux.tx/tx-id)]
@@ -114,18 +149,15 @@
                 [:td (format-date tx-time)]
                 [:td (with-out-str
                        (pp/pprint tx-ops))]])]]]
-          [:div.status
-           [:h4 "Status:"]
-           [:pre (with-out-str
-                   (pp/pprint (api/status crux)))]]
-          [:footer
-           "© 2019 "
-           [:a {:href "https://juxt.pro"} "JUXT"]]]])))))
+          [:div
+           [:a {:href "/"} "Back to Message Board"]]
+          (status-block crux)
+          (footer)]])))))
 
 (defn redirect-with-time [ctx valid-time transaction-time]
   (assoc (:response ctx)
          :status 302
-         :headers {"location" (str "/?vt=" (format-date valid-time) "&tt=" (format-date transaction-time))}))
+         :headers {"location" (str "/?" "vt=" (format-date valid-time) "&tt=" (format-date transaction-time))}))
 
 (defn post-comment-handler
   [ctx {:keys [crux]}]
@@ -139,7 +171,6 @@
              id
              {:crux.db/id id
               :message-post/created now
-              :message-post/edited now
               :message-post/name name
               :message-post/message message}
              now]])]
@@ -148,7 +179,7 @@
 (defn edit-comment-handler
   [ctx {:keys [crux]}]
   (let [{:keys [name message created _action]} (get-in ctx [:parameters :form])
-        id (get-in ctx [:parameters :path :id])
+        id (UUID/fromString (get-in ctx [:parameters :path :id]))
         now (Date.)
         {:keys [crux.tx/tx-time]}
         (case (str/lower-case _action)
@@ -193,6 +224,11 @@
       {:methods
        {:get {:produces "text/html"
               :response #(index-handler % system)}}})]
+    ["tx-log"
+     (resource
+      {:methods
+       {:get {:produces "text/html"
+              :response #(tx-log-handler % system)}}})]
     ["comment"
      (resource
       {:methods
@@ -265,5 +301,6 @@
            (run-system
             crux-options
             (fn [_]
+              (def crux)
               (Thread/sleep Long/MAX_VALUE)))))
   (future-cancel s))
