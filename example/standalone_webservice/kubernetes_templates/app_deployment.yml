@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-standalone-webservice
-        date: "1549290009"
+        date: "1549290014"
     spec:
       containers:
       - name: crux-standalone-webservice
@@ -23,10 +23,10 @@ spec:
         - containerPort: 8080
         volumeMounts:
         - mountPath: "/usr/src/app/data"
-          name: my-crux-volume-9
+          name: my-crux-volume-10
   volumeClaimTemplates:
     - metadata:
-        name: my-crux-volume-9
+        name: my-crux-volume-10
       spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
