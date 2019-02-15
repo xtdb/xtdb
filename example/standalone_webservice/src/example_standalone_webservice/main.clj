@@ -50,12 +50,14 @@
             [:fieldset
              [:label {:for "valid-time"} "Valid time:"]
              [:input {:type "datetime-local" :value (str/replace (format-date vt) #"-00:00$" "") :name "vt"}]
-             [:label {:for "tx-time"} "Transaction time:"]
-             [:select
-              {:id "tx-time" :name "tt"}
-              (for [{:keys [crux.tx/tx-time]} (reverse tx-log)]
-                [:option {:value (format-date tx-time)
-                          :selected (= tt tx-time)} (format-date tx-time)])]]
+             (when (seq tx-log)
+               [:label {:for "tx-time"} "Transaction time:"])
+             (when (seq tx-log)
+               [:select
+                {:id "tx-time" :name "tt"}
+                (for [{:keys [crux.tx/tx-time]} (reverse tx-log)]
+                  [:option {:value (format-date tx-time)
+                            :selected (= tt tx-time)} (format-date tx-time)])])]
             [:input {:type "submit" :value "Go"}]]]
 
           [:div.comments
