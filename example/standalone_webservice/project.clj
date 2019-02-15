@@ -9,4 +9,5 @@
                  [hiccup "2.0.0-alpha2"]
                  [org.rocksdb/rocksdbjni "5.17.2"]
                  [ch.qos.logback/logback-classic "1.2.3"]]
+  :global-vars {*warn-on-reflection* true}
   :main example-standalone-webservice.main)
