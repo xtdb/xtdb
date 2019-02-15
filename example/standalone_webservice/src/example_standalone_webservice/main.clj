@@ -28,8 +28,8 @@
                (Date.))
           tt (when tt
                (instant/read-instant-date tt))
-          tx-times (with-open [tx-log-cxt (api/new-tx-log-context crux)]
-                     (reverse (mapv :crux.tx/tx-time (api/tx-log crux tx-log-cxt nil false))))]
+          tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
+                   (vec (api/tx-log crux tx-log-cxt nil true)))]
       (str
        "<!DOCTYPE html>"
        (html
@@ -39,7 +39,7 @@
           [:title "Message Board"]]
          [:body
           [:div
-           [:h1 "Message Board"]
+           [:h1 [:a {:href "/"} "Message Board"]]
            [:form
             {:action "/" :method "GET"}
             [:label {:for "valid-time"} "Valid time:"]
@@ -50,7 +50,7 @@
             [:br]
             [:select
              {:id "tx-time" :name "tt"}
-             (for [tx-time tx-times]
+             (for [{:keys [crux.tx/tx-time]} (reverse tx-log)]
                [:option {:value (format-date tx-time)
                          :selected (= tt tx-time)} (format-date tx-time)])]
             [:br]
@@ -73,20 +73,16 @@
                   [:span "Edited: " (format-date edited)])
                 [:pre message]
                 [:form {:action (str "/comment/" id) :method "POST"}
-                 [:input {:type "text" :name "_method" :value "put" :hidden true}]
                  [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
                  [:input {:type "text" :name "name" :value name :hidden true}]
                  [:label {:for (str "edit-message-" id)} "Message:"]
                  [:br]
                  [:textarea {:cols "40" :rows "3" :id (str "edit-message-" id) :name "message"} message]
                  [:br]
-                 [:input {:type "submit" :value "Edit"}]]
-                [:form {:action (str "/comment/" id) :method "POST"}
-                 [:input {:type "text" :name "_method" :value "delete" :hidden true}]
-                 [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
-                 [:input {:type "text" :name "name" :value name :hidden true}]
-                 [:input {:type "text" :name "message" :value message :hidden true}]
-                 [:input {:type "submit" :value "Delete"}]]
+                 [:input {:type "submit" :name "_action" :value "Edit"}]
+                 [:input {:type "submit" :name "_action" :value "Delete"}]
+                 [:input {:type "submit" :name "_action" :value "Delete History"}]
+                 [:input {:type "submit" :name "_action" :value "Evict"}]]
                 [:br]])]]
            [:hr]
            [:h3 "Add new comment"]
@@ -102,56 +98,87 @@
             [:input {:type "submit" :value "Submit"}]]
            [:hr]
            [:div
+            "Transaction History:"
+            [:pre
+             [:table
+              [:thead
+               [:th (str :crux.tx/tx-id)]
+               [:th (str :crux.tx/tx-time)]
+               [:th (str :crux.tx/tx-ops)]]
+              [:tbody
+               (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log]
+                 [:tr
+                  [:td tx-id]
+                  [:td (format-date tx-time)]
+                  [:td (with-out-str
+                         (pp/pprint tx-ops))]])]]]]
+           [:div
             "Status:"
             [:pre (with-out-str
                     (pp/pprint (api/status crux)))]]]]])))))
+
+(defn redirect-with-time [ctx valid-time transaction-time]
+  (assoc (:response ctx)
+         :status 302
+         :headers {"location" (str "/?vt=" (format-date valid-time) "&tt=" (format-date transaction-time))}))
 
 (defn post-comment-handler
   [ctx {:keys [crux]}]
   (let [{:keys [name message]} (get-in ctx [:parameters :form])]
     (let [id (UUID/randomUUID)
-          created-date (Date.)
+          now (Date.)
           {:keys [crux.tx/tx-time]}
           (api/submit-tx
            crux
            [[:crux.tx/put
              id
              {:crux.db/id id
-              :message-post/created created-date
-              :message-post/edited created-date
+              :message-post/created now
+              :message-post/edited now
               :message-post/name name
               :message-post/message message}
-             created-date]])]
-
-      (assoc (:response ctx)
-             :status 302
-             :headers {"location" (str "/?vt=" (format-date created-date) "&tt=" (format-date tx-time))}))))
+             now]])]
+      (redirect-with-time ctx now tx-time))))
 
 (defn edit-comment-handler
   [ctx {:keys [crux]}]
-  (let [{:keys [name message created _method]} (get-in ctx [:parameters :form])
+  (let [{:keys [name message created _action]} (get-in ctx [:parameters :form])
         id (get-in ctx [:parameters :path :id])
-        edited-date (Date.)
+        now (Date.)
         {:keys [crux.tx/tx-time]}
-        (if (= "delete" (str/lower-case _method))
+        (case (str/lower-case _action)
+          "delete"
           (api/submit-tx
            crux
            [[:crux.tx/delete
              id
-             edited-date]])
+             now]])
+          "delete history"
+          (api/submit-tx
+           crux
+           [[:crux.tx/delete
+             id
+             (instant/read-instant-date created)
+             now]])
+          "evict"
+          (api/submit-tx
+           crux
+           [[:crux.tx/evict
+             id
+             (instant/read-instant-date created)
+             now]])
+          "edit"
           (api/submit-tx
            crux
            [[:crux.tx/put
              id
              {:crux.db/id id
               :message-post/created (instant/read-instant-date created)
-              :message-post/edited edited-date
+              :message-post/edited now
               :message-post/name name
               :message-post/message message}
-             edited-date]]))]
-    (assoc (:response ctx)
-           :status 302
-           :headers {"location" (str "/?vt=" (format-date edited-date) "&tt=" (format-date tx-time))})))
+             now]]))]
+    (redirect-with-time ctx now tx-time)))
 
 (defn application-resource
   [system]
@@ -177,7 +204,7 @@
                :parameters {:form {:created String
                                    :name String
                                    :message String
-                                   :_method String}}
+                                   :_action String}}
                :produces "text/html"
                :response #(edit-comment-handler % system)}}})]]])
 
