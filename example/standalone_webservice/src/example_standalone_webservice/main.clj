@@ -57,17 +57,37 @@
             [:input {:type "submit" :value "Go"}]]
            [:div
             [:ul
-             (for [[message name created]
-                   (sort-by #(nth % 2)
-                            (api/q (api/db crux vt tt)
-                                   '{:find [m n c]
-                                     :where [[e :message-post/message m]
-                                             [e :message-post/name n]
-                                             [e :message-post/created c]]}))]
+             (for [[message name created id edited]
+                   (->> (api/q (api/db crux vt tt)
+                               '{:find [m n c e ed]
+                                 :where [[e :message-post/message m]
+                                         [e :message-post/name n]
+                                         [e :message-post/created c]
+                                         [e :message-post/edited ed]]})
+                        (sort-by #(nth % 2)))]
                [:li
                 [:span "From: " name] [:br]
-                [:span "Created: " (format-date created)] [:br]
-                [:pre message]])]]
+                [:span "Created: " (format-date created)]
+                [:br]
+                (when (not= created edited)
+                  [:span "Edited: " (format-date edited)])
+                [:pre message]
+                [:form {:action (str "/comment/" id) :method "POST"}
+                 [:input {:type "text" :name "_method" :value "put" :hidden true}]
+                 [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
+                 [:input {:type "text" :name "name" :value name :hidden true}]
+                 [:label {:for (str "edit-message-" id)} "Message:"]
+                 [:br]
+                 [:textarea {:cols "40" :rows "3" :id (str "edit-message-" id) :name "message"} message]
+                 [:br]
+                 [:input {:type "submit" :value "Edit"}]]
+                [:form {:action (str "/comment/" id) :method "POST"}
+                 [:input {:type "text" :name "_method" :value "delete" :hidden true}]
+                 [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
+                 [:input {:type "text" :name "name" :value name :hidden true}]
+                 [:input {:type "text" :name "message" :value message :hidden true}]
+                 [:input {:type "submit" :value "Delete"}]]
+                [:br]])]]
            [:hr]
            [:h3 "Add new comment"]
            [:form {:action "/comment" :method "POST"}
@@ -86,10 +106,9 @@
             [:pre (with-out-str
                     (pp/pprint (api/status crux)))]]]]])))))
 
-
 (defn post-comment-handler
   [ctx {:keys [crux]}]
-  (let [{:keys [name message]} (:form (:parameters ctx))]
+  (let [{:keys [name message]} (get-in ctx [:parameters :form])]
     (let [id (UUID/randomUUID)
           created-date (Date.)
           {:keys [crux.tx/tx-time]}
@@ -99,6 +118,7 @@
              id
              {:crux.db/id id
               :message-post/created created-date
+              :message-post/edited created-date
               :message-post/name name
               :message-post/message message}
              created-date]])]
@@ -106,6 +126,32 @@
       (assoc (:response ctx)
              :status 302
              :headers {"location" (str "/?vt=" (format-date created-date) "&tt=" (format-date tx-time))}))))
+
+(defn edit-comment-handler
+  [ctx {:keys [crux]}]
+  (let [{:keys [name message created _method]} (get-in ctx [:parameters :form])
+        id (get-in ctx [:parameters :path :id])
+        edited-date (Date.)
+        {:keys [crux.tx/tx-time]}
+        (if (= "delete" (str/lower-case _method))
+          (api/submit-tx
+           crux
+           [[:crux.tx/delete
+             id
+             edited-date]])
+          (api/submit-tx
+           crux
+           [[:crux.tx/put
+             id
+             {:crux.db/id id
+              :message-post/created (instant/read-instant-date created)
+              :message-post/edited edited-date
+              :message-post/name name
+              :message-post/message message}
+             edited-date]]))]
+    (assoc (:response ctx)
+           :status 302
+           :headers {"location" (str "/?vt=" (format-date edited-date) "&tt=" (format-date tx-time))})))
 
 (defn application-resource
   [system]
@@ -122,7 +168,18 @@
                :parameters {:form {:name String
                                    :message String}}
                :produces "text/html"
-               :response #(post-comment-handler % system)}}})]]])
+               :response #(post-comment-handler % system)}}})]
+
+    [["comment/" :id]
+     (resource
+      {:methods
+       {:post {:consumes "application/x-www-form-urlencoded"
+               :parameters {:form {:created String
+                                   :name String
+                                   :message String
+                                   :_method String}}
+               :produces "text/html"
+               :response #(edit-comment-handler % system)}}})]]])
 
 (def index-dir "data/db-dir-1")
 (def log-dir "data/eventlog-1")
@@ -165,3 +222,11 @@
       (-main))
     (catch Exception e
       (log/error e "what happened" (ex-data e)))))
+
+(comment
+  (def s (future
+           (run-system
+            crux-options
+            (fn [_]
+              (Thread/sleep Long/MAX_VALUE)))))
+  (future-cancel s))
