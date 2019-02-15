@@ -9,7 +9,4 @@
                  [hiccup "2.0.0-alpha2"]
                  [org.rocksdb/rocksdbjni "5.17.2"]
                  [ch.qos.logback/logback-classic "1.2.3"]]
-  :main example-standalone-webservice.main
-  :jvm-opts ~(vec (remove nil?
-                          [(when-let [f (System/getenv "YOURKIT_AGENT")]
-                             (str "-agentpath:" (clojure.java.io/as-file f)))])))
+  :main example-standalone-webservice.main)
