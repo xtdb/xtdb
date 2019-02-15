@@ -179,13 +179,13 @@
   (UnsafeBuffer. b))
 
 (defn buffer->hex ^String [^DirectBuffer b]
-  (ByteUtils/bufferToHex b))
+  (some-> b (ByteUtils/bufferToHex)))
 
 (defn hex->buffer
   (^org.agrona.DirectBuffer [^String b]
    (hex->buffer b (ExpandableDirectByteBuffer.)))
   (^org.agrona.DirectBuffer [^String b ^MutableDirectBuffer to]
-   (ByteUtils/hexToBuffer b to)))
+   (some-> b (ByteUtils/hexToBuffer to))))
 
 (defn compare-buffers
   (^long [^DirectBuffer a ^DirectBuffer b]
