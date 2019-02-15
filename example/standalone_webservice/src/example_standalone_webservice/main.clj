@@ -213,6 +213,7 @@
 
 (def crux-options
   {:kv-backend "crux.kv.rocksdb.RocksKv"
+   :bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
    :event-log-dir log-dir
    :db-dir index-dir
    :server-port 8080})
@@ -224,7 +225,9 @@
    :shell/restore-script "bin/restore.sh"})
 
 (defn run-system [{:keys [server-port] :as options} with-system-fn]
-  (with-open [crux-system (api/start-standalone-system options)
+  (with-open [crux-system (case (System/getenv "CRUX_MODE")
+                            "LOCAL_NODE" (api/start-local-node options)
+                            (api/start-standalone-system options))
               http-server
               (let [l (listener
                        (application-resource {:crux crux-system})

@@ -8,6 +8,7 @@
                  [yada "1.3.0-alpha7"]
                  [hiccup "2.0.0-alpha2"]
                  [org.rocksdb/rocksdbjni "5.17.2"]
-                 [ch.qos.logback/logback-classic "1.2.3"]]
+                 [ch.qos.logback/logback-classic "1.2.3"]
+                 [org.apache.kafka/kafka-clients "2.1.0"]]
   :global-vars {*warn-on-reflection* true}
   :main example-standalone-webservice.main)
