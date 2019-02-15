@@ -10,7 +10,7 @@ services:
     command: lein repl :headless :host 0.0.0.0 :port 7888
     ports:
       - "7888:7888"
-      - "8085:8085"
+      - "8080:8080"
 
     working_dir: /app
     environment:
