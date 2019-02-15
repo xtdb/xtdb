@@ -360,6 +360,18 @@
   (.write w "#crux/id ")
   (.write w (str (or (.original-id id) (.hex id)))))
 
+(nippy/extend-freeze
+ EDNId
+ :crux.codec/edn-id
+ [x data-output]
+ (nippy/freeze-to-out! data-output (new-id x)))
+
+(nippy/extend-thaw
+ :crux.codec/edn-id
+ [data-input]
+ (id-edn-reader (nippy/thaw-from-in! data-input)))
+
+
 (defn valid-id? [x]
   (try
     (->id-buffer x)

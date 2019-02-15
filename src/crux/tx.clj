@@ -20,8 +20,9 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (s/def ::id (s/conformer (comp str c/new-id)))
-(s/def ::doc (s/and (s/or :doc (s/and map? (s/conformer (comp str c/new-id)))
-                          :content-hash ::id)
+(s/def :crux.db/id (s/and (complement string?) c/valid-id?))
+(s/def ::doc (s/and (s/or :doc (s/and (s/keys :req [:crux.db/id]) ::id)
+                          :content-hash (s/and (complement map?) ::id))
                     (s/conformer second)))
 
 (s/def ::put-op (s/cat :op #{:crux.tx/put}

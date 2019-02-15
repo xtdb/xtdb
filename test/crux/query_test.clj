@@ -3,7 +3,8 @@
             [clojure.test :as t]
             [crux.db :as db]
             [crux.fixtures :as f :refer [*kv*]]
-            [crux.query :as q]))
+            [crux.query :as q])
+  (:import java.util.UUID))
 
 (t/use-fixtures :each f/with-kv-store)
 
@@ -1156,12 +1157,13 @@
                              :where [[e :friend e]
                                      [e :boss b]]}))))
 
-;; TODO: This test doesn't manage to reproduce the bug.
 (t/deftest test-or-bug-146
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :extra "Petr" :age 20}
                             {:crux.db/id :oleg :name "Oleg" :extra #inst "1980" :age 30}
                             {:crux.db/id :petr :name "Petr" :age 40}])
 
+  ;; This wasn't the bug, but a useful test, lead to fixes in SPARQL
+  ;; translator, and an example on how to use this.
   (t/testing "Or with non existing attribute in one leg and different types "
     (t/is (= #{["Ivan" "Petr" 20 :ivan]
                ["Oleg" #inst "1980" 30 :oleg]
@@ -1173,7 +1175,17 @@
                                         (or-join [e x]
                                                  [e :extra x]
                                                  (and [(identity :none) x]
-                                                      (not [e :extra])))]})))))
+                                                      (not [e :extra])))]}))))
+
+  ;; NOTE: This is the actual root cause of the bug, when editing a
+  ;; message the id was transacted as a raw string.
+  (t/testing "entity ids cannot be raw strings"
+    (let [id (UUID/randomUUID)
+          id-str (str id)]
+      (t/is (thrown-with-msg?
+             RuntimeException
+             #"Spec assertion failed"
+             (f/transact-people! *kv* [{:crux.db/id id-str :name "Ivan" :version 2}]))))))
 
 (t/deftest test-query-and-cas
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
