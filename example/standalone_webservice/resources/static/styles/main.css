@@ -29,6 +29,7 @@ input, textarea, select {
     background: transparent;
     margin: 0.2em;
     padding: 0.2em;
+    outline: none;
 }
 
 textarea:invalid, input:invalid {
@@ -138,6 +139,10 @@ dl dd {
     border: 1px solid grey;
     cursor: text;
     resize: both;
+}
+
+.comments .edit-comment:hover textarea:invalid {
+    border: 1px solid darkred;
 }
 
 .comments .edit-comment .buttons {
