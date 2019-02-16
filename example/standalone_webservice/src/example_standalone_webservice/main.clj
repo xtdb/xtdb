@@ -66,7 +66,8 @@
         max-time-str (format-date max-time)
         now-str (format-date now)
         time->x (fn [t]
-                  (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))]
+                  (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))
+        onclick-timeline-js "window.location = ('/?%s=' + Math.round(%f * (window.event.offsetX / window.event.target.getBoundingClientRect().width) + %d) + '&%s=%d');"]
     [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
      [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.55 height)} min-time-str]]
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
@@ -77,7 +78,8 @@
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
        [:tspan.axis-value (format-date vt)]]
-      [:line {:x1 0 :y1 (* 0.25 height) :x2 width :y2 (* 0.25 height) :stroke-width (* 0.01 height)}]
+      [:line.axis-line {:x1 0 :y1 (* 0.25 height) :x2 width :y2 (* 0.25 height) :stroke-width (* 0.01 height)
+                        :onclick (format onclick-timeline-js "vt" time-diff (inst-ms min-time) "tt" (inst-ms tt))}]
       (for [{:keys [tt vt]} (sort-by :vt known-times)
             :let [vt-str (format-date vt)
                   x (time->x vt)]]
@@ -86,7 +88,8 @@
           [:line.timepoint-marker {:x1 x :y1 (* 0.2 height) :x2 x :y2 (* 0.3 height)}]
           [:text {:x x :y (* 0.15 height)} (str vt-str " | " (format-date tt))]]])]
      [:g.axis
-      [:line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)}]
+      [:line.axis-line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)
+                        :onclick (format onclick-timeline-js "tt" time-diff (inst-ms min-time) "vt" (inst-ms vt))}]
       (for [tt (sort (map :tt known-times))
             :let [tt-str (format-date tt)
                   x (time->x tt)]]
@@ -101,16 +104,6 @@
       [:line {:x1 (time->x now) :y1 (* 0.1 height) :x2 (time->x now) :y2 (* 0.9 height)}]]
      (when tt
        [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])]))
-
-(defn- timetravel-form [tx-log min-time max-time now max-known-tt vt tt]
-  [:form {:action "/" :method "GET" :autocomplete "off"}
-   [:fieldset
-    [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
-             :onchange "this.form.submit();"}]
-    (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)
-    [:input {:type "range" :name "tt" :value (or (some-> tt (inst-ms)) 0) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
-             :disabled (boolean (not tt))
-             :onchange "this.form.submit();"}]]])
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
@@ -152,7 +145,7 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-           (timetravel-form tx-log min-time max-time now max-known-tt vt tt)]
+           (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)]
           [:div.comments
            [:h3 "Comments"]
            [:ul

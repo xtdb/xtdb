@@ -102,23 +102,6 @@ svg a text {
     text-decoration: underline;
 }
 
-.timetravel input[type=range] {
-    width: 100%;
-    padding: 0;
-    margin: 0;
-    border: 0;
-    outline: none;
-}
-
-.timetravel input[type=range]:disabled {
-    pointer-events: none;
-    opacity: 0.6;
-}
-
-.timetravel input[type=range]:hover {
-    cursor: pointer;
-}
-
 .timetravel svg.timeline-graph {
     text-anchor: start;
     width: 100%;
@@ -170,8 +153,10 @@ svg a text {
     font-weight: normal;
 }
 
-.timetravel svg.timeline-graph .axis line {
-    stroke: #eee;
+.timetravel svg.timeline-graph .axis .axis-line {
+    stroke-width: 3px;
+    stroke: #ddd;
+    cursor: pointer;
 }
 
 .timetravel svg.timeline-graph .timepoint {
@@ -179,6 +164,7 @@ svg a text {
 }
 
 .timetravel svg.timeline-graph .timepoint .timepoint-marker {
+    stroke-width: 2px;
     stroke: #555;
 }
 
