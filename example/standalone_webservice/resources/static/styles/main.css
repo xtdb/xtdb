@@ -138,18 +138,24 @@ svg a text {
     stroke: blue;
 }
 
-.timetravel svg.timeline-graph .time-horizon {
-    text-anchor: start;
-    font-weight: bold;
-}
-
 .timetravel svg.timeline-graph .time-horizon line {
     stroke: green;
 }
 
-.timetravel svg.timeline-graph .max-transaction-time {
+.timetravel svg.timeline-graph .time-horizon text,
+.timetravel svg.timeline-graph .max-transaction-time text {
     font-weight: bold;
+    text-decoration: none;
+    visibility: hidden;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time text {
     text-anchor: end;
+}
+
+.timetravel svg.timeline-graph .time-horizon:hover text,
+.timetravel svg.timeline-graph .max-transaction-time:hover text {
+    visibility: visible;
 }
 
 .timetravel svg.timeline-graph .max-transaction-time line {
