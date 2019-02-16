@@ -162,12 +162,13 @@
                 " at "
                 (valid-time-link created)
                 (let [history (with-open [snapshot ^Closeable (api/new-snapshot db)]
-                                (mapv :crux.db/valid-time (api/history-descending db snapshot id)))]
+                                (mapv :crux.db/valid-time (api/history-descending db snapshot id)))
+                      history-onchange-js "this.form.submit();"]
                   (when (> (count history) 1)
                     [:span " • "
                      [:form.version-history {:method "GET" :action "/"  :autocomplete "off"}
                       [:label {:for "version-history-list"} "edited at "]
-                      [:select#version-history-list {:name "vt" :onchange "this.form.submit();" :placeholder "versions:"}
+                      [:select#version-history-list {:name "vt" :onchange history-onchange-js :placeholder "versions:"}
                        (for [history-vt history
                              :let [vt-str (format-date history-vt)]]
                          [:option {:value vt-str :selected (= vt history-vt)} vt-str])]]]))]
