@@ -128,6 +128,7 @@
                (parse-query-date tt))
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
                    (vec (api/tx-log crux tx-log-cxt nil true)))
+          tt (or tt (:crux.tx/tx-time (last tx-log)))
           [min-time max-time] (min-max-time now)
           edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
@@ -139,7 +140,7 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-           (timetravel-form tx-log min-time max-time now vt (or tt now))]
+           (timetravel-form tx-log min-time max-time now vt tt)]
           [:div.comments
            [:h3 "Comments"]
            [:ul
