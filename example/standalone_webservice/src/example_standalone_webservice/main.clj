@@ -67,12 +67,13 @@
     [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
      [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.55 height)} min-time-str]]
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
-     [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x (or tt now)) :y2 (* 0.75 height)}]
+     [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}]
      [:a.time-horizon {:href (str "/?vt=" now-str)}
-      [:text {:x (time->x now) :y (* 0.55 height)} now-str]
+      [:text {:x (time->x now) :y (* 0.55 height)} "(now)"]
       [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
      [:g.axis
-      [:text.axis-name {:x 0 :y (* 0.2 height)} "Valid time"]
+      [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
+       [:tspan#vtOut.axis-value (format-date vt)]]
       [:line.axis-line {:x1 0 :y1 (* 0.25 height) :x2 width :y2 (* 0.25 height) :stroke-width (* 0.01 height)}]
       (for [{:keys [tt vt]} (sort-by :vt known-times)
             :let [vt-str (format-date vt)
@@ -88,21 +89,18 @@
                   x (time->x tt)]]
         [:a.timepoint {:href (str "/?tt=" tt-str)}
          [:g
-          [:rect.timepoint-marker {:x x :y (* 0.70 height) :width (* 0.015 height) :height (* 0.1 height)}]
+          [:rect.timepoint-marker {:x x :y (* 0.7 height) :width (* 0.015 height) :height (* 0.1 height)}]
           [:text {:x x :y (* 0.65 height)} tt-str]]])
-      [:text.axis-name {:x 0 :y (* 0.90 height)} "Transaction time"]]]))
+      [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
+       [:tspan#ttOut.axis-value (format-date tt)]]]]))
 
 (defn- timetravel-form [tx-log min-time max-time now vt tt]
-  (let [slider-oninput-s "this.form.%s.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
+  (let [slider-oninput-js "document.getElementById('%s').textContent = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
     [:form {:action "/" :method "GET" :autocomplete "off"}
      [:fieldset
       [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
                :oninput (format slider-oninput-js "vtOut")}]
-      [:dl
-       [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]]
       (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
-      [:dl
-       [:dt "Selected:"] [:dd [:output#ttOut (format-date tt)]]]
       [:input {:type "range" :name "tt" :value (inst-ms tt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
                :oninput (format slider-oninput-js "ttOut")}]]
      [:input {:type "submit" :value "Go"}]]))
@@ -141,8 +139,7 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-;;           (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
-           (timetravel-form tx-log min-time max-time now vt tt)]
+           (timetravel-form tx-log min-time max-time now vt (or tt now))]
           [:div.comments
            [:h3 "Comments"]
            [:ul

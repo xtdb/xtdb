@@ -141,6 +141,10 @@ svg a text {
     font-weight: bold;
 }
 
+.timetravel svg.timeline-graph .axis .axis-value {
+    font-weight: normal;
+}
+
 .timetravel svg.timeline-graph .axis .axis-line {
     stroke: lightgrey;
 }
