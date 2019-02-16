@@ -92,27 +92,19 @@
           [:text {:x x :y (* 0.65 height)} tt-str]]])
       [:text.axis-name {:x 0 :y (* 0.90 height)} "Transaction time"]]]))
 
-(defn- timetravel-form [tx-log min-time max-time vt tt]
-  (let [slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
+(defn- timetravel-form [tx-log min-time max-time now vt tt]
+  (let [slider-oninput-s "this.form.%s.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
     [:form {:action "/" :method "GET" :autocomplete "off"}
      [:fieldset
-      [:label {:for "valid-time"} "Valid time:"]
-      [:dl
-       [:dt "Min:"] [:dd (valid-time-link min-time)]
-       [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]
-       [:dt "Max:"] [:dd (valid-time-link max-time)]]
       [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
-               :oninput slider-oninput-js}]
-      (when (seq tx-log)
-        [:label {:for "tx-time"} "Transaction time:"])
-      (when (seq tx-log)
-        [:select
-         {:id "tx-time" :name "tt"}
-         [:option {:value ""} "latest"]
-         (for [tx-time (reverse (sort (map :crux.tx/tx-time tx-log)))
-               :let [tx-time-str (format-date tx-time)]]
-           [:option {:value tx-time-str
-                     :selected (= tt tx-time)} tx-time-str])])]
+               :oninput (format slider-oninput-js "vtOut")}]
+      [:dl
+       [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]]
+      (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
+      [:dl
+       [:dt "Selected:"] [:dd [:output#ttOut (format-date tt)]]]
+      [:input {:type "range" :name "tt" :value (inst-ms tt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+               :oninput (format slider-oninput-js "ttOut")}]]
      [:input {:type "submit" :value "Go"}]]))
 
 (defn- parse-query-date [d]
@@ -149,8 +141,8 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-           (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
-           (timetravel-form tx-log min-time max-time vt tt)]
+;;           (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
+           (timetravel-form tx-log min-time max-time now vt tt)]
           [:div.comments
            [:h3 "Comments"]
            [:ul
