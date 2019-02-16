@@ -69,7 +69,7 @@
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
      [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}]
      [:a.time-horizon {:href (str "/?vt=" now-str)}
-      [:text {:x (time->x now) :y (* 0.55 height)} "(now)"]
+      [:text {:x (inc (time->x now)) :y (* 0.55 height)} "NOW"]
       [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "

@@ -130,11 +130,15 @@ svg a text {
 }
 
 .timetravel svg.timeline-graph .time-horizon {
-    text-anchor: middle;
+    text-anchor: start;
 }
 
 .timetravel svg.timeline-graph .time-horizon line {
     stroke: green;
+}
+
+.timetravel svg.timeline-graph .time-horizon text {
+    font-weight: bold;
 }
 
 .timetravel svg.timeline-graph .axis .axis-name {
