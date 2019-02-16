@@ -23,17 +23,20 @@
   (when d
     (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
 
-(defn- pp-with-date-links [x]
+(defn- pp-with-date-links [tt-str x]
   (hiccup.util/raw-string
    (str/replace (with-out-str
                   (pp/pprint x))
                 #"\#inst \"(.+)\""
                 (fn [[s d]]
-                  (str/replace s d (str "<a href=\"/?vt=" d "\">" d "</a>"))))))
+                  (str/replace s d (str "<a href=\"/?vt=" d (when tt-str
+                                                              (str "&tt=" tt-str)) "\">" d "</a>"))))))
 
 (defn- page-head [title]
   [:head
    [:meta {:charset "utf-8"}]
+   [:meta {:http-equiv "Content-Language" :content "en"}]
+   [:meta {:name "google" :content "notranslate"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]
    [:title title]])
@@ -46,7 +49,7 @@
 (defn- status-block [crux]
   [:div.status
    [:h4 "Status:"]
-   [:pre (pp-with-date-links (api/status crux))]])
+   [:pre (pp-with-date-links nil (api/status crux))]])
 
 (defn- valid-time-link [vt]
   (let [vt-str (format-date vt)]
@@ -69,7 +72,7 @@
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
      (when max-known-tt
        [:a.max-transaction-time {:href (str "/?tt=" (format-date max-known-tt))}
-        [:text {:x (* 0.995 (time->x max-known-tt)) :y (* 0.55 height)} "MAX"]
+        [:text {:x (* 0.995 (time->x max-known-tt)) :y (* 0.85 height)} "MAX"]
         [:line {:x1 (time->x max-known-tt) :y1 (* 0.25 height) :x2 (time->x max-known-tt) :y2 (* 0.75 height)}]])
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
@@ -94,7 +97,7 @@
       [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
        [:tspan.axis-value (or (format-date tt) "empty")]]]
      [:a.time-horizon {:href (str "/?vt=" now-str)}
-      [:text {:x (* 1.005 (time->x now)) :y (* 0.55 height)} "NOW"]
+      [:text {:x (* 1.005 (time->x now)) :y (* 0.85 height)} "NOW"]
       [:line {:x1 (time->x now) :y1 (* 0.1 height) :x2 (time->x now) :y2 (* 0.9 height)}]]
      (when tt
        [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])]))
@@ -142,7 +145,7 @@
       (str
        "<!DOCTYPE html>"
        (html
-        [:html
+        [:html {:lang "en"}
          (page-head "Message Board")
          [:body
           [:header
@@ -187,11 +190,13 @@
            [:h3 "Add new comment"]
            [:form {:action "/comment" :method "POST" :autocomplete "off"}
             [:fieldset
+             [:input {:type "text" :name "created" :value (format-date vt) :hidden true}]
              [:label {:for "name"} "Name:"]
              [:input {:type "text" :id "name" :name "name" :required true}]
              [:label {:for "message"} "Message:"]
              [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true}]]
-            [:input.primary {:type "submit" :value "Submit"}]]]
+            [:input.primary {:type "submit" :name "_action" :value "Submit"}]
+            [:input.primary {:type "submit" :name "_action" :value "Bitemp Submit"}]]]
 
           [:div
            [:a {:href "tx-log"} "Transaction History"]]
@@ -223,7 +228,7 @@
                [:tr
                 [:td tx-id]
                 [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
-                [:td (pp-with-date-links tx-ops)]])]]]
+                [:td (pp-with-date-links (format-date tx-time) tx-ops)]])]]]
           [:div
            [:a {:href "/"} "Back to Message Board"]]
           (status-block crux)
@@ -236,20 +241,22 @@
 
 (defn post-comment-handler
   [ctx {:keys [crux]}]
-  (let [{:keys [name message]} (get-in ctx [:parameters :form])]
+  (let [{:keys [name message created _action]} (get-in ctx [:parameters :form])]
     (let [id (UUID/randomUUID)
-          now (Date.)
+          created (case (str/lower-case _action)
+                    "submit" (Date.)
+                    "bitemp submit" (instant/read-instant-date created))
           {:keys [crux.tx/tx-time]}
           (api/submit-tx
            crux
            [[:crux.tx/put
              id
              {:crux.db/id id
-              :message-post/created now
+              :message-post/created created
               :message-post/name name
               :message-post/message message}
-             now]])]
-      (redirect-with-time ctx now tx-time))))
+             created]])]
+      (redirect-with-time ctx created tx-time))))
 
 (defn edit-comment-handler
   [ctx {:keys [crux]}]
@@ -308,8 +315,10 @@
      (resource
       {:methods
        {:post {:consumes "application/x-www-form-urlencoded"
-               :parameters {:form {:name String
-                                   :message String}}
+               :parameters {:form {:created String
+                                   :name String
+                                   :message String
+                                   :_action String}}
                :produces "text/html"
                :response #(post-comment-handler % system)}}})]
 
