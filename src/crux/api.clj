@@ -72,7 +72,7 @@
 
   (entity-tx [this eid])
 
-  (new-snapshot [this])
+  (new-snapshot ^java.io.Closeable [this])
 
   (q
     [this query]
