@@ -200,6 +200,13 @@ svg a text {
     list-style: none;
 }
 
+.comments li .comment-meta {
+    display: inline-block;
+    color: grey;
+    font-size: 80%;
+    margin-bottom: 0.2em;
+}
+
 .comments form.edit-comment {
     position: relative;
     width: auto;

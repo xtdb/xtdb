@@ -166,14 +166,13 @@
                                                  (and [(identity :none) ed]
                                                       (not [e :message-post/edited])))]})
                        (sort-by #(nth % 2)))]
-              [:li
-               [:dl
-                [:dt "From:"] [:dd name]
-                [:dt "Created:"] [:dd (valid-time-link created)]
+              [:li.comment
+               [:span.comment-meta
+                name
+                " at "
+                (valid-time-link created)
                 (when (inst? edited)
-                  [:dt "Edited:"])
-                (when (inst? edited)
-                  [:dd (valid-time-link edited)])]
+                  [:span " edited at " (valid-time-link edited)])]
                [:form.edit-comment {:action (str "/comment/" id) :method "POST" :autocomplete "off"}
                 [:fieldset
                  [:input {:type "hidden" :name "created" :value (format-date created)}]
@@ -184,17 +183,17 @@
                  [:input.primary {:type "submit" :name "_action" :value "Edit"}]
                  [:input {:type "submit" :name "_action" :value "Delete"}]
                  [:input {:type "submit" :name "_action" :value "Delete History"}]
-                 [:input {:type "submit" :name "_action" :value "Evict"}]]]])]]
+                 [:input {:type "submit" :name "_action" :value "Evict"}]]]])]
 
-          [:div.add-comment-box
-           [:h3 "Add new comment"]
-           [:form {:action "/comment" :method "POST" :autocomplete "off"}
-            [:fieldset
-             [:input {:type "hidden" :name "created" :value (format-date vt)}]
-             [:input {:type "text" :id "name" :name "name" :required true :placeholder "Name"}]
-             [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true :placeholder "Message"}]]
-            [:input.primary {:type "submit" :name "_action" :value "Submit"}]
-            [:input.primary {:type "submit" :name "_action" :value "Bitemp Submit"}]]]
+           [:div.add-comment-box
+            [:h5 "Add new comment"]
+            [:form {:action "/comment" :method "POST" :autocomplete "off"}
+             [:fieldset
+              [:input {:type "hidden" :name "created" :value (format-date vt)}]
+              [:input {:type "text" :id "name" :name "name" :required true :placeholder "Name"}]
+              [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true :placeholder "Message"}]]
+             [:input.primary {:type "submit" :name "_action" :value "Comment"}]
+             [:input.primary {:type "submit" :name "_action" :value "Bitemporal Comment"}]]]]
 
           [:div
            [:a {:href "tx-log"} "Transaction History"]]
@@ -242,8 +241,8 @@
   (let [{:keys [name message created _action]} (get-in ctx [:parameters :form])]
     (let [id (UUID/randomUUID)
           created (case (str/lower-case _action)
-                    "submit" (Date.)
-                    "bitemp submit" (instant/read-instant-date created))
+                    "comment" (Date.)
+                    "bitemporal comment" (instant/read-instant-date created))
           {:keys [crux.tx/tx-time]}
           (api/submit-tx
            crux
