@@ -7,6 +7,7 @@
             [clojure.string :as str]
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
+            [hiccup.util]
             [yada.resource :refer [resource]]
             [yada.resources.classpath-resource]
             [clojure.java.io :as io]
@@ -21,6 +22,14 @@
 (defn- format-date [^Date d]
   (when d
     (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
+
+(defn- pp-with-date-links [x]
+  (hiccup.util/raw-string
+   (str/replace (with-out-str
+                  (pp/pprint x))
+                #"\#inst \"(.+)\""
+                (fn [[s d]]
+                  (str/replace s d (str "<a href=\"/?vt=" d "\">" d "</a>"))))))
 
 (defn- page-head [title]
   [:head
@@ -37,8 +46,7 @@
 (defn- status-block [crux]
   [:div.status
    [:h4 "Status:"]
-   [:pre (with-out-str
-           (pp/pprint (api/status crux)))]])
+   [:pre (pp-with-date-links (api/status crux))]])
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
@@ -168,8 +176,7 @@
                [:tr
                 [:td tx-id]
                 [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
-                [:td (with-out-str
-                       (pp/pprint tx-ops))]])]]]
+                [:td (pp-with-date-links tx-ops)]])]]]
           [:div
            [:a {:href "/"} "Back to Message Board"]]
           (status-block crux)
