@@ -200,11 +200,21 @@ svg a text {
     list-style: none;
 }
 
-.comments li .comment-meta {
+.comments li.comment .comment-meta {
     display: inline-block;
     color: grey;
     font-size: 80%;
     margin-bottom: 0.2em;
+}
+
+.comments li.comment .comment-meta .version-history,
+.comments li.comment .comment-meta .version-history label,
+.comments li.comment .comment-meta .version-history select {
+    display: inline-block;
+    font-weight: normal;
+    padding: 0;
+    margin: 0;
+    border: 0;
 }
 
 .comments form.edit-comment {

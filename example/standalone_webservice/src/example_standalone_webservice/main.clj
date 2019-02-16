@@ -140,6 +140,7 @@
           tt (if (pos? (compare tt max-known-tt))
                max-known-tt
                tt)
+          db (api/db crux vt tt)
           [min-time max-time] (min-max-time now)
           edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
@@ -155,24 +156,28 @@
           [:div.comments
            [:h3 "Comments"]
            [:ul
-            (for [[message name created id edited]
-                  (->> (api/q (api/db crux vt tt)
-                              '{:find [m n c e ed]
+            (for [[message name created id]
+                  (->> (api/q db
+                              '{:find [m n c e]
                                 :where [[e :message-post/message m]
                                         [e :message-post/name n]
-                                        [e :message-post/created c]
-                                        (or-join [e ed]
-                                                 [e :message-post/edited ed]
-                                                 (and [(identity :none) ed]
-                                                      (not [e :message-post/edited])))]})
+                                        [e :message-post/created c]]})
                        (sort-by #(nth % 2)))]
               [:li.comment
                [:span.comment-meta
                 name
                 " at "
                 (valid-time-link created)
-                (when (inst? edited)
-                  [:span " edited at " (valid-time-link edited)])]
+                (let [history (with-open [snapshot ^Closeable (api/new-snapshot db)]
+                                (mapv :crux.db/valid-time (api/history-descending db snapshot id)))]
+                  (when (> (count history) 1)
+                    [:span " • "
+                     [:form.version-history {:method "GET" :action "/"}
+                      [:label {:for "version-history-list"} "edited at "]
+                      [:select#version-history-list {:name "vt" :onchange "this.form.submit();" :placeholder "versions:"}
+                       (for [history-vt history
+                             :let [vt-str (format-date history-vt)]]
+                         [:option {:value vt-str :selected (= vt history-vt)} vt-str])]]]))]
                [:form.edit-comment {:action (str "/comment/" id) :method "POST" :autocomplete "off"}
                 [:fieldset
                  [:input {:type "hidden" :name "created" :value (format-date created)}]
