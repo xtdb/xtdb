@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.rdf :as rdf])
   (:import java.util.Arrays
            [org.ejml.data DMatrix DMatrixRMaj
@@ -2007,20 +2008,59 @@
 (defn morton-get-next-address [^Number min ^Number max]
   (let [min (biginteger min)
         max (biginteger max)
-        litmax max
-        bigmin min
+        _ (log/debug :min min (.toString min 2))
+        _ (log/debug :max max (.toString max 2))
+        ;; Calculates the last common bit as seen from MSB, with
+        ;; 1-based indexing from LSB. 6, 7 returns 2. 12, 13 return 2.
+        ;; Returns 1 when there are no different bits. 2, 2 returns 1.
+        ;  Returns the zero of the highest bit of the longest if there
+        ;  is no common prefix. 2, 7 returns 4.
         index (- (inc (* 2 Long/SIZE)) (- (* 2 Long/SIZE) (.bitLength (.xor min max))))
-        mask (.not (.subtract (.shiftLeft BigInteger/ONE (bit-shift-right index 1)) BigInteger/ONE))
-        inc (.shiftLeft BigInteger/ONE (dec (bit-shift-right index 1)))
-        index (rem index 2)
+        _ (log/debug :index index)
 
+        ;; This creates a mask for un-spread value (half size) to
+        ;; filter out the uncommon bits.
+        mask (.not (.subtract (.shiftLeft BigInteger/ONE (quot index 2)) BigInteger/ONE))
+        _ (log/debug :mask mask (.toString mask 2))
+        ;; This is to increase the bit that differs (I think) in
+        ;; un-spread space.
+        inc (.shiftLeft BigInteger/ONE (dec (quot index 2)))
+        _ (log/debug :inc inc (.toString inc 2))
+        ;; Index is now dimension.
+        index (bit-and 1 index)
+        _ (log/debug :dimension index)
+        ;; The shift right and un spread gives the value for the
+        ;; dimension. This is masked and then increased.
+        _ (log/debug :unspread-min (.toString (biginteger-bit-unspread (.shiftRight min index)) 2))
+        _ (log/debug :unspread-min-masked (.toString (.and ^BigInteger (biginteger-bit-unspread (.shiftRight min index)) mask) 2))
         part (.add (.and ^BigInteger (biginteger-bit-unspread (.shiftRight min index)) mask) inc)
-        bigmin (.and bigmin (.not (.shiftLeft morton-2-x-mask index)))
+        _ (log/debug :part part (.toString part 2))
+        ;; 0x5555 etc is every other bit set, with LSB set. 5 is 0b101
+        ;; 0x55 is 0b1010101. This is shifted either 0 or 1 step to
+        ;; the left and inverted to create a mask. Selects one of the
+        ;; dimensions. Likely the other compared to what's in part
+        ;; above. The inversion after shift left means that two zeros
+        ;; can become two ones, so the mask always includes the LSB?
+        _ (log/debug :inverted-morton-mask (.toString (.not (.shiftLeft morton-2-x-mask index)) 2))
+        bigmin (.and min (.not (.shiftLeft morton-2-x-mask index)))
+        _ (log/debug :min-masked bigmin (.toString bigmin 2))
+        ;; Takes part, which is min for one dimension with the bit
+        ;; that differs increased (and the below zeroed) out and ors
+        ;; this with the original min value.
+        _ (log/debug :spread-part (.toString (biginteger-bit-spread part) 2))
+        _ (log/debug :spread-part-shifted (.toString (.shiftLeft (biginteger-bit-spread part) index) 2))
         bigmin (.or bigmin (.shiftLeft (biginteger-bit-spread part) index))
+        _ (log/debug :bigmin bigmin (.toString bigmin 2))
 
+        ;; Subtract one and do the similar steps for max.
         part (.subtract part BigInteger/ONE)
-        litmax (.and litmax (.not (.shiftLeft morton-2-x-mask index)))
-        litmax (.or litmax (.shiftLeft (biginteger-bit-spread part) index))]
+        _ (log/debug :part-dec part (.toString part 2))
+        litmax (.and max (.not (.shiftLeft morton-2-x-mask index)))
+        _ (log/debug :max-masked litmax (.toString litmax 2))
+        _ (log/debug :spread-part (.toString (biginteger-bit-spread part) 2))
+        _ (log/debug :spread-part-shifted (.toString (.shiftLeft (biginteger-bit-spread part) index) 2))
+        litmax (.or litmax (.shiftLeft (biginteger-bit-spread part) index))
+        _ (log/debug :litmax litmax (.toString litmax 2))]
     [litmax bigmin]))
 
 (comment
