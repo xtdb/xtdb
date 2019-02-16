@@ -76,7 +76,8 @@
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
                    (vec (api/tx-log crux tx-log-cxt nil true)))
           [min-vt max-vt] (min-max-valid-time now)
-          slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
+          slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"
+          edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -133,7 +134,8 @@
                 [:fieldset
                  [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
                  [:input {:type "text" :name "name" :value name :hidden true}]
-                 [:textarea {:id (str "edit-message-" id) :name "message" :required true} message]]
+                 [:textarea {:id (str "edit-message-" id) :rows (count (str/split-lines message)) :name "message" :required true
+                             :oninput edit-comment-oninput-js} message]]
                 [:div.buttons
                  [:input.primary {:type "submit" :name "_action" :value "Edit"}]
                  [:input {:type "submit" :name "_action" :value "Delete"}]
