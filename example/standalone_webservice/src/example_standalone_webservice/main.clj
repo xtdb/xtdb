@@ -176,8 +176,8 @@
                   [:dd (valid-time-link edited)])]
                [:form.edit-comment {:action (str "/comment/" id) :method "POST" :autocomplete "off"}
                 [:fieldset
-                 [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
-                 [:input {:type "text" :name "name" :value name :hidden true}]
+                 [:input {:type "hidden" :name "created" :value (format-date created)}]
+                 [:input {:type "hidden" :name "name" :value name}]
                  [:textarea {:id (str "edit-message-" id) :rows (count (str/split-lines message)) :name "message" :required true
                              :oninput edit-comment-oninput-js} message]]
                 [:div.buttons
@@ -190,11 +190,9 @@
            [:h3 "Add new comment"]
            [:form {:action "/comment" :method "POST" :autocomplete "off"}
             [:fieldset
-             [:input {:type "text" :name "created" :value (format-date vt) :hidden true}]
-             [:label {:for "name"} "Name:"]
-             [:input {:type "text" :id "name" :name "name" :required true}]
-             [:label {:for "message"} "Message:"]
-             [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true}]]
+             [:input {:type "hidden" :name "created" :value (format-date vt)}]
+             [:input {:type "text" :id "name" :name "name" :required true :placeholder "Name"}]
+             [:textarea {:cols "40" :rows "10" :id "message" :name "message" :required true :placeholder "Message"}]]
             [:input.primary {:type "submit" :name "_action" :value "Submit"}]
             [:input.primary {:type "submit" :name "_action" :value "Bitemp Submit"}]]]
 

@@ -241,6 +241,20 @@ svg a text {
     visibility: visible;
 }
 
+.add-comment-box fieldset {
+    width: 25em;
+    min-width: 10em;
+}
+
+.add-comment-box input[type=text] {
+    width: 100%;
+    display: block;
+}
+
+.add-comment-box textarea {
+    width: 100%;
+}
+
 .transaction-history table {
     width: 100%;
     border-spacing: 0;
