@@ -7,7 +7,7 @@
                  [org.clojure/tools.logging "0.4.1"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 [org.agrona/agrona "0.9.32"]
+                 [org.agrona/agrona "0.9.33"]
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.1" :scope "provided"]
                  [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
