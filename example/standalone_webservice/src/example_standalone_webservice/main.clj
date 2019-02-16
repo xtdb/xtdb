@@ -48,6 +48,10 @@
    [:h4 "Status:"]
    [:pre (pp-with-date-links (api/status crux))]])
 
+(defn- valid-time-link [vt]
+  (let [vt-str (format-date vt)]
+    [:a {:href (str "/?vt=" vt-str)} vt-str]))
+
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
     (Date. (Long/parseLong d))
@@ -86,9 +90,9 @@
             [:fieldset
              [:label {:for "valid-time"} "Valid time:"]
              [:dl
-              [:dt "Min:"] [:dd (format-date min-vt)]
+              [:dt "Min:"] [:dd (valid-time-link min-vt)]
               [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]
-              [:dt "Max:"] [:dd (format-date max-vt)]]
+              [:dt "Max:"] [:dd (valid-time-link max-vt)]]
              [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-vt) :max (inst-ms max-vt) :step 1
                       :oninput slider-oninput-js}]
              (when (seq tx-log)
@@ -120,11 +124,11 @@
               [:li
                [:dl
                 [:dt "From:"] [:dd name]
-                [:dt "Created:"] [:dd [:a {:href (str "/?vt=" (format-date created))} (format-date created)]]
+                [:dt "Created:"] [:dd (valid-time-link created)]
                 (when (inst? edited)
                   [:dt "Edited:"])
                 (when (inst? edited)
-                  [:dd [:a {:href (str "/?vt=" (format-date edited))} (format-date edited)]])]
+                  [:dd (valid-time-link edited)])]
                [:form.edit-comment {:action (str "/comment/" id) :method "POST" :autocomplete "off"}
                 [:fieldset
                  [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
