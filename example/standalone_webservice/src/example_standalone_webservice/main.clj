@@ -165,7 +165,7 @@
                                 (mapv :crux.db/valid-time (api/history-descending db snapshot id)))]
                   (when (> (count history) 1)
                     [:span " • "
-                     [:form.version-history {:method "GET" :action "/"}
+                     [:form.version-history {:method "GET" :action "/"  :autocomplete "off"}
                       [:label {:for "version-history-list"} "edited at "]
                       [:select#version-history-list {:name "vt" :onchange "this.form.submit();" :placeholder "versions:"}
                        (for [history-vt history
