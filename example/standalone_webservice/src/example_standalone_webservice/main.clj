@@ -67,11 +67,6 @@
     [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
      [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.55 height)} min-time-str]]
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
-     (when tt
-       [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])
-     [:a.time-horizon {:href (str "/?vt=" now-str)}
-      [:text {:x (inc (time->x now)) :y (* 0.55 height)} "NOW"]
-      [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
        [:tspan.axis-value (format-date vt)]]
@@ -93,7 +88,12 @@
           [:line.timepoint-marker {:x1 x :y1 (* 0.7 height) :x2 x :y2 (* 0.8 height)}]
           [:text {:x x :y (* 0.65 height)} tt-str]]])
       [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
-       [:tspan.axis-value (or (format-date tt) "empty")]]]]))
+       [:tspan.axis-value (or (format-date tt) "empty")]]]
+     [:a.time-horizon {:href (str "/?vt=" now-str)}
+      [:text {:x (inc (time->x now)) :y (* 0.55 height)} "NOW"]
+      [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
+     (when tt
+       [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])]))
 
 (defn- timetravel-form [tx-log min-time max-time now vt tt]
   [:form {:action "/" :method "GET" :autocomplete "off"}
