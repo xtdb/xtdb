@@ -67,7 +67,8 @@
     [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
      [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.55 height)} min-time-str]]
      [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
-     [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}]
+     (when tt
+       [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])
      [:a.time-horizon {:href (str "/?vt=" now-str)}
       [:text {:x (inc (time->x now)) :y (* 0.55 height)} "NOW"]
       [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
@@ -92,7 +93,7 @@
           [:rect.timepoint-marker {:x x :y (* 0.7 height) :width (* 0.015 height) :height (* 0.1 height)}]
           [:text {:x x :y (* 0.65 height)} tt-str]]])
       [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
-       [:tspan#ttOut.axis-value (format-date tt)]]]]))
+       [:tspan#ttOut.axis-value (or (format-date tt) "empty")]]]]))
 
 (defn- timetravel-form [tx-log min-time max-time now vt tt]
   (let [slider-oninput-js "document.getElementById('%s').textContent = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
@@ -101,7 +102,8 @@
       [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
                :oninput (format slider-oninput-js "vtOut")}]
       (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
-      [:input {:type "range" :name "tt" :value (inst-ms tt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+      [:input {:type "range" :name "tt" :value (or (some-> tt (inst-ms)) 0) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+               :disabled (boolean (not tt))
                :oninput (format slider-oninput-js "ttOut")}]]
      [:input {:type "submit" :value "Go"}]]))
 
@@ -128,7 +130,11 @@
                (parse-query-date tt))
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
                    (vec (api/tx-log crux tx-log-cxt nil true)))
-          tt (or tt (:crux.tx/tx-time (last tx-log)))
+          max-known-tt (:crux.tx/tx-time (last tx-log))
+          tt (or tt max-known-tt)
+          tt (if (pos? (compare tt max-known-tt))
+               max-known-tt
+               tt)
           [min-time max-time] (min-max-time now)
           edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str

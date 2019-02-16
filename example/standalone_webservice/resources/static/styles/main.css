@@ -106,6 +106,11 @@ svg a text {
     width: 100%;
 }
 
+.timetravel input[type=range]:disabled {
+    pointer-events: none;
+    opacity: 0.6;
+}
+
 .timetravel input[type=range]:hover {
     cursor: pointer;
 }
