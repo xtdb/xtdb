@@ -14,7 +14,8 @@
             [example-standalone-webservice.backup :as backup])
   (:import [crux.api IndexVersionOutOfSyncException]
            java.io.Closeable
-           [java.util Date UUID]
+           [java.util Calendar Date TimeZone UUID]
+           java.time.ZoneId
            java.text.SimpleDateFormat))
 
 (defn- format-date [^Date d]
@@ -39,17 +40,31 @@
    [:pre (with-out-str
            (pp/pprint (api/status crux)))]])
 
+(defn- parse-query-date [d]
+  (if (re-find #"^\d+$" d)
+    (Date. (Long/parseLong d))
+    (instant/read-instant-date d)))
+
+(defn- min-max-valid-time [^Date from]
+  (let [utc (ZoneId/of "UTC")
+        ld (.toLocalDate (.atZone (.toInstant from) utc))]
+    [(Date/from (.toInstant (.atStartOfDay (.minusYears ld 1) utc)))
+     (Date/from (.toInstant (.atStartOfDay (.plusYears ld 1) utc)))]))
+
 (defn index-handler
   [ctx {:keys [crux]}]
   (fn [ctx]
     (let [{:strs [vt tt]} (get-in ctx [:parameters :query])
+          now (Date.)
           vt (if (not (str/blank? vt))
-               (instant/read-instant-date vt)
-               (Date.))
+               (parse-query-date vt)
+               now)
           tt (when (not (str/blank? tt))
-               (instant/read-instant-date tt))
+               (parse-query-date tt))
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
-                   (vec (api/tx-log crux tx-log-cxt nil true)))]
+                   (vec (api/tx-log crux tx-log-cxt nil true)))
+          [min-vt max-vt] (min-max-valid-time now)
+          slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -59,17 +74,21 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-           [:form
-            {:action "/" :method "GET"}
+           [:form {:action "/" :method "GET" :autocomplete "off"}
             [:fieldset
              [:label {:for "valid-time"} "Valid time:"]
-             [:input {:type "datetime-local" :value (str/replace (format-date vt) #"-00:00$" "") :name "vt"}]
+             [:dl
+              [:dt "Min:"] [:dd (format-date min-vt)]
+              [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]
+              [:dt "Max:"] [:dd (format-date max-vt)]]
+             [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-vt) :max (inst-ms max-vt) :step 1
+                      :oninput slider-oninput-js}]
              (when (seq tx-log)
                [:label {:for "tx-time"} "Transaction time:"])
              (when (seq tx-log)
                [:select
                 {:id "tx-time" :name "tt"}
-                [:option {:value ""} "now"]
+                [:option {:value ""} "latest"]
                 (for [{:keys [crux.tx/tx-time]} (reverse tx-log)
                       :let [tx-time-str (format-date tx-time)]]
                   [:option {:value tx-time-str
@@ -98,19 +117,20 @@
                   [:dt "Edited:"])
                 (when (inst? edited)
                   [:dd [:a {:href (str "/?vt=" (format-date edited))} (format-date edited)]])]
-               [:form.edit-comment {:action (str "/comment/" id) :method "POST"}
+               [:form.edit-comment {:action (str "/comment/" id) :method "POST" :autocomplete "off"}
                 [:fieldset
                  [:input {:type "text" :name "created" :value (format-date created) :hidden true}]
                  [:input {:type "text" :name "name" :value name :hidden true}]
                  [:textarea {:id (str "edit-message-" id) :name "message" :required true} message]]
-                [:input.primary {:type "submit" :name "_action" :value "Edit"}]
-                [:input {:type "submit" :name "_action" :value "Delete"}]
-                [:input {:type "submit" :name "_action" :value "Delete History"}]
-                [:input {:type "submit" :name "_action" :value "Evict"}]]])]]
+                [:div.buttons
+                 [:input.primary {:type "submit" :name "_action" :value "Edit"}]
+                 [:input {:type "submit" :name "_action" :value "Delete"}]
+                 [:input {:type "submit" :name "_action" :value "Delete History"}]
+                 [:input {:type "submit" :name "_action" :value "Evict"}]]]])]]
 
           [:div.add-comment-box
            [:h3 "Add new comment"]
-           [:form {:action "/comment" :method "POST"}
+           [:form {:action "/comment" :method "POST" :autocomplete "off"}
             [:fieldset
              [:label {:for "name"} "Name:"]
              [:input {:type "text" :id "name" :name "name" :required true}]
@@ -143,10 +163,11 @@
              [:th (str :crux.tx/tx-time)]
              [:th (str :crux.tx/tx-ops)]]
             [:tbody
-             (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log]
+             (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log
+                   :let [tx-time-str (format-date tx-time)]]
                [:tr
-                [:td [:a {:href (str "/?tt=" (format-date tx-time))} tx-id]]
-                [:td (format-date tx-time)]
+                [:td tx-id]
+                [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
                 [:td (with-out-str
                        (pp/pprint tx-ops))]])]]]
           [:div

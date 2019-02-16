@@ -42,7 +42,7 @@ input[type=submit] {
     font-size: 80%;
 }
 
-form:invalid > input[type=submit].primary {
+form:invalid input[type=submit].primary {
     pointer-events: none;
     opacity: 0.6;
 }
@@ -78,12 +78,12 @@ footer {
     text-align: center;
 }
 
-.comments dl {
+dl {
     margin: 0;
     margin-bottom: 0.2em;
 }
 
-.comments dl dt, .comments dl dd {
+dl dt, dl dd {
     color: grey;
     font-size: 80%;
     display: inline-block;
@@ -91,9 +91,17 @@ footer {
     margin-right: 0.2em;
 }
 
-.comments dl dd {
+dl dd {
     color: black;
     margin-right: 1em;
+}
+
+.timetravel input[type=range] {
+    width: 100%;
+}
+
+.timetravel input[type=range]:hover {
+    cursor: pointer;
 }
 
 .comments ul {
@@ -106,6 +114,7 @@ footer {
 }
 
 .comments form.edit-comment {
+    position: relative;
     width: auto;
     padding-bottom: 0;
 }
@@ -115,7 +124,7 @@ footer {
 }
 
 .comments .edit-comment textarea {
-    background: #eee;
+    background: #f8f8f8;
     border: 1px solid transparent;
     cursor: default;
     resize: none;
@@ -128,13 +137,16 @@ footer {
 .comments .edit-comment:hover textarea {
     border: 1px solid grey;
     cursor: text;
+    resize: both;
 }
 
-.comments .edit-comment input {
+.comments .edit-comment .buttons {
+    position: absolute;
     visibility: hidden;
+    right: 0;
 }
 
-.comments .edit-comment:hover input[type=submit] {
+.comments .edit-comment:hover .buttons {
     visibility: visible;
 }
 
@@ -143,6 +155,10 @@ footer {
     border-spacing: 0;
     font-family: monospace;
     white-space: pre;
+}
+
+.transaction-history table th {
+    text-align: left;
 }
 
 .transaction-history table td {
