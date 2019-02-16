@@ -1984,6 +1984,17 @@
   (assert (= [15 36] (hakan/biginteger-zdiv 12 45 19)))
   (assert (= [55 74] (hakan/biginteger-zdiv 27 102 58))))
 
+;; From http://cppedinburgh.uk/slides/201603-zcurves.pdf
+;; Compares real x,y coordinates in Z order without interleaving them
+;; first.
+
+(defn zless [^longs a ^longs b]
+  (let [x-diff (bit-xor (aget a 0) (aget b 0))
+        y-diff (bit-xor (aget a 1) (aget b 1))]
+    (if (and (<= y-diff x-diff) (< y-diff (bit-xor x-diff y-diff)))
+      (< (aget a 0) (aget b 0))
+      (< (aget a 1) (aget b 1)))))
+
 ;; NOTE: Based on
 ;; https://github.com/hadeaninc/libzinc/blob/master/libzinc/AABB.hh
 ;; This file and project lacks license.
