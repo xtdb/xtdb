@@ -52,12 +52,75 @@
   (let [vt-str (format-date vt)]
     [:a {:href (str "/?vt=" vt-str)} vt-str]))
 
+(defn- draw-timeline-graph [tx-log min-time max-time now vt tt width height]
+  (let [known-times (for [{:crux.tx/keys [tx-time tx-ops]} tx-log
+                          command tx-ops
+                          x command
+                          :when (inst? x)]
+                      {:vt x :tt tx-time})
+        time-diff (double (- (inst-ms max-time) (inst-ms min-time)))
+        min-time-str (format-date min-time)
+        max-time-str (format-date max-time)
+        now-str (format-date now)
+        time->x (fn [t]
+                  (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))]
+    [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
+     [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.55 height)} min-time-str]]
+     [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.55 height)} max-time-str]]
+     [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x (or tt now)) :y2 (* 0.75 height)}]
+     [:a.time-horizon {:href (str "/?vt=" now-str)}
+      [:text {:x (time->x now) :y (* 0.55 height)} now-str]
+      [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
+     [:g.axis
+      [:text.axis-name {:x 0 :y (* 0.2 height)} "Valid time"]
+      [:line.axis-line {:x1 0 :y1 (* 0.25 height) :x2 width :y2 (* 0.25 height) :stroke-width (* 0.01 height)}]
+      (for [{:keys [tt vt]} (sort-by :vt known-times)
+            :let [vt-str (format-date vt)
+                  x (time->x vt)]]
+        [:a.timepoint {:href (str "/?vt=" vt-str "&tt=" (format-date tt))}
+         [:g
+          [:rect.timepoint-marker {:x x :y (* 0.2 height) :width (* 0.015 height) :height (* 0.1 height)}]
+          [:text {:x x :y (* 0.15 height)} vt-str]]])]
+     [:g.axis
+      [:line.axis-line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)}]
+      (for [tt (sort (map :tt known-times))
+            :let [tt-str (format-date tt)
+                  x (time->x tt)]]
+        [:a.timepoint {:href (str "/?tt=" tt-str)}
+         [:g
+          [:rect.timepoint-marker {:x x :y (* 0.70 height) :width (* 0.015 height) :height (* 0.1 height)}]
+          [:text {:x x :y (* 0.65 height)} tt-str]]])
+      [:text.axis-name {:x 0 :y (* 0.90 height)} "Transaction time"]]]))
+
+(defn- timetravel-form [tx-log min-time max-time vt tt]
+  (let [slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
+    [:form {:action "/" :method "GET" :autocomplete "off"}
+     [:fieldset
+      [:label {:for "valid-time"} "Valid time:"]
+      [:dl
+       [:dt "Min:"] [:dd (valid-time-link min-time)]
+       [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]
+       [:dt "Max:"] [:dd (valid-time-link max-time)]]
+      [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+               :oninput slider-oninput-js}]
+      (when (seq tx-log)
+        [:label {:for "tx-time"} "Transaction time:"])
+      (when (seq tx-log)
+        [:select
+         {:id "tx-time" :name "tt"}
+         [:option {:value ""} "latest"]
+         (for [tx-time (reverse (sort (map :crux.tx/tx-time tx-log)))
+               :let [tx-time-str (format-date tx-time)]]
+           [:option {:value tx-time-str
+                     :selected (= tt tx-time)} tx-time-str])])]
+     [:input {:type "submit" :value "Go"}]]))
+
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
     (Date. (Long/parseLong d))
     (instant/read-instant-date d)))
 
-(defn- min-max-valid-time [^Date from]
+(defn- min-max-time [^Date from]
   (let [utc (ZoneId/of "UTC")
         ld (.toLocalDate (.atZone (.toInstant from) utc))]
     [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 1) utc)))
@@ -75,8 +138,7 @@
                (parse-query-date tt))
           tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
                    (vec (api/tx-log crux tx-log-cxt nil true)))
-          [min-vt max-vt] (min-max-valid-time now)
-          slider-oninput-js "this.form.vtOut.value = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"
+          [min-time max-time] (min-max-time now)
           edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
        "<!DOCTYPE html>"
@@ -87,27 +149,8 @@
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
-           [:form {:action "/" :method "GET" :autocomplete "off"}
-            [:fieldset
-             [:label {:for "valid-time"} "Valid time:"]
-             [:dl
-              [:dt "Min:"] [:dd (valid-time-link min-vt)]
-              [:dt "Selected:"] [:dd [:output#vtOut (format-date vt)]]
-              [:dt "Max:"] [:dd (valid-time-link max-vt)]]
-             [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-vt) :max (inst-ms max-vt) :step 1
-                      :oninput slider-oninput-js}]
-             (when (seq tx-log)
-               [:label {:for "tx-time"} "Transaction time:"])
-             (when (seq tx-log)
-               [:select
-                {:id "tx-time" :name "tt"}
-                [:option {:value ""} "latest"]
-                (for [{:keys [crux.tx/tx-time]} (reverse tx-log)
-                      :let [tx-time-str (format-date tx-time)]]
-                  [:option {:value tx-time-str
-                            :selected (= tt tx-time)} tx-time-str])])]
-            [:input {:type "submit" :value "Go"}]]]
-
+           (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
+           (timetravel-form tx-log min-time max-time vt tt)]
           [:div.comments
            [:h3 "Comments"]
            [:ul

@@ -97,12 +97,69 @@ dl dd {
     margin-right: 1em;
 }
 
+svg a text {
+    fill: #d67214;
+    text-decoration: underline;
+}
+
 .timetravel input[type=range] {
     width: 100%;
 }
 
 .timetravel input[type=range]:hover {
     cursor: pointer;
+}
+
+.timetravel svg.timeline-graph {
+    text-anchor: start;
+    width: 100%;
+    font: 10px sans-serif;
+}
+
+.timetravel svg.timeline-graph line {
+    stroke: black;
+}
+
+.timetravel svg.timeline-graph .max-time {
+    text-anchor: end;
+}
+
+.timetravel svg.timeline-graph .bitemp-coordinates {
+    stroke: blue;
+    stroke-width: 1px;
+}
+
+.timetravel svg.timeline-graph .time-horizon {
+    text-anchor: middle;
+}
+
+.timetravel svg.timeline-graph .time-horizon line {
+    stroke: green;
+}
+
+.timetravel svg.timeline-graph .axis .axis-name {
+    font-weight: bold;
+}
+
+.timetravel svg.timeline-graph .axis .axis-line {
+    stroke: lightgrey;
+}
+
+.timetravel svg.timeline-graph .timepoint {
+    text-anchor: middle;
+}
+
+.timetravel svg.timeline-graph .timepoint .timepoint-marker {
+    fill: #222;
+}
+
+.timetravel svg.timeline-graph a.timepoint text {
+    visibility: hidden;
+    text-decoration: none;
+}
+
+.timetravel svg.timeline-graph a.timepoint:hover text {
+    visibility: visible;
 }
 
 .comments ul {
