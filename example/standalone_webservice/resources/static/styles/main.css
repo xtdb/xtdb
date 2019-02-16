@@ -140,14 +140,20 @@ svg a text {
 
 .timetravel svg.timeline-graph .time-horizon {
     text-anchor: start;
+    font-weight: bold;
 }
 
 .timetravel svg.timeline-graph .time-horizon line {
     stroke: green;
 }
 
-.timetravel svg.timeline-graph .time-horizon text {
+.timetravel svg.timeline-graph .max-transaction-time {
     font-weight: bold;
+    text-anchor: end;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time line {
+    stroke: darkred;
 }
 
 .timetravel svg.timeline-graph .axis .axis-name {
@@ -158,7 +164,7 @@ svg a text {
     font-weight: normal;
 }
 
-.timetravel svg.timeline-graph .axis .axis-line {
+.timetravel svg.timeline-graph .axis line {
     stroke: #eee;
 }
 
