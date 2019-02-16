@@ -123,6 +123,7 @@ svg a text {
 
 .timetravel svg.timeline-graph line {
     stroke: black;
+    stroke-width: 1.5px;
 }
 
 .timetravel svg.timeline-graph .max-time {
@@ -131,7 +132,6 @@ svg a text {
 
 .timetravel svg.timeline-graph .bitemp-coordinates {
     stroke: blue;
-    stroke-width: 1px;
 }
 
 .timetravel svg.timeline-graph .time-horizon {
@@ -163,7 +163,7 @@ svg a text {
 }
 
 .timetravel svg.timeline-graph .timepoint .timepoint-marker {
-    fill: #222;
+    stroke: #555;
 }
 
 .timetravel svg.timeline-graph a.timepoint text {

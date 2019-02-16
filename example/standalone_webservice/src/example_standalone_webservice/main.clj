@@ -74,15 +74,15 @@
       [:line {:x1 (time->x now) :y1 (* 0.25 height) :x2 (time->x now) :y2 (* 0.75 height)}]]
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
-       [:tspan#vtOut.axis-value (format-date vt)]]
+       [:tspan.axis-value (format-date vt)]]
       [:line.axis-line {:x1 0 :y1 (* 0.25 height) :x2 width :y2 (* 0.25 height) :stroke-width (* 0.01 height)}]
       (for [{:keys [tt vt]} (sort-by :vt known-times)
             :let [vt-str (format-date vt)
                   x (time->x vt)]]
         [:a.timepoint {:href (str "/?vt=" vt-str "&tt=" (format-date tt))}
          [:g
-          [:rect.timepoint-marker {:x x :y (* 0.2 height) :width (* 0.015 height) :height (* 0.1 height)}]
-          [:text {:x x :y (* 0.15 height)} vt-str]]])]
+          [:line.timepoint-marker {:x1 x :y1 (* 0.2 height) :x2 x :y2 (* 0.3 height)}]
+          [:text {:x x :y (* 0.15 height)} (str vt-str " | " (format-date tt))]]])]
      [:g.axis
       [:line.axis-line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)}]
       (for [tt (sort (map :tt known-times))
@@ -90,22 +90,20 @@
                   x (time->x tt)]]
         [:a.timepoint {:href (str "/?tt=" tt-str)}
          [:g
-          [:rect.timepoint-marker {:x x :y (* 0.7 height) :width (* 0.015 height) :height (* 0.1 height)}]
+          [:line.timepoint-marker {:x1 x :y1 (* 0.7 height) :x2 x :y2 (* 0.8 height)}]
           [:text {:x x :y (* 0.65 height)} tt-str]]])
       [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
-       [:tspan#ttOut.axis-value (or (format-date tt) "empty")]]]]))
+       [:tspan.axis-value (or (format-date tt) "empty")]]]]))
 
 (defn- timetravel-form [tx-log min-time max-time now vt tt]
-  (let [slider-oninput-js "document.getElementById('%s').textContent = new Date(Number.parseInt(this.value)).toISOString().replace('Z', '-00:00');"]
-    [:form {:action "/" :method "GET" :autocomplete "off"}
-     [:fieldset
-      [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
-               :oninput (format slider-oninput-js "vtOut")}]
-      (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
-      [:input {:type "range" :name "tt" :value (or (some-> tt (inst-ms)) 0) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
-               :disabled (boolean (not tt))
-               :oninput (format slider-oninput-js "ttOut")}]]
-     [:input {:type "submit" :value "Go"}]]))
+  [:form {:action "/" :method "GET" :autocomplete "off"}
+   [:fieldset
+    [:input {:type "range" :name "vt" :value (inst-ms vt) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+             :onchange "this.form.submit();"}]
+    (draw-timeline-graph tx-log min-time max-time now vt tt 750 100)
+    [:input {:type "range" :name "tt" :value (or (some-> tt (inst-ms)) 0) :min (inst-ms min-time) :max (inst-ms max-time) :step 1
+             :disabled (boolean (not tt))
+             :onchange "this.form.submit();"}]]])
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
