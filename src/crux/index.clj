@@ -510,6 +510,17 @@
 ;; search space just because it finds the lowest valid value in Z
 ;; order. Needs more testing / reflection.
 
+;; What I think needs to happen when one finds a candidate within the
+;; box, is to search the left hand side as a new box (really the lower
+;; left quadrant), until there's nothing more found, in which case one
+;; takes the last found value.  This is due to use wanting to both
+;; search across both two time dimensions, which zdiv does, but while
+;; also give priority to valid time (which is the x-axis). A potential
+;; other alternative is to use the other index first, and only use
+;; this when one is starting to scan for transaction time, but the
+;; same issue would likely still be there, so we can as well solve it
+;; here without complicating both boxes.
+
 (defrecord EntityMortonAsOfIndex [i seek-z eb]
   db/Index
   (db/seek-values [this k]
