@@ -2121,3 +2121,37 @@
         next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
         next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
     (bit-or (bit-and next-z end) start)))
+
+
+;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.144.505&rep=rep1&type=pdf
+
+;; Algorithm 3 Algorithm to calculate the Z-order next-match
+
+;; 1: next-match <= page-key
+
+;; 2: check each coordinate in the page-key-point to find the highest
+;; bit in the next-match which must change:
+
+;; (a) from 1 to 0 because a page-key-point coordinate > the
+;; corresponding coordinate in the range upper bound or
+
+;; (b) from 0 to 1 because a page-key-point coordinate < the
+;; corresponding coordinate in the range lower bound
+
+;; 3: where the highest bit to change arises from condition (a) in
+;; some coordinate:
+
+;; find the lowest but higher bit in the next-match determined by some
+;; other coordinate which can be changed from 0 to 1, such that if all
+;; lower bits are set to 0, the coordinate value remains leq the
+;; corresponding coordinate in the range upper bound
+
+;; 4: set to 1 the bit identified in the next-match as being the
+;; highest zero-valued bit which must be incremented
+
+;; 5: set all lower bits in the next-match to 0
+
+;; 6: for each coordinate of the point corresponding to the
+;; next-match, if any is < the corresponding coordinate of the range
+;; lower bound, then increment the corresponding ts in the next-match
+;; to the values in the range lower bound
