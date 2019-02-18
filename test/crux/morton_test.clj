@@ -109,7 +109,7 @@
           (t/testing "not visible before both times"
             (t/is (nil? (seek-at i 4 3)))))
 
-        (t/testing "with a value before in valid time from earlier transaction"
+        (t/testing "with a value later in valid time from earlier transaction"
           (let [valid-time 2
                 tx-time 4
                 z (morton/longs->morton-number valid-time tx-time)
