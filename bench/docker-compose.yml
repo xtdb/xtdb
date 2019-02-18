@@ -4,7 +4,7 @@ services:
   website:
     build:
       context: .
-      dockerfile: ../example/standalone_webservice/docker-images/development/Dockerfile
+      dockerfile: docker-files/Dockerfile
 
     restart: always
     command: lein repl :headless :host 0.0.0.0 :port 7889

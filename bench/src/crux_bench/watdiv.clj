@@ -8,19 +8,6 @@
   (:import [java.io Closeable]
            [java.time Duration]))
 
-(def ^:const watdiv-triples-resource
-  "watdiv/data/watdiv.10M.nt")
-
-(def ^:const watdiv-num-queries
-  (some-> (System/getenv "CRUX_WATDIV_NUM_QUERIES")
-          Integer/parseInt))
-
-(def ^:const watdiv-indexes
-  (some-> (System/getenv "CRUX_WATDIV_IDS")
-          (str/split #"\s*,\s+")
-          (->> (map #(Long/parseLong %))
-               (into #{}))))
-
 (defn load-rdf-into-crux
   [{:keys [^crux.api.ICruxSystem crux] :as runner} resource]
   (let [submit-future (future
@@ -41,7 +28,7 @@
     {:running-future
      (future
        (log/info "starting to load watdiv data into crux")
-       (load-rdf-into-crux )
+       (load-rdf-into-crux options "watdiv/data/watdiv.10M.nt")
        (log/info "completed loading watdiv data into crux")
 
        (println "Now it should be starting to run the tests"))}))

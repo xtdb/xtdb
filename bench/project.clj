@@ -12,4 +12,5 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [org.apache.kafka/kafka-clients "2.1.0"]]
   :global-vars {*warn-on-reflection* true}
+  :resource-paths ["/watdiv-data/resources" "resources"]
   :main crux-bench.main)

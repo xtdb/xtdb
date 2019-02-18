@@ -4,7 +4,7 @@ set -e
 
 WATDIV_ARCIVE="watdiv.10M.tar.bz2"
 STRESS_ARCIVE="stress-workloads.tar.gz"
-TARGET_DIR="test/watdiv/data"
+TARGET_DIR="resources/watdiv/data"
 
 mkdir -p ${TARGET_DIR}
 

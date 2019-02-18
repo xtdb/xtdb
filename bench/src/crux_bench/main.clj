@@ -6,6 +6,7 @@
             [yada.yada :refer [handler listener]]
             [yada.resource :refer [resource]]
             [yada.resources.classpath-resource]
+            [clojure.pprint :as pp]
 
             [crux-bench.watdiv :as watdiv])
   (:import [java.io Closeable]))
@@ -26,10 +27,13 @@
        [:body
         [:header
          [:h2 [:a {:href "/"} "Bench Mark runner"]]
-         [:pre (pr-str (-> system :benchmark-runner :status deref))]
+         [:pre
+          (with-out-str
+            (pp/pprint (-> system :benchmark-runner :status deref)))]
          [:div.buttons
-          [:input {:value "Run!" :name "run" :type "button"}]
-          [:input {:value "Stop!" :name "run" :type "button"}]]]
+          [:form {:action "/start-bench" :method "POST"}
+           [:input {:value "Run!" :name "run" :type "submit"}]]
+          [:input {:value "Stop!" :name "run" :type "submit"}]]]
 
         [:hr]
         [:div.status-content
@@ -38,13 +42,32 @@
           "current status"]]]])))
 
 (defn application-resource
-  [system]
+  [{:keys [benchmark-runner] :as system}]
   ["/"
    [[""
      (resource
       {:methods
        {:get {:produces "text/html"
               :response #(index-handler % system)}}})]
+
+    ["start-bench"
+     (resource
+       {:methods
+        {:post {:consumes "application/x-www-form-urlencoded"
+                :produces "text/html"
+                :response
+                (fn [ctx]
+                  (log/info "starting benchmark tests")
+                  (swap!
+                    (:status benchmark-runner)
+                    merge
+                    {:running? true
+                     :watdiv-runner (watdiv/run-watdiv-test system)})
+
+                  (assoc (:response ctx)
+                         :status 302
+                         :headers {"location" "/"}))}}})]
+
     ["static"
      (yada.resources.classpath-resource/new-classpath-resource
        "static")]]])
@@ -62,7 +85,9 @@
 (defrecord BenchMarkRunner [status crux-system]
   Closeable
   (close [_]
-    (println "closing benchmark")))
+    (println "closing benchmark")
+    (when-let [watdiv-runner (:watdiv-runner @status)]
+      (.close ^Closeable watdiv-runner))))
 
 (defn ^BenchMarkRunner bench-mark-runner [crux-system]
   (map->BenchMarkRunner
