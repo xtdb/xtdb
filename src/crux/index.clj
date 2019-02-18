@@ -525,6 +525,10 @@
 ;; demonstrates the idea. Don't we need to use zdiv here as well on
 ;; subsequent seeks? Or does the other zdiv kick into action for this
 ;; range as well? Needs reflection and to be rewritten.
+
+;; NOTE: I think that in normal, non z-max searches, we can actually
+;; check if BIGMIN makes sense or not to jump into, or if we gone out
+;; of range, so think we need that logic here.
 (defn- find-entity-tx-with-highest-valid-time [i seek-k prefix-size eid k z min max candidate]
   (if (and k
            (mem/buffers=? seek-k k prefix-size)
