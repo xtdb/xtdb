@@ -45,7 +45,9 @@
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
                          :id ::id
                          :start-valid-time (s/? inst?)
-                         :end-valid-time (s/? inst?)))
+                         :end-valid-time (s/? inst?)
+                         :keep-latest? (s/? boolean?)
+                         :keep-earliest? (s/? boolean?)))
 
 (s/def ::tx-op (s/and (s/or :put ::put-op
                             :delete ::delete-op
@@ -113,15 +115,19 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+(defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-valid-time (or start-valid-time (.vt ^EntityTx (last history-descending)))
         end-valid-time (or end-valid-time transact-time)]
     {:post-commit-fn #(when tx-log
-                        (doseq [^EntityTx entity-tx history-descending
-                                :when ((in-range-pred start-valid-time end-valid-time) (.vt entity-tx))]
-                          (db/submit-doc tx-log (.content-hash entity-tx) nil)))
+                        (let [range-pred (in-range-pred start-valid-time end-valid-time)]
+                          (doseq [^EntityTx entity-tx (cond->> (filter (fn [^EntityTx entity-tx]
+                                                                         (range-pred (.vt entity-tx)))
+                                                                       history-descending)
+                                                        keep-latest? rest
+                                                        keep-earliest? butlast)]
+                            (db/submit-doc tx-log (.content-hash entity-tx) nil))))
      :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
              nil
              (c/->id-buffer eid)
