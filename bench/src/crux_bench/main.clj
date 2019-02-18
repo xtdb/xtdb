@@ -7,6 +7,7 @@
             [yada.resource :refer [resource]]
             [yada.resources.classpath-resource]
             [clojure.pprint :as pp]
+            [clojure.java.shell :refer [sh]]
 
             [crux-bench.watdiv :as watdiv])
   (:import [java.io Closeable]))
@@ -39,7 +40,9 @@
         [:div.status-content
          [:h3 "Status"]
          [:pre
-          "current status"]]]])))
+          (when-let [f (-> system :benchmark-runner :status deref
+                           :watdiv-runner :out-file)]
+            (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]]])))
 
 (defn application-resource
   [{:keys [benchmark-runner] :as system}]
@@ -123,4 +126,6 @@
             (fn [_]
               (def crux)
               (Thread/sleep Long/MAX_VALUE)))))
-  (future-cancel s))
+  (future-cancel s)
+
+  )
