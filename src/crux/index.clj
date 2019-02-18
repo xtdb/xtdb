@@ -506,6 +506,10 @@
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))
 
+;; TODO: We're not 100% sure this actually returns the lowest value in
+;; search space just because it finds the lowest valid value in Z
+;; order. Needs more testing / reflection.
+
 (defrecord EntityMortonAsOfIndex [i seek-z eb]
   db/Index
   (db/seek-values [this k]
