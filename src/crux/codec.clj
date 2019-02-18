@@ -2,6 +2,7 @@
   (:require [crux.byte-utils :as bu]
             [crux.hash :as hash]
             [crux.memory :as mem]
+            [crux.morton :as morton]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang IHashEq IPersistentMap Keyword]
            [java.io Closeable Writer]
@@ -28,6 +29,9 @@
 (def ^:const ^:private meta-key->value-index-id 4)
 (def ^:const ^:private tx-id->tx-index-id 5)
 (def ^:const ^:private index-version-index-id 6)
+;; TODO: Might replace entity+vt+tt+tx-id->content-hash-index-id
+;; eventually.
+(def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
@@ -556,6 +560,53 @@
           transact-time (reverse-time-ms->date (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
       (->EntityTx entity valid-time transact-time tx-id nil))))
+
+(defn encode-entity-tx-z-number ^java.math.BigInteger [valid-time transaction-time]
+  (morton/longs->morton-number (date->reverse-time-ms valid-time)
+                               (date->reverse-time-ms transaction-time)))
+
+(defn encode-entity+z+tx-id-key-to
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+   (encode-entity+z+tx-id-key-to b empty-buffer nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
+   (encode-entity+z+tx-id-key-to b entity nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^BigInteger z ^Long tx-id]
+   (assert (or (= id-size (.capacity entity))
+               (zero? (.capacity entity))) (mem/buffer->hex entity))
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ index-id-size (.capacity entity))
+                                                             z (+ (* 2 Long/BYTES))
+                                                             tx-id (+ Long/BYTES))))
+         [upper-morton lower-morton] (when z
+                                       (morton/morton-number->interleaved-longs z))]
+     (.putByte b 0 entity+z+tx-id->content-hash-index-id)
+     (.putBytes b index-id-size entity 0 (.capacity entity))
+     (when z
+       (.putLong b (+ index-id-size id-size) upper-morton ByteOrder/BIG_ENDIAN)
+       (.putLong b (+ index-id-size id-size Long/BYTES) lower-morton ByteOrder/BIG_ENDIAN))
+     (when tx-id
+       (.putLong b (+ index-id-size id-size Long/BYTES Long/BYTES) tx-id ByteOrder/BIG_ENDIAN))
+     (->> (+ index-id-size (.capacity entity) (if z (* 2 Long/BYTES) 0) (maybe-long-size tx-id))
+          (mem/limit-buffer b)))))
+
+(defn decode-entity+z+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= entity+z+tx-id->content-hash-index-id index-id))
+    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
+          [valid-time transaction-time] (morton/morton-number->longs
+                                         (morton/interleaved-longs->morton-number
+                                          (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN)
+                                          (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN)))
+          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+      (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
+
+(defn decode-entity+z+tx-id-key-as-z-from ^java.math.BigInteger [^DirectBuffer k]
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= entity+z+tx-id->content-hash-index-id index-id))
+    (morton/interleaved-longs->morton-number
+     (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN)
+     (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))))
 
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx

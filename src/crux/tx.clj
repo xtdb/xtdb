@@ -9,6 +9,7 @@
             [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.moberg :as moberg]
+            [crux.morton :as morton]
             [crux.status :as status]
             [taoensso.nippy :as nippy])
   (:import [crux.codec EntityTx Id]
@@ -73,14 +74,22 @@
         dates-to-correct (->> (cons start-valid-time dates-in-history)
                               (filter (in-range-pred start-valid-time end-valid-time))
                               (into (sorted-set)))]
-    {:kvs (vec (for [valid-time dates-to-correct]
-                 [(c/encode-entity+vt+tt+tx-id-key-to
-                   nil
-                   (c/->id-buffer eid)
-                   valid-time
-                   transact-time
-                   tx-id)
-                  content-hash]))}))
+    {:kvs (->> (for [valid-time dates-to-correct]
+                 [[(c/encode-entity+vt+tt+tx-id-key-to
+                    nil
+                    (c/->id-buffer eid)
+                    valid-time
+                    transact-time
+                    tx-id)
+                   content-hash]
+                  (when morton/use-space-filling-curve-index?
+                    [(c/encode-entity+z+tx-id-key-to
+                      nil
+                      (c/->id-buffer eid)
+                      (c/encode-entity-tx-z-number valid-time transact-time)
+                      tx-id)
+                     content-hash])])
+               (reduce into []))}))
 
 (defmethod tx-command :crux.tx/put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
@@ -102,18 +111,25 @@
     {:pre-commit-fn #(if (= (c/new-id content-hash)
                             (c/new-id old-v))
                        (let [correct-state? (not (nil? (db/get-single-object object-store snapshot (c/new-id new-v))))]
-                          (when-not correct-state?
-                            (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
-                          correct-state?)
+                         (when-not correct-state?
+                           (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
+                         correct-state?)
                        (do (log/warn "CAS failure:" (pr-str cas-op))
                            false))
-     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             valid-time
-             transact-time
-             tx-id)
-            (c/->id-buffer new-v)]]}))
+     :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
+                     nil
+                     (c/->id-buffer eid)
+                     valid-time
+                     transact-time
+                     tx-id)
+                    (c/->id-buffer new-v)]]
+            morton/use-space-filling-curve-index?
+            (conj [(c/encode-entity+z+tx-id-key-to
+                    nil
+                    (c/->id-buffer eid)
+                    (c/encode-entity-tx-z-number valid-time transact-time)
+                    tx-id)
+                   (c/->id-buffer new-v)]))}))
 
 (defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
@@ -128,13 +144,20 @@
                                                         keep-latest? rest
                                                         keep-earliest? butlast)]
                             (db/submit-doc tx-log (.content-hash entity-tx) nil))))
-     :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
-             nil
-             (c/->id-buffer eid)
-             end-valid-time
-             transact-time
-             tx-id)
-            c/nil-id-buffer]]}))
+     :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
+                     nil
+                     (c/->id-buffer eid)
+                     end-valid-time
+                     transact-time
+                     tx-id)
+                    c/nil-id-buffer]]
+            morton/use-space-filling-curve-index?
+            (conj [(c/encode-entity+z+tx-id-key-to
+                    nil
+                    (c/->id-buffer eid)
+                    (c/encode-entity-tx-z-number end-valid-time transact-time)
+                    tx-id)
+                   c/nil-id-buffer]))}))
 
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable

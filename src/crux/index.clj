@@ -7,6 +7,7 @@
             [crux.db :as db]
             [crux.kv :as kv]
             [crux.memory :as mem]
+            [crux.morton :as morton]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File FileInputStream FileOutputStream]
            [java.util Arrays Collections Comparator Date]
@@ -505,8 +506,39 @@
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))
 
-(defn new-entity-as-of-index [snapshot valid-time transact-time]
-  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transact-time (ExpandableDirectByteBuffer.)))
+(defrecord EntityMortonAsOfIndex [i seek-z eb]
+  db/Index
+  (db/seek-values [this k]
+    (let [eid k
+          prefix-size (+ c/index-id-size c/id-size)
+          seek-k (c/encode-entity+z+tx-id-key-to
+                  (.get seek-buffer-tl)
+                  eid
+                  seek-z
+                  nil)]
+      (loop [k (kv/seek i seek-k)]
+        (when (and k (mem/buffers=? seek-k k prefix-size))
+          (let [z (c/decode-entity+z+tx-id-key-as-z-from k)]
+            (if (morton/morton-number-within-range? seek-z morton/z-max-mask z)
+              (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+                    v (kv/value i)]
+                (when-not (mem/buffers=? c/nil-id-buffer v)
+                  [(c/->id-buffer (.eid entity-tx))
+                   (enrich-entity-tx entity-tx v)]))
+              (let [[_ bigmin] (morton/zdiv seek-z morton/z-max-mask z)]
+                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                   (.get seek-buffer-tl)
+                                   eid
+                                   bigmin
+                                   nil))))))))))
+
+  (db/next-values [this]
+    (throw (UnsupportedOperationException.))))
+
+(defn new-entity-as-of-index [snapshot valid-time transaction-time]
+  (if morton/use-space-filling-curve-index?
+    (->EntityMortonAsOfIndex (kv/new-iterator snapshot) (c/encode-entity-tx-z-number valid-time transaction-time) (ExpandableDirectByteBuffer.))
+    (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time (ExpandableDirectByteBuffer.))))
 
 (defn entities-at [snapshot eids valid-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
@@ -523,6 +555,11 @@
                     (map (comp :eid c/decode-entity+vt+tt+tx-id-key-from))
                     (distinct))]
       (entities-at snapshot eids valid-time transact-time))))
+
+;; TODO: Entity history would need to be able to use the Z order index
+;; for us to be able to remove the old index. Outstanding questions
+;; around how and if LITMAX would work together with seeks and prev
+;; for ascending search.
 
 (defn- entity-history-step [i seek-k f-cons f-next]
   (lazy-seq
@@ -559,6 +596,9 @@
                                    (pos? (compare (.tt entity-tx) transaction-time))))
                      (first))))
          (remove nil?))))
+
+;; TODO: This would need to change to simply walk the entire Z curve
+;; from a point in the right order.
 
 (defn entity-history-seq [i eid]
   (let [seek-k (c/encode-entity+vt+tt+tx-id-key-to nil (c/->id-buffer eid))]
@@ -650,7 +690,7 @@
                      (c/->id-buffer (.eid entity-tx))
                      (c/->id-buffer (.content-hash entity-tx))
                      v)]
-      (when (kv/get-value snapshot  version-k)
+      (when (kv/get-value snapshot version-k)
         entity-tx))))
 
 (mem/defvo UnaryJoinIteratorsThunkFnState [thunk])
