@@ -2080,7 +2080,6 @@
   (assert (= [99 104] (morton-get-next-address 98 107)))
   (assert (= [149 192] (morton-get-next-address 145 193))))
 
-
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^longs z]
   (.or (.shiftLeft (biginteger (aget z 0)) Long/SIZE)
         (biginteger (aget z 1))))
@@ -2089,39 +2088,54 @@
   (long-array [(.longValue (.shiftRight z Long/SIZE))
                (.longValue z)]))
 
-;; TODO: Try
-;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
+(defn morton-within-range? [^Number min ^Number max ^Number z]
+  (let [min (biginteger min)
+        max (biginteger max)
+        z (biginteger z)
+        zx (.and z morton-2-x-mask)
+        zy (.and z (.shiftLeft morton-2-x-mask 1))]
+    (and (not (pos? (.compareTo (.and min morton-2-x-mask) zx)))
+         (not (pos? (.compareTo (.and min (.shiftLeft morton-2-x-mask 1)) zy)))
+         (not (pos? (.compareTo zx (.and max morton-2-x-mask))))
+         (not (pos? (.compareTo zy (.and max (.shiftLeft morton-2-x-mask 1))))))))
 
-;; NOTE: these don't work, they should operate on the "h" path into
-;; the tree somehow, which is z chopped up in k (2) bits. It's not
-;; clear in the paper how one actually makes that step. If they did
-;; work, this should be enough for the int case, but we need longs.
+;; Example of how this would actually be used in Crux. Coordinates
+;; here would really be the reversed dates. Max (63 in this example)
+;; would be (.longValue 0xffffffffffffffff). 0 represents the future,
+;; and new values in times shrinks towards it.
 
-;; There are tests seemingly related to the paper here, but they don't
-;; show the relation between z and h:
-;; https://github.com/tzaeschke/phtree/blob/master/src/test/java/ch/ethz/globis/phtree/bits/TestIncSuccessor.java
+;; See https://en.wikipedia.org/wiki/Z-order_curve#Use_with_one-dimensional_data_structures_for_range_searching
 
-;; isInI
-(defn within-range-ints? [^long start ^long end ^long z]
-  (= (bit-and (bit-or z start) end) z))
+;; Say time we look for is 12, max is 63. We find 16 via a seek, above
+;; 12, but outside the box:
 
-;; inc, z has to already be in range.
-(defn next-in-range [^long start ^long end ^long z]
-  (let [next-z (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start)]
-    (if (<= next-z z)
-      -1
-      next-z)))
+;; (hakan/morton-within-range? 12 63 16)
+;; false
 
-;; succ, z can be anywhere.
-(defn next-within-range [^long start ^long end ^long z]
-  (let [mask-start (dec (Long/highestOneBit (bit-or (bit-and (bit-not z) start) 1)))
-        end-high-bit (Long/highestOneBit (bit-or (bit-and z (bit-not end)) 1))
-        mask-end (dec end-high-bit)
-        next-z (bit-or z (bit-not end))
-        next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
-        next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
-    (bit-or (bit-and next-z end) start)))
+;; We then divide the box based on 16:
 
+;; (hakan/zdiv 12 63 16)
+;; [15, 24]
+
+;; This means the box continues below between 12 and 15 and above
+;; between 24 and 63. As we did seek for 12 but found 16 we know the
+;; lower box is empty, and can seek for 24 to continue. Say we find
+;; 33:
+
+;; (hakan/morton-within-range? 12 63 33)
+;; false
+;; (hakan/zdiv 12 63 33)
+;; [31, 36]
+
+;; Again we can skip the lower box 12 and 31 as this is below 33, but
+;; continue back in range between 36 and 63. Say you now seek and find
+;; 39, this is within the box:
+
+;; (hakan/morton-within-range? 12 63 39)
+;; true
+
+;; 39 is our answer. Or do need to sanity check we haven't skipped
+;; anything (in the lower boxes)?
 
 ;; http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.144.505&rep=rep1&type=pdf
 
@@ -2155,3 +2169,36 @@
 ;; next-match, if any is < the corresponding coordinate of the range
 ;; lower bound, then increment the corresponding ts in the next-match
 ;; to the values in the range lower bound
+
+;; TODO: Try
+;; https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/123617/eth-50204-01.pdf
+
+;; NOTE: these don't work, they should operate on the "h" path into
+;; the tree somehow, which is z chopped up in k (2) bits. It's not
+;; clear in the paper how one actually makes that step. If they did
+;; work, this should be enough for the int case, but we need longs.
+
+;; There are tests seemingly related to the paper here, but they don't
+;; show the relation between z and h:
+;; https://github.com/tzaeschke/phtree/blob/master/src/test/java/ch/ethz/globis/phtree/bits/TestIncSuccessor.java
+
+;; ;; isInI
+;; (defn within-range-ints? [^long start ^long end ^long z]
+;;   (= (bit-and (bit-or z start) end) z))
+
+;; ;; inc, z has to already be in range.
+;; (defn next-in-range [^long start ^long end ^long z]
+;;   (let [next-z (bit-or (bit-and (inc (bit-or z (bit-not end))) end) start)]
+;;     (if (<= next-z z)
+;;       -1
+;;       next-z)))
+
+;; ;; succ, z can be anywhere.
+;; (defn next-within-range [^long start ^long end ^long z]
+;;   (let [mask-start (dec (Long/highestOneBit (bit-or (bit-and (bit-not z) start) 1)))
+;;         end-high-bit (Long/highestOneBit (bit-or (bit-and z (bit-not end)) 1))
+;;         mask-end (dec end-high-bit)
+;;         next-z (bit-or z (bit-not end))
+;;         next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
+;;         next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
+;;     (bit-or (bit-and next-z end) start)))
