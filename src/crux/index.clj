@@ -551,7 +551,8 @@
                              eid
                              min
                              nil))
-          z (c/decode-entity+z+tx-id-key-as-z-from k)]
+          z (when next-k
+              (c/decode-entity+z+tx-id-key-as-z-from next-k))]
       (recur i
              seek-k
              prefix-size
