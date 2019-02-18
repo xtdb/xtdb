@@ -529,64 +529,52 @@
 ;; NOTE: I think that in normal, non z-max searches, we can actually
 ;; check if BIGMIN makes sense or not to jump into, or if we gone out
 ;; of range, so think we need that logic here.
-(defn- find-entity-tx-with-highest-valid-time [i seek-k prefix-size eid k z min max candidate]
-  (if (and k
-           (mem/buffers=? seek-k k prefix-size)
-           (morton/morton-number-within-range? min max z))
-    (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
-          v (kv/value i)
-          new-candidate (if-not (mem/buffers=? c/nil-id-buffer v)
-                          [(c/->id-buffer (.eid entity-tx))
-                           (enrich-entity-tx entity-tx v)]
-                          ::deleted-entity)
-          [x y] (morton/morton-number->longs (c/encode-entity-tx-z-number (.vt entity-tx) (.tt entity-tx)))
+(defn- find-first-entity-tx-within-range [i min max eb eid]
+  (let [prefix-size (+ c/index-id-size c/id-size)
+        seek-k (c/encode-entity+z+tx-id-key-to
+                (.get seek-buffer-tl)
+                eid
+                min
+                nil)]
+    (loop [k (kv/seek i seek-k)]
+      (when (and k (mem/buffers=? seek-k k prefix-size))
+        (let [z (c/decode-entity+z+tx-id-key-as-z-from k)]
+          (if (morton/morton-number-within-range? min max z)
+            (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+                  v (kv/value i)]
+              (if-not (mem/buffers=? c/nil-id-buffer v)
+                [(c/->id-buffer (.eid entity-tx))
+                 (enrich-entity-tx entity-tx v)]
+                [::deleted-entity entity-tx]))
+            (when-let [[_ bigmin] (morton/zdiv min max z)]
+              (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                 (.get seek-buffer-tl)
+                                 eid
+                                 bigmin
+                                 nil))))))))))
+
+(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid]
+  (when-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
+    (let [x (c/date->reverse-time-ms (.vt entity-tx))
+          y (c/date->reverse-time-ms (.tt entity-tx))
+          min-x (long (first (morton/morton-number->longs min)))
           min (morton/longs->morton-number
-               (first (morton/morton-number->longs min))
+               min-x
                y)
+          max-x (dec (long x))
           max (morton/longs->morton-number
-               (dec (long x))
-               (second (morton/morton-number->longs max)))
-          next-k (kv/seek i (c/encode-entity+z+tx-id-key-to
-                             (.get seek-buffer-tl)
-                             eid
-                             min
-                             nil))
-          z (when next-k
-              (c/decode-entity+z+tx-id-key-as-z-from next-k))]
-      (recur i
-             seek-k
-             prefix-size
-             eid
-             next-k
-             z
-             min
-             max
-             new-candidate))
-    [candidate z]))
+               max-x
+               (second (morton/morton-number->longs max)))]
+      (or (when (<= min-x max-x)
+            (find-entity-tx-within-range-with-highest-valid-time i min max eb eid))
+          candidate))))
 
 (defrecord EntityMortonAsOfIndex [i seek-z eb]
   db/Index
   (db/seek-values [this k]
-    (let [eid k
-          prefix-size (+ c/index-id-size c/id-size)
-          seek-k (c/encode-entity+z+tx-id-key-to
-                  (.get seek-buffer-tl)
-                  eid
-                  seek-z
-                  nil)]
-      (loop [k (kv/seek i seek-k)]
-        (when (and k (mem/buffers=? seek-k k prefix-size))
-          (let [z (c/decode-entity+z+tx-id-key-as-z-from k)
-                [candidate z] (find-entity-tx-with-highest-valid-time i seek-k prefix-size eid k z seek-z morton/z-max-mask nil)]
-            (if candidate
-              (when-not (= ::deleted-entity candidate)
-                candidate)
-              (let [[_ bigmin] (morton/zdiv seek-z morton/z-max-mask z)]
-                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
-                                   (.get seek-buffer-tl)
-                                   eid
-                                   bigmin
-                                   nil))))))))))
+    (let [candidate (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k)]
+      (when-not (= ::deleted-entity (first candidate))
+        candidate)))
 
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))

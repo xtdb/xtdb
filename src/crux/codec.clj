@@ -496,10 +496,10 @@
        (.putBytes index-id-size k 0 (.capacity k)))
      (+ index-id-size id-size))))
 
-(defn- date->reverse-time-ms ^long [^Date date]
+(defn date->reverse-time-ms ^long [^Date date]
   (bit-xor (bit-not (.getTime date)) Long/MIN_VALUE))
 
-(defn- reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
+(defn reverse-time-ms->date ^java.util.Date [^long reverse-time-ms]
   (Date. (bit-xor (bit-not reverse-time-ms) Long/MIN_VALUE)))
 
 (defn- maybe-long-size ^long [x]

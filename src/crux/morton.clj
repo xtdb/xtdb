@@ -33,7 +33,7 @@
           (bit-spread-int (Integer/toUnsignedLong (unchecked-int y)))))
 
 (defn- bit-uninterleave-ints [^long x]
-  (int-array [(bit-unspread-int (bit-shift-right x 1))
+  (int-array [(bit-unspread-int (unsigned-bit-shift-right x 1))
               (bit-unspread-int x)]))
 
 (defn interleaved-longs->morton-number ^java.math.BigInteger [^long upper ^long lower]
@@ -62,34 +62,34 @@
      (bit-or (bit-shift-left (Integer/toUnsignedLong (aget upper 1)) Integer/SIZE)
              (Integer/toUnsignedLong (aget lower 1)))]))
 
-(def ^:private ^BigInteger morton-2-x-mask (biginteger 0x55555555555555555555555555555555))
+(def ^:private ^BigInteger morton-2-x-mask (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa))
 
 (defn morton-number-within-range? [^Number min ^Number max ^Number z]
   (let [min (biginteger min)
         max (biginteger max)
         z (biginteger z)
         zx (.and z morton-2-x-mask)
-        zy (.and z (.shiftLeft morton-2-x-mask 1))]
+        zy (.and (.shiftLeft z 1) morton-2-x-mask)]
     (and (not (pos? (.compareTo (.and min morton-2-x-mask) zx)))
-         (not (pos? (.compareTo (.and min (.shiftLeft morton-2-x-mask 1)) zy)))
+         (not (pos? (.compareTo (.and (.shiftLeft min 1) morton-2-x-mask) zy)))
          (not (pos? (.compareTo zx (.and max morton-2-x-mask))))
-         (not (pos? (.compareTo zy (.and max (.shiftLeft morton-2-x-mask 1))))))))
+         (not (pos? (.compareTo zy (.and (.shiftLeft max 1) morton-2-x-mask)))))))
 
 (defn- bit-spread ^BigInteger [^BigInteger x]
-  (let [l1 (biginteger (bit-spread-int (.intValue x)))
-        l2 (biginteger (bit-spread-int (.intValue (.shiftRight x Integer/SIZE))))
-        l3 (biginteger (bit-spread-int (.intValue (.shiftRight x (* 2 Integer/SIZE)))))
-        l4 (biginteger (bit-spread-int (.intValue (.shiftRight x (* 3 Integer/SIZE)))))]
+  (let [l1 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue x)))
+        l2 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x Integer/SIZE))))
+        l3 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x (* 2 Integer/SIZE)))))
+        l4 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x (* 3 Integer/SIZE)))))]
     (.or (.shiftLeft l4 (* 3 Long/SIZE))
          (.or (.shiftLeft l3 (* 2 Long/SIZE))
               (.or (.shiftLeft l2 Long/SIZE)
                    l1)))))
 
 (defn- bit-unspread ^BigInteger [^BigInteger x]
-  (let [l1 (biginteger (bit-unspread-int (.longValue x)))
-        l2 (biginteger (bit-unspread-int (.longValue (.shiftRight x Long/SIZE))))
-        l3 (biginteger (bit-unspread-int (.longValue (.shiftRight x (* 2 Long/SIZE)))))
-        l4 (biginteger (bit-unspread-int (.longValue (.shiftRight x (* 3 Long/SIZE)))))]
+  (let [l1 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue x)))
+        l2 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x Long/SIZE))))
+        l3 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x (* 2 Long/SIZE)))))
+        l4 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x (* 3 Long/SIZE)))))]
     (.or (.shiftLeft l4 (* 3 Integer/SIZE))
          (.or (.shiftLeft l3 (* 2 Integer/SIZE))
               (.or (.shiftLeft l2 Integer/SIZE)
@@ -125,8 +125,14 @@
            bigmin BigInteger/ZERO
            start start
            end end]
-      (if (zero? n)
+      (cond
+        (pos? (compare start end)) ;; TODO: This cannot be right, but kind of works.
+        nil
+
+        (zero? n)
         [litmax bigmin]
+
+        :else
         (let [n (dec n)
               bits (inc (unsigned-bit-shift-right n 1))
               dim (bit-and n 1)
