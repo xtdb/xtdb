@@ -544,8 +544,9 @@
                   v (kv/value i)]
               (if-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
-                 (enrich-entity-tx entity-tx v)]
-                [::deleted-entity entity-tx]))
+                 (enrich-entity-tx entity-tx v)
+                 z]
+                [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/zdiv min max z)]
               (when-not (zero? (long bigmin))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
@@ -555,10 +556,8 @@
                                    nil)))))))))))
 
 (defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid prev-candidate]
-  (if-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
-    (let [x (c/date->reverse-time-ms (.vt entity-tx))
-          y (c/date->reverse-time-ms (.tt entity-tx))
-          z (morton/longs->morton-number x y)
+  (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
+    (let [[^long x ^long y] (morton/morton-number->longs z)
           min-x (long (first (morton/morton-number->longs min)))
           max-x (dec x)]
       (if (<= min-x max-x)
@@ -578,9 +577,9 @@
 (defrecord EntityMortonAsOfIndex [i seek-z eb]
   db/Index
   (db/seek-values [this k]
-    (let [candidate (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k nil)]
-      (when-not (= ::deleted-entity (first candidate))
-        candidate)))
+    (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k nil)]
+      (when-not (= ::deleted-entity k)
+        [k v])))
 
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))
