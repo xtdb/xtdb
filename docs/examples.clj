@@ -1,22 +1,29 @@
 (ns examples)
 
 ;; tag::start-system[]
-(import 'crux.api.ICruxSystem)
-(require '[crux.bootstrap.standalone :as standalone])
+(require '[crux.api :as api])
 
-(def ^ICruxSystem system (standalone/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
-                                                              :db-dir "data/db-dir-1"}))
+(def ^crux.api.ICruxSystem system (api/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
+                                                                :db-dir "data/db-dir-1"}))
 ;; end::start-system[]
 
 ;; tag::close-system[]
 (.close system)
 ;; end::close-system[]
 
-;; tag::submit-tx[]
-(require '[crux.db :as db])
+;; tag::start-local-node-system[]
+(def ^crux.api.ICruxSystem system (api/start-local-node {:kv-backend "crux.kv.memdb.MemKv"
+                                                         :bootstrap-servers "localhost:29092"}))
+;; end::start-local-node-system[]
 
-(db/submit-tx
- (:tx-log system)
+;; tag::start-standalone-with-rocks[]
+(def ^crux.api.ICruxSystem system (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
+                                                                :db-dir "data/db-dir-1"}))
+;; end::start-standalone-with-rocks[]
+
+;; tag::submit-tx[]
+(api/submit-tx
+ system
  [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
    {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
     :name "Pablo"
@@ -25,11 +32,9 @@
 ;; end::submit-tx[]
 
 ;; tag::query[]
-(require '[crux.query :as q])
-
-(q/q (q/db (:kv-store system))
-     '{:find [e]
-       :where [[e :name "Pablo"]]})
+(api/q (api/db system)
+       '{:find [e]
+         :where [[e :name "Pablo"]]})
 ;; end::query[]
 
 (comment
@@ -53,19 +58,6 @@
 ;; tag::ek-close[]
 (.close embedded-kafka)
 ;; end::ek-close[]
-
-;; tag::ln-example[]
-(require '[crux.bootstrap.local-node :as local-node])
-
-(def storage-dir "dev-storage")
-(def local-node-options {:db-dir (str storage-dir "/data")
-                         :bootstrap-servers "localhost:9092"})
-(def local-node (local-node/start-local-node local-node-options))
-;; end::ln-example[]
-
-;; tag::ln-close[]
-(.close local-node)
-;; end::ln-close[]
 
 ;; tag::http-setup[]
 (require '[crux.http-server :as srv])

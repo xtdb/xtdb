@@ -2,9 +2,14 @@
 
 == Introduction
 
-Crux can be used in two main configurations: *local node* vs *standalone*. Local node is each Crux instance being a node in a wider cluster, using Kafka for the centralised event log. Standalone is where a single Crux instance has everything it needs locally.
+There are two main Crux systems: *local node* vs *standalone*. Local
+node is each Crux system instance being a node in a wider cluster,
+using Kafka for the centralised event log.
 
-.Crux Configurations
+Standalone is where a single Crux instance has everything it needs
+locally.
+
+.Crux Systems
 [#table-conversion%header,cols="d,d"]
 |===
 |Name|Transaction Log
@@ -12,7 +17,7 @@ Crux can be used in two main configurations: *local node* vs *standalone*. Local
 |Standalone|Uses local event log
 |===
 
-The Standalone coniguration is good for experimenting with Crux and
+The Standalone system is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
 is permissable.
 
@@ -21,11 +26,11 @@ required, and for the resiliency and availabilty guarantees that Kafka
 offers.
 
 [#standalone]
-== Standalone
+== Standalone System
 
-Using Crux standalone is the best way to get started. Once you've
-staredt a standalone Crux instance as described below, you can then
-follow the <<user_guide#getting-started-example,getting started
+Using the Crux standalone system is the best way to get started. Once
+you've staredt a standalone Crux instance as described below, you can
+then follow the <<user_guide#getting-started-example,getting started
 example>>.
 
 === Project Dependency
@@ -39,8 +44,6 @@ include::./deps.edn[tags=CruxDep]
 
 === Start the standalone system:
 
-NOTE: TODO: rewrite this bit to use the Java API via Clojure interop
-
 [source,clj]
 ----
 include::./examples.clj[tags=start-system]
@@ -50,20 +53,6 @@ For the purposes of this Hello World, we are using the simplest
 configuration of Crux, where all the pluggable components are
 in-memory constituents. There is no Kafka or RocksDB to worry about.
 
-The system will contain a `kv-store` that you can use for query purposes:
-
-[source,clj]
-----
-(:kv-store system)
-----
-
-And a `tx-log` that you can use to transact data into Crux:
-
-[source,clj]
-----
-(:tx-log system)
-----
-
 You can later stop the system if you wish:
 
 [source,clj]
@@ -71,87 +60,67 @@ You can later stop the system if you wish:
 include::./examples.clj[tags=close-system]
 ----
 
-== Kafka
+== Local Node System
 
-When using Crux at scale, it's recommended to configure Crux to use
-Kafka.
+When using Crux at scale, it's recommended to use Crux as nodes
+connecting to a Kakfa cluster.
 
-Crux will use Kafka as a replayable and consumable transaction log,
-injesting the documents in order to build local query indices.
-
-You can setup Kafka yourself to run outside of Crux, or Crux ships
-with the option of running an embedded Kafka.
-
-If you want to play around with Crux without using Kafka, you can try
-using Crux <<#standalone,standalone>> which uses in-memory event logs.
-
-NOTE: TODO Be more explicit local-node (kafka) vs standalone
-
-=== Connecting to Kakfa
-
-To connect to a running Kafka, simply configure the following property:
+Add Crux as a project dependency:
 
 [source,clj]
 ----
-:bootstrap-servers "localhost:9092"
+include::./deps.edn[tags=CruxDep]
 ----
 
-An easy way to fire up a local Kafka and Zookeeper for testing
-purposes is via
-https://docs.confluent.io/current/installation/docker/docs/installation/single-node-client.html[Confluent's
-'single node client' guide]. Note you will need to add an additional
-argument when running the Kakfa container: `-p 9092:9092`, and edit
-your hosts file with the entry `127.0.0.1 kafka`.
-
-=== Embedded Kafka
-
-Add Kafka and Zookeeper to your project dependencies:
+And Kafka:
 
 [source,clj,subs="normal"]
 ----
 include::./deps.edn[tags=KakfaDeps]
 ----
 
-See the below example code:
+Use the API to start a local node system, configuring it with the
+`bootstrap-servers` property in order to connect to Kafka:
 
 [source,clj]
 ----
-include::./examples.clj[tags=ek-example]
+include::./examples.clj[tags=start-local-node-system]
 ----
 
-You can later stop the Embedded Kafka if you wish:
+Note: If you don't specify `kv-backend` then by default the
+local-node system will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
+your list of project dependencies.
 
-[source,clj]
-----
-include::./examples.clj[tags=ek-close]
-----
+== RocksDB
 
-== Crux Node
+[#rocksdep]
+=== Project Dependency
 
-By default Crux uses RocksDB as the underlying Key/Value store, that
-Crux nodes use to house their query indices.
-
-Therefore, you'll need the Rocks dependency:
+Add RocksDB as a project dependency:
 
 [source,clj,subs="normal"]
 ----
-org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
+include::./deps.edn[tags=RocksDeps]
 ----
+
+=== Configuration
+
+Set the following properties when configuring Crux systems:
+
+.Rocks Configuration
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Value
+|`kv-backend`|`"crux.kv.rocksdb.RocksKv"`
+|`db-dir`|i.e. `"data/db-dir-1"`
+|===
+
+For example when constructing the standalone system:
 
 [source,clj]
 ----
-include::./examples.clj[tags=ln-example]
+include::./examples.clj[tags=start-standalone-with-rocks]
 ----
-
-As per usual, you can close the local node when you're finished:
-
-[source,clj]
-----
-include::./examples.clj[tags=ln-close]
-----
-
-NOTE: TODO: show how you'd use the in-mem KV to skip rocks, provide a
-link in this intro.
 
 == Http
 
@@ -188,3 +157,26 @@ queries).
 === K/V Store
 
 Supported KV stores are RocksDB, LMDB and an in-memory store.
+
+== Embedded Kafka
+
+Add Kafka and Zookeeper to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=KakfaDeps]
+----
+
+See the below example code:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-example]
+----
+
+You can later stop the Embedded Kafka if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=ek-close]
+----
