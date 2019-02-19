@@ -3,6 +3,7 @@ package crux.api;
 import java.util.Map;
 
 import clojure.java.api.Clojure;
+import clojure.lang.Keyword;
 
 /**
  * Public API entry point for starting a {@link ICruxSystem}.
@@ -40,7 +41,7 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
-    public static ICruxSystem startLocalNode(Map options) throws IndexVersionOutOfSyncException {
+    public static ICruxSystem startLocalNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.local-node"));
         return (ICruxSystem) Clojure.var("crux.bootstrap.local-node/start-local-node").invoke(options);
     }
@@ -68,7 +69,7 @@ public class Crux {
      * backwards since last run. Only applicable when using the event
      * log.
      */
-    public static ICruxSystem startStandaloneSystem(Map options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+    public static ICruxSystem startStandaloneSystem(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.standalone"));
         return (ICruxSystem) Clojure.var("crux.bootstrap.standalone/start-standalone-system").invoke(options);
     }

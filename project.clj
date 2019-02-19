@@ -58,7 +58,7 @@
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :java-source-paths ["src"]
-  :javac-options ["-XDignore.symbol.file"]
+  :javac-options ["-source" "8" "-target" "8" "-Xlint" "-XDignore.symbol.file"]
   :aot [crux.kafka.nippy
         crux.main]
   :main crux.main

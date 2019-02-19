@@ -263,11 +263,11 @@ public class ByteUtils {
         pad.putByte(bytesInLastBlock, (byte) 0x80);
         pad.putLong(SHA1_BLOCK_BYTES - Long.BYTES, Byte.SIZE * size, ByteOrder.BIG_ENDIAN);
 
-        int h0 = (int) 0x67452301;
-        int h1 = (int) 0xEFCDAB89;
-        int h2 = (int) 0x98BADCFE;
-        int h3 = (int) 0x10325476;
-        int h4 = (int) 0xC3D2E1F0;
+        int h0 = 0x67452301;
+        int h1 = 0xEFCDAB89;
+        int h2 = 0x98BADCFE;
+        int h3 = 0x10325476;
+        int h4 = 0xC3D2E1F0;
 
         for (int i = 0; i <= blocks; i++) {
             final DirectBuffer block = i == blocks ? pad : new UnsafeBuffer(from, SHA1_BLOCK_BYTES * i, SHA1_BLOCK_BYTES);

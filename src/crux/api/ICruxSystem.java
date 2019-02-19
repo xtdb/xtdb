@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.time.Duration;
+import clojure.lang.Keyword;
 
 /**
  *  Provides API access to Crux.
@@ -46,7 +47,7 @@ public interface ICruxSystem extends Closeable {
      * hash.
      * @return            the document map.
      */
-    public Map document(Object contentHash);
+    public Map<Keyword,?> document(Object contentHash);
 
     /**
      * Returns the transaction history of an entity, in reverse
@@ -56,14 +57,14 @@ public interface ICruxSystem extends Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the transaction history.
      */
-    public List<Map> history(Object eid);
+    public List<Map<Keyword,?>> history(Object eid);
 
     /**
      * Returns the status of this node as a map.
      *
      * @return the status map.
      */
-    public Map status();
+    public Map<Keyword,?> status();
 
     /**
      * Writes transactions to the log for processing.
@@ -71,7 +72,7 @@ public interface ICruxSystem extends Closeable {
      * @param txOps the transactions to be processed.
      * @return      a map with details about the submitted transaction.
      */
-    public Map submitTx(List<List> txOps);
+    public Map<Keyword,?> submitTx(List<List<?>> txOps);
 
     /**
      * Checks if a submitted tx did update an entity.
@@ -81,7 +82,7 @@ public interface ICruxSystem extends Closeable {
      * @param eid         an object that can be coerced into an entity id.
      * @return            true if the entity was updated in this transaction.
      */
-    public boolean hasSubmittedTxUpdatedEntity(Map submittedTx, Object eid);
+    public boolean hasSubmittedTxUpdatedEntity(Map<Keyword,?> submittedTx, Object eid);
 
     /**
      * Checks if a submitted tx did correct an entity as of valid
@@ -93,7 +94,7 @@ public interface ICruxSystem extends Closeable {
      * @param eid          an object that can be coerced into an entity id.
      * @return             true if the entity was updated in this transaction.
      */
-    public boolean hasSubmittedTxCorrectedEntity(Map submittedTx, Date validTime, Object eid);
+    public boolean hasSubmittedTxCorrectedEntity(Map<Keyword,?> submittedTx, Date validTime, Object eid);
 
     /**
      * Blocks until the node has caught up indexing. Will throw an
@@ -128,5 +129,5 @@ public interface ICruxSystem extends Closeable {
      * @param withDocuments    should the documents be included?
      * @return                 a lazy sequence of the transaction log.
      */
-    public Iterable<List> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments);
+    public Iterable<List<?>> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments);
 }

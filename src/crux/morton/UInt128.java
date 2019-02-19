@@ -3,7 +3,9 @@ package crux.morton;
 import java.math.BigInteger;
 import java.util.Arrays;
 
-public class UInt128 extends Number implements Comparable {
+public class UInt128 extends Number implements Comparable<UInt128> {
+    private static final long serialVersionUID = 4323374720764034739L;
+
     private static BigInteger unsignedLongToBigInteger(long x) {
         BigInteger b = BigInteger.valueOf(x & Long.MAX_VALUE);
         if (x < 0) {
@@ -150,11 +152,10 @@ public class UInt128 extends Number implements Comparable {
         return Arrays.hashCode(new long[] {upper, lower});
     }
 
-    public int compareTo(Object that) {
-        UInt128 other = (UInt128) that;
-        int diff = Long.compareUnsigned(upper, other.upper);
+    public int compareTo(UInt128 that) {
+        int diff = Long.compareUnsigned(upper, that.upper);
         if (diff == 0) {
-            return Long.compareUnsigned(lower, other.lower);
+            return Long.compareUnsigned(lower, that.lower);
         }
         return diff;
     }

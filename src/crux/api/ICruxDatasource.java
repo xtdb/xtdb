@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import clojure.lang.Keyword;
 
 /**
  * Represents the database as of a specific valid and
@@ -18,7 +19,7 @@ public interface ICruxDatasource {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
-    public Map entity(Object eid);
+    public Map<Keyword,Object> entity(Object eid);
 
     /**
      * Returns the entity tx for an entity.
@@ -26,7 +27,7 @@ public interface ICruxDatasource {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity transaction details.
      */
-    public Map entityTx(Object eid);
+    public Map<Keyword,?> entityTx(Object eid);
 
     /**
      * Returns a new snapshot allowing for lazy query results in a
@@ -45,7 +46,7 @@ public interface ICruxDatasource {
      * @param query the query in map, vector or string form.
      * @return      a set or vector of result tuples.
      */
-    public Collection<List> q(Object query);
+    public Collection<List<?>> q(Object query);
 
     /**
      * Queries the db lazily.
@@ -54,7 +55,7 @@ public interface ICruxDatasource {
      * @param query    the query in map, vector or string form.
      * @return         a lazy sequence of result tuples.
      */
-    public Iterable<List> q(Closeable snapshot, Object query);
+    public Iterable<List<?>> q(Closeable snapshot, Object query);
 
     /**
      * Retrieves entity history lazily in chronological order from and
@@ -65,7 +66,7 @@ public interface ICruxDatasource {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a lazy sequence of history.
      */
-    public Iterable<Map> historyAscending(Closeable snapshot, Object eid);
+    public Iterable<Map<Keyword,?>> historyAscending(Closeable snapshot, Object eid);
 
     /**
      * Retrieves entity history lazily in reverse chronological order
@@ -76,7 +77,7 @@ public interface ICruxDatasource {
      * @param eid      an object that can be coerced into an entity id.
      * @return         a lazy sequence of history.
      */
-    public Iterable<Map> historyDescending(Closeable snapshot, Object eid);
+    public Iterable<Map<Keyword,?>> historyDescending(Closeable snapshot, Object eid);
 
     /**
      * The valid time of this db.
