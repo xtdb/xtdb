@@ -546,7 +546,7 @@
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)]
                 [::deleted-entity entity-tx]))
-            (when-let [[_ bigmin] (morton/zdiv min max z)]
+            (let [[litmax bigmin] (morton/zdiv min max z)]
               (when-not (zero? (long bigmin))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
@@ -558,16 +558,20 @@
   (if-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
     (let [x (c/date->reverse-time-ms (.vt entity-tx))
           y (c/date->reverse-time-ms (.tt entity-tx))
+          z (morton/longs->morton-number x y)
           min-x (long (first (morton/morton-number->longs min)))
-          max-x (dec (long x))]
+          max-x (dec x)]
       (if (<= min-x max-x)
         (let [min (morton/longs->morton-number
                    min-x
-                   (dec (long y)))
+                   (inc y))
               max (morton/longs->morton-number
                    max-x
-                   (long (second (morton/morton-number->longs max))))]
-          (recur i min max eb eid candidate))
+                   -1)
+              [litmax bigmin] (morton/zdiv min max z)]
+          (if (zero? (long bigmin))
+            candidate
+            (recur i bigmin max eb eid candidate)))
         candidate))
     prev-candidate))
 
