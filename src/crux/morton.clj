@@ -107,14 +107,8 @@
            bigmin UInt128/ZERO
            start start
            end end]
-      (cond
-        (pos? (compare start end)) ;; TODO: This cannot be right, but kind of works.
-        nil
-
-        (zero? n)
+      (if (zero? n)
         [litmax bigmin]
-
-        :else
         (let [n (dec n)
               bits (inc (unsigned-bit-shift-right n 1))
               dim (bit-and n 1)
