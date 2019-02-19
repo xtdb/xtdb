@@ -113,7 +113,7 @@
 (defn- min-max-time [^Date from]
   (let [utc (ZoneId/of "UTC")
         ld (.toLocalDate (.atZone (.toInstant from) utc))]
-    [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 1) utc)))
+    [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 9) utc)))
      (Date/from (.toInstant (.atStartOfDay (.plusDays ld 1) utc)))]))
 
 (defn index-handler
