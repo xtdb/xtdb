@@ -447,10 +447,10 @@ public class ByteUtils {
         }
 
         public boolean testBit(int n) {
-            if (n > Long.SIZE) {
+            if (n >= Long.SIZE) {
                 return ((upper >>> (n - Long.SIZE)) & 1) == 1;
             } else {
-                return (lower >>> n & 1) == 1;
+                return ((lower >>> n) & 1) == 1;
             }
         }
 
