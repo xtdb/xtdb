@@ -1,12 +1,19 @@
 (ns crux.morton)
 
+;; TODO: Fix coordinates so they match expected y/x order from most
+;; papers. Try UInt128 proxy extending Number instead of
+;; BigInteger. Add helpers to avoid encode/decode the Z number just to
+;; update one dimension of it.
+
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn- long->binary-str [^long x]
   (.replace (format "%64s" (Long/toBinaryString x)) \space \0))
 
 (defn- unsigned-long->biginteger ^java.math.BigInteger [^long x]
-  (cond-> (biginteger (bit-and x Long/MAX_VALUE))
+  (cond-> (BigInteger/valueOf (bit-and x Long/MAX_VALUE))
     (neg? x) (.setBit (dec Long/SIZE))))
 
 ;; http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
