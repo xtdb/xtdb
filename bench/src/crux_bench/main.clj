@@ -143,7 +143,9 @@
     (with-system-fn crux-system)))
 
 (defn -main []
-  )
+  (log/info "bench runner starting")
+  (run-system crux-options (fn [_] (.join (Thread/currentThread))))
+  (log/info "bench runner exiting"))
 
 (comment
   (def s (future
