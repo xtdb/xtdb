@@ -58,14 +58,3 @@
 ;; tag::ek-close[]
 (.close embedded-kafka)
 ;; end::ek-close[]
-
-;; tag::http-setup[]
-(require '[crux.http-server :as srv])
-
-(def http-server-options {:server-port 3000})
-(def http-server (srv/start-http-server local-node http-server-options))
-;; end::http-setup[]
-
-;; tag::http-close[]
-(.close http-server)
-;; end::http-close[]

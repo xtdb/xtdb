@@ -47,6 +47,7 @@ Crux Systems will use the following properties:
 |Both|kv-store|`kv-backend`|Sets the K/V Store to use, i.e. `"crux.kv.rocksdb.RocksKv"`
 |Both|kv-store|`db-dir`|Sets the data-directory to use, i.e. `"data/db-dir-1"`
 |Standalone|tx-log|`bootstrap-servers`|Kakfa Servers to connect to i.e. `"localhost:9092"`
+|Standalone|http-server|`server-port`|Port for Crux HTTP Server i.e. `8080`
 |===
 
 [#standalone]
@@ -111,9 +112,16 @@ Use the API to start a local node system, configuring it with the
 include::./examples.clj[tags=start-local-node-system]
 ----
 
-Note: If you don't specify `kv-backend` then by default the
+NOTE: If you don't specify `kv-backend` then by default the
 local-node system will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
 your list of project dependencies.
+
+You can later stop the system if you wish:
+
+[source,clj]
+----
+include::./examples.clj[tags=close-system]
+----
 
 == RocksDB
 
@@ -152,20 +160,11 @@ Crux can be used programmatically as a library, but Crux also ships
 with an embedded http server, that allows clients to use the API
 remotely via REST.
 
-[source,clj]
-----
-include::./examples.clj[tags=http-setup]
-----
+Set the `server-port` configuration property on a Crux local node
+system to expose a HTTP port that will accept REST requests.
 
 Visit the guide on using the <<deployment#rest,REST api>> for examples
 of how to interact with Crux over http.
-
-Close the server:
-
-[source,clj]
-----
-include::./examples.clj[tags=http-close]
-----
 
 == Extras
 
