@@ -1,9 +1,11 @@
 (ns examples)
 
 ;; tag::start-system[]
+(import 'crux.api.ICruxSystem)
 (require '[crux.bootstrap.standalone :as standalone])
 
-(def system (standalone/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"}))
+(def ^ICruxSystem system (standalone/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
+                                                              :db-dir "data/db-dir-1"}))
 ;; end::start-system[]
 
 ;; tag::close-system[]

@@ -1,20 +1,34 @@
 = Getting Started
 
-NOTE: TODO, drop the approach of doing a `lein install` to play with
-Crux. Walk users through the minimal dependency setup to get a
-kafka-less instance running so that they can play with it.
+== Introduction
 
-== Dependency
+Crux can be used in two main configurations: *local node* vs *standalone*. Local node is each Crux instance being a node in a wider cluster, using Kafka for the centralised event log. Standalone is where a single Crux instance has everything it needs locally.
 
-As Crux is in development, the best route is to clone the
-https://github.com/juxt/crux[GitHub repo].
+.Crux Configurations
+[#table-conversion%header,cols="d,d"]
+|===
+|Name|Transaction Log
+|Local Node|Uses Kakfa
+|Standalone|Uses local event log
+|===
 
-To use Crux in other projects, add it to your local Maven repository
-by running:
+The Standalone coniguration is good for experimenting with Crux and
+for small to medium sized deployments, where running a single instance
+is permissable.
 
-----
-lein install
-----
+The Local Node is for when horizontal scalability of nodes is
+required, and for the resiliency and availabilty guarantees that Kafka
+offers.
+
+[#standalone]
+== Standalone
+
+Using Crux standalone is the best way to get started. Once you've
+staredt a standalone Crux instance as described below, you can then
+follow the <<user_guide#getting-started-example,getting started
+example>>.
+
+=== Project Dependency
 
 To add Crux as a project dependency:
 
@@ -22,22 +36,6 @@ To add Crux as a project dependency:
 ----
 include::./deps.edn[tags=CruxDep]
 ----
-
-NOTE: Depending on your setup, other dependencies will be
-required, as described below.
-
-[#standalone]
-== Standalone
-
-Using Crux standalone is the best way to get started. Once you've
-start a standalone Crux instance as described below, you can then
-follow the <<user_guide#getting-started-example,getting started
-example>>.
-
-=== Start a REPL
-
-Clone the https://github.com/juxt/crux[repo] and fire up a REPL in the
-project.
 
 === Start the standalone system:
 
