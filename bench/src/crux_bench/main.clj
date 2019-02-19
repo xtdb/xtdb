@@ -8,6 +8,7 @@
             [yada.resources.classpath-resource]
             [clojure.pprint :as pp]
             [clojure.java.shell :refer [sh]]
+            [clojure.string :as str]
 
             [crux-bench.watdiv :as watdiv])
   (:import [java.io Closeable]))
@@ -34,7 +35,8 @@
 
          [:div.buttons
           [:form {:action "/start-bench" :method "POST"}
-           [:input {:value "Run!" :name "run" :type "submit"}]]
+           [:input {:type "input" :name "test-count"}]
+           [:input {:value "Run!" :type "submit"}]]
 
           [:form {:action "/stop-bench" :method "POST"}
            [:input {:value "Stop!" :name "run" :type "submit"}]]]]
@@ -61,6 +63,7 @@
        {:methods
         {:post {:consumes "application/x-www-form-urlencoded"
                 :produces "text/html"
+                :parameters {:form {:test-count String}}
                 :response
                 (fn [ctx]
                   (log/info "starting benchmark tests")
@@ -68,7 +71,13 @@
                     (:status benchmark-runner)
                     merge
                     {:running? true
-                     :watdiv-runner (watdiv/run-watdiv-test system)})
+                     :watdiv-runner
+                     (watdiv/run-watdiv-test
+                       system
+                       (let [t (some-> ctx :parameters :form :test-count)]
+                         (if (str/blank? t)
+                           100
+                           (Integer/parseInt t))))})
                   (assoc (:response ctx)
                          :status 302
                          :headers {"location" "/"}))}}})]
@@ -118,6 +127,7 @@
   (with-open [crux-system (case (System/getenv "CRUX_MODE")
                             "LOCAL_NODE" (api/start-local-node options)
                             (api/start-standalone-system options))
+
               benchmark-runner (bench-mark-runner crux-system)
 
               http-server

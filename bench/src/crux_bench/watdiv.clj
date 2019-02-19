@@ -32,13 +32,13 @@
     (future-cancel running-future)))
 
 (defn execute-stress-test
-  [{:keys [^crux.api.ICruxSystem crux] :as options} tests-run out-file]
+  [{:keys [^crux.api.ICruxSystem crux] :as options} tests-run out-file num-tests]
   (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
               sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))
               out (io/writer out-file)]
     (.write out "[\n")
     (doseq [[idx [d q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                             (take 100)
+                             (take (or num-tests 100))
                              (map-indexed vector))]
       (.write out "{")
       (.write out (str ":idx " (pr-str idx) "\n"))
@@ -60,7 +60,7 @@
     (.write out "]")))
 
 (defn run-watdiv-test
-  [{:keys [^crux.api.ICruxSystem crux] :as options}]
+  [{:keys [^crux.api.ICruxSystem crux] :as options} num-tests]
   (let [status (atom nil)
         tests-run (atom 0)
         out-file (io/file (format "target/watdiv_%s.edn" (System/currentTimeMillis)))]
@@ -68,6 +68,7 @@
       {:status status
        :tests-run tests-run
        :out-file out-file
+       :num-tests num-tests
        :running-future
        (future
          (try
@@ -81,8 +82,9 @@
                                {:crux.db/id ::watdiv-injestion-status
                                 :done? true}]]))
            (reset! status :running-benchmark)
-           (execute-stress-test options tests-run out-file)
+           (execute-stress-test options tests-run out-file num-tests)
            (reset! status :benchmark-completed)
            (catch Throwable t
+             (log/error t "watdiv testrun failed")
              (reset! status :benchmark-failed)
              false)))})))
