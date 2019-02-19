@@ -69,18 +69,19 @@
      (bit-or (bit-shift-left (Integer/toUnsignedLong (aget upper 1)) Integer/SIZE)
              (Integer/toUnsignedLong (aget lower 1)))]))
 
-(def ^:private ^BigInteger morton-2-x-mask (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa))
+(def ^:private ^BigInteger morton-x-mask (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa))
+(def ^:private ^BigInteger morton-y-mask (biginteger 0x55555555555555555555555555555555))
 
 (defn morton-number-within-range? [^Number min ^Number max ^Number z]
   (let [min (biginteger min)
         max (biginteger max)
         z (biginteger z)
-        zx (.and z morton-2-x-mask)
-        zy (.and (.shiftLeft z 1) morton-2-x-mask)]
-    (and (not (pos? (.compareTo (.and min morton-2-x-mask) zx)))
-         (not (pos? (.compareTo (.and (.shiftLeft min 1) morton-2-x-mask) zy)))
-         (not (pos? (.compareTo zx (.and max morton-2-x-mask))))
-         (not (pos? (.compareTo zy (.and (.shiftLeft max 1) morton-2-x-mask)))))))
+        zx (.and z morton-x-mask)
+        zy (.and z morton-y-mask)]
+    (and (not (pos? (.compareTo (.and min morton-x-mask) zx)))
+         (not (pos? (.compareTo (.and min morton-y-mask) zy)))
+         (not (pos? (.compareTo zx (.and max morton-x-mask))))
+         (not (pos? (.compareTo zy (.and max morton-y-mask)))))))
 
 (defn- bit-spread ^BigInteger [^BigInteger x]
   (let [l1 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue x)))
@@ -110,18 +111,19 @@
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
 (def ^BigInteger z-max-mask (biginteger 0xffffffffffffffffffffffffffffffff))
+(def ^:private ^BigInteger z-max-mask-spread (bit-spread z-max-mask))
 (def ^:const z-max-bits (* 2 Long/SIZE))
 
-(defn- bits-over ^BigInteger [^long x]
-  (.shiftLeft BigInteger/ONE (dec x)))
+(defn- bits-over-spread ^BigInteger [^long x]
+  (.shiftLeft BigInteger/ONE (bit-shift-left (dec x) 1)))
 
-(defn- bits-under ^BigInteger [^long x]
-  (.subtract (.shiftLeft BigInteger/ONE (dec x)) BigInteger/ONE))
+(defn- bits-under-spread ^BigInteger [^long x]
+  (.and z-max-mask-spread (.subtract (.shiftLeft BigInteger/ONE (bit-shift-left (dec x) 1)) BigInteger/ONE)))
 
 (defn- zload ^BigInteger [^BigInteger z ^BigInteger load ^long bits ^long dim]
-  (let [mask (.not (.shiftLeft (bit-spread (.shiftRight z-max-mask (- z-max-bits bits))) dim))]
+  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (* 2 (- z-max-bits bits))) dim))]
     (.or (.and z mask)
-         (.shiftLeft (bit-spread load) dim))))
+         (.shiftLeft load dim))))
 
 (defn zdiv [^Number start ^Number end ^Number z]
   (let [start (biginteger start)
@@ -151,7 +153,7 @@
             (recur n litmax bigmin start end)
 
             (and (= 0 zb) (= 0 sb) (= 1 eb))
-            (recur n litmax (zload start (bits-over bits) bits dim) start (zload end (bits-under bits) bits dim))
+            (recur n litmax (zload start (bits-over-spread bits) bits dim) start (zload end (bits-under-spread bits) bits dim))
 
             (and (= 0 zb) (= 1 sb) (= 0 eb))
             (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (0 1 0)"))
@@ -163,7 +165,7 @@
             [end bigmin]
 
             (and (= 1 zb) (= 0 sb) (= 1 eb))
-            (recur n (zload end (bits-under bits) bits dim) bigmin (zload start (bits-over bits) bits dim) end)
+            (recur n (zload end (bits-under-spread bits) bits dim) bigmin (zload start (bits-over-spread bits) bits dim) end)
 
             (and (= 1 zb) (= 1 sb) (= 0 eb))
             (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (1 1 0)"))
