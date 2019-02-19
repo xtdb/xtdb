@@ -31,10 +31,13 @@
          [:pre
           (with-out-str
             (pp/pprint (-> system :benchmark-runner :status deref)))]
+
          [:div.buttons
           [:form {:action "/start-bench" :method "POST"}
            [:input {:value "Run!" :name "run" :type "submit"}]]
-          [:input {:value "Stop!" :name "run" :type "submit"}]]]
+
+          [:form {:action "/stop-bench" :method "POST"}
+           [:input {:value "Stop!" :name "run" :type "submit"}]]]]
 
         [:hr]
         [:div.status-content
@@ -66,7 +69,21 @@
                     merge
                     {:running? true
                      :watdiv-runner (watdiv/run-watdiv-test system)})
+                  (assoc (:response ctx)
+                         :status 302
+                         :headers {"location" "/"}))}}})]
 
+    ["stop-bench"
+     (resource
+       {:methods
+        {:post {:consumes "application/x-www-form-urlencoded"
+                :produces "text/html"
+                :response
+                (fn [ctx]
+                  (log/info "stopping benchmark tests")
+                  (when-let [watdiv-runner (:watdiv-runner @(:status benchmark-runner))]
+                    (.close ^Closeable watdiv-runner))
+                  (reset! (:status benchmark-runner) {:running? false})
                   (assoc (:response ctx)
                          :status 302
                          :headers {"location" "/"}))}}})]
@@ -88,7 +105,6 @@
 (defrecord BenchMarkRunner [status crux-system]
   Closeable
   (close [_]
-    (println "closing benchmark")
     (when-let [watdiv-runner (:watdiv-runner @status)]
       (.close ^Closeable watdiv-runner))))
 
