@@ -70,7 +70,8 @@
 ;; NOTE: this test is a bit unusual in that it creates the index
 ;; without transacting, as we need to test certain relationships
 ;; between vt and tt in Z order space. The times here are the raw
-;; reversed times.
+;; reversed times. That is, they both shrink towards 0 as time passes.
+;;
 (t/deftest test-can-find-latest-value-on-x-axis
   (f/with-kv-store
     (fn []
@@ -79,7 +80,7 @@
             valid-time 3
             tx-time 2
             z (morton/longs->morton-number valid-time tx-time)
-            tx-id 0
+            tx-id 2
             eb (ExpandableDirectByteBuffer.)
             seek-at (fn [i vt tt]
                       (db/seek-values (idx/->EntityMortonAsOfIndex i
