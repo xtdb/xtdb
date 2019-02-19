@@ -4,9 +4,8 @@
 ;; NOTE: Many papers use y/x order for coordinates, so some tests are
 ;; a bit confusing. We, and the original paper use x/y:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
-;; One way to see it is that internally its first and second
-;; dimension, x and y are just names for these which may change
-;; depending on context.
+;; Internally its first and second dimension, x and y are just names
+;; for these which may change depending on context.
 
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
 
@@ -30,10 +29,9 @@
         x (bit-and (bit-or x (bit-shift-right x 16)) 0xffffffff)]
     x))
 
-;; NOTE: we're putting x before y dimension here.
-(defn- bit-interleave-ints ^long [^long x ^long y]
-  (bit-or (bit-shift-left (bit-spread-int (Integer/toUnsignedLong (unchecked-int x))) 1)
-          (bit-spread-int (Integer/toUnsignedLong (unchecked-int y)))))
+(defn- bit-interleave-ints ^long [^long d1 ^long d2]
+  (bit-or (bit-shift-left (bit-spread-int (Integer/toUnsignedLong (unchecked-int d1))) 1)
+          (bit-spread-int (Integer/toUnsignedLong (unchecked-int d2)))))
 
 (defn- bit-uninterleave-ints [^long x]
   (int-array [(bit-unspread-int (unsigned-bit-shift-right x 1))
@@ -42,14 +40,14 @@
 (defn interleaved-longs->morton-number ^crux.morton.UInt128 [^long upper ^long lower]
   (UInt128. upper lower))
 
-(defn longs->morton-number-parts [^long x ^long y]
-  (let [lower (bit-interleave-ints x y)
-        upper (bit-interleave-ints (unsigned-bit-shift-right x Integer/SIZE)
-                                   (unsigned-bit-shift-right y Integer/SIZE))]
+(defn longs->morton-number-parts [^long d1 ^long d2]
+  (let [lower (bit-interleave-ints d1 d2)
+        upper (bit-interleave-ints (unsigned-bit-shift-right d1 Integer/SIZE)
+                                   (unsigned-bit-shift-right d2 Integer/SIZE))]
     [upper lower]))
 
-(defn longs->morton-number ^crux.morton.UInt128 [^long x ^long y]
-  (let [[upper lower] (longs->morton-number-parts x y)]
+(defn longs->morton-number ^crux.morton.UInt128 [^long d1 ^long d2]
+  (let [[upper lower] (longs->morton-number-parts d1 d2)]
     (interleaved-longs->morton-number upper lower)))
 
 (defn morton-number->interleaved-longs [^UInt128 z]
@@ -64,19 +62,19 @@
      (bit-or (bit-shift-left (Integer/toUnsignedLong (aget upper 1)) Integer/SIZE)
              (Integer/toUnsignedLong (aget lower 1)))]))
 
-(def ^:private ^UInt128 morton-x-mask (UInt128/fromBigInteger (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)))
-(def ^:private ^UInt128 morton-y-mask (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
+(def ^:private ^UInt128 morton-d1-mask (UInt128/fromBigInteger (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)))
+(def ^:private ^UInt128 morton-d2-mask (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
 
 (defn morton-number-within-range? [^Number min ^Number max ^Number z]
   (let [min (UInt128/fromNumber min)
         max (UInt128/fromNumber max)
         z (UInt128/fromNumber z)
-        zx (.and z morton-x-mask)
-        zy (.and z morton-y-mask)]
-    (and (not (pos? (.compareTo (.and min morton-x-mask) zx)))
-         (not (pos? (.compareTo (.and min morton-y-mask) zy)))
-         (not (pos? (.compareTo zx (.and max morton-x-mask))))
-         (not (pos? (.compareTo zy (.and max morton-y-mask)))))))
+        z-d1 (.and z morton-d1-mask)
+        z-d2 (.and z morton-d2-mask)]
+    (and (not (pos? (.compareTo (.and min morton-d1-mask) z-d1)))
+         (not (pos? (.compareTo (.and min morton-d2-mask) z-d2)))
+         (not (pos? (.compareTo z-d1 (.and max morton-d1-mask))))
+         (not (pos? (.compareTo z-d2 (.and max morton-d2-mask)))))))
 
 ;; BIGMIN/LITMAX based on
 ;; https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
