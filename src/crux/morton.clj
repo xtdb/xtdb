@@ -7,6 +7,9 @@
 ;; Internally its first and second dimension, x and y are just names
 ;; for these which may change depending on context.
 
+;; Lawder's thesis has a lot of info:
+;; http://www.dcs.bbk.ac.uk/~jkl/thesis.pdf
+
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
 
 (set! *unchecked-math* :warn-on-boxed)
