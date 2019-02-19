@@ -1,6 +1,7 @@
 package crux.morton;
 
 import java.math.BigInteger;
+import java.util.Arrays;
 
 public class UInt128 extends Number implements Comparable {
     private static BigInteger unsignedLongToBigInteger(long x) {
@@ -146,7 +147,7 @@ public class UInt128 extends Number implements Comparable {
     }
 
     public int hashCode() {
-        return bigIntegerValue().hashCode();
+        return Arrays.hashCode(new long[] {upper, lower});
     }
 
     public int compareTo(Object that) {
