@@ -49,12 +49,19 @@
               (morton/longs->morton-number 5 4)))))
 
 (t/deftest test-can-calculate-litmax-and-bigmin
+  ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
+  ;; page 74.
   (t/is (= [55 74] (morton/zdiv 27 102 58)))
   (t/is (= [55 74] (morton/zdiv (morton/longs->morton-number 3 5)
                                 (morton/longs->morton-number 5 10)
                                 (morton/longs->morton-number 7 4))))
 
-  ;; Example from https://en.wikipedia.org/wiki/Z-order_curve#Use_with_one-dimensional_data_structures_for_range_searching
+  ;; Example from
+  ;; https://en.wikipedia.org/wiki/Z-order_curve#Use_with_one-dimensional_data_structures_for_range_searching
+  ;; NOTE: The example above have y/x while we use x/y. But the
+  ;; important thing is which number comes first, it will generate the
+  ;; same codes. So when y=6 and x=3 here, it just means that the
+  ;; first dimension is y according to the examples encoding.
   (t/is (= [15 36] (morton/zdiv 12 45 19)))
   (t/is (= [15 36] (morton/zdiv (morton/longs->morton-number 2 2)
                                 (morton/longs->morton-number 6 3)

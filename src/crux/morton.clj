@@ -4,6 +4,9 @@
 ;; NOTE: Many papers use y/x order for coordinates, so some tests are
 ;; a bit confusing. We, and the original paper use x/y:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
+;; One way to see it is that internally its first and second
+;; dimension, x and y are just names for these which may change
+;; depending on context.
 
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
 
