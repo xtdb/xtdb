@@ -558,15 +558,15 @@
     (let [x (c/date->reverse-time-ms (.vt entity-tx))
           y (c/date->reverse-time-ms (.tt entity-tx))
           min-x (long (first (morton/morton-number->longs min)))
-          min (morton/longs->morton-number
-               min-x
-               y)
-          max-x (dec (long x))
-          max (morton/longs->morton-number
-               max-x
-               (second (morton/morton-number->longs max)))]
+          max-x (dec (long x))]
       (if (<= min-x max-x)
-        (recur i min max eb eid candidate)
+        (let [min (morton/longs->morton-number
+                   min-x
+                   (dec (long y)))
+              max (morton/longs->morton-number
+                   max-x
+                   (long (second (morton/morton-number->longs max))))]
+          (recur i min max eb eid candidate))
         candidate))
     prev-candidate))
 
