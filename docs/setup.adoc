@@ -1,31 +1,23 @@
 = Getting Started
 
-== Introduction
+== Systems
 
-=== Systems
-
-To use Crux you need to build a Crux system. Systems implement the
-`ICruxSystem` interface and are the starting point for making use of
-Crux. Systems also implement `java.io.Closeable` and can therefore be
-lifecycle managed.
-
-Systems are started using the
+To start a Crux system, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
 
-NOTE: To see an example of a Crux System being integrated into a
-Clojure lifecycle management framework such as Integrant, see the
-https://github.com/juxt/crux/blob/master/docs/example_standalone_integrantsystem.clj[example
-Integrant system].
-
-=== Configurations
-
 There are two main Crux systems: *local node* vs *standalone*. Use a
-local node system if you want Crux system instances to participate in
-a cluster, using Kafka for the centralised event log.
+local node system for when horizontal scalability of nodes required,
+and for guarantees Kafka makes on resiliency and
+availabilty, and retention of data.
+
+if you want Crux system instances to participate in
+a cluster using Kafka for the centralised event log.
 
 The Standalone system is where a single Crux instance has everything
-it needs locally.
+it needs locally. This is good for experimenting with Crux and
+for small to medium sized deployments, where running a single instance
+is permissable.
 
 .Crux Systems
 [#table-conversion%header,cols="d,d,d"]
@@ -35,13 +27,15 @@ it needs locally.
 |Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
-The Standalone system is good for experimenting with Crux and
-for small to medium sized deployments, where running a single instance
-is permissable.
+Crux systems implement the `ICruxSystem` interface and are the
+starting point for making use of Crux. Systems also implement
+`java.io.Closeable` and can therefore be lifecycle managed.
 
-The Local Node is for when horizontal scalability of nodes is
-required, and for the resiliency and availabilty guarantees that Kafka
-offers.
+NOTE: To see an example of a Crux System being integrated into a
+Clojure lifecycle management framework such as Integrant, see the
+https://github.com/juxt/crux/blob/master/docs/example_standalone_integrantsystem.clj[example
+Integrant system].
+
 
 [#standalone]
 == Standalone System
