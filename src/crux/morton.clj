@@ -1,10 +1,9 @@
 (ns crux.morton
   (:import crux.morton.UInt128))
 
-;; TODO: Fix coordinates so they match expected y/x order from most
-;; papers. Try UInt128 proxy extending Number instead of
-;; BigInteger. Add helpers to avoid encode/decode the Z number just to
-;; update one dimension of it.
+;; NOTE: Many papers use y/x order for coordinates, so some tests are
+;; a bit confusing. We, and the original paper use x/y:
+;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
 

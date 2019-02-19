@@ -553,8 +553,8 @@
                                  bigmin
                                  nil))))))))))
 
-(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid]
-  (when-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
+(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid prev-candidate]
+  (if-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
     (let [x (c/date->reverse-time-ms (.vt entity-tx))
           y (c/date->reverse-time-ms (.tt entity-tx))
           min-x (long (first (morton/morton-number->longs min)))
@@ -565,14 +565,15 @@
           max (morton/longs->morton-number
                max-x
                (second (morton/morton-number->longs max)))]
-      (or (when (<= min-x max-x)
-            (find-entity-tx-within-range-with-highest-valid-time i min max eb eid))
-          candidate))))
+      (if (<= min-x max-x)
+        (recur i min max eb eid candidate)
+        candidate))
+    prev-candidate))
 
 (defrecord EntityMortonAsOfIndex [i seek-z eb]
   db/Index
   (db/seek-values [this k]
-    (let [candidate (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k)]
+    (let [candidate (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k nil)]
       (when-not (= ::deleted-entity (first candidate))
         candidate)))
 
