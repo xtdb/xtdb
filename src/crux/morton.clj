@@ -1,4 +1,5 @@
-(ns crux.morton)
+(ns crux.morton
+  (:import crux.morton.UInt128))
 
 ;; TODO: Fix coordinates so they match expected y/x order from most
 ;; papers. Try UInt128 proxy extending Number instead of
@@ -8,13 +9,6 @@
 (def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defn- long->binary-str [^long x]
-  (.replace (format "%64s" (Long/toBinaryString x)) \space \0))
-
-(defn- unsigned-long->biginteger ^java.math.BigInteger [^long x]
-  (cond-> (BigInteger/valueOf (bit-and x Long/MAX_VALUE))
-    (neg? x) (.setBit (dec Long/SIZE))))
 
 ;; http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
 (defn- bit-spread-int ^long [^long x]
@@ -43,9 +37,8 @@
   (int-array [(bit-unspread-int (unsigned-bit-shift-right x 1))
               (bit-unspread-int x)]))
 
-(defn interleaved-longs->morton-number ^java.math.BigInteger [^long upper ^long lower]
-  (.or (.shiftLeft ^BigInteger (unsigned-long->biginteger upper) Long/SIZE)
-       ^BigInteger (unsigned-long->biginteger lower)))
+(defn interleaved-longs->morton-number ^crux.morton.UInt128 [^long upper ^long lower]
+  (UInt128. upper lower))
 
 (defn longs->morton-number-parts [^long x ^long y]
   (let [lower (bit-interleave-ints x y)
@@ -53,55 +46,35 @@
                                    (unsigned-bit-shift-right y Integer/SIZE))]
     [upper lower]))
 
-(defn longs->morton-number ^java.math.BigInteger [^long x ^long y]
+(defn longs->morton-number ^crux.morton.UInt128 [^long x ^long y]
   (let [[upper lower] (longs->morton-number-parts x y)]
     (interleaved-longs->morton-number upper lower)))
 
-(defn morton-number->interleaved-longs [^BigInteger z]
-  [(.longValue (.shiftRight z Long/SIZE)) (.longValue z)])
+(defn morton-number->interleaved-longs [^UInt128 z]
+  [(.upper z) (.lower z)])
 
 (defn morton-number->longs [^Number z]
-  (let [z (biginteger z)
-        lower ^ints (bit-uninterleave-ints (.longValue z))
-        upper ^ints (bit-uninterleave-ints (.longValue (.shiftRight z Long/SIZE)))]
+  (let [z (UInt128/fromNumber z)
+        lower ^ints (bit-uninterleave-ints (.lower z))
+        upper ^ints (bit-uninterleave-ints (.upper z))]
     [(bit-or (bit-shift-left (Integer/toUnsignedLong (aget upper 0)) Integer/SIZE)
              (Integer/toUnsignedLong (aget lower 0)))
      (bit-or (bit-shift-left (Integer/toUnsignedLong (aget upper 1)) Integer/SIZE)
              (Integer/toUnsignedLong (aget lower 1)))]))
 
-(def ^:private ^BigInteger morton-x-mask (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa))
-(def ^:private ^BigInteger morton-y-mask (biginteger 0x55555555555555555555555555555555))
+(def ^:private ^UInt128 morton-x-mask (UInt128/fromBigInteger (biginteger 0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)))
+(def ^:private ^UInt128 morton-y-mask (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
 
 (defn morton-number-within-range? [^Number min ^Number max ^Number z]
-  (let [min (biginteger min)
-        max (biginteger max)
-        z (biginteger z)
+  (let [min (UInt128/fromNumber min)
+        max (UInt128/fromNumber max)
+        z (UInt128/fromNumber z)
         zx (.and z morton-x-mask)
         zy (.and z morton-y-mask)]
     (and (not (pos? (.compareTo (.and min morton-x-mask) zx)))
          (not (pos? (.compareTo (.and min morton-y-mask) zy)))
          (not (pos? (.compareTo zx (.and max morton-x-mask))))
          (not (pos? (.compareTo zy (.and max morton-y-mask)))))))
-
-(defn- bit-spread ^BigInteger [^BigInteger x]
-  (let [l1 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue x)))
-        l2 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x Integer/SIZE))))
-        l3 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x (* 2 Integer/SIZE)))))
-        l4 ^BigInteger (unsigned-long->biginteger (bit-spread-int (.intValue (.shiftRight x (* 3 Integer/SIZE)))))]
-    (.or (.shiftLeft l4 (* 3 Long/SIZE))
-         (.or (.shiftLeft l3 (* 2 Long/SIZE))
-              (.or (.shiftLeft l2 Long/SIZE)
-                   l1)))))
-
-(defn- bit-unspread ^BigInteger [^BigInteger x]
-  (let [l1 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue x)))
-        l2 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x Long/SIZE))))
-        l3 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x (* 2 Long/SIZE)))))
-        l4 ^BigInteger (unsigned-long->biginteger (bit-unspread-int (.longValue (.shiftRight x (* 3 Long/SIZE)))))]
-    (.or (.shiftLeft l4 (* 3 Integer/SIZE))
-         (.or (.shiftLeft l3 (* 2 Integer/SIZE))
-              (.or (.shiftLeft l2 Integer/SIZE)
-                   l1)))))
 
 ;; BIGMIN/LITMAX based on
 ;; https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
@@ -110,28 +83,28 @@
 ;; Ultimately based on this paper and the decision tables on page 76:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
-(def ^BigInteger z-max-mask (biginteger 0xffffffffffffffffffffffffffffffff))
-(def ^:private ^BigInteger z-max-mask-spread (bit-spread z-max-mask))
+(def ^UInt128 z-max-mask (UInt128/fromBigInteger (biginteger 0xffffffffffffffffffffffffffffffff)))
+(def ^:private ^UInt128 z-max-mask-spread (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
 (def ^:const z-max-bits (* 2 Long/SIZE))
 
-(defn- bits-over-spread ^BigInteger [^long x]
-  (.shiftLeft BigInteger/ONE (bit-shift-left (dec x) 1)))
+(defn- bits-over-spread ^UInt128 [^long x]
+  (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))
 
-(defn- bits-under-spread ^BigInteger [^long x]
-  (.and z-max-mask-spread (.subtract (.shiftLeft BigInteger/ONE (bit-shift-left (dec x) 1)) BigInteger/ONE)))
+(defn- bits-under-spread ^UInt128 [^long x]
+  (.and z-max-mask-spread (.dec (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))))
 
-(defn- zload ^BigInteger [^BigInteger z ^BigInteger load ^long bits ^long dim]
-  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (* 2 (- z-max-bits bits))) dim))]
+(defn- zload ^UInt128 [^UInt128 z ^UInt128 load ^long bits ^long dim]
+  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (- z-max-bits (* bits 2))) dim))]
     (.or (.and z mask)
          (.shiftLeft load dim))))
 
 (defn zdiv [^Number start ^Number end ^Number z]
-  (let [start (biginteger start)
-        end (biginteger end)
-        z (biginteger z)]
+  (let [start (UInt128/fromNumber start)
+        end (UInt128/fromNumber end)
+        z (UInt128/fromNumber z)]
     (loop [n z-max-bits
-           litmax BigInteger/ZERO
-           bigmin BigInteger/ZERO
+           litmax UInt128/ZERO
+           bigmin UInt128/ZERO
            start start
            end end]
       (cond
