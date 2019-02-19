@@ -2,19 +2,37 @@
 
 == Introduction
 
-There are two main Crux systems: *local node* vs *standalone*. Local
-node is each Crux system instance being a node in a wider cluster,
-using Kafka for the centralised event log.
+=== Systems
 
-Standalone is where a single Crux instance has everything it needs
-locally.
+To use Crux you need to build a Crux system. Systems implement the
+`ICruxSystem` interface and are the starting point for making use of
+Crux. Systems also implement `java.io.Closeable` and can therefore be
+lifecycle managed.
+
+Systems are started using the
+https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
+https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
+
+NOTE: To see an example of a Crux System being integrated into a
+Clojure lifecycle management framework such as Integrant, see the
+https://github.com/juxt/crux/blob/master/docs/example_standalone_integrantsystem.clj[example
+Integrant system].
+
+=== Configurations
+
+There are two main Crux systems: *local node* vs *standalone*. Use a
+local node system if you want Crux system instances to participate in
+a cluster, using Kafka for the centralised event log.
+
+The Standalone system is where a single Crux instance has everything
+it needs locally.
 
 .Crux Systems
-[#table-conversion%header,cols="d,d"]
+[#table-conversion%header,cols="d,d,d"]
 |===
-|Name|Transaction Log
-|Local Node|Uses Kakfa
-|Standalone|Uses local event log
+|Name|Transaction Log|Java API
+|Local Node|Uses Kakfa|`Crux.startLocalNode options;`
+|Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
 The Standalone system is good for experimenting with Crux and
@@ -143,28 +161,19 @@ Close the server:
 include::./examples.clj[tags=http-close]
 ----
 
-== Embedded
+== Extras
 
-To see an example of a wired up embedded Crux, see an
-https://github.com/juxt/crux/blob/master/docs/example_system.clj[example
-Integrant system].
+=== Embedded Kafka
 
-NOTE: TODO, show how to actually use this system (transact and run
-queries).
-
-== Configuration
-
-=== K/V Store
-
-Supported KV stores are RocksDB, LMDB and an in-memory store.
-
-== Embedded Kafka
+Crux has an embedded Kafka that can be used.
 
 Add Kafka and Zookeeper to your project dependencies:
 
 [source,clj,subs="normal"]
 ----
 include::./deps.edn[tags=KakfaDeps]
+include::./deps.edn[tags=ZookeeperDeps]
+
 ----
 
 See the below example code:

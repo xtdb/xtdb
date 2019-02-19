@@ -12,11 +12,14 @@
   org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
   ;; end::RocksDeps[]
 
-  ;; org.apache.zookeeper/zookeeper {:mvn/version "3.4.13"
-  ;;                                 :exclusions [io.netty/netty
-  ;;                                              jline
-  ;;                                              org.apache.yetus/audience-annotations
-  ;;                                              org.slf4j/slf4j-log4j12
-  ;;                                              log4j]}
+  integrant/integrant {:mvn/version "0.6.3"}
 
+  ;; tag::ZookeeperDeps[]
+  org.apache.zookeeper/zookeeper {:mvn/version "3.4.13"
+                                  :exclusions [io.netty/netty
+                                               jline
+                                               org.apache.yetus/audience-annotations
+                                               org.slf4j/slf4j-log4j12
+                                               log4j]}
+  ;; end::ZookeeperDeps[]
   }}
