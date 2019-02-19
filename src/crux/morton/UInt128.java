@@ -138,10 +138,10 @@ public class UInt128 extends Number implements Comparable {
         }
         if (that instanceof Number && upper == 0) {
             Number other = (Number) that;
-            return this.upper == other.longValue();
+            return this.longValue() == other.longValue();
         }
         if (that instanceof BigInteger) {
-            return that.equals(bigIntegerValue());
+            return this.bigIntegerValue().equals(that);
         }
         return false;
     }
