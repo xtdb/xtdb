@@ -56,23 +56,35 @@ public class UInt128 extends Number implements Comparable {
     }
 
     public UInt128 shiftLeft(int n) {
+        if (n == 0) {
+            return this;
+        }
         long lower = this.lower;
         long upper = this.upper;
-        while (n-- > 0) {
-            upper = upper << 1 | ((lower & Long.MIN_VALUE) == 0 ? 0 : 1);
-            lower = lower << 1;
+        if (n >= Long.SIZE) {
+            int shift = n - Long.SIZE;
+            if (shift >= Long.SIZE) {
+                return new UInt128(0, 0);
+            }
+            return new UInt128(lower << shift, 0);
         }
-        return new UInt128(upper, lower);
+        return new UInt128(upper << n | lower >>> (Long.SIZE - n), lower << n);
     }
 
     public UInt128 shiftRight(int n) {
+        if (n == 0) {
+            return this;
+        }
         long lower = this.lower;
         long upper = this.upper;
-        while (n-- > 0) {
-            lower = lower >>> 1 | ((upper & 1) == 0 ? 0 : Long.MIN_VALUE);
-            upper = upper >>> 1;
+        if (n >= Long.SIZE) {
+            int shift = n - Long.SIZE;
+            if (shift >= Long.SIZE) {
+                return new UInt128(0, 0);
+            }
+            return new UInt128(0, upper >>> shift);
         }
-        return new UInt128(upper, lower);
+        return new UInt128(upper >>> n, upper << (Long.SIZE - n) | lower >>> n);
     }
 
     public UInt128 dec() {

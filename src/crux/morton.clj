@@ -83,9 +83,9 @@
 ;; Ultimately based on this paper and the decision tables on page 76:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
-(def ^UInt128 z-max-mask (UInt128/fromBigInteger (biginteger 0xffffffffffffffffffffffffffffffff)))
-(def ^:private ^UInt128 z-max-mask-spread (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
-(def ^:const z-max-bits (* 2 Long/SIZE))
+(def ^UInt128 z-max-mask UInt128/MAX)
+(def ^UInt128 z-max-mask-spread (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
+(def ^:const z-max-bits UInt128/SIZE)
 
 (defn- bits-over-spread ^UInt128 [^long x]
   (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))
@@ -94,7 +94,7 @@
   (.and z-max-mask-spread (.dec (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))))
 
 (defn- zload ^UInt128 [^UInt128 z ^UInt128 load ^long bits ^long dim]
-  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (- z-max-bits (* bits 2))) dim))]
+  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (- z-max-bits (bit-shift-left bits 1))) dim))]
     (.or (.and z mask)
          (.shiftLeft load dim))))
 
