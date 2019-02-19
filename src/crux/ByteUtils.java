@@ -369,7 +369,7 @@ public class ByteUtils {
     private static BigInteger unsignedLongToBigInteger(long x) {
         BigInteger b = BigInteger.valueOf(x & Long.MAX_VALUE);
         if (x < 0) {
-            b.setBit(Long.SIZE -1);
+            return b.setBit(Long.SIZE - 1);
         }
         return b;
     }
@@ -379,12 +379,26 @@ public class ByteUtils {
             return new UInt128(x.shiftRight(Long.SIZE).longValue(), x.longValue());
         }
 
+        public static UInt128 fromLong(long x) {
+            return new UInt128(0, x);
+        }
+
         public static UInt128 fromNumber(Number x) {
+            if (x instanceof UInt128) {
+                return (UInt128) x;
+            }
             if (x instanceof BigInteger) {
                 return UInt128.fromBigInteger((BigInteger) x);
             }
-            return new UInt128(0, x.longValue());
+            return UInt128.fromLong(x.longValue());
         }
+
+        public static final int BYTES = 16;
+        public static final int SIZE = 128;
+
+        public static final UInt128 ZERO = new UInt128(0, 0);
+        public static final UInt128 ONE = new UInt128(0, 1);
+        public static final UInt128 MAX = new UInt128(-1, -1);
 
         public final long upper, lower;
 
@@ -408,7 +422,7 @@ public class ByteUtils {
         public UInt128 shiftLeft(int n) {
             long lower = this.lower;
             long upper = this.upper;
-            while (--n > 0) {
+            while (n-- > 0) {
                 upper = upper << 1 | ((lower & Long.MIN_VALUE) == 0 ? 0 : 1);
                 lower = lower << 1;
             }
@@ -418,22 +432,23 @@ public class ByteUtils {
         public UInt128 shiftRight(int n) {
             long lower = this.lower;
             long upper = this.upper;
-            while (--n > 0) {
-                lower = lower >>> 1  | ((upper & 1) == 0 ? 0 : Long.MIN_VALUE);
+            while (n-- > 0) {
+                lower = lower >>> 1 | ((upper & 1) == 0 ? 0 : Long.MIN_VALUE);
                 upper = upper >>> 1;
             }
             return new UInt128(upper, lower);
         }
 
         public UInt128 dec() {
-            long lower = this.lower - 1;
-            long upper = lower == Long.MAX_VALUE ? this.upper - 1 : this.upper;
-            return new UInt128(upper, lower);
+            if (lower == 0) {
+                return new UInt128(upper - 1, -1);
+            }
+            return new UInt128(upper, lower - 1);
         }
 
         public boolean testBit(int n) {
             if (n > Long.SIZE) {
-                return upper >>> ((n - Long.SIZE) & 1) == 1;
+                return ((upper >>> (n - Long.SIZE)) & 1) == 1;
             } else {
                 return (lower >>> n & 1) == 1;
             }
