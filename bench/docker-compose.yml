@@ -16,5 +16,7 @@ services:
     volumes:
       # Cache maven dependencies
       - "${HOME}/.m2:/root/.m2"
+      # mount local leiningen profiles
+      - "${HOME}/.lein:/root/.lein"
       # Mount the application source and target directories
       - ./:/app
