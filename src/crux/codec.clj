@@ -561,7 +561,7 @@
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
       (->EntityTx entity valid-time transact-time tx-id nil))))
 
-(defn encode-entity-tx-z-number ^java.math.BigInteger [valid-time transaction-time]
+(defn encode-entity-tx-z-number [valid-time transaction-time]
   (morton/longs->morton-number (date->reverse-time-ms valid-time)
                                (date->reverse-time-ms transaction-time)))
 
@@ -570,7 +570,7 @@
    (encode-entity+z+tx-id-key-to b empty-buffer nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
    (encode-entity+z+tx-id-key-to b entity nil nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity ^BigInteger z ^Long tx-id]
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity z ^Long tx-id]
    (assert (or (= id-size (.capacity entity))
                (zero? (.capacity entity))) (mem/buffer->hex entity))
    (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (cond-> (+ index-id-size (.capacity entity))
@@ -600,7 +600,7 @@
           tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
       (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
 
-(defn decode-entity+z+tx-id-key-as-z-from ^java.math.BigInteger [^DirectBuffer k]
+(defn decode-entity+z+tx-id-key-as-z-from [^DirectBuffer k]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
     (assert (= entity+z+tx-id->content-hash-index-id index-id))
