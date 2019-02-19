@@ -547,11 +547,12 @@
                  (enrich-entity-tx entity-tx v)]
                 [::deleted-entity entity-tx]))
             (when-let [[_ bigmin] (morton/zdiv min max z)]
-              (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
-                                 (.get seek-buffer-tl)
-                                 eid
-                                 bigmin
-                                 nil))))))))))
+              (when-not (zero? (long bigmin))
+                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                   (.get seek-buffer-tl)
+                                   eid
+                                   bigmin
+                                   nil)))))))))))
 
 (defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid prev-candidate]
   (if-let [[_ ^EntityTx entity-tx :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
