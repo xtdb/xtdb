@@ -7,12 +7,14 @@ https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
 
 There are two main Crux systems: *local node* vs *standalone*. Use a
-local node system for when horizontal scalability of nodes required,
-and for guarantees Kafka makes on resiliency and
-availabilty, and retention of data.
+local node system when horizontal scalability is required or when it
+is necessary to achieve the guarantees that Kafka is capable of
+providing in terms of resiliency, availabilty, and retention of
+data.
 
-if you want Crux system instances to participate in
-a cluster using Kafka for the centralised event log.
+Multiple instances of a local node systems may participate in a
+cluster using Kafka as the primary store and as the central means of
+coordination.
 
 The Standalone system is where a single Crux instance has everything
 it needs locally. This is good for experimenting with Crux and
@@ -54,7 +56,7 @@ Crux Systems will use the following properties:
 == Standalone System
 
 Using the Crux standalone system is the best way to get started. Once
-you've staredt a standalone Crux instance as described below, you can
+you've started a standalone Crux instance as described below, you can
 then follow the <<user_guide#getting-started-example,getting started
 example>>.
 
@@ -75,8 +77,8 @@ include::./examples.clj[tags=start-system]
 ----
 
 For the purposes of this Hello World, we are using the simplest
-configuration of Crux, where all the pluggable components are
-in-memory constituents. There is no Kafka or RocksDB to worry about.
+configuration of Crux, where all of the pluggable components are
+in-memory. There is no Kafka or RocksDB to worry about.
 
 You can later stop the system if you wish:
 
@@ -87,7 +89,7 @@ include::./examples.clj[tags=close-system]
 
 == Local Node System
 
-When using Crux at scale, it's recommended to use Crux as nodes
+When using Crux at scale it is recommended to use Crux as nodes
 connecting to a Kakfa cluster.
 
 Add Crux as a project dependency:
@@ -157,14 +159,14 @@ include::./examples.clj[tags=start-standalone-with-rocks]
 == Http
 
 Crux can be used programmatically as a library, but Crux also ships
-with an embedded http server, that allows clients to use the API
+with an embedded HTTP server, that allows clients to use the API
 remotely via REST.
 
 Set the `server-port` configuration property on a Crux local node
 system to expose a HTTP port that will accept REST requests.
 
 Visit the guide on using the <<deployment#rest,REST api>> for examples
-of how to interact with Crux over http.
+of how to interact with Crux over HTTP.
 
 == Extras
 

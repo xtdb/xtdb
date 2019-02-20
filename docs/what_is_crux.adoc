@@ -4,21 +4,22 @@ Crux is an unbundled, distributed, bi-temporal graph database.
 
 == Unbundled
 
-Crux - to use Martin Kleppmann’s phrase -is is an _unbundled_
-database. It's a database turned inside out, using:
+Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
+database. It is a database turned inside out, using:
 
-* Apache Kafka for the primary store and semi-immutable log.
+* Apache Kafka for the primary storage of transactions and documents
+as semi-immutable logs.
 * RocksDB or LMDB to host indices for rich query support.
 
 == Distributed
 
 Nodes can come and go, with local indices stored in a Key/Value store
-such as RocksDB, sharing the master data living in a master event-log
-(Kafka is currently supported).
+such as RocksDB, sharing the master data living in a central log topics
+(only Kafka is currently supported).
 
 == Bitemporality
 
-Crux is a bitemporal database, storing both valid and transaction
+Crux is a bitemporal database that stores valid time and transaction
 time. This enables corrections in valid time at a later transaction
 time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
 
@@ -34,12 +35,12 @@ of these documents are indexed, allowing for queries.
 == Schemaless
 
 Crux does not use a schema for the documents. One reason for this is
-that the document data might come from many different places, and not
-ultimately be owned by the system using Crux to query the data.
+that data might come from many different places, and may not
+ultimately be owned by the service using Crux to query the data.
 
 == Eviction
 
-Crux supports eviction of past data, to play nicely with GDRP and
+Crux supports eviction of past data, to play nicely with GDPR and
 similar concerns.
 
 The main transaction log contains only hashes and is immutable. The
