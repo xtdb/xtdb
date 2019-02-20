@@ -570,7 +570,7 @@
               (when-not (mem/buffers=? c/nil-id-buffer v)
                 [(c/->id-buffer (.eid entity-tx))
                  (enrich-entity-tx entity-tx v)])
-              (if morton/use-space-filling-curve-index?
+              (if morton/*use-space-filling-curve-index?*
                 (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
                   (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb eid nil)]
                     (when-not (= ::deleted-entity k)
