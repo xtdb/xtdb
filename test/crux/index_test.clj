@@ -423,9 +423,12 @@
                              :crux.db/valid-time vt
                              :crux.tx/tx-time tt
                              :crux.tx/tx-id tx-id})))
+        query-start-date #inst "2018"
+        query-end-date #inst "2021"
+        query-diff (- (inst-ms query-end-date) (inst-ms query-start-date))
         queries (or bitemp-stress-queries
-                    (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms start-date)
-                                                                    (long (* (rand) diff))))))))
+                    (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms query-start-date)
+                                                                    (long (* (rand) query-diff))))))))
         vt+tt->entity (into (sorted-map)
                             (zipmap
                              (for [entity-tx entities]
