@@ -162,6 +162,9 @@
                     (t/is (= tx-time (c/date->reverse-time-ms (:tt entity-tx))))
                     (t/is (= tx-id (:tx-id entity-tx)))))))))))))
 
+(def stress-entities nil)
+(def stress-queries nil)
+
 (t/deftest test-stress-bitemporal-lookup
   (f/with-kv-store
     (fn []
@@ -176,31 +179,21 @@
             start-date #inst "2019"
             end-date #inst "2020"
             diff (- (inst-ms end-date) (inst-ms start-date))
-            n 100
-            dates (repeatedly n #(Date. (long (+ (inst-ms start-date)
-                                                 (long (* (rand) diff))))))
-            bitemp-pairs (partition-all 2 dates)
-            entities (vec (for [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
-                                :let [z (c/encode-entity-tx-z-number vt tt)
-                                      content-hash (c/new-id (keyword (str tx-id)))]]
-                            (do (kv/store f/*kv* [[(c/encode-entity+vt+tt+tx-id-key-to
-                                                    nil
-                                                    eid
-                                                    vt
-                                                    tt
-                                                    tx-id)
-                                                   (c/->id-buffer content-hash)]
-                                                  [(c/encode-entity+z+tx-id-key-to
-                                                    nil
-                                                    eid
-                                                    z
-                                                    tx-id)
-                                                   (c/->id-buffer content-hash)]])
+            n ( * 2 5)
+            bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
+                                                             (long (* (rand) diff))))))
+                              (partition-all 2))
+            entities (or stress-entities
+                         (vec (for [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
+                                    :let [content-hash (c/new-id (keyword (str tx-id)))]]
                                 {:crux.db/id (str (c/new-id eid))
                                  :crux.db/content-hash (str content-hash)
                                  :crux.db/valid-time vt
                                  :crux.tx/tx-time tt
                                  :crux.tx/tx-id tx-id})))
+            queries (or stress-queries
+                        (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms start-date)
+                                                                        (long (* (rand) diff))))))))
             vt+tt->entity (into (sorted-map)
                                 (zipmap
                                  (for [entity-tx entities]
@@ -208,10 +201,36 @@
                                     (c/date->reverse-time-ms (:crux.tx/tx-time entity-tx))])
                                  entities))]
 
+        (doseq [entity-tx entities
+                :let [eid (c/->id-buffer (:crux.db/id entity-tx))
+                      vt (:crux.db/valid-time entity-tx)
+                      tt (:crux.tx/tx-time entity-tx)
+                      tx-id (:crux.tx/tx-id entity-tx)
+                      z (c/encode-entity-tx-z-number vt tt)
+                      content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
+          (kv/store f/*kv* [[(c/encode-entity+vt+tt+tx-id-key-to
+                              nil
+                              eid
+                              vt
+                              tt
+                              tx-id)
+                             (c/->id-buffer content-hash)]
+                            [(c/encode-entity+z+tx-id-key-to
+                              nil
+                              eid
+                              z
+                              tx-id)
+                             (c/->id-buffer content-hash)]]))
+
         (with-open [snapshot (kv/new-snapshot f/*kv*)
                     i (kv/new-iterator snapshot)]
-          (doseq [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
-                  :let [content-hash (c/new-id (keyword (str tx-id)))]]
+          (doseq [entity-tx entities
+                  :let [eid (c/->id-buffer (:crux.db/id entity-tx))
+                        vt (:crux.db/valid-time entity-tx)
+                        tt (:crux.tx/tx-time entity-tx)
+                        tx-id (:crux.tx/tx-id entity-tx)
+                        z (c/encode-entity-tx-z-number vt tt)
+                        content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
             (t/is (= {:crux.db/id (str (c/new-id eid))
                       :crux.db/content-hash (str content-hash)
                       :crux.db/valid-time vt
@@ -219,8 +238,7 @@
                       :crux.tx/tx-id tx-id}
                      (c/entity-tx->edn (second (seek-at i vt tt))))))
 
-          (doseq [[vt tt] (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms start-date)
-                                                                          (long (* (rand) diff)))))))
+          (doseq [[vt tt] queries
                   :let [expected (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
                                                                                (c/date->reverse-time-ms tt)])
                                        :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
@@ -228,8 +246,13 @@
             (t/is (= (first expected)
                      (binding [morton/*use-space-filling-curve-index?* false]
                        (c/entity-tx->edn (second (seek-at i vt tt))))))
-          ;; TODO: There are failures here, needs investigating where
+            ;; TODO: There are failures here, needs investigating where
             ;; the underlying cause is.
+            (when-not (= (first expected)
+                         (binding [morton/*use-space-filling-curve-index?* true]
+                           (c/entity-tx->edn (second (seek-at i vt tt)))))
+              (def stress-queries queries)
+              (def stress-entities entities))
             #_(t/is (= (first expected)
                        (binding [morton/*use-space-filling-curve-index?* true]
                          (c/entity-tx->edn (second (seek-at i vt tt)))))
