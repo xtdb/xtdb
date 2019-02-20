@@ -1,14 +1,28 @@
 (ns crux.morton
   (:import crux.morton.UInt128))
 
+;; Start here:
+;; https://en.wikipedia.org/wiki/Z-order_curve
+;; https://en.wikipedia.org/wiki/Z-order_curve#Use_with_one-dimensional_data_structures_for_range_searching
+
+;; Based on this paper and the decision tables on page 76:
+;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
+
+;; Further resources:
+;; https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
+;; https://raima.com/wp-content/uploads/COTS_embedded_database_solving_dynamic_pois_2012.pdf
+;; https://github.com/hadeaninc/libzinc/blob/master/libzinc/AABB.hh
+;; http://cppedinburgh.uk/slides/201603-zcurves.pdf
+
+;; https://aws.amazon.com/blogs/database/z-order-indexing-for-multifaceted-queries-in-amazon-dynamodb-part-1/
+;; https://redis.io/topics/indexes#multi-dimensional-indexes
+;; http://www.dcs.bbk.ac.uk/~jkl/thesis.pdf
+
 ;; NOTE: Many papers use y/x order for coordinates, so some tests are
 ;; a bit confusing. We, and the original paper use x/y:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 ;; Internally its first and second dimension, x and y are just names
 ;; for these which may change depending on context.
-
-;; Lawder's thesis has a lot of info:
-;; http://www.dcs.bbk.ac.uk/~jkl/thesis.pdf
 
 (def ^:const use-space-filling-curve-index? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_SPACE_FILLING_CURVE_INDEX"))))
 
@@ -74,9 +88,6 @@
          (not (pos? (.compareTo (.and min morton-d2-mask) z-d2)))
          (not (pos? (.compareTo z-d1 (.and max morton-d1-mask))))
          (not (pos? (.compareTo z-d2 (.and max morton-d2-mask)))))))
-
-;; Based on this paper and the decision tables on page 76:
-;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
 (def ^UInt128 z-max-mask UInt128/MAX)
 (def ^UInt128 z-max-mask-spread (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
