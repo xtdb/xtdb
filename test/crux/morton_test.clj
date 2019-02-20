@@ -179,7 +179,8 @@
             start-date #inst "2019"
             end-date #inst "2020"
             diff (- (inst-ms end-date) (inst-ms start-date))
-            n ( * 2 5)
+            n ( * 2 10)
+            deletion-rate 0.2
             bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
                                                              (long (* (rand) diff))))))
                               (partition-all 2))
@@ -187,7 +188,9 @@
                          (vec (for [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
                                     :let [content-hash (c/new-id (keyword (str tx-id)))]]
                                 {:crux.db/id (str (c/new-id eid))
-                                 :crux.db/content-hash (str content-hash)
+                                 :crux.db/content-hash (if (< (rand) deletion-rate)
+                                                         nil
+                                                         (str content-hash))
                                  :crux.db/valid-time vt
                                  :crux.tx/tx-time tt
                                  :crux.tx/tx-id tx-id})))
@@ -231,29 +234,32 @@
                         tx-id (:crux.tx/tx-id entity-tx)
                         z (c/encode-entity-tx-z-number vt tt)
                         content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
-            (t/is (= {:crux.db/id (str (c/new-id eid))
-                      :crux.db/content-hash (str content-hash)
-                      :crux.db/valid-time vt
-                      :crux.tx/tx-time tt
-                      :crux.tx/tx-id tx-id}
+            (t/is (= (when (:crux.db/content-hash entity-tx)
+                       {:crux.db/id (str (c/new-id eid))
+                        :crux.db/content-hash (str content-hash)
+                        :crux.db/valid-time vt
+                        :crux.tx/tx-time tt
+                        :crux.tx/tx-id tx-id})
                      (c/entity-tx->edn (second (seek-at i vt tt))))))
 
           (doseq [[vt tt] queries
-                  :let [expected (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
-                                                                               (c/date->reverse-time-ms tt)])
-                                       :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
-                                   entity-tx)]]
-            (t/is (= (first expected)
+                  :let [[expected] (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
+                                                                                 (c/date->reverse-time-ms tt)])
+                                         :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
+                                     entity-tx)
+                        expected-or-deleted (when (:crux.db/content-hash expected)
+                                              expected)]]
+            (t/is (= expected-or-deleted
                      (binding [morton/*use-space-filling-curve-index?* false]
                        (c/entity-tx->edn (second (seek-at i vt tt))))))
             ;; TODO: There are failures here, needs investigating where
             ;; the underlying cause is.
-            (when-not (= (first expected)
+            (when-not (= expected-or-deleted
                          (binding [morton/*use-space-filling-curve-index?* true]
                            (c/entity-tx->edn (second (seek-at i vt tt)))))
               (def stress-queries queries)
               (def stress-entities entities))
-            #_(t/is (= (first expected)
+            #_(t/is (= expected-or-deleted
                        (binding [morton/*use-space-filling-curve-index?* true]
                          (c/entity-tx->edn (second (seek-at i vt tt)))))
-                    (pr-str [vt tt]))))))))
+                    (pr-str [vt tt expected]))))))))
