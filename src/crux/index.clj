@@ -483,13 +483,12 @@
       (update :eid c/safe-id)
       (update :content-hash c/safe-id)))
 
-(defn- find-first-entity-tx-within-range [i min max eb eid]
+(defn- find-first-entity-tx-within-range [i min max eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
         seek-k (c/encode-entity+z+tx-id-key-to
                 (.get seek-buffer-tl)
                 eid
-                min
-                nil)]
+                min)]
     (loop [k (kv/seek i seek-k)]
       (when (and k (mem/buffers=? seek-k k prefix-size))
         (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
@@ -506,11 +505,10 @@
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
                                    eid
-                                   bigmin
-                                   nil)))))))))))
+                                   bigmin)))))))))))
 
-(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid prev-candidate]
-  (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
+(defn- find-entity-tx-within-range-with-highest-valid-time [i min max eid prev-candidate]
+  (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eid)]
     (let [[^long x ^long y] (morton/morton-number->longs z)
           min-x (long (first (morton/morton-number->longs min)))
           max-x (dec x)]
@@ -522,11 +520,11 @@
               max (morton/longs->morton-number
                    max-x
                    -1)]
-          (recur i min max eb eid candidate))
+          (recur i min max eid candidate))
         candidate))
     prev-candidate))
 
-(defrecord EntityAsOfIndex [i valid-time transact-time eb]
+(defrecord EntityAsOfIndex [i valid-time transact-time]
   db/Index
   (db/seek-values [this k]
     (let [eid k
@@ -547,7 +545,7 @@
                  (enrich-entity-tx entity-tx v)])
               (if morton/*use-space-filling-curve-index?*
                 (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
-                  (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb eid nil)]
+                  (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eid nil)]
                     (when-not (= ::deleted-entity k)
                       [k v])))
                 (recur (kv/next i)))))))))
@@ -556,7 +554,7 @@
     (throw (UnsupportedOperationException.))))
 
 (defn new-entity-as-of-index [snapshot valid-time transaction-time]
-  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time (ExpandableDirectByteBuffer.)))
+  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time))
 
 (defn entities-at [snapshot eids valid-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
@@ -566,6 +564,58 @@
                entity-tx)
              (not-empty)
              (vec))))
+
+(mem/defvo EntityHistoryRangeState [eid prefix])
+
+(defn- entity-history-range-step [i min max ^EntityHistoryRangeState state k]
+  (loop [k k]
+    (when (and k (mem/buffers=? (.prefix state) k (.capacity ^DirectBuffer (.prefix state))))
+      (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
+        (when (not (neg? (.compareTo ^Comparable max z)))
+          (if (morton/morton-number-within-range? min max z)
+            (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
+                  v (kv/value i)]
+              [(c/->id-buffer (.eid entity-tx))
+               (enrich-entity-tx entity-tx v)])
+            (let [[litmax bigmin] (morton/morton-range-search min max z)]
+              (when-not (= min bigmin)
+                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                   (.get seek-buffer-tl)
+                                   (.eid state)
+                                   bigmin)))))))))))
+
+(defrecord EntityHistoryRangeIndex [i min max ^EntityHistoryRangeState state]
+  db/Index
+  (db/seek-values [this k]
+    (let [prefix-size (+ c/index-id-size c/id-size)
+          seek-k (c/encode-entity+z+tx-id-key-to
+                  (.get seek-buffer-tl)
+                  k
+                  min)]
+      (set! (.eid state) k)
+      (set! (.prefix state) (mem/copy-buffer seek-k prefix-size))
+      (entity-history-range-step i min max state (kv/seek i seek-k))))
+
+  (db/next-values [this]
+    (entity-history-range-step i min max state (kv/next i))))
+
+(defn new-entity-history-range-index [snapshot vt-start vt-end tt-start tt-end]
+  (let [[min max] (sort (reify Comparator
+                          (compare [_ a b]
+                            (.compareTo ^Comparable a b)))
+                        [(c/encode-entity-tx-z-number vt-start tt-start)
+                         (c/encode-entity-tx-z-number vt-end tt-end)])]
+    (->EntityHistoryRangeIndex (kv/new-iterator snapshot) min max
+                               (->EntityHistoryRangeState nil nil))))
+
+(defn entity-history-range [snapshot eid vt-start vt-end tt-start tt-end]
+  (let [idx (new-entity-history-range-index snapshot vt-start vt-end tt-start tt-end)]
+    (when-let [result (db/seek-values idx (c/->id-buffer eid))]
+      (some->> (repeatedly #(db/next-values idx))
+               (take-while identity)
+               (cons result)
+               (not-empty)
+               (map second)))))
 
 (defn all-entities [snapshot valid-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]

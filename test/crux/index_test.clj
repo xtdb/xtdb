@@ -418,7 +418,7 @@
                                 :let [content-hash (c/new-id (keyword (str tx-id)))]]
                             {:crux.db/id (str (c/new-id eid))
                              :crux.db/content-hash (if (< (rand) deletion-rate)
-                                                     nil
+                                                     (str (c/new-id nil))
                                                      (str content-hash))
                              :crux.db/valid-time vt
                              :crux.tx/tx-time tt
@@ -458,37 +458,59 @@
                          (c/->id-buffer content-hash)]]))
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
-      (doseq [entity-tx entities
-              :let [eid (c/->id-buffer (:crux.db/id entity-tx))
-                    vt (:crux.db/valid-time entity-tx)
-                    tt (:crux.tx/tx-time entity-tx)
-                    tx-id (:crux.tx/tx-id entity-tx)
-                    z (c/encode-entity-tx-z-number vt tt)
-                    content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
-        (t/is (= (when (:crux.db/content-hash entity-tx)
-                   {:crux.db/id (str (c/new-id eid))
-                    :crux.db/content-hash (str content-hash)
-                    :crux.db/valid-time vt
-                    :crux.tx/tx-time tt
-                    :crux.tx/tx-id tx-id})
-                 (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt))))))
+      (t/testing "can read at exact time"
+        (doseq [entity-tx entities
+                :let [eid (c/->id-buffer (:crux.db/id entity-tx))
+                      vt (:crux.db/valid-time entity-tx)
+                      tt (:crux.tx/tx-time entity-tx)
+                      tx-id (:crux.tx/tx-id entity-tx)
+                      z (c/encode-entity-tx-z-number vt tt)
+                      content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
+          (t/is (= (when-not (= (c/new-id nil) content-hash)
+                     {:crux.db/id (str (c/new-id eid))
+                      :crux.db/content-hash (str content-hash)
+                      :crux.db/valid-time vt
+                      :crux.tx/tx-time tt
+                      :crux.tx/tx-id tx-id})
+                   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt)))))))
 
-      (doseq [[vt tt] queries
-              :let [[expected] (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
-                                                                             (c/date->reverse-time-ms tt)])
-                                     :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
-                                 entity-tx)
-                    expected-or-deleted (when (:crux.db/content-hash expected)
-                                          expected)]]
-        (t/is (= expected-or-deleted
-                 (binding [morton/*use-space-filling-curve-index?* false]
-                   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt))))))
-        (binding [morton/*use-space-filling-curve-index?* true]
-          (let [actual (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt)))]
-            (when-not (= expected-or-deleted actual)
-              (def bitemp-stress-queries queries)
-              (def bitemp-stress-entities entities))
-            (t/is (= expected-or-deleted actual) (pr-str [vt tt expected]))))))))
+      (t/testing "can query as of any time"
+        (doseq [[vt tt] queries
+                :let [[expected] (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
+                                                                               (c/date->reverse-time-ms tt)])
+                                       :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
+                                   entity-tx)
+                      content-hash (c/new-id (:crux.db/content-hash expected))
+                      expected-or-deleted (when-not (= (c/new-id nil) content-hash)
+                                            expected)]]
+          (t/is (= expected-or-deleted
+                   (binding [morton/*use-space-filling-curve-index?* false]
+                     (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt))))))
+          (binding [morton/*use-space-filling-curve-index?* true]
+            (let [actual (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt)))]
+              (when-not (= expected-or-deleted actual)
+                (def bitemp-stress-queries queries)
+                (def bitemp-stress-entities entities))
+              (t/is (= expected-or-deleted actual) (pr-str [vt tt expected]))))))
+
+      (t/testing "can do range queries across valid and transaction time"
+        (doseq [[[vt-start tt-start] [vt-end tt-end]] (partition-all 2 queries)
+                :let [[vt-start vt-end] (sort [vt-start vt-end])
+                      [tt-start tt-end] (sort [tt-start tt-end])
+                      expected (set (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt-end)
+                                                                                  (c/date->reverse-time-ms tt-end)])
+                                          :while (<= (compare vt-start (:crux.db/valid-time entity-tx)) 0)
+                                          :when (and (<= (compare tt-start (:crux.tx/tx-time entity-tx)) 0)
+                                                     (<= (compare (:crux.tx/tx-time entity-tx) tt-end) 0))]
+                                      entity-tx))]]
+          (binding [morton/*use-space-filling-curve-index?* true]
+            (let [actual (->> (idx/entity-history-range snapshot eid vt-start vt-end tt-start tt-end)
+                              (map c/entity-tx->edn)
+                              (set))]
+              (when-not (= expected actual)
+                (def bitemp-stress-queries queries)
+                (def bitemp-stress-entities entities))
+              (t/is (= expected actual) (pr-str [[vt-start vt-end] [tt-start tt-end]])))))))))
 
 (t/deftest test-can-read-kv-tx-log
   (let [tx-log (tx/->KvTxLog f/*kv*)

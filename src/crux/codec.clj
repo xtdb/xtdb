@@ -568,6 +568,8 @@
    (encode-entity+z+tx-id-key-to b empty-buffer nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity]
    (encode-entity+z+tx-id-key-to b entity nil nil))
+  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b entity z]
+   (encode-entity+z+tx-id-key-to b entity z nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer entity z ^Long tx-id]
    (assert (or (= id-size (.capacity entity))
                (zero? (.capacity entity))) (mem/buffer->hex entity))
