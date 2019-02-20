@@ -130,7 +130,7 @@
             litmax (.litmax range)
             bigmin (.bigmin range)]
         (cond
-          (and (= start litmax) (= end bigmin))
+          (or (= start litmax) (= end bigmin))
           [litmax bigmin]
 
           (neg? (.compareTo ^UInt128 bigmin z))
