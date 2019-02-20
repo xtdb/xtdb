@@ -483,29 +483,6 @@
       (update :eid c/safe-id)
       (update :content-hash c/safe-id)))
 
-;; TODO: We're not 100% sure this actually returns the lowest value in
-;; search space just because it finds the lowest valid value in Z
-;; order. Needs more testing / reflection.
-
-;; What I think needs to happen when one finds a candidate within the
-;; box, is to search the left hand side as a new box (really the lower
-;; left quadrant), until there's nothing more found, in which case one
-;; takes the last found value.  This is due to use wanting to both
-;; search across both two time dimensions, which zdiv does, but while
-;; also give priority to valid time (which is the x-axis). A potential
-;; other alternative is to use the other index first, and only use
-;; this when one is starting to scan for transaction time, but the
-;; same issue would likely still be there, so we can as well solve it
-;; here without complicating both boxes.
-
-;; TODO: This is really rough and untested, doing extra work, but
-;; demonstrates the idea. Don't we need to use zdiv here as well on
-;; subsequent seeks? Or does the other zdiv kick into action for this
-;; range as well? Needs reflection and to be rewritten.
-
-;; NOTE: I think that in normal, non z-max searches, we can actually
-;; check if BIGMIN makes sense or not to jump into, or if we gone out
-;; of range, so think we need that logic here.
 (defn- find-first-entity-tx-within-range [i min max eb eid]
   (let [prefix-size (+ c/index-id-size c/id-size)
         seek-k (c/encode-entity+z+tx-id-key-to
