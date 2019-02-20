@@ -12,10 +12,11 @@
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.memory :as mem]
+            [crux.morton :as morton]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import java.util.Date))
+    (:import java.util.Date))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store)
 
@@ -394,6 +395,97 @@
             (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
               (t/is (>= baseline-time corrections-time)))))))))
+
+;; NOTE: This test does not go via the TxLog, but writes its own
+;; transactions direct into the KV store so it can generate random
+;; histories of both valid and transaction time.
+
+(def bitemp-stress-entities nil)
+(def bitemp-stress-queries nil)
+
+(t/deftest test-stress-bitemporal-lookup
+  (let [eid (c/->id-buffer :foo)
+        start-date #inst "2019"
+        end-date #inst "2020"
+        diff (- (inst-ms end-date) (inst-ms start-date))
+        n ( * 2 200)
+        deletion-rate 0.2
+        bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
+                                                         (long (* (rand) diff))))))
+                          (partition-all 2))
+        entities (or bitemp-stress-entities
+                     (vec (for [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
+                                :let [content-hash (c/new-id (keyword (str tx-id)))]]
+                            {:crux.db/id (str (c/new-id eid))
+                             :crux.db/content-hash (if (< (rand) deletion-rate)
+                                                     nil
+                                                     (str content-hash))
+                             :crux.db/valid-time vt
+                             :crux.tx/tx-time tt
+                             :crux.tx/tx-id tx-id})))
+        queries (or bitemp-stress-queries
+                    (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms start-date)
+                                                                    (long (* (rand) diff))))))))
+        vt+tt->entity (into (sorted-map)
+                            (zipmap
+                             (for [entity-tx entities]
+                               [(c/date->reverse-time-ms (:crux.db/valid-time entity-tx))
+                                (c/date->reverse-time-ms (:crux.tx/tx-time entity-tx))])
+                             entities))]
+
+    (doseq [entity-tx entities
+            :let [eid (c/->id-buffer (:crux.db/id entity-tx))
+                  vt (:crux.db/valid-time entity-tx)
+                  tt (:crux.tx/tx-time entity-tx)
+                  tx-id (:crux.tx/tx-id entity-tx)
+                  z (c/encode-entity-tx-z-number vt tt)
+                  content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
+      (kv/store f/*kv* [[(c/encode-entity+vt+tt+tx-id-key-to
+                          nil
+                          eid
+                          vt
+                          tt
+                          tx-id)
+                         (c/->id-buffer content-hash)]
+                        [(c/encode-entity+z+tx-id-key-to
+                          nil
+                          eid
+                          z
+                          tx-id)
+                         (c/->id-buffer content-hash)]]))
+
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (doseq [entity-tx entities
+              :let [eid (c/->id-buffer (:crux.db/id entity-tx))
+                    vt (:crux.db/valid-time entity-tx)
+                    tt (:crux.tx/tx-time entity-tx)
+                    tx-id (:crux.tx/tx-id entity-tx)
+                    z (c/encode-entity-tx-z-number vt tt)
+                    content-hash (c/new-id (:crux.db/content-hash entity-tx))]]
+        (t/is (= (when (:crux.db/content-hash entity-tx)
+                   {:crux.db/id (str (c/new-id eid))
+                    :crux.db/content-hash (str content-hash)
+                    :crux.db/valid-time vt
+                    :crux.tx/tx-time tt
+                    :crux.tx/tx-id tx-id})
+                 (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt))))))
+
+      (doseq [[vt tt] queries
+              :let [[expected] (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt)
+                                                                             (c/date->reverse-time-ms tt)])
+                                     :when (<= (compare (:crux.tx/tx-time entity-tx) tt) 0)]
+                                 entity-tx)
+                    expected-or-deleted (when (:crux.db/content-hash expected)
+                                          expected)]]
+        (t/is (= expected-or-deleted
+                 (binding [morton/*use-space-filling-curve-index?* false]
+                   (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt))))))
+        (binding [morton/*use-space-filling-curve-index?* true]
+          (let [actual (c/entity-tx->edn (first (idx/entities-at snapshot [eid] vt tt)))]
+            (when-not (= expected-or-deleted actual)
+              (def bitemp-stress-queries queries)
+              (def bitemp-stress-entities entities))
+            (t/is (= expected-or-deleted actual) (pr-str [vt tt expected]))))))))
 
 (t/deftest test-can-read-kv-tx-log
   (let [tx-log (tx/->KvTxLog f/*kv*)
