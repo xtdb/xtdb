@@ -179,7 +179,7 @@
             start-date #inst "2019"
             end-date #inst "2020"
             diff (- (inst-ms end-date) (inst-ms start-date))
-            n ( * 2 10)
+            n ( * 2 200)
             deletion-rate 0.2
             bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
                                                              (long (* (rand) diff))))))
@@ -259,7 +259,7 @@
                            (c/entity-tx->edn (second (seek-at i vt tt)))))
               (def stress-queries queries)
               (def stress-entities entities))
-            #_(t/is (= expected-or-deleted
-                       (binding [morton/*use-space-filling-curve-index?* true]
-                         (c/entity-tx->edn (second (seek-at i vt tt)))))
-                    (pr-str [vt tt expected]))))))))
+            (t/is (= expected-or-deleted
+                     (binding [morton/*use-space-filling-curve-index?* true]
+                       (c/entity-tx->edn (second (seek-at i vt tt)))))
+                  (pr-str [vt tt expected]))))))))

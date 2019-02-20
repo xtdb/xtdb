@@ -525,29 +525,26 @@
                  z]
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
-              (when-not (zero? (long bigmin))
-                (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
-                                   (.get seek-buffer-tl)
-                                   eid
-                                   bigmin
-                                   nil)))))))))))
+              (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
+                                 (.get seek-buffer-tl)
+                                 eid
+                                 bigmin
+                                 nil))))))))))
 
 (defn- find-entity-tx-within-range-with-highest-valid-time [i min max eb eid prev-candidate]
   (if-let [[_ ^EntityTx entity-tx z :as candidate] (find-first-entity-tx-within-range i min max eb eid)]
     (let [[^long x ^long y] (morton/morton-number->longs z)
           min-x (long (first (morton/morton-number->longs min)))
           max-x (dec x)]
-      (if (<= min-x max-x)
+      (if (and (not (pos? (Long/compareUnsigned min-x max-x)))
+               (not= y -1))
         (let [min (morton/longs->morton-number
                    min-x
-                   (inc y))
+                   (unchecked-inc y))
               max (morton/longs->morton-number
                    max-x
-                   -1)
-              [litmax bigmin] (morton/morton-range-search min max z)]
-          (if (zero? (long bigmin))
-            candidate
-            (recur i bigmin max eb eid candidate)))
+                   -1)]
+          (recur i min max eb eid candidate))
         candidate))
     prev-candidate))
 

@@ -393,8 +393,7 @@
           (t/testing "no version is visible before transactions"
             (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
-              ;; TODO: re-enable once bitemp stress test passes.
-              #_(t/is (>= baseline-time corrections-time)))))))))
+              (t/is (>= baseline-time corrections-time)))))))))
 
 (t/deftest test-can-read-kv-tx-log
   (let [tx-log (tx/->KvTxLog f/*kv*)
