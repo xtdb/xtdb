@@ -538,7 +538,7 @@
                 nil)]
     (loop [k (kv/seek i seek-k)]
       (when (and k (mem/buffers=? seek-k k prefix-size))
-        (let [z (c/decode-entity+z+tx-id-key-as-z-from k)]
+        (let [z (c/decode-entity+z+tx-id-key-as-z-number-from k)]
           (if (morton/morton-number-within-range? min max z)
             (let [entity-tx (safe-entity-tx (c/decode-entity+z+tx-id-key-from k))
                   v (kv/value i)]
@@ -547,7 +547,7 @@
                  (enrich-entity-tx entity-tx v)
                  z]
                 [::deleted-entity entity-tx z]))
-            (let [[litmax bigmin] (morton/zdiv min max z)]
+            (let [[litmax bigmin] (morton/morton-range-search min max z)]
               (when-not (zero? (long bigmin))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
@@ -567,7 +567,7 @@
               max (morton/longs->morton-number
                    max-x
                    -1)
-              [litmax bigmin] (morton/zdiv min max z)]
+              [litmax bigmin] (morton/morton-range-search min max z)]
           (if (zero? (long bigmin))
             candidate
             (recur i bigmin max eb eid candidate)))

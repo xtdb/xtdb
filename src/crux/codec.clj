@@ -588,25 +588,22 @@
      (->> (+ index-id-size (.capacity entity) (if z (* 2 Long/BYTES) 0) (maybe-long-size tx-id))
           (mem/limit-buffer b)))))
 
-(defn decode-entity+z+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
-  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
-  (let [index-id (.getByte k 0)]
-    (assert (= entity+z+tx-id->content-hash-index-id index-id))
-    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
-          [valid-time transaction-time] (morton/morton-number->longs
-                                         (morton/interleaved-longs->morton-number
-                                          (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN)
-                                          (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN)))
-          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
-      (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
-
-(defn decode-entity+z+tx-id-key-as-z-from [^DirectBuffer k]
+(defn decode-entity+z+tx-id-key-as-z-number-from [^DirectBuffer k]
   (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
     (assert (= entity+z+tx-id->content-hash-index-id index-id))
     (morton/interleaved-longs->morton-number
      (.getLong k (+ index-id-size id-size) ByteOrder/BIG_ENDIAN)
      (.getLong k (+ index-id-size id-size Long/BYTES) ByteOrder/BIG_ENDIAN))))
+
+(defn decode-entity+z+tx-id-key-from ^crux.codec.EntityTx [^DirectBuffer k]
+  (assert (= (+ index-id-size id-size Long/BYTES Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+  (let [index-id (.getByte k 0)]
+    (assert (= entity+z+tx-id->content-hash-index-id index-id))
+    (let [entity (Id. (mem/slice-buffer k index-id-size id-size) 0)
+          [valid-time transaction-time] (morton/morton-number->longs (decode-entity+z+tx-id-key-as-z-number-from k))
+          tx-id (.getLong k (+ index-id-size id-size Long/BYTES Long/BYTES) ByteOrder/BIG_ENDIAN)]
+      (->EntityTx entity (reverse-time-ms->date valid-time) (reverse-time-ms->date transaction-time) tx-id nil))))
 
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx

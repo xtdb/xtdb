@@ -24,7 +24,7 @@
     (t/is (= [-1 -1] (morton/morton-number->longs morton/z-max-mask))))
 
   (t/testing "can take out upper and lower part"
-    (let [[upper lower] (morton/longs->morton-number-parts -1 -1)]
+    (let [[upper lower] (morton/morton-number->interleaved-longs (morton/longs->morton-number -1 -1))]
       (t/is (= morton/z-max-mask (morton/interleaved-longs->morton-number upper lower))))))
 
 (t/deftest test-can-check-range-without-decoding-morton-number
@@ -65,7 +65,16 @@
   (t/is (= [15 36] (morton/zdiv 12 45 19)))
   (t/is (= [15 36] (morton/zdiv (morton/longs->morton-number 2 2)
                                 (morton/longs->morton-number 6 3)
-                                (morton/longs->morton-number 1 5)))))
+                                (morton/longs->morton-number 1 5))))
+
+  (t/testing "new version"
+    (t/is (= [107 145] (morton/morton-get-next-address 51 193)))
+    (t/is (= [63 98] (morton/morton-get-next-address 51 107)))
+    (t/is (= [99 104] (morton/morton-get-next-address 98 107)))
+    (t/is (= [149 192] (morton/morton-get-next-address 145 193)))
+
+    (t/is (= [55 74] (morton/morton-range-search 27 102 58)))
+    (t/is (= [15 36] (morton/morton-range-search 12 45 19)))))
 
 ;; NOTE: this test is a bit unusual in that it creates the index
 ;; without transacting, as we need to test certain relationships

@@ -43,14 +43,10 @@
 (defn interleaved-longs->morton-number ^crux.morton.UInt128 [^long upper ^long lower]
   (UInt128. upper lower))
 
-(defn longs->morton-number-parts [^long d1 ^long d2]
+(defn longs->morton-number ^crux.morton.UInt128 [^long d1 ^long d2]
   (let [lower (bit-interleave-ints d1 d2)
         upper (bit-interleave-ints (unsigned-bit-shift-right d1 Integer/SIZE)
                                    (unsigned-bit-shift-right d2 Integer/SIZE))]
-    [upper lower]))
-
-(defn longs->morton-number ^crux.morton.UInt128 [^long d1 ^long d2]
-  (let [[upper lower] (longs->morton-number-parts d1 d2)]
     (interleaved-longs->morton-number upper lower)))
 
 (defn morton-number->interleaved-longs [^UInt128 z]
@@ -142,3 +138,54 @@
 
             (and (= 1 zb) (= 1 sb) (= 1 eb))
             (recur n litmax bigmin start end)))))))
+
+;; Rewritten from scratch, 1.5-2x faster than zdiv.
+
+(defrecord MortonRange [litmax bigmin])
+
+(defn- morton-get-next-address-internal ^crux.morton.MortonRange [^UInt128 start ^UInt128 end]
+  (let [first-differing-bit (.numberOfLeadingZeros (.xor start end))
+        split-dimension (bit-and 1 first-differing-bit)
+        dimension-inherit-mask (if (zero? split-dimension)
+                                 morton-d2-mask
+                                 morton-d1-mask)
+        common-most-significant-bits-mask (.shiftLeft UInt128/MAX (- UInt128/SIZE first-differing-bit))
+        all-common-bits-mask (.or dimension-inherit-mask common-most-significant-bits-mask)
+
+        ;; 1000 -> 1000000
+        other-dimension-above (.shiftLeft UInt128/ONE (dec (- UInt128/SIZE first-differing-bit)))
+        bigmin (.or (.and all-common-bits-mask start) other-dimension-above)
+
+        ;; 0111 -> 0010101
+        other-dimension-below (.and (.dec other-dimension-above)
+                                    (if (zero? split-dimension)
+                                      morton-d1-mask
+                                      morton-d2-mask))
+        litmax (.or (.and all-common-bits-mask end) other-dimension-below)]
+    (MortonRange. litmax bigmin)))
+
+(defn morton-get-next-address [^Number start ^Number end]
+  (let [start (UInt128/fromNumber start)
+        end (UInt128/fromNumber end)
+        range (morton-get-next-address-internal start end)]
+    [(.litmax range) (.bigmin range)]))
+
+(defn morton-range-search [^Number start ^Number end ^Number z]
+  (let [z (UInt128/fromNumber z)]
+    (loop [start (UInt128/fromNumber start)
+           end (UInt128/fromNumber end)]
+      (let [range (morton-get-next-address-internal start end)
+            litmax (.litmax range)
+            bigmin (.bigmin range)]
+        (cond
+          (and (= start litmax) (= end bigmin))
+          [litmax bigmin]
+
+          (neg? (.compareTo ^UInt128 bigmin z))
+          (recur bigmin end)
+
+          (neg? (.compareTo ^UInt128 z litmax))
+          (recur start litmax)
+
+          :else
+          [litmax bigmin])))))

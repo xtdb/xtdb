@@ -2,6 +2,7 @@ package crux.morton;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import clojure.lang.BigInt;
 
 public class UInt128 extends Number implements Comparable<UInt128> {
     private static final long serialVersionUID = 4323374720764034739L;
@@ -29,6 +30,9 @@ public class UInt128 extends Number implements Comparable<UInt128> {
         if (x instanceof BigInteger) {
             return UInt128.fromBigInteger((BigInteger) x);
         }
+        if (x instanceof BigInt) {
+            return UInt128.fromBigInteger(((BigInt) x).toBigInteger());
+        }
         return UInt128.fromLong(x.longValue());
     }
 
@@ -52,6 +56,10 @@ public class UInt128 extends Number implements Comparable<UInt128> {
 
     public UInt128 or(UInt128 other) {
         return new UInt128(upper | other.upper, lower | other.lower);
+    }
+
+    public UInt128 xor(UInt128 other) {
+        return new UInt128(upper ^ other.upper, lower ^ other.lower);
     }
 
     public UInt128 not() {
@@ -105,6 +113,14 @@ public class UInt128 extends Number implements Comparable<UInt128> {
         }
     }
 
+    public int numberOfLeadingZeros() {
+        if (upper != 0) {
+            return Long.numberOfLeadingZeros(upper);
+        } else {
+            return Long.numberOfLeadingZeros(lower) + Long.SIZE;
+        }
+    }
+
     public double doubleValue() {
         return (double) lower;
     }
@@ -152,6 +168,8 @@ public class UInt128 extends Number implements Comparable<UInt128> {
         return Arrays.hashCode(new long[] {upper, lower});
     }
 
+    // NOTE: Using clojure.core/compare isn't safe, as it will use
+    // longValue for any Number implementation it doesn't know about.
     public int compareTo(UInt128 that) {
         int diff = Long.compareUnsigned(upper, that.upper);
         if (diff == 0) {
