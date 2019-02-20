@@ -17,7 +17,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def ^:const index-version 3)
+(def ^:const index-version 4)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -29,8 +29,6 @@
 (def ^:const ^:private meta-key->value-index-id 4)
 (def ^:const ^:private tx-id->tx-index-id 5)
 (def ^:const ^:private index-version-index-id 6)
-;; TODO: Might replace entity+vt+tt+tx-id->content-hash-index-id
-;; eventually.
 (def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)

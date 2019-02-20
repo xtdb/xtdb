@@ -10,8 +10,6 @@
 ;; Lawder's thesis has a lot of info:
 ;; http://www.dcs.bbk.ac.uk/~jkl/thesis.pdf
 
-(def ^:const use-space-filling-curve-index? (Boolean/parseBoolean (System/getenv "CRUX_SPACE_FILLING_CURVE_INDEX")))
-
 (set! *unchecked-math* :warn-on-boxed)
 
 ;; http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
@@ -75,71 +73,12 @@
          (not (pos? (.compareTo z-d1 (.and max morton-d1-mask))))
          (not (pos? (.compareTo z-d2 (.and max morton-d2-mask)))))))
 
-;; BIGMIN/LITMAX based on
-;; https://github.com/locationtech/geotrellis/tree/master/spark/src/main/scala/geotrellis/spark/io/index/zcurve
-;; Apache License
-
-;; Ultimately based on this paper and the decision tables on page 76:
+;; Based on this paper and the decision tables on page 76:
 ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
 
 (def ^UInt128 z-max-mask UInt128/MAX)
 (def ^UInt128 z-max-mask-spread (UInt128/fromBigInteger (biginteger 0x55555555555555555555555555555555)))
 (def ^:const z-max-bits UInt128/SIZE)
-
-(defn- bits-over-spread ^UInt128 [^long x]
-  (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))
-
-(defn- bits-under-spread ^UInt128 [^long x]
-  (.and z-max-mask-spread (.dec (.shiftLeft UInt128/ONE (bit-shift-left (dec x) 1)))))
-
-(defn- zload ^UInt128 [^UInt128 z ^UInt128 load ^long bits ^long dim]
-  (let [mask (.not (.shiftLeft (.shiftRight z-max-mask-spread (- z-max-bits (bit-shift-left bits 1))) dim))]
-    (.or (.and z mask)
-         (.shiftLeft load dim))))
-
-(defn zdiv [^Number start ^Number end ^Number z]
-  (let [start (UInt128/fromNumber start)
-        end (UInt128/fromNumber end)
-        z (UInt128/fromNumber z)]
-    (loop [n z-max-bits
-           litmax UInt128/ZERO
-           bigmin UInt128/ZERO
-           start start
-           end end]
-      (if (zero? n)
-        [litmax bigmin]
-        (let [n (dec n)
-              bits (inc (unsigned-bit-shift-right n 1))
-              dim (bit-and n 1)
-              zb (if (.testBit z n) 1 0)
-              sb (if (.testBit start n) 1 0)
-              eb (if (.testBit end n) 1 0)]
-          (cond
-            (and (= 0 zb) (= 0 sb) (= 0 eb))
-            (recur n litmax bigmin start end)
-
-            (and (= 0 zb) (= 0 sb) (= 1 eb))
-            (recur n litmax (zload start (bits-over-spread bits) bits dim) start (zload end (bits-under-spread bits) bits dim))
-
-            (and (= 0 zb) (= 1 sb) (= 0 eb))
-            (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (0 1 0)"))
-
-            (and (= 0 zb) (= 1 sb) (= 1 eb))
-            [litmax start]
-
-            (and (= 1 zb) (= 0 sb) (= 0 eb))
-            [end bigmin]
-
-            (and (= 1 zb) (= 0 sb) (= 1 eb))
-            (recur n (zload end (bits-under-spread bits) bits dim) bigmin (zload start (bits-over-spread bits) bits dim) end)
-
-            (and (= 1 zb) (= 1 sb) (= 0 eb))
-            (throw (IllegalStateException. "This case is not possible because MIN <= MAX. (1 1 0)"))
-
-            (and (= 1 zb) (= 1 sb) (= 1 eb))
-            (recur n litmax bigmin start end)))))))
-
-;; Rewritten from scratch, 1.5-2x faster than zdiv.
 
 (defrecord MortonRange [litmax bigmin])
 

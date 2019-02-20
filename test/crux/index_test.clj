@@ -393,7 +393,7 @@
           (t/testing "no version is visible before transactions"
             (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
-              (t/is (<= baseline-time corrections-time) "Would fail if we fix #144, so we want this to fail eventually."))))))))
+              (t/is (>= baseline-time corrections-time) "Would fail if we fix #144, so we want this to fail eventually."))))))))
 
 (t/deftest test-can-read-kv-tx-log
   (let [tx-log (tx/->KvTxLog f/*kv*)

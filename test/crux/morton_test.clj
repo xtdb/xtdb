@@ -51,10 +51,10 @@
 (t/deftest test-can-calculate-litmax-and-bigmin
   ;; https://www.vision-tools.com/h-tropf/multidimensionalrangequery.pdf
   ;; page 74.
-  (t/is (= [55 74] (morton/zdiv 27 102 58)))
-  (t/is (= [55 74] (morton/zdiv (morton/longs->morton-number 3 5)
-                                (morton/longs->morton-number 5 10)
-                                (morton/longs->morton-number 7 4))))
+  (t/is (= [55 74] (morton/morton-range-search 27 102 58)))
+  (t/is (= [55 74] (morton/morton-range-search (morton/longs->morton-number 3 5)
+                                               (morton/longs->morton-number 5 10)
+                                               (morton/longs->morton-number 7 4))))
 
   ;; Example from
   ;; https://en.wikipedia.org/wiki/Z-order_curve#Use_with_one-dimensional_data_structures_for_range_searching
@@ -62,24 +62,22 @@
   ;; important thing is which number comes first, it will generate the
   ;; same codes. So when y=6 and x=3 here, it just means that the
   ;; first dimension is y according to the examples encoding.
-  (t/is (= [15 36] (morton/zdiv 12 45 19)))
-  (t/is (= [15 36] (morton/zdiv (morton/longs->morton-number 2 2)
-                                (morton/longs->morton-number 6 3)
-                                (morton/longs->morton-number 1 5))))
+  (t/is (= [15 36] (morton/morton-range-search 12 45 19)))
+  (t/is (= [15 36] (morton/morton-range-search (morton/longs->morton-number 2 2)
+                                               (morton/longs->morton-number 6 3)
+                                               (morton/longs->morton-number 1 5))))
 
-  (t/testing "new version"
-    (t/is (= [107 145] (morton/morton-get-next-address 51 193)))
-    (t/is (= [63 98] (morton/morton-get-next-address 51 107)))
-    (t/is (= [99 104] (morton/morton-get-next-address 98 107)))
-    (t/is (= [149 192] (morton/morton-get-next-address 145 193)))
-
-    (t/is (= [55 74] (morton/morton-range-search 27 102 58)))
-    (t/is (= [15 36] (morton/morton-range-search 12 45 19)))))
+  (t/is (= [107 145] (morton/morton-get-next-address 51 193)))
+  (t/is (= [63 98] (morton/morton-get-next-address 51 107)))
+  (t/is (= [99 104] (morton/morton-get-next-address 98 107)))
+  (t/is (= [149 192] (morton/morton-get-next-address 145 193))))
 
 ;; NOTE: this test is a bit unusual in that it creates the index
 ;; without transacting, as we need to test certain relationships
 ;; between vt and tt in Z order space. The times here are the raw
 ;; reversed times. That is, they both shrink towards 0 as time passes.
+
+;; TODO: redo this test in a saner way.
 ;;
 (t/deftest test-can-find-latest-value-on-x-axis
   (f/with-kv-store
@@ -92,11 +90,19 @@
             tx-id 2
             eb (ExpandableDirectByteBuffer.)
             seek-at (fn [i vt tt]
-                      (db/seek-values (idx/->EntityMortonAsOfIndex i
-                                                                   (morton/longs->morton-number vt tt)
-                                                                   eb)
+                      (db/seek-values (idx/->EntityAsOfIndex i
+                                                             (c/reverse-time-ms->date vt)
+                                                             (c/reverse-time-ms->date tt)
+                                                             eb)
                                       eid))]
-        (kv/store f/*kv* [[(c/encode-entity+z+tx-id-key-to
+        (kv/store f/*kv* [[(c/encode-entity+vt+tt+tx-id-key-to
+                            nil
+                            eid
+                            (c/reverse-time-ms->date valid-time)
+                            (c/reverse-time-ms->date tx-time)
+                            tx-id)
+                           (c/->id-buffer content-hash)]
+                          [(c/encode-entity+z+tx-id-key-to
                             nil
                             eid
                             z
@@ -132,7 +138,14 @@
                 z (morton/longs->morton-number valid-time tx-time)
                 tx-id 1]
 
-            (kv/store f/*kv* [[(c/encode-entity+z+tx-id-key-to
+            (kv/store f/*kv* [[(c/encode-entity+vt+tt+tx-id-key-to
+                                nil
+                                eid
+                                (c/reverse-time-ms->date valid-time)
+                                (c/reverse-time-ms->date tx-time)
+                                tx-id)
+                               (c/->id-buffer content-hash)]
+                              [(c/encode-entity+z+tx-id-key-to
                                 nil
                                 eid
                                 z

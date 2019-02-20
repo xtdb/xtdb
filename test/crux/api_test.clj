@@ -22,7 +22,7 @@
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
               :crux.kv/estimate-num-keys 1
-              :crux.index/index-version 3
+              :crux.index/index-version 4
               :crux.tx-log/consumer-state nil}
              (dissoc (.status f/*api*) :crux.kv/size))))
 

@@ -483,29 +483,6 @@
       (update :eid c/safe-id)
       (update :content-hash c/safe-id)))
 
-(defrecord EntityAsOfIndex [i valid-time transact-time eb]
-  db/Index
-  (db/seek-values [this k]
-    (let [prefix-size (+ c/index-id-size c/id-size)
-          seek-k (c/encode-entity+vt+tt+tx-id-key-to
-                  (.get seek-buffer-tl)
-                  k
-                  valid-time
-                  transact-time
-                  nil)]
-      (loop [k (kv/seek i seek-k)]
-        (when (and k (mem/buffers=? seek-k k prefix-size))
-          (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
-                v (kv/value i)]
-            (if (<= (compare (.tt entity-tx) transact-time) 0)
-              (when-not (mem/buffers=? c/nil-id-buffer v)
-                [(c/->id-buffer (.eid entity-tx))
-                 (enrich-entity-tx entity-tx v)])
-              (recur (kv/next i))))))))
-
-  (db/next-values [this]
-    (throw (UnsupportedOperationException.))))
-
 ;; TODO: We're not 100% sure this actually returns the lowest value in
 ;; search space just because it finds the lowest valid value in Z
 ;; order. Needs more testing / reflection.
@@ -574,20 +551,35 @@
         candidate))
     prev-candidate))
 
-(defrecord EntityMortonAsOfIndex [i seek-z eb]
+(defrecord EntityAsOfIndex [i valid-time transact-time eb]
   db/Index
   (db/seek-values [this k]
-    (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb k nil)]
-      (when-not (= ::deleted-entity k)
-        [k v])))
+    (let [prefix-size (+ c/index-id-size c/id-size)
+          seek-k (c/encode-entity+vt+tt+tx-id-key-to
+                  (.get seek-buffer-tl)
+                  k
+                  valid-time
+                  transact-time
+                  nil)
+          eid k]
+      (when-let [k (kv/seek i seek-k)]
+        (when (mem/buffers=? seek-k k prefix-size)
+          (let [entity-tx (safe-entity-tx (c/decode-entity+vt+tt+tx-id-key-from k))
+                v (kv/value i)]
+            (if (<= (compare (.tt entity-tx) transact-time) 0)
+              (when-not (mem/buffers=? c/nil-id-buffer v)
+                [(c/->id-buffer (.eid entity-tx))
+                 (enrich-entity-tx entity-tx v)])
+              (let [seek-z (c/encode-entity-tx-z-number valid-time transact-time)]
+                (when-let [[k v] (find-entity-tx-within-range-with-highest-valid-time i seek-z morton/z-max-mask eb eid nil)]
+                  (when-not (= ::deleted-entity k)
+                    [k v])))))))))
 
   (db/next-values [this]
     (throw (UnsupportedOperationException.))))
 
 (defn new-entity-as-of-index [snapshot valid-time transaction-time]
-  (if morton/use-space-filling-curve-index?
-    (->EntityMortonAsOfIndex (kv/new-iterator snapshot) (c/encode-entity-tx-z-number valid-time transaction-time) (ExpandableDirectByteBuffer.))
-    (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time (ExpandableDirectByteBuffer.))))
+  (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time (ExpandableDirectByteBuffer.)))
 
 (defn entities-at [snapshot eids valid-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
