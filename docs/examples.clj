@@ -37,6 +37,20 @@
          :where [[e :name "Pablo"]]})
 ;; end::query[]
 
+;; tag::query-valid-time[]
+(api/q (api/db system #inst "2018-05-19T09:20:27.966-00:00")
+       '{:find [e]
+         :where [[e :name "Pablo"]]})
+;; end::query-valid-time[]
+
+;; tag::query-tx-time[]
+(api/q (api/db system
+               #inst "2018-05-19T09:20:27.966-00:00"
+               #inst "2018-05-19T09:20:27.966-00:00")
+       '{:find [e]
+         :where [[e :name "Pablo"]]})
+;; end::query-tx-time[]
+
 (comment
   ;; tag::should-get[]
   #{[:http://dbpedia.org/resource/Pablo_Picasso]}

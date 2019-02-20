@@ -30,12 +30,50 @@ include::./examples.clj[tags=should-get]
 
 == Query
 
+Crux query syntax is that of Datalog using Clojure's EDN, inspired by
+Datomic (later adopted by other DBs such as DataScript).
+
 === Basic Query
 
 [source,clj]
 ----
 include::./examples.clj[tags=query]
 ----
+
+The `db` is retrieved via a call to `crux.api/db`.
+
+=== Time Queries
+
+`crux.api/db` optionally takes valid time and transaction time as
+additional arguments. In the below example we query using valid time
+only.
+
+[source,clj]
+----
+include::./examples.clj[tags=query-valid-time]
+----
+
+In the next example we query using both valid time and transaction
+time temporal coordinates. This call will block until the local index
+has seen the transaction time
+
+[source,clj]
+----
+include::./examples.clj[tags=query-tx-time]
+----
+
+NOTE: TODO: The above doesn't yeild a result
+
+=== Lazy Queries
+
+NOTE: TODO Make an example
+
+The `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
+optionally a `snapshot` which is already opened and managed by the
+caller (using `with-open` for example). This version of the call
+returns a lazy sequence of the results, while the other version
+provides a set. A snapshot can be retreived from a `kv` instance via
+`crux.kv-store/new-snapshot`.
 
 === Rules
 
@@ -53,15 +91,6 @@ Crux query capability is easiest summarized via an example:
               [?e1 :follow ?t]
               (follow ?t ?e2)]]})
 ----
-
-The `db` is retrieved via a call to `crux.query/db` which optionally
-takes valid and transaction time. The call will block until the local
-index has seen the transaction time, if provided. The `crux.query/q`
-takes 2 or 3 arguments, `db` and `q` but also optionally a `snapshot`
-which is already opened and managed by the caller (using `with-open`
-for example). This version of the call returns a lazy sequence of the
-results, while the other verision provides a set. A snapshot can be
-retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
 
 The `:args` key contains a relation where each map is expected to have
 the same keys. These keys are turned into logic variable symbols and the
