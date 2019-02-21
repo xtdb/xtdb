@@ -147,6 +147,7 @@ svg a text {
 
 .timetravel svg.timeline-graph .max-transaction-time line {
     stroke: darkred;
+    opacity: 0.5;
 }
 
 .timetravel svg.timeline-graph .axis .axis-name {
@@ -201,13 +202,20 @@ svg a text {
 
 .timetravel svg.timeline-graph.timeline-2d-graph .bitemp-coordinates rect {
     fill: grey;
-    stroke: black;
-    opacity: 0.1;
+    stroke: lightgrey;
+    fill-opacity: 0.2;
 }
 
 .timetravel svg.timeline-graph .max-transaction-time text,
 .timetravel svg.timeline-graph .time-horizon text {
     text-anchor: middle;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .time-horizon rect {
+    fill: green;
+    stroke: green;
+    stroke-width: 1;
+    fill-opacity: 0.1;
 }
 
 .comments ul {

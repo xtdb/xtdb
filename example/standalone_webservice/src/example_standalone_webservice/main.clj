@@ -142,13 +142,13 @@
              y (quot (+ height (time->y max-known-tt)) 2)]
          [:a.max-transaction-time {:href (str "?tt=" (format-date max-known-tt))}
           [:text {:x x :y y} "MAX"]
-          [:line {:x1 1 :y1 (time->y max-known-tt)
-                  :x2 (time->x max-known-tt) :y2 height}]]))
+          [:line {:x1 x :y1 1
+                  :x2 x :y2 height}]]))
      (let [x (quot (time->x now) 2)
            y (quot (+ height (time->y now)) 2)]
        [:a.time-horizon {:href "/timeline"}
         [:text {:x x :y y} "NOW"]
-        [:line {:x1 1 :y1 (time->y now) :x2 (time->x now) :y2 height}]])
+        [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "none"}]])
      (for [{:keys [tt vt]} (sort-by :vt known-times)
            :let [vt-str (format-date vt)
                  x (quot (time->x tt) 2)
