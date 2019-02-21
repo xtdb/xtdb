@@ -65,6 +65,7 @@
         min-time-str (format-date min-time)
         max-time-str (format-date max-time)
         now-str (format-date now)
+        tt (or tt now)
         time->x (fn [t]
                   (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))
         onclick-timeline-js "window.location = ('/?%s=' + Math.round(%f * (window.event.offsetX / window.event.target.getBoundingClientRect().width) + %d) + '&%s=%d');"]
