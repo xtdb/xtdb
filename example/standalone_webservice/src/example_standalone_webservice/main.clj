@@ -285,7 +285,7 @@
              (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log
                    :let [tx-time-str (format-date tx-time)]]
                [:tr
-                [:td tx-id]
+                [:td {:id (str tx-id)} tx-id]
                 [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
                 [:td (with-date-links (format-date tx-time)
                        (with-out-str
@@ -297,7 +297,8 @@
 
 (defn- pp-entity-tx [entity-tx]
   (let [content-hash (:crux.db/content-hash entity-tx)
-        eid (:crux.db/id entity-tx)]
+        eid (:crux.db/id entity-tx)
+        tx-id (:crux.tx/tx-id entity-tx)]
     (-> (with-out-str
           (pp/pprint entity-tx))
         (str/replace
@@ -305,7 +306,10 @@
          (format "<a href=\"/entity/%s\">%s</a>" eid eid))
         (str/replace
          content-hash
-         (format "<a href=\"/document/%s\">%s</a>" content-hash content-hash)))))
+         (format "<a href=\"/document/%s\">%s</a>" content-hash content-hash))
+        (str/replace
+         (str tx-id)
+         (format "<a href=\"/tx-log#%s\">%s</a>" tx-id tx-id)))))
 
 (defn- pp-entity-txs [entity-txs]
   (for [{:crux.tx/keys [tx-id tx-time] :as entity-tx} entity-txs
