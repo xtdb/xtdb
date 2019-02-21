@@ -306,3 +306,14 @@ svg a text {
     padding-top: 0.5em;
     vertical-align: top;
 }
+
+.status {
+    font-size: 75%;
+}
+
+pre.edn {
+    padding: 1em;
+    border-radius: 4px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+}

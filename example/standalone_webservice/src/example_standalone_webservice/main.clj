@@ -1,5 +1,6 @@
 (ns example-standalone-webservice.main
   (:require [crux.api :as api]
+            [crux.codec :as c]
             [crux.io :as crux-io]
             [clojure.instant :as instant]
             [clojure.tools.logging :as log]
@@ -23,10 +24,9 @@
   (when d
     (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
 
-(defn- pp-with-date-links [tt-str x]
+(defn- with-date-links [tt-str x]
   (hiccup.util/raw-string
-   (str/replace (with-out-str
-                  (pp/pprint x))
+   (str/replace x
                 #"\#inst \"(.+)\""
                 (fn [[s d]]
                   (str/replace s d (str "<a href=\"/?vt=" d (when tt-str
@@ -49,7 +49,8 @@
 (defn- status-block [crux]
   [:div.status
    [:h4 "Status:"]
-   [:pre (pp-with-date-links nil (api/status crux))]])
+   [:pre.edn (with-date-links nil (with-out-str
+                                (pp/pprint (api/status crux))))]])
 
 (defn- valid-time-link [vt]
   (let [vt-str (format-date vt)]
@@ -286,15 +287,41 @@
                [:tr
                 [:td tx-id]
                 [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
-                [:td (pp-with-date-links (format-date tx-time) tx-ops)]])]]]
+                [:td (with-date-links (format-date tx-time)
+                       (with-out-str
+                         (pp/pprint tx-ops)))]])]]]
           [:h5
            [:a {:href "/"} "Back to Message Board"]]
           (status-block crux)
           (footer)]])))))
 
+(defn- pp-entity-tx [entity-tx]
+  (let [content-hash (:crux.db/content-hash entity-tx)
+        eid (:crux.db/id entity-tx)]
+    (-> (with-out-str
+          (pp/pprint entity-tx))
+        (str/replace
+         eid
+         (format "<a href=\"/entity/%s\">%s</a>" eid eid))
+        (str/replace
+         content-hash
+         (format "<a href=\"/document/%s\">%s</a>" content-hash content-hash)))))
+
+(defn- pp-entity-txs [entity-txs]
+  (for [{:crux.tx/keys [tx-id tx-time] :as entity-tx} entity-txs
+        :let [tx-time-str (format-date tx-time)]]
+    (with-date-links (format-date tx-time)
+      (pp-entity-tx entity-tx))))
+
 (defn timeline-graph-handler [ctx {:keys [crux]}]
   (fn [ctx]
-    (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)]
+    (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)
+          eids (api/q db '{:find [e]
+                           :where [[e :message-post/message]]})
+          entity-txs (->> (for [[eid] eids]
+                            (api/history-range crux eid nil nil vt tt))
+                          (reduce into [])
+                          (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))]
       (str
        "<!DOCTYPE html>"
        (html
@@ -305,10 +332,53 @@
            [:h2 [:a {:href ""} "Timeline Graph"]]]
           [:div.timetravel
            (draw-timeline-2d-graph tx-log min-time max-time now max-known-tt vt tt 500 500)]
+          [:div
+           [:h4 "Entity TXs"]
+           [:pre.edn (pp-entity-txs entity-txs)]]
           [:h5
            [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
           (status-block crux)
           (footer)]])))))
+
+(defn document-handler [ctx {:keys [crux]}]
+  (fn [ctx]
+    (let [content-hash (get-in ctx [:parameters :path :content-hash])]
+      (when-let [document (and (c/valid-id? content-hash)
+                               (api/document crux content-hash))]
+        (str
+         "<!DOCTYPE html>"
+         (html
+          [:html
+           (page-head "Message Board - Document")
+           [:body
+            [:header
+             [:h2 [:a {:href ""} "Document: " content-hash]]]
+            [:pre.edn
+             (pp-with-date-links nil (with-out-str
+                                       (pp/pprint document)))]
+            [:h5
+             [:a {:href "/"} "Back to Message Board"]]
+            (status-block crux)
+            (footer)]]))))))
+
+(defn entity-handler [ctx {:keys [crux]}]
+  (fn [ctx]
+    (let [eid (get-in ctx [:parameters :path :eid])]
+      (when-let [history (and (c/valid-id? eid)
+                              (api/history crux eid))]
+        (str
+         "<!DOCTYPE html>"
+         (html
+          [:html
+           (page-head "Message Board - Entity")
+           [:body
+            [:header
+             [:h2 [:a {:href ""} "Entity: " eid]]]
+            [:pre.edn (pp-entity-txs history)]
+            [:h5
+             [:a {:href "/"} "Back to Message Board"]]
+            (status-block crux)
+            (footer)]]))))))
 
 (defn redirect-with-time [ctx valid-time transaction-time]
   (assoc (:response ctx)
@@ -393,6 +463,19 @@
       {:methods
        {:get {:produces "text/html"
               :response #(timeline-graph-handler % system)}}})]
+
+    [["document/" :content-hash]
+     (resource
+      {:methods
+       {:get {:produces "text/html"
+              :response #(document-handler % system)}}})]
+
+    [["entity/" :eid]
+     (resource
+      {:methods
+       {:get {:produces "text/html"
+              :response #(entity-handler % system)}}})]
+
     ["comment"
      (resource
       {:methods
