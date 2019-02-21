@@ -410,11 +410,11 @@
         diff (- (inst-ms end-date) (inst-ms start-date))
         n ( * 2 200)
         deletion-rate 0.2
-        bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
-                                                         (long (* (rand) diff))))))
-                          (partition-all 2))
+        tx-bitemp-pairs (->> (repeatedly n #(Date. (long (+ (inst-ms start-date)
+                                                            (long (* (rand) diff))))))
+                             (partition-all 2))
         entities (or bitemp-stress-entities
-                     (vec (for [[tx-id [vt tt]] (map-indexed vector bitemp-pairs)
+                     (vec (for [[tx-id [vt tt]] (map-indexed vector tx-bitemp-pairs)
                                 :let [content-hash (c/new-id (keyword (str tx-id)))]]
                             {:crux.db/id (str (c/new-id eid))
                              :crux.db/content-hash (if (< (rand) deletion-rate)
@@ -427,8 +427,9 @@
         query-end-date #inst "2021"
         query-diff (- (inst-ms query-end-date) (inst-ms query-start-date))
         queries (or bitemp-stress-queries
-                    (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms query-start-date)
-                                                                    (long (* (rand) query-diff))))))))
+                    (concat tx-bitemp-pairs
+                            (partition-all 2 (repeatedly n #(Date. (long (+ (inst-ms query-start-date)
+                                                                            (long (* (rand) query-diff)))))))))
         vt+tt->entity (into (sorted-map)
                             (zipmap
                              (for [entity-tx entities]
@@ -493,7 +494,7 @@
                 (def bitemp-stress-entities entities))
               (t/is (= expected-or-deleted actual) (pr-str [vt tt expected]))))))
 
-      (t/testing "can do range queries across valid and transaction time"
+      (t/testing "can do range queries across valid and transaction time, including at tx bondaries"
         (doseq [[[vt-start tt-start] [vt-end tt-end]] (partition-all 2 queries)
                 :let [[vt-start vt-end] (sort [vt-start vt-end])
                       [tt-start tt-end] (sort [tt-start tt-end])
