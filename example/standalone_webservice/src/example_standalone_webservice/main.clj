@@ -122,44 +122,44 @@
                   (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))
         time->y (fn [t]
                   (- height (* height (/ (- (inst-ms t) (inst-ms min-time)) time-diff))))
+        onclick-timeline-js (format "window.location = '?tt=' + Math.round(2 * (%f * (window.event.offsetX / window.event.target.getBoundingClientRect().width)) + %d) + '&vt=' +  Math.round(%f * (2 * (window.event.target.getBoundingClientRect().height - window.event.offsetY) / (window.event.target.getBoundingClientRect().height)) + %d);"
 
-        onclick-timeline-js "window.location = ('/?%s=' + Math.round(%f * (%s) + %d) + '&%s=%d');"]
-    [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
-     [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.8 height)} min-time-str]]
-     [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.8 height)} max-time-str]]
-     (when tt
-       (let [x (quot (time->x tt) 2)
-             y (quot (+ (* 0.75 height) (time->y vt)) 2)]
-         [:rect.bitemp-coordinates {:x 1 :y y :width x :height (- (* 0.75 height) y) :opacity 0.1}]))
+                                    time-diff (inst-ms min-time) time-diff (inst-ms min-time))]
+    [:svg.timeline-graph.timeline-2d-graph
+     {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)
+      :onclick onclick-timeline-js}
+     (let [x (quot (time->x tt) 2)
+           y (quot (+ height (time->y vt)) 2)]
+       [:g.bitemp-coordinates
+        [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "none"}]
+        [:text {:x x :y (+ (* 0.025 height) y)} (format-date vt) " | " (format-date tt)]])
+     [:a {:href (str "?vt=" min-time-str)} [:text.min-time {:x (* 0.01 width) :y (* 0.975 height)} min-time-str]]
+     [:a {:href (str "?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.025 height)} max-time-str]]
+     [:line {:x1 1 :y1 height :x2  width :y2 1 :stroke-dasharray "8, 10" :stroke-width 1}]
      (when max-known-tt
-       [:a.max-transaction-time {:href (str "/?tt=" (format-date max-known-tt))}
-        [:text {:x (time->x max-known-tt) :y (* 0.85 height)} "MAX"]
-        [:line {:x1 1 :y1 (time->y max-known-tt)
-                :x2 (time->x max-known-tt) :y2 (* 0.75 height)}]])
-     [:line {:x1 1 :y1 (* 0.75 height) :x2  width :y2 1 :stroke-dasharray "8, 10" :stroke-width 1}]
-     [:a.time-horizon {:href "/"}
-      [:text {:x (time->x now) :y (* 0.85 height)} "NOW"]
-      [:line {:x1 1 :y1 (time->y now) :x2 (time->x now) :y2 (* 0.75 height)}]]
+       (let [x (quot (time->x max-known-tt) 2)
+             y (quot (+ height (time->y max-known-tt)) 2)]
+         [:a.max-transaction-time {:href (str "?tt=" (format-date max-known-tt))}
+          [:text {:x x :y y} "MAX"]
+          [:line {:x1 1 :y1 (time->y max-known-tt)
+                  :x2 (time->x max-known-tt) :y2 height}]]))
+     (let [x (quot (time->x now) 2)
+           y (quot (+ height (time->y now)) 2)]
+       [:a.time-horizon {:href "/timeline"}
+        [:text {:x x :y y} "NOW"]
+        [:line {:x1 1 :y1 (time->y now) :x2 (time->x now) :y2 height}]])
+     (for [{:keys [tt vt]} (sort-by :vt known-times)
+           :let [vt-str (format-date vt)
+                 x (quot (time->x tt) 2)
+                 y (quot (+ height (time->y vt)) 2)]]
+       [:a.timepoint {:href (str "?vt=" vt-str "&tt=" (format-date tt))}
+        [:g
+         [:circle.timepoint-marker {:cx x :cy y :r 2}]
+         [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])
      [:g.axis
-      #_[:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
-         [:tspan.axis-value (format-date vt)]]
-      [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 (* 0.75 height) :stroke-width (* 0.01 height)
-                        :onclick (format onclick-timeline-js "vt" time-diff "(2 * (window.event.target.getBoundingClientRect().height - window.event.offsetY * 0.75) / (window.event.target.getBoundingClientRect().height))"
-                                         (inst-ms min-time) "tt" (inst-ms tt))}]
-      (for [{:keys [tt vt]} (sort-by :vt known-times)
-            :let [vt-str (format-date vt)
-                  x (quot (time->x tt) 2)
-                  y (quot (+ (* 0.75 height) (time->y vt)) 2)]]
-        [:a.timepoint {:href (str "/?vt=" vt-str "&tt=" (format-date tt))}
-         [:g
-          [:circle.timepoint-marker {:cx x :cy y :r 3 :fill "#444"}]
-          [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])]
+      [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 height :stroke-width (* 0.01 height) :pointer-events "none"}]]
      [:g.axis
-      #_[:text.axis-name {:x (time->x tt) :y (* 0.9 height)} "TT: "
-         [:tspan.axis-value (or (format-date tt) "empty")]]
-      [:line.axis-line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)
-                        :onclick (format onclick-timeline-js "tt" time-diff "2 * (window.event.offsetX / window.event.target.getBoundingClientRect().width)"
-                                         (inst-ms min-time) "vt" (inst-ms vt))}]]]))
+      [:line.axis-line {:x1 0 :y1 height :x2 width :y2 height :stroke-width (* 0.01 height) :pointer-events "none"}]]]))
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
@@ -172,25 +172,29 @@
     [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 9) utc)))
      (Date/from (.toInstant (.atStartOfDay (.plusDays ld 1) utc)))]))
 
+(defn- time-context [crux ctx]
+  (let [{:strs [vt tt]} (get-in ctx [:parameters :query])
+        now (Date.)
+        vt (if (not (str/blank? vt))
+             (parse-query-date vt)
+             now)
+        tt (when (not (str/blank? tt))
+             (parse-query-date tt))
+        tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
+                 (vec (api/tx-log crux tx-log-cxt nil true)))
+        max-known-tt (:crux.tx/tx-time (last tx-log))
+        tt (or tt max-known-tt)
+        tt (if (pos? (compare tt max-known-tt))
+             max-known-tt
+             tt)
+        db (api/db crux vt tt)
+        [min-time max-time] (min-max-time now)]
+    {:vt vt :tt tt :now now :tx-log tx-log :max-known-tt max-known-tt :min-time min-time :max-time max-time :db db}))
+
 (defn index-handler
   [ctx {:keys [crux]}]
   (fn [ctx]
-    (let [{:strs [vt tt]} (get-in ctx [:parameters :query])
-          now (Date.)
-          vt (if (not (str/blank? vt))
-               (parse-query-date vt)
-               now)
-          tt (when (not (str/blank? tt))
-               (parse-query-date tt))
-          tx-log (with-open [tx-log-cxt (api/new-tx-log-context crux)]
-                   (vec (api/tx-log crux tx-log-cxt nil true)))
-          max-known-tt (:crux.tx/tx-time (last tx-log))
-          tt (or tt max-known-tt)
-          tt (if (pos? (compare tt max-known-tt))
-               max-known-tt
-               tt)
-          db (api/db crux vt tt)
-          [min-time max-time] (min-max-time now)
+    (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)
           edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
        "<!DOCTYPE html>"
@@ -202,8 +206,6 @@
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
            (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)]
-          #_[:div.timetravel
-             (draw-timeline-2d-graph tx-log min-time max-time now max-known-tt vt tt 500 500)]
           [:div.comments
            [:h3 "Comments"]
            [:ul
@@ -252,8 +254,10 @@
              [:input.primary {:type "submit" :name "_action" :value "Comment"}]
              [:input.primary {:type "submit" :name "_action" :value "Bitemporal Comment"}]]]]
 
-          [:div
+          [:h5
            [:a {:href "tx-log"} "Transaction History"]]
+          [:h5
+           [:a {:href (str "timeline?vt=" (format-date vt) "&tt=" (format-date tt))} "Timeline Graph"]]
           (status-block crux)
           (footer)]])))))
 
@@ -283,8 +287,26 @@
                 [:td tx-id]
                 [:td [:a {:href (str "/?tt=" tx-time-str)} tx-time-str]]
                 [:td (pp-with-date-links (format-date tx-time) tx-ops)]])]]]
-          [:div
+          [:h5
            [:a {:href "/"} "Back to Message Board"]]
+          (status-block crux)
+          (footer)]])))))
+
+(defn timeline-graph-handler [ctx {:keys [crux]}]
+  (fn [ctx]
+    (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)]
+      (str
+       "<!DOCTYPE html>"
+       (html
+        [:html
+         (page-head "Message Board - Timeline Graph")
+         [:body
+          [:header
+           [:h2 [:a {:href ""} "Timeline Graph"]]]
+          [:div.timetravel
+           (draw-timeline-2d-graph tx-log min-time max-time now max-known-tt vt tt 500 500)]
+          [:h5
+           [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
           (status-block crux)
           (footer)]])))))
 
@@ -365,6 +387,12 @@
       {:methods
        {:get {:produces "text/html"
               :response #(tx-log-handler % system)}}})]
+
+    ["timeline"
+     (resource
+      {:methods
+       {:get {:produces "text/html"
+              :response #(timeline-graph-handler % system)}}})]
     ["comment"
      (resource
       {:methods

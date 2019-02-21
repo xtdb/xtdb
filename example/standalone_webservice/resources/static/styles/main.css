@@ -60,6 +60,11 @@ h1, h2, h3, h4, h5, h6 {
     border-bottom: 1px solid lightgrey;
 }
 
+h5, h6 {
+    border-bottom: 1px solid #eee;
+}
+
+
 h2 small {
     padding: 0.2em;
     color: grey;
@@ -175,6 +180,35 @@ svg a text {
 
 .timetravel svg.timeline-graph a.timepoint:hover text {
     visibility: visible;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph {
+    max-width: 100%;
+    width: 70%;
+    margin: auto;
+    display: block;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .timepoint .timepoint-marker {
+    stroke: none;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .bitemp-coordinates text {
+    text-anchor: middle;
+    stroke: grey;
+    stroke-width: 0.1;
+    fill: grey;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .bitemp-coordinates rect {
+    fill: grey;
+    stroke: black;
+    opacity: 0.1;
+}
+
+.timetravel svg.timeline-graph .max-transaction-time text,
+.timetravel svg.timeline-graph .time-horizon text {
+    text-anchor: middle;
 }
 
 .comments ul {
