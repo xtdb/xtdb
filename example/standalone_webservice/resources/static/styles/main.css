@@ -218,6 +218,12 @@ svg a text {
     fill-opacity: 0.1;
 }
 
+.timetravel svg.timeline-graph.timeline-2d-graph .time-arrow {
+    stroke: #ccc;
+    stroke-width: 1;
+    stroke-dasharray: 10, 10;
+}
+
 .comments ul {
     padding: 0;
 }

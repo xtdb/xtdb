@@ -123,44 +123,44 @@
                   (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))
         time->y (fn [t]
                   (- height (* height (/ (- (inst-ms t) (inst-ms min-time)) time-diff))))
-        onclick-timeline-js (format "window.location = '?tt=' + Math.round(2 * (%f * (window.event.offsetX / window.event.target.getBoundingClientRect().width)) + %d) + '&vt=' +  Math.round(%f * (2 * (window.event.target.getBoundingClientRect().height - window.event.offsetY) / (window.event.target.getBoundingClientRect().height)) + %d);"
+        onclick-timeline-js (format "window.location = '?tt=' + Math.round((%f * (window.event.offsetX / window.event.target.getBoundingClientRect().width)) + %d) + '&vt=' +  Math.round(%f * ((window.event.target.getBoundingClientRect().height - window.event.offsetY) / (window.event.target.getBoundingClientRect().height)) + %d);"
 
                                     time-diff (inst-ms min-time) time-diff (inst-ms min-time))]
-    [:svg.timeline-graph.timeline-2d-graph
+    [:svg#timeline-graph.timeline-graph.timeline-2d-graph
      {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)
       :onclick onclick-timeline-js}
-     (let [x (quot (time->x tt) 2)
-           y (quot (+ height (time->y vt)) 2)]
+     (let [x (time->x tt)
+           y (time->y vt)]
        [:g.bitemp-coordinates
         [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "none"}]
         [:text {:x x :y (+ (* 0.025 height) y)} (format-date vt) " | " (format-date tt)]])
-     [:a {:href (str "?vt=" min-time-str)} [:text.min-time {:x (* 0.01 width) :y (* 0.975 height)} min-time-str]]
-     [:a {:href (str "?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.025 height)} max-time-str]]
-     [:line {:x1 1 :y1 height :x2  width :y2 1 :stroke-dasharray "8, 10" :stroke-width 1}]
+     [:a {:href (str "?vt=" min-time-str)} [:text.min-time {:x (* 0.01 width) :y (* 0.985 height)} min-time-str]]
+     [:a {:href (str "?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.015 height)} max-time-str]]
+     [:line.time-arrow {:x1 1 :y1 height :x2  width :y2 1}]
      (when max-known-tt
-       (let [x (quot (time->x max-known-tt) 2)
-             y (quot (+ height (time->y max-known-tt)) 2)]
+       (let [x (time->x max-known-tt)
+             y (time->y max-known-tt)]
          [:a.max-transaction-time {:href (str "?tt=" (format-date max-known-tt))}
           [:text {:x x :y y} "MAX"]
           [:line {:x1 x :y1 1
                   :x2 x :y2 height}]]))
-     (let [x (quot (time->x now) 2)
-           y (quot (+ height (time->y now)) 2)]
+     (let [x (time->x now)
+           y (time->y now)]
        [:a.time-horizon {:href "/timeline"}
         [:text {:x x :y y} "NOW"]
-        [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "none"}]])
+        [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "stroke"}]])
      (for [{:keys [tt vt]} (sort-by :vt known-times)
            :let [vt-str (format-date vt)
-                 x (quot (time->x tt) 2)
-                 y (quot (+ height (time->y vt)) 2)]]
+                 x (time->x tt)
+                 y (time->y vt)]]
        [:a.timepoint {:href (str "?vt=" vt-str "&tt=" (format-date tt))}
         [:g
          [:circle.timepoint-marker {:cx x :cy y :r 2}]
          [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])
      [:g.axis
-      [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 height :stroke-width (* 0.01 height) :pointer-events "none"}]]
+      [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 height :pointer-events "none"}]]
      [:g.axis
-      [:line.axis-line {:x1 0 :y1 height :x2 width :y2 height :stroke-width (* 0.01 height) :pointer-events "none"}]]]))
+      [:line.axis-line {:x1 0 :y1 height :x2 width :y2 height :pointer-events "none"}]]]))
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
@@ -170,7 +170,7 @@
 (defn- min-max-time [^Date from]
   (let [utc (ZoneId/of "UTC")
         ld (.toLocalDate (.atZone (.toInstant from) utc))]
-    [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 9) utc)))
+    [(Date/from (.toInstant (.atStartOfDay ld utc)))
      (Date/from (.toInstant (.atStartOfDay (.plusDays ld 1) utc)))]))
 
 (defn- time-context [crux ctx]
