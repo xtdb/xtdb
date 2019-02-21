@@ -1,13 +1,12 @@
 (ns crux-bench.watdiv
-  (:require
-   [crux.kafka :as k]
-   [crux.rdf :as rdf]
-   [clojure.java.io :as io]
-   [crux.sparql :as sparql]
-   [clojure.string :as str]
-   [clojure.tools.logging :as log])
-  (:import [java.io Closeable]
-           [java.time Duration]))
+  (:require [amazonica.aws.s3 :as s3]
+            [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
+            [crux.rdf :as rdf]
+            [crux.sparql :as sparql])
+  (:import [java.io Closeable File]
+           [com.amazonaws.services.s3.model CannedAccessControlList]
+           java.time.Duration))
 
 (def query-timeout-ms 15000)
 
@@ -59,6 +58,18 @@
       (swap! tests-run inc))
     (.write out "]")))
 
+(defn upload-watdiv-results
+  [^File out-file]
+  (s3/put-object
+    :bucket-name (System/getenv "CRUX_BENCHMARK_BUCKET")
+    :key (.getName out-file)
+    :acl :public-read
+    :file out-file)
+  (s3/set-object-acl
+    (System/getenv "CRUX_BENCHMARK_BUCKET")
+    (.getName out-file)
+    CannedAccessControlList/PublicRead))
+
 (defn run-watdiv-test
   [{:keys [^crux.api.ICruxSystem crux] :as options} num-tests]
   (let [status (atom nil)
@@ -83,6 +94,8 @@
                                 :done? true}]]))
            (reset! status :running-benchmark)
            (execute-stress-test options tests-run out-file num-tests)
+           (reset! status :uploading-results)
+           (upload-watdiv-results out-file)
            (reset! status :benchmark-completed)
            (catch Throwable t
              (log/error t "watdiv testrun failed")

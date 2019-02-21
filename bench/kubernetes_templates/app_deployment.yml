@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: crux-bench
+  labels:
+    app: crux-bench
+spec:
+  serviceName: crux-bench-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crux-bench
+  template:
+    metadata:
+      labels:
+        app: crux-bench
+        date: "1549290021"
+    spec:
+      containers:
+      - name: crux-bench
+        image: juxt/crux-bench:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - mountPath: "/usr/src/app/data"
+          name: app-data-2
+  volumeClaimTemplates:
+    - metadata:
+        name: app-data-2
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+               storage: 10Gi

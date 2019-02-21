@@ -2,6 +2,7 @@
 
 set -e
 
-sudo docker build -t crux-bench -f bench/Dockerfile .
-sudo docker tag crux-bench juxt/crux-bench
-sudo docker push juxt/crux-bench
+docker build -t crux-bench-base -f docker-files/Dockerfile.base .
+docker build -t crux-bench -f docker-files/Dockerfile.production .
+docker tag crux-bench juxt/crux-bench
+docker push juxt/crux-bench

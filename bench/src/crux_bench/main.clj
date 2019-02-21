@@ -1,17 +1,17 @@
 (ns crux-bench.main
-  (:require [crux.api :as api]
-            [clojure.tools.logging :as log]
-            [hiccup2.core :refer [html]]
-            [hiccup.util]
-            [yada.yada :refer [handler listener]]
-            [yada.resource :refer [resource]]
-            [yada.resources.classpath-resource]
+  (:gen-class)
+  (:require [clojure.java.shell :refer [sh]]
             [clojure.pprint :as pp]
-            [clojure.java.shell :refer [sh]]
             [clojure.string :as str]
-
-            [crux-bench.watdiv :as watdiv])
-  (:import [java.io Closeable]))
+            [amazonica.aws.s3 :as s3]
+            [clojure.tools.logging :as log]
+            [crux-bench.watdiv :as watdiv]
+            [crux.api :as api]
+            [hiccup2.core :refer [html]]
+            [yada.yada :refer [listener]]
+            [yada.resource :refer [resource]]
+            yada.resources.classpath-resource)
+  (:import java.io.Closeable))
 
 (defn index-handler
   [ctx system]
@@ -31,6 +31,9 @@
          [:h2 [:a {:href "/"} "Bench Mark runner"]]
          [:pre
           (with-out-str
+            (pp/pprint (.status (:crux system))))]
+         [:pre
+          (with-out-str
             (pp/pprint (-> system :benchmark-runner :status deref)))]
 
          [:div.buttons
@@ -47,7 +50,15 @@
          [:pre
           (when-let [f (-> system :benchmark-runner :status deref
                            :watdiv-runner :out-file)]
-            (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]]])))
+            (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]
+
+        [:div.previus-benchmarks
+         (for [obj (:object-summaries
+                    (s3/list-objects-v2
+                      :bucket-name (System/getenv "CRUX_BENCHMARK_BUCKET")))]
+           [:div
+            [:a {:href (s3/get-url (System/getenv "CRUX_BENCHMARK_BUCKET") (:key obj))}
+             (:key obj)]])]]])))
 
 (defn application-resource
   [{:keys [benchmark-runner] :as system}]
@@ -108,6 +119,9 @@
   {:kv-backend "crux.kv.rocksdb.RocksKv"
    :bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
    :event-log-dir log-dir
+
+   :tx-topic "crux-bench-transaction-log"
+   :doc-topic "crux-bench-docs"
    :db-dir index-dir
    :server-port 8080})
 
