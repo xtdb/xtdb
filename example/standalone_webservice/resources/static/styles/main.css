@@ -189,6 +189,18 @@ svg a text {
     display: block;
 }
 
+.timetravel svg.timeline-graph.timeline-2d-graph .axis-name {
+    fill: grey;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .axis.vt {
+    text-anchor: start;
+}
+
+.timetravel svg.timeline-graph.timeline-2d-graph .axis.tt {
+    text-anchor: end;
+}
+
 .timetravel svg.timeline-graph.timeline-2d-graph .timepoint .timepoint-marker {
     stroke: none;
 }

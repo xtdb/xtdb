@@ -157,9 +157,11 @@
         [:g
          [:circle.timepoint-marker {:cx x :cy y :r 2}]
          [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])
-     [:g.axis
+     [:g.axis.vt
+      [:text.axis-name {:x (* 0.015 width) :y (* 0.015 height)} "VT"]
       [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 height :pointer-events "none"}]]
-     [:g.axis
+     [:g.axis.tt
+      [:text.axis-name {:x (* 0.985 width) :y (* 0.985 height)} "TT"]
       [:line.axis-line {:x1 0 :y1 height :x2 width :y2 height :pointer-events "none"}]]]))
 
 (defn- parse-query-date [d]
