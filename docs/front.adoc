@@ -1,5 +1,5 @@
 = Home
 
-image::crux-banner.png[]
+image::crux-logo_1.jpg[]
 
 include::what_is_crux.adoc[]
