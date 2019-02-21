@@ -119,6 +119,7 @@
                    entity-tx))
           (t/is (= {:crux.db/id :ivan :name "Ivan"} (.document f/*api* (:crux.db/content-hash entity-tx))))
           (t/is (= [entity-tx] (.history f/*api* :ivan)))
+          (t/is (= [entity-tx] (.historyRange f/*api* :ivan #inst "1990" #inst "1990" (:crux.tx/tx-time submitted-tx) (:crux.tx/tx-time submitted-tx))))
 
           (t/is (nil? (.document f/*api* (c/new-id :does-not-exist))))
           (t/is (nil? (.entityTx (.db f/*api* #inst "1999") :ivan)))))

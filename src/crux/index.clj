@@ -599,7 +599,7 @@
   (db/next-values [this]
     (entity-history-range-step i min max state (kv/next i))))
 
-(defn new-entity-history-range-index [snapshot vt-start vt-end tt-start tt-end]
+(defn new-entity-history-range-index [snapshot vt-start tt-start vt-end tt-end]
   (let [[min max] (sort (reify Comparator
                           (compare [_ a b]
                             (.compareTo ^Comparable a b)))
@@ -608,8 +608,13 @@
     (->EntityHistoryRangeIndex (kv/new-iterator snapshot) min max
                                (->EntityHistoryRangeState nil nil))))
 
-(defn entity-history-range [snapshot eid vt-start vt-end tt-start tt-end]
-  (let [idx (new-entity-history-range-index snapshot vt-start vt-end tt-start tt-end)]
+(def ^:private min-date (Date. Long/MIN_VALUE))
+(def ^:private max-date (Date. Long/MAX_VALUE))
+
+(defn entity-history-range [snapshot eid vt-start tt-start vt-end tt-end]
+  (let [idx (new-entity-history-range-index snapshot
+                                            (or vt-start min-date) (or tt-start min-date)
+                                            (or vt-end max-date) (or tt-end max-date))]
     (when-let [result (db/seek-values idx (c/->id-buffer eid))]
       (some->> (repeatedly #(db/next-values idx))
                (take-while identity)

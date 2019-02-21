@@ -7,6 +7,7 @@
   The optional SPARQL handler requires further dependencies on the
   classpath, see crux.sparql.protocol for details."
   (:require [clojure.edn :as edn]
+            [clojure.instant :as instant]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.pprint :as pp]
@@ -68,12 +69,19 @@
       (try
         (handler request)
         (catch Exception e
-          (if (str/starts-with? (.getMessage e) "Spec assertion failed")
+          (if (and (.getMessage e)
+                   (str/starts-with? (.getMessage e) "Spec assertion failed"))
             (exception-response 400 e) ;; Valid edn, invalid content
             (do (log/error e "Exception while handling request:" (pr-str request))
                 (exception-response 500 e))))) ;; Valid content; something internal failed, or content validity is not properly checked
       (catch Exception e
         (exception-response 400 e))))) ;;Invalid edn
+
+(defn- add-last-modified [response date]
+  (if date
+    (->> (rt/format-date date)
+         (assoc-in response [:headers "Last-Modified"]))
+    response))
 
 ;; ---------------------------------------------------
 ;; Services
@@ -96,8 +104,23 @@
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
         history (.history crux-system (c/new-id eid))]
     (-> (success-response history)
-        (assoc-in [:headers "Last-Modified"]
-                  (rt/format-date (:crux.tx/tx-time (first history)))))))
+        (add-last-modified (:crux.tx/tx-time (first history))))))
+
+(defn- history-range [^ICruxSystem crux-system request]
+  (prn request)
+  (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
+        valid-time-start (some->> (get-in request [:query-params "valid-time-start"])
+                                  (cio/parse-rfc3339-or-millis-date))
+        transaction-time-start (some->> (get-in request [:query-params "transaction-time-start"])
+                                        (cio/parse-rfc3339-or-millis-date))
+        valid-time-end (some->> (get-in request [:query-params "valid-time-end"])
+                                (cio/parse-rfc3339-or-millis-date))
+        transaction-time-end (some->> (get-in request [:query-params "transaction-time-end"])
+                                      (cio/parse-rfc3339-or-millis-date))
+        history (.historyRange crux-system (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        last-modified (:crux.tx/tx-time (last history))]
+    (-> (success-response history)
+        (add-last-modified (:crux.tx/tx-time (last history))))))
 
 (defn- db-for-request ^ICruxDatasource [^ICruxSystem crux-system {:keys [valid-time transact-time]}]
   (cond
@@ -114,12 +137,6 @@
 
     :else
     (.db crux-system)))
-
-(defn- add-last-modified [response date]
-  (if date
-    (->> (rt/format-date date)
-         (assoc-in response [:headers "Last-Modified"]))
-    response))
 
 (defn- streamed-edn-response [^Closeable ctx edn]
   (try
@@ -248,6 +265,9 @@
 
     [#"^/history/.+$" [:get :post]]
     (history crux-system request)
+
+    [#"^/history-range/.+$" [:get]]
+    (history-range crux-system request)
 
     [#"^/history-ascending$" [:post]]
     (history-ascending crux-system request)

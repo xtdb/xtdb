@@ -162,6 +162,16 @@
   (history [_ eid]
     (api-request-sync (str url "/history/" eid) nil {:method :get}))
 
+  (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (api-request-sync (str url "/history-range/" eid "?"
+                           (str/join "&"
+                                     (map (partial str/join "=")
+                                          [["valid-time-start" (cio/format-rfc3339-date valid-time-start)]
+                                           ["transaction-time-start" (cio/format-rfc3339-date transaction-time-start)]
+                                           ["valid-time-end" (cio/format-rfc3339-date valid-time-end)]
+                                           ["transaction-time-end" (cio/format-rfc3339-date transaction-time-end)]])))
+                      nil {:method :get}))
+
   (status [_]
     (api-request-sync url nil {:method :get}))
 

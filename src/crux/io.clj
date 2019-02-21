@@ -1,14 +1,16 @@
 (ns crux.io
-  (:require [clojure.java.io :as io]
+  (:require [clojure.instant :as instant]
+            [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
   (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
-           [java.nio.file.attribute FileAttribute]
+           java.nio.file.attribute.FileAttribute
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang.ref ReferenceQueue PhantomReference]
            [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
-           [java.net ServerSocket]
+           java.net.ServerSocket
+           java.text.SimpleDateFormat
            [clojure.lang IPersistentMap IRecord]))
 
 (s/def ::port (s/int-in 1 65536))
@@ -50,6 +52,15 @@
       date
       (do (Thread/sleep 1)
           (recur)))))
+
+(defn format-rfc3339-date [^Date d]
+  (when d
+    (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))
+
+(defn parse-rfc3339-or-millis-date [d]
+  (if (re-find #"^\d+$" d)
+    (Date. (Long/parseLong d))
+    (instant/read-instant-date d)))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]

@@ -52,6 +52,12 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))
 
+  (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (->> (idx/entity-history-range snapshot eid valid-time-start transaction-time-start valid-time-end transaction-time-end)
+           (mapv c/entity-tx->edn)
+           (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))))
+
   (status [this]
     (apply merge (map status/status-map (vals this))))
 

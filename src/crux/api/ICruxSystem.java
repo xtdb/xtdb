@@ -60,6 +60,24 @@ public interface ICruxSystem extends Closeable {
     public List<Map<Keyword,?>> history(Object eid);
 
     /**
+     * Returns the transaction history of an entity, ordered by valid
+     * time / transaction time in chronological order, earliest
+     * first. Includes corrections, but does not include the actual
+     * documents.
+     *
+     * Giving null as any of the date arguments makes the range open
+     * ended for that value.
+     *
+     * @param eid                  an object that can be coerced into an entity id.
+     * @param validTimeStart       the start valid time or null.
+     * @param transactionTimeStart the start transaction time or null.
+     * @param validTimeEnd         the end valid time or null, inclusive.
+     * @param transactionTimeEnd   the start transaction time or null, inclusive.
+     * @return                     the transaction history.
+     */
+    public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
+
+    /**
      * Returns the status of this node as a map.
      *
      * @return the status map.

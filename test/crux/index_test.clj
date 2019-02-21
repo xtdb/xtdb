@@ -505,7 +505,7 @@
                                                      (<= (compare (:crux.tx/tx-time entity-tx) tt-end) 0))]
                                       entity-tx))]]
           (binding [morton/*use-space-filling-curve-index?* true]
-            (let [actual (->> (idx/entity-history-range snapshot eid vt-start vt-end tt-start tt-end)
+            (let [actual (->> (idx/entity-history-range snapshot eid vt-start tt-start vt-end tt-end)
                               (map c/entity-tx->edn)
                               (set))]
               (when-not (= expected actual)

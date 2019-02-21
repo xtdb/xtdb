@@ -16,6 +16,8 @@
 
   (history [this eid])
 
+  (history-range [this eid ^Date valid-time-start ^Date transaction-time-start ^Date valid-time-end ^Date transaction-time-end])
+
   (status [this])
 
   (submit-tx [this tx-ops])
@@ -45,6 +47,9 @@
 
   (history [this eid]
     (.history this eid))
+
+  (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
+    (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
   (status [this]
     (.status this))
