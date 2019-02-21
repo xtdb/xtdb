@@ -76,6 +76,9 @@
        [:a.max-transaction-time {:href (str "/?tt=" (format-date max-known-tt))}
         [:text {:x (* 0.995 (time->x max-known-tt)) :y (* 0.85 height)} "MAX"]
         [:line {:x1 (time->x max-known-tt) :y1 (* 0.25 height) :x2 (time->x max-known-tt) :y2 (* 0.75 height)}]])
+     [:a.time-horizon {:href "/"}
+      [:text {:x (* 1.005 (time->x now)) :y (* 0.85 height)} "NOW"]
+      [:line {:x1 (time->x now) :y1 (* 0.1 height) :x2 (time->x now) :y2 (* 0.9 height)}]]
      [:g.axis
       [:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
        [:tspan.axis-value (format-date vt)]]
@@ -100,9 +103,6 @@
           [:text {:x x :y (* 0.65 height)} tt-str]]])
       [:text.axis-name {:x 0 :y (* 0.9 height)} "TT: "
        [:tspan.axis-value (or (format-date tt) "empty")]]]
-     [:a.time-horizon {:href "/"}
-      [:text {:x (* 1.005 (time->x now)) :y (* 0.85 height)} "NOW"]
-      [:line {:x1 (time->x now) :y1 (* 0.1 height) :x2 (time->x now) :y2 (* 0.9 height)}]]
      (when tt
        [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])]))
 
