@@ -106,6 +106,61 @@
      (when tt
        [:line.bitemp-coordinates {:x1 (time->x vt) :y1 (* 0.25 height) :x2 (time->x tt) :y2 (* 0.75 height)}])]))
 
+;; TODO: WIP.
+(defn- draw-timeline-2d-graph [tx-log min-time max-time now max-known-tt vt tt width height]
+  (let [known-times (for [{:crux.tx/keys [tx-time tx-ops]} tx-log
+                          command tx-ops
+                          x command
+                          :when (inst? x)]
+                      {:vt x :tt tx-time})
+        time-diff (double (- (inst-ms max-time) (inst-ms min-time)))
+        min-time-str (format-date min-time)
+        max-time-str (format-date max-time)
+        now-str (format-date now)
+        tt (or tt now)
+        time->x (fn [t]
+                  (* width (/ (- (inst-ms t) (inst-ms min-time)) time-diff)))
+        time->y (fn [t]
+                  (- height (* height (/ (- (inst-ms t) (inst-ms min-time)) time-diff))))
+
+        onclick-timeline-js "window.location = ('/?%s=' + Math.round(%f * (%s) + %d) + '&%s=%d');"]
+    [:svg.timeline-graph {:version "1.1" :xmlns "http://www.w3.org/2000/svg" :viewBox (str "0 0 " width " " height)}
+     [:a {:href (str "/?vt=" min-time-str)} [:text.min-time {:x 0 :y (* 0.8 height)} min-time-str]]
+     [:a {:href (str "/?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.8 height)} max-time-str]]
+     (when tt
+       (let [x (quot (time->x tt) 2)
+             y (quot (+ (* 0.75 height) (time->y vt)) 2)]
+         [:rect.bitemp-coordinates {:x 1 :y y :width x :height (- (* 0.75 height) y) :opacity 0.1}]))
+     (when max-known-tt
+       [:a.max-transaction-time {:href (str "/?tt=" (format-date max-known-tt))}
+        [:text {:x (time->x max-known-tt) :y (* 0.85 height)} "MAX"]
+        [:line {:x1 1 :y1 (time->y max-known-tt)
+                :x2 (time->x max-known-tt) :y2 (* 0.75 height)}]])
+     [:line {:x1 1 :y1 (* 0.75 height) :x2  width :y2 1 :stroke-dasharray "8, 10" :stroke-width 1}]
+     [:a.time-horizon {:href "/"}
+      [:text {:x (time->x now) :y (* 0.85 height)} "NOW"]
+      [:line {:x1 1 :y1 (time->y now) :x2 (time->x now) :y2 (* 0.75 height)}]]
+     [:g.axis
+      #_[:text.axis-name {:x 0 :y (* 0.2 height)} "VT: "
+         [:tspan.axis-value (format-date vt)]]
+      [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 (* 0.75 height) :stroke-width (* 0.01 height)
+                        :onclick (format onclick-timeline-js "vt" time-diff "(2 * (window.event.target.getBoundingClientRect().height - window.event.offsetY * 0.75) / (window.event.target.getBoundingClientRect().height))"
+                                         (inst-ms min-time) "tt" (inst-ms tt))}]
+      (for [{:keys [tt vt]} (sort-by :vt known-times)
+            :let [vt-str (format-date vt)
+                  x (quot (time->x tt) 2)
+                  y (quot (+ (* 0.75 height) (time->y vt)) 2)]]
+        [:a.timepoint {:href (str "/?vt=" vt-str "&tt=" (format-date tt))}
+         [:g
+          [:circle.timepoint-marker {:cx x :cy y :r 3 :fill "#444"}]
+          [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])]
+     [:g.axis
+      #_[:text.axis-name {:x (time->x tt) :y (* 0.9 height)} "TT: "
+         [:tspan.axis-value (or (format-date tt) "empty")]]
+      [:line.axis-line {:x1 0 :y1 (* 0.75 height) :x2 width :y2 (* 0.75 height) :stroke-width (* 0.01 height)
+                        :onclick (format onclick-timeline-js "tt" time-diff "2 * (window.event.offsetX / window.event.target.getBoundingClientRect().width)"
+                                         (inst-ms min-time) "vt" (inst-ms vt))}]]]))
+
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
     (Date. (Long/parseLong d))
@@ -147,6 +202,8 @@
            [:h2 [:a {:href "/"} "Message Board"]]]
           [:div.timetravel
            (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)]
+          #_[:div.timetravel
+             (draw-timeline-2d-graph tx-log min-time max-time now max-known-tt vt tt 500 500)]
           [:div.comments
            [:h3 "Comments"]
            [:ul
