@@ -107,7 +107,6 @@
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
 (defn- history-range [^ICruxSystem crux-system request]
-  (prn request)
   (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
         valid-time-start (some->> (get-in request [:query-params "valid-time-start"])
                                   (cio/parse-rfc3339-or-millis-date))
