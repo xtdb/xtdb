@@ -144,17 +144,20 @@
       (t/is (nil? (kv/prev i))))))
 
 (tcct/defspec test-basic-generative-store-and-get-value 20
-  (prop/for-all [kvs (gen/not-empty (gen/vector (gen/tuple gen/int gen/int)))]
-                (let [kvs (into (sorted-map) kvs)]
+  (prop/for-all [kvs (gen/not-empty (gen/map
+                                     gen/simple-type-printable
+                                     gen/int {:num-elements 100}))]
+                (let [kvs (->> (for [[k v] kvs]
+                                 [(c/->value-buffer k)
+                                  (c/->value-buffer v)])
+                               (into {}))]
                   (f/with-kv-store
                     (fn []
-                      (kv/store f/*kv* (for [[k v] kvs]
-                                         [(bu/long->bytes k)
-                                          (bu/long->bytes v)]))
+                      (kv/store f/*kv* kvs)
                       (with-open [snapshot (kv/new-snapshot f/*kv*)]
-                        (= (vals kvs)
-                           (for [[k] kvs]
-                             (bu/bytes->long (mem/->on-heap (kv/get-value snapshot (bu/long->bytes k))))))))))))
+                        (->> (for [[k v] kvs]
+                               (= v (kv/get-value snapshot k)))
+                             (every? true?))))))))
 
 ;; TODO: These helpers convert back and forth to bytes, would be good
 ;; to get rid of this, but that requires changing removing the byte
