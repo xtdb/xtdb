@@ -159,6 +159,82 @@
                                (= v (kv/get-value snapshot k)))
                              (every? true?))))))))
 
+(tcct/defspec test-generative-kv-store-commands 20
+  (prop/for-all [commands (gen/let [ks (gen/not-empty (gen/vector gen/simple-type-printable))]
+                            (gen/not-empty (gen/vector
+                                            (gen/one-of
+                                             [(gen/tuple
+                                               (gen/return :get-value)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :seek)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :seek+value)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :seek+next)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :seek+prev)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :fsync))
+                                              (gen/tuple
+                                               (gen/return :delete)
+                                               (gen/elements ks))
+                                              (gen/tuple
+                                               (gen/return :store)
+                                               (gen/elements ks)
+                                               gen/int)]))))]
+                (f/with-kv-store
+                  (fn []
+                    (let [expected (->> (reductions
+                                         (fn [[state] [op k v :as command]]
+                                           (case op
+                                             :get-value [state (get state (c/->value-buffer k))]
+                                             :seek [state (ffirst (subseq state >= (c/->value-buffer k)))]
+                                             :seek+value [state (second (first (subseq state >= (c/->value-buffer k))))]
+                                             :seek+next [state (first (second (subseq state >= (c/->value-buffer k))))]
+                                             :seek+prev [state (some->> (ffirst (subseq state >= (c/->value-buffer k)))
+                                                                        (rsubseq state <)
+                                                                        (ffirst))]
+                                             :fsync [state]
+                                             :delete [(dissoc state (c/->value-buffer k))]
+                                             :store [(assoc state
+                                                            (c/->value-buffer k)
+                                                            (c/->value-buffer v))]))
+                                         [(sorted-map-by mem/buffer-comparator)]
+                                         commands)
+                                        (rest)
+                                        (map second))]
+                      (->> (for [[[op k v :as command] expected] (map vector commands expected)]
+                             (= expected
+                                (case op
+                                  :get-value (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                                               (kv/get-value snapshot (c/->value-buffer k)))
+                                  :seek (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                    i (kv/new-iterator snapshot)]
+                                          (kv/seek i (c/->value-buffer k)))
+                                  :seek+value (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                          i (kv/new-iterator snapshot)]
+                                                (when (kv/seek i (c/->value-buffer k))
+                                                  (kv/value i)))
+                                  :seek+next (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                         i (kv/new-iterator snapshot)]
+                                               (when (kv/seek i (c/->value-buffer k))
+                                                 (kv/next i)))
+                                  :seek+prev (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                         i (kv/new-iterator snapshot)]
+                                               (when (kv/seek i (c/->value-buffer k))
+                                                 (kv/prev i)))
+                                  :fsync (kv/fsync f/*kv*)
+                                  :delete (kv/delete f/*kv* [(c/->value-buffer k)])
+                                  :store (kv/store f/*kv*
+                                                   [[(c/->value-buffer k)
+                                                     (c/->value-buffer v)]]))))
+                           (every? true?)))))))
+
 ;; TODO: These helpers convert back and forth to bytes, would be good
 ;; to get rid of this, but that requires changing removing the byte
 ;; arrays above in the tests. The tested code uses buffers internally.

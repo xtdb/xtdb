@@ -92,10 +92,12 @@
   (store [_ kvs]
     (swap! db into (vec (for [[k v] kvs]
                           [(mem/copy-to-unpooled-buffer (mem/as-buffer k))
-                           (mem/copy-to-unpooled-buffer (mem/as-buffer v))]))))
+                           (mem/copy-to-unpooled-buffer (mem/as-buffer v))])))
+    nil)
 
   (delete [_ ks]
-    (swap! db #(apply dissoc % (map mem/->off-heap ks))))
+    (swap! db #(apply dissoc % (map mem/->off-heap ks)))
+    nil)
 
   (fsync [_]
     (log/warn "Using fsync on MemKv has no effect."))
