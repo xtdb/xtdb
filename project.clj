@@ -36,6 +36,7 @@
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
+                                  [org.clojure/test.check "0.10.0-alpha3"]
                                   [com.datomic/datomic-free "0.9.5697"
                                    :exclusions [org.slf4j/slf4j-nop]]
                                   [org.neo4j/neo4j "3.5.1"

@@ -1,5 +1,8 @@
 (ns crux.kv-test
   (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tcct]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [crux.bootstrap :as b]
             [crux.byte-utils :as bu]
             [crux.codec :as c]
@@ -9,7 +12,7 @@
             [crux.io :as cio])
   (:import [java.io Closeable]))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store f/with-silent-test-check)
 
 (declare value seek seek-and-iterate)
 
@@ -139,6 +142,17 @@
     (t/testing "prev, iterators aren't bidirectional"
       (t/is (= "a" (String. (mem/->on-heap (kv/prev i)))))
       (t/is (nil? (kv/prev i))))))
+
+(tcct/defspec test-basic-generative-store-and-get-value
+  (prop/for-all [kvs (gen/not-empty (gen/vector (gen/tuple gen/int gen/int)))]
+                (let [kvs (into (sorted-map) kvs)]
+                  (kv/store f/*kv* (for [[k v] kvs]
+                                     [(bu/long->bytes k)
+                                      (bu/long->bytes v)]))
+                  (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                    (= (vals kvs)
+                       (for [[k] kvs]
+                         (bu/bytes->long (mem/->on-heap (kv/get-value snapshot (bu/long->bytes k))))))))))
 
 ;; TODO: These helpers convert back and forth to bytes, would be good
 ;; to get rid of this, but that requires changing removing the byte

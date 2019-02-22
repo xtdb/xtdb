@@ -1,5 +1,6 @@
 (ns crux.fixtures
   (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tcct]
             [clojure.java.io :as io]
             [crux.bootstrap :as b]
             [crux.codec :as c]
@@ -224,3 +225,7 @@
   (t/testing "Remote API"
     (with-local-node
       #(with-api-client f))))
+
+(defn with-silent-test-check [f]
+  (binding [tcct/*report-completion* false]
+    (f)))
