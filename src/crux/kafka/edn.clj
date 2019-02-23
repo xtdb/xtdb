@@ -8,7 +8,7 @@
   (close [_])
   (configure [_ _ _])
   (serialize [_ _ data]
-    (some-> data pr-str (.getBytes "UTF-8"))))
+    (some-> data (pr-str) (.getBytes "UTF-8"))))
 
 (deftype EDNDeserializer []
   Deserializer
