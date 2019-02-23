@@ -61,6 +61,7 @@
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8" "-Xlint" "-XDignore.symbol.file"]
   :aot [crux.kafka.nippy
+        crux.kafka.edn
         crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
