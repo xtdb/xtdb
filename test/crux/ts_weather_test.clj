@@ -27,7 +27,7 @@
 
 (def run-ts-weather-tests? (boolean (and (io/resource weather-locations-csv-resource)
                                          (io/resource weather-conditions-csv-resource)
-                                         (System/getenv "CRUX_TS_WEATHER"))))
+                                         (Boolean/parseBoolean (System/getenv "CRUX_TS_WEATHER")))))
 
 (defn with-kv-backend-from-env [f]
   (binding [f/*kv-backend* (or (System/getenv "CRUX_TS_KV_BACKEND") f/*kv-backend*)]

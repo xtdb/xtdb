@@ -23,7 +23,7 @@
 
 (def run-ts-devices-tests? (boolean (and (io/resource devices-device-info-csv-resource)
                                          (io/resource devices-readings-csv-resource)
-                                         (System/getenv "CRUX_TS_DEVICES"))))
+                                         (Boolean/parseBoolean (System/getenv "CRUX_TS_DEVICES")))))
 
 (defn with-kv-backend-from-env [f]
   (binding [f/*kv-backend* (or (System/getenv "CRUX_TS_KV_BACKEND") f/*kv-backend*)]

@@ -312,7 +312,7 @@
     (t/is true)))
 
 (t/deftest test-performance-off-heap
-  (if (and (System/getenv "CRUX_KV_PERFORMANCE")
+  (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
              (= backend f/*kv-backend*)
              true))

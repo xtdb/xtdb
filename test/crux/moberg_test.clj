@@ -3,7 +3,8 @@
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.kv :as kv]
-            [crux.moberg :as moberg])
+            [crux.moberg :as moberg]
+            [crux.status :as status])
   (:import crux.api.NonMonotonicTimeException))
 
 (t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
@@ -85,13 +86,15 @@
                          :crux.moberg/body "Goodbye."}) (moberg/message->edn (moberg/seek-message i :my-topic))))
         (t/is (nil? (moberg/next-message i :my-topic)))))))
 
-#_(t/deftest test-micro-bench
+(t/deftest test-micro-bench
+  (if (Boolean/parseBoolean (System/getenv "CRUX_MOBERG_PERFORMANCE"))
     (let [n 1000000]
+      (println f/*kv-backend*)
       (time
        (dotimes [n n]
          (moberg/send-message f/*kv* :my-topic (str "Hello World-" n))))
 
-      (prn (kv/kv-status f/*kv*))
+      (prn (status/status-map f/*kv*))
 
       (time
        (with-open [snapshot (kv/new-snapshot f/*kv*)
@@ -99,4 +102,5 @@
          (t/is (= (str "Hello World-" 0)
                   (.body (moberg/seek-message i :my-topic))))
          (dotimes [n n]
-           (moberg/next-message i :my-topic))))))
+           (moberg/next-message i :my-topic)))))
+    (t/is true)))

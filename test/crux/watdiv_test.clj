@@ -87,19 +87,19 @@
 
 (def ^:const watdiv-triples-resource "watdiv/data/watdiv.10M.nt")
 (def ^:const watdiv-num-queries (some-> (System/getenv "CRUX_WATDIV_NUM_QUERIES")
-                                        Integer/parseInt))
+                                        Long/parseLong))
 (def ^:const watdiv-indexes (some-> (System/getenv "CRUX_WATDIV_IDS")
                                     (str/split #"\s*,\s+")
                                     (->> (map #(Long/parseLong %))
                                          (into #{}))))
 
-(def run-watdiv-tests? (and (boolean (System/getenv "CRUX_WATDIV"))
+(def run-watdiv-tests? (and (Boolean/parseBoolean (System/getenv "CRUX_WATDIV"))
                             (boolean (io/resource watdiv-triples-resource))))
 
-(def crux-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_CRUX")))
-(def datomic-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_DATOMIC")))
-(def sail-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_SAIL")))
-(def neo4j-tests? (boolean (System/getenv "CRUX_WATDIV_RUN_NEO4J")))
+(def crux-tests? (Boolean/parseBoolean (System/getenv "CRUX_WATDIV_RUN_CRUX")))
+(def datomic-tests? (Boolean/parseBoolean (System/getenv "CRUX_WATDIV_RUN_DATOMIC")))
+(def sail-tests? (Boolean/parseBoolean (System/getenv "CRUX_WATDIV_RUN_SAIL")))
+(def neo4j-tests? (Boolean/parseBoolean (System/getenv "CRUX_WATDIV_RUN_NEO4J")))
 
 (def query-timeout-ms 15000)
 
