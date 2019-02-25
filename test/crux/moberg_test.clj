@@ -1,5 +1,8 @@
 (ns crux.moberg-test
   (:require [clojure.test :as t]
+            [clojure.test.check.clojure-test :as tcct]
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.properties :as prop]
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.kv :as kv]
@@ -7,7 +10,7 @@
             [crux.status :as status])
   (:import crux.api.NonMonotonicTimeException))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store)
+(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store f/with-silent-test-check)
 
 (t/deftest test-can-send-and-receive-message
   (t/is (= 1 (moberg/end-message-id-offset f/*kv* :my-topic)))
@@ -85,6 +88,71 @@
                          :crux.moberg/key :my-key
                          :crux.moberg/body "Goodbye."}) (moberg/message->edn (moberg/seek-message i :my-topic))))
         (t/is (nil? (moberg/next-message i :my-topic)))))))
+
+(tcct/defspec test-basic-generative-send-and-seek-without-compaction 20
+  (prop/for-all [[messages seek-to] (gen/let [topics (gen/not-empty (gen/vector gen/keyword 3))]
+                                      (gen/tuple
+                                       (gen/not-empty (gen/vector
+                                                       (gen/tuple
+                                                        (gen/elements topics)
+                                                        (gen/not-empty gen/string-ascii))
+                                                       10))
+                                       (gen/one-of [(gen/return nil)
+                                                    (gen/large-integer* {:min 0 :max 10})])))]
+                (f/with-kv-store
+                  (fn []
+                    (let [submitted-messages (vec (for [[topic body] messages]
+                                                    (merge (moberg/sent-message->edn (moberg/send-message f/*kv* topic body))
+                                                           {:crux.moberg/topic topic
+                                                            :crux.moberg/body body})))]
+                      (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                  i (kv/new-iterator snapshot)]
+                        (->> (for [[topic messages] (group-by :crux.moberg/topic submitted-messages)
+                                   :let [messages (sort-by :crux.moberg/message-id messages)
+                                         [messages seek-id] (cond
+                                                              (nil? seek-to)
+                                                              [messages nil]
+
+                                                              (>= seek-to (count messages))
+                                                              [nil (inc (:crux.moberg/message-id (last messages)))]
+
+                                                              :else
+                                                              (let [messages (drop seek-to messages)]
+                                                                [messages (:crux.moberg/message-id (first messages))]))]]
+                               (t/is (= messages
+                                        (when-let [m (moberg/seek-message i topic seek-id)]
+                                          (->> (repeatedly #(moberg/next-message i topic))
+                                               (take-while identity)
+                                               (cons m)
+                                               (mapv moberg/message->edn))))))
+                             (every? true?))))))))
+
+(tcct/defspec test-basic-generative-send-and-seek-with-compaction 20
+  (prop/for-all [messages (gen/let [topics (gen/not-empty (gen/vector gen/keyword 3))
+                                    keys (gen/not-empty (gen/vector gen/keyword 8))]
+                            (gen/not-empty (gen/vector
+                                            (gen/tuple
+                                             (gen/elements topics)
+                                             (gen/elements keys)
+                                             (gen/not-empty gen/string-ascii)))))]
+                (f/with-kv-store
+                  (fn []
+                    (let [submitted-messages (vec (for [[topic key body] messages]
+                                                    (merge (moberg/sent-message->edn (moberg/send-message f/*kv* topic key body))
+                                                           {:crux.moberg/topic topic
+                                                            :crux.moberg/key key
+                                                            :crux.moberg/body body})))]
+                      (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                  i (kv/new-iterator snapshot)]
+                        (->> (for [[topic messages] (group-by :crux.moberg/topic submitted-messages)
+                                   :let [messages (for [[k messages] (group-by :crux.moberg/key messages)]
+                                                    (last (sort-by :crux.moberg/message-id messages)))]]
+                               (t/is (= (sort-by :crux.moberg/message-id messages)
+                                        (map moberg/message->edn
+                                             (cons (moberg/seek-message i topic)
+                                                   (->> (repeatedly #(moberg/next-message i topic))
+                                                        (take-while identity)))))))
+                             (every? true?))))))))
 
 (t/deftest test-micro-bench
   (if (Boolean/parseBoolean (System/getenv "CRUX_MOBERG_PERFORMANCE"))
