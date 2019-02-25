@@ -1,4 +1,4 @@
-FROM clojure:openjdk-11-lein-2.9.0
+FROM clojure:openjdk-11-lein-2.9.0 as standalone-demo-with-volume
 
 RUN apt-get update
 RUN apt-get install -y awscli
