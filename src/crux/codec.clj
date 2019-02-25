@@ -59,7 +59,10 @@
 
 (def nil-id-bytes (doto (byte-array id-size)
                     (aset 0 (byte id-value-type-id))))
-(def ^org.agrona.DirectBuffer nil-id-buffer (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
+(def nil-id-buffer
+  (memoize
+   (fn []
+     (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
@@ -243,7 +246,7 @@
 
   nil
   (id->buffer [this to]
-    (id->buffer nil-id-buffer to)))
+    (id->buffer (nil-id-buffer) to)))
 
 (deftype Id [^org.agrona.DirectBuffer buffer ^:unsynchronized-mutable ^int hash-code]
   IdToBuffer
@@ -282,9 +285,6 @@
   (.write w "#crux/id ")
   (.write w (str id)))
 
-(def ^:private ^crux.codec.Id nil-id
-  (Id. nil-id-buffer (.hashCode ^DirectBuffer nil-id-buffer)))
-
 (extend-protocol IdOrBuffer
   Id
   (->id-buffer [this]
@@ -303,10 +303,10 @@
 
   nil
   (->id-buffer [this]
-    nil-id-buffer)
+    (nil-id-buffer))
 
   (new-id [this]
-    nil-id)
+    (Id. (nil-id-buffer) (.hashCode ^DirectBuffer (nil-id-buffer))))
 
   Object
   (->id-buffer [this]

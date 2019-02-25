@@ -2211,4 +2211,4 @@
 ;; export JAVA_HOME=~/opt/graalvm-ce-1.0.0-rc12/
 ;; export PATH=$JAVA_HOME/bin:$PATH
 ;; CRUX_DISABLE_LIBGCRYPT=true CRUX_DISABLE_LIBCRYPTO=true lein with-profile graal,uberjar uberjar
-;; native-image --no-server -H:+ReportExceptionStackTraces -H:+ReportUnsupportedElementsAtRuntime -H:ReflectionConfigurationFiles=~/dev/crux/resources/graal_reflectconfig.json -H:EnableURLProtocols=http,https -Dclojure.compiler.direct-linking=true -jar ./crux-0.1.0-SNAPSHOT-standalone.jar
+;; native-image --no-server -H:+ReportExceptionStackTraces -H:+ReportUnsupportedElementsAtRuntime -H:ReflectionConfigurationFiles=~/dev/crux/resources/graal_reflectconfig.json -H:EnableURLProtocols=http -H:IncludeResources='.*/.*properties$' -H:IncludeResources='.*/.*xml$' -Dclojure.compiler.direct-linking=true -jar ./crux-0.1.0-SNAPSHOT-standalone.jar

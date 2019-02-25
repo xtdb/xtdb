@@ -3,7 +3,6 @@
             [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.kafka.nippy]
             [crux.kv :as kv]
             [crux.status :as status]
             [crux.tx :as tx]

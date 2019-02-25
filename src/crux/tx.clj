@@ -99,7 +99,7 @@
                            correct-state?)))
 
 (defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
-  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id c/nil-id-buffer))
+  (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
 
 (defmethod tx-command :crux.tx/cas [object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
@@ -147,13 +147,13 @@
                      end-valid-time
                      transact-time
                      tx-id)
-                    c/nil-id-buffer]
+                    (c/nil-id-buffer)]
                    [(c/encode-entity+z+tx-id-key-to
                      nil
                      (c/->id-buffer eid)
                      (c/encode-entity-tx-z-number end-valid-time transact-time)
                      tx-id)
-                    c/nil-id-buffer]])}))
+                    (c/nil-id-buffer)]])}))
 
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable

@@ -34,14 +34,13 @@
                                        [clj-http "3.9.1"]
                                        [http-kit "2.3.0"]]}
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :graal {:dependencies [[org.clojure/clojure "1.9.0"]]
+             :graal {:dependencies [[org.clojure/clojure "1.9.0"]
+                                    [org.slf4j/slf4j-simple "1.7.26"]]
                      :clean-targets []
-                     :aot ^:replace [crux.kafka.nippy
-                                     crux.kafka.edn
-                                     crux.main.graal
+                     :aot ^:replace [crux.kafka.edn
                                      crux.kv.rocksdb
-                                     crux.kv.lmdb
-                                     crux.kv.memdb]
+                                     crux.kv.memdb
+                                     crux.main.graal]
                      :main crux.main.graal}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
@@ -69,9 +68,7 @@
                    :repl-options {:init-ns user}}}
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8" "-Xlint" "-XDignore.symbol.file"]
-  :aot [crux.kafka.nippy
-        crux.kafka.edn
-        crux.main]
+  :aot [crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
