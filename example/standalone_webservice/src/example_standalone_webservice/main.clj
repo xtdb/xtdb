@@ -360,8 +360,8 @@
             [:header
              [:h2 [:a {:href ""} "Document: " content-hash]]]
             [:pre.edn
-             (pp-with-date-links nil (with-out-str
-                                       (pp/pprint document)))]
+             (with-date-links nil (with-out-str
+                                    (pp/pprint document)))]
             [:h5
              [:a {:href "/"} "Back to Message Board"]]
             (status-block crux)
