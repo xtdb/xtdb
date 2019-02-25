@@ -407,6 +407,8 @@
 (def bitemp-stress-entities nil)
 (def bitemp-stress-queries nil)
 
+;; TODO: Consider splitting this into several test.check tests, one
+;; per each assertion.
 (t/deftest test-stress-bitemporal-lookup
   (let [eid (c/->id-buffer :foo)
         start-date #inst "2019"
