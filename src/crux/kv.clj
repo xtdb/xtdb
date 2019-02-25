@@ -41,7 +41,7 @@
                          :opt [:crux.index/check-and-store-index-version]))
 
 (defn require-and-ensure-kv-record ^Class [record-class-name]
-  (cio/require-and-ensure-record 'crux.kv/KvStore record-class-name))
+  (cio/require-and-ensure-record @#'crux.kv/KvStore record-class-name))
 
 (defn new-kv-store ^java.io.Closeable [kv-backend]
   (->> (require-and-ensure-kv-record kv-backend)

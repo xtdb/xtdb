@@ -1,5 +1,6 @@
 (ns crux.memory
-  (:require [clojure.string :as str])
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str])
   (:import [java.io DataOutputStream]
            java.nio.ByteBuffer
            java.util.Comparator
@@ -220,7 +221,7 @@
 (defn- define-value-object [fqn fields]
   (let [cw (ClassWriter. ClassWriter/COMPUTE_MAXS)
         cw (doto cw
-             (.visit Opcodes/V1_8
+             (.visit 52 ;; Opcodes/V1_8 ;; NOTE: Field does not exist in Clojure 1.9.
                      (bit-or Opcodes/ACC_PUBLIC
                              Opcodes/ACC_FINAL)
                      (str/replace (str fqn) "." "/")
@@ -230,7 +231,7 @@
              (-> (.visitMethod 1 "<init>" "()V" nil nil)
                  (doto (.visitCode)
                    (.visitVarInsn Opcodes/ALOAD 0)
-                   (.visitMethodInsn Opcodes/INVOKESPECIAL (.getInternalName (Type/getType Object)) "<init>" "()V" false)
+                   (.visitMethodInsn Opcodes/INVOKESPECIAL (.getInternalName (Type/getType Object)) "<init>" "()V")
                    (.visitInsn Opcodes/RETURN)
                    (.visitMaxs 0 0)
                    (.visitEnd))))]
@@ -294,6 +295,10 @@
       (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
     (let [bs (.toByteArray (doto cw
                              (.visitEnd)))]
+      (when *compile-files*
+        (let [f (io/file (str *compile-path* "/" (str/replace fqn "." "/") ".class"))]
+          (io/make-parents f)
+          (io/copy bs f)))
       (.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str fqn) bs ""))))
 
 (defmacro defvo [name fields]

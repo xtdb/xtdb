@@ -1,0 +1,44 @@
+[
+ {
+  "name": "crux.kv.rocksdb.RocksKv",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
+  "name": "crux.kv.lmdb.LMDBKv",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
+  "name": "crux.kv.memdb.MemKv",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
+  "name": "crux.index.KvObjectStore",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
+  "name": "crux.kafka.nippy.NippySerializer",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
+  "name": "crux.kafka.nippy.NippyDeserializer",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  }
+ ]

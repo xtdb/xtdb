@@ -49,7 +49,7 @@
 (s/def ::object-store string?)
 
 (defn require-and-ensure-object-store-record [object-store]
-  (cio/require-and-ensure-record 'crux.db/ObjectStore object-store))
+  (cio/require-and-ensure-record @#'crux.db/ObjectStore object-store))
 
 (defn new-object-store ^java.io.Closeable [object-store]
   (->> (require-and-ensure-object-store-record object-store)

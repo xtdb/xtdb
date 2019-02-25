@@ -34,6 +34,15 @@
                                        [clj-http "3.9.1"]
                                        [http-kit "2.3.0"]]}
              :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+             :graal {:dependencies [[org.clojure/clojure "1.9.0"]]
+                     :clean-targets []
+                     :aot ^:replace [crux.kafka.nippy
+                                     crux.kafka.edn
+                                     crux.main.graal
+                                     crux.kv.rocksdb
+                                     crux.kv.lmdb
+                                     crux.kv.memdb]
+                     :main crux.main.graal}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.4"]
                                   [org.clojure/test.check "0.10.0-alpha3"]

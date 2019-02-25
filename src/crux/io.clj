@@ -126,11 +126,19 @@
          (.load in))
        (into {})))
 
+;; NOTE: This used to use eval for a reason as the REPL easily got
+;; confused.
+(defn- load-dynamic-class [fqn]
+  (try
+    (Class/forName fqn)
+    (catch ClassNotFoundException e
+      (resolve (symbol fqn)))))
+
 (defn require-and-ensure-record ^Class [protocol record-class-name]
   (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
     (require (symbol record-ns))
-    (let [record-class ^Class (eval (symbol record-class-name))]
-      (when (and (extends? (eval protocol) record-class)
+    (let [record-class ^Class (load-dynamic-class record-class-name)]
+      (when (and (extends? protocol record-class)
                  (.isAssignableFrom ^Class IRecord record-class))
         record-class))))
 

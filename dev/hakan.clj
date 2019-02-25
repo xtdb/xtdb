@@ -2202,3 +2202,13 @@
 ;;         next-z (bit-and next-z (bit-not (bit-or mask-start mask-end)))
 ;;         next-z (+ next-z (bit-and end-high-bit (bit-not mask-start)))]
 ;;     (bit-or (bit-and next-z end) start)))
+
+;; Graal:
+;; https://www.innoq.com/en/blog/native-clojure-and-graalvm/
+;; https://github.com/taylorwood/lein-native-image
+;; https://www.graalvm.org/docs/getting-started/
+
+;; export JAVA_HOME=~/opt/graalvm-ce-1.0.0-rc12/
+;; export PATH=$JAVA_HOME/bin:$PATH
+;; CRUX_DISABLE_LIBGCRYPT=true CRUX_DISABLE_LIBCRYPTO=true lein with-profile graal,uberjar uberjar
+;; native-image --no-server -H:+ReportExceptionStackTraces -H:+ReportUnsupportedElementsAtRuntime -H:ReflectionConfigurationFiles=~/dev/crux/resources/graal_reflectconfig.json -H:EnableURLProtocols=http,https -Dclojure.compiler.direct-linking=true -jar ./crux-0.1.0-SNAPSHOT-standalone.jar

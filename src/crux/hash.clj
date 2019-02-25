@@ -42,12 +42,14 @@
                        (ByteUtils/sha1 to from))))
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
                                          (jnr-available?)
-                                         (some-> (requiring-resolve 'crux.hash.jnr/openssl-id-hash-buffer) (deref)))]
+                                         (do (require 'crux.hash.jnr)
+                                             (some-> (resolve 'crux.hash.jnr/openssl-id-hash-buffer) (deref))))]
       (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
           (def id-hash openssl-id-hash-buffer))
       (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
                                           (jnr-available?)
-                                          (some-> (requiring-resolve 'crux.hash.jnr/gcrypt-id-hash-buffer) (deref)))]
+                                          (do (require 'crux.hash.jnr)
+                                              (some-> (resolve 'crux.hash.jnr/gcrypt-id-hash-buffer) (deref))))]
         (do (log/info "Using libgcrypt for ID hashing.")
             (def id-hash gcrypt-id-hash-buffer))
         (do (log/info "Using java.security.MessageDigest for ID hashing.")
