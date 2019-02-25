@@ -64,7 +64,12 @@ data: {values: [{a: 'A', b: 28},
 encoding: {x: {field: 'a', type: 'ordinal'},
            y: {field: 'b', type: 'quantitative'}}};
 
-     vegaEmbed('%s', v);"
+     vegaEmbed('%s', v).then(function(result)  {
+        result.view.addEventListener('click', function(event, item) {
+           var datum = item && item.datum;
+           console.log(event, item, datum && datum.a, datum && datum.b);
+        });
+     });"
             "#vega"))])
 
 (defn- footer []
