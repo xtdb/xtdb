@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [clojure.java.shell :refer [sh]]
             [clojure.pprint :as pp]
+            [crux.io :as crux-io]
             [clojure.string :as str]
             [amazonica.aws.s3 :as s3]
             [clojure.tools.logging :as log]
@@ -11,7 +12,8 @@
             [yada.yada :refer [listener]]
             [yada.resource :refer [resource]]
             yada.resources.classpath-resource)
-  (:import java.io.Closeable))
+  (:import [crux.api IndexVersionOutOfSyncException]
+           java.io.Closeable))
 
 (defn index-handler
   [ctx system]
@@ -117,7 +119,7 @@
 
 (def crux-options
   {:kv-backend "crux.kv.rocksdb.RocksKv"
-   :bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
+   :bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
    :event-log-dir log-dir
 
    :tx-topic "crux-bench-transaction-log"
@@ -158,7 +160,11 @@
 
 (defn -main []
   (log/info "bench runner starting")
-  (run-system crux-options (fn [_] (.join (Thread/currentThread))))
+  (try
+    (run-system crux-options (fn [_] (.join (Thread/currentThread))))
+    (catch IndexVersionOutOfSyncException e
+      (crux-io/delete-dir index-dir)
+      (-main)))
   (log/info "bench runner exiting"))
 
 (comment

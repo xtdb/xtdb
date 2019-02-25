@@ -16,7 +16,11 @@
                         (with-open [in (io/input-stream (io/resource resource))]
                           (rdf/submit-ntriples (:tx-log crux) in 1000)))]
     (assert (= 521585 @submit-future))
-    (.sync crux (Duration/ofSeconds 60))))
+    (.submitTx crux [[:crux.tx/put
+                      ::watdiv-injestion-status
+                      {:crux.db/id ::watdiv-injestion-status
+                       :done? true}]])
+    (.sync crux (Duration/ofSeconds 6000))))
 
 (defn lazy-count-with-timeout
   [^crux.api.ICruxSystem crux q]
@@ -74,7 +78,7 @@
   [{:keys [^crux.api.ICruxSystem crux] :as options} num-tests]
   (let [status (atom nil)
         tests-run (atom 0)
-        out-file (io/file (format "target/watdiv_%s.edn" (System/currentTimeMillis)))]
+        out-file (io/file (format "watdiv_%s.edn" (System/currentTimeMillis)))]
     (map->WatdivRunner
       {:status status
        :tests-run tests-run
@@ -87,11 +91,7 @@
              (log/info "starting to load watdiv data into crux")
              (reset! status :injesting-watdiv-data)
              (load-rdf-into-crux options "watdiv/data/watdiv.10M.nt")
-             (log/info "completed loading watdiv data into crux")
-             (.submitTx crux [[:crux.tx/put
-                               ::watdiv-injestion-status
-                               {:crux.db/id ::watdiv-injestion-status
-                                :done? true}]]))
+             (log/info "completed loading watdiv data into crux"))
            (reset! status :running-benchmark)
            (execute-stress-test options tests-run out-file num-tests)
            (reset! status :uploading-results)
