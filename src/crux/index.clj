@@ -501,7 +501,8 @@
                  z]
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
-              (when-not (= min bigmin)
+              (when-not (or (= bigmin max)
+                            (neg? (.compareTo ^Comparable bigmin z)))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
                                    eid
@@ -578,7 +579,8 @@
               [(c/->id-buffer (.eid entity-tx))
                (enrich-entity-tx entity-tx v)])
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
-              (when-not (= min bigmin)
+              (when-not (or (= bigmin max)
+                            (neg? (.compareTo ^Comparable bigmin z)))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
                                    (.eid state)
