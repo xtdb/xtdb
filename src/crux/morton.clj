@@ -126,18 +126,23 @@
   (let [z (UInt128/fromNumber z)]
     (loop [start (UInt128/fromNumber start)
            end (UInt128/fromNumber end)]
-      (let [range (morton-get-next-address-internal start end)
-            litmax (.litmax range)
-            bigmin (.bigmin range)]
-        (cond
-          (or (= start litmax) (= end bigmin))
-          [litmax bigmin]
+      (cond
+        (neg? (.compareTo ^UInt128 end z))
+        [end 0]
 
-          (neg? (.compareTo ^UInt128 bigmin z))
-          (recur bigmin end)
+        (neg? (.compareTo ^UInt128 z start))
+        [0 start]
 
-          (neg? (.compareTo ^UInt128 z litmax))
-          (recur start litmax)
+        :else
+        (let [range (morton-get-next-address-internal start end)
+              litmax (.litmax range)
+              bigmin (.bigmin range)]
+          (cond
+            (neg? (.compareTo ^UInt128 bigmin z))
+            (recur bigmin end)
 
-          :else
-          [litmax bigmin])))))
+            (neg? (.compareTo ^UInt128 z litmax))
+            (recur start litmax)
+
+            :else
+            [litmax bigmin]))))))

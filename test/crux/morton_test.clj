@@ -62,9 +62,13 @@
                                                (morton/longs->morton-number 1 5))))
 
   (t/testing "can search below"
-    (t/is (= [12 13] (morton/morton-range-search 12 45 11)))
-    (t/is (= [12 13] (morton/morton-range-search 12 45 0)))
-    (t/is (= [51 54] (morton/morton-range-search 51 193 50))))
+    (t/is (= [0 12] (morton/morton-range-search 12 45 11)))
+    (t/is (= [0 12] (morton/morton-range-search 12 45 0)))
+    (t/is (= [0 51] (morton/morton-range-search 51 193 50))))
+
+  (t/testing "can search above"
+    (t/is (= [45 0] (morton/morton-range-search 12 45 46)))
+    (t/is (= [193 0] (morton/morton-range-search 51 193 196))))
 
   (t/is (= [107 145] (morton/morton-get-next-address 51 193)))
   (t/is (= [63 98] (morton/morton-get-next-address 51 107)))
