@@ -519,7 +519,44 @@
               (when-not (= expected actual)
                 (def bitemp-stress-queries queries)
                 (def bitemp-stress-entities entities))
-              (t/is (= expected actual) (pr-str [[vt-start vt-end] [tt-start tt-end]])))))))))
+              (t/is (= expected actual) (pr-str [[vt-start vt-end] [tt-start tt-end]]))))))
+
+      (t/testing "can do range queries across valid and transaction time, with unbounded max"
+        (doseq [[vt-start tt-start] queries
+                :let [expected (set (for [[_ entity-tx] (subseq vt+tt->entity <= [(c/date->reverse-time-ms vt-start)
+                                                                                  (c/date->reverse-time-ms tt-start)])
+                                          :when (<= (compare tt-start (:crux.tx/tx-time entity-tx)) 0)]
+                                      entity-tx))]]
+          (binding [morton/*use-space-filling-curve-index?* true]
+            (let [actual (->> (idx/entity-history-range snapshot eid vt-start tt-start nil nil)
+                              (map c/entity-tx->edn)
+                              (set))]
+              (when-not (= expected actual)
+                (def bitemp-stress-queries queries)
+                (def bitemp-stress-entities entities))
+              (t/is (= expected actual) (pr-str [vt-start tt-start]))))))
+
+
+      (t/testing "can do range queries across valid and transaction time, with unbounded min"
+        (doseq [[vt-end tt-end] queries
+                :let [expected (set (for [[_ entity-tx] (subseq vt+tt->entity >= [(c/date->reverse-time-ms vt-end)
+                                                                                  (c/date->reverse-time-ms tt-end)])
+                                          :when (<= (compare (:crux.tx/tx-time entity-tx) tt-end) 0)]
+                                      entity-tx))]]
+          (binding [morton/*use-space-filling-curve-index?* true]
+            (let [actual (->> (idx/entity-history-range snapshot eid nil nil vt-end tt-end)
+                              (map c/entity-tx->edn)
+                              (set))]
+              (when-not (= expected actual)
+                (def bitemp-stress-queries queries)
+                (def bitemp-stress-entities entities))
+              (t/is (= expected actual) (pr-str [vt-end tt-end]))))))
+
+      (t/testing "can do unbounded range query across full set"
+        (t/is (= (set (vals vt+tt->entity))
+                 (->> (idx/entity-history-range snapshot eid nil nil nil nil)
+                      (map c/entity-tx->edn)
+                      (set))))))))
 
 (tcct/defspec test-generative-stress-bitemporal-lookup-test 50
   (let [eid (c/->id-buffer :foo)
