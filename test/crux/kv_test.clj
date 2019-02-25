@@ -173,10 +173,10 @@
                                                (gen/return :seek+value)
                                                (gen/elements ks))
                                               (gen/tuple
-                                               (gen/return :seek+next)
+                                               (gen/return :seek+nexts)
                                                (gen/elements ks))
                                               (gen/tuple
-                                               (gen/return :seek+prev)
+                                               (gen/return :seek+prevs)
                                                (gen/elements ks))
                                               (gen/tuple
                                                (gen/return :fsync))
@@ -195,10 +195,10 @@
                                              :get-value [state (get state (c/->value-buffer k))]
                                              :seek [state (ffirst (subseq state >= (c/->value-buffer k)))]
                                              :seek+value [state (second (first (subseq state >= (c/->value-buffer k))))]
-                                             :seek+next [state (first (second (subseq state >= (c/->value-buffer k))))]
-                                             :seek+prev [state (some->> (ffirst (subseq state >= (c/->value-buffer k)))
-                                                                        (rsubseq state <)
-                                                                        (ffirst))]
+                                             :seek+nexts [state (subseq state >= (c/->value-buffer k))]
+                                             :seek+prevs [state (some->> (subseq state >= (c/->value-buffer k))
+                                                                         (ffirst)
+                                                                         (rsubseq state <= ))]
                                              :fsync [state]
                                              :delete [(dissoc state (c/->value-buffer k))]
                                              :store [(assoc state
@@ -220,14 +220,30 @@
                                                           i (kv/new-iterator snapshot)]
                                                 (when (kv/seek i (c/->value-buffer k))
                                                   (kv/value i)))
-                                  :seek+next (with-open [snapshot (kv/new-snapshot f/*kv*)
-                                                         i (kv/new-iterator snapshot)]
-                                               (when (kv/seek i (c/->value-buffer k))
-                                                 (kv/next i)))
-                                  :seek+prev (with-open [snapshot (kv/new-snapshot f/*kv*)
-                                                         i (kv/new-iterator snapshot)]
-                                               (when (kv/seek i (c/->value-buffer k))
-                                                 (kv/prev i)))
+                                  :seek+nexts (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                          i (kv/new-iterator snapshot)]
+                                                (when-let [k (kv/seek i (c/->value-buffer k))]
+                                                  (cons [(mem/copy-to-unpooled-buffer k)
+                                                         (mem/copy-to-unpooled-buffer (kv/value i))]
+                                                        (->> (repeatedly
+                                                              (fn []
+                                                                (when-let [k (kv/next i)]
+                                                                  [(mem/copy-to-unpooled-buffer k)
+                                                                   (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                             (take-while identity)
+                                                             (vec)))))
+                                  :seek+prevs (with-open [snapshot (kv/new-snapshot f/*kv*)
+                                                          i (kv/new-iterator snapshot)]
+                                                (when-let [k (kv/seek i (c/->value-buffer k))]
+                                                  (cons [(mem/copy-to-unpooled-buffer k)
+                                                         (mem/copy-to-unpooled-buffer (kv/value i))]
+                                                        (->> (repeatedly
+                                                              (fn []
+                                                                (when-let [k (kv/prev i)]
+                                                                  [(mem/copy-to-unpooled-buffer k)
+                                                                   (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                             (take-while identity)
+                                                             (vec)))))
                                   :fsync (kv/fsync f/*kv*)
                                   :delete (kv/delete f/*kv* [(c/->value-buffer k)])
                                   :store (kv/store f/*kv*
