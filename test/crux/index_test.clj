@@ -394,7 +394,11 @@
           (t/testing "no version is visible before transactions"
             (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
             (let [corrections-time (- (System/nanoTime) start-time)]
-              (t/is (>= baseline-time corrections-time)))))))))
+              ;; TODO: This can be a bit flaky. This assertion was
+              ;; mainly there to prove the opposite, but it has been
+              ;; fixed. Can be added back to sanity check when
+              ;; changing indexes.
+              #_(t/is (>= baseline-time corrections-time)))))))))
 
 ;; NOTE: This test does not go via the TxLog, but writes its own
 ;; transactions direct into the KV store so it can generate random
