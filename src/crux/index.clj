@@ -501,8 +501,7 @@
                  z]
                 [::deleted-entity entity-tx z]))
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
-              (when-not (or (= bigmin max)
-                            (neg? (.compareTo ^Comparable bigmin z)))
+              (when-not (neg? (.compareTo ^Comparable bigmin z))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
                                    eid
@@ -579,8 +578,7 @@
               [(c/->id-buffer (.eid entity-tx))
                (enrich-entity-tx entity-tx v)])
             (let [[litmax bigmin] (morton/morton-range-search min max z)]
-              (when-not (or (= bigmin max)
-                            (neg? (.compareTo ^Comparable bigmin z)))
+              (when-not (neg? (.compareTo ^Comparable bigmin z))
                 (recur (kv/seek i (c/encode-entity+z+tx-id-key-to
                                    (.get seek-buffer-tl)
                                    (.eid state)
@@ -618,11 +616,11 @@
                                             (or vt-start min-date) (or tt-start min-date)
                                             (or vt-end max-date) (or tt-end max-date))]
     (when-let [result (db/seek-values idx (c/->id-buffer eid))]
-      (some->> (repeatedly #(db/next-values idx))
-               (take-while identity)
-               (cons result)
-               (not-empty)
-               (map second)))))
+      (->> (repeatedly #(db/next-values idx))
+           (take-while identity)
+           (cons result)
+           (not-empty)
+           (map second)))))
 
 (defn all-entities [snapshot valid-time transact-time]
   (with-open [i (kv/new-iterator snapshot)]
