@@ -11,6 +11,8 @@ database. It is a database turned inside out, using:
 as semi-immutable logs.
 * RocksDB or LMDB to host indices for rich query support.
 
+image::img/crux-kafka-local-node.png[Crux Kafka local node diagram,558,571]
+
 == Distributed
 
 Nodes can come and go, with local indices stored in a Key/Value store
