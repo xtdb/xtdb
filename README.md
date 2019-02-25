@@ -6,11 +6,9 @@ Crux is an unbundled, distributed, bitemporal graph database, currently sitting 
 
 ## Manual
 
-Please visit and read our [manual](https://juxt.pro/crux/docs/index.html).
+Visit and read our [manual](https://juxt.pro/crux/docs/index.html). Until Crux is publicly released you will need credentials: User Name `crux` / Password `advisor`
 
-Until Crux is publicly released, you will need credentials; userame `crux`, password `advisor`.
-
-Please give us your feedback, and enjoy Crux.
+Please give us your feedback and enjoy using Crux.
 
 ## Roadmap
 
