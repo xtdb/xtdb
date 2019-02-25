@@ -39,12 +39,39 @@
    [:meta {:name "google" :content "notranslate"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]
+   [:script {:src "/cljsjs/vega.min.inc.js"}]
+   [:script {:src "/cljsjs/vega-lite.min.inc.js"}]
+   [:script {:src "/cljsjs/vega-embed.min.inc.js"}]
    [:title title]])
+
+;; TODO: Not used, just verified that it works.
+(defn- vega-graph [element-id]
+  [:script {:type "text/javascript"}
+   (hiccup.util/raw-string
+    (format "var v = {
+$schema: 'https://vega.github.io/schema/vega-lite/v2.0.json',
+description: 'Hello Vega',
+mark: 'bar',
+data: {values: [{a: 'A', b: 28},
+                {a: 'B', b: 55},
+                {a: 'C', b: 43},
+                {a: 'D', b: 91},
+                {a: 'E', b: 81},
+                {a: 'F', b: 53},
+                {a: 'G', b: 19},
+                {a: 'H', b: 87},
+                {a: 'I', b: 52} ]},
+encoding: {x: {field: 'a', type: 'ordinal'},
+           y: {field: 'b', type: 'quantitative'}}};
+
+     vegaEmbed('%s', v);"
+            "#vega"))])
 
 (defn- footer []
   [:footer
    "© 2019 "
-   [:a {:href "https://juxt.pro"} "JUXT"]])
+   [:a {:href "https://juxt.pro"} "JUXT"]]
+  #_(vega-graph "#vega"))
 
 (defn- status-block [crux]
   [:div.status
@@ -207,6 +234,7 @@
          [:body
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
+          [:div#vega]
           [:div.timetravel
            (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)]
           [:div.comments
@@ -503,6 +531,9 @@
                                    :_action String}}
                :produces "text/html"
                :response #(edit-comment-handler % system)}}})]
+    ["cljsjs"
+     (yada.resources.classpath-resource/new-classpath-resource "cljsjs/production")]
+
     ["static"
      (yada.resources.classpath-resource/new-classpath-resource "static")]]])
 
