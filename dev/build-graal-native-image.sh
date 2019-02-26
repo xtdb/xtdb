@@ -1,6 +1,6 @@
 #!/bin/sh -e
 
-: "${GRAAL_HOME?GRAAL_HOME is required}"
+: "${GRAAL_HOME?GRAAL_HOME is required. Download from https://github.com/oracle/graal/releases}"
 
 JAVA_HOME=$GRAAL_HOME
 PATH=$JAVA_HOME/bin:$PATH
