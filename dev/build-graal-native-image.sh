@@ -2,7 +2,7 @@
 
 : "${GRAAL_HOME?GRAAL_HOME is required. Download from https://github.com/oracle/graal/releases}"
 
-command -v lein >/dev/null 2>&1 || { echo >&2 "lein required on PATH"; exit 1; }
+command -v lein >/dev/null 2>&1 || { echo >&2 "lein required on PATH."; exit 1; }
 
 JAVA_HOME=$GRAAL_HOME
 PATH=$JAVA_HOME/bin:$PATH
@@ -10,7 +10,7 @@ PATH=$JAVA_HOME/bin:$PATH
 LEIN_TARGET_DIR=./target
 GRAAL_TARGET_DIR=/dev/shm/crux-graal-build-target
 
-echo "Deleting $LEIN_TARGET_DIR and linking to $GRAAL_TARGET_DIR"
+echo "Deleting $LEIN_TARGET_DIR and linking to $GRAAL_TARGET_DIR to avoid 'File name too long' exceptions."
 
 rm -rf $GRAAL_TARGET_DIR $LEIN_TARGET_DIR
 mkdir -p $GRAAL_TARGET_DIR
