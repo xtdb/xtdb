@@ -22,16 +22,16 @@ export CRUX_DISABLE_LIBCRYPTO=true
 lein do version, with-profile graal,uberjar uberjar
 
 UBERJAR=$(ls $LEIN_TARGET_DIR/*-standalone.jar)
-REFLECTION_JSON=./resources/graal_reflectconfig.json
+REFLECTION_JSON_RESOURCE=graal_reflectconfig.json
 
 native-image --no-server \
+             --enable-http \
              -H:+ReportExceptionStackTraces \
-             -H:+ReportUnsupportedElementsAtRuntime \
-             -H:ReflectionConfigurationFiles=$REFLECTION_JSON \
-             -H:EnableURLProtocols=http \
+             -H:ReflectionConfigurationResources=$REFLECTION_JSON_RESOURCE \
              -H:IncludeResources='.*/.*properties$' \
              -H:IncludeResources='.*/.*so$' \
              -H:IncludeResources='.*/.*xml$' \
+             -H:IncludeResources='.*/.*json$' \
              -H:Path=$LEIN_TARGET_DIR \
              -Dclojure.compiler.direct-linking=true \
              -jar $UBERJAR
