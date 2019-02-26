@@ -70,18 +70,20 @@ Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
 engine from its syntax, but this is not currently the case in the MVP.
 There is a query translator for a subset of SPARQL in `crux.rdf`.
 
-Does not a lack of schema lead to confusion?::
+Will a lack of schema lead to confusion?::
 
   It of course depends.
 +
-While Crux does not enforce a schema, but the user can. Crux only
-requires that the data can be represented as valid EDN documents. Data
-ingested from different systems can still be assigned qualified keys,
-which does not require a shared schema to be defined while still
-avoiding collision. Defining such a common schema up front might be
-prohibitive and Crux instead aims to enable exploration of the data from
-different sources early. This exploration can also help discover and
-define the common schema of interest.
+While Crux does not enforce a schema, the user may do so in a layer
+above to achieve the semantics of schema-on-read (per node) and
+schema-on-write (via a gateway node). Crux only requires that the data
+can be represented as valid EDN documents. Data ingested from different
+systems can still be assigned qualified keys, which does not require a
+shared schema to be defined while still avoiding collision. Defining
+such a common schema up front might be prohibitive and Crux instead aims
+to enable exploration of the data from different sources early. This
+exploration can also help discover and define the common schema of
+interest.
 +
 Enforcing constraints on the data to avoid indexing all attributes can
 be done with `crux.index.ValueToBytes`. Crux does this internally via
