@@ -126,21 +126,26 @@
          (.load in))
        (into {})))
 
+(defn native-image? []
+  (boolean (System/getProperty "org.graalvm.nativeimage.kind")))
+
 ;; NOTE: This used to use eval for a reason as the REPL easily got
 ;; confused.
-(defn- load-dynamic-class [fqn]
-  (try
-    (Class/forName fqn)
-    (catch ClassNotFoundException e
-      (resolve (symbol fqn)))))
+(defmacro load-dynamic-class [fqn]
+  `(try
+     (let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
+       (Class/forName ~fqn))
+     (catch ClassNotFoundException e#
+       ~(when-not *compile-files*
+          `(let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
+             (require (symbol ns#))
+             (resolve (symbol ~fqn)))))))
 
 (defn require-and-ensure-record ^Class [protocol record-class-name]
-  (let [[_ record-ns] (re-find #"(.+)(:?\..+)" record-class-name)]
-    (require (symbol record-ns))
-    (let [record-class ^Class (load-dynamic-class record-class-name)]
-      (when (and (extends? protocol record-class)
-                 (.isAssignableFrom ^Class IRecord record-class))
-        record-class))))
+  (let [record-class ^Class (load-dynamic-class record-class-name)]
+    (when (and (extends? protocol record-class)
+               (.isAssignableFrom ^Class IRecord record-class))
+      record-class)))
 
 (defn new-record ^clojure.lang.IRecord [^Class record-class]
   (.invoke (.getMethod record-class "create"

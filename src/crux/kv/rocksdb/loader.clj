@@ -10,7 +10,7 @@
         library (io/file tmp (Environment/getJniLibraryFileName "rocksdb"))]
     (io/make-parents library)
     (.loadLibrary (NativeLibraryLoader/getInstance) (str tmp))
-    (assert (.exists library))
+    (assert (or (cio/native-image?) (.exists library)))
     (str library)))
 
 (defonce rocksdb-library-path (load-rocksdb-native-lib))

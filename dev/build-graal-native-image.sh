@@ -27,13 +27,15 @@ REFLECTION_JSON_RESOURCE=graal_reflectconfig.json
 
 native-image --no-server \
              --enable-http \
+             --rerun-class-initialization-at-runtime='org.rocksdb.NativeLibraryLoader,org.rocksdb.RocksDB' \
              -H:+ReportExceptionStackTraces \
              -H:ReflectionConfigurationResources=$REFLECTION_JSON_RESOURCE \
-             -H:IncludeResources='.*/.*properties$' \
-             -H:IncludeResources='.*/.*so$' \
-             -H:IncludeResources='.*/.*xml$' \
-             -H:IncludeResources='.*/.*json$' \
+             -H:IncludeResources='.*/?.*properties$' \
+             -H:IncludeResources='.*/?.*so$' \
+             -H:IncludeResources='.*/?.*xml$' \
+             -H:IncludeResources='.*/?.*json$' \
              -Dclojure.compiler.direct-linking=true \
+             -Dclojure.spec.compile-asserts=false \
              -jar $UBERJAR \
               $NATIVE_IMAGE
 

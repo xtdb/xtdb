@@ -14,7 +14,9 @@
            java.net.InetAddress
            crux.api.ICruxSystem))
 
-(s/check-asserts true)
+(s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
+                   (Boolean/parseBoolean check-asserts)
+                   true))
 
 (def default-options {:bootstrap-servers "localhost:9092"
                       :group-id (.getHostName (InetAddress/getLocalHost))

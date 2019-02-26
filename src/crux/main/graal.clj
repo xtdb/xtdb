@@ -1,11 +1,11 @@
 (ns crux.main.graal
   (:require [crux.bootstrap.cli :as cli]
+            [crux.bootstrap :as b]
+            [crux.kv.memdb]
+            [crux.kv.rocksdb]
             [clojure.tools.logging :as log])
   (:gen-class))
 
-(defn native-image? []
-  (boolean (System/getProperty "org.graalvm.nativeimage.kind")))
-
 (defn -main [& args]
-  (log/info "Hello World!")
-  #_(cli/start-system-from-command-line args))
+  (with-open [kv (b/start-kv-store {:db-dir "graal-data" :kv-backend "crux.kv.rocksdb.RocksKv"})]
+    (log/info "Starting Crux native image" (pr-str kv))))
