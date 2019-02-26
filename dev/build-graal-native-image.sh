@@ -2,6 +2,8 @@
 
 : "${GRAAL_HOME?GRAAL_HOME is required. Download from https://github.com/oracle/graal/releases}"
 
+command -v lein >/dev/null 2>&1 || { echo >&2 "lein required on PATH"; exit 1; }
+
 JAVA_HOME=$GRAAL_HOME
 PATH=$JAVA_HOME/bin:$PATH
 
@@ -19,6 +21,7 @@ export CRUX_DISABLE_LIBCRYPTO=true
 
 lein do version, with-profile graal,uberjar uberjar
 
+UBERJAR=$(ls $LEIN_TARGET_DIR/*-standalone.jar)
 REFLECTION_JSON=./resources/graal_reflectconfig.json
 
 native-image --no-server \
@@ -31,4 +34,4 @@ native-image --no-server \
              -H:IncludeResources='.*/.*xml$' \
              -H:Path=$LEIN_TARGET_DIR \
              -Dclojure.compiler.direct-linking=true \
-             -jar $LEIN_TARGET_DIR/crux-*-standalone.jar
+             -jar $UBERJAR
