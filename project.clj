@@ -37,8 +37,10 @@
              :graal {:dependencies [[org.clojure/clojure "1.9.0"]
                                     [org.slf4j/slf4j-simple "1.7.26"]]
                      :clean-targets []
-                     :aot ^:replace [crux.kv.rocksdb
+                     :aot ^:replace [crux.kv.lmdb
                                      crux.kv.memdb
+                                     crux.kv.rocksdb
+                                     crux.kv.rocksdb.loader
                                      crux.main.graal]
                      :main crux.main.graal}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]

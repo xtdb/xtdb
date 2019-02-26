@@ -7,6 +7,13 @@
   "allPublicMethods": true
   },
  {
+  "name": "crux.kv.lmdb.LMDBKv",
+  "allDeclaredConstructors": true,
+  "allPublicConstructors": true,
+  "allDeclaredMethods": true,
+  "allPublicMethods": true
+  },
+ {
   "name": "crux.kv.memdb.MemKv",
   "allDeclaredConstructors": true,
   "allPublicConstructors": true,
