@@ -22,6 +22,7 @@ export CRUX_DISABLE_LIBCRYPTO=true
 lein do version, with-profile graal,uberjar uberjar
 
 UBERJAR=$(ls $LEIN_TARGET_DIR/*-standalone.jar)
+NATIVE_IMAGE=$(echo $UBERJAR | sed s/.jar\$// )
 REFLECTION_JSON_RESOURCE=graal_reflectconfig.json
 
 native-image --no-server \
@@ -32,6 +33,8 @@ native-image --no-server \
              -H:IncludeResources='.*/.*so$' \
              -H:IncludeResources='.*/.*xml$' \
              -H:IncludeResources='.*/.*json$' \
-             -H:Path=$LEIN_TARGET_DIR \
              -Dclojure.compiler.direct-linking=true \
-             -jar $UBERJAR
+             -jar $UBERJAR \
+              $NATIVE_IMAGE
+
+echo "Created native image $NATIVE_IMAGE"
