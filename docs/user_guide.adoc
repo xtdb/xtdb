@@ -252,7 +252,7 @@ NOTE: Hashes for older versions of a document can be obtained with `/history`, u
 [#entity]
 === POST `/entity`
 
-Takes a key and, optionally, a `:valid-time` and/or `:valid-time` (defaulting to now). Returns the value stored under that key at those times.
+Takes a key and, optionally, a `:valid-time` and/or `:transact-time` (defaulting to now). Returns the value stored under that key at those times.
 
 See <<bitemp.adoc#,bitemporality explained>> for more information.
 
