@@ -57,8 +57,6 @@
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
-(defmulti tx-command (fn [object-store snapshot tx-log [op] transact-time tx-id] op))
-
 (defn- in-range-pred [start end]
   #(and (or (nil? start)
             (not (pos? (compare start %))))
@@ -89,7 +87,7 @@
                    content-hash]])
                (reduce into []))}))
 
-(defmethod tx-command :crux.tx/put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
                                doc (db/get-single-object object-store snapshot content-hash)
@@ -98,10 +96,10 @@
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
 
-(defmethod tx-command :crux.tx/delete [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-delete [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
   (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
 
-(defmethod tx-command :crux.tx/cas [object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
+(defn tx-command-cas [object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)
         {:keys [content-hash]
@@ -128,7 +126,7 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defmethod tx-command :crux.tx/evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-valid-time (or start-valid-time (.vt ^EntityTx (last history-descending)))
@@ -138,9 +136,13 @@
                           (doseq [^EntityTx entity-tx (cond->> (filter (fn [^EntityTx entity-tx]
                                                                          (range-pred (.vt entity-tx)))
                                                                        history-descending)
-                                                        keep-latest? rest
-                                                        keep-earliest? butlast)]
-                            (db/submit-doc tx-log (.content-hash entity-tx) nil))))
+                                                        keep-latest? (rest)
+                                                        keep-earliest? (butlast))]
+                            ;; TODO: Direct interface call to help
+                            ;; Graal, not sure why this is needed,
+                            ;; fails with get-proxy-class issue
+                            ;; otherwise.
+                            (.submit_doc ^crux.db.TxLog tx-log (.content-hash entity-tx) nil))))
      :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
                      nil
                      (c/->id-buffer eid)
@@ -154,6 +156,15 @@
                      (c/encode-entity-tx-z-number end-valid-time transact-time)
                      tx-id)
                     (c/nil-id-buffer)]])}))
+
+(defn tx-command-unknown [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+  (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
+
+(def ^:private tx-op->command
+  {:crux.tx/put tx-command-put
+   :crux.tx/delete tx-command-delete
+   :crux.tx/cas tx-command-cas
+   :crux.tx/evict tx-command-evict})
 
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable
@@ -179,8 +190,9 @@
 
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
-      (let [tx-command-results (for [tx-op tx-ops]
-                                 (tx-command object-store snapshot tx-log tx-op tx-time tx-id))]
+      (let [tx-command-results (vec (for [[op :as tx-op] tx-ops]
+                                      ((get tx-op->command op tx-command-unknown)
+                                       object-store snapshot tx-log tx-op tx-time tx-id)))]
         (log/debug "Indexing tx-id:" tx-id "tx-ops:" (count tx-ops))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]

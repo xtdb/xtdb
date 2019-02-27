@@ -34,8 +34,6 @@ native-image --no-server \
              -H:IncludeResources='.*/?.*so$' \
              -H:IncludeResources='.*/?.*xml$' \
              -H:IncludeResources='.*/?.*json$' \
-             -Dclojure.compiler.direct-linking=true \
-             -Dclojure.spec.compile-asserts=false \
              -jar $UBERJAR \
               $NATIVE_IMAGE
 

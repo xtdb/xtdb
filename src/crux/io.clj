@@ -84,16 +84,16 @@
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
 
 (defn create-tmpdir ^java.io.File [dir-name]
-  (let [f (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0)))]
-    (locking files-to-delete
-      (when (empty? @files-to-delete)
-        (.addShutdownHook
-         (Runtime/getRuntime)
-         (Thread. (fn []
-                    (doseq [f @files-to-delete]
-                      (delete-dir f)))
-                  "crux.io.shutdown-hook-thread")))
-      (swap! files-to-delete conj f))
+  (let [f (.toFile (Files/createTempDirectory dir-name (make-array FileAttribute 0)))
+        known-files (swap! files-to-delete conj f)]
+    (when (= 1 (count known-files))
+      (.addShutdownHook
+       (Runtime/getRuntime)
+       (Thread. (fn []
+                  (doseq [f @files-to-delete]
+                    (delete-dir f)))
+                "crux.io.shutdown-hook-thread")))
+
     f))
 
 (defn folder-size

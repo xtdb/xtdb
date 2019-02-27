@@ -218,6 +218,10 @@
 
 ;; Value Objects, normal on heap classes with mutable public fields.
 
+(defmacro define-class [fqn bs]
+  (when-not *compile-files*
+    `(.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str ~fqn) ~bs "")))
+
 (defn- define-value-object [fqn fields]
   (let [cw (ClassWriter. ClassWriter/COMPUTE_MAXS)
         cw (doto cw
@@ -295,11 +299,10 @@
       (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
     (let [bs (.toByteArray (doto cw
                              (.visitEnd)))]
-      (when *compile-files*
-        (let [f (io/file (str *compile-path* "/" (str/replace fqn "." "/") ".class"))]
-          (io/make-parents f)
-          (io/copy bs f)))
-      (.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str fqn) bs ""))))
+      (let [f (io/file (str *compile-path* "/" (str/replace fqn "." "/") ".class"))]
+        (io/make-parents f)
+        (io/copy bs f))
+      (define-class fqn bs))))
 
 (defmacro defvo [name fields]
   (let [fqn (if-not (namespace name)
