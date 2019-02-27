@@ -1,6 +1,5 @@
 (ns crux.bootstrap.cli
-  (:require [clojure.java.io :as io]
-            [clojure.edn :as edn]
+  (:require [clojure.edn :as edn]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
@@ -91,10 +90,6 @@
          [(str "--" (name id)) v])
        (apply concat)))
 
-(defn- parse-pom-version []
-  (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux/pom.properties"))]
-    (cio/load-properties in)))
-
 (defn- options->table [options]
   (with-out-str
     (pp/print-table (for [[k v] options]
@@ -106,8 +101,8 @@
                 errors
                 summary]} (cli/parse-opts (concat (options-from-env) args) cli-options)
         options (merge (dissoc options :extra-edn-options) (:extra-edn-options options))
-        {:strs [version
-                revision]} (parse-pom-version)]
+        {:keys [version
+                revision]} (b/crux-version)]
     (cond
       (:help options)
       (println summary)

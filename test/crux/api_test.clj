@@ -24,7 +24,7 @@
               :crux.kv/estimate-num-keys 1
               :crux.index/index-version 4
               :crux.tx-log/consumer-state nil}
-             (dissoc (.status f/*api*) :crux.kv/size))))
+             (dissoc (.status f/*api*) :crux.kv/size :crux.version/version :crux.version/revision))))
 
   (t/testing "empty db"
     (t/is (.db f/*api*)))

@@ -1,5 +1,6 @@
 (ns crux.bootstrap
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
@@ -32,6 +33,20 @@
                       :doc-cache-size (* 128 1024)
                       :object-store "crux.index.KvObjectStore"})
 
+(defrecord CruxVersion [version revision]
+  status/Status
+  (status-map [this]
+    {:crux.version/version version
+     :crux.version/revision revision}))
+
+(def crux-version
+  (memoize
+   (fn []
+     (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux/pom.properties"))]
+       (let [{:strs [version
+                     revision]} (cio/load-properties in)]
+         (->CruxVersion version revision))))))
+
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxSystem
   (db [_]
@@ -61,7 +76,7 @@
            (sort-by (juxt :crux.db/valid-time :crux.tx/tx-time)))))
 
   (status [this]
-    (apply merge (map status/status-map (vals this))))
+    (apply merge (map status/status-map (cons (crux-version) (vals this)))))
 
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
