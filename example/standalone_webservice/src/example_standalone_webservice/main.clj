@@ -165,7 +165,7 @@ encoding: {x: {field: 'a', type: 'ordinal'},
            y (time->y vt)]
        [:g.bitemp-coordinates
         [:rect {:x 1 :y y :width x :height (- height y) :pointer-events "none"}]
-        [:text {:x x :y (+ (* 0.025 height) y)} (format-date vt) " | " (format-date tt)]])
+        [:text {:x x :y (+ (* 0.025 height) y) :pointer-events "none"} (format-date vt) " | " (format-date tt)]])
      [:a {:href (str "?vt=" min-time-str)} [:text.min-time {:x (* 0.01 width) :y (* 0.985 height)} min-time-str]]
      [:a {:href (str "?vt=" max-time-str)} [:text.max-time {:x width :y (* 0.015 height)} max-time-str]]
      [:line.time-arrow {:x1 1 :y1 height :x2  width :y2 1}]
@@ -188,13 +188,13 @@ encoding: {x: {field: 'a', type: 'ordinal'},
        [:a.timepoint {:href (str "?vt=" vt-str "&tt=" (format-date tt))}
         [:g
          [:circle.timepoint-marker {:cx x :cy y :r 2}]
-         [:text {:x x :y (+ (* 0.025 height) y)} (str vt-str " | " (format-date tt))]]])
+         [:text {:x x :y (+ (* 0.025 height) y) :pointer-events "none"} (str vt-str " | " (format-date tt))]]])
      [:g.axis.vt
       [:text.axis-name {:x (* 0.015 width) :y (* 0.015 height)} "VT"]
       [:line.axis-line {:x1 1 :y1 0 :x2 1 :y2 height :pointer-events "none"}]]
      [:g.axis.tt
       [:text.axis-name {:x (* 0.985 width) :y (* 0.985 height)} "TT"]
-      [:line.axis-line {:x1 0 :y1 height :x2 width :y2 height :pointer-events "none"}]]]))
+      [:line.axis-line {:x1 0 :y1 (dec height) :x2 width :y2 (dec height) :pointer-events "none"}]]]))
 
 (defn- parse-query-date [d]
   (if (re-find #"^\d+$" d)
@@ -204,7 +204,7 @@ encoding: {x: {field: 'a', type: 'ordinal'},
 (defn- min-max-time [^Date from]
   (let [utc (ZoneId/of "UTC")
         ld (.toLocalDate (.atZone (.toInstant from) utc))]
-    [(Date/from (.toInstant (.atStartOfDay ld utc)))
+    [(Date/from (.toInstant (.atStartOfDay (.minusDays ld 0) utc)))
      (Date/from (.toInstant (.atStartOfDay (.plusDays ld 1) utc)))]))
 
 (defn- time-context [crux ctx]
