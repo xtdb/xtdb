@@ -1,5 +1,13 @@
+## Run locally using Docker and a persistent volume
 
-## Run the posts query against the sandbox node
+```bash
+docker pull juxt/crux-standalone-webservice:latest
+mkdir my-crux-data & docker run -p 8079:8080 -v $(pwd)/my-crux-data:/usr/src/app/data -i -t juxt/crux-standalone-webservice:latest
+```
+
+Navigate to: `http://localhost:8079`
+
+## Run the posts query against the hosted sandbox node
 ```bash
 curl -X POST \
      -H "Content-Type: application/edn" \
