@@ -56,7 +56,6 @@
                        :url (str "?vt=" (format-date x) "&" "tt=" (format-date tx-time))})
         vega-spec {:width width
                    :height height
-                   :data {:values known-times}
                    :layer [{:data {:values [{:vt now :tt now :event "NOW"
                                              :url (str "?vt=" (format-date now) "&" "tt=" (format-date now))}
                                             {:vt max-known-tt  :tt max-known-tt :event "MAX"
@@ -76,6 +75,7 @@
                                                 :color {:field :event :type :nominal}
                                                 :href {:field :url :type :nominal}}}]}
                            {:mark :circle
+                            :data {:values known-times}
                             :encoding {:x {:field :tt
                                            :type :temporal
                                            :timeUnit "utcyearmonthdatehoursminutesseconds"
@@ -86,8 +86,7 @@
                                            :timeUnit "utcyearmonthdatehoursminutesseconds"
                                            :scale {:domain [min-time max-time]}
                                            :axis {:title "Valid Time"}}
-                                       :href {:field :url :type :nominal}
-                                       :detail {:field :tx-id :type :nominal}}}]}]
+                                       :href {:field :url :type :nominal}}}]}]
     [:script {:type "text/javascript"}
      (hiccup.util/raw-string
       (format "
@@ -404,7 +403,7 @@
            [:pre.edn (pp-entity-txs entity-txs)]]
           [:h5
            [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
-          #_(vega-graph "#vega" tx-log min-time max-time now max-known-tt vt tt 500 500)
+          #_(vega-graph "#vega" tx-log min-time max-time now max-known-tt vt tt 750 750)
           (status-block crux)
           (footer)]])))))
 
