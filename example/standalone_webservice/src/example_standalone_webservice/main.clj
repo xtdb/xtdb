@@ -56,26 +56,46 @@
                        :url (str "?vt=" (format-date x) "&" "tt=" (format-date tx-time))})
         vega-spec {:width width
                    :height height
+
                    :layer [{:data {:values [{:vt now :tt now :event "NOW"
-                                             :url (str "?vt=" (format-date now) "&" "tt=" (format-date now))}
+                                             :url (str "?vt=" (format-date now) "&" "tt=" (format-date now))
+                                             :color "lightgreen"}
                                             {:vt max-known-tt  :tt max-known-tt :event "MAX"
-                                             :url (str "?vt=" (format-date max-known-tt) "&" "tt=" (format-date max-known-tt))}
+                                             :url (str "?vt=" (format-date max-known-tt) "&" "tt=" (format-date max-known-tt))
+                                             :color "grey"}
                                             {:vt vt :tt tt :event "selection"
-                                             :url (str "?vt=" (format-date vt) "&" "tt=" (format-date tt))}]}
+                                             :url (str "?vt=" (format-date vt) "&" "tt=" (format-date tt))
+                                             :color "blue"}]}
                             :layer [{:mark :rect
                                      :encoding {:x {:value min-time :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
                                                 :x2 {:field :tt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
                                                 :y {:value min-time :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
                                                 :y2 {:field :vt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
                                                 :fillOpacity {:value 0.25}
-                                                :stroke {:field :event :type :nominal}
-                                                :fill {:field :event :type :nominal}}}
+                                                :strokeOpacity {:value 1}
+                                                :strokeWidth {:value 2}
+                                                :stroke {:field :color :type :nominal :scale nil}
+                                                :fill  {:field :color :type :nominal :scale nil}
+                                                :tooltip [{:field :event :type :nominal
+                                                           :title "Event"}
+                                                          {:field :vt :type :temporal
+                                                           :title "VT"
+                                                           :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                          {:field :tt :type :temporal
+                                                           :title "TT"
+                                                           :timeUnit "utcyearmonthdatehoursminutesseconds"}]}}
                                     {:mark :rule
                                      :encoding {:x {:field :tt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
-                                                :color {:field :event :type :nominal}
+                                                :color {:field :color :type :nominal :scale nil}
+                                                :tooltip [{:field :event :type :nominal
+                                                           :title "Event"}
+                                                          {:field :tt :type :temporal
+                                                           :title "TT"
+                                                           :timeUnit "utcyearmonthdatehoursminutesseconds"}]
                                                 :href {:field :url :type :nominal}}}]}
                            {:mark :circle
                             :data {:values known-times}
+
                             :encoding {:x {:field :tt
                                            :type :temporal
                                            :timeUnit "utcyearmonthdatehoursminutesseconds"
@@ -83,9 +103,16 @@
                                            :axis {:title "Transaction Time"}}
                                        :y {:field :vt
                                            :type :temporal
-                                           :timeUnit "utcyearmonthdatehoursminutesseconds"
                                            :scale {:domain [min-time max-time]}
                                            :axis {:title "Valid Time"}}
+                                       :tooltip [{:field :tx-id :type :ordinal
+                                                  :title "tx-id"}
+                                                 {:field :vt :type :temporal
+                                                  :title ":VT"
+                                                  :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                 {:field :tt :type :temporal
+                                                  :title "TT"
+                                                  :timeUnit "utcyearmonthdatehoursminutesseconds"}]
                                        :href {:field :url :type :nominal}}}]}]
     [:script {:type "text/javascript"}
      (hiccup.util/raw-string
