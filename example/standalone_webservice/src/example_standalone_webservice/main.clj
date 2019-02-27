@@ -95,7 +95,7 @@
                                                 :href {:field :url :type :nominal}}}]}
                            {:mark :circle
                             :data {:values known-times}
-
+                            :selection {:bitemp_selection {:type :interval}}
                             :encoding {:x {:field :tt
                                            :type :temporal
                                            :timeUnit "utcyearmonthdatehoursminutesseconds"
@@ -121,6 +121,9 @@
         result.view.addEventListener('click', function(event, item) {
            var datum = item && item.datum;
            console.log(event, item, datum && datum.a, datum && datum.b);
+        });
+        result.view.addDataListener('bitemp_selection_store', function(name, value) {
+           console.log(name, value);
         });
      });"
 
