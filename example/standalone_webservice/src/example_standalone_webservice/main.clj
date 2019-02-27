@@ -11,6 +11,7 @@
             [hiccup.util]
             [yada.resource :refer [resource]]
             [yada.resources.classpath-resource]
+            [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.java.shell :refer [sh]]
             [example-standalone-webservice.backup :as backup])
@@ -44,39 +45,66 @@
    [:script {:src "/cljsjs/vega-embed.min.inc.js"}]
    [:title title]])
 
-;; TODO: Not used, just verified that it works.
-(defn- vega-graph [element-id]
-  [:script {:type "text/javascript"}
-   (hiccup.util/raw-string
-    (format "var v = {
-$schema: 'https://vega.github.io/schema/vega-lite/v2.0.json',
-description: 'Hello Vega',
-mark: 'bar',
-data: {values: [{a: 'A', b: 28},
-                {a: 'B', b: 55},
-                {a: 'C', b: 43},
-                {a: 'D', b: 91},
-                {a: 'E', b: 81},
-                {a: 'F', b: 53},
-                {a: 'G', b: 19},
-                {a: 'H', b: 87},
-                {a: 'I', b: 52} ]},
-encoding: {x: {field: 'a', type: 'ordinal'},
-           y: {field: 'b', type: 'quantitative'}}};
-
-     vegaEmbed('%s', v).then(function(result)  {
+(defn- vega-graph [element-id tx-log min-time max-time now max-known-tt vt tt width height]
+  (let [known-times (for [{:crux.tx/keys [tx-time tx-ops tx-id]} tx-log
+                          command tx-ops
+                          x command
+                          :when (inst? x)]
+                      {:vt x
+                       :tt tx-time
+                       :tx-id tx-id
+                       :url (str "?vt=" (format-date x) "&" "tt=" (format-date tx-time))})
+        vega-spec {:width width
+                   :height height
+                   :data {:values known-times}
+                   :layer [{:data {:values [{:vt now :tt now :event "NOW"
+                                             :url (str "?vt=" (format-date now) "&" "tt=" (format-date now))}
+                                            {:vt max-known-tt  :tt max-known-tt :event "MAX"
+                                             :url (str "?vt=" (format-date max-known-tt) "&" "tt=" (format-date max-known-tt))}
+                                            {:vt vt :tt tt :event "selection"
+                                             :url (str "?vt=" (format-date vt) "&" "tt=" (format-date tt))}]}
+                            :layer [{:mark :rect
+                                     :encoding {:x {:value min-time :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                :x2 {:field :tt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                :y {:value min-time :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                :y2 {:field :vt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                :fillOpacity {:value 0.25}
+                                                :stroke {:field :event :type :nominal}
+                                                :fill {:field :event :type :nominal}}}
+                                    {:mark :rule
+                                     :encoding {:x {:field :tt :type :temporal :timeUnit "utcyearmonthdatehoursminutesseconds"}
+                                                :color {:field :event :type :nominal}
+                                                :href {:field :url :type :nominal}}}]}
+                           {:mark :circle
+                            :encoding {:x {:field :tt
+                                           :type :temporal
+                                           :timeUnit "utcyearmonthdatehoursminutesseconds"
+                                           :scale {:domain [min-time max-time]}
+                                           :axis {:title "Transaction Time"}}
+                                       :y {:field :vt
+                                           :type :temporal
+                                           :timeUnit "utcyearmonthdatehoursminutesseconds"
+                                           :scale {:domain [min-time max-time]}
+                                           :axis {:title "Valid Time"}}
+                                       :href {:field :url :type :nominal}
+                                       :detail {:field :tx-id :type :nominal}}}]}]
+    [:script {:type "text/javascript"}
+     (hiccup.util/raw-string
+      (format "
+     vegaEmbed('%s', %s).then(function(result)  {
         result.view.addEventListener('click', function(event, item) {
            var datum = item && item.datum;
            console.log(event, item, datum && datum.a, datum && datum.b);
         });
      });"
-            "#vega"))])
+
+              "#vega"
+              (json/generate-string vega-spec)))]))
 
 (defn- footer []
   [:footer
    "© 2019 "
-   [:a {:href "https://juxt.pro"} "JUXT"]]
-  #_(vega-graph "#vega"))
+   [:a {:href "https://juxt.pro"} "JUXT"]])
 
 (defn- status-block [crux]
   [:div.status
@@ -239,7 +267,6 @@ encoding: {x: {field: 'a', type: 'ordinal'},
          [:body
           [:header
            [:h2 [:a {:href "/"} "Message Board"]]]
-          [:div#vega]
           [:div.timetravel
            (draw-timeline-graph tx-log min-time max-time now max-known-tt vt tt 750 100)]
           [:div.comments
@@ -371,11 +398,13 @@ encoding: {x: {field: 'a', type: 'ordinal'},
            [:h2 [:a {:href ""} "Timeline Graph"]]]
           [:div.timetravel
            (draw-timeline-2d-graph tx-log min-time max-time now max-known-tt vt tt 500 500)]
+          [:div#vega]
           [:div
            [:h4 "Entity TXs"]
            [:pre.edn (pp-entity-txs entity-txs)]]
           [:h5
            [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
+          #_(vega-graph "#vega" tx-log min-time max-time now max-known-tt vt tt 500 500)
           (status-block crux)
           (footer)]])))))
 
