@@ -1013,9 +1013,8 @@
   (cond
     (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
                                             (partition-all 2))]
-                           [k (if (or (= :find k)
-                                      (and (nat-int? (first v))
-                                           (= 1 (count v))))
+                           [k (if (and (nat-int? (first v))
+                                       (= 1 (count v)))
                                 (first v)
                                 (vec v))]))
     (string? q) (normalize-query (edn/read-string q))
