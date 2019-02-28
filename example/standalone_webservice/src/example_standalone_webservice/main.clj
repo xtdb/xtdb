@@ -463,7 +463,7 @@
           [:header
            [:h2 [:a {:href ""} "Query Console"]]]
           [:div.query-editor
-           [:form.submit-query {:action "/query" :method "GET" :autocomplete "off"}
+           [:form.submit-query {:action "/query" :method "GET"}
             [:fieldset
              [:input {:type "hidden" :name "vt" :value (format-date vt)}]
              [:input {:type "hidden" :name "tt" :value (format-date tt)}]
