@@ -2,6 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.java.io :as io]
+            [crux.backup :as backup]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -103,6 +105,10 @@
   (sync [_ timeout]
     (tx/await-no-consumer-lag indexer (or (some-> timeout (.toMillis))
                                           (:crux.tx-log/await-tx-timeout options))))
+
+  backup/ISystemBackup
+  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
+    (kv/backup kv-store (io/file checkpoint-directory "kv-store")))
 
   Closeable
   (close [_]

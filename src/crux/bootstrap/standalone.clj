@@ -1,6 +1,8 @@
 (ns crux.bootstrap.standalone
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [clojure.java.io :as io]
+            [crux.backup :as backup]
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
@@ -56,6 +58,12 @@
 
   (sync [this timeout]
     (.sync ^CruxNode (b/map->CruxNode this) timeout))
+
+  backup/ISystemBackup
+  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
+    (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
+    (when event-log-kv-store
+      (kv/backup event-log-kv-store (io/file checkpoint-directory "event-log-kv-store"))))
 
   Closeable
   (close [_]
