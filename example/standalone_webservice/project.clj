@@ -12,6 +12,7 @@
                  [org.apache.kafka/kafka-clients "2.1.0"]
                  [cljsjs/vega "4.4.0-0"]
                  [cljsjs/vega-lite "3.0.0-rc10-0"]
-                 [cljsjs/vega-embed "3.26.0-0"]]
+                 [cljsjs/vega-embed "3.26.0-0"]
+                 [cljsjs/codemirror "5.44.0-1"]]
   :global-vars {*warn-on-reflection* true}
   :main example-standalone-webservice.main)

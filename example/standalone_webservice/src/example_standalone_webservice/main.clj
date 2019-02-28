@@ -41,9 +41,16 @@
    [:meta {:name "google" :content "notranslate"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
    [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]
-   [:script {:src "/cljsjs/vega.min.inc.js"}]
-   [:script {:src "/cljsjs/vega-lite.min.inc.js"}]
-   [:script {:src "/cljsjs/vega-embed.min.inc.js"}]
+   [:link {:rel "stylesheet" :type "text/css" :href "/cljsjs/codemirror/production/codemirror.min.css"}]
+   [:link {:rel "stylesheet" :type "text/css" :href "/cljsjs/codemirror/common/theme/eclipse.css"}]
+   [:script {:src "/cljsjs/production/vega.min.inc.js"}]
+   [:script {:src "/cljsjs/production/vega-lite.min.inc.js"}]
+   [:script {:src "/cljsjs/production/vega-embed.min.inc.js"}]
+   [:script {:src "/cljsjs/codemirror/production/codemirror.min.inc.js"}]
+   [:script {:src "/cljsjs/codemirror/common/mode/clojure.inc.js"}]
+   [:script {:src "/cljsjs/codemirror/common/keymap/emacs.inc.js"}]
+   [:script {:src "/cljsjs/codemirror/common/addon/edit/closebrackets.inc.js"}]
+   [:script {:src "/cljsjs/codemirror/common/addon/edit/matchbrackets.inc.js"}]
    [:title title]])
 
 (defn- vega-graph [element-id tx-log min-time max-time now max-known-tt vt tt width height]
@@ -453,7 +460,7 @@
           query-time (- (System/currentTimeMillis) start-time)
           invalid? (and query-invalid? (not (str/blank? q)))
           grow-textarea-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
-          ctrl-enter-to-submit-onkeydown-js "window.event.ctrlKey && window.event.keyCode == 13 && this.form.submit();"]
+          ctrl-enter-to-submit-onkeydown-js "window.event.ctrlKey && window.event.keyCode == 13 && document.getElementById('query-editor').form.submit();"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -468,8 +475,8 @@
              [:input {:type "hidden" :name "vt" :value (format-date vt)}]
              [:input {:type "hidden" :name "tt" :value (format-date tt)}]
              [(if invalid?
-                :textarea.invalid
-                :textarea)
+                :textarea#query-editor.invalid
+                :textarea#query-editor)
               {:name "q" :required true :placeholder "Query"
                :title "Submit with Ctrl-Enter"
                :rows (inc (count (str/split-lines (str q))))
@@ -477,6 +484,13 @@
                :onkeydown ctrl-enter-to-submit-onkeydown-js}
               (when (seq q)
                 (str q))]
+             [:script {:type "text/javascript"}
+              (hiccup.util/raw-string
+               (format "var opts = {lineNumbers: true, autofocus: true, mode: 'clojure', theme: 'eclipse', autoCloseBrackets: true, matchBrackets: true, keyMap: 'emacs'};
+                        var cm = CodeMirror.fromTextArea(document.getElementById('query-editor'), opts);
+                        cm.on('keydown', function() { %s });
+                        cm.setSize('100%%', 'auto')"
+                       ctrl-enter-to-submit-onkeydown-js))]
              (when invalid?
                [:div.invalid-query-message
                 [:pre.edn (with-out-str
@@ -667,7 +681,7 @@
                :produces "text/html"
                :response #(edit-comment-handler % system)}}})]
     ["cljsjs"
-     (yada.resources.classpath-resource/new-classpath-resource "cljsjs/production")]
+     (yada.resources.classpath-resource/new-classpath-resource "cljsjs")]
 
     ["static"
      (yada.resources.classpath-resource/new-classpath-resource "static")]]])
