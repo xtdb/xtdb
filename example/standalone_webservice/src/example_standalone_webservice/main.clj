@@ -6,6 +6,7 @@
             [clojure.tools.logging :as log]
             [clojure.pprint :as pp]
             [clojure.string :as str]
+            [clojure.spec.alpha :as s]
             [yada.yada :refer [handler listener]]
             [hiccup2.core :refer [html]]
             [hiccup.util]
@@ -350,6 +351,8 @@
            [:a {:href "tx-log"} "Transaction History"]]
           [:h5
            [:a {:href (str "timeline?vt=" (format-date vt) "&tt=" (format-date tt))} "Timeline Graph"]]
+          [:h5
+           [:a {:href (str "query?vt=" (format-date vt) "&tt=" (format-date tt))} "Query Console"]]
           (status-block crux)
           (footer)]])))))
 
@@ -434,6 +437,66 @@
           [:h5
            [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
           #_(vega-graph "#vega" tx-log min-time max-time now max-known-tt vt tt 750 750)
+          (status-block crux)
+          (footer)]])))))
+
+(defn query-handler [ctx {:keys [crux]}]
+  (fn [ctx]
+    (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)
+          {:strs [q]} (get-in ctx [:parameters :query])
+          _ (prn q)
+          conformed-query (s/conform :crux.query/query q)
+          query-invalid? (= :clojure.spec.alpha/invalid conformed-query)
+          start-time (System/currentTimeMillis)
+          result (when-not query-invalid?
+                   (api/q db q))
+          query-time (- (System/currentTimeMillis) start-time)
+          invalid? (and query-invalid? (not (str/blank? q)))
+          on-ctrl-enter-js "window.event.ctrlKey && window.event.keyCode == 13 && this.form.submit();"]
+      (str
+       "<!DOCTYPE html>"
+       (html
+        [:html
+         (page-head "Message Board - Query Console")
+         [:body
+          [:header
+           [:h2 [:a {:href ""} "Query Console"]]]
+          [:div.query-editor
+           [:form.submit-query {:action "/query" :method "GET" :autocomplete "off"}
+            [:fieldset
+             [:input {:type "hidden" :name "vt" :value (format-date vt)}]
+             [:input {:type "hidden" :name "tt" :value (format-date tt)}]
+             [(if invalid?
+                :textarea.invalid
+                :textarea)
+              {:name "q" :required true :placeholder "Query"
+               :title "Submit with Ctrl-Enter"
+               :onkeydown on-ctrl-enter-js}
+              (when (seq q)
+                (str q))]
+             (when invalid?
+               [:div.invalid-query-message
+                [:pre.edn (with-out-str
+                            (pp/pprint (s/explain-data :crux.query/query q)))]])]
+            [:input.primary {:type "submit" :value "Query"}]]
+           (when-not query-invalid?
+             [:div.query-result
+              [:h4  (count result) " results:"
+               [:small "(query time: " query-time "ms)"]]
+              [:table
+               [:thead
+                (for [v (:find conformed-query)]
+                  [:th (pr-str v)])]
+               [:tbody
+                (for [tuple result]
+                  [:tr
+                   (for [v tuple]
+                     [:td
+                      (with-date-links nil
+                        (with-out-str
+                          (pp/pprint v)))])])]]])]
+          [:h5
+           [:a {:href (str "/?tt=" (format-date tt) "&vt=" (format-date vt))} "Back to Message Board"]]
           (status-block crux)
           (footer)]])))))
 
@@ -572,6 +635,12 @@
       {:methods
        {:get {:produces "text/html"
               :response #(entity-handler % system)}}})]
+
+    ["query"
+     (resource
+      {:methods
+       {:get {:produces "text/html"
+              :response #(query-handler % system)}}})]
 
     ["comment"
      (resource

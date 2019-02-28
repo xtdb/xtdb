@@ -64,7 +64,7 @@ h5, h6 {
     border-bottom: 1px solid #eee;
 }
 
-h2 small {
+h1 small, h2 small, h3 small, h4 small {
     padding: 0.2em;
     color: grey;
     display: block;
@@ -329,6 +329,37 @@ svg a text {
 }
 
 .transaction-history table td {
+    padding-top: 0.5em;
+    vertical-align: top;
+}
+
+.query-editor textarea {
+    width: 100%;
+    font-size: 1.5em;
+    font-family: monospace;
+}
+
+.query-editor textarea.invalid {
+    border: 1px solid darkred;
+}
+
+.query-editor .invalid-query-message .edn {
+    color: darkred;
+    font-size: 0.7em;
+}
+
+.query-result table {
+    width: 100%;
+    border-spacing: 0;
+    font-family: monospace;
+    white-space: pre;
+}
+
+.query-result table th {
+    text-align: left;
+}
+
+.query-result table td {
     padding-top: 0.5em;
     vertical-align: top;
 }
