@@ -1,5 +1,6 @@
 (ns example-standalone-webservice.main
   (:require [crux.api :as api]
+            [crux.backup :as backup]
             [crux.codec :as c]
             [crux.io :as crux-io]
             [clojure.instant :as instant]
@@ -14,8 +15,7 @@
             [yada.resources.classpath-resource]
             [cheshire.core :as json]
             [clojure.java.io :as io]
-            [clojure.java.shell :refer [sh]]
-            [example-standalone-webservice.backup :as backup])
+            [clojure.java.shell :refer [sh]])
   (:import [crux.api IndexVersionOutOfSyncException]
            java.io.Closeable
            [java.util Calendar Date TimeZone UUID]
@@ -695,13 +695,12 @@
    :bootstrap-servers "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
    :event-log-dir log-dir
    :db-dir index-dir
-   :server-port 8080})
+   :server-port 8080
 
-(def backup-options
-  {:backend :shell
-   :backup-dir "data/backup"
-   :shell/backup-script "bin/backup.sh"
-   :shell/restore-script "bin/restore.sh"})
+   ::backup/backend ::backup/sh
+   ::backup/checkpoint-directory "data/checkpoint"
+   ::backup/sh-backup-script "bin/backup.sh"
+   ::backup/sh-restore-script "bin/restore.sh"})
 
 (defn run-system [{:keys [server-port] :as options} with-system-fn]
   (with-open [crux-system (case (System/getenv "CRUX_MODE")
@@ -718,14 +717,14 @@
     (with-system-fn crux-system)))
 
 (defn -main []
+  (backup/check-and-restore crux-options)
   (try
-    (backup/check-and-restore crux-options backup-options)
     (run-system
-     crux-options
-     (fn [crux-system]
-       (while (not (.isInterrupted (Thread/currentThread)))
-         (Thread/sleep (* 1000 60 60 1)) ;; every hour
-         (backup/backup-current-version crux-system crux-options backup-options))))
+      crux-options
+      (fn [crux-system]
+        (while (not (.isInterrupted (Thread/currentThread)))
+          (Thread/sleep (* 1000 60 60 1)) ;; every hour
+          (backup/backup-current-version crux-options crux-system))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main))
