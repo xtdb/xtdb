@@ -1156,10 +1156,10 @@
   (^crux.api.ICruxDatasource [kv valid-time transact-time]
    (db kv nil valid-time transact-time {}))
   (^crux.api.ICruxDatasource [kv object-store valid-time transact-time {:keys [crux.query/query-cache-size
-                                                                                  doc-cache-size]
-                                                                           :or {query-cache-size default-query-cache-size
-                                                                                doc-cache-size lru/default-doc-cache-size}
-                                                                           :as options}]
+                                                                               doc-cache-size]
+                                                                        :or {query-cache-size default-query-cache-size
+                                                                             doc-cache-size lru/default-doc-cache-size}
+                                                                        :as options}]
    (s/assert ::db-options options)
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
