@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-bench
-        date: "1549290042"
+        date: "1549290072"
     spec:
       containers:
       - name: crux-bench

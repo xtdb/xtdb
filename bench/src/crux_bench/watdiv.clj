@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [crux.rdf :as rdf]
-            [crux.sparql :as sparql])
+            [crux.sparql :as sparql]
+            [crux.api :as crux])
   (:import [java.io Closeable File]
            [com.amazonaws.services.s3.model CannedAccessControlList]
            java.time.Duration))
@@ -24,10 +25,12 @@
 
 (defn lazy-count-with-timeout
   [^crux.api.ICruxSystem crux q]
-  (let [query-future (future (count (.q (.db crux) q)))]
-    (or (deref query-future query-timeout-ms nil)
-        (do (future-cancel query-future)
-            (throw (IllegalStateException. "Query timed out."))))))
+  (let [db (.db crux)]
+    (with-open [snapshot (crux/new-snapshot db)]
+      (let [query-future (future (count (crux/q db snapshot q)))]
+        (or (deref query-future query-timeout-ms nil)
+            (do (future-cancel query-future)
+                (throw (IllegalStateException. "Query timed out."))))))))
 
 (defrecord WatdivRunner [running-future]
   Closeable

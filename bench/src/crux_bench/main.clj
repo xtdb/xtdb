@@ -13,7 +13,13 @@
             [yada.resource :refer [resource]]
             yada.resources.classpath-resource)
   (:import [crux.api IndexVersionOutOfSyncException]
+           [org.rocksdb Options RocksDB
+            CompactionStyle CompressionType LRUCache
+            HashSkipListMemTableConfig BlockBasedTableConfig]
+           [org.rocksdb.util SizeUnit]
            java.io.Closeable))
+
+;; getApproximateMemTableStats
 
 (defn index-handler
   [ctx system]
@@ -33,7 +39,30 @@
          [:h2 [:a {:href "/"} "Bench Mark runner"]]
          [:pre
           (with-out-str
-            (pp/pprint (.status (:crux system))))]
+            (pp/pprint
+              (into
+                {}
+                (for [p ["rocksdb.estimate-table-readers-mem"
+                         "rocksdb.size-all-mem-tables"
+                         "rocksdb.cur-size-all-mem-tables"
+                         "rocksdb.estimate-num-keys"]]
+                  (let [^RocksDB db (-> system :crux :kv-store :kv :db)]
+                    [p (-> db (.getProperty (.getDefaultColumnFamily db) p))])))))]
+         [:pre
+          (with-out-str
+            (pp/pprint (.status ^crux.api.ICruxSystem (:crux system))))]
+
+         [:pre
+          (with-out-str
+            (pp/pprint {:max-memory (.maxMemory (Runtime/getRuntime))
+                        :total-memory (.totalMemory (Runtime/getRuntime))
+                        :free-memory (.freeMemory (Runtime/getRuntime))}))]
+
+         [:pre
+          (slurp
+            (java.io.FileReader.
+              (format "/proc/%s/status" (.pid (java.lang.ProcessHandle/current)))))]
+
          [:pre
           (with-out-str
             (pp/pprint (-> system :benchmark-runner :status deref)))]
@@ -117,10 +146,59 @@
 (def index-dir "data/db-dir")
 (def log-dir "data/eventlog")
 
+
+(def ^:private default-block-cache-size (* 10 SizeUnit/MB))
+(def ^:private default-block-size (* 16 SizeUnit/KB))
+
+(require 'crux.kv.rocksdb.loader)
+
 (def crux-options
   {:kv-backend "crux.kv.rocksdb.RocksKv"
    :bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
    :event-log-dir log-dir
+
+   :crux.kv.rocksdb/db-options
+   (let [memtableMemoryBudget SizeUnit/MB
+         blockCacheSize 32768]
+     (doto (Options.)
+       (.setWriteBufferSize (int (/ memtableMemoryBudget 4)))
+       (.setTableFormatConfig (doto (BlockBasedTableConfig.)
+                                (.setNoBlockCache true)
+                                ;;(.setBlockCache (LRUCache. default-block-cache-size))
+                                ;;(.setBlockSize default-block-size)
+                                ;;(.setCacheIndexAndFilterBlocks true)
+                                ;;(.setPinL0FilterAndIndexBlocksInCache true)
+                                ))
+       (.setIncreaseParallelism (max (.availableProcessors (Runtime/getRuntime)) 2))))
+   #_(let
+     (doto (Options.)
+       ;;(.setWriteBufferSize (int (/ memtableMemoryBudget 4)))
+
+       ;;(.setMinWriteBufferNumberToMerge 2)
+       ;;(.setMaxWriteBufferNumber 6)
+       ;;(.setLevelZeroFileNumCompactionTrigger 2)
+       ;;(.setTargetFileSizeBase (int (/ memtableMemoryBudget 8.0)))
+       ;;(.setMaxBytesForLevelBase memtableMemoryBudget)
+       ;;(.setCompactionStyle CompactionStyle/LEVEL)
+       ;;(.setCompressionType CompressionType/SNAPPY_COMPRESSION)
+
+       ;;(.useFixedLengthPrefixExtractor prefixLength)
+       ;; (.setLevelZeroSlowdownWritesTrigger 20)
+       ;; (.setLevelZeroStopWritesTrigger 40)
+
+       #_(.setTableFormatConfig (-> (new BlockBasedTableConfig)
+                                    (.setHashIndexAllowCollision false)
+                                    (.setBlockCacheSize (* blockCacheSize SizeUnit/MB))
+                                    (.setCacheNumShardBits 6)
+                                    ;;(.setFilter bloomFilter)
+                                    (.setCacheIndexAndFilterBlocks false)))
+
+       ;;(.setMemtablePrefixBloomBits 100000000)
+       ;;(.setMemtablePrefixBloomProbes 6)
+       ;;(.setMaxOpenFiles -1)
+       ;;(.setMaxBackgroundCompactions 4)
+       ;;(.setMaxBackgroundFlushes 1)
+       ))
 
    :tx-topic "crux-bench-transaction-log"
    :doc-topic "crux-bench-docs"
@@ -161,7 +239,10 @@
 (defn -main []
   (log/info "bench runner starting")
   (try
-    (run-system crux-options (fn [_] (.join (Thread/currentThread))))
+    (run-system
+      crux-options
+      (fn [_]
+        (.join (Thread/currentThread))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main)))
@@ -169,11 +250,15 @@
 
 (comment
   (def s (future
-           (run-system
-            crux-options
-            (fn [_]
-              (def crux)
-              (Thread/sleep Long/MAX_VALUE)))))
+           (try
+             (run-system
+               crux-options
+               (fn [c]
+                 (def crux c)
+                 (Thread/sleep Long/MAX_VALUE)))
+             (catch Exception e
+               (println e)
+               (throw e)))))
   (future-cancel s)
 
   )
