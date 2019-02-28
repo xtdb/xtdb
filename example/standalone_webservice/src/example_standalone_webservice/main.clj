@@ -460,7 +460,8 @@
           query-time (- (System/currentTimeMillis) start-time)
           invalid? (and query-invalid? (not (str/blank? q)))
           grow-textarea-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
-          ctrl-enter-to-submit-onkeydown-js "window.event.ctrlKey && window.event.keyCode == 13 && document.getElementById('query-editor').form.submit();"]
+          ctrl-enter-to-submit-onkeydown-js "window.event.ctrlKey && window.event.keyCode == 13 && document.getElementById('query-editor').form.submit();"
+          on-cm-change-js "cm.save();"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -470,7 +471,7 @@
           [:header
            [:h2 [:a {:href ""} "Query Console"]]]
           [:div.query-editor
-           [:form.submit-query {:action "/query" :method "GET"}
+           [:form.submit-query {:action "/query" :method "GET" :title "Submit with Ctrl-Enter"}
             [:fieldset
              [:input {:type "hidden" :name "vt" :value (format-date vt)}]
              [:input {:type "hidden" :name "tt" :value (format-date tt)}]
@@ -478,7 +479,6 @@
                 :textarea#query-editor.invalid
                 :textarea#query-editor)
               {:name "q" :required true :placeholder "Query"
-               :title "Submit with Ctrl-Enter"
                :rows (inc (count (str/split-lines (str q))))
                :oninput grow-textarea-oninput-js
                :onkeydown ctrl-enter-to-submit-onkeydown-js}
@@ -489,8 +489,9 @@
                (format "var opts = {lineNumbers: true, autofocus: true, mode: 'clojure', theme: 'eclipse', autoCloseBrackets: true, matchBrackets: true, keyMap: 'emacs'};
                         var cm = CodeMirror.fromTextArea(document.getElementById('query-editor'), opts);
                         cm.on('keydown', function() { %s });
+                        cm.on('change', function() { %s });
                         cm.setSize('100%%', 'auto')"
-                       ctrl-enter-to-submit-onkeydown-js))]
+                       ctrl-enter-to-submit-onkeydown-js on-cm-change-js))]
              (when invalid?
                [:div.invalid-query-message
                 [:pre.edn (with-out-str
