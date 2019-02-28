@@ -335,7 +335,7 @@ svg a text {
 
 .query-editor textarea {
     width: 100%;
-    height: 5em;
+    min-height: 3em;
     font-size: 1.5em;
     font-family: monospace;
 }

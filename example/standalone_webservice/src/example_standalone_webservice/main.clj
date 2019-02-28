@@ -288,7 +288,7 @@
   [ctx {:keys [crux]}]
   (fn [ctx]
     (let [{:keys [vt tt now tx-log max-known-tt min-time max-time db]} (time-context crux ctx)
-          edit-comment-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
+          grow-textarea-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -330,7 +330,7 @@
                  [:input {:type "hidden" :name "created" :value (format-date created)}]
                  [:input {:type "hidden" :name "name" :value name}]
                  [:textarea {:id (str "edit-message-" id) :rows (count (str/split-lines message)) :name "message" :required true
-                             :oninput edit-comment-oninput-js} message]]
+                             :oninput grow-textarea-oninput-js} message]]
                 [:div.buttons
                  [:input.primary {:type "submit" :name "_action" :value "Edit"}]
                  [:input {:type "submit" :name "_action" :value "Delete"}]
@@ -452,7 +452,8 @@
                    (api/q db q))
           query-time (- (System/currentTimeMillis) start-time)
           invalid? (and query-invalid? (not (str/blank? q)))
-          on-ctrl-enter-js "window.event.ctrlKey && window.event.keyCode == 13 && this.form.submit();"]
+          grow-textarea-oninput-js "this.style.height = ''; this.style.height = this.scrollHeight + 'px';"
+          ctrl-enter-to-submit-onkeydown-js "window.event.ctrlKey && window.event.keyCode == 13 && this.form.submit();"]
       (str
        "<!DOCTYPE html>"
        (html
@@ -471,7 +472,9 @@
                 :textarea)
               {:name "q" :required true :placeholder "Query"
                :title "Submit with Ctrl-Enter"
-               :onkeydown on-ctrl-enter-js}
+               :rows (inc (count (str/split-lines (str q))))
+               :oninput grow-textarea-oninput-js
+               :onkeydown ctrl-enter-to-submit-onkeydown-js}
               (when (seq q)
                 (str q))]
              (when invalid?
