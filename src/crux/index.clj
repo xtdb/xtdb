@@ -461,9 +461,9 @@
        (let [k (f-cons)]
          (when (and k (mem/buffers=? prefix k (mem/capacity prefix)))
            (cons (if entries?
-                   [(mem/copy-buffer k)
-                    (mem/copy-buffer (kv/value i))]
-                   (mem/copy-buffer k)) (step f-next f-next))))))
+                   [(mem/copy-to-unpooled-buffer k)
+                    (mem/copy-to-unpooled-buffer (kv/value i))]
+                   (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
     #(kv/seek i seek-k) #(kv/next i))))
 
 (defn idx->seq [idx]

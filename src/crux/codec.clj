@@ -168,7 +168,7 @@
   (value->buffer x (ExpandableDirectByteBuffer. 32)))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
-  (mem/copy-buffer buffer value-type-id-size))
+  (mem/limit-buffer buffer value-type-id-size))
 
 (def ^:private hex-id-pattern
   (re-pattern (format "\\p{XDigit}{%d}" (* 2 (dec id-size)))))
@@ -319,7 +319,7 @@
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (when id
-    (Id. (mem/copy-buffer (.buffer id)) 0)))
+    (Id. (mem/copy-to-unpooled-buffer (.buffer id)) 0)))
 
 (deftype EDNId [hex original-id]
   IdOrBuffer
