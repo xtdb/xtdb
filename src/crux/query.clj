@@ -1017,7 +1017,11 @@
                                        (= 1 (count v)))
                                 (first v)
                                 (vec v))]))
-    (string? q) (normalize-query (edn/read-string q))
+    (string? q) (if-let [q (try
+                             (edn/read-string q)
+                             (catch Exception e))]
+                  (normalize-query q)
+                  q)
     :else
     q))
 
