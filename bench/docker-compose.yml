@@ -28,3 +28,10 @@ services:
       - "${HOME}/.aws:/root/.aws"
       # Mount the application source and target directories
       - ./:/app
+
+  datomic:
+    build:
+      context: .
+      dockerfile: docker-files/datomic_transactor
+    ports:
+      - "4334:4334"

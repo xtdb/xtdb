@@ -13,6 +13,8 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [org.apache.kafka/kafka-clients "2.1.0"]
 
+                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/slf4j-nop]]
+
                  [amazonica "0.3.139"]]
   :global-vars {*warn-on-reflection* true}
   :resource-paths ["/watdiv-data/resources" "resources"]
