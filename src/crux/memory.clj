@@ -10,9 +10,7 @@
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            org.agrona.io.ExpandableDirectBufferOutputStream
-           crux.ByteUtils
-           [clojure.lang Compiler DynamicClassLoader Reflector RT]
-           [clojure.asm ClassWriter Opcodes Type]))
+           crux.ByteUtils))
 
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
@@ -230,108 +228,3 @@
                (recur (dec idx)))
            (doto buffer
              (.putByte idx (unchecked-byte (inc b))))))))))
-
-;; Value Objects, normal on heap classes with mutable public fields.
-
-(defmacro define-class [fqn bs]
-  (when-not *compile-files*
-    `(.defineClass ^DynamicClassLoader (RT/makeClassLoader) (str ~fqn) ~bs "")))
-
-(defn- define-value-object [fqn fields]
-  (let [cw (ClassWriter. ClassWriter/COMPUTE_MAXS)
-        cw (doto cw
-             (.visit 52 ;; Opcodes/V1_8 ;; NOTE: Field does not exist in Clojure 1.9.
-                     (bit-or Opcodes/ACC_PUBLIC
-                             Opcodes/ACC_FINAL)
-                     (str/replace (str fqn) "." "/")
-                     nil
-                     (.getInternalName (Type/getType Object))
-                     (make-array String 0))
-             (-> (.visitMethod 1 "<init>" "()V" nil nil)
-                 (doto (.visitCode)
-                   (.visitVarInsn Opcodes/ALOAD 0)
-                   (.visitMethodInsn Opcodes/INVOKESPECIAL (.getInternalName (Type/getType Object)) "<init>" "()V")
-                   (.visitInsn Opcodes/RETURN)
-                   (.visitMaxs 0 0)
-                   (.visitEnd))))]
-
-    (doseq [f fields
-            :let [tag (some-> f meta :tag)
-                  f (Compiler/munge (str f))
-                  type (case (str tag)
-                         "boolean"
-                         Type/BOOLEAN_TYPE
-                         "booleans"
-                         (Type/getType "[Z")
-
-                         "byte"
-                         Type/BYTE_TYPE
-                         "bytes"
-                         (Type/getType "[B")
-
-                         "char"
-                         Type/CHAR_TYPE
-                         "chars"
-                         (Type/getType "[C")
-
-                         "short"
-                         Type/SHORT_TYPE
-                         "shorts"
-                         (Type/getType "[S")
-
-                         "int"
-                         Type/INT_TYPE
-                         "ints"
-                         (Type/getType "[I")
-
-                         "long"
-                         Type/LONG_TYPE
-                         "longs"
-                         (Type/getType "[J")
-
-                         "float"
-                         Type/FLOAT_TYPE
-                         "floats"
-                         (Type/getType "[F")
-
-                         "double"
-                         Type/DOUBLE_TYPE
-                         "doubles"
-                         (Type/getType "[D")
-
-                         "objects"
-                         (Type/getType (str "[" (Type/getDescriptor Object)))
-
-                         (cond
-                           (string? tag)
-                           (Type/getType (Class/forName (str tag)))
-
-                           (symbol? tag)
-                           (Type/getType ^Class (resolve tag))
-
-                           :else
-                           (Type/getType Object)))]]
-      (.visitEnd (.visitField cw Opcodes/ACC_PUBLIC (str f) (.getDescriptor type) nil nil)))
-    (let [bs (.toByteArray (doto cw
-                             (.visitEnd)))]
-      (let [f (io/file (str *compile-path* "/" (str/replace fqn "." "/") ".class"))]
-        (io/make-parents f)
-        (io/copy bs f))
-      (define-class fqn bs))))
-
-(defmacro defvo [name fields]
-  (let [fqn (if-not (namespace name)
-              (symbol (str (ns-name *ns*)
-                           "."
-                           name))
-              name)
-        vo-sym (gensym "vo")]
-    (define-value-object fqn fields)
-    `(do (import ~fqn)
-         (defn ~(symbol (str "->" name)) ~(with-meta (mapv #(with-meta % nil) fields)
-                                            {:tag fqn})
-           (let [~vo-sym (~(symbol (str name ".")))]
-             ~@(for [[k v] (zipmap (map keyword fields) fields)]
-                 `(set! (~(symbol (str "." (clojure.core/name k))) ~vo-sym) ~v))
-             ~vo-sym))
-         ~fqn)))

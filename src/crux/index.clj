@@ -15,7 +15,11 @@
            [org.agrona DirectBuffer ExpandableDirectByteBuffer]
            org.agrona.io.DirectBufferInputStream
            [crux.api IndexVersionOutOfSyncException]
-           [crux.codec EntityTx Id]))
+           [crux.codec EntityTx Id]
+           [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState
+            EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState
+            RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState
+            UnaryJoinIteratorsThunkState ValueEntityValuePeekState]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -56,8 +60,6 @@
 
 ;; AVE
 
-(mem/defvo ValueEntityValuePeekState [last-k value])
-
 (defn- attribute-value+placeholder [k ^ValueEntityValuePeekState peek-state]
   (let [value (.value (c/decode-attribute+value+entity+content-hash-key->value+entity+content-hash-from k))]
     (set! (.last-k peek-state) k)
@@ -84,9 +86,7 @@
 (defn new-doc-attribute-value-entity-value-index [snapshot attr]
   (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+value+entity+content-hash-key-to nil attr)]
-    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (->ValueEntityValuePeekState nil nil))))
-
-(mem/defvo DocAttributeValueEntityEntityIndexState [peek])
+    (->DocAttributeValueEntityValueIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr (ValueEntityValuePeekState. nil nil))))
 
 (defn- attribute-value-entity-entity+value [snapshot i ^DirectBuffer current-k attr value entity-as-of-idx peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   (loop [k current-k]
@@ -139,11 +139,9 @@
 (defn new-doc-attribute-value-entity-entity-index [snapshot attr value-entity-value-idx entity-as-of-idx]
   (->DocAttributeValueEntityEntityIndex snapshot (kv/new-iterator snapshot) (c/->id-buffer attr) value-entity-value-idx entity-as-of-idx
                                         (ExpandableDirectByteBuffer.) (ExpandableDirectByteBuffer.)
-                                        (->DocAttributeValueEntityEntityIndexState nil)))
+                                        (DocAttributeValueEntityEntityIndexState. nil)))
 
 ;; AEV
-
-(mem/defvo EntityValueEntityPeekState [last-k ^EntityTx entity-tx])
 
 (defn- attribute-entity+placeholder [k attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   (let [eid (.eid (c/decode-attribute+entity+content-hash+value-key->entity+value+content-hash-from k))
@@ -182,7 +180,7 @@
   (let [attr (c/->id-buffer attr)
         prefix (c/encode-attribute+entity+content-hash+value-key-to nil attr)]
     (->DocAttributeEntityValueEntityIndex (new-prefix-kv-iterator (kv/new-iterator snapshot) prefix) attr entity-as-of-idx
-                                          (->EntityValueEntityPeekState nil nil))))
+                                          (EntityValueEntityPeekState. nil nil))))
 
 (defrecord EntityTxAndPrefixIterator [entity-tx prefix-iterator])
 
@@ -565,8 +563,6 @@
              (not-empty)
              (vec))))
 
-(mem/defvo EntityHistoryRangeState [eid prefix])
-
 (defn- entity-history-range-step [i min max ^EntityHistoryRangeState state k]
   (loop [k k]
     (when (and k (mem/buffers=? (.prefix state) k (.capacity ^DirectBuffer (.prefix state))))
@@ -606,7 +602,7 @@
                         [(c/encode-entity-tx-z-number vt-start tt-start)
                          (c/encode-entity-tx-z-number vt-end tt-end)])]
     (->EntityHistoryRangeIndex (kv/new-iterator snapshot) min max
-                               (->EntityHistoryRangeState nil nil))))
+                               (EntityHistoryRangeState. nil nil))))
 
 (def ^:private min-date (Date. Long/MIN_VALUE))
 (def ^:private max-date (Date. Long/MAX_VALUE))
@@ -702,8 +698,6 @@
       (mem/compare-buffers (or a (c/nil-id-buffer))
                            (or b (c/nil-id-buffer))))))
 
-(mem/defvo SortedVirtualIndexState [seq])
-
 (defrecord SortedVirtualIndex [values ^SortedVirtualIndexState state]
   db/Index
   (seek-values [this k]
@@ -730,7 +724,7 @@
           (sort-by first mem/buffer-comparator)
           (distinct)
           (vec))
-     (->SortedVirtualIndexState nil))))
+     (SortedVirtualIndexState. nil))))
 
 ;; NOTE: Not used by production code, kept for reference.
 (defrecord OrVirtualIndex [indexes ^objects peek-state]
@@ -766,13 +760,9 @@
       (when (kv/get-value snapshot version-k)
         entity-tx))))
 
-(mem/defvo UnaryJoinIteratorsThunkFnState [thunk])
-(mem/defvo UnaryJoinIteratorsThunkState [iterators ^long index])
-(mem/defvo UnaryJoinIteratorState [idx key results])
-
 (defn- new-unary-join-iterator-state [idx [value results]]
   (let [result-name (:name idx)]
-    (->UnaryJoinIteratorState
+    (UnaryJoinIteratorState.
      idx
      (or value (c/nil-id-buffer))
      (when (and result-name results)
@@ -785,7 +775,7 @@
                                  (new-unary-join-iterator-state idx (db/seek-values idx k)))
                                (sort-by (fn [x] (.key ^UnaryJoinIteratorState x)) mem/buffer-comparator)
                                (vec))]
-            (->UnaryJoinIteratorsThunkState iterators 0))
+            (UnaryJoinIteratorsThunkState. iterators 0))
          (set! (.thunk state)))
     (db/next-values this))
 
@@ -827,13 +817,11 @@
     1))
 
 (defn new-unary-join-virtual-index [indexes]
-  (->UnaryJoinVirtualIndex indexes (->UnaryJoinIteratorsThunkFnState nil)))
+  (->UnaryJoinVirtualIndex indexes (UnaryJoinIteratorsThunkFnState. nil)))
 
 (defn constrain-join-result-by-empty-names [join-keys join-results]
   (when (not-any? nil? (vals join-results))
     join-results))
-
-(mem/defvo NAryJoinLayeredVirtualIndexState [^long depth])
 
 (defrecord NAryJoinLayeredVirtualIndex [unary-join-indexes ^NAryJoinLayeredVirtualIndexState state]
   db/Index
@@ -858,9 +846,7 @@
     (count unary-join-indexes)))
 
 (defn new-n-ary-join-layered-virtual-index [indexes]
-  (->NAryJoinLayeredVirtualIndex indexes (->NAryJoinLayeredVirtualIndexState 0)))
-
-(mem/defvo BinaryJoinLayeredVirtualIndexState [indexes ^long depth])
+  (->NAryJoinLayeredVirtualIndex indexes (NAryJoinLayeredVirtualIndexState. 0)))
 
 (defrecord BinaryJoinLayeredVirtualIndex [^BinaryJoinLayeredVirtualIndexState state]
   db/Index
@@ -888,7 +874,7 @@
   ([]
    (new-binary-join-virtual-index nil nil))
   ([lhs-index rhs-index]
-   (->BinaryJoinLayeredVirtualIndex (->BinaryJoinLayeredVirtualIndexState
+   (->BinaryJoinLayeredVirtualIndex (BinaryJoinLayeredVirtualIndexState.
                                      [lhs-index rhs-index]
                                      0))))
 
@@ -903,8 +889,6 @@
                                  (constrain-result-fn join-keys)
                                  (not-empty))]
       (conj result-stack [join-keys join-results]))))
-
-(mem/defvo NAryWalkState [result-stack last])
 
 (defrecord NAryConstrainingLayeredVirtualIndex [n-ary-index constrain-result-fn ^NAryWalkState state]
   db/Index
@@ -937,7 +921,7 @@
     (db/max-depth n-ary-index)))
 
 (defn new-n-ary-constraining-layered-virtual-index [idx constrain-result-fn]
-  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (->NAryWalkState [] nil)))
+  (->NAryConstrainingLayeredVirtualIndex idx constrain-result-fn (NAryWalkState. [] nil)))
 
 (defn layered-idx->seq [idx]
   (let [max-depth (long (db/max-depth idx))
@@ -973,9 +957,6 @@
                      (close-level)))))]
     (when (pos? max-depth)
       (step [] 0 true))))
-
-(mem/defvo RelationNestedIndexState [value child-idx])
-(mem/defvo RelationIteratorsState [indexes child-idx ^boolean needs-seek?])
 
 (defn- relation-virtual-index-depth ^long [^RelationIteratorsState iterators-state]
   (dec (count (.indexes iterators-state))))
@@ -1024,7 +1005,7 @@
        (for [prefix (partition-by first tuples)
              :let [value (ffirst prefix)]]
          [(c/->value-buffer value)
-          (->RelationNestedIndexState
+          (RelationNestedIndexState.
            value
            (when (seq (next (first prefix)))
              (build-nested-index (map next prefix) next-range-constraints)))]))
@@ -1045,5 +1026,5 @@
   ([relation-name tuples max-depth]
    (new-relation-virtual-index relation-name tuples max-depth nil))
   ([relation-name tuples max-depth layered-range-constraints]
-   (let [iterators-state (->RelationIteratorsState nil nil false)]
+   (let [iterators-state (RelationIteratorsState. nil nil false)]
      (update-relation-virtual-index! (->RelationVirtualIndex relation-name max-depth layered-range-constraints iterators-state) tuples))))
