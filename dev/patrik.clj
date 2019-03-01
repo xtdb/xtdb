@@ -1,5 +1,6 @@
 (ns patrik
-  (:require [crux.api]))
+  (:require [clojure.pprint]
+            [crux.api]))
 
 (defn aggregation-runner
   [spec]
