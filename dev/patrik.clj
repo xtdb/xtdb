@@ -1,4 +1,5 @@
-(ns patrik)
+(ns patrik
+  (:require [crux.api]))
 
 (defn aggregation-runner
   [spec]
