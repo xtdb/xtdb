@@ -10,7 +10,7 @@
                  [org.agrona/agrona "0.9.33"]
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.1" :scope "provided"]
-                 [org.apache.kafka/kafka-clients "2.1.0" :scope "provided"]
+                 [org.apache.kafka/kafka-clients "2.1.1" :scope "provided"]
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [org.rocksdb/rocksdbjni "5.17.2" :scope "provided"]
                  [org.lwjgl/lwjgl "3.2.1" :classifier "natives-linux" :native-prefix "" :scope "provided"]
@@ -21,10 +21,10 @@
                  [org.lmdbjava/lmdbjava "0.6.3" :exclusions [com.github.jnr/jffi] :scope "provided"]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.3" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.3" :scope "provided"]]
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.5" :scope "provided"]
+                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.5" :scope "provided"]]
   :profiles { ;; Provided dependencies excluded from uberjar.
-             :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.0"]
+             :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.1"]
                                        [org.apache.zookeeper/zookeeper "3.4.13"
                                         :exclusions [io.netty/netty
                                                      jline
@@ -48,7 +48,7 @@
                                   [org.clojure/test.check "0.10.0-alpha3"]
                                   [com.datomic/datomic-free "0.9.5697"
                                    :exclusions [org.slf4j/slf4j-nop]]
-                                  [org.neo4j/neo4j "3.5.1"
+                                  [org.neo4j/neo4j "3.5.3"
                                    :exclusions [com.github.ben-manes.caffeine/caffeine
                                                 io.netty/netty-all
                                                 org.ow2.asm/asm
@@ -56,14 +56,14 @@
                                                 org.ow2.asm/asm-tree
                                                 org.ow2.asm/asm-util]]
                                   [com.github.ben-manes.caffeine/caffeine "2.6.2"]
-                                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.3"]
-                                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.3"
+                                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.4.5"]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.4.5"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
-                                  [org.eclipse.rdf4j/rdf4j-repository-sparql "2.4.3"]
+                                  [org.eclipse.rdf4j/rdf4j-repository-sparql "2.4.5"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.37"
                                    :exclusions [com.google.code.findbugs/jsr305]]
-                                  [org.roaringbitmap/RoaringBitmap "0.7.36"]
+                                  [org.roaringbitmap/RoaringBitmap "0.7.42"]
                                   [integrant "0.6.3"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
