@@ -146,7 +146,6 @@
 (def index-dir "data/db-dir")
 (def log-dir "data/eventlog")
 
-
 (def ^:private default-block-cache-size (* 10 SizeUnit/MB))
 (def ^:private default-block-size (* 16 SizeUnit/KB))
 
@@ -156,53 +155,9 @@
   {:kv-backend "crux.kv.rocksdb.RocksKv"
    :bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
    :event-log-dir log-dir
-
-   :crux.kv.rocksdb/db-options
-   (let [memtableMemoryBudget SizeUnit/MB
-         blockCacheSize 32768]
-     (doto (Options.)
-       (.setWriteBufferSize (int (/ memtableMemoryBudget 4)))
-       (.setTableFormatConfig (doto (BlockBasedTableConfig.)
-                                (.setNoBlockCache true)
-                                ;;(.setBlockCache (LRUCache. default-block-cache-size))
-                                ;;(.setBlockSize default-block-size)
-                                ;;(.setCacheIndexAndFilterBlocks true)
-                                ;;(.setPinL0FilterAndIndexBlocksInCache true)
-                                ))
-       (.setIncreaseParallelism (max (.availableProcessors (Runtime/getRuntime)) 2))))
-   #_(let
-     (doto (Options.)
-       ;;(.setWriteBufferSize (int (/ memtableMemoryBudget 4)))
-
-       ;;(.setMinWriteBufferNumberToMerge 2)
-       ;;(.setMaxWriteBufferNumber 6)
-       ;;(.setLevelZeroFileNumCompactionTrigger 2)
-       ;;(.setTargetFileSizeBase (int (/ memtableMemoryBudget 8.0)))
-       ;;(.setMaxBytesForLevelBase memtableMemoryBudget)
-       ;;(.setCompactionStyle CompactionStyle/LEVEL)
-       ;;(.setCompressionType CompressionType/SNAPPY_COMPRESSION)
-
-       ;;(.useFixedLengthPrefixExtractor prefixLength)
-       ;; (.setLevelZeroSlowdownWritesTrigger 20)
-       ;; (.setLevelZeroStopWritesTrigger 40)
-
-       #_(.setTableFormatConfig (-> (new BlockBasedTableConfig)
-                                    (.setHashIndexAllowCollision false)
-                                    (.setBlockCacheSize (* blockCacheSize SizeUnit/MB))
-                                    (.setCacheNumShardBits 6)
-                                    ;;(.setFilter bloomFilter)
-                                    (.setCacheIndexAndFilterBlocks false)))
-
-       ;;(.setMemtablePrefixBloomBits 100000000)
-       ;;(.setMemtablePrefixBloomProbes 6)
-       ;;(.setMaxOpenFiles -1)
-       ;;(.setMaxBackgroundCompactions 4)
-       ;;(.setMaxBackgroundFlushes 1)
-       ))
-
+   :db-dir index-dir
    :tx-topic "crux-bench-transaction-log"
    :doc-topic "crux-bench-docs"
-   :db-dir index-dir
    :server-port 8080})
 
 (defrecord BenchMarkRunner [status crux-system]
@@ -234,15 +189,26 @@
                 (reify Closeable
                   (close [_]
                     ((:close l)))))]
-    (with-system-fn crux-system)))
+    (with-system-fn
+      {:crux crux-system
+       :benchmark-runner benchmark-runner})))
 
 (defn -main []
   (log/info "bench runner starting")
   (try
     (run-system
       crux-options
-      (fn [_]
-        (.join (Thread/currentThread))))
+      (fn [system]
+        (while true
+          (Thread/sleep 3000)
+          (log/info
+            (with-out-str
+              (pp/pprint {:max-memory (.maxMemory (Runtime/getRuntime))
+                          :total-memory (.totalMemory (Runtime/getRuntime))
+                          :free-memory (.freeMemory (Runtime/getRuntime))})))
+          (log/info
+            (with-out-str
+              (pp/pprint (some-> system :benchmark-runner :status deref)))))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main)))
@@ -259,6 +225,10 @@
              (catch Exception e
                (println e)
                (throw e)))))
-  (future-cancel s)
+  (future-cancel s))
+
+(comment
+  (require '[datomic.api :as d])
+  (def uri "datomic:free://datomic:4334/bench")
 
   )

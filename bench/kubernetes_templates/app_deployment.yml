@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-bench
-        date: "1549290072"
+        date: "1549290102"
     spec:
       containers:
       - name: crux-bench
@@ -23,19 +23,20 @@ spec:
         - containerPort: 8080
         volumeMounts:
         - mountPath: "/usr/src/app/data"
-          name: app-data-2
+          name: app-data-3
         env:
         - name: JVM_OPTS
           value: "-Xms1G -Xmx1800M"
         resources:
           requests:
+            cpu: 1
             memory: 1Gi
           limits:
             cpu: 1
-            memory: 2Gi
+            memory: 7Gi
   volumeClaimTemplates:
     - metadata:
-        name: app-data-2
+        name: app-data-3
       spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
