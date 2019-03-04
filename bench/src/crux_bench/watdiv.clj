@@ -83,8 +83,8 @@
         (load-rdf-into-datomic conn resource)
         (let [injest-time (- (.getTime (Date.)) (.getTime time-before))]
           (log/infof "completed datomic watdiv injestion time taken: %s" injest-time)
-          @(d/transact [{:watdiv/injest-state :global
-                         :watdiv/injest-time injest-time}]))))))
+          @(d/transact conn [{:watdiv/injest-state :global
+                              :watdiv/injest-time injest-time}]))))))
 
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
@@ -429,13 +429,20 @@
       (.write out (str ":query " (pr-str q) "\n"))
       (let [start-time (System/currentTimeMillis)]
         (try
-          (.write out (str ":backend-results " (execute-with-timeout backend (sparql/sparql->datalog q))
+          (.write out (str ":backend-results "
+                           (execute-with-timeout backend (sparql/sparql->datalog q))
                            "\n"))
+          (catch java.util.concurrent.TimeoutException t
+            (.write out (str ":crux-error " (pr-str (str t)) "\n")))
           (catch IllegalStateException t
             (.write out (str ":crux-error " (pr-str (str t)) "\n")))
           (catch Throwable t
             (.write out (str ":crux-error " (pr-str (str t)) "\n"))
-            (throw t)))
+            ;; datomic wrapps the error multiple times
+            ;; doing this to get the cause exception!
+            (when-not (instance? java.util.concurrent.TimeoutException
+                                 (.getCause (.getCause (.getCause t))))
+              (throw t))))
         (.write out (str ":crux-time " (pr-str (-  (System/currentTimeMillis) start-time)))))
 
       (.write out "}\n")
