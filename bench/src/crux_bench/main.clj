@@ -148,8 +148,6 @@
 (def ^:private default-block-cache-size (* 10 SizeUnit/MB))
 (def ^:private default-block-size (* 16 SizeUnit/KB))
 
-(require 'crux.kv.rocksdb.loader)
-
 (def crux-options
   {:kv-backend "crux.kv.rocksdb.RocksKv"
    :bootstrap-servers "kafka-cluster2-kafka-bootstrap.crux:9092"
