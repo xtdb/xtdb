@@ -21,6 +21,7 @@
 (def query-timeout-ms 15000)
 
 (defprotocol WatdivBackend
+  (backend-info [this])
   (execute-with-timeout [this datalog])
   (injest-watdiv-data [this resource]))
 
@@ -72,6 +73,8 @@
 
 (defrecord DatomicBackend [conn]
   WatdivBackend
+  (backend-info [this]
+    {:backend :datomic})
   (execute-with-timeout [this datalog]
     (d/query {:query datalog
               :timeout query-timeout-ms
@@ -366,6 +369,8 @@
 
 (defrecord CruxBackend [crux]
   WatdivBackend
+  (backend-info [this]
+    {:backend :crux})
   (execute-with-timeout [this datalog]
     (let [db (crux/db crux)]
       (with-open [snapshot (crux/new-snapshot db)]
@@ -420,6 +425,10 @@
   (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
               sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))
               out (io/writer out-file)]
+    (.write out "{\n")
+    (.write out (str ":test-time " (pr-str (System/currentTimeMillis)) "\n"))
+    (.write out (str ":backend-info " (pr-str (backend-info backend)) "\n"))
+    (.write out (str ":tests " "\n"))
     (.write out "[\n")
     (doseq [[idx [d q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
                              (take (or num-tests 100))
@@ -433,22 +442,22 @@
                            (execute-with-timeout backend (sparql/sparql->datalog q))
                            "\n"))
           (catch java.util.concurrent.TimeoutException t
-            (.write out (str ":crux-error " (pr-str (str t)) "\n")))
+            (.write out (str ":error " (pr-str (str t)) "\n")))
           (catch IllegalStateException t
-            (.write out (str ":crux-error " (pr-str (str t)) "\n")))
+            (.write out (str ":error " (pr-str (str t)) "\n")))
           (catch Throwable t
-            (.write out (str ":crux-error " (pr-str (str t)) "\n"))
+            (.write out (str ":error " (pr-str (str t)) "\n"))
             ;; datomic wrapps the error multiple times
             ;; doing this to get the cause exception!
             (when-not (instance? java.util.concurrent.TimeoutException
                                  (.getCause (.getCause (.getCause t))))
               (throw t))))
-        (.write out (str ":crux-time " (pr-str (-  (System/currentTimeMillis) start-time)))))
+        (.write out (str ":time " (pr-str (-  (System/currentTimeMillis) start-time)))))
 
       (.write out "}\n")
       (.flush out)
       (swap! tests-run inc))
-    (.write out "]")))
+    (.write out "]}")))
 
 (defn run-watdiv-test
   [backend num-tests]
