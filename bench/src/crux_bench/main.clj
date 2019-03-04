@@ -108,21 +108,20 @@
                 :parameters {:form {:test-count String}}
                 :response
                 (fn [ctx]
-                  (log/info "starting benchmark tests")
-                  (swap!
-                    (:status benchmark-runner)
-                    merge
-                    {:running? true
-                     :watdiv-runner
-                     (watdiv/run-watdiv-test
-                       system
-                       (let [t (some-> ctx :parameters :form :test-count)]
-                         (if (str/blank? t)
-                           100
-                           (Integer/parseInt t))))})
-                  (assoc (:response ctx)
-                         :status 302
-                         :headers {"location" "/"}))}}})]
+                  (let [num-tests (let [t (some-> ctx :parameters :form :test-count)]
+                                    (if (str/blank? t)
+                                      100
+                                      (Integer/parseInt t)))]
+                    (log/info "starting benchmark tests")
+                    (swap!
+                      (:status benchmark-runner)
+                      merge
+                      {:running? true
+                       :watdiv-runner
+                       (watdiv/start-and-run :crux system num-tests)})
+                    (assoc (:response ctx)
+                           :status 302
+                           :headers {"location" "/"})))}}})]
 
     ["stop-bench"
      (resource
@@ -226,9 +225,3 @@
                (println e)
                (throw e)))))
   (future-cancel s))
-
-(comment
-  (require '[datomic.api :as d])
-  (def uri "datomic:free://datomic:4334/bench")
-
-  )
