@@ -35,3 +35,9 @@ services:
       dockerfile: docker-files/datomic_transactor
     ports:
       - "4334:4334"
+    volumes:
+      # Cache maven dependencies
+      - "./datomic/transactor.properties:/etc/datomic/transactor.properties"
+      - "./datomic-data:/var/datomic"
+      - "./logs:/var/log"
+      - "${HOME}/.m2:/root/.m2"

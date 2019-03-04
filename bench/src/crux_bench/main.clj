@@ -69,7 +69,14 @@
 
          [:div.buttons
           [:form {:action "/start-bench" :method "POST"}
-           [:input {:type "input" :name "test-count"}]
+           [:div
+            [:label "Test Count:"]
+            [:input {:type "input" :name "test-count"}]]
+           [:div
+            [:label "Backend"]
+            [:select {:name "backend"}
+             (for [backend watdiv/supported-backends]
+               [:option {:value backend} backend])]]
            [:input {:value "Run!" :type "submit"}]]
 
           [:form {:action "/stop-bench" :method "POST"}
@@ -105,20 +112,22 @@
        {:methods
         {:post {:consumes "application/x-www-form-urlencoded"
                 :produces "text/html"
-                :parameters {:form {:test-count String}}
+                :parameters {:form {:test-count String
+                                    :backend String}}
                 :response
                 (fn [ctx]
                   (let [num-tests (let [t (some-> ctx :parameters :form :test-count)]
                                     (if (str/blank? t)
                                       100
-                                      (Integer/parseInt t)))]
+                                      (Integer/parseInt t)))
+                        backend (some-> ctx :parameters :form :backend keyword)]
                     (log/info "starting benchmark tests")
                     (swap!
                       (:status benchmark-runner)
                       merge
                       {:running? true
                        :watdiv-runner
-                       (watdiv/start-and-run :crux system num-tests)})
+                       (watdiv/start-and-run backend system num-tests)})
                     (assoc (:response ctx)
                            :status 302
                            :headers {"location" "/"})))}}})]

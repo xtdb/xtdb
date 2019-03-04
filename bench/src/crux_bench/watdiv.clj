@@ -12,6 +12,9 @@
            java.time.Duration
            java.util.Date))
 
+(def supported-backends
+  [:crux :datomic])
+
 (defmulti start-watdiv-runner
   (fn [key system] key))
 
@@ -49,13 +52,22 @@
          (map #(rdf/use-default-language % rdf/*default-language*))
          (partition-all datomic-tx-size)
          (reduce (fn [^long n entities]
-                   (when (zero? (long (mod n rdf/*ntriples-log-size*)))
-                     (log/debug "submitted" n))
-                   @(d/transact conn (mapcat entity->idents entities))
-                   @(d/transact conn (->> (map entity->datomic entities)
-                                          (apply concat)
-                                          (vec)))
-                   (+ n (count entities)))
+                   (let [done? (atom false)]
+                     (while (not @done?)
+                       (try
+                         (when (zero? (long (mod n rdf/*ntriples-log-size*)))
+                           (log/debug "submitted" n))
+                         @(d/transact conn (mapcat entity->idents entities))
+                         @(d/transact conn (->> (map entity->datomic entities)
+                                                (apply concat)
+                                                (vec)))
+                         (reset! done? true)
+                         (catch Exception e
+                           (println (ex-data e))
+                           (println (ex-data (.getCause e)))
+                           (println "retry again to submit!")
+                           (Thread/sleep 10000))))
+                     (+ n (count entities))))
                  0))))
 
 (defrecord DatomicBackend [conn]
@@ -77,275 +89,278 @@
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
 (def datomic-watdiv-schema
-  [#:db{:valueType :db.type/keyword
+  [#:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/composer")
         :cardinality :db.cardinality/one
-        :indexed true
-        :ident :watdiv/injest-state}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident :watdiv/injest-time}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/composer")}
-   #:db{:valueType :db.type/ref
+        :valueType :db.type/string}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/follows")
         :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/follows")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/friendOf")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/gender")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hits")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/likes")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/subscribes")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/userId")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://ogp.me/ns#tag")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://ogp.me/ns#title")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/dc/terms/Location")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/description")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/includes")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/name")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://purl.org/goodrelations/offers")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/price")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/serialNumber")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/validFrom")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/goodrelations/validThrough")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/artist")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/conductor")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/movement")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/opus")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/performed_in")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/performer")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/producer")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/record_number")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/ontology/mo/release")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://purl.org/stuff/rev#hasReview")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/stuff/rev#rating")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/stuff/rev#reviewer")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/stuff/rev#text")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/stuff/rev#title")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://purl.org/stuff/rev#totalVotes")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/actor")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/aggregateRating")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/author")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/award")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/birthDate")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/bookEdition")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/caption")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/contactPoint")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/contentRating")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/contentSize")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/datePublished")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/description")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/director")}
+        :valueType :db.type/ref}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/friendOf")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/gender")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hasGenre")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/hits")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/likes")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/makesPurchase")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseDate")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/purchaseFor")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/subscribes")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://db.uwaterloo.ca/~galuc/wsdbm/userId")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://ogp.me/ns#tag")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://ogp.me/ns#title")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/dc/terms/Location")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/description")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/includes")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/name")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/offers")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://purl.org/goodrelations/price")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/serialNumber")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/validFrom")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/goodrelations/validThrough")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/artist")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/conductor")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/movement")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/opus")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/performed_in")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/performer")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/producer")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/record_number")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/ontology/mo/release")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#hasReview")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#rating")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#reviewer")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#text")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#title")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://purl.org/stuff/rev#totalVotes")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/actor")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/aggregateRating")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/author")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/award")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/birthDate")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/bookEdition")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/caption")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/contactPoint")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/contentRating")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/contentSize")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/datePublished")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/description")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/director")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
    #:db{:valueType :db.type/long
         :cardinality :db.cardinality/one
         :ident (keyword "http://schema.org/duration")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/editor")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/eligibleQuantity")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/eligibleRegion")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/email")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/employee")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/expires")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/faxNumber")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/isbn")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/jobTitle")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/keywords")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/language")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/legalName")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/nationality")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/numberOfPages")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/openingHours")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/paymentAccepted")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/priceValidUntil")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/printColumn")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/printEdition")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/printPage")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/printSection")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/producer")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/publisher")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/telephone")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/text")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://schema.org/trailer")}
-   #:db{:valueType :db.type/string
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/url")}
-   #:db{:valueType :db.type/long
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://schema.org/wordCount")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://www.geonames.org/ontology#parentCountry")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/many
-        :ident (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://xmlns.com/foaf/age")}
+   #:db{:ident (keyword "http://schema.org/editor")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/eligibleQuantity")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/eligibleRegion")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/email")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/employee")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/expires")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/faxNumber")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/isbn")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/jobTitle")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/keywords")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/language")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/legalName")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/nationality")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/numberOfPages")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/openingHours")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/paymentAccepted")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/priceValidUntil")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/printColumn")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/printEdition")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/printPage")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/printSection")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/producer")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/publisher")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/telephone")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/text")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/trailer")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://schema.org/url")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://schema.org/wordCount")
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://www.geonames.org/ontology#parentCountry")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/many}
+   #:db{:ident (keyword "http://xmlns.com/foaf/age")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
    #:db{:valueType :db.type/string
         :cardinality :db.cardinality/one
         :ident (keyword "http://xmlns.com/foaf/familyName")}
-   #:db{:valueType :db.type/string
+   #:db{:ident (keyword "http://xmlns.com/foaf/givenName")
+        :valueType :db.type/string
+        :cardinality :db.cardinality/one}
+   #:db{:ident (keyword "http://xmlns.com/foaf/homepage")
+        :valueType :db.type/ref
+        :cardinality :db.cardinality/one}
+   #:db{:ident :watdiv/injest-time
+        :valueType :db.type/long
+        :cardinality :db.cardinality/one}
+   #:db{:ident :watdiv/injest-state
+        :valueType :db.type/keyword
         :cardinality :db.cardinality/one
-        :ident (keyword "http://xmlns.com/foaf/givenName")}
-   #:db{:valueType :db.type/ref
-        :cardinality :db.cardinality/one
-        :ident (keyword "http://xmlns.com/foaf/homepage")}])
+        :unique :db.unique/identity
+        :index true}])
 
 (defmethod start-watdiv-runner :datomic
   [_ system]
-  (let [conn (d/connect "datomic:free://datomic:4334/bench")]
+  (let [uri "datomic:free://datomic:4334/bench?password=password"
+        _ (d/create-database uri)
+        conn (d/connect uri)]
     @(d/transact conn datomic-watdiv-schema)
     (map->DatomicBackend {:conn conn})))
 

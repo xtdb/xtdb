@@ -1,7 +1,7 @@
 FROM alpine
 RUN apk update && \
     apk --no-cache add openjdk8-jre-base curl bash
-ENV DATOMIC_VERSION 0.9.5407
+ENV DATOMIC_VERSION 0.9.5703
 RUN curl --progress-bar --location\
          --url "https://my.datomic.com/downloads/free/${DATOMIC_VERSION}"\
          --output /tmp/datomic.zip && \
@@ -10,5 +10,5 @@ RUN curl --progress-bar --location\
     rm /tmp/datomic.zip
 RUN mkdir -p /etc/datomic
 COPY datomic/transactor.properties /etc/datomic
-CMD ["/usr/local/datomic/bin/transactor", "-Xms128m", "-Xmx128m", "/etc/datomic/transactor.properties"]
+CMD ["/usr/local/datomic/bin/transactor", "-Xmx4g", "-Xms4g", "/etc/datomic/transactor.properties"]
 EXPOSE 4334
