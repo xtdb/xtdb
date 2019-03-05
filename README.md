@@ -10,10 +10,6 @@ Visit and read our [manual](https://juxt.pro/crux/docs/index.html). Until Crux i
 
 Please give us your feedback and enjoy using Crux.
 
-## Roadmap
-
-+ [Roadmap](docs/roadmap.adoc)
-
 ## Building
 
 ``` sh
