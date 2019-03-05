@@ -9,6 +9,6 @@ RUN curl --progress-bar --location\
     mv /usr/local/datomic-free-${DATOMIC_VERSION} /usr/local/datomic && \
     rm /tmp/datomic.zip
 RUN mkdir -p /etc/datomic
-COPY datomic/transactor.properties /etc/datomic
+COPY datomic/transactor.properties.prod /etc/datomic/transactor.properties
 CMD ["/usr/local/datomic/bin/transactor", "-Xmx4g", "-Xms4g", "/etc/datomic/transactor.properties"]
 EXPOSE 4334

@@ -361,7 +361,9 @@
 
 (defmethod start-watdiv-runner :datomic
   [_ system]
-  (let [uri "datomic:free://datomic:4334/bench?password=password"
+  (let [uri (str "datomic:free://"
+                 (or (System/getenv "DATOMIC_TRANSACTOR_URI") "datomic")
+                 ":4334/bench?password=password")
         _ (d/create-database uri)
         conn (d/connect uri)]
     @(d/transact conn datomic-watdiv-schema)

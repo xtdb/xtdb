@@ -1,0 +1,16 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: datomic-transactor-service
+  labels:
+    app: datomic-transactor-service
+spec:
+  ports:
+    - port: 4334
+      name: transactor
+      targetPort: 4334
+    - port: 4335
+      name: h3
+      targetPort: 4335
+  selector:
+    app: datomic-transactor

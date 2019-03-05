@@ -17,4 +17,4 @@ ENV CRUX_BENCHMARK_BUCKET=crux-bench-results
 ENV CRUX_MODE=LOCAL_NODE
 ENV AWS_REGION=eu-west-1
 
-CMD java -Xms1G -Xmx1G -jar crux-bench-uberjar.jar
+CMD java ${JVM_OPTS} -jar crux-bench-uberjar.jar

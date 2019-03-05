@@ -14,7 +14,7 @@ spec:
     metadata:
       labels:
         app: crux-bench
-        date: "1549290106"
+        date: "1549290114"
     spec:
       containers:
       - name: crux-bench
@@ -26,11 +26,10 @@ spec:
           name: app-data-3
         env:
         - name: JVM_OPTS
-          value: "-Xms1G -Xmx1800M"
+          value: "-Xms1G -Xmx4G"
+        - name: DATOMIC_TRANSACTOR_URI
+          value: "datomic-transactor-service.crux"
         resources:
-          requests:
-            cpu: 1
-            memory: 1Gi
           limits:
             cpu: 1
             memory: 7Gi
