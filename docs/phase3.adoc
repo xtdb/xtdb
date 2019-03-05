@@ -1,13 +1,13 @@
 = Phase 3 Roadmap:
 
-== Matrix and Index Storage.
+== Matrix and Index Storage
 
 === Pros
 
-. Query performance (speed)
-. Less code (option to make more layered)
-. Simplified storage
-. Possibility of sharing index data-structures between nodes
+* Query performance (speed)
+* Less code (option to make more layered)
+* Simplified storage
+* Possibility of sharing index data-structures between nodes
 
 For the latter, we have the option of moving away from the K/V stores
 and to have our own memory mapped disk backend, and/or potentially to
@@ -15,25 +15,25 @@ use succinct data structures (or alternatives).
 
 === Cons
 
-. Effort/Risk
-. Doesn't offer any new features
-. Joins and potentially the entire result will need to fit into
+* Effort/Risk
+* Doesn't offer any new features
+* Joins and potentially the entire result will need to fit into
   memory.
 
-== Data Explorer.
+== Data Explorer
 
 Important for making Crux more usable in practice.
 
 === Pros
 
-. We dogfood Crux with an advanced UI application
-. Tooling for using
-. Will demo and promote Crux.
-. Will help debugging.
+* We dogfood Crux with an advanced UI application
+* Tooling for using
+* Will demo and promote Crux.
+* Will help debugging.
 
 === Cons
 
-. Scope is not well defined.
+* Scope is not well defined.
 
 == Decorators
 
@@ -46,38 +46,38 @@ time series data.
 
 === Pros
 
-. Compelling feature.
+* Compelling feature.
 
 === Cons
 
-. Requires a different architecture
-. Concern with Matrix compatibility
-. Can we compete in this area?
+* Requires a different architecture
+* Concern with Matrix compatibility
+* Can we compete in this area?
 
 == Real Bitemporal Queries.
 
 Crux currently support point-in-time and limited history and history
-range queries. In many bitemporal papers they go far beyond this
+range queries* In many bitemporal papers they go far beyond this
 allowing for more complex queries across both time lines.
 
 Examples:
 
-. 'When did I change my address?'
-. 'When did a person first earn more then X amount'
-. 'Show me all fields that have been corrected over X time-frame'
+* 'When did I change my address?'
+* 'When did a person first earn more then X amount'
+* 'Show me all fields that have been corrected over X time-frame'
 
 _(consult Jensen bitemp resources for more examples)_
 
 === Pros
 
-. Opens up far more auditing capability
-. Bolsters 'bitemporal' claim we are making
-. Z Curve index opens up this a bit
+* Opens up far more auditing capability
+* Bolsters 'bitemporal' claim
+* Z Curve index opens this up
 
 === Cons
 
-. Hard to reason about and adapt queries for what end-users want
-. Difficult to build
+* Hard to reason about and adapt queries for what end-users want
+* Difficult to build
 
 == Sharding
 
@@ -87,15 +87,15 @@ document partitions intelligently.
 
 === Pros
 
-. Query nodes will need less disk.
-. Query nodes faster to index (subset vs full population)
-. Possibly complements Matrix (shared index chunks)
+* Query nodes will need less disk.
+* Query nodes faster to index (subset vs full population)
+* Possibly complements Matrix (shared index chunks)
 
 === Cons
 
-. Complicates Crux.
-. Actual feature request might not arise
-. The simple version needs more complexity and _virtual
+* Complicates Crux.
+* Actual feature request might not arise
+* The simple version needs more complexity and _virtual
   partitions_ to allow re-sharding.
 
 == Subscriptions
@@ -104,41 +104,41 @@ Blurs the line betweem Crux, stream processing and rule engines a bit.
 
 === Pros
 
-. Opens up a world of possibilities.
-. Simple versions of this can be built around the transaction log and
+* Opens up a world of possibilities.
+* Simple versions of this can be built around the transaction log and
   re-running queries.
-. Potentially use differential dataflow in an unbundled way as
+* Potentially use differential dataflow in an unbundled way as
   long as our log provides enough information.
 
 === Cons
 
-. Modelling it into the core would be intrusive. Could
+* Modelling it into the core would be intrusive* Could
   potentially be done when we introduce matrix, but it's an orthogonal
   problem.
-. Using dataflow might lead to two different query engines with subtle
+* Using dataflow might lead to two different query engines with subtle
   differences unless we move it to the core.
-. Needs us to think properly about how we related streaming, which
+* Needs us to think properly about how we related streaming, which
   like times series might lead to taking on too much scope in Crux, or
   taking on areas we don't really understand.
 
 == Rule Engine
 
 Enable rule engine and declarative programming on top of Crux
-itself. This is a potential alternative to transaction functions.
+itself* This is a potential alternative to transaction functions.
 
 === Pros
 
-. A lot of exciting possibilities
-. Likely to be some low-hanging fruit
-. Could lead to a Dedalus style programming model where you implement
-  parts of your system in Crux's Datalog directly. A rule engine
+* A lot of exciting possibilities
+* Likely to be some low-hanging fruit
+* Could lead to a Dedalus style programming model where you implement
+  parts of your system in Crux's Datalog directly* A rule engine
 
 === Cons
 
-. Trying to turn Crux into a rule engine might derail it from its
+* Trying to turn Crux into a rule engine might derail it from its
   primary bitemporal purpose
-. Transaction functions needs to be constrained and managed in various
-  ways. Should be possible to evict
+* Transaction functions needs to be constrained and managed in various
+  ways* Should be possible to evict
 
 == Non-JVM Core
 
@@ -151,37 +151,37 @@ comparatively straight forward in the right language.
 
 === Pros
 
-. Right tool for the job.
-. Control over speed. Opens up for SIMD and vectorization. Potentially
-  no GC. Better interaction with native libraries.
-. Better memory safety if using Rust or similar language than when
+* Right tool for the job.
+* Control over speed* Opens up for SIMD and vectorization* Potentially
+  no GC* Better interaction with native libraries.
+* Better memory safety if using Rust or similar language than when
   using sun.misc.Unsafe.
-. Potential to be used as a library beyond the JVM world.
+* Potential to be used as a library beyond the JVM world.
 
 === Cons
 
-. Would still need to be embedded into Crux unless we rewrite the
+* Would still need to be embedded into Crux unless we rewrite the
   entire thing, which isn't necessarily a good idea unless we find the
   right boundaries, as we want to keep the benefit of Clojure in the
   higher layers.
-. While Rust is the likely candidate, others might be more suitable in
+* While Rust is the likely candidate, others might be more suitable in
   practice, so we need to spend time choosing the right tool.
-. We're not experts in these languages.
-. We also need to understand their ecosystem, and how to deploy and
+* We're not experts in these languages.
+* We also need to understand their ecosystem, and how to deploy and
   debug such languages and also how to manage them operationally.
-. The feedback loop and ability to iterate is lower, so more likely to
+* The feedback loop and ability to iterate is lower, so more likely to
   go stale.
 
 The language needs to be fast, have zero or low-cost interaction with
-C libraries, and make managing memory easy, correct and cheap. No GC
-is preferable, but not a strict requirement. It also needs to be easy
+C libraries, and make managing memory easy, correct and cheap* No GC
+is preferable, but not a strict requirement* It also needs to be easy
 to call from Clojure and Java over JNI/JNR.
 
 It should preferably be easy to work with and have reasonable feedback
 loops and compilation times.
 
 Alternatives to Rust could maybe be Common Lisp, Ada, OCaml, D or even
-C itself combined with the right verification tools. We also have Java
+C itself combined with the right verification tools* We also have Java
 on Graal, and could double down on using native images.
 
 Second tier languages that might also be worth considering are Go and
