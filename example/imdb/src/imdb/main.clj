@@ -81,6 +81,10 @@
               (Thread/sleep Long/MAX_VALUE)))))
   (future-cancel s))
 
+
+;;========================================================================
+;; taken from https://hashrocket.com/blog/posts/using-datomic-as-a-graph-database
+
 (defn paths
   "Returns a lazy seq of all non-looping path vectors starting with
   [<start-node>]"
@@ -132,6 +136,9 @@
             (if-let [all (overlaps preds q2)]
               (find-paths preds succs (set all))
               (recur preds succs q1 q2))))))))
+
+
+;; =============================================================================
 
 (defn connected-movies
   [db snapshot person-id]
