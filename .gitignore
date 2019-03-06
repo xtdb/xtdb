@@ -27,3 +27,6 @@ target
 bench/data/**/*
 bench/datomic-data/**/*
 /bench/watdiv_*
+
+/example/imdb/data/**/*
+example/imdb/.nrepl-port
