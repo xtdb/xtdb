@@ -21,6 +21,7 @@
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
+            [ring.middleware.cors :refer [wrap-cors]]
             [ring.util.request :as req]
             [ring.util.io :as rio]
             [ring.util.time :as rt])
@@ -89,7 +90,8 @@
 (defn- status [^ICruxSystem crux-system]
   (let [status-map (.status crux-system)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
-            (:crux.zk/zk-active? status-map))
+            (:crux.zk/zk-active? status-map)
+            (not= (System/getenv "CRUX_MODE") "LOCAL_NODE"))
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
@@ -318,8 +320,18 @@
                  :as options}]
    (s/assert ::options options)
    (let [server (j/run-jetty (-> (partial handler crux-system)
+                                 (wrap-cors :access-control-allow-origin [#".*"]
+                                            :access-control-allow-headers ["X-Requested-With"
+                                                                           "Content-Type"
+                                                                           "Cache-Control"
+                                                                           "Origin"
+                                                                           "Accept"
+                                                                           "Authorization"
+                                                                           "X-Custom-Header"]
+                                            :access-control-allow-methods [:get :put :post :delete])
                                  (p/wrap-params)
-                                 (wrap-exception-handling))
+                                 (wrap-exception-handling)
+                                 )
                              {:port server-port
                               :join? false})]
      (log/info "HTTP server started on port: " server-port)

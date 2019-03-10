@@ -21,6 +21,7 @@
                  [org.lmdbjava/lmdbjava "0.6.3" :exclusions [com.github.jnr/jffi] :scope "provided"]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
+                 [ring-cors "0.1.13" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.5" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.5" :scope "provided"]]
   :profiles { ;; Provided dependencies excluded from uberjar.
