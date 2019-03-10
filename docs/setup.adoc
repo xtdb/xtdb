@@ -46,10 +46,10 @@ Crux Systems will use the following properties:
 [#table-conversion%header,cols="d,d,d,d"]
 |===
 |System|Component|Property|Description
-|Both|kv-store|`kv-backend`|Sets the K/V Store to use, i.e. `"crux.kv.rocksdb.RocksKv"`
-|Both|kv-store|`db-dir`|Sets the data-directory to use, i.e. `"data/db-dir-1"`
-|Standalone|tx-log|`bootstrap-servers`|Kakfa Servers to connect to i.e. `"localhost:9092"`
-|Standalone|http-server|`server-port`|Port for Crux HTTP Server i.e. `8080`
+|Both|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
+|Both|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
+|Standalone|tx-log|`bootstrap-servers`|Kakfa Servers to connect to e.g. `"localhost:9092"`
+|Standalone|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
 [#standalone]
