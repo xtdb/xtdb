@@ -315,23 +315,14 @@
   the Crux HTTP API. Takes a either a crux.api.ICruxSystem or its
   dependencies explicitly as arguments (internal use)."
   (^java.io.Closeable
-   [crux-system {:keys [server-port]
-                 :or {server-port 3000}
+   [crux-system {:keys [server-port cors-access-control]
+                 :or {server-port 3000 cors-acces-control []}
                  :as options}]
    (s/assert ::options options)
    (let [server (j/run-jetty (-> (partial handler crux-system)
-                                 (wrap-cors :access-control-allow-origin [#".*"]
-                                            :access-control-allow-headers ["X-Requested-With"
-                                                                           "Content-Type"
-                                                                           "Cache-Control"
-                                                                           "Origin"
-                                                                           "Accept"
-                                                                           "Authorization"
-                                                                           "X-Custom-Header"]
-                                            :access-control-allow-methods [:get :put :post :delete])
+                                 (#(apply wrap-cors (into [%] cors-access-control)))
                                  (p/wrap-params)
-                                 (wrap-exception-handling)
-                                 )
+                                 (wrap-exception-handling))
                              {:port server-port
                               :join? false})]
      (log/info "HTTP server started on port: " server-port)
