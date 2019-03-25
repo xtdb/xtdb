@@ -93,5 +93,3 @@
                    queries-to-bench
                    (map (partial do-benchmark ts samples index speed verbose)
                         queries-to-bench)))))))))
-
-;; Datomic: 100 queries against 1000 dataset = 40-50 millis
