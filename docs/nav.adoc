@@ -1,7 +1,7 @@
 * <<user_guide.adoc#,User Guide>>
 * <<setup.adoc#,Setting Up>>
 * <<deployment.adoc#,Deployment>>
-* <<Support.adoc#,Support>>
+* <<support.adoc#,Support>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<benchmarks.adoc#,Benchmarks>>
 * <<faq.adoc#,FAQ>>
