@@ -44,7 +44,7 @@ NOTE: When writing data, in case there isn’t any specific
 valid-time available, valid-time and transaction-time take the
 same value.
 
-NODE: Queries can use both times to get consistent reads, as long as
+NOTE: Queries can use both times to get consistent reads, as long as
 the data hasn’t been evicted.
 
 == Examples
