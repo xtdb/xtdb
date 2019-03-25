@@ -14,6 +14,10 @@
 
 include::what_is_crux.adoc[]
 include::user_guide.adoc[]
+include::setup.adoc[]
 include::deployment.adoc[]
+include::support.adoc[]
 include::bitemp.adoc[]
+include::benchmarks.adoc[]
 include::faq.adoc[]
+include::design.adoc[]

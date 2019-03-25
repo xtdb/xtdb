@@ -1,0 +1,25 @@
+= Deployment
+
+== Kafka ClusterNode Mode
+
+Use Kafka for transaction log and document log persistance.
+
+== Standalone Mode
+
+Use a second RocksDB instance for transaction log and document log persistance.
+
+== Migration
+
+You can rebuild nodes whenever needed as long as the transaction log and document log is durably stored. Nodes will need rebuilding when index formats have breaking changes. Migrating from a Standalone Mode system to a ClusterNode system is possible to address evolving scaling and availability requirements.
+
+== Security
+
+Crux does not provide any native security features. It is important that you carefully consider the security risks when deploying Crux in public environments. Contact us if you would like to hear about JUXT's deployment services for Crux: info@juxt.pro 
+
+== Managed Hosting
+
+JUXT offers a Managed Hosting service for Crux to accelerate your development and provide you with a secure and reliable service. We can deploy into any environment. Contact us if you would like to hear about JUXT's Managed Hosting service for Crux: info@juxt.pro 
+
+== Backup & Restore
+
+Crux provides basic utility APIs for easily incorporating a backup and restore process into your operations.
