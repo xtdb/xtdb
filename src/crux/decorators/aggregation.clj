@@ -4,14 +4,17 @@
             [clojure.string :as str]
             [clojure.spec.alpha :as s]))
 
-(s/def ::aggr (s/keys :req-un [::partition-by ::select]))
-
-(defn- validate-aggregation-query
-  [query])
-
 (defn variable?
   [s]
   (and (symbol? s) (= \? (first (name s)))))
+
+(s/def ::partition-by (s/coll-of variable?))
+(s/def ::vector-aggregation-expr any?)
+(s/def ::list-aggregation-expr any?)
+(s/def ::aggrigation-expr (s/or :vector ::vector-aggregation-expr
+                                :list ::list-aggregation-expr))
+(s/def ::select (s/map-of variable? ::aggrigation-expr))
+(s/def ::aggr (s/keys :req-un [::partition-by ::select]))
 
 (defn find-used-variables
   [expr]
@@ -150,6 +153,7 @@
    (with-open [s (api/new-snapshot db)]
      (vec (q db s query))))
   ([db snapshot query]
+   (s/assert ::aggr (:aggr query))
    (run-plan
      db snapshot (running-plan query)
      (decorated-query query)
