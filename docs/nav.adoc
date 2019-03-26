@@ -4,5 +4,6 @@
 * <<support.adoc#,Support>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<benchmarks.adoc#,Benchmarks>>
+* <<roadmap.adoc#,Roadmap>>
 * <<faq.adoc#,FAQ>>
 * <<design.adoc#,Design>>
