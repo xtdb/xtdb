@@ -150,12 +150,17 @@
 
 (defn q
   ([db query]
-   (with-open [s (api/new-snapshot db)]
-     (vec (q db s query))))
+   (if (:aggr query)
+     (with-open [s (api/new-snapshot db)]
+       (vec (q db s query)))
+     (api/q db query)))
   ([db snapshot query]
-   (s/assert ::aggr (:aggr query))
-   (run-plan
-     db snapshot (running-plan query)
-     (decorated-query query)
-     identity
-     (constantly conj))))
+   (if (:aggr query)
+     (do
+       (s/assert ::aggr (:aggr query))
+       (run-plan
+         db snapshot (running-plan query)
+         (decorated-query query)
+         identity
+         (constantly conj)))
+     (api/q db snapshot query))))

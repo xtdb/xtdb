@@ -36,4 +36,15 @@
                         {?cost-sum (+ ?post-cost)
                          ?post-count [0 (inc acc) ?e]}}
                  :where [[?e :user/name ?user-name]
+                         [?e :post/cost ?post-cost]]}))))
+
+  (t/testing "not doing anything to normal query"
+    (t/is (= #{[:a4 "niclas" 8]
+               [:a3 "patrik" 5]
+               [:a2 "patrik" 35]
+               [:a1 "patrik" 30]}
+             (aggr/q
+               (q/db *kv*)
+               '{:find [?e ?user-name ?post-cost]
+                 :where [[?e :user/name ?user-name]
                          [?e :post/cost ?post-cost]]})))))
