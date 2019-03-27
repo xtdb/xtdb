@@ -1,14 +1,14 @@
 (ns crux.decorators.aggregation-test
   (:require [crux.decorators.aggregation.alpha :as aggr]
-            [crux.fixtures :as f :refer [*kv*]]
-            [crux.query :as q]
+            [crux.fixtures :as f :refer [*api*]]
+            [crux.api :as api]
             [clojure.test :as t]))
 
-(t/use-fixtures :each f/with-kv-store)
+(t/use-fixtures :each f/with-standalone-system)
 
 (t/deftest test-count-aggrigation
   (f/transact-entity-maps!
-    *kv*
+    (:kv-store *api*)
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
@@ -18,7 +18,7 @@
     (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
               {:user-name "patrik" :post-count 3 :cost-sum 70}]
              (aggr/q
-               (q/db *kv*)
+               (api/db *api*)
                '{:aggr {:partition-by [?user-name]
                         :select
                         {?cost-sum [0 (+ acc ?post-cost)]
@@ -30,7 +30,7 @@
     (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
               {:user-name "patrik" :post-count 3 :cost-sum 70}]
              (aggr/q
-               (q/db *kv*)
+               (api/db *api*)
                '{:aggr {:partition-by [?user-name]
                         :select
                         {?cost-sum (+ ?post-cost)
@@ -44,7 +44,28 @@
                [:a2 "patrik" 35]
                [:a1 "patrik" 30]}
              (aggr/q
-               (q/db *kv*)
+               (api/db *api*)
                '{:find [?e ?user-name ?post-cost]
+                 :where [[?e :user/name ?user-name]
+                         [?e :post/cost ?post-cost]]})))))
+
+
+(t/deftest test-with-decorator
+  (f/transact-entity-maps!
+    (:kv-store *api*)
+    [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
+     {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
+     {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
+     {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
+
+  (let [decorated (aggr/aggregation-decorator *api*)]
+    (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
+              {:user-name "patrik" :post-count 3 :cost-sum 70}]
+             (api/q
+               (api/db decorated)
+               '{:aggr {:partition-by [?user-name]
+                        :select
+                        {?cost-sum (+ ?post-cost)
+                         ?post-count [0 (inc acc) ?e]}}
                  :where [[?e :user/name ?user-name]
                          [?e :post/cost ?post-cost]]})))))

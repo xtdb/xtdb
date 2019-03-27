@@ -1,5 +1,6 @@
 (ns crux.decorators.aggregation.alpha
   (:require [crux.api :as api]
+            [crux.decorators.core :as decorators]
             [clojure.walk :as walk]
             [clojure.string :as str]
             [clojure.spec.alpha :as s]))
@@ -164,3 +165,6 @@
          identity
          (constantly conj)))
      (api/q db snapshot query))))
+
+(def aggregation-decorator
+  (decorators/system-decorator {:data-source {#'api/q q}}))
