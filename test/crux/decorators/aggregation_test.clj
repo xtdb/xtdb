@@ -1,5 +1,5 @@
 (ns crux.decorators.aggregation-test
-  (:require [crux.decorators.aggregation :as aggr]
+  (:require [crux.decorators.aggregation.alpha :as aggr]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.query :as q]
             [clojure.test :as t]))
@@ -38,7 +38,7 @@
                  :where [[?e :user/name ?user-name]
                          [?e :post/cost ?post-cost]]}))))
 
-  (t/testing "not doing anything to normal query"
+  (t/testing "not doing anything to a query without aggr clause"
     (t/is (= #{[:a4 "niclas" 8]
                [:a3 "patrik" 5]
                [:a2 "patrik" 35]

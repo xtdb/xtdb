@@ -1,4 +1,4 @@
-(ns crux.decorators.aggregation
+(ns crux.decorators.aggregation.alpha
   (:require [crux.api :as api]
             [clojure.walk :as walk]
             [clojure.string :as str]
