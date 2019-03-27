@@ -3,8 +3,8 @@
 ;; tag::start-system[]
 (require '[crux.api :as api])
 
-(def ^crux.api.ICruxSystem system (api/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
-                                                                :db-dir "data/db-dir-1"}))
+(def ^crux.api.ICruxAPI system (api/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
+                                                             :db-dir "data/db-dir-1"}))
 ;; end::start-system[]
 
 ;; tag::close-system[]
@@ -12,13 +12,13 @@
 ;; end::close-system[]
 
 ;; tag::start-local-node-system[]
-(def ^crux.api.ICruxSystem system (api/start-local-node {:kv-backend "crux.kv.memdb.MemKv"
-                                                         :bootstrap-servers "localhost:29092"}))
+(def ^crux.api.ICruxAPI system (api/start-local-node {:kv-backend "crux.kv.memdb.MemKv"
+                                                      :bootstrap-servers "localhost:29092"}))
 ;; end::start-local-node-system[]
 
 ;; tag::start-standalone-with-rocks[]
-(def ^crux.api.ICruxSystem system (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
-                                                                :db-dir "data/db-dir-1"}))
+(def ^crux.api.ICruxAPI system (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
+                                                             :db-dir "data/db-dir-1"}))
 ;; end::start-standalone-with-rocks[]
 
 ;; tag::submit-tx[]

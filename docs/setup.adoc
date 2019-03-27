@@ -29,7 +29,7 @@ is permissable.
 |Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
-Crux systems implement the `ICruxSystem` interface and are the
+Crux systems implement the `ICruxAPI` interface and are the
 starting point for making use of Crux. Systems also implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 

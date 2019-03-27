@@ -10,7 +10,7 @@ import clojure.lang.Keyword;
 /**
  *  Provides API access to Crux.
  */
-public interface ICruxSystem extends Closeable {
+public interface ICruxAPI extends Closeable {
     /**
      * Returns a db as of now. Will return the latest consistent
      * snapshot of the db currently known. Does not block.

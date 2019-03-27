@@ -13,7 +13,7 @@
             [crux.query :as q]
             [crux.tx :as tx])
   (:import java.io.Closeable
-           crux.api.ICruxSystem))
+           crux.api.ICruxAPI))
 
 (s/def :crux.http-server/server-port :crux.io/port)
 
@@ -77,7 +77,7 @@
       (log/info "stopping system")))
   (log/info "system stopped"))
 
-(defn start-local-node ^ICruxSystem [options]
+(defn start-local-node ^ICruxAPI [options]
   (let [system-promise (promise)
         close-promise (promise)
         error-promise (promise)
@@ -85,10 +85,10 @@
         node-thread (doto (Thread. (fn []
                                      (try
                                        (run-system
-                                        options
-                                        (fn with-system-callback [system]
-                                          (deliver system-promise system)
-                                          @close-promise))
+                                         options
+                                         (fn with-system-callback [system]
+                                           (deliver system-promise system)
+                                           @close-promise))
                                        (catch Throwable t
                                          (if (realized? system-promise)
                                            (throw t)

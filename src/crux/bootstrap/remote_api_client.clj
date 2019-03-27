@@ -5,7 +5,7 @@
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Duration
-           [crux.api Crux ICruxSystem ICruxDatasource]))
+           [crux.api Crux ICruxAPI ICruxDatasource]))
 
 (defn- edn-list->lazy-seq [in]
   (let [in (PushbackReader. (InputStreamReader. in))
@@ -146,7 +146,7 @@
     transact-time))
 
 (defrecord RemoteApiClient [url]
-  ICruxSystem
+  ICruxAPI
   (db [_]
     (->RemoteDatasource url nil nil))
 
@@ -209,6 +209,6 @@
   Closeable
   (close [_]))
 
-(defn new-api-client ^ICruxSystem [url]
+(defn new-api-client ^ICruxAPI [url]
   (init-intrnal-http-request-fn)
   (->RemoteApiClient url))

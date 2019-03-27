@@ -16,7 +16,7 @@
            org.apache.kafka.clients.admin.AdminClient
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.consumer.KafkaConsumer
-           [crux.api Crux ICruxSystem]))
+           [crux.api Crux ICruxAPI]))
 
 (defn random-person [] {:crux.db/id (UUID/randomUUID)
                         :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
@@ -155,8 +155,8 @@
       (f))))
 
 (def ^:dynamic *api-url*)
-(def ^:dynamic ^ICruxSystem *api*)
-(def ^:dynamic ^ICruxSystem *local-node*)
+(def ^:dynamic ^ICruxAPI *api*)
+(def ^:dynamic ^ICruxAPI *local-node*)
 
 (defn with-local-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))

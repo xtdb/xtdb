@@ -58,7 +58,6 @@
 
 (defn compile-reducer
   [expr query-variables]
-  ;; TODO: validate this with spec
   (cond
     (vector? expr)
     (let [[seed-expr progress-expr & extra-required-variables] expr

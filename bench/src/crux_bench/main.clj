@@ -50,7 +50,7 @@
                     [p (-> db (.getProperty (.getDefaultColumnFamily db) p))])))))]
          [:pre
           (with-out-str
-            (pp/pprint (.status ^crux.api.ICruxSystem (:crux system))))]
+            (pp/pprint (.status ^crux.api.ICruxAPI (:crux system))))]
 
          [:pre
           (with-out-str

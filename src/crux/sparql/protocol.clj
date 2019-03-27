@@ -10,7 +10,7 @@
             [ring.util.request :as req]
             [ring.util.time :as rt])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]
-           crux.api.ICruxSystem))
+           crux.api.ICruxAPI))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -76,7 +76,7 @@
             (str/join ", " ))
        "]}}"))
 
-(defn sparql-query [^ICruxSystem crux-system request]
+(defn sparql-query [^ICruxAPI crux-system request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])

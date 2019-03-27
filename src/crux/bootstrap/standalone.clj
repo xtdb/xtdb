@@ -13,11 +13,11 @@
             [crux.query :as q]
             [crux.tx :as tx])
   (:import java.io.Closeable
-           crux.api.ICruxSystem
+           crux.api.ICruxAPI
            crux.bootstrap.CruxNode))
 
 (defrecord StandaloneSystem [kv-store event-log-kv-store event-log-consumer tx-log options]
-  ICruxSystem
+  ICruxAPI
   (db [this]
     (.db ^CruxNode (b/map->CruxNode this)))
 
@@ -75,24 +75,24 @@
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
-(defn start-standalone-system ^ICruxSystem [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
-                                                    crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options
-                                             :or {doc-cache-size (:doc-cache-size b/default-options)}}]
+(defn start-standalone-system ^ICruxAPI [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
+                                                 crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options
+                                          :or {doc-cache-size (:doc-cache-size b/default-options)}}]
   (s/assert ::standalone-options options)
   (let [started (atom [])]
     (try
       (let [kv-store (doto (b/start-kv-store
-                            (merge (when-not event-log-dir
-                                     {:sync? true})
-                                   options))
+                             (merge (when-not event-log-dir
+                                      {:sync? true})
+                                    options))
                        (->> (swap! started conj)))
             event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))
             event-log-kv-store (when event-log-dir
                                  (doto (b/start-kv-store
-                                        {:db-dir event-log-dir
-                                         :kv-backend (or event-log-kv-backend kv-backend)
-                                         :sync? event-log-sync?
-                                         :crux.index/check-and-store-index-version false})
+                                         {:db-dir event-log-dir
+                                          :kv-backend (or event-log-kv-backend kv-backend)
+                                          :sync? event-log-sync?
+                                          :crux.index/check-and-store-index-version false})
                                    (->> (swap! started conj))))
             tx-log (if event-log-kv-store
                      (tx/->EventTxLog event-log-kv-store)

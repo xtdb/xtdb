@@ -20,7 +20,7 @@
             [crux.memory :as mem]
             [crux.rdf :as rdf]
             [crux.query :as q])
-  (:import [crux.api Crux ICruxSystem]
+  (:import [crux.api Crux ICruxAPI]
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory
            java.io.Closeable
@@ -41,9 +41,9 @@
 
 (def dev-options (dev-option-defaults storage-dir))
 
-(def ^ICruxSystem system)
+(def ^ICruxAPI system)
 
-(defn start-dev-system ^crux.api.ICruxSystem [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
+(defn start-dev-system ^crux.api.ICruxAPI [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
@@ -61,7 +61,7 @@
           (cio/try-close c))
         (throw t)))))
 
-(defn stop-dev-system ^crux.api.ICruxSystem [{:keys [http-server embedded-kafka] :as system}]
+(defn stop-dev-system ^crux.api.ICruxAPI [{:keys [http-server embedded-kafka] :as system}]
   (doseq [c [http-server system embedded-kafka]]
     (cio/try-close c)))
 

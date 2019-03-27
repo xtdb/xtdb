@@ -15,7 +15,7 @@
             [crux.tx :as tx])
   (:import java.io.Closeable
            java.net.InetAddress
-           crux.api.ICruxSystem))
+           crux.api.ICruxAPI))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -50,7 +50,7 @@
          (->CruxVersion version revision))))))
 
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
-  ICruxSystem
+  ICruxAPI
   (db [_]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store object-store tx-time tx-time options)))

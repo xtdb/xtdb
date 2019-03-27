@@ -1,7 +1,7 @@
 (ns crux.api
   "Public API of Crux. For documentation, see the JavaDoc."
   (:refer-clojure :exclude [sync])
-  (:import [crux.api Crux ICruxSystem ICruxDatasource]
+  (:import [crux.api Crux ICruxAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -33,7 +33,7 @@
   (tx-log [this tx-log-context from-tx-id with-documents?]))
 
 (extend-protocol PCruxSystem
-  ICruxSystem
+  ICruxAPI
   (db
     ([this]
      (.db this))
@@ -120,11 +120,11 @@
   (transaction-time [this]
     (.transactionTime this)))
 
-(defn start-local-node ^ICruxSystem [options]
+(defn start-local-node ^ICruxAPI [options]
   (Crux/startLocalNode options))
 
-(defn start-standalone-system ^ICruxSystem [options]
+(defn start-standalone-system ^ICruxAPI [options]
   (Crux/startStandaloneSystem options))
 
-(defn new-api-client ^ICruxSystem [url]
+(defn new-api-client ^ICruxAPI [url]
   (Crux/newApiClient url))
