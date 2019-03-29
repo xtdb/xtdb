@@ -156,9 +156,9 @@
 
 (def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxAPI *api*)
-(def ^:dynamic ^ICruxAPI *local-node*)
+(def ^:dynamic ^ICruxAPI *cluster-node*)
 
-(defn with-local-node [f]
+(defn with-cluster-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
   (assert (not (bound? #'*kv*)))
   (let [server-port (cio/free-port)
@@ -173,10 +173,10 @@
                  :kv-backend *kv-backend*
                  :bootstrap-servers *kafka-bootstrap-servers*}]
     (try
-      (with-open [local-node (Crux/startLocalNode options)
-                  http-server (srv/start-http-server local-node options)]
-        (binding [*local-node* local-node
-                  *api* local-node
+      (with-open [cluster-node (Crux/startClusterNode options)
+                  http-server (srv/start-http-server cluster-node options)]
+        (binding [*cluster-node* cluster-node
+                  *api* cluster-node
                   *api-url* (str "http://" ek/*host* ":" server-port)]
           (f)))
       (finally
@@ -216,14 +216,14 @@
       (f))))
 
 (defn with-each-api-implementation [f]
-  (t/testing "Local API LocalNode"
-    (with-local-node f))
+  (t/testing "Local API ClusterNode"
+    (with-cluster-node f))
   (t/testing "Local API StandaloneSystem"
     (with-standalone-system f))
   (t/testing "Local API StandaloneSystem using event log"
     (with-standalone-system-using-event-log f))
   (t/testing "Remote API"
-    (with-local-node
+    (with-cluster-node
       #(with-api-client f))))
 
 (defn with-silent-test-check [f]

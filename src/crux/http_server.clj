@@ -91,7 +91,7 @@
   (let [status-map (.status crux-system)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
             (:crux.zk/zk-active? status-map)
-            (not= (System/getenv "CRUX_MODE") "LOCAL_NODE"))
+            (not= (System/getenv "CRUX_MODE") "CLUSTER_NODE"))
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}
@@ -308,7 +308,7 @@
   (close [_]
     (.stop server)))
 
-;; TODO: The direct dependency on LocalNode here will go.
+;; TODO: The direct dependency on ClusterNode here will go.
 
 (defn start-http-server
   "Starts a HTTP server listening to the specified server-port, serving

@@ -25,7 +25,7 @@ is permissable.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
-|Local Node|Uses Kakfa|`Crux.startLocalNode options;`
+|Local Node|Uses Kakfa|`Crux.startClusterNode options;`
 |Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
@@ -111,11 +111,11 @@ Use the API to start a local node system, configuring it with the
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-local-node-system]
+include::./examples.clj[tags=start-cluster-node-system]
 ----
 
 NOTE: If you don't specify `kv-backend` then by default the
-local-node system will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
+cluster-node system will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
 your list of project dependencies.
 
 You can later stop the system if you wish:

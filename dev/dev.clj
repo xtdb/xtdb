@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.bootstrap :as b]
-            [crux.bootstrap.local-node :as local-node]
+            [crux.bootstrap.cluster-node :as cluster-node]
             [crux.bootstrap.standalone :as standalone]
             [crux.byte-utils :as bu]
             [crux.db :as db]
@@ -34,7 +34,7 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/system-start-fn local-node/start-local-node
+   :dev/system-start-fn cluster-node/start-cluster-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
@@ -49,11 +49,11 @@
       (let [embedded-kafka (when embed-kafka?
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
-            local-node (doto (system-start-fn options)
+            cluster-node (doto (system-start-fn options)
                          (->> (swap! started conj)))
             http-server (when http-server?
-                          (srv/start-http-server local-node options))]
-        (assoc local-node
+                          (srv/start-http-server cluster-node options))]
+        (assoc cluster-node
                :http-server http-server
                :embedded-kafka embedded-kafka))
       (catch Throwable t

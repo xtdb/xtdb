@@ -11,10 +11,10 @@
 (.close system)
 ;; end::close-system[]
 
-;; tag::start-local-node-system[]
-(def ^crux.api.ICruxAPI system (api/start-local-node {:kv-backend "crux.kv.memdb.MemKv"
-                                                      :bootstrap-servers "localhost:29092"}))
-;; end::start-local-node-system[]
+;; tag::start-cluster-node-system[]
+(def ^crux.api.ICruxAPI system (api/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
+                                                        :bootstrap-servers "localhost:29092"}))
+;; end::start-cluster-node-system[]
 
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI system (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"

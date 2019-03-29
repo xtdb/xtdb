@@ -120,8 +120,8 @@
   (transaction-time [this]
     (.transactionTime this)))
 
-(defn start-local-node ^ICruxAPI [options]
-  (Crux/startLocalNode options))
+(defn start-cluster-node ^ICruxAPI [options]
+  (Crux/startClusterNode options))
 
 (defn start-standalone-system ^ICruxAPI [options]
   (Crux/startStandaloneSystem options))

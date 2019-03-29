@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
             [crux.db :as db]
-            [crux.bootstrap.local-node :as ln]
+            [crux.bootstrap.cluster-node :as ln]
             [crux.http-server :as srv]
             [crux.io :as cio]
             [crux.kv :as kv])

@@ -53,9 +53,9 @@
 
           :else
           (let [tx-topic-key (keyword "crux.kafka.topic-partition"
-                                      (str (get-in f/*local-node* [:options :tx-topic]) "-0"))
+                                      (str (get-in f/*cluster-node* [:options :tx-topic]) "-0"))
                 doc-topic-key (keyword "crux.kafka.topic-partition"
-                                       (str (get-in f/*local-node* [:options :doc-topic]) "-0"))]
+                                       (str (get-in f/*cluster-node* [:options :doc-topic]) "-0"))]
             (t/is (= {:lag 0
                       :next-offset 1
                       :time tx-time}

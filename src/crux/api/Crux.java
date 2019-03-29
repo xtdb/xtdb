@@ -41,9 +41,9 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
-    public static ICruxAPI startLocalNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.local-node"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.local-node/start-local-node").invoke(options);
+    public static ICruxAPI startClusterNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.cluster-node"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap.cluster-node/start-cluster-node").invoke(options);
     }
 
     /**

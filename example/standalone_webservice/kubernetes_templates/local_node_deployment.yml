@@ -21,7 +21,7 @@ spec:
         image: juxt/crux-standalone-webservice:latest
         env:
           - name: CRUX_MODE
-            value: LOCAL_NODE
+            value: CLUSTER_NODE
         ports:
         - containerPort: 8080
         volumeMounts:

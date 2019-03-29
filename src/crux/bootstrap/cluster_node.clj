@@ -1,4 +1,4 @@
-(ns crux.bootstrap.local-node
+(ns crux.bootstrap.cluster-node
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
@@ -77,7 +77,7 @@
       (log/info "stopping system")))
   (log/info "system stopped"))
 
-(defn start-local-node ^ICruxAPI [options]
+(defn start-cluster-node ^ICruxAPI [options]
   (let [system-promise (promise)
         close-promise (promise)
         error-promise (promise)
@@ -93,7 +93,7 @@
                                          (if (realized? system-promise)
                                            (throw t)
                                            (deliver error-promise t)))))
-                                   "crux.bootstrap.local-node.main-thread")
+                                   "crux.bootstrap.cluster-node.main-thread")
                       (.start))]
     (while (and (nil? (deref system-promise 100 nil))
                 (.isAlive node-thread)))

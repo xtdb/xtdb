@@ -1,6 +1,6 @@
 (ns crux-node-only-system
   (:require [clojure.tools.logging :as log]
-            [crux.bootstrap.local-node :as local-node]
+            [crux.bootstrap.cluster-node :as cluster-node]
             [crux.http-server :as srv]
             [crux.kafka.embedded :as ek]
             [crux.db :as db]
@@ -11,13 +11,13 @@
 (def tx-topic-config
   {"retention.ms" (str Long/MAX_VALUE)})
 
-(def config {:crux/local-node {:db-dir "dev-storage/data"
-                               :bootstrap-servers "localhost:9092"}})
+(def config {:crux/cluster-node {:db-dir "dev-storage/data"
+                                 :bootstrap-servers "localhost:9092"}})
 
-(defmethod ig/init-key :crux/local-node [_ opts]
-  (local-node/start-local-node opts))
+(defmethod ig/init-key :crux/cluster-node [_ opts]
+  (cluster-node/start-cluster-node opts))
 
-(defmethod ig/halt-key! :crux/local-node [_ ^java.io.Closeable closeable]
+(defmethod ig/halt-key! :crux/cluster-node [_ ^java.io.Closeable closeable]
   (.close closeable))
 
 (declare system)
@@ -36,13 +36,13 @@
   (start-system)
 
   (db/submit-tx
-   (:tx-log (:crux/local-node system))
-   [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-     {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
-      :name "Pablo"
-      :last-name "Picasso"}
-     #inst "2018-05-18T09:20:27.966-00:00"]])
+    (:tx-log (:crux/cluster-node system))
+    [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
+      {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+       :name "Pablo"
+       :last-name "Picasso"}
+      #inst "2018-05-18T09:20:27.966-00:00"]])
 
-  (q/q (q/db (:kv-store (:crux/local-node system)))
+  (q/q (q/db (:kv-store (:crux/cluster-node system)))
        '{:find [e]
          :where [[e :name "Pablo"]]}))

@@ -180,7 +180,7 @@
 (defn run-system
   [{:keys [server-port] :as options} with-system-fn]
   (with-open [crux-system (case (System/getenv "CRUX_MODE")
-                            "LOCAL_NODE" (api/start-local-node options)
+                            "CLUSTER_NODE" (api/start-cluster-node options)
                             (api/start-standalone-system options))
 
               benchmark-runner (bench-mark-runner crux-system)
