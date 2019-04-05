@@ -4,9 +4,9 @@
   juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
   ;; end::CruxDep[]
 
-  ;; tag::KakfaDeps[]
+  ;; tag::KafkaDeps[]
   org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
-  ;; end::KakfaDeps[]
+  ;; end::KafkaDeps[]
 
   ;; tag::RocksDeps[]
   org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}

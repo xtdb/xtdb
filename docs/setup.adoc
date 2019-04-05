@@ -25,7 +25,7 @@ is permissable.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
-|Local Node|Uses Kakfa|`Crux.startClusterNode options;`
+|Local Node|Uses Kafka|`Crux.startClusterNode options;`
 |Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
@@ -48,7 +48,7 @@ Crux Systems will use the following properties:
 |System|Component|Property|Description
 |Both|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
 |Both|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
-|Standalone|tx-log|`bootstrap-servers`|Kakfa Servers to connect to e.g. `"localhost:9092"`
+|Standalone|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
 |Standalone|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
@@ -90,7 +90,7 @@ include::./examples.clj[tags=close-system]
 == Local Node System
 
 When using Crux at scale it is recommended to use Crux as nodes
-connecting to a Kakfa cluster.
+connecting to a Kafka cluster.
 
 Add Crux as a project dependency:
 
@@ -103,7 +103,7 @@ And Kafka:
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=KakfaDeps]
+include::./deps.edn[tags=KafkaDeps]
 ----
 
 Use the API to start a local node system, configuring it with the
@@ -178,7 +178,7 @@ Add Kafka and Zookeeper to your project dependencies:
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=KakfaDeps]
+include::./deps.edn[tags=KafkaDeps]
 include::./deps.edn[tags=ZookeeperDeps]
 
 ----
