@@ -13,6 +13,7 @@ in a <<setup#standalone,standalone configuration>> first.
 ----
 include::./examples.clj[tags=submit-tx]
 ----
+Id for Crux is likely to be unnecessary to restate in future, or entirely optional, TBD.
 
 === Make a query:
 
@@ -28,6 +29,19 @@ You should get:
 include::./examples.clj[tags=should-get]
 ----
 
+Accordingly, an entity query would be like:
+[source,clj]
+----
+include::./examples.clj[tags=query-entity]
+----
+You should get:
+
+[source,clj]
+----
+include::./examples.clj[tags=should-get-entity]
+----
+
+
 == Query
 
 Crux query syntax is that of Datalog using Clojure's EDN, inspired by
@@ -41,6 +55,9 @@ include::./examples.clj[tags=query]
 ----
 
 The `db` is retrieved via a call to `crux.api/db`.
+
+
+
 
 === Time Queries
 
