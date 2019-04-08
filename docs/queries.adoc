@@ -1,0 +1,11 @@
+[#Queries]
+== Queries
+
+This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context. 
+
+=== A Very Basic Query:
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=test-basic-query]
+----
