@@ -14,6 +14,7 @@
 
 include::what_is_crux.adoc[]
 include::user_guide.adoc[]
+include::story_two.adoc[]
 include::setup.adoc[]
 include::deployment.adoc[]
 include::support.adoc[]
