@@ -1,7 +1,6 @@
 = Bitemporality
 
 == Why?
-// Rationale?
 
 One inherent question of using a temporal database, is how to model
 time. A baseline notion of time that is always available is

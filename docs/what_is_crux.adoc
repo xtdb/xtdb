@@ -24,7 +24,7 @@ such as RocksDB, sharing the master data living in a central log topics
 Crux is a _bitemporal_ database that stores valid time and transaction
 time. While _[uni]temporal_ databases enable "timetravel" through the sequence
 of database states from the moment of database creation to its current state,
-bitemporal Crux allows "timetravel" also for domain time without unnecessary 
+bitemporal Crux allows "timetravel" also for the time axis of the modelled domain itself without unnecessary
 design complexity. A Crux user can populate past of the domain [or its future probable states] over time,
 to get an ever-improving understanding of the domain.
 

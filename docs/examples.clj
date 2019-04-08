@@ -4,7 +4,7 @@
 (require '[crux.api :as crux])
 (import (crux.api ICruxAPI))
 
-(def ^crux.api.ICruxAPI system ;; xxx what does the meta do?
+(def ^crux.api.ICruxAPI system
   (crux/start-standalone-system {:kv-backend "crux.kv.memdb.MemKv"
                                  :db-dir "data/db-dir-1"}))
 ;; end::start-system[]
