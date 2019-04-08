@@ -1,0 +1,55 @@
+= A Story
+
+For those readers whose learning ability is better when affections are in place
+we're offering a short story writing experience through database transactions and queries.
+
+
+=== Table of contents
+
+* Letting data in
+  ** Basic transactions
+  ** References                                             // missing in intro 1
+
+* Queries
+  // Explore the present state of a world.
+  ** simple where and fields selection
+  ** entity pull
+       to observe characters and their relations structure
+  ** and / or / in (1 2 3)
+  ** joins                                                 // missing in intro 1
+  ** main Clojure core functions at work
+     or (arbitrary user functions)
+  ** having                                                // requires a decorator [why do we call them decorators btw]?
+
+* Domain evolution
+  // Imagine we acquired a new datasource telling us about the past. We feed it in.
+  // Characters should get more complex motivations.
+  ** Who was where at valid-time year 1
+  ** Who was where at valid-time year 20
+
+* Harnessing the power of the valid-time engine
+  ** Simplistic trend detection
+  ** Simplistic linear regression detection
+
+* Simplistic recommendation engine
+
+
+// Then final plot-twist and recommendation engine impovings.
+
+
+
+Data structure could be like
+
+Heroes
+- name
+- stats
+- relations with others
+- artifacts
+
+Artifacts
+- name
+- stats
+
+Places
+- name
+- location

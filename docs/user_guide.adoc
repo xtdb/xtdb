@@ -1,8 +1,22 @@
 [#getting-started-example]
-== Example (Getting Started)
+== Getting Started
 
 This guide contains simple steps transacting some data and running a
 simple query.
+
+== Preconceptions you might want to know
+
+- *Datalog* and *EDN*. Crux supports an EDN-flavoured version of Datalog.
+  You can find some prolific training http://www.learndatalogtoday.org/chapter/1[here].
+
+- Concept of database temporality and consequent bitemporality.
+
+- *Clojure* succinct and pragmatic data-oriented language with strong support
+  for immutability and paralellism. https://clojure.org/[More].
+
+
+
+== Setting things up
 
 First setup Crux. If you want to play about, it's advised you run Crux
 in a <<setup#standalone,standalone configuration>> first.
@@ -13,6 +27,7 @@ in a <<setup#standalone,standalone configuration>> first.
 ----
 include::./examples.clj[tags=submit-tx]
 ----
+Id for Crux is likely to be unnecessary to restate in future, or entirely optional, TBD.
 
 === Make a query:
 
@@ -28,6 +43,19 @@ You should get:
 include::./examples.clj[tags=should-get]
 ----
 
+An entity query would be:
+[source,clj]
+----
+include::./examples.clj[tags=query-entity]
+----
+You should get:
+
+[source,clj]
+----
+include::./examples.clj[tags=should-get-entity]
+----
+
+
 == Query
 
 Crux query syntax is that of Datalog using Clojure's EDN, inspired by
@@ -41,6 +69,9 @@ include::./examples.clj[tags=query]
 ----
 
 The `db` is retrieved via a call to `crux.api/db`.
+
+
+
 
 === Time Queries
 
