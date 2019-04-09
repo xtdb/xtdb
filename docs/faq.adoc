@@ -30,7 +30,7 @@ client using the same node will have a consistent view. Reading your own
 writes can be achieved by providing the transaction time Kafka assigned
 to the submitted transaction, which is returned in a promise from
 `crux.tx/submit-tx`, in the call to `crux.query/db`. This will block
-until this transaction time has been seen by the local node.
+until this transaction time has been seen by the cluster node.
 +
 Write consistency across nodes is provided via the `:crux.db/cas`
 operation. The user needs to attempt to perform a CAS, then wait for the

@@ -6,13 +6,12 @@ To start a Crux system, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
 
-There are two main Crux systems: *local node* vs *standalone*. Use a
-local node system when horizontal scalability is required or when it
-is necessary to achieve the guarantees that Kafka is capable of
-providing in terms of resiliency, availabilty, and retention of
-data.
+There are two main Crux systems: *cluster node* vs *standalone*. Use a
+cluster node system when horizontal scalability is required or when
+you want the guarantees that Kafka offers in terms of resiliency,
+availabilty, and retention of data.
 
-Multiple instances of a local node systems may participate in a
+Multiple instances of a cluster node systems may participate in a
 cluster using Kafka as the primary store and as the central means of
 coordination.
 
@@ -25,7 +24,7 @@ is permissable.
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
-|Local Node|Uses Kafka|`Crux.startClusterNode options;`
+|Cluster Node|Uses Kafka|`Crux.startClusterNode options;`
 |Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
 |===
 
@@ -87,7 +86,7 @@ You can later stop the system if you wish:
 include::./examples.clj[tags=close-system]
 ----
 
-== Local Node System
+== Cluster Node System
 
 When using Crux at scale it is recommended to use Crux as nodes
 connecting to a Kafka cluster.
@@ -106,7 +105,7 @@ And Kafka:
 include::./deps.edn[tags=KafkaDeps]
 ----
 
-Use the API to start a local node system, configuring it with the
+Use the API to start a cluster node system, configuring it with the
 `bootstrap-servers` property in order to connect to Kafka:
 
 [source,clj]
@@ -162,8 +161,8 @@ Crux can be used programmatically as a library, but Crux also ships
 with an embedded HTTP server, that allows clients to use the API
 remotely via REST.
 
-Set the `server-port` configuration property on a Crux local node
-system to expose a HTTP port that will accept REST requests.
+Set the `server-port` configuration property on a Crux system to
+expose a HTTP port that will accept REST requests.
 
 Visit the guide on using the <<deployment#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
