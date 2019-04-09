@@ -1,6 +1,6 @@
 * <<bitemp.adoc#,Bitemporality>>
 * <<user_guide.adoc#,User Guide>>
-* <<queries.adoc#,Queries>>
+* <<queries.adoc#,Query Guide>>
 * <<setup.adoc#,Setting Up>>
 * <<deployment.adoc#,Deployment>>
 * <<support.adoc#,Support>>

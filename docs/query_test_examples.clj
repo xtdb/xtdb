@@ -16,55 +16,77 @@
 
   (t/testing "Can query across fields for same value when value is passed in"
     (t/is (= #{[:smith]}
-             (q/q (q/db *kv*) '{:find [p1] :where [[p1 :name name]
-                                                   [p1 :last-name name]
-                                                   [p1 :name "Smith"]]})))))
+             (q/q (q/db *kv*) '{:find [p1]
+                                :where [[p1 :name name]
+                                        [p1 :last-name name]
+                                        [p1 :name "Smith"]]})))))
 ;; end::test-basic-query[]
 
+;; tag::query-with-arguments[]
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                                               {:name "Petr" :last-name "Petrov"}])]
+;; end::query-with-arguments[]
 
+;; tag::query-with-arguments1[]
     (t/testing "Can match on both entity and value position"
-      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) {:find '[name]
-                                             :where '[[e :name name]]
-                                             :args [{:e (:crux.db/id ivan)
-                                                     :name "Ivan"}]}))))
+      (t/is (= #{["Ivan"]}
+               (q/q
+                 (q/db *kv*)
+                 {:find '[name]
+                  :where '[[e :name name]]
+                  :args [{:e (:crux.db/id ivan)
+                          :name "Ivan"}]}))))
+;; end::query-with-arguments1[]
 
+;; tag::query-with-arguments2[]
     (t/testing "Can query entity by single field with several arguments"
       (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
-                                                          :where [[e :name name]]
-                                                          :args [{:name "Ivan"}
-                                                                 {:name "Petr"}]}))))
+                 [(:crux.db/id petr)]}
+               (q/q
+                 (q/db *kv*)
+                 '{:find [e]
+                   :where [[e :name name]]
+                   :args [{:name "Ivan"}
+                          {:name "Petr"}]}))))
+;; end::query-with-arguments2[]
 
-    (t/testing "Can query entity by single field with literals"
-      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) {:find '[name]
-                                             :where '[[e :name name]
-                                                      [e :last-name "Ivanov"]]
-                                             :args [{:e (:crux.db/id ivan)}
-                                                    {:e (:crux.db/id petr)}]}))))
-
+;; tag::query-with-arguments3[]
     (t/testing "Can query entity with tuple arguments"
       (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (q/q (q/db *kv*) '{:find [e]
-                                                          :where [[e :name name]
-                                                                  [e :last-name last-name]]
-                                                          :args [{:name "Ivan" :last-name "Ivanov"}
-                                                                 {:name "Petr" :last-name "Petrov"}]}))))
+                 [(:crux.db/id petr)]}
+               (q/q
+                 (q/db *kv*)
+                 '{:find [e]
+                   :where [[e :name name]
+                           [e :last-name last-name]]
+                   :args [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Petr" :last-name "Petrov"}]}))))
+;; end::query-with-arguments3[]
 
+;; tag::query-with-arguments4[]
     (t/testing "Can query predicates based on arguments alone"
-      (t/is (= #{["Ivan"]} (q/q (q/db *kv*) '{:find [name]
-                                              :where [[(re-find #"I" name)]
-                                                      [(= last-name "Ivanov")]]
-                                              :args [{:name "Ivan" :last-name "Ivanov"}
-                                                     {:name "Petr" :last-name "Petrov"}]})))
+      (t/is (= #{["Ivan"]}
+               (q/q
+                 (q/db *kv*)
+                 '{:find [name]
+                   :where [[(re-find #"I" name)]
+                           [(= last-name "Ivanov")]]
+                   :args [{:name "Ivan" :last-name "Ivanov"}
+                          {:name "Petr" :last-name "Petrov"}]})))
+;; end::query-with-arguments4[]
 
+;; tag::query-with-arguments5[]
       (t/testing "Can use range constraints on arguments"
-        (t/is (= #{[22]} (q/q (q/db *kv*) '{:find [age]
-                                            :where [[(>= age 21)]]
-                                            :args [{:age 22}]})))))))
+        (t/is (= #{[22]}
+                 (q/q
+                   (q/db *kv*)
+                   '{:find [age]
+                     :where [[(>= age 21)]]
+                     :args [{:age 22}]})))))))
+;; end::query-with-arguments5[]
 
+;; tag::query-at-t[]
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people! *kv* [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
                                       #inst "1986-10-22")]
@@ -75,6 +97,7 @@
       (t/is (= #{} (q/q (q/db *kv* #inst "1986-10-23")
                         q)))
       (t/is (= #{[(:crux.db/id malcolm)]} (q/q (q/db *kv*) q))))))
+;; end::query-at-t[]
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:

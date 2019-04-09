@@ -1,11 +1,160 @@
-[#Queries]
-== Queries
+[#query-guide]
+== Query Overview 
 
-This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context. 
+This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
 
-=== A Very Basic Query:
+A relevant crash course on EDN, the data syntax used by Clojure and the Crux APIs:
+
+[source,clj]
+----
+; Comments start with a semicolon.
+; Anything after the semicolon is ignored.
+
+nil         ; also known in other languages as null
+
+; Booleans
+true
+false
+
+; Strings are enclosed in double quotes
+"time travel is fun"
+"time traveller's fun"
+
+; Keywords start with a colon. They behave like enums. Kind of
+; like symbols in Ruby.
+:time
+:machine
+:time-machine
+
+; Symbols are used to represent identifiers. 
+; You can namespace symbols by using /. Whatever precedes / is
+; the namespace of the symbol.
+spoon
+kitchen/spoon ; not the same as spoon
+kitchen/fork
+github/fork   ; you can't eat with this
+
+; Integers and floats
+42
+3.14159
+
+; Lists are sequences of values
+(:widget :sprocket 9 "some text!")
+
+; Vectors allow random access. Kind of like arrays in JavaScript.
+[:first 1 2 :fourth]
+
+; Maps are associative data structures that associate the key with its value
+{:avocado     2
+ :pepper      1
+ :lemon-juice 3.5}
+
+; You may use commas for readability. They are treated as whitespace.
+
+; Sets are collections that contain unique elements.
+#{:a :b 88 "huat"}
+
+; Adapted from https://learnxinyminutes.com/docs/edn/
+; License https://creativecommons.org/licenses/by-sa/3.0/deed.en_US
+; © 2019 Jason Yeo, Jonathan D Johnston
+----
+
+
+== A Very Basic Query
+
+Our first query runs on a database that contains the following 3 documents which get broken apart and indexed as "entities":
+[source,clj]
+----
+[{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+ {:crux.db/id :petr :name "Petr" :last-name "Petrov"}
+ {:crux.db/id :smith :name "Smith" :last-name "Smith"}]
+----
+
+Note that `:ivan`, `:petr` and `:smith` are EDN keywords, which may be used as document IDs in addition to UUIDs.
+
+The following query has 3 clauses, represented as EDN vectors within the `:where` vector which constrain the result set to match only the entities that satisfy all 3 clauses at once:
+
+[source,clj]
+----
+{:find [p1]
+ :where [[p1 :name name]
+         [p1 :last-name name]
+         [p1 :name "Smith"]]}
+----
+
+Let's try to work out what these 3 clauses do...
+
+`[p1 :name name]` is looking for all entities that have a value under the attribute of `:name` and then binds the corresponding entity ID to `p1` and the corresponding value to `name`. Since all 3 entites in our database have a `:name` attribute, this clause alone will simply return all 3 entities.
+
+`[p1 :last-name name]` reuses the variable `name` from the previous clause which is significant because it constrains the query to only look for entities where the value of `:name` (from the first clause) is _equal to_ the value of `:last-name` (from the second clause). Looking at documents that were processed by our database there is only one possible entity that can be returned, because it has the same values `:name` and `:last-name`.
+
+`[p1 :name "Smith"]` only serves to reinforce the conclusion from the previous two clauses which is that the variable `name` can only be matched against the string `"Smith"` within our database.
+
+...so what is the actual result of the query? Well that is defined by the `:find` vector which states that only the values corresponding to `p1` should be returned, which in this case is simply `:smith` (the keyword database ID for the document relating to our protagonist "Smith Smith"). Results are returned as an EDN set, which means duplicate results won't appear.
+
+Armed with this knowledge you should now be able to see how the query runs in the context of actual test from the Crux test suite.
+
+=== Straight from `query_test.clj`:
+
+Here you can see our query nested inside a couple of layers of testing and Crux API calls, but it works exactly as described above:
 
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=test-basic-query]
 ----
+
+In particular, note that `(t/is (= \#{[:smith]}` is the line that checks the result of our query is equal to the hand-generated result set `#{[smith]}`.
+
+`q/q` is how we execute the queries in these examples and it takes two arguments: `(q/db *kv*)`, which is our snapshot of the database, and the actual query. `q/q` evaluates to its results synchronously.
+
+== Query with arguments
+
+For the next set of queries we'll use a different set of documents for our database:
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments]
+----
+
+Note that these two documents don't specify a `:crux.db/id` Crux ID attribute and so UUID values are generated and assigned by Crux instead. To avoid having to work with UUIDs directly we have destructured the returned IDs using the let binding so we can work with the symbols `ivan` and `petr` instead.
+
+Our first query supplies two arguments to the query via a map within the `:args` vector. The effect of this is to make sure that regardless of whether other `:name` values in the database also equal `"Ivan"`, that only the entity with an ID matching our specific `ivan` ID is considered within the query. Use of arguments means we can avoid hard-coding values directly into the query clauses.
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments1]
+----
+
+This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parametise the input to a query such that we don't have to rerun a single query multiple times (which would be significantly less efficient!).
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments2]
+----
+
+Next we see how we can extend the parametisation to cover multiple fields at once.
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments3]
+----
+
+Something else we can do with arguments is apply predicates to them directly within the clauses. Predicates return either `true` or `false` but all predicates used in clauses must return `true` in order for the given combination of field values to be part of the valid result set. In this case only `:name "Ivan"` satisfies `[(re-find #"I" name)]` (which returns true for any values that begin with "I").
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments4]
+----
+
+Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database. 
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-with-arguments5]
+----
+
+== DataScript Queries
+
+== Bitemporal Queries
+
+== Other Queries
