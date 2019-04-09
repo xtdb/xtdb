@@ -164,7 +164,7 @@ remotely via REST.
 Set the `server-port` configuration property on a Crux system to
 expose a HTTP port that will accept REST requests.
 
-Visit the guide on using the <<deployment#rest,REST api>> for examples
+Visit the guide on using the <<rest#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
 
 == Extras
