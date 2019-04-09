@@ -1,4 +1,19 @@
-[#query-guide]
+= Query Guide
+
+== Quick Reference
+
+As a handy reference to Crux's query features:
+
+* <<_a_very_basic_query>>
+* <<_valid_time_travel>>
+* <<_query_with_arguments,`:args`>>
+* <<_a_very_basic_query,`or`>>
+* <<_a_very_basic_query,Combining `or` with `and`>>
+* <<_a_very_basic_query,`not`>>
+* <<_a_very_basic_query,Joins>>
+* <<_a_very_basic_query,Blanks>>
+* <<_a_very_basic_query,`:rules`>>
+
 == Query Overview 
 
 This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
@@ -60,7 +75,7 @@ github/fork   ; you can't eat with this
 ----
 
 
-== A Very Basic Query
+== A very basic query
 
 Our first query runs on a database that contains the following 3 documents which get broken apart and indexed as "entities":
 [source,clj]
@@ -92,7 +107,7 @@ Let's try to work out what these 3 clauses do...
 
 ...so what is the actual result of the query? Well that is defined by the `:find` vector which states that only the values corresponding to `p1` should be returned, which in this case is simply `:smith` (the keyword database ID for the document relating to our protagonist "Smith Smith"). Results are returned as an EDN set, which means duplicate results won't appear.
 
-Armed with this knowledge you should now be able to see how the query runs in the context of actual test from the Crux test suite.
+Armed with this knowledge you should now be able to see how the query runs in the context of the real test from the Crux test suite.
 
 === Straight from `query_test.clj`:
 
@@ -151,6 +166,19 @@ Finally we can see how we can return an argument that passes all of the predicat
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=query-with-arguments5]
+----
+
+== Valid time travel
+
+Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you've been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
+
+The following test query shows how you are able to run queries at a given point in the valid time axis against, implicity, the most recent transaction time. 
+
+First, we transact a very old document into the database with the ID `:malcolm` and the `:name` `"Malcolm"`, and specify the `valid time` instant at which this document became valid in the legacy system: `#inst "1986-10-22"`. Next we transact a slightly more recent (though still very old!) revision of that same document where the `:name` has been corrected to `"Malcolma"`, again using a historical timestamp extracted from the legacy system. We are then able to query at different points in the valid time axis and verify that `"Malcolma"` was unknown at `#inst "1986-10-23"`.
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=query-at-t]
 ----
 
 == DataScript Queries

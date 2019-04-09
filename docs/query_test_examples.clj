@@ -88,17 +88,24 @@
 
 ;; tag::query-at-t[]
 (t/deftest test-basic-query-at-t
-  (let [[malcolm] (f/transact-people! *kv* [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
-                                      #inst "1986-10-22")]
-    (f/transact-people! *kv* [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}] #inst "1986-10-24")
+  (let [[malcolm] (f/transact-people!
+                    *kv*
+                    [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
+                    #inst "1986-10-22")
+        [malcolma] (f/transact-people!
+                     *kv*
+                     [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}]
+                     #inst "1986-10-24")]
     (let [q '{:find [e]
               :where [[e :name "Malcolma"]
                       [e :last-name "Sparks"]]}]
-      (t/is (= #{} (q/q (q/db *kv* #inst "1986-10-23")
-                        q)))
-      (t/is (= #{[(:crux.db/id malcolm)]} (q/q (q/db *kv*) q))))))
+      (t/is (= #{}
+               (q/q (q/db *kv* #inst "1986-10-23") q)))
+      (t/is (= #{[(:crux.db/id malcolm)]}
+               (q/q (q/db *kv*) q))))))
 ;; end::query-at-t[]
 
+;; tag::join[]
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}])
@@ -107,7 +114,9 @@
     (t/is (= 7 (count (q/q (q/db *kv*) '{:find [p1 p2]
                                          :where [[p1 :name name]
                                                  [p2 :name name]]}))))))
+;; end::join[]
 
+;; tag::join2[]
 (t/deftest test-join-over-two-attributes
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
@@ -116,14 +125,18 @@
                                          :where [[e :last-name last-name]
                                                  [e2 :follows last-name]
                                                  [e :name "Ivan"]]}))))
+;; end::join2[]
 
+;; tag::blanks[]
 (t/deftest test-blanks
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
   (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
            (q/q (q/db *kv*) '{:find [name]
                               :where [[_ :name name]]}))))
+;; end::blanks[]
 
+;; tag::not[]
 (t/deftest test-not-query
   (f/transact-people! *kv* [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
@@ -147,7 +160,9 @@
                                          :where [[e :name name]
                                                  [:ivan-ivanovtov-1 :last-name i-name]
                                                  (not [e :last-name i-name])]}))))))
+;; end::not[]
 
+;; tag::or[]
 (t/deftest test-or-query
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                             {:name "Ivan" :last-name "Ivanov"}
@@ -160,7 +175,9 @@
                                                  [e :name "Ivan"]
                                                  (or [e :last-name "Ivanov"]
                                                      [e :last-name "Ivannotov"])]}))))))
+;; end::or[]
 
+;; tag::or-and[]
 (t/deftest test-or-query-can-use-and
   (let [[ivan] (f/transact-people! *kv* [{:name "Ivan" :sex :male}
                                          {:name "Bob" :sex :male}
@@ -173,7 +190,9 @@
                                         (or [e :sex :female]
                                             (and [e :sex :male]
                                                  [e :name "Ivan"]))]})))))
+;; end::or-and[]
 
+;; tag::or-and2[]
 (t/deftest test-ors-can-introduce-new-bindings
   (let [[petr ivan ivanova] (f/transact-people! *kv* [{:name "Petr" :last-name "Smith" :sex :male}
                                                       {:name "Ivan" :last-name "Ivanov" :sex :male}
@@ -185,7 +204,9 @@
                                                                            [?p2 :sex :female])
                                                                       (and [?p2 :last-name "Ivanov"]
                                                                            [?p2 :sex :male]))]}))))))
+;; end::or-and2[]
 
+;; tag::not-join[]
 (t/deftest test-not-join
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                             {:name "Malcolm" :last-name "Ofsparks"}
@@ -197,6 +218,7 @@
                                 :where [[e :name name]
                                         (not-join [e]
                                                   [e :last-name "Monroe"])]})))))
+;; end::not-join[]
 
 (t/deftest test-mixing-expressions
   (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
