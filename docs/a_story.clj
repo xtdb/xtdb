@@ -35,7 +35,7 @@
      :person/dex  40
      :person/hp   40
      :person/gold 10000}
-    #inst "1700-05-18"]]) ; valid time
+    #inst "1700-05-18"]]) ; valid time (optional)
 ;; end::a-story/def-character[]
 
 
@@ -87,27 +87,10 @@
      :artifact/title "Doesn't belong to the realm"}
     #inst "2018-05-18"]
 
-   ; ownership
-    ; charles was 25 when he got the cozy
-   [:crux.tx/put :ids.people/Charles
-    {:crux.db/id :ids.people/Charles
-     :person/has :ids.artifacts/cozy-mug}
-    #inst "1725-05-18"]
-
    ; places
    [:crux.tx/put :ids.places/continent
     {:crux.db/id :ids.places/continent
      :place/title "Ah The Continent"}
-    #inst "1000-01-01"]
-   [:crux.tx/put :ids.places/city
-    {:crux.db/id :ids.places/city
-     :place/title "An Old City"
-     :place/location :ids.places/continent}
-    #inst "1000-05-18"]
-   [:crux.tx/put :ids.places/rarities-shop
-    {:crux.db/id :ids.places/rarities-shop
-     :place/title "Charles shop of rarities"
-     :place/location :ids.places/city}
     #inst "1000-01-01"]
    [:crux.tx/put :ids.places/carribean
     {:crux.db/id :ids.places/carribean
@@ -145,14 +128,55 @@
           [?e :person/int  ?int]])
 
 
+;; Some character development
+
+; Note that in Crux tranactions rewrite the whole entity.
+; It's a bare bones product. Core is intentionally slim.
+; So we're open for your convinience utils projects.
+
+; Set up ownership
+; Charles was 25 when he got the Cozy Mug
+(let [charles (crux/entity db :ids.people/Charles)]
+  (crux/submit-tx system
+    [[:crux.tx/cas :ids.people/Charles
+      charles
+      (assoc charles :person/has :ids.artifacts/cozy-mug)
+      #inst "1725-05-18"]]))
+
+
+; Let's not repeat ourselves
+(defn entity-update
+  [entity-id new-attrs valid-time]
+  (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
+    (crux/submit-tx system
+      [[:crux.tx/put entity-id
+        (merge entity-prev-value new-attrs)
+        valid-time]])))
+
+(defn entity
+  [entity-id]
+  (crux/entity (crux/db system) entity-id))
+
 
 ; Charles got smarter to his thirties
-(crux/submit-tx
-  system
-  [[:crux.tx/put :ids.people/Charles
+(entity-update :ids.people/Charles
+  {:person/int  55}
+  #inst "1730-05-18")
+
+(entity :ids.people/Charles)
+
+; {:crux.db/id :ids.people/Charles, :person/has :ids.artifacts/cozy-mug}
+
+; Ah put updates only the whole entity
+
+    character-one
+
+   ; ownership
+    ; charles was 25 when he got the cozy
+   [:crux.tx/put :ids.people/Charles
     {:crux.db/id :ids.people/Charles
-     :person/int  55}
-    #inst "1730-05-18"]])
+     :person/has :ids.artifacts/cozy-mug}
+    #inst "1725-05-18"]
 
 ; Charles got smarter to his thirties
 (crux/submit-tx
