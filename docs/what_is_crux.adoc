@@ -21,15 +21,16 @@ such as RocksDB, sharing the master data living in a central log topics
 
 == Bitemporality
 
-Crux is a _bitemporal_ database that stores valid time and transaction
-time. While _[uni]temporal_ databases enable "timetravel" through the sequence
-of database states from the moment of database creation to its current state,
-bitemporal Crux allows "timetravel" also for the time axis of the modelled domain itself without unnecessary
-design complexity. A Crux user can populate past of the domain [or its future probable states] over time,
-to get an ever-improving understanding of the domain.
+Crux is a _bitemporal_ database that stores _transaction time_ and _valid time_
+histories. While a _[uni]temporal_ database enables "time travel" querying
+through the transactional sequence of database states from the moment of
+database creation to its current state, Crux also provides "time travel"
+querying for a discrete valid time axis without unnecessary design complexity.
+This means a Crux user can populate the database with past and future
+information regardless of the order in which the information arrives, to build
+an ever-improving temporal model of a given domain.
 
-Technically it enables corrections in valid time at a later transaction
-time. <<bitemp.adoc#,Read more about Bitemporality in Crux.>>
+<<bitemp.adoc#,Read more about Bitemporality in Crux.>>
 
 == Query
 
