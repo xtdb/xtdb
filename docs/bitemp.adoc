@@ -3,11 +3,13 @@
 [#bitemp-why]
 == Why?
 
-One inherent question of using a temporal database, is how to model
-time. A baseline notion of time that is always available is
-*transaction-time*; the point at which data is transacted into the
-database. Bitemporality comes in when we also need the concept of
-*valid-time*.
+The rationale for bitemporality is also explained in this https://juxt.pro/blog/posts/value-of-bitemporality.html[blog post].
+
+A baseline notion of time that is always available is
+`transaction-time`; the point at which data is transacted into the
+database.
+
+Bitemporality is the addition of another time-axis: `valid-time`.
 
 .Time Axes
 [#table-conversion%header,cols="d,d"]
@@ -17,12 +19,10 @@ database. Bitemporality comes in when we also need the concept of
 |`valid-time`|Used for querying data across time, historical analysis.
 |===
 
-*transaction-time* represents the point at which data arrives into the
-database. This gives us an audit trail and we can use transaction-time
-to see what the state of the database was at a particular point in
-time. You cannot write a new transaction with a transaction-time that
-is in the past. This forms the basis of an immutable data-model and an
-event sourced architecture.
+`transaction-time` represents the point at which data arrives into the
+database. This gives us an audit trail and we can see what the state
+of the database was at a particular point in time. You cannot write a
+new transaction with a `transaction-time` that is in the past.
 
 *valid-time* is an arbitrary time that can originate from an upstream
  system, or by default is set to transaction-time. Valid time is
@@ -30,27 +30,20 @@ event sourced architecture.
 
 ****
 Writes can be made in the past of valid-time. Users will normally
-ask 'what is the value of this entity at valid-time?' regardless if
+ask _"what is the value of this entity at valid-time?"_ regardless if
 this history has been rewritten several times at multiple
 transaction-times.
 
-Only if you want to ensure consistent reads across nodes or to do
-auditing queries, would you need to consider both transaction-time and
-valid-time.
+Only if you want to ensure consistent reads across nodes or to query
+for audit reasons, would you want to consider using both
+transaction-time and valid-time.
 ****
 
-NOTE: transaction-time is simply _now_ for most normal queries.
+NOTE: In Crux, when `transaction-time` isn't specified, it is set to
+_now_. When writing data, in case there isn’t any specific valid-time
+available, valid-time and transaction-time take the same value.
 
-NOTE: When writing data, in case there isn’t any specific
-valid-time available, valid-time and transaction-time take the
-same value.
-
-NOTE: Queries can use both times to get consistent reads, as long as
-the data hasn’t been evicted.
-
-== Examples
-
-=== Valid Time
+== Valid Time
 
 In any situation where your database isn't the ultimate owner of the
 data and where corrections to data can flow in from various sources,
@@ -73,10 +66,9 @@ data for our calculation purposes, and this is where *valid-time*
 comes in. When data arrives into our database, it can come with an
 arbitrary time-stamp that we can use for querying purposes.
 
-Therefore we're not completely dependent on transaction-time, and we
-can tolerate data arriving out of order.
-
-.Why Valid Time?
+We can tolerate data arriving out of order, as we're not completely
+dependent on transaction-time.
+1
 ****
 In a ecosystem of many systems, where one cannot control
 the ultimate time line, or other systems abilities to write into the
@@ -84,18 +76,25 @@ past, one needs bitemporality to ensure evolving but consistent views
 of the data.
 ****
 
-=== Transaction Time
+== Transaction Time
 
 For audit reasons, we might wish to know with certainty the value of a
-given entity-attribute at a given tx-instant. In this case, we want to
+given entity-attribute at a given `tx-instant`. In this case, we want to
 exclude the possibility of the valid past being amended, so we need a
-pre-correction view of the data, relying on tx-instant.
+pre-correction view of the data, relying on `tx-instant`.
 
-To achieve this we will use an as-of using ts (valid-time) and tx-ts
-(transaction-time).
+To achieve this you can use `as-of` using `ts` (`valid-time`) and `tx-ts`
+(`transaction-time`).
+
+****
+Only if you want to ensure consistent reads across nodes or to query
+for audit reasons, would you want to consider using both
+transaction-time and valid-time.
+****
 
 == References
 
+* https://juxt.pro/blog/posts/value-of-bitemporality.html
 * https://en.wikipedia.org/wiki/Temporal_database[Temporal database]
 * https://martinfowler.com/eaaDev/timeNarrative.html[Temporal Patterns]
 * https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data]
