@@ -1,5 +1,5 @@
 [#rest]
-== REST API
+== Introduction
 
 Crux offers a small REST API that allows one to use Crux in a
 conventional SaaS way, deploying Kafka and query nodes into AWS and
@@ -16,6 +16,8 @@ The REST API also provides an experimental endpoint for SPARQL 1.1
 Protocol queries under `/sparql/`, rewriting the query into the Crux
 datalog dialect. Only a small subset of SPARQL is supported, and no
 other RDF features are available.
+
+== Index
 
 .API
 [#table-conversion%header,cols="d,d,d"]
