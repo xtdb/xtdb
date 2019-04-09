@@ -17,7 +17,7 @@ through database transactions and queries.
   ** Basic transactions
   ** References                                             // missing in intro 1
 
-* Queries
+* Looking Around (Queries)
   // Explore the present state of a world.
   ** schema exploration
   ** simple where and fields selection
