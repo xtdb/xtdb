@@ -84,7 +84,7 @@
 
    [:crux.tx/put :ids.artifacts/laptop
     {:crux.db/id :ids.artifacts/laptop
-     :artifact/title "Doesn't belong to the realm"}
+     :artifact/title "A Laptop"}
     #inst "2018-05-18"]
 
    ; places
@@ -127,6 +127,45 @@
           [?e :person/name ?name]
           [?e :person/int  ?int]])
 
+; See all artifact names
+(crux/q db
+        '[:find ?name
+          :where
+          [_ :artifact/title ?name]])
+; yeilds
+#{["Magic beans"] ["Doesn't belong to the realm"] ["A Rather Cozy Mug"]}
+
+; ok magic beans once were in the realm but left it, since a balance patch
+(crux/submit-tx
+  system
+  [[:crux.tx/delete :ids.artifacts/forbidden-beans
+    #inst "1690-05-18"]])
+
+; and sometimes people enter data which doesn't belong to the place
+(crux/submit-tx
+  system
+  [[:crux.tx/evict :ids.artifacts/laptop]])
+
+; See all artifact names
+(crux/q (crux/db system)
+        '[:find ?name
+          :where
+          [_ :artifact/title ?name]])
+
+; yeilds
+#{["A Rather Cozy Mug"]}
+
+
+; Historians will know about the beans though
+(crux/q (crux/db system #inst "1599-01-01")
+        '[:find ?name
+          :where
+          [_ :artifact/title ?name]])
+
+; yeilds
+#{["Magic beans"]}
+
+
 
 ;; Some character development
 
@@ -144,7 +183,7 @@
       #inst "1725-05-18"]]))
 
 
-; Let's not repeat ourselves
+; Lets not repeat ourselves
 (defn entity-update
   [entity-id new-attrs valid-time]
   (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
@@ -163,46 +202,21 @@
   {:person/int  55}
   #inst "1730-05-18")
 
+
 (entity :ids.people/Charles)
 
-; {:crux.db/id :ids.people/Charles, :person/has :ids.artifacts/cozy-mug}
+;yields
+{:person/str 40,
+ :person/dex 40,
+ :person/has :ids.artifacts/cozy-mug,
+ :person/location :ids.places/rarities-shop,
+ :person/hp 40,
+ :person/int 55,
+ :person/name "Charles",
+ :crux.db/id :ids.people/Charles,
+ :person/gold 10000,
+ :person/born #inst "1700-05-18T00:00:00.000-00:00"}
 
-; Ah put updates only the whole entity
-
-    character-one
-
-   ; ownership
-    ; charles was 25 when he got the cozy
-   [:crux.tx/put :ids.people/Charles
-    {:crux.db/id :ids.people/Charles
-     :person/has :ids.artifacts/cozy-mug}
-    #inst "1725-05-18"]
-
-; Charles got smarter to his thirties
-(crux/submit-tx
-  system
-  [[:crux.tx/put :ids.people/Charles
-    {:crux.db/id :ids.people/Charles
-     :person/int  35}
-    #inst "1720-05-18"]])
-
-
-; Query entities
-(crux/entity (crux/db system) :ids.people/Charles)
-
-
-
-; ok magic beans once were in the realm but left it, since a balance patch
-(crux/submit-tx
-  system
-  [[:crux.tx/delete :ids.artifacts/forbidden-beans
-    #inst "1600-05-18"]])
-
-; and sometimes people enter data which doesn't belong to the place
-(crux/submit-tx
-  system
-  [[:crux.tx/evict :ids.artifacts/laptop
-    #inst "1500-01-01"]])
 
 
 ; plot : Mary steals Charles cozy-mug in June
