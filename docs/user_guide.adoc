@@ -12,6 +12,7 @@ simple query. However, there are a few topics you might benefit from studying be
   You can find an interactive tutorial for EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
 
 - An understanding of temporality in databases and the significance of <<bitemp#bitemp-why,bitemporality>>.
+  See https://juxt.pro/blog/posts/value-of-bitemporality.html[also].
 
 - Basic understanding of *Clojure* – a succinct and pragmatic data-oriented
   language with strong support for immutability and paralellism. https://clojure.org/[More].
@@ -28,7 +29,9 @@ in a <<setup#standalone,standalone configuration>> first.
 ----
 include::./examples.clj[tags=submit-tx]
 ----
-Note that the ID for the Kafka transaction and the ID within the Crux document must be the same. Restating the ID within the Crux document is currently necessary although this may change in the future, as the standard API evolves.
+Note that the ID for the Kafka transaction and the ID within the Crux document
+must be the same. Restating the ID within the Crux document is currently necessary
+although this may change in the future, as the standard API evolves.
 
 === Make a query:
 
