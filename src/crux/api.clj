@@ -20,7 +20,8 @@
 
   (status [this])
 
-  (submit-tx [this tx-ops])
+  (submit-tx [this tx-ops]
+    "Writes transactions to the log for processing")
 
   (submitted-tx-updated-entity? [this submitted-tx eid])
 
