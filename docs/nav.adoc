@@ -9,3 +9,4 @@
 * <<roadmap.adoc#,Roadmap>>
 * <<faq.adoc#,FAQ>>
 * <<design.adoc#,Design>>
+* <<resources.adoc#,Resources>>

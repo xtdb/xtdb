@@ -8,124 +8,227 @@
 
 (t/use-fixtures :each f/with-kv-store)
 
-;; tag::test-basic-query[]
 (t/deftest test-basic-query
-  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                            {:crux.db/id :petr :name "Petr" :last-name "Petrov"}
-                            {:crux.db/id :smith :name "Smith" :last-name "Smith"}])
+  (f/transact-people! *kv* 
+;; tag::test-basic-query-d[]
+[{:crux.db/id :ivan
+  :name "Ivan"
+  :last-name "Ivanov"}
+
+ {:crux.db/id :petr
+  :name "Petr"
+  :last-name "Petrov"}
+
+ {:crux.db/id :smith
+  :name "Smith"
+  :last-name "Smith"}]
+;; end::test-basic-query-d[]
+)
 
   (t/testing "Can query across fields for same value when value is passed in"
-    (t/is (= #{[:smith]}
-             (q/q (q/db *kv*) '{:find [p1]
-                                :where [[p1 :name name]
-                                        [p1 :last-name name]
-                                        [p1 :name "Smith"]]})))))
-;; end::test-basic-query[]
+    (t/is (= 
+;; tag::test-basic-query-r[]
+#{[:smith]}
+;; end::test-basic-query-r[]
+             (q/q (q/db *kv*) (quote
+;; tag::test-basic-query-q[]
+{:find [p1]
+ :where [[p1 :name name]
+         [p1 :last-name name]
+         [p1 :name "Smith"]]}
+;; end::test-basic-query-q[]
+))))))
 
-;; tag::query-with-arguments[]
 (t/deftest test-query-with-arguments
-  (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
-                                              {:name "Petr" :last-name "Petrov"}])]
-;; end::query-with-arguments[]
+  (let [[ivan petr] (f/transact-people! *kv* 
+;; tag::query-with-arguments-d[]
+[{:crux.db/id :ivan
+  :name "Ivan"
+  :last-name "Ivanov"}
 
-;; tag::query-with-arguments1[]
+ {:crux.db/id :petr
+  :name "Petr"
+  :last-name "Petrov"}
+
+ {:crux.db/id :smith
+  :name "Smith"
+  :last-name "Smith"}]
+;; end::query-with-arguments-d[]
+                                        )]
+
     (t/testing "Can match on both entity and value position"
-      (t/is (= #{["Ivan"]}
+      (t/is (=
+;; tag::query-with-arguments1-r[]
+#{["Ivan"]}
+;; end::query-with-arguments1-r[]
                (q/q
                  (q/db *kv*)
-                 {:find '[name]
-                  :where '[[e :name name]]
-                  :args [{:e (:crux.db/id ivan)
-                          :name "Ivan"}]}))))
-;; end::query-with-arguments1[]
+(quote
+;; tag::query-with-arguments1-q[]
+{:find [name]
+ :where [[e :name name]]
+ :args [{:e :ivan 
+         :name "Ivan"}]}
+;; end::query-with-arguments1-q[]
+)))))
 
-;; tag::query-with-arguments2[]
     (t/testing "Can query entity by single field with several arguments"
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]}
+      (t/is (=
+;; tag::query-with-arguments2-r[]
+#{[:ivan] [:petr]}
+;; end::query-with-arguments2-r[]
                (q/q
                  (q/db *kv*)
-                 '{:find [e]
-                   :where [[e :name name]]
-                   :args [{:name "Ivan"}
-                          {:name "Petr"}]}))))
-;; end::query-with-arguments2[]
+(quote
+;; tag::query-with-arguments2-q[]
+{:find [e]
+  :where [[e :name name]]
+  :args [{:name "Ivan"}
+         {:name "Petr"}]}
+;; end::query-with-arguments2-q[]
+)))))
 
-;; tag::query-with-arguments3[]
     (t/testing "Can query entity with tuple arguments"
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]}
+      (t/is (= 
+;; tag::query-with-arguments3-r[]
+#{[:ivan] [:petr]}
+;; end::query-with-arguments3-r[]
                (q/q
                  (q/db *kv*)
-                 '{:find [e]
-                   :where [[e :name name]
-                           [e :last-name last-name]]
-                   :args [{:name "Ivan" :last-name "Ivanov"}
-                          {:name "Petr" :last-name "Petrov"}]}))))
-;; end::query-with-arguments3[]
+                 (quote
+;; tag::query-with-arguments3-q[]
+{:find [e]
+ :where [[e :name name]
+         [e :last-name last-name]]
+ :args [{:name "Ivan" :last-name "Ivanov"}
+        {:name "Petr" :last-name "Petrov"}]}
+;; end::query-with-arguments3-q[]
+                 )))))
 
-;; tag::query-with-arguments4[]
     (t/testing "Can query predicates based on arguments alone"
-      (t/is (= #{["Ivan"]}
+      (t/is (= 
+;; tag::query-with-arguments4-r[]
+#{["Ivan"]}
+;; end::query-with-arguments4-r[]
                (q/q
                  (q/db *kv*)
-                 '{:find [name]
-                   :where [[(re-find #"I" name)]
-                           [(= last-name "Ivanov")]]
-                   :args [{:name "Ivan" :last-name "Ivanov"}
-                          {:name "Petr" :last-name "Petrov"}]})))
-;; end::query-with-arguments4[]
+                 (quote
+;; tag::query-with-arguments4-q[]
+{:find [name]
+ :where [[(re-find #"I" name)]
+         [(= last-name "Ivanov")]]
+ :args [{:name "Ivan" :last-name "Ivanov"}
+        {:name "Petr" :last-name "Petrov"}]}
+;; end::query-with-arguments4-q[]
+                 ))))
 
-;; tag::query-with-arguments5[]
       (t/testing "Can use range constraints on arguments"
-        (t/is (= #{[22]}
+        (t/is (= 
+;; tag::query-with-arguments5-r[]
+#{[22]}
+;; end::query-with-arguments5-r[]
                  (q/q
                    (q/db *kv*)
-                   '{:find [age]
-                     :where [[(>= age 21)]]
-                     :args [{:age 22}]})))))))
-;; end::query-with-arguments5[]
+                   (quote
+;; tag::query-with-arguments5-q[]
+{:find [age]
+ :where [[(>= age 21)]]
+ :args [{:age 22}]}
+;; end::query-with-arguments5-q[]
+))))))))
 
-;; tag::query-at-t[]
 (t/deftest test-basic-query-at-t
   (let [[malcolm] (f/transact-people!
                     *kv*
-                    [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
-                    #inst "1986-10-22")
-        [malcolma] (f/transact-people!
+;; tag::query-at-t-d1[]
+[{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}]
+#inst "1986-10-22"
+;; end::query-at-t-d1[]
+                    )
+        [malcolm2] (f/transact-people!
                      *kv*
-                     [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}]
-                     #inst "1986-10-24")]
-    (let [q '{:find [e]
-              :where [[e :name "Malcolma"]
-                      [e :last-name "Sparks"]]}]
-      (t/is (= #{}
-               (q/q (q/db *kv* #inst "1986-10-23") q)))
-      (t/is (= #{[(:crux.db/id malcolm)]}
-               (q/q (q/db *kv*) q))))))
-;; end::query-at-t[]
+;; tag::query-at-t-d2[]
+[{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}]
+#inst "1986-10-24")
+;; end::query-at-t-d2[]
+        ]
+    (let [q (quote
+;; tag::query-at-t-q[]
+{:find [e]
+ :where [[e :name "Malcolma"]
+         [e :last-name "Sparks"]]}
+;; end::query-at-t-q[]
+              )]
+      (t/is (=
+;; tag::query-at-t-q1-r[]
+#{}
+;; end::query-at-t-q1-r[]
+;; tag::query-at-t-q1-q[]
+;;TODO Java & Clojure _API_
+(q/q (q/db *kv* #inst "1986-10-23") q)
+;; end::query-at-t-q1-q[]
+))
+      (t/is (=
+;; tag::query-at-t-q2-r[]
+#{[:malcolm]}
+;; end::query-at-t-q2-r[]
+;; tag::query-at-t-q2-q[]
+;;TODO Java & Clojure _API_
+(q/q (q/db *kv*) q)
+;; end::query-at-t-q2-q[]
+)))))
 
-;; tag::join[]
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
-  (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"} {:name "Denis"} {:name "Denis"}])
+  (f/transact-people! *kv* 
+;; tag::join-d[]
+[{:crux.db/id :ivan :name "Ivan"}
+ {:crux.db/id :petr :name "Petr"}
+ {:crux.db/id :sergei :name "Sergei"}
+ {:crux.db/id :denis-a :name "Denis"}
+ {:crux.db/id :denis-b :name "Denis"}]
+;; end::join-d[]
+)
 
   (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 7 (count (q/q (q/db *kv*) '{:find [p1 p2]
-                                         :where [[p1 :name name]
-                                                 [p2 :name name]]}))))))
-;; end::join[]
+    (t/is (= 
+;; tag::join-r[]
+#{[:ivan :ivan]
+  [:petr :petr]
+  [:sergei :sergei]
+  [:denis-a :denis-a]
+  [:denis-b :denis-b]
+  [:denis-a :denis-b]
+  [:denis-b :denis-a]}
+;; end::join-r[]
+            (q/q (q/db *kv*) (quote
+;; tag::join-q[]
+{:find [p1 p2]
+ :where [[p1 :name name]
+         [p2 :name name]]}
+;; end::join-q[]
+))))))
 
-;; tag::join2[]
 (t/deftest test-join-over-two-attributes
-  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                            {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}])
+  (f/transact-people! *kv* 
+;; tag::join2-d[]
+[{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+ {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]
+;; end::join2-d[]
+)
 
-  (t/is (= #{[:petr]} (q/q (q/db *kv*) '{:find [e2]
-                                         :where [[e :last-name last-name]
-                                                 [e2 :follows last-name]
-                                                 [e :name "Ivan"]]}))))
-;; end::join2[]
+  (t/is (= 
+;; tag::join2-r[]
+#{[:petr]}
+;; end::join2-r[]
+          (q/q (q/db *kv*) (quote
+;; tag::join2-q[]
+{:find [e2]
+ :where [[e :last-name last-name]
+         [e2 :follows last-name]
+         [e :name "Ivan"]]}
+;; end::join2-q[]
+                             )))))
 
 ;; tag::blanks[]
 (t/deftest test-blanks
