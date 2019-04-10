@@ -50,9 +50,12 @@ through database transactions and queries.
 
 // Then final plot-twist and recommendation engine impovings.
 
+* Datalog results shaping?
+
 * Storage
   ** In memory
   ** Rocks DB
+
 
 
 Data structure could be like
