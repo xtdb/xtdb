@@ -506,6 +506,82 @@
 ;; on day 2 (valid time), as of day 3 (transaction time)
 ;; t2 p2 SFO, t5 p3 LA, t9 p4 NY, t10 p4 NY (?)
 
+(comment
+;; tag::bitemp0[]
+{:crux.db/id :p2
+ :entry-pt :SFO
+ :arrival-time #inst "2018-12-31"
+ :departure-time :na}
+ 
+{:crux.db/id :p3
+ :entry-pt :LA
+ :arrival-time #inst "2018-12-31"
+ :departure-time :na}
+
+#inst "2018-12-31"
+;; end::bitemp0[]
+
+;; tag::bitemp2[]
+{:crux.db/id :p4
+ :entry-pt :NY
+ :arrival-time #inst "2019-01-02"
+ :departure-time :na}
+
+#inst "2019-01-02"
+;; end::bitemp2[]
+
+;; tag::bitemp3[]
+{:crux.db/id :p4
+ :entry-pt :NY
+ :arrival-time #inst "2019-01-02"
+ :departure-time #inst "2019-01-03"}
+
+#inst "2019-01-03"
+;; end::bitemp3[]
+
+;; tag::bitemp4[]
+{:crux.db/id :p1
+ :entry-pt :NY
+ :arrival-time #inst "2018-12-31"
+ :departure-time :na}
+
+#inst "2018-12-31"
+;; end::bitemp4[]
+
+;; tag::bitemp4b[]
+{:crux.db/id :p1
+ :entry-pt :NY
+ :arrival-time #inst "2018-12-31"
+ :departure-time #inst "2019-01-03"}
+
+#inst "2019-01-03"
+;; end::bitemp4b[]
+
+;; tag::bitemp4c[]
+{:crux.db/id :p1
+ :entry-pt :LA
+ :arrival-time #inst "2019-01-04"
+ :departure-time :na}
+
+{:crux.db/id :p3
+ :entry-pt :LA
+ :arrival-time #inst "2018-12-31"
+ :departure-time #inst "2019-01-04"}
+
+#inst "2019-01-04"
+;; end::bitemp4c[]
+
+;; tag::bitemp5[]
+{:crux.db/id :p2
+ :entry-pt :SFO
+ :arrival-time #inst "2018-12-31"
+ :departure-time #inst "2018-12-31"}
+
+#inst "2019-01-05"
+;; end::bitemp5[]
+
+)
+
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
     ;; Day 0, represented as #inst "2018-12-31"

@@ -236,8 +236,134 @@ include::./query_test_examples.clj[tags=join2-r]
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
-== DataScript Queries
-
 == Bitemporal Queries
 
+=== Crime Investigations
+
+.Indexing temporal data using existing B +-trees
+****
+[%hardbreaks]
+https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
+Cheng Hian Goh, Hongjun Lu, Kian-Lee Tan, Published in Data Knowl. Eng. 1996
+DOI:10.1016/0169-023X(95)00034-P
+See "7. Support for complex queries in bitemporal databases"
+****
+
+During a criminal investigation it is critical to be able to refine a temporal understanding of past events as new evidence is brought to light, errors in documentation are accounted for, and speculation is corroborated. The paper referenced above gives the following query example:
+
+****
+Find all persons who are known to be present in the United States on day 2 (valid time), as of day 3 (transaction time)
+****
+
+The paper then lists a sequence of entry and departure events at various United States border checkpoints. We as the investigator will step through this sequence to monitor a set of suspects. These events will arrive in an undetermined chronological order based on how and when each checkpoint is able to manually relay the information.
+
+Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the initial documents are ingested using the Day 0 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp0]
+----
+
+The first document shows that `Person 2` was recorded entering via `:SFO` and the second document shows that `Person 3` was recorded entering `:LA`.
+
+No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no documents available to ingest.
+
+A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp2]
+----
+
+Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is represented as an update to the existing document using the Day 3 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp3]
+----
+
+On Day 4 we begin to receive events relating to the previous days of the investigation.
+
+First we receive an event showing that `Person 1` entered `:NY` on Day 0 which must ingest using the Day 0 valid time `#inst "2018-12-31"`:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4]
+----
+
+We then receive an event showing that `Person 1` departed from `:NY` on Day 3, so again we ingest this document using the corresponding Day 3 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4b]
+----
+
+Finally, we receive two events relating to Day 4, which can be ingested using the current valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4c]
+----
+
+On Day 5 there is an event showing that `Person 2` departed from `:SFO` on Day 5.
+
+== Differences from DataScript Queries
+
+This list is not necessarily exhaustive and is based on the partial re-usage of DataScript's query test suite within Crux's query tests.
+
+Crux does not support:
+
+- vars in the attribute position, such as `[e ?a "Ivan"]` or `[e _ "Ivan"]`
+
+Crux does _not yet_ support:
+
+- `ground`, `get-else`, `get-some`, `missing?`, `missing? back-ref`
+- destructuring
+- source vars, e.g. function references passed into the query via `:args`
+
+Note that many of these _not yet_ supported query features can be achieved via simple function calls since you can currently fully qualify any function that is loaded. In future, limitations on available functions may be introduced to enforce security restrictions for remote query execution.
+
+DataScript test queries such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the Crux tests for details.
+
 == Other Queries
+
+=== Racket Datalog
+
+Several Datalog tests from the Racket Datalog examples have been translated and re-used within Crux's query tests.
+
+Specifically, from https://github.com/racket/datalog/tree/master/tests/examples
+
+- tutorial.rkt
+- path.rkt
+- revpath.rkt
+- bidipath.rkt
+- sym.rkt
+
+=== Datalog Research 
+
+Several Datalog examples from a classic Datalog paper have been translated and re-used within Crux's query tests.
+
+.What you Always Wanted to Know About Datalog (And Never Dared to Ask)
+****
+[%hardbreaks]
+https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/630444d76e5aa81867344cb11aaddaab8dc8174c
+Stefano Ceri, Georg Gottlob, Letizia Tanca, Published in IEEE Trans. Knowl. Data Eng. 1989
+DOI:10.1109/69.43410
+****
+
+Specifically:
+
+- "sgc"
+- 3 examples of "stratified Datalog"
+
+=== WatDiv SPARQL Tests
+
+****
+Waterloo SPARQL Diversity Test Suite
+https://dsg.uwaterloo.ca/watdiv/
+****
+
+Benchmarking has been performed against the WatDiv test suite. These tests demonstrate comprehensive RDF subgraph matching. Note that Crux does not natively implement the RDF specification and only a simplified subset of the RDF tests have been translated for use in Crux. See the Crux tests for details.
+
+=== LUBM Web Ontology Language (OWL) Tests
+
+****
+Lehigh University Benchmark
+http://swat.cse.lehigh.edu/projects/lubm/
+****
+
+Benchmarking has been performed against the LUBM test suite. These tests demonstrate extreme stress testing for subgraph matching. See the Crux tests for details.
