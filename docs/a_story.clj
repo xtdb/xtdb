@@ -19,6 +19,7 @@
 ;; Building some story
 ;; Story time 1740
 
+;; tag::a-story/def-character[]
 
 ; First character
 ;; tag::a-story/def-character[]
@@ -219,7 +220,7 @@
 
 
 
-; plot : Mary steals Charles cozy-mug in June
+; plot : Mary steals Charles The Mug in June
 (crux/submit-tx
   system
   [; rest of characters
@@ -231,3 +232,5 @@
      :person/has :ids.artifacts/cozy-mug}
     #inst "1740-06-18"]])
 
+
+;; end::a-story/def-character[]

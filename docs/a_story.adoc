@@ -95,7 +95,7 @@ include::./a_story.clj[tags=a-story/create-ns]
 ----
 include::./examples.clj[tags=submit-tx]
 ----
-	
+
   ** Basic transactions
 
 
