@@ -190,32 +190,33 @@
 
 ; Give em some artefacts
 ; Charles was 25 when he got the Cozy Mug
-(let [db (crux/db system)
-      charles (crux/entity db :ids.people/Charles)
-      mary    (crux/entity db :ids.people/Mary)]
-  (crux/submit-tx system
-    [[:crux.tx/cas :ids.people/Charles
+(crux/submit-tx system
+  [(let [charles (crux/entity (crux/db system #inst "1725-05-18") :ids.people/Charles)]
+     [:crux.tx/cas :ids.people/Charles
       charles
       (assoc charles
              :person/has
              #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key})
-      #inst "1725-05-18"]
+      #inst "1725-05-18"])
+   (let [mary  (crux/entity (crux/db system #inst "1715-05-18") :ids.people/Mary)]
      [:crux.tx/cas :ids.people/Mary
       mary
       (assoc mary
              :person/has
              #{:ids.artefacts/pirate-sword :ids.artefacts/flintlock-pistol})
-      #inst "1725-05-18"]]))
+      #inst "1715-05-18"])])
 
 
 
 ; Who has what : basic joins
-(crux/q (crux/db system)
-        '[:find ?name ?atitle
-          :where
-          [?p :person/name ?name]
-          [?p :person/has ?artefact-id]
-          [?artefact-id :artefact/title ?atitle]])
+(def who-has-what-query
+  '[:find ?name ?atitle
+    :where
+    [?p :person/name ?name]
+    [?p :person/has ?artefact-id]
+    [?artefact-id :artefact/title ?atitle]])
+
+(crux/q (crux/db system) who-has-what-query)
 
 ; yeilds
 #{["Mary" "A used sword"]
@@ -241,6 +242,10 @@
 (defn entity
   [entity-id]
   (crux/entity (crux/db system) entity-id))
+
+(defn entity-at
+  [entity-id valid-time]
+  (crux/entity (crux/db system valid-time) entity-id))
 
 (defn entity-with-adjacent
   [entity-id keys-to-pull]
@@ -324,8 +329,7 @@
    [:crux.tx/cas :ids.people/Mary
     (entity :ids.people/Mary)
     (assoc (entity :ids.people/Mary)
-           :person/has :ids.artefacts/cozy-mug)]]
-   ])
+           :person/has :ids.artefacts/cozy-mug)]])
 
 ; plot : Mary moves her operations to Carribean
 
@@ -336,20 +340,34 @@
 ; a previously unknown plast of history.
 
 ; turns out it was Mary's family mug all along
-(entity-update
-  (
-    [[:crux.tx/cas :ids.people/Charles
-      charles
-      (assoc charles :person/has :ids.artefacts/cozy-mug)
-      #inst "1725-05-18"]]))
+(let [marys-birth-inst #inst "1710-05-18"
+      db        (crux/db system marys-birth-inst)
+      baby-mary (crux/entity db :ids.people/Mary)]
+  (crux/submit-tx
+    system
+    [[:crux.tx/cas :ids.people/Mary
+      baby-mary
+      (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
+      marys-birth-inst]]))
 
-(crux/submit-tx
-  system
-  [; rest of characters
-   [:crux.tx/put :ids.people/Mary
-    {:crux.db/id :ids.people/Mary
-     :person/has :ids.artefacts/cozy-mug}]
-   [:crux.tx/delete ; note delete
-    {:crux.db/id :ids.people/Charles
-     :person/has :ids.artefacts/cozy-mug}
-    #inst "1740-06-18"]])
+; but lost it in 1723
+(let [mug-lost-date  #inst "1723-01-09"
+      db        (crux/db system mug-lost-date)
+      mary      (crux/entity db :ids.people/Mary)]
+  (crux/submit-tx
+    system
+    [[:crux.tx/cas :ids.people/Mary
+      mary
+      (update mary :person/has (comp set disj) :ids.artefacts/cozy-mug)
+      mug-lost-date]]))
+
+(crux/q
+  (crux/db system #inst "1710-05-18")
+  who-has-what-query)
+
+#{["Mary" "A Rather Cozy Mug"]}
+
+(crux/q
+  (crux/db system #inst "1723-05-18")
+  who-has-what-query)
+; todo yeilds
