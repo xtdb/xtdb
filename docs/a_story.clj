@@ -88,7 +88,7 @@
    [:crux.tx/put :ids.artefacts/flintlock-pistol
     {:crux.db/id :ids.artefacts/flintlock-pistol
      :artefact/title "Flintlock pistol"}
-    #inst "1720-05-18"]
+    #inst "1710-05-18"]
    [:crux.tx/put :ids.artefacts/unknown-key
     {:crux.db/id :ids.artefacts/unknown-key
      :artefact/title "Key from an unknown door"}
@@ -269,7 +269,7 @@
 
 (entity-with-adjacent :ids.people/Charles [:person/has])
 
-; db
+; yeilds
 {:crux.db/id :ids.people/Charles,
  :person/str 40,
  :person/dex 40,
@@ -315,21 +315,23 @@
 ;; use your own functions (subject to change)
 
 
-; plot : Mary steals Charles The Mug in June
-(crux/submit-tx
-  system
-  [; rest of characters
-   [:crux.tx/cas
-    (entity :ids.people/Charles)
-    (update (entity :ids.people/Charles)
-            :person/has
-            disj
-            :ids.artefacts/cozy-mug)
-    #inst "1740-06-18"]
-   [:crux.tx/cas :ids.people/Mary
-    (entity :ids.people/Mary)
-    (assoc (entity :ids.people/Mary)
-           :person/has :ids.artefacts/cozy-mug)]])
+; plot : Mary steals The Mug in June
+(let [theft-date #inst "1740-06-18"]
+  (crux/submit-tx
+    system
+    [; rest of characters
+     [:crux.tx/put :ids.people/Charles
+      (update (entity-at :ids.people/Charles theft-date)
+              :person/has
+              disj
+              :ids.artefacts/cozy-mug)
+      theft-date]
+     [:crux.tx/put :ids.people/Mary
+      (update (entity-at :ids.people/Mary theft-date)
+              :person/has
+              (comp set conj)
+              :ids.artefacts/cozy-mug)
+      theft-date]]))
 
 ; plot : Mary moves her operations to Carribean
 
@@ -350,7 +352,7 @@
       (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
       marys-birth-inst]]))
 
-; but lost it in 1723
+; but she lost it in 1723
 (let [mug-lost-date  #inst "1723-01-09"
       db        (crux/db system mug-lost-date)
       mary      (crux/entity db :ids.people/Mary)]
@@ -362,7 +364,7 @@
       mug-lost-date]]))
 
 (crux/q
-  (crux/db system #inst "1710-05-18")
+  (crux/db system #inst "1715-05-18")
   who-has-what-query)
 
 #{["Mary" "A Rather Cozy Mug"]}
@@ -371,3 +373,11 @@
   (crux/db system #inst "1723-05-18")
   who-has-what-query)
 ; todo yeilds
+
+(crux/q
+  (crux/db system #inst "1726-05-18")
+  who-has-what-query)
+
+(crux/q
+  (crux/db system #inst "1740-06-19")
+  who-has-what-query)
