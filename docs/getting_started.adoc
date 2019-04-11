@@ -6,7 +6,7 @@ simple query. However, there are a few topics you might benefit from studying be
 
 == Prerequisites
 
-- Familiarity with *EDN* – the extensible data notation. https://github.com/edn-format/edn[Link].
+- Familiarity with *EDN* – the extensible data notation. https://github.com/edn-format/edn[Link].  See also <<resources.adoc#_essential_edn_for_using_crux>>.
 
 - A basic understanding of the *Datalog* query language. Crux supports an EDN-flavoured version of Datalog.
   You can find an interactive tutorial for EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].

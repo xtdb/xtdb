@@ -1,14 +1,16 @@
 * <<getting_started.adoc#,Getting Started>>
-* <<user_guide.adoc#,User Guide>>
-* <<queries.adoc#,Query Guide>>
-* <<setup.adoc#,Setting Up>>
+* <<queries.adoc#,Queries>>
+* <<transactions.adoc#,Transactions>>
+* <<configuration.adoc#,Configuration>>
+* <<api.adoc#,Javadocs>>
 * <<bitemp.adoc#,Bitemporality>>
+* <<advanced_queries.adoc#,Queries (advanced)>>
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
 * <<support.adoc#,Support>>
 * <<benchmarks.adoc#,Benchmarks>>
 * <<roadmap.adoc#,Roadmap>>
-* <<faq.adoc#,FAQ>>
 * <<a_tale.adoc#,Tutorial>>
 * <<unbundled.adoc#,Unbundled>>
-* <<resources.adoc#,Resources>>
+* <<tutorials.adoc#,Tutorials>>
+* <<faq.adoc#,FAQ>>

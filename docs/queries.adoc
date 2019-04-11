@@ -1,12 +1,16 @@
-= Query Guide
+= Queries
 
-== Quick Reference
+== Introduction
 
-As a handy reference to Crux's query features:
+This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
 
-* <<_a_very_basic_query>>
+Extensible Data Notation (edn) is used as the data format for the public Crux APIs. To gain an understanding of edn see <<resources.adoc#_essential_edn_for_using_crux>>.
+
+== Reference
+
+* <<_basic_query>>
 * <<_valid_time_travel>>
-* <<_how_to_use_arguments,`:args`>>
+* <<_arguments,`:args`>>
 * <<_a_very_basic_query,`or`>>
 * <<_a_very_basic_query,Combining `or` with `and`>>
 * <<_a_very_basic_query,`not`>>
@@ -14,13 +18,7 @@ As a handy reference to Crux's query features:
 * <<_a_very_basic_query,Blanks>>
 * <<_a_very_basic_query,`:rules`>>
 
-== Introduction 
-
-This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
-
-Extensible Data Notation (edn) is used as the data format for the public Crux APIs. To gain an understanding of edn see <<resources.adoc#_essential_edn_for_using_crux>>.
-
-== A very basic query
+== Basic Query
 
 Our first query runs on a database that contains the following 3 documents which get broken apart and indexed as "entities":
 [source,clj]
@@ -54,7 +52,7 @@ The edn result set only contains the value `:smith`
 include::./query_test_examples.clj[tags=test-basic-query-r]
 ----
 
-== How to use arguments
+== Arguments
 
 For the next set of queries we will again use the same set of documents for our database as used in the previous section:
 
@@ -109,7 +107,7 @@ Result Set:
 include::./query_test_examples.clj[tags=query-with-arguments3-r]
 ----
 
-=== Query: "Use predicates with arguments" 
+=== Query: "Use predicates with arguments"
 
 [source,clj]
 ----
@@ -123,14 +121,14 @@ Something else we can do with arguments is apply predicates to them directly wit
 include::./query_test_examples.clj[tags=query-with-arguments4-r]
 ----
 
-=== Query: "Use range constraints with arguments" 
+=== Query: "Use range constraints with arguments"
 
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=query-with-arguments5-q]
 ----
 
-Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database. 
+Finally we can see how we can return an argument that passes all of the predicates by including it in the `:find` vector. This essentially bypasses any interaction with the data in our database.
 
 Result Set:
 [source,clj]
@@ -142,7 +140,7 @@ include::./query_test_examples.clj[tags=query-with-arguments5-r]
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
 
-Here we will sees how you are able to run queries at a given point in the valid time axis against, implicity, the most recent transaction time. 
+Here we will sees how you are able to run queries at a given point in the valid time axis against, implicity, the most recent transaction time.
 
 First, we transact a very old document into the database with the ID `:malcolm` and the `:name` `"Malcolm"`, and specify the `valid time` instant at which this document became valid in the legacy system: `#inst "1986-10-22"`.
 
@@ -177,7 +175,7 @@ Result Set:
 include::./query_test_examples.clj[tags=query-at-t-q1-r]
 ----
 
-We can then verify that `"Malcolma"` is the currently known `:name` for the entity with ID `:malcolm` by simply not specifying a valid time alongside the query. This will be the case so long as there are no newer versions (in the valid time axis) of the document that affect the current valid time version. 
+We can then verify that `"Malcolma"` is the currently known `:name` for the entity with ID `:malcolm` by simply not specifying a valid time alongside the query. This will be the case so long as there are no newer versions (in the valid time axis) of the document that affect the current valid time version.
 
 [source,clj]
 ----
@@ -192,7 +190,7 @@ include::./query_test_examples.clj[tags=query-at-t-q2-r]
 
 == Joins
 
-=== Query: "Join across entities on a single attribute" 
+=== Query: "Join across entities on a single attribute"
 
 Given the following documents in the database
 [source,clj]
@@ -236,72 +234,7 @@ include::./query_test_examples.clj[tags=join2-r]
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
-== Bitemporal Queries
-
-=== Crime Investigations
-
-.Indexing temporal data using existing B +-trees
-****
-[%hardbreaks]
-https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
-Cheng Hian Goh, Hongjun Lu, Kian-Lee Tan, Published in Data Knowl. Eng. 1996
-DOI:10.1016/0169-023X(95)00034-P
-See "7. Support for complex queries in bitemporal databases"
-****
-
-During a criminal investigation it is critical to be able to refine a temporal understanding of past events as new evidence is brought to light, errors in documentation are accounted for, and speculation is corroborated. The paper referenced above gives the following query example:
-
-****
-Find all persons who are known to be present in the United States on day 2 (valid time), as of day 3 (transaction time)
-****
-
-The paper then lists a sequence of entry and departure events at various United States border checkpoints. We as the investigator will step through this sequence to monitor a set of suspects. These events will arrive in an undetermined chronological order based on how and when each checkpoint is able to manually relay the information.
-
-Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the initial documents are ingested using the Day 0 valid time:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp0]
-----
-
-The first document shows that `Person 2` was recorded entering via `:SFO` and the second document shows that `Person 3` was recorded entering `:LA`.
-
-No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no documents available to ingest.
-
-A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp2]
-----
-
-Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is represented as an update to the existing document using the Day 3 valid time:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp3]
-----
-
-On Day 4 we begin to receive events relating to the previous days of the investigation.
-
-First we receive an event showing that `Person 1` entered `:NY` on Day 0 which must ingest using the Day 0 valid time `#inst "2018-12-31"`:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp4]
-----
-
-We then receive an event showing that `Person 1` departed from `:NY` on Day 3, so again we ingest this document using the corresponding Day 3 valid time:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp4b]
-----
-
-Finally, we receive two events relating to Day 4, which can be ingested using the current valid time:
-[source,clj]
-----
-include::./query_test_examples.clj[tags=bitemp4c]
-----
-
-On Day 5 there is an event showing that `Person 2` departed from `:SFO` on Day 5.
-
-== Differences from DataScript Queries
+== DataScript Differences
 
 This list is not necessarily exhaustive and is based on the partial re-usage of DataScript's query test suite within Crux's query tests.
 
@@ -319,51 +252,74 @@ Note that many of these _not yet_ supported query features can be achieved via s
 
 DataScript test queries such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the Crux tests for details.
 
-== Other Queries
+== Query
 
-=== Racket Datalog
+Crux query syntax is that of Datalog using Clojure's EDN, inspired by
+Datomic (later adopted by other DBs such as DataScript).
 
-Several Datalog tests from the Racket Datalog examples have been translated and re-used within Crux's query tests.
+=== Basic Query
 
-Specifically, from https://github.com/racket/datalog/tree/master/tests/examples
+[source,clj]
+----
+include::./examples.clj[tags=query]
+----
 
-- tutorial.rkt
-- path.rkt
-- revpath.rkt
-- bidipath.rkt
-- sym.rkt
+The `db` is retrieved via a call to `crux.api/db`.
 
-=== Datalog Research 
+=== Time Queries
 
-Several Datalog examples from a classic Datalog paper have been translated and re-used within Crux's query tests.
+`crux.api/db` optionally takes valid time and transaction time as
+additional arguments. In the below example we query using valid time
+only.
 
-.What you Always Wanted to Know About Datalog (And Never Dared to Ask)
-****
-[%hardbreaks]
-https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/630444d76e5aa81867344cb11aaddaab8dc8174c
-Stefano Ceri, Georg Gottlob, Letizia Tanca, Published in IEEE Trans. Knowl. Data Eng. 1989
-DOI:10.1109/69.43410
-****
+[source,clj]
+----
+include::./examples.clj[tags=query-valid-time]
+----
 
-Specifically:
+In the next example we query using both valid time and transaction
+time temporal coordinates. This call will block until the local index
+has seen the transaction time
 
-- "sgc"
-- 3 examples of "stratified Datalog"
+[source,clj]
+----
+include::./examples.clj[tags=query-tx-time]
+----
 
-=== WatDiv SPARQL Tests
+NOTE: TODO: The above doesn't yeild a result
 
-****
-Waterloo SPARQL Diversity Test Suite
-https://dsg.uwaterloo.ca/watdiv/
-****
+=== Lazy Queries
 
-Benchmarking has been performed against the WatDiv test suite. These tests demonstrate comprehensive RDF subgraph matching. Note that Crux does not natively implement the RDF specification and only a simplified subset of the RDF tests have been translated for use in Crux. See the Crux tests for details.
+NOTE: TODO Make an example
 
-=== LUBM Web Ontology Language (OWL) Tests
+The `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
+optionally a `snapshot` which is already opened and managed by the
+caller (using `with-open` for example). This version of the call
+returns a lazy sequence of the results, while the other version
+provides a set. A snapshot can be retreived from a `kv` instance via
+`crux.kv-store/new-snapshot`.
 
-****
-Lehigh University Benchmark
-http://swat.cse.lehigh.edu/projects/lubm/
-****
+=== Rules
 
-Benchmarking has been performed against the LUBM test suite. These tests demonstrate extreme stress testing for subgraph matching. See the Crux tests for details.
+Crux query capability is easiest summarized via an example:
+
+[source,clj]
+----
+(q/q db
+    '{:find  [?e2]
+      :where [(follow ?e1 ?e2)]
+      :args [{:?e1 :1}]
+      :rules [[(follow ?e1 ?e2)
+              [?e1 :follow ?e2]]
+             [(follow ?e1 ?e2)
+              [?e1 :follow ?t]
+              (follow ?t ?e2)]]})
+----
+
+The `:args` key contains a relation where each map is expected to have
+the same keys. These keys are turned into logic variable symbols and the
+relation is joined with the rest of the query. The elements must
+implement `Comparable`.
+
+Crux does not support variables in the attribute position. The entity
+position is hard coded to mean the `:crux.db/id` field.

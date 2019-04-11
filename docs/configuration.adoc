@@ -1,4 +1,4 @@
-= Getting Started
+= Configuration
 
 == Systems
 
@@ -37,7 +37,7 @@ Clojure lifecycle management framework such as Integrant, see the
 https://github.com/juxt/crux/blob/master/docs/example_standalone_integrantsystem.clj[example
 Integrant system].
 
-== Configuration
+== Properties
 
 Crux Systems will use the following properties:
 

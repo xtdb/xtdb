@@ -92,6 +92,72 @@ for audit reasons, would you want to consider using both
 transaction-time and valid-time.
 ****
 
+== Example Queries
+
+=== Crime Investigations
+
+.Indexing temporal data using existing B +-trees
+****
+[%hardbreaks]
+https://www.comp.nus.edu.sg/~ooibc/stbtree95.pdf
+Cheng Hian Goh, Hongjun Lu, Kian-Lee Tan, Published in Data Knowl. Eng. 1996
+DOI:10.1016/0169-023X(95)00034-P
+See "7. Support for complex queries in bitemporal databases"
+****
+
+During a criminal investigation it is critical to be able to refine a temporal understanding of past events as new evidence is brought to light, errors in documentation are accounted for, and speculation is corroborated. The paper referenced above gives the following query example:
+
+****
+Find all persons who are known to be present in the United States on day 2 (valid time), as of day 3 (transaction time)
+****
+
+The paper then lists a sequence of entry and departure events at various United States border checkpoints. We as the investigator will step through this sequence to monitor a set of suspects. These events will arrive in an undetermined chronological order based on how and when each checkpoint is able to manually relay the information.
+
+Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the initial documents are ingested using the Day 0 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp0]
+----
+
+The first document shows that `Person 2` was recorded entering via `:SFO` and the second document shows that `Person 3` was recorded entering `:LA`.
+
+No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no documents available to ingest.
+
+A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp2]
+----
+
+Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is represented as an update to the existing document using the Day 3 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp3]
+----
+
+On Day 4 we begin to receive events relating to the previous days of the investigation.
+
+First we receive an event showing that `Person 1` entered `:NY` on Day 0 which must ingest using the Day 0 valid time `#inst "2018-12-31"`:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4]
+----
+
+We then receive an event showing that `Person 1` departed from `:NY` on Day 3, so again we ingest this document using the corresponding Day 3 valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4b]
+----
+
+Finally, we receive two events relating to Day 4, which can be ingested using the current valid time:
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp4c]
+----
+
+On Day 5 there is an event showing that `Person 2` departed from `:SFO` on Day 5.
+
+
 == References
 
 * https://juxt.pro/blog/posts/value-of-bitemporality.html

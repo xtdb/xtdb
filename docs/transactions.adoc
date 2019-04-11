@@ -1,78 +1,6 @@
-[#getting-started-example]
+= Transactions
 
-== Query
-
-Crux query syntax is that of Datalog using Clojure's EDN, inspired by
-Datomic (later adopted by other DBs such as DataScript).
-
-=== Basic Query
-
-[source,clj]
-----
-include::./examples.clj[tags=query]
-----
-
-The `db` is retrieved via a call to `crux.api/db`.
-
-=== Time Queries
-
-`crux.api/db` optionally takes valid time and transaction time as
-additional arguments. In the below example we query using valid time
-only.
-
-[source,clj]
-----
-include::./examples.clj[tags=query-valid-time]
-----
-
-In the next example we query using both valid time and transaction
-time temporal coordinates. This call will block until the local index
-has seen the transaction time
-
-[source,clj]
-----
-include::./examples.clj[tags=query-tx-time]
-----
-
-NOTE: TODO: The above doesn't yeild a result
-
-=== Lazy Queries
-
-NOTE: TODO Make an example
-
-The `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
-optionally a `snapshot` which is already opened and managed by the
-caller (using `with-open` for example). This version of the call
-returns a lazy sequence of the results, while the other version
-provides a set. A snapshot can be retreived from a `kv` instance via
-`crux.kv-store/new-snapshot`.
-
-=== Rules
-
-Crux query capability is easiest summarized via an example:
-
-[source,clj]
-----
-(q/q db
-    '{:find  [?e2]
-      :where [(follow ?e1 ?e2)]
-      :args [{:?e1 :1}]
-      :rules [[(follow ?e1 ?e2)
-              [?e1 :follow ?e2]]
-             [(follow ?e1 ?e2)
-              [?e1 :follow ?t]
-              (follow ?t ?e2)]]})
-----
-
-The `:args` key contains a relation where each map is expected to have
-the same keys. These keys are turned into logic variable symbols and the
-relation is joined with the rest of the query. The elements must
-implement `Comparable`.
-
-Crux does not support variables in the attribute position. The entity
-position is hard coded to mean the `:crux.db/id` field.
-
-== Transactions
+== Index
 
 There are four transaction (write) operations:
 
@@ -118,7 +46,7 @@ the event log. The document itself is submitted to the `doc-topic`,
 using its content hash as key. In Kafka, the `doc-topic` is compacted,
 which enables later deletion of documents.
 
-=== Put
+== Put
 
 Put's a document into Crux. If a document already exists with the
 given `:crub.db/id`, a new version of this document will be created at
@@ -143,7 +71,7 @@ Crux currently writes into the past at a single point, so to overwrite
 several versions or a range in time, one is required to submit a
 transaction containing several operations.
 
-=== CAS
+== CAS
 
 The CAS operation (_compare and swap_) swaps an existing document version with a
 newer one, if the existing document is as expected.
@@ -162,7 +90,7 @@ newer one, if the existing document is as expected.
 <3> New document
 <4> `valid time`
 
-=== Delete
+== Delete
 
 Deletes a document at a given `valid time`. Historical version of the
 document will still be available.
@@ -173,7 +101,7 @@ document will still be available.
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
-=== Evict
+== Evict
 
 Evicts a document from Crux. The transaction history will be
 available, but all versions at or before the provided `valid time` are
@@ -184,9 +112,3 @@ evicted.
 [:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
-
-== API
-
-Please consult the JavaDocs for the official Crux API.
-
-https://juxt.pro/crux/docs/javadoc/index.html[API JavaDoc]
