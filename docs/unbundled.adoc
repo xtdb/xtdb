@@ -1,10 +1,13 @@
 = Unbundled
 
-== Introduction
+== Philosophy
 
 Crux is an unbundled database, where parts are pluggable and can be
-swapped out for alternative implementations. This document walks
-through some of the noteworthy parts.
+swapped out for alternative implementations. We are attempting to
+follow the https://en.wikipedia.org/wiki/Unix_philosophy[Unix
+philosophy] of each part doing one thing well.
+
+This document walks through some of the high-level Crux component.
 
 == ObjectStore
 
