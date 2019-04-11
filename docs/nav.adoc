@@ -1,7 +1,8 @@
-* <<bitemp.adoc#,Bitemporality>>
+* <<getting_started.adoc#,Getting Started>>
 * <<user_guide.adoc#,User Guide>>
 * <<queries.adoc#,Query Guide>>
 * <<setup.adoc#,Setting Up>>
+* <<bitemp.adoc#,Bitemporality>>
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
 * <<support.adoc#,Support>>

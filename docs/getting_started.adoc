@@ -1,0 +1,59 @@
+[#getting-started-example]
+= Getting Started
+
+This guide contains simple steps showing how to transact data and run a
+simple query. However, there are a few topics you might benefit from studying beforehand.
+
+== Prerequisites
+
+- Familiarity with *EDN* – the extensible data notation. https://github.com/edn-format/edn[Link].
+
+- A basic understanding of the *Datalog* query language. Crux supports an EDN-flavoured version of Datalog.
+  You can find an interactive tutorial for EDN-flavoured Datalog http://www.learndatalogtoday.org/chapter/1[here].
+
+- An understanding of temporality in databases and the significance of <<bitemp#bitemp-why,bitemporality>>.
+  See https://juxt.pro/blog/posts/value-of-bitemporality.html[also].
+
+- Basic understanding of *Clojure* – a succinct and pragmatic data-oriented
+  language with strong support for immutability and paralellism. https://clojure.org/[More].
+
+== Setting Up
+
+First setup Crux. If you want to play about, it's advised you run Crux
+in a <<setup#standalone,standalone configuration>> first.
+
+== Transacting
+
+[source,clj]
+----
+include::./examples.clj[tags=submit-tx]
+----
+Note that the ID for the Kafka transaction and the ID within the Crux document
+must be the same. Restating the ID within the Crux document is currently necessary
+although this may change in the future, as the standard API evolves.
+
+== Querying
+
+[source,clj]
+----
+include::./examples.clj[tags=query]
+----
+
+You should get:
+
+[source,clj]
+----
+include::./examples.clj[tags=should-get]
+----
+
+An entity query would be:
+[source,clj]
+----
+include::./examples.clj[tags=query-entity]
+----
+You should get:
+
+[source,clj]
+----
+include::./examples.clj[tags=should-get-entity]
+----
