@@ -4,10 +4,12 @@
 ;; end::a-tale/create-ns[]
 
 
-;; a shopkeeper Charles has an artefact [limestone comb]
-;; pirate Mary steals it
-;; rogue traveller Joe aims to recover it
+;; An Interactive Tale Of Time
 
+;; Charles is a shopkeeper who possesses a truly magical artefact:
+;; A Rather Cozy Mug.
+;; When Mary and her fellow pirates steal the mug, Charles recruits the
+;; assistance of Joe, a rogue traveller, to help recover it.
 
 ;; tag::a-tale/def-system[]
 (def system
@@ -16,15 +18,14 @@
 ;; end::a-tale/def-system[]
 
 
-;; Building some story
-;; Story time 1740
+;; The year is 1740.
 
 ; First character
 ;; tag::a-tale/def-character[]
 (crux/submit-tx
   system
-  [[:crux.tx/put :ids.people/Charles  ; id for the storage (mem or Kafka)
-    {:crux.db/id :ids.people/Charles  ; id for Crux
+  [[:crux.tx/put :ids.people/Charles  ; id for the transaction (mem or Kafka)
+    {:crux.db/id :ids.people/Charles  ; id again for the document in Crux
      :person/name "Charles"
      ; age 40
      :person/born #inst "1700-05-18"
@@ -68,30 +69,35 @@
     #inst "1715-05-18"]
 
    ; artefacts
-   ; There was a Cozy Mug
+   ; In Charles' shop there was a Cozy Mug...
    [:crux.tx/put :ids.artefacts/cozy-mug
     {:crux.db/id :ids.artefacts/cozy-mug
      :artefact/title "A Rather Cozy Mug"
      :artefact.perks/int 3}
     #inst "1625-05-18"]
+   ; ...some regular magic beans...
    [:crux.tx/put :ids.artefacts/forbidden-beans
     {:crux.db/id :ids.artefacts/forbidden-beans
      :artefact/title "Magic beans"
      :artefact.perks/int 30
      :artefact.perks/hp -20}
     #inst "1500-05-18"]
+   ; ...a used pirate sword...
    [:crux.tx/put :ids.artefacts/pirate-sword
     {:crux.db/id :ids.artefacts/pirate-sword
      :artefact/title "A used sword"}
     #inst "1710-05-18"]
+   ; ...a flintlock pistol...
    [:crux.tx/put :ids.artefacts/flintlock-pistol
     {:crux.db/id :ids.artefacts/flintlock-pistol
      :artefact/title "Flintlock pistol"}
     #inst "1710-05-18"]
+   ; ...a mysterious key...
    [:crux.tx/put :ids.artefacts/unknown-key
     {:crux.db/id :ids.artefacts/unknown-key
      :artefact/title "Key from an unknown door"}
     #inst "1700-05-18"]
+   ; ...and a personal computing device from the wrong century.
    [:crux.tx/put :ids.artefacts/laptop
     {:crux.db/id :ids.artefacts/laptop
      :artefact/title "A Tell DPS Laptop (what?)"}
@@ -143,19 +149,19 @@
         '[:find ?name
           :where
           [_ :artefact/title ?name]])
-; yeilds
-#{["Magic beans"] ["Doesn't belong to the realm"] ["A Rather Cozy Mug"]}
+; yields
+#{["Key from an unknown door"] ["Magic beans"] ["A used sword"] ["A Rather Cozy Mug"] ["A Tell DPS Laptop (what?)"] ["Flintlock pistol"]}
 
 
 ;; Balancing the world
 
-; ok magic beans once were in the realm but left it, since a balance patch
+; Ok yes magic beans once _were_ in the realm, and we want to remember that, but following advice from our publisher we've decided to remove them from the story for now. Charles won't know that they ever existed!
 (crux/submit-tx
   system
   [[:crux.tx/delete :ids.artefacts/forbidden-beans
     #inst "1690-05-18"]])
 
-; and sometimes people enter data which doesn't belong to the place
+; Sometimes people enter data which just doesn't belong there. Lets completely wipe all traces of the laptop the timelines.
 (crux/submit-tx
   system
   [[:crux.tx/evict :ids.artefacts/laptop]])
@@ -166,8 +172,8 @@
           :where
           [_ :artefact/title ?name]])
 
-; yeilds
-#{["A Rather Cozy Mug"]}
+; yields
+#{["Key from an unknown door"] ["A used sword"] ["A Rather Cozy Mug"] ["Flintlock pistol"]}
 
 
 ; Historians will know about the beans though
@@ -176,21 +182,21 @@
           :where
           [_ :artefact/title ?name]])
 
-; yeilds
+; yields
 #{["Magic beans"]}
 
 
 
 ;; Some character development
 
-; Note that in Crux tranactions rewrite the whole entity.
-; It's a bare bones product. Core is intentionally slim.
-; So we're open for your convinience utils projects.
+; Note that transactions in Crux will rewrite the whole entity.
+; This is because the core of Crux is intentionally slim, and
+; features like partial updates will appear in utils projects!
 
-; Give em some artefacts
-; Charles was 25 when he got the Cozy Mug
+; Give 'em some artefacts
 (crux/submit-tx system
   [(let [charles (crux/entity (crux/db system #inst "1725-05-18") :ids.people/Charles)]
+     ; Charles was 25 when he took possession of the Cozy Mug
      [:crux.tx/cas :ids.people/Charles
       charles
       (assoc charles
@@ -198,6 +204,7 @@
              #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key})
       #inst "1725-05-18"])
    (let [mary  (crux/entity (crux/db system #inst "1715-05-18") :ids.people/Mary)]
+     ; And at that time Mary also owned the pirate sword and flintlock pistol
      [:crux.tx/cas :ids.people/Mary
       mary
       (assoc mary
@@ -217,7 +224,7 @@
 
 (crux/q (crux/db system) who-has-what-query)
 
-; yeilds
+; yields
 #{["Mary" "A used sword"]
   ["Mary" "Flintlock pistol"]
   ["Charles" "A Rather Cozy Mug"]
@@ -266,9 +273,10 @@
       (crux/entity db entity-id)
       keys-to-pull)))
 
+; Let's pull out everything we know about Charles and the items he has
 (entity-with-adjacent :ids.people/Charles [:person/has])
 
-; yeilds
+; yields
 {:crux.db/id :ids.people/Charles,
  :person/str 40,
  :person/dex 40,
@@ -286,12 +294,13 @@
  :person/born #inst "1700-05-18T00:00:00.000-00:00"}
 
 
-; Charles got smarter to his thirties
+; Charles became more studious as he entered his thirties
 (entity-update :ids.people/Charles
   {:person/int  55}
   #inst "1730-05-18")
 
 
+; Let's check our update
 (entity :ids.people/Charles)
 
 ;yields
@@ -318,8 +327,7 @@
 (let [theft-date #inst "1740-06-18"]
   (crux/submit-tx
     system
-    [; rest of characters
-     [:crux.tx/put :ids.people/Charles
+    [[:crux.tx/put :ids.people/Charles
       (update (entity-at :ids.people/Charles theft-date)
               :person/has
               disj
@@ -332,15 +340,17 @@
               :ids.artefacts/cozy-mug)
       theft-date]]))
 
-; plot : Mary moves her operations to Carribean
+; future plot development : Mary moves her operations to Carribean, Charles recruits Joe to follow her
 
+; (Exercise for reader, PRs are welcome)
 
-; Now we think we're done with the story.
-; We have a picture and we're ready to blame Mary for stealing the Mug.
-; Then a new upstream data source kicks in. We uncover previously
-; a previously unknown plast of history.
+; So for now we think we're done with the story.
+; We have a picture and we're all perfectly ready to blame Mary for
+; stealing the mug.
+; Suddently a revelation occurs when an upstream data source kicks in.
+; We uncover a previously unknown piece of history.
+; It turns out the mug was Mary's family heirloom all along!
 
-; turns out it was Mary's family mug all along
 (let [marys-birth-inst #inst "1710-05-18"
       db        (crux/db system marys-birth-inst)
       baby-mary (crux/entity db :ids.people/Mary)]
@@ -351,7 +361,7 @@
       (update baby-mary :person/has (comp set conj) :ids.artefacts/cozy-mug)
       marys-birth-inst]]))
 
-; but she lost it in 1723
+; ...and she lost it in 1723
 (let [mug-lost-date  #inst "1723-01-09"
       db        (crux/db system mug-lost-date)
       mary      (crux/entity db :ids.people/Mary)]
@@ -366,12 +376,13 @@
   (crux/db system #inst "1715-05-18")
   who-has-what-query)
 
+; yields
 #{["Mary" "A Rather Cozy Mug"]}
 
 (crux/q
   (crux/db system #inst "1723-05-18")
   who-has-what-query)
-; todo yeilds
+; todo yields
 
 (crux/q
   (crux/db system #inst "1726-05-18")
