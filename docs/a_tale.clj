@@ -12,9 +12,19 @@
 ;; assistance of Joe, a rogue traveller, to help recover it.
 
 ;; tag::a-tale/def-system[]
+
+; or
 (def system
   (crux/start-standalone-system
     {:kv-backend "crux.kv.memdb.MemKv" :db-dir "data/db-dir-1"}))
+
+;or
+(comment
+  (def system
+    (crux/start-standalone-system
+      {:kv-backend "crux.kv.rocksdb.RocksKv"
+       :db-dir "data/db-dir-1"})))
+; org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
 ;; end::a-tale/def-system[]
 
 
@@ -69,7 +79,7 @@
     #inst "1715-05-18"]
 
    ; artefacts
-   ; In Charles' shop there was a Cozy Mug...
+   ; In our tale there is a Cozy Mug...
    [:crux.tx/put :ids.artefacts/cozy-mug
     {:crux.db/id :ids.artefacts/cozy-mug
      :artefact/title "A Rather Cozy Mug"
@@ -124,7 +134,7 @@
 
 ;; Looking Around : Basic Queries
 
-; Get a database value, read it until it's changed
+; Get a database value, read from it until it's changed
 (def db (crux/db system))
 
 ; Query entities
@@ -150,18 +160,24 @@
           :where
           [_ :artefact/title ?name]])
 ; yields
-#{["Key from an unknown door"] ["Magic beans"] ["A used sword"] ["A Rather Cozy Mug"] ["A Tell DPS Laptop (what?)"] ["Flintlock pistol"]}
+#{["Key from an unknown door"] ["Magic beans"]
+  ["A used sword"] ["A Rather Cozy Mug"]
+  ["A Tell DPS Laptop (what?)"]
+  ["Flintlock pistol"]}
 
 
 ;; Balancing the world
 
-; Ok yes magic beans once _were_ in the realm, and we want to remember that, but following advice from our publisher we've decided to remove them from the story for now. Charles won't know that they ever existed!
+; Ok yes magic beans once _were_ in the realm, and we want to remember that,
+; but following advice from our publisher we've decided to remove them from
+; the story for now. Charles won't know that they ever existed!
 (crux/submit-tx
   system
   [[:crux.tx/delete :ids.artefacts/forbidden-beans
     #inst "1690-05-18"]])
 
-; Sometimes people enter data which just doesn't belong there. Lets completely wipe all traces of the laptop the timelines.
+; Sometimes people enter data which just doesn't belong there.
+; Lets completely wipe all traces of the laptop the timelines.
 (crux/submit-tx
   system
   [[:crux.tx/evict :ids.artefacts/laptop]])
@@ -194,23 +210,28 @@
 ; features like partial updates will appear in utils projects!
 
 ; Give 'em some artefacts
-(crux/submit-tx system
-  [(let [charles (crux/entity (crux/db system #inst "1725-05-18") :ids.people/Charles)]
-     ; Charles was 25 when he took possession of the Cozy Mug
-     [:crux.tx/cas :ids.people/Charles
-      charles
-      (assoc charles
-             :person/has
-             #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key})
-      #inst "1725-05-18"])
-   (let [mary  (crux/entity (crux/db system #inst "1715-05-18") :ids.people/Mary)]
-     ; And at that time Mary also owned the pirate sword and flintlock pistol
-     [:crux.tx/cas :ids.people/Mary
-      mary
-      (assoc mary
-             :person/has
-             #{:ids.artefacts/pirate-sword :ids.artefacts/flintlock-pistol})
-      #inst "1715-05-18"])])
+; Charles was 25 when he found the Cozy Mug
+
+(defn first-ownership-tx []
+  [(let [charles (crux/entity (crux/db system #inst "1725-05-17") :ids.people/Charles)]
+      [:crux.tx/put :ids.people/Charles
+       (update charles
+              :person/has
+              (comp set conj)
+              :ids.artefacts/cozy-mug
+              :ids.artefacts/unknown-key)
+       #inst "1725-05-18"])
+    (let [mary  (crux/entity (crux/db system #inst "1715-05-17") :ids.people/Mary)]
+      [:crux.tx/put :ids.people/Mary
+       (update mary
+              :person/has
+              (comp set conj)
+              :ids.artefacts/pirate-sword
+              :ids.artefacts/flintlock-pistol)
+       #inst "1715-05-18"])])
+
+(def first-ownership-tx-response
+  (crux/submit-tx system (first-ownership-tx)))
 
 
 
@@ -222,14 +243,16 @@
     [?p :person/has ?artefact-id]
     [?artefact-id :artefact/title ?atitle]])
 
-(crux/q (crux/db system) who-has-what-query)
-
+(crux/q (crux/db system #inst "1726-05-01") who-has-what-query)
 ; yields
 #{["Mary" "A used sword"]
   ["Mary" "Flintlock pistol"]
   ["Charles" "A Rather Cozy Mug"]
   ["Charles" "Key from an unknown door"]}
 
+(crux/q (crux/db system #inst "1716-05-01") who-has-what-query)
+; yields
+#{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
 
 
 ; Lets not repeat ourselves
@@ -375,20 +398,41 @@
 (crux/q
   (crux/db system #inst "1715-05-18")
   who-has-what-query)
-
 ; yields
-#{["Mary" "A Rather Cozy Mug"]}
+#{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
+; Ah it doesn't have The Mug still.
+; Because we store that data in the Mary entity itself
+; we now should rewrite it's state on "1715-05-18"
+
+(crux/submit-tx system (first-ownership-tx))
 
 (crux/q
-  (crux/db system #inst "1723-05-18")
+  (crux/db system #inst "1715-05-18")
   who-has-what-query)
-; todo yields
+; yields
+#{["Mary" "A used sword"]
+  ["Mary" "Flintlock pistol"]
+  ["Mary" "A Rather Cozy Mug"]}
+; ah, much better
 
-(crux/q
-  (crux/db system #inst "1726-05-18")
-  who-has-what-query)
+; Note that with this particular data model we should also rewrite
+; all the artefacts transactions since 1715. But since it matches
+; the tale we can omit the labour for this time.
+; And if acts of ownership were separate documents, the labour
+; wouldn't be needed at all.
+
 
 (crux/q
   (crux/db system #inst "1740-06-19")
   who-has-what-query)
+
+
+; but also we are still able to see how wrong we were
+(crux/q
+  (crux/db system
+           #inst "1715-06-19"
+           (:crux.tx/tx-time first-ownership-tx-response))
+  who-has-what-query)
+; yields
+#{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
 ;; end::a-tale/rest[]
