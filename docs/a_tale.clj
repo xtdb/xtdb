@@ -134,7 +134,7 @@
 
 ;; Looking Around : Basic Queries
 
-; Get a database value, read from it until it's changed
+; Get a database _value_ and read from it consistently
 (def db (crux/db system))
 
 ; Query entities
@@ -176,8 +176,9 @@
   [[:crux.tx/delete :ids.artefacts/forbidden-beans
     #inst "1690-05-18"]])
 
-; Sometimes people enter data which just doesn't belong there.
-; Lets completely wipe all traces of the laptop the timelines.
+; Sometimes people enter data which just doesn't belong there or that they no
+; longer have a legal right to store.
+; Lets completely wipe all traces of that laptop from the timelines.
 (crux/submit-tx
   system
   [[:crux.tx/evict :ids.artefacts/laptop]])
@@ -210,18 +211,21 @@
 ; features like partial updates will appear in utils projects!
 
 ; Give 'em some artefacts
-; Charles was 25 when he found the Cozy Mug
 
 (defn first-ownership-tx []
   [(let [charles (crux/entity (crux/db system #inst "1725-05-17") :ids.people/Charles)]
+     ; Charles was 25 when he found the Cozy Mug
       [:crux.tx/put :ids.people/Charles
        (update charles
-              :person/has
+              ; Crux is schemaless, so we can use :person/has however we like
+              :person/has 
               (comp set conj)
+              ; ...such as storing a set of references to other entity ids
               :ids.artefacts/cozy-mug
               :ids.artefacts/unknown-key)
        #inst "1725-05-18"])
     (let [mary  (crux/entity (crux/db system #inst "1715-05-17") :ids.people/Mary)]
+      ; And Mary has owned the pirate sword and flintlock pistol for long time
       [:crux.tx/put :ids.people/Mary
        (update mary
               :person/has
