@@ -8,5 +8,6 @@
 * <<benchmarks.adoc#,Benchmarks>>
 * <<roadmap.adoc#,Roadmap>>
 * <<faq.adoc#,FAQ>>
+* <<a_tale.adoc#,Tutorial>>
 * <<design.adoc#,Design>>
 * <<resources.adoc#,Resources>>

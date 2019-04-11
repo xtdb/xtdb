@@ -1,22 +1,36 @@
-= A Story
+= A Tale
 
-For those readers whose learning ability is better when affections are in place
-we're offering a short story writing experience through database transactions and queries.
+For those readers whose learning ability is better when affections
+are in place we're offering a short story writing experience
+through database transactions and queries.
 
 
 === Table of contents
+
+* Prerequisite knowledge
+  ** EDN
+  ** basic datalog
+  ** basic clojrue
+  ** bitemp
 
 * Letting data in
   ** Basic transactions
   ** References                                             // missing in intro 1
 
-* Queries
+* Looking Around (Queries)
   // Explore the present state of a world.
+  ** schema exploration
   ** simple where and fields selection
   ** entity pull
        to observe characters and their relations structure
   ** and / or / in (1 2 3)
   ** joins                                                 // missing in intro 1
+
+  ** changing data
+     - cas
+     - delete
+     - evict
+
   ** main Clojure core functions at work
      or (arbitrary user functions)
   ** having                                                // requires a decorator [why do we call them decorators btw]?
@@ -36,6 +50,12 @@ we're offering a short story writing experience through database transactions an
 
 // Then final plot-twist and recommendation engine impovings.
 
+* Datalog results shaping?
+
+* Storage
+  ** In memory
+  ** Rocks DB
+
 
 
 Data structure could be like
@@ -53,3 +73,35 @@ Artifacts
 Places
 - name
 - location
+
+
+
+== Setup
+Assuming you have some basic knowledge of Clojure and you own a REPL.
+All you need for this story is
+Add our our dep stup
+
+[source,clj]
+----
+include::./deps.edn[tags=CruxDep]
+----
+
+Fire up a repl and create a namespace
+[source,clj]
+----
+include::./a_story.clj[tags=a-story/create-ns]
+----
+
+== Letting data in
+
+[source,clj]
+----
+include::./examples.clj[tags=submit-tx]
+----
+
+  ** Basic transactions
+
+
+
+
+  ** References
