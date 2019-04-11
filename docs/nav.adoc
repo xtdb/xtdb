@@ -9,5 +9,5 @@
 * <<roadmap.adoc#,Roadmap>>
 * <<faq.adoc#,FAQ>>
 * <<a_tale.adoc#,Tutorial>>
-* <<design.adoc#,Design>>
+* <<unbundled.adoc#,Unbundled>>
 * <<resources.adoc#,Resources>>

@@ -1,4 +1,4 @@
-= Design
+= Unbundled
 
 == Introduction
 
@@ -77,22 +77,3 @@ include::../src/crux/db.clj[tags=Indexer]
 
 The single implememention is `crux.tx.KvIndexer`, which makes use of
 the `KvStore` to persist indices.
-
-The Indexer writes to these indices when indexing _documents_:
-
-.Crux Document Indices
-[#table-conversion%header,cols="d,d"]
-|===
-|Implementation|Description
-|`attribute+value+entity+content-hash-key`|For querying against attribute values
-|`attribute+entity+value+entity+content-hash-key`|For querying against attribute values within entities
-|===
-
-The Indexer writes to these indices when indexing _transactions_:
-
-.Crux Transaction Indices
-[#table-conversion%header,cols="d,d"]
-|===
-|Implementation|Description
-|`entity+valid-time+transaction-time+transaction-id`|Use for `as-of` document retrieval
-|===
