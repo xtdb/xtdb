@@ -134,36 +134,17 @@ position is hard coded to mean the `:crux.db/id` field.
 
 == Transactions
 
-The four transaction (write) operations are as follows:
+There are four transaction (write) operations:
 
-[source,clojure]
-----
-[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-#inst "2018-05-18T09:20:27.966-00:00"]
-
-[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso
-"090622a35d4b579d2fcfebf823821298711d3867"
-"048ebba27e1da223ce97dded59d46e069ddf921b"
-#inst "2018-05-18T09:21:31.846-00:00"]
-
-[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
-
-[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
-----
-
-The valid time is optional and defaults to transaction time, which is
-taken from the Kafka log. Crux currently writes into the past at a
-single point, so to overwrite several versions or a range in time, one
-is required to submit a transaction containing several operations.
-Eviction works a bit differently, and all versions at or before the
-provided valid time are evicted.
-
-The hashes are the SHA-1 content hash of the documents. Crux uses an
-attribute `:crux.db/id` on the documents that has to line up with the id
-it is submitted under.
+.Write Operations
+[#table-conversion%header,cols="d,d"]
+|===
+|Operation|Purpose
+|`crux.tx/put`|Write a version of a document
+|`crux.tx/cas`|_Compare and swap_ the version of a document, if that version is as expected
+|`crux.tx/delete`|Deletes the specific document at a given `valid time`
+|`crux.tx/evict`|Evicts a document entirely, including all historical versions
+|===
 
 A document looks like this:
 
@@ -174,9 +155,8 @@ A document looks like this:
  :last-name "Picasso"}
 ----
 
-In practice when using Crux, one calls `crux.db/submit-tx` with a set of
-transaction operations as above, where the hashes are replaced with
-actual documents:
+In practice when using Crux, one calls `crux.db/submit-tx` with a
+sequence of transaction operations:
 
 [source,clj]
 ----
@@ -187,15 +167,83 @@ actual documents:
  #inst "2018-05-18T09:20:27.966-00:00"]]
 ----
 
-For each operation the id and the document are hashed, and this version
-is submitted to the `tx-topic` in Kafka. The document itself is
-submitted to the `doc-topic`, using its content hash as key. This latter
-topic is compacted, which enables later deletion of documents.
-
 If the transaction contains CAS operations, all CAS operations must pass
 their pre-condition check or the entire transaction is aborted. This
 happens at the query node during indexing, and not when submitting the
 transaction.
+
+For operations containing documents, the id and the document are
+hashed, and the operation and hash is submitted to the `tx-topic` in
+the event log. The document itself is submitted to the `doc-topic`,
+using its content hash as key. In Kafka, the `doc-topic` is compacted,
+which enables later deletion of documents.
+
+=== Put
+
+Put's a document into Crux. If a document already exists with the
+given `:crub.db/id`, a new version of this document will be created at
+the supplied `valid time`.
+
+[source,clojure]
+----
+[:crux.tx/put
+ :http://dbpedia.org/resource/Pablo_Picasso <1>
+ {:crub.db/id :http://dbpedia.org/resource/Pablo_Picasso :first-name :Pablo} <2>
+ #inst "2018-05-18T09:20:27.966-00:00"] <3>
+----
+
+<1> The ID of the document being written
+<2> The document itself
+<3> `valid time`
+
+Note that `valid time` is optional and defaults to transaction time,
+which is taken from the Kafka log.
+
+Crux currently writes into the past at a single point, so to overwrite
+several versions or a range in time, one is required to submit a
+transaction containing several operations.
+
+=== CAS
+
+The CAS operation (_compare and swap_) swaps an existing document version with a
+newer one, if the existing document is as expected.
+
+[source,clojure]
+----
+[:crux.tx/cas
+ :http://dbpedia.org/resource/Pablo_Picasso <1>
+ {..} <2>
+ {..} <3>
+  #inst "2018-05-18T09:21:31.846-00:00"] <4>
+----
+
+<1> The ID of the document being written
+<2> Expected Document
+<3> New document
+<4> `valid time`
+
+=== Delete
+
+Deletes a document at a given `valid time`. Historical version of the
+document will still be available.
+
+[source,clojure]
+----
+[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
+#inst "2018-05-18T09:21:52.151-00:00"]
+----
+
+=== Evict
+
+Evicts a document from Crux. The transaction history will be
+available, but all versions at or before the provided `valid time` are
+evicted.
+
+[source,clojure]
+----
+[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
+#inst "2018-05-18T09:21:52.151-00:00"]
+----
 
 == API
 
