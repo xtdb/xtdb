@@ -1,7 +1,7 @@
-;; tag::a-story/create-ns[]
-(ns a-story
+;; tag::a-tale/create-ns[]
+(ns a-tale
   (:require [crux.api :as crux]))
-;; end::a-story/create-ns[]
+;; end::a-tale/create-ns[]
 
 
 ;; a shopkeeper Charles has an artefact [limestone comb]
@@ -9,20 +9,18 @@
 ;; rogue traveller Joe aims to recover it
 
 
-;; tag::a-story/def-system[]
+;; tag::a-tale/def-system[]
 (def system
   (crux/start-standalone-system
     {:kv-backend "crux.kv.memdb.MemKv" :db-dir "data/db-dir-1"}))
-;; end::a-story/def-system[]
+;; end::a-tale/def-system[]
 
 
 ;; Building some story
 ;; Story time 1740
 
-;; tag::a-story/def-character[]
-
 ; First character
-;; tag::a-story/def-character[]
+;; tag::a-tale/def-character[]
 (crux/submit-tx
   system
   [[:crux.tx/put :ids.people/Charles  ; id for the storage (mem or Kafka)
@@ -37,9 +35,10 @@
      :person/hp   40
      :person/gold 10000}
     #inst "1700-05-18"]]) ; valid time (optional)
-;; end::a-story/def-character[]
+;; end::a-tale/def-character[]
 
 
+;; tag::a-tale/rest[]
 ; Load the remaining part of the set
 (crux/submit-tx
   system
@@ -381,3 +380,4 @@
 (crux/q
   (crux/db system #inst "1740-06-19")
   who-has-what-query)
+;; end::a-tale/rest[]
