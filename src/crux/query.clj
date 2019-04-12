@@ -11,7 +11,8 @@
             [crux.index :as idx]
             [crux.lru :as lru]
             [crux.kv :as kv]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [datomic.api :as d])
   (:import java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
@@ -103,6 +104,7 @@
 (s/def ::rules (s/coll-of ::rule-definition :kind vector? :min-count 1))
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
+(s/def ::full-results? boolean?)
 
 (s/def ::order-element (s/and vector?
                               (s/cat :var logic-var? :direction (s/? #{:asc :desc}))))
@@ -113,7 +115,7 @@
 (declare normalize-query)
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
-                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout])))
+                      (s/keys :req-un [::find ::where] :opt-un [::args ::rules ::offset ::limit ::order-by ::timeout ::full-results?])))
 
 ;; NOTE: :min-count generates boxed math warnings, so this goes below
 ;; the spec.
@@ -1072,7 +1074,7 @@
        result)))
   ([{:keys [object-store kv] :as db} snapshot q]
    (let [q (normalize-query (s/assert ::query q))
-         {:keys [find where args rules offset limit order-by] :as q-conformed} (s/conform ::query q)
+         {:keys [find where args rules offset limit order-by full-results?] :as q-conformed} (s/conform ::query q)
          stats (idx/read-meta kv :crux.kv/stats)]
      (log/debug :query (pr-str q))
      (validate-args args)
@@ -1090,9 +1092,11 @@
        (cond->> (for [[join-keys join-results] (idx/layered-idx->seq n-ary-join)
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
-                  (with-meta
-                    (mapv #(.value ^BoundResult %) bound-result-tuple)
-                    (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple)))
+                  (if full-results?
+                    (vec bound-result-tuple)
+                    (with-meta
+                      (mapv #(.value ^BoundResult %) bound-result-tuple)
+                      (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple))))
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)

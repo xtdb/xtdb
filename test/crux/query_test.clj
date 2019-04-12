@@ -60,6 +60,22 @@
                                                    [p1 :last-name name]
                                                    [p1 :name "Smith"]]})))))
 
+(t/deftest test-basic-query-returning-meta
+  (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
+
+  (t/testing "Can retrieve meta data via results"
+    (let [m (-> (meta (first (q/q (q/db *kv*) '{:find [e]
+                                                :where [[e :name "Ivan"]]}))))]
+      (t/is (= {:var 'e :value :ivan}
+               (select-keys (get m 'e) [:var :value])))
+      (t/is (= "Ivanov" (get-in m ['e :doc :last-name])))))
+
+  (t/testing "Can retrieve meta data directly"
+    (t/is (= ['e 'first-name] (map :var (first (q/q (q/db *kv*)
+                                                    '{:find [e first-name]
+                                                      :where [[e :name first-name]]
+                                                      :full-results? true})))))))
+
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (f/transact-people! *kv* [{:name "Ivan" :last-name "Ivanov"}
                                               {:name "Petr" :last-name "Petrov"}])]
