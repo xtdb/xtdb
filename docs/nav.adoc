@@ -13,4 +13,4 @@
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<design.adoc#,Design>>
-* <<Contributing.adoc#,Contributing>>
+* <<contributing.adoc#,Contributing>>

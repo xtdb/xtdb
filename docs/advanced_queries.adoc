@@ -32,6 +32,7 @@ Specifically:
 == WatDiv SPARQL Tests
 
 ****
+[%hardbreaks]
 Waterloo SPARQL Diversity Test Suite
 https://dsg.uwaterloo.ca/watdiv/
 ****
@@ -41,6 +42,7 @@ Benchmarking has been performed against the WatDiv test suite. These tests demon
 == LUBM Web Ontology Language (OWL) Tests
 
 ****
+[%hardbreaks]
 Lehigh University Benchmark
 http://swat.cse.lehigh.edu/projects/lubm/
 ****
