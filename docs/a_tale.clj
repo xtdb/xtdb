@@ -13,7 +13,6 @@
 
 ;; tag::a-tale/def-system[]
 
-; or
 (def system
   (crux/start-standalone-system
     {:kv-backend "crux.kv.memdb.MemKv" :db-dir "data/db-dir-1"}))
@@ -49,8 +48,7 @@
 ;; end::a-tale/def-character[]
 
 
-;; tag::a-tale/rest[]
-; Load the remaining part of the set
+;; tag::a-tale/rest-of-set[]
 (crux/submit-tx
   system
   [; rest of characters
@@ -129,22 +127,35 @@
      :place/location :ids.places/carribean}
     #inst "1000-01-01"]
    ])
-
+;; end::a-tale/rest-of-set[]
 
 
 ;; Looking Around : Basic Queries
 
 ; Get a database _value_ and read from it consistently
+
+;; tag::a-tale/simple-queries[]
 (def db (crux/db system))
 
 ; Query entities
 (crux/entity db :ids.people/Charles)
+; yields
+{:crux.db/id :ids.people/Charles,
+ :person/str 40,
+ :person/dex 40,
+ :person/location :ids.places/rarities-shop,
+ :person/hp 40,
+ :person/int 40,
+ :person/name "Charles",
+ :person/gold 10000,
+ :person/born #inst "1700-05-18T00:00:00.000-00:00"}
 
 ; Datalog syntax : query ids
 (crux/q db
         '[:find ?e
           :where
           [?e :person/name "Charles"]])
+#{[:ids.people/Charles]}
 
 ; Datalog syntax : query more fields
 (crux/q db
@@ -153,6 +164,7 @@
           [?e :person/name "Charles"]
           [?e :person/name ?name]
           [?e :person/int  ?int]])
+#{[:ids.people/Charles "Charles" 40]}
 
 ; See all artefact names
 (crux/q db
@@ -164,6 +176,8 @@
   ["A used sword"] ["A Rather Cozy Mug"]
   ["A Tell DPS Laptop (what?)"]
   ["Flintlock pistol"]}
+;; end::a-tale/simple-queries[]
+
 
 
 ;; Balancing the world
@@ -171,19 +185,26 @@
 ; Ok yes magic beans once _were_ in the realm, and we want to remember that,
 ; but following advice from our publisher we've decided to remove them from
 ; the story for now. Charles won't know that they ever existed!
+
+;; tag::a-tale/delete-query[]
 (crux/submit-tx
   system
   [[:crux.tx/delete :ids.artefacts/forbidden-beans
     #inst "1690-05-18"]])
+;; end::a-tale/delete-query[]
+
 
 ; Sometimes people enter data which just doesn't belong there or that they no
 ; longer have a legal right to store.
 ; Lets completely wipe all traces of that laptop from the timelines.
+;; tag::a-tale/evict-query[]
 (crux/submit-tx
   system
   [[:crux.tx/evict :ids.artefacts/laptop]])
+;; end::a-tale/evict-query[]
 
-; See all artefact names
+; Let's see what we got now
+;; tag::a-tale/eviction-result[]
 (crux/q (crux/db system)
         '[:find ?name
           :where
@@ -201,24 +222,22 @@
 
 ; yields
 #{["Magic beans"]}
+;; end::a-tale/eviction-result[]
 
 
 
 ;; Some character development
 
-; Note that transactions in Crux will rewrite the whole entity.
-; This is because the core of Crux is intentionally slim, and
-; features like partial updates will appear in utils projects!
+; Let's see how Crux handles references. Give our characters some artefacts
 
-; Give 'em some artefacts
-
+;; tag::a-tale/write-references[]
 (defn first-ownership-tx []
   [(let [charles (crux/entity (crux/db system #inst "1725-05-17") :ids.people/Charles)]
      ; Charles was 25 when he found the Cozy Mug
       [:crux.tx/put :ids.people/Charles
        (update charles
               ; Crux is schemaless, so we can use :person/has however we like
-              :person/has 
+              :person/has
               (comp set conj)
               ; ...such as storing a set of references to other entity ids
               :ids.artefacts/cozy-mug
@@ -236,10 +255,11 @@
 
 (def first-ownership-tx-response
   (crux/submit-tx system (first-ownership-tx)))
-
+;; end::a-tale/write-references[]
 
 
 ; Who has what : basic joins
+;; tag::a-tale/basic-joins[]
 (def who-has-what-query
   '[:find ?name ?atitle
     :where
@@ -257,9 +277,11 @@
 (crux/q (crux/db system #inst "1716-05-01") who-has-what-query)
 ; yields
 #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
+;; end::a-tale/basic-joins[]
 
 
 ; Lets not repeat ourselves
+;; tag::a-tale/convenience-functions[]
 (defn entity-update
   [entity-id new-attrs valid-time]
   (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
@@ -300,7 +322,29 @@
       (crux/entity db entity-id)
       keys-to-pull)))
 
-; Let's pull out everything we know about Charles and the items he has
+
+; Charles became more studious as he entered his thirties
+(entity-update :ids.people/Charles
+  {:person/int  50}
+  #inst "1730-05-18")
+
+; Check our update
+(entity :ids.people/Charles)
+
+;yields
+{:person/str 40,
+ :person/dex 40,
+ :person/has #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key}
+ :person/location :ids.places/rarities-shop,
+ :person/hp 40,
+ :person/int 50,
+ :person/name "Charles",
+ :crux.db/id :ids.people/Charles,
+ :person/gold 10000,
+ :person/born #inst "1700-05-18T00:00:00.000-00:00"}
+
+
+; Pull out everything we know about Charles and the items he has
 (entity-with-adjacent :ids.people/Charles [:person/has])
 
 ; yields
@@ -315,42 +359,20 @@
     :artefact.perks/int 3}},
  :person/location :ids.places/rarities-shop,
  :person/hp 40,
- :person/int 40,
+ :person/int 50,
  :person/name "Charles",
  :person/gold 10000,
  :person/born #inst "1700-05-18T00:00:00.000-00:00"}
+;; end::a-tale/convenience-functions[]
 
 
-; Charles became more studious as he entered his thirties
-(entity-update :ids.people/Charles
-  {:person/int  55}
-  #inst "1730-05-18")
 
-
-; Let's check our update
-(entity :ids.people/Charles)
-
-;yields
-{:person/str 40,
- :person/dex 40,
- :person/has :ids.artefacts/cozy-mug,
- :person/location :ids.places/rarities-shop,
- :person/hp 40,
- :person/int 55,
- :person/name "Charles",
- :crux.db/id :ids.people/Charles,
- :person/gold 10000,
- :person/born #inst "1700-05-18T00:00:00.000-00:00"}
-
-
-;; associations / joins
- ; who was where
-
-;; use any clojure core function
-;; use your own functions (subject to change)
+; todo use any clojure core function
+; todo use your own functions (subject to change)
 
 
 ; plot : Mary steals The Mug in June
+;; tag::a-tale/plot-final-1[]
 (let [theft-date #inst "1740-06-18"]
   (crux/submit-tx
     system
@@ -366,6 +388,7 @@
               (comp set conj)
               :ids.artefacts/cozy-mug)
       theft-date]]))
+;; end::a-tale/plot-final-1[]
 
 ; future plot development : Mary moves her operations to Carribean, Charles recruits Joe to follow her
 
@@ -374,10 +397,11 @@
 ; So for now we think we're done with the story.
 ; We have a picture and we're all perfectly ready to blame Mary for
 ; stealing the mug.
-; Suddently a revelation occurs when an upstream data source kicks in.
+; Suddenly a revelation occurs when an upstream data source kicks in.
 ; We uncover a previously unknown piece of history.
 ; It turns out the mug was Mary's family heirloom all along!
 
+;; tag::a-tale/new-upstream-data[]
 (let [marys-birth-inst #inst "1710-05-18"
       db        (crux/db system marys-birth-inst)
       baby-mary (crux/entity db :ids.people/Mary)]
@@ -405,7 +429,7 @@
 ; yields
 #{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
 ; Ah it doesn't have The Mug still.
-; Because we store that data in the Mary entity itself
+; Because we store that data in the entity itself
 ; we now should rewrite it's state on "1715-05-18"
 
 (crux/submit-tx system (first-ownership-tx))
@@ -418,6 +442,7 @@
   ["Mary" "Flintlock pistol"]
   ["Mary" "A Rather Cozy Mug"]}
 ; ah, much better
+;; end::a-tale/new-upstream-data[]
 
 ; Note that with this particular data model we should also rewrite
 ; all the artefacts transactions since 1715. But since it matches
@@ -426,17 +451,22 @@
 ; wouldn't be needed at all.
 
 
+;; tag::a-tale/final-picture[]
 (crux/q
   (crux/db system #inst "1740-06-19")
   who-has-what-query)
 
 
-; but also we are still able to see how wrong we were
+; But also we are still able to see how wrong we were
+; as we can can rewind not only the tale's history
+; but also the history of our edits to it. Just use
+; the tx-time of the first ownership response.
 (crux/q
   (crux/db system
            #inst "1715-06-19"
            (:crux.tx/tx-time first-ownership-tx-response))
   who-has-what-query)
 ; yields
-#{["Mary" "A used sword"] ["Mary" "Flintlock pistol"]}
-;; end::a-tale/rest[]
+#{["Mary" "A used sword"]
+  ["Mary" "Flintlock pistol"]}
+;; end::a-tale/final-picture[]
