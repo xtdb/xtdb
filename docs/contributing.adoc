@@ -11,6 +11,6 @@ https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
 == Contributor License Agreement (CLA)
 
-A CLA is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future. Please complete the very short *.doc template and email it to us, crux@juxt.pro, along with a link to your initial PR on GitHub.
+A CLA is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future. Please complete the very short `.doc` template linked below and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
 
-<<open-crux-individual-contributor-license-agreement-cla.doc#,Open Crux CLA>>
+link:open-crux-individual-contributor-license-agreement-cla.doc[Open Crux CLA]
