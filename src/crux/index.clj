@@ -1,7 +1,5 @@
 (ns crux.index
   (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
-            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.db :as db]
@@ -19,7 +17,8 @@
            [crux.index BinaryJoinLayeredVirtualIndexState DocAttributeValueEntityEntityIndexState EntityHistoryRangeState
             EntityValueEntityPeekState NAryJoinLayeredVirtualIndexState NAryWalkState RelationIteratorsState
             RelationNestedIndexState SortedVirtualIndexState UnaryJoinIteratorState UnaryJoinIteratorsThunkFnState
-            UnaryJoinIteratorsThunkState ValueEntityValuePeekState]))
+            UnaryJoinIteratorsThunkState ValueEntityValuePeekState]
+           [clojure.lang IReduceInit Seqable Sequential]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -464,11 +463,29 @@
                    (mem/copy-to-unpooled-buffer k)) (step f-next f-next))))))
     #(kv/seek i seek-k) #(kv/next i))))
 
-(defn idx->seq [idx]
-  (when-let [result (db/seek-values idx nil)]
-    (->> (repeatedly #(db/next-values idx))
-         (take-while identity)
-         (cons result))))
+(defn idx->series
+  [idx]
+  (reify
+    IReduceInit
+    (reduce [_ rf init]
+      (loop [ret (rf init (db/seek-values idx nil))]
+        (if-let [x (db/next-values idx)]
+          (let [ret (rf ret x)]
+            (if (reduced? ret)
+              @ret
+              (recur ret)))
+          ret)))
+    Seqable
+    (seq [_]
+      (when-let [result (db/seek-values idx nil)]
+        (->> (repeatedly #(db/next-values idx))
+             (take-while identity)
+             (cons result))))
+    Sequential))
+
+(defn idx->seq
+  [idx]
+  (seq (idx->series idx)))
 
 ;; Entities
 
