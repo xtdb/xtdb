@@ -2,6 +2,10 @@
 
 == Introduction
 
+Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time. This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals. With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.
+
+Crux is also a graph database. The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations. Crux gives you the ability to construct graph queries via a Datalog query language that operates using graph-friendly indexes to provide a powerful set of querying capabilties. Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
+
 This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux APIs. To gain an understanding of edn see <<resources.adoc#_essential_edn_for_using_crux>>.
@@ -22,6 +26,8 @@ Note that all Crux Datalog queries run using a point-in-time view of the databas
 
 == Basic Query
 
+In the most basic case, a Datalog query works by searching for "subgraphs" in the database that match the pattern defined by the clauses. The values within these subgraphs are then returned according to the list of return variables requested in the `:find` vector within the query. 
+
 Our first query runs on a database that contains the following 3 documents which get broken apart and indexed as "entities":
 [source,clj]
 ----
@@ -30,7 +36,7 @@ include::./query_test_examples.clj[tags=test-basic-query-d]
 
 Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as document IDs in addition to UUIDs.
 
-The following query has 3 clauses, represented as edn vectors within the `:where` vector which constrain the result set to match only the entities that satisfy all 3 clauses at once:
+The following query has 3 clauses, represented as edn vectors within the `:where` vector. These clauses constrain the result set to match only the entity (or subgraph of interconnected entities) that satisfy all 3 clauses at once:
 
 [source,clj]
 ----
