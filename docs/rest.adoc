@@ -1,21 +1,40 @@
 [#rest]
 == Introduction
 
-Crux offers a small REST API that allows one to use Crux in a
-conventional SaaS way, deploying Kafka and query nodes into AWS and
-interacting with Crux over HTTP. This mode does not support all
-features.
+Crux offers a small REST API that allows you to send transactions and run
+queries over HTTP. For instance, you could deploy your Crux nodes along with
+Kafka into a Kubernetes pod running on AWS and interact with Crux from your
+application purely via HTTP. Using Crux in this manner is a valid use-case but
+it cannot support all of the features and benfits that running the Crux node
+inside of your application provides.
 
-When using the REST API, the user doesn’t interact directly with
-Kafka, but calls one of the query nodes (potentially behind a load
-balancer) over HTTP to interact with Crux. As the query nodes might be
-at different points in the index, and different queries might go to
-differnet nodes, this may cause read consistency issues.
+Your application only needs to communicate with one Crux node when using the
+REST API. This Crux node may placed be behind a load balancer which spreads the
+load over multiple nodes transparently to application. In addition, different
+Crux nodes might be still be catching up with the head of the transaction log,
+and since different queries might go to different nodes, you have to be
+conscious of read consistency issues when designing your application to use
+Crux in this way. Fortunately, you can mitigate read consistency issues the
+ability to query consistent point-in-time snapshots of the database by
+specifying temporal coordinates along with your queries.
 
 The REST API also provides an experimental endpoint for SPARQL 1.1
 Protocol queries under `/sparql/`, rewriting the query into the Crux
-datalog dialect. Only a small subset of SPARQL is supported, and no
+Datalog dialect. Only a small subset of SPARQL is supported and no
 other RDF features are available.
+
+== Using the HTTP API
+
+The HTTP interface is provided as a Ring middleware in a Clojure namespace,
+located at `crux/src/crux/http_server.clj`. There is an example of using this
+middleware in a full example HTTP server configuration:
+https://github.com/juxt/crux/tree/master/example/standalone_webservice
+
+Whilst CORS may be easily configured for use while prototyping a Single Page
+Application that uses Crux directly from a web browser, it is currently NOT
+recommended to expose Crux directly to any untrusted endpoints (including web
+browsers) in production since the default query API does not sandbox or
+otherwise restrict the execution of queries.
 
 == Index
 
@@ -158,7 +177,7 @@ curl -X GET $nodeURL/history/:ivan
 [#query]
 === POST `/query`
 
-Takes a datalog query and returns its results.
+Takes a Datalog query and returns its results. Note that you are able to add `:full-results true` to the query map to easily retrieve the source documents relating to the entites in the result set.
 
 [source,bash]
 ----
