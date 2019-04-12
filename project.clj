@@ -34,7 +34,8 @@
                                                      log4j]]
                                        [clj-http "3.9.1"]
                                        [http-kit "2.3.0"]]}
-             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
+                       :resource-paths ["resources-uberjar"]}
              :graal {:dependencies [[org.clojure/clojure "1.9.0"]
                                     [org.slf4j/slf4j-simple "1.7.26"]]
                      :clean-targets []
