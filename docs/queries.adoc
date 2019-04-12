@@ -6,6 +6,8 @@ This page walks through many of the more interesting queries that run as part of
 
 Extensible Data Notation (edn) is used as the data format for the public Crux APIs. To gain an understanding of edn see <<resources.adoc#_essential_edn_for_using_crux>>.
 
+Note that all Crux Datalog queries run using a point-in-time view of the database which means the query capabilities and patterns presented in this section are not aware of valid times or transation times.
+
 == Reference
 
 * <<_basic_query>>

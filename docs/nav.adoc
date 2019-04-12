@@ -8,10 +8,9 @@
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
 * <<support.adoc#,Support>>
-* <<benchmarks.adoc#,Benchmarks>>
 * <<roadmap.adoc#,Roadmap>>
 * <<a_tale.adoc#,Tutorial>>
-* <<unbundled.adoc#,Unbundled>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
-* <<dev.adoc#,Dev>>
+* <<design.adoc#,Design>>
+* <<Contributing.adoc#,Contributing>>

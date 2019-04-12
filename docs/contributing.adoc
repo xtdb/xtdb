@@ -1,0 +1,16 @@
+= Contributing
+
+== Thank you
+
+Crux would not exist without the community of vibrant open source projects on which it depends, and we hope that the Crux community will serve to extend and reflect our gratitude.
+
+== Commit Messages
+
+Please strive to follow the best-practices for commit messages which are outlined here:
+https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
+
+== Contributor License Agreement (CLA)
+
+A CLA is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future. Please complete the very short *.doc template and email it to us, crux@juxt.pro, along with a link to your initial PR on GitHub.
+
+<<open-crux-individual-contributor-license-agreement-cla.doc#,Open Crux CLA>>
