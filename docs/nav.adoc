@@ -9,7 +9,6 @@
 * <<rest.adoc#,REST API>>
 * <<support.adoc#,Support>>
 * <<roadmap.adoc#,Roadmap>>
-* <<a_tale.adoc#,Tutorial>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<design.adoc#,Design>>
