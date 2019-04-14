@@ -68,7 +68,7 @@ arbitrary time-stamp that we can use for querying purposes.
 
 We can tolerate data arriving out of order, as we're not completely
 dependent on transaction-time.
-1
+
 ****
 In a ecosystem of many systems, where one cannot control
 the ultimate time line, or other systems abilities to write into the

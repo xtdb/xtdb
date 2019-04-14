@@ -97,7 +97,7 @@ document will still be available.
 
 [source,clojure]
 ----
-[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
+[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
