@@ -179,7 +179,7 @@
 )))))
 
 ;; tag::history-full[]
-(api/submit-tx
+(crux.api/submit-tx
   system
   [[:crux.tx/put :ids.persons/Jeff
     {:crux.db/id :ids.persons/Jeff
@@ -192,10 +192,18 @@
      :person/wealth 1000}
     #inst "2015-05-18T09:20:27.966"]])
 
-(api/history system :ids.persons/Jeff)
+;yields
+{:crux.tx/tx-id 1555314836178,
+ :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00"}
+
+
+(crux.api/history system :ids.persons/Jeff)
+
 ; yields
-[{:crux.db/id "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613", ; sha1 hash of document id
-  :crux.db/content-hash "6ca48d3bf05a16cd8d30e6b466f76d5cc281b561", ; sha1 hash of document contents
+[{:crux.db/id ; sha1 hash of document id
+  "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+  :crux.db/content-hash ; sha1 hash of document contents
+  "6ca48d3bf05a16cd8d30e6b466f76d5cc281b561",
   :crux.db/valid-time #inst "2018-05-18T09:20:27.966-00:00",
   :crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
   :crux.tx/tx-id 1555314835817}
@@ -207,14 +215,17 @@
 ;; end::history-full[]
 
 ;; tag::history-range[]
-(api/history-range system :ids.persons/Jeff
-  #inst "2015-05-18T09:20:27.966"  ; validTimeStart       the start valid time or null.
-  #inst "2015-05-18T09:20:27.966"  ; transactionTimeStart the start transaction time or null.
-  #inst "2020-05-18T09:20:27.966"  ; validTimeEnd         the end valid time or null, inclusive.
-  #inst "2020-05-18T09:20:27.966") ; transactionTimeEnd   the start transaction time or null, inclusive.
+(crux.api/history-range system :ids.persons/Jeff
+  #inst "2015-05-18T09:20:27.966"  ; valid-time start or nil
+  #inst "2015-05-18T09:20:27.966"  ; transaction-time start or nil
+  #inst "2020-05-18T09:20:27.966"  ; valid-time end or nil, inclusive
+  #inst "2020-05-18T09:20:27.966") ; transaction-time end or nil, inclusive.
+
 ; yields
-({:crux.db/id "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613", ; sha1 hash of document id
-  :crux.db/content-hash "a95f149636e0a10a78452298e2135791c0203529", ; sha1 hash of document contents
+({:crux.db/id ; sha1 hash of document id
+  "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613",
+  :crux.db/content-hash  ; sha1 hash of document contents
+  "a95f149636e0a10a78452298e2135791c0203529",
   :crux.db/valid-time #inst "2015-05-18T09:20:27.966-00:00",
   :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00",
   :crux.tx/tx-id 1555314836178}
@@ -224,7 +235,9 @@
    :crux.tx/tx-time #inst "2019-04-15T07:53:55.817-00:00",
    :crux.tx/tx-id 1555314835817})
 
-(api/entity (api/db system) "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613")
+
+(crux.api/entity (crux.api/db system) "c7e66f757f198e08a07a8ea6dfc84bc3ab1c6613")
+
 ; yields
 {:crux.db/id :ids.persons/Jeff,
  :d.person/name "Jeff",
