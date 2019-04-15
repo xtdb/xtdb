@@ -2,7 +2,9 @@
 
 == Thank you
 
-Crux would not exist without the community of vibrant open source projects on which it depends, and we hope that the Crux community will serve to extend and reflect our gratitude.
+Crux would not exist without the community of vibrant open source projects on
+which it depends, and we hope that the Crux community will serve to extend and
+reflect our gratitude.
 
 == Commit Messages
 
@@ -11,6 +13,9 @@ https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
 == Contributor License Agreement (CLA)
 
-A CLA is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future. Please complete the very short `.doc` template linked below and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
+A CLA is necessary for us to ensure that we can support a healthy Crux
+ecosystem over the indefinite future. Please complete the very short `.doc`
+template linked below and email it to us, crux@juxt.pro, along with a reference
+to your current PR on GitHub.
 
 link:open-crux-individual-contributor-license-agreement-cla.doc[Open Crux CLA]
