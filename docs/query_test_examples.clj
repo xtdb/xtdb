@@ -2,8 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.db :as db]
-            [crux.fixtures :as f :refer [*kv*]]
-            [crux.query :as q])
+            [crux.api :as api]
+            [crux.fixtures :as f :refer [*kv*]])
   (:import java.util.UUID))
 
 (t/use-fixtures :each f/with-kv-store)
@@ -30,7 +30,7 @@
 ;; tag::test-basic-query-r[]
 #{[:smith]}
 ;; end::test-basic-query-r[]
-             (q/q (q/db *kv*) (quote
+             (api/q (api/db *kv*) (quote
 ;; tag::test-basic-query-q[]
 {:find [p1]
  :where [[p1 :name name]
@@ -61,8 +61,8 @@
 ;; tag::query-with-arguments1-r[]
 #{["Ivan"]}
 ;; end::query-with-arguments1-r[]
-               (q/q
-                 (q/db *kv*)
+               (api/q
+                 (api/db *kv*)
 (quote
 ;; tag::query-with-arguments1-q[]
 {:find [name]
@@ -77,8 +77,8 @@
 ;; tag::query-with-arguments2-r[]
 #{[:ivan] [:petr]}
 ;; end::query-with-arguments2-r[]
-               (q/q
-                 (q/db *kv*)
+               (api/q
+                 (api/db *kv*)
 (quote
 ;; tag::query-with-arguments2-q[]
 {:find [e]
@@ -93,8 +93,8 @@
 ;; tag::query-with-arguments3-r[]
 #{[:ivan] [:petr]}
 ;; end::query-with-arguments3-r[]
-               (q/q
-                 (q/db *kv*)
+               (api/q
+                 (api/db *kv*)
                  (quote
 ;; tag::query-with-arguments3-q[]
 {:find [e]
@@ -110,8 +110,8 @@
 ;; tag::query-with-arguments4-r[]
 #{["Ivan"]}
 ;; end::query-with-arguments4-r[]
-               (q/q
-                 (q/db *kv*)
+               (api/q
+                 (api/db *kv*)
                  (quote
 ;; tag::query-with-arguments4-q[]
 {:find [name]
@@ -127,8 +127,8 @@
 ;; tag::query-with-arguments5-r[]
 #{[22]}
 ;; end::query-with-arguments5-r[]
-                 (q/q
-                   (q/db *kv*)
+                 (api/q
+                   (api/db *kv*)
                    (quote
 ;; tag::query-with-arguments5-q[]
 {:find [age]
@@ -165,7 +165,7 @@
 ;; end::query-at-t-q1-r[]
 ;; tag::query-at-t-q1-q[]
 ;;TODO Java & Clojure _API_
-(q/q (q/db *kv* #inst "1986-10-23") q)
+(api/q (api/db *kv* #inst "1986-10-23") q)
 ;; end::query-at-t-q1-q[]
 ))
       (t/is (=
@@ -174,12 +174,12 @@
 ;; end::query-at-t-q2-r[]
 ;; tag::query-at-t-q2-q[]
 ;;TODO Java & Clojure _API_
-(q/q (q/db *kv*) q)
+(api/q (api/db *kv*) q)
 ;; end::query-at-t-q2-q[]
 )))))
 
 ;; tag::history-full[]
-(crux.api/submit-tx
+(api/submit-tx
   system
   [[:crux.tx/put :ids.persons/Jeff
     {:crux.db/id :ids.persons/Jeff
@@ -197,7 +197,7 @@
  :crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00"}
 
 
-(crux.api/history system :ids.persons/Jeff)
+(api/history system :ids.persons/Jeff)
 
 ; yields
 [{:crux.db/id ; sha1 hash of document id
@@ -269,7 +269,7 @@
   [:denis-a :denis-b]
   [:denis-b :denis-a]}
 ;; end::join-r[]
-            (q/q (q/db *kv*) (quote
+            (api/q (api/db *kv*) (quote
 ;; tag::join-q[]
 {:find [p1 p2]
  :where [[p1 :name name]
@@ -289,7 +289,7 @@
 ;; tag::join2-r[]
 #{[:petr]}
 ;; end::join2-r[]
-          (q/q (q/db *kv*) (quote
+          (api/q (api/db *kv*) (quote
 ;; tag::join2-q[]
 {:find [e2]
  :where [[e :last-name last-name]
@@ -303,7 +303,7 @@
   (f/transact-people! *kv* [{:name "Ivan"} {:name "Petr"} {:name "Sergei"}])
 
   (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
-           (q/q (q/db *kv*) '{:find [name]
+           (api/q (api/db *kv*) '{:find [name]
                               :where [[_ :name name]]}))))
 ;; end::blanks[]
 
@@ -314,20 +314,20 @@
                             {:crux.db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}])
 
   (t/testing "literal v"
-    (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
+    (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
                                          :where [[e :name name]
                                                  [e :name "Ivan"]
                                                  (not [e :last-name "Ivannotov"])]}))))
 
     (t/testing "multiple clauses in not"
-      (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
+      (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
                                            :where [[e :name name]
                                                    [e :name "Ivan"]
                                                    (not [e :last-name "Ivannotov"]
                                                         [(string? name)])]}))))))
 
   (t/testing "variable v"
-    (t/is (= 2 (count (q/q (q/db *kv*) '{:find [e]
+    (t/is (= 2 (count (api/q (api/db *kv*) '{:find [e]
                                          :where [[e :name name]
                                                  [:ivan-ivanovtov-1 :last-name i-name]
                                                  (not [e :last-name i-name])]}))))))
@@ -341,7 +341,7 @@
                             {:name "Bob" :last-name "Controlguy"}])
 
   (t/testing "Or works as expected"
-    (t/is (= 3 (count (q/q (q/db *kv*) '{:find [e]
+    (t/is (= 3 (count (api/q (api/db *kv*) '{:find [e]
                                          :where [[e :name name]
                                                  [e :name "Ivan"]
                                                  (or [e :last-name "Ivanov"]
@@ -356,7 +356,7 @@
 
     (t/is (= #{["Ivan"]
                ["Ivana"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         (or [e :sex :female]
                                             (and [e :sex :male]
@@ -370,7 +370,7 @@
                                                       {:name "Ivanova" :last-name "Ivanov" :sex :female}])]
 
     (t/testing "?p2 introduced only inside of an Or"
-      (t/is (= #{[(:crux.db/id ivan)]} (q/q (q/db *kv*) '{:find [?p2]
+      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *kv*) '{:find [?p2]
                                                           :where [(or (and [?p2 :name "Petr"]
                                                                            [?p2 :sex :female])
                                                                       (and [?p2 :last-name "Ivanov"]
@@ -385,7 +385,7 @@
 
   (t/testing "Rudimentary not-join"
     (t/is (= #{["Ivan"] ["Malcolm"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         (not-join [e]
                                                   [e :last-name "Monroe"])]})))))
@@ -399,13 +399,13 @@
 
   (t/testing "Or can use not expression"
     (t/is (= #{["Ivan"] ["Derek"] ["Fred"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         (or [e :last-name "Ivanov"]
                                             (not [e :name "Bob"]))]}))))
 
   (t/testing "Not can use Or expression"
-    (t/is (= #{["Fred"]} (q/q (q/db *kv*) '{:find [name]
+    (t/is (= #{["Fred"]} (api/q (api/db *kv*) '{:find [name]
                                             :where [[e :name name]
                                                     (not (or [e :last-name "Ivanov"]
                                                              [e :name "Bob"]))]})))))
@@ -417,27 +417,27 @@
 
   (t/testing "range expressions"
     (t/is (= #{["Ivan"] ["Bob"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [e :age age]
                                         [(< age 50)]]})))
 
     (t/is (= #{["Dominic"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [e :age age]
                                         [(>= age 50)]]}))))
 
   (t/testing "clojure.core predicate"
     (t/is (= #{["Bob"] ["Dominic"]}
-             (q/q (q/db *kv*) '{:find [name]
+             (api/q (api/db *kv*) '{:find [name]
                                 :where [[e :name name]
                                         [(re-find #"o" name)]]})))
 
 
     (t/testing "Several variables"
       (t/is (= #{[:bob "Ivanov"]}
-               (q/q (q/db *kv*) '{:find [e last-name]
+               (api/q (api/db *kv*) '{:find [e last-name]
                                   :where [[e :last-name last-name]
                                           [e :age age]
                                           [(re-find #"ov$" last-name)]
@@ -445,14 +445,14 @@
 
     (t/testing "Bind result to var"
       (t/is (= #{["Dominic" 25] ["Ivan" 15] ["Bob" 20]}
-               (q/q (q/db *kv*) '{:find [name half-age]
+               (api/q (api/db *kv*) '{:find [name half-age]
                                   :where [[e :name name]
                                           [e :age age]
                                           [(quot age 2) half-age]]})))
 
       (t/testing "Binding more than once intersects result"
         (t/is (= #{["Ivan" 15]}
-                 (q/q (q/db *kv*) '{:find [name half-age]
+                 (api/q (api/db *kv*) '{:find [name half-age]
                                     :where [[e :name name]
                                             [e :age real-age]
                                             [(quot real-age 2) half-age]
@@ -460,7 +460,7 @@
 
       (t/testing "Binding can use range predicates"
         (t/is (= #{["Dominic" 25]}
-                 (q/q (q/db *kv*) '{:find [name half-age]
+                 (api/q (api/db *kv*) '{:find [name half-age]
                                     :where [[e :name name]
                                             [e :age real-age]
                                             [(quot real-age 2) half-age]
@@ -473,7 +473,7 @@
 
   (t/testing "can find multiple values"
     (t/is (= #{[:bob] [:dominic]}
-             (q/q (q/db *kv*) '{:find [f]
+             (api/q (api/db *kv*) '{:find [f]
                                 :where [[i :name "Ivan"]
                                         [i :friends f]]})))))
 
@@ -484,7 +484,7 @@
 
   (t/is (= #{[:oleg "Oleg" :petr "Petr"]
              [:ivan "Ivan" :oleg "Oleg"]
-             [:petr "Petr" :ivan "Ivan"]} (q/q (q/db *kv*) '{:find [e1 n1 e2 n2]
+             [:petr "Petr" :ivan "Ivan"]} (api/q (api/db *kv*) '{:find [e1 n1 e2 n2]
                                                              :where [[e1 :name n1]
                                                                      [e2 :mentor e1]
                                                                      [e2 :name n2]]}))))
@@ -493,13 +493,13 @@
   (f/transact-people! *kv* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
                             {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}])
 
-  (t/is (= #{[:petr :petr]} (q/q (q/db *kv*) '{:find [p1 p2]
+  (t/is (= #{[:petr :petr]} (api/q (api/db *kv*) '{:find [p1 p2]
                                                :where [[p1 :name "Petr"]
                                                        [p2 :mentor i]
                                                        [(== p1 p2)]]})))
 
   (t/testing "multiple literals in set"
-    (t/is (= #{[:petr] [:ivan]} (q/q (q/db *kv*) '{:find [p]
+    (t/is (= #{[:petr] [:ivan]} (api/q (api/db *kv*) '{:find [p]
                                                    :where [[p :name n]
                                                            [(== n #{"Petr" "Ivan"})]]})))))
 
@@ -508,33 +508,33 @@
                             {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}])
 
   (t/testing "without rule"
-    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+    (t/is (= #{[:ivan]} (api/q (api/db *kv*) '{:find [i]
                                            :where [[i :age age]
                                                    [(>= age 21)]]}))))
 
   (t/testing "rule using same variable name as body"
-    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+    (t/is (= #{[:ivan]} (api/q (api/db *kv*) '{:find [i]
                                            :where [[i :age age]
                                                    (over-twenty-one? age)]
                                            :rules [[(over-twenty-one? age)
                                                     [(>= age 21)]]]}))))
 
   (t/testing "rules directly on arguments"
-    (t/is (= #{[21]} (q/q (q/db *kv*) '{:find [age]
+    (t/is (= #{[21]} (api/q (api/db *kv*) '{:find [age]
                                         :where [(over-twenty-one? age)]
                                         :args [{:age 21}]
                                         :rules [[(over-twenty-one? age)
                                                  [(>= age 21)]]]}))))
 
   (t/testing "rule using multiple arguments"
-    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+    (t/is (= #{[:ivan]} (api/q (api/db *kv*) '{:find [i]
                                            :where [[i :age age]
                                                    (over-age? age 21)]
                                            :rules [[(over-age? [age] required-age)
                                                     [(>= age required-age)]]]}))))
 
   (t/testing "rule using multiple branches"
-    (t/is (= #{[:ivan]} (q/q (q/db *kv*) '{:find [i]
+    (t/is (= #{[:ivan]} (api/q (api/db *kv*) '{:find [i]
                                            :where [(is-ivan-or-bob? i)]
                                            :rules [[(is-ivan-or-bob? i)
                                                     [i :name "Ivan"]
@@ -542,7 +542,7 @@
                                                    [(is-ivan-or-bob? i)
                                                     [i :name "Bob"]]]})))
 
-    (t/is (= #{["Petr"]} (q/q (q/db *kv*) '{:find [name]
+    (t/is (= #{["Petr"]} (api/q (api/db *kv*) '{:find [name]
                                             :where [[i :name name]
                                                     (not (is-ivan-or-bob? i))]
                                             :rules [[(is-ivan-or-bob? i)
@@ -769,7 +769,7 @@
       (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                  [:p3 :LA #inst "2018-12-31" :na]
                  [:p4 :NY #inst "2019-01-02" :na]}
-               (q/q (q/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
+               (api/q (api/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
                     '{:find [p entry-pt arrival-time departure-time]
                       :where [[p :entry-pt entry-pt]
                               [p :arrival-time arrival-time]
@@ -792,8 +792,8 @@
                                    {:crux.db/id :2 :follow #{:3 :4}}
                                    {:crux.db/id :3 :follow :4}
                                    {:crux.db/id :4 :follow :6}])
-  (let [db (q/db *kv*)]
-    (t/is (= (q/q db
+  (let [db (api/db *kv*)]
+    (t/is (= (api/q db
                   '{:find  [?e1 ?e2]
                     :where [(follow ?e1 ?e2)]
                     :rules [[(follow ?x ?y)
@@ -803,7 +803,7 @@
     ;; NOTE: Crux does not support vars in attribute position, so
     ;; :follow is explicit.
     (t/testing "Joining regular clauses with rule"
-      (t/is (= (q/q db
+      (t/is (= (api/q db
                     '{:find [?y ?x]
                       :where [[_ :follow ?x]
                               (rule ?x ?y)
@@ -814,7 +814,7 @@
 
     ;; NOTE: Crux does not support vars in attribute position.
     #_(t/testing "Rule context is isolated from outer context"
-        (t/is (= (q/q db
+        (t/is (= (api/q db
                       '{:find [?x]
                         :where [[?e _ _]
                                 (rule ?x)]
@@ -823,7 +823,7 @@
                  #{[:follow]})))
 
     (t/testing "Rule with branches"
-      (t/is (= (q/q db
+      (t/is (= (api/q db
                     '{:find [?e2]
                       :where [(follow ?e1 ?e2)]
                       :args [{:?e1 :1}]
@@ -836,7 +836,7 @@
 
 
     (t/testing "Recursive rules"
-      (t/is (= (q/q db
+      (t/is (= (api/q db
                     '{:find  [?e2]
                       :where [(follow ?e1 ?e2)]
                       :args [{:?e1 :1}]
@@ -851,8 +851,8 @@
         (fn []
           (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
                                            {:crux.db/id :2 :follow :3}])
-          (let [db (q/db *kv*)]
-            (t/is (= (q/q db
+          (let [db (api/db *kv*)]
+            (t/is (= (api/q db
                           '{:find [?e1 ?e2]
                             :where [(follow ?e1 ?e2)]
                             :rules [[(follow ?e1 ?e2)
@@ -866,8 +866,8 @@
           (f/transact-entity-maps! f/*kv* [{:crux.db/id :1 :follow :2}
                                            {:crux.db/id :2 :follow :3}
                                            {:crux.db/id :3 :follow :1}])
-          (let [db (q/db *kv*)]
-            (t/is (= (q/q db
+          (let [db (api/db *kv*)]
+            (t/is (= (api/q db
                           '{:find [?e1 ?e2]
                             :where [(follow ?e1 ?e2)]
                             :rules [[(follow ?e1 ?e2)
@@ -885,8 +885,8 @@
                                            {:crux.db/id :3 :f2 :4}
                                            {:crux.db/id :4 :f1 :5}
                                            {:crux.db/id :5 :f2 :6}])
-          (let [db (q/db *kv*)]
-            (t/is (= (q/q db
+          (let [db (api/db *kv*)]
+            (t/is (= (api/q db
                           '{:find [?e1 ?e2]
                             :where [(f1 ?e1 ?e2)]
                             :rules [[(f1 ?e1 ?e2)
@@ -906,7 +906,7 @@
                        [:4 :5]}))))))
 
     (t/testing "Passing ins to rule"
-      (t/is (= (q/q db
+      (t/is (= (api/q db
                     {:find '[?x ?y]
                      :where '[(match ?even ?x ?y)]
                      :rules '[[(match ?pred ?e ?e2)
@@ -937,11 +937,11 @@
                                    {:crux.db/id :2 :name "Ivan" :age 20}
                                    {:crux.db/id :3 :name "Oleg" :age 10}
                                    {:crux.db/id :4 :name "Oleg" :age 20}])
-  (let [db (q/db *kv*)]
+  (let [db (api/db *kv*)]
     ;; NOTE: Crux does not support source vars.
     #_(let [pred (fn [db e a]
                    (= a (:age (d/entity db e))))]
-        (t/is (= (q/q '[:find ?e
+        (t/is (= (api/q '[:find ?e
                         :in $ ?pred
                         :where [?e :age ?a]
                         [(?pred $ ?e 10)]]
