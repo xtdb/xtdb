@@ -1,4 +1,5 @@
 = Queries
+= Queries
 
 == Introduction
 
@@ -15,14 +16,19 @@ Note that all Crux Datalog queries run using a point-in-time view of the databas
 == Reference
 
 * <<_basic_query>>
-* <<_valid_time_travel>>
 * <<_arguments,`:args`>>
 * <<_a_very_basic_query,`or`>>
 * <<_a_very_basic_query,Combining `or` with `and`>>
 * <<_a_very_basic_query,`not`>>
+* <<_valid_time_travel>>
+* <<_history_api>>
+  ** <<_full_document_history>>
+  ** <<_document_history_range>>
 * <<_joins,Joins>>
 * <<_a_very_basic_query,Blanks>>
 * <<_a_very_basic_query,`:rules`>>
+* <<_lazy_queries>>
+* <<_datascript_differences>>
 
 == Basic Query
 
@@ -144,11 +150,11 @@ Result Set:
 include::./query_test_examples.clj[tags=query-with-arguments5-r]
 ----
 
-== Valid time travel
+=== Valid time travel
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
 
-Here we will sees how you are able to run queries at a given point in the valid time axis against, implicity, the most recent transaction time.
+Here we will sees how you are able to run queries at a given point in the valid time axis against, implicitly, the most recent transaction time.
 
 First, we transact a very old document into the database with the ID `:malcolm` and the `:name` `"Malcolm"`, and specify the `valid time` instant at which this document became valid in the legacy system: `#inst "1986-10-22"`.
 
@@ -183,7 +189,10 @@ Result Set:
 include::./query_test_examples.clj[tags=query-at-t-q1-r]
 ----
 
-We can then verify that `"Malcolma"` is the currently known `:name` for the entity with ID `:malcolm` by simply not specifying a valid time alongside the query. This will be the case so long as there are no newer versions (in the valid time axis) of the document that affect the current valid time version.
+We can then verify that `"Malcolma"` is the currently known `:name` for the entity
+with ID `:malcolm` by simply not specifying a valid time alongside the query.
+This will be the case so long as there are no newer versions (in the valid time axis)
+of the document that affect the current valid time version.
 
 [source,clj]
 ----
@@ -195,6 +204,31 @@ Result Set:
 ----
 include::./query_test_examples.clj[tags=query-at-t-q2-r]
 ----
+
+== History API
+
+=== Full Document History
+Crux allows to retrieve all versions of a document
+[source,clj]
+----
+include::./query_test_examples.clj[tags=history-full]
+----
+
+
+=== Document History Range
+Retrievable document versions can be bounded by four time coordinates:
+
+* valid-time-start
+* tx-time-start
+* valid-time-end
+* tx-time-end
+
+All coordinates are inclusive. All coordinates can be null.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=history-range]
+----
+
 
 == Joins
 
@@ -284,4 +318,4 @@ Crux does _not yet_ support:
 
 Note that many of these _not yet_ supported query features can be achieved via simple function calls since you can currently fully qualify any function that is loaded. In future, limitations on available functions may be introduced to enforce security restrictions for remote query execution.
 
-DataScript test queries such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the Crux tests for details.
+_DataScript_ test queries such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the Crux tests for details.
