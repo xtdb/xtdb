@@ -22,7 +22,8 @@ public interface ICruxDatasource {
     public Map<Keyword,Object> entity(Object eid);
 
     /**
-     * Returns the entity tx for an entity.
+     * Returns the transaction details for an entity. Details
+     * include tx-id and tx-time.
      *
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity transaction details.
@@ -81,15 +82,17 @@ public interface ICruxDatasource {
 
     /**
      * The valid time of this db.
+     * If valid time wasn't specified at the moment of the db value retrieval
+     * then valid time will be time of the latest transaction.
      *
      * @return the valid time of this db.
      */
     public Date validTime();
 
     /**
-     * The transaction time of this db.
-     *
-     * @return the transaction time of this db.
+     * @return the time of the latest transaction applied to this db value.
+     * If a tx time was specified when db value was acquired then returns
+     * the specified time.
      */
     public Date transactionTime();
 }

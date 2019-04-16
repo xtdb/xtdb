@@ -58,6 +58,7 @@ public interface ICruxAPI extends Closeable {
      * @return    the transaction history.
      */
     public List<Map<Keyword,?>> history(Object eid);
+    // todo elaborate about corrections contents
 
     /**
      * Returns the transaction history of an entity, ordered by valid
@@ -76,6 +77,7 @@ public interface ICruxAPI extends Closeable {
      * @return                     the transaction history.
      */
     public List<Map<Keyword,?>> historyRange(Object eid, Date validTimeStart, Date transactionTimeStart, Date validTimeEnd, Date transactionTimeEnd);
+    // todo elaborate
 
     /**
      * Returns the status of this node as a map.
@@ -83,6 +85,7 @@ public interface ICruxAPI extends Closeable {
      * @return the status map.
      */
     public Map<Keyword,?> status();
+    // todo elaborate
 
     /**
      * Writes transactions to the log for processing.
