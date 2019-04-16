@@ -1,4 +1,4 @@
-* <<getting_started.adoc#,Getting Started>>
+* <<get_started.adoc#,Get Started>>
 * <<queries.adoc#,Queries>>
 * <<transactions.adoc#,Transactions>>
 * <<configuration.adoc#,Configuration>>

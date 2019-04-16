@@ -56,7 +56,7 @@ Crux Systems will use the following properties:
 
 Using the Crux standalone system is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
-then follow the <<user_guide#getting-started-example,getting started
+then follow the <<get_started.adoc#,getting started
 example>>.
 
 === Project Dependency
