@@ -72,4 +72,4 @@ _
 ; © 2019 Jason Yeo, Jonathan D Johnston
 ----
 
-For further information on edn, see http://edn-format.org/
+For further information on EDN, see http://edn-format.org/[Official EDN Format]

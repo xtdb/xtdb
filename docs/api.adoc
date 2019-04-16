@@ -1,5 +1,7 @@
+= Javadocs
+
 == API
 
-Please consult the JavaDocs for the official Crux API.
+Please consult the Javadocs for the official Crux API.
 
-https://juxt.pro/crux/docs/javadoc/index.html[API JavaDoc]
+https://juxt.pro/crux/docs/javadoc/index.html[API Javadocs]

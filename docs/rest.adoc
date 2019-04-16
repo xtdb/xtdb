@@ -1,3 +1,5 @@
+= REST API
+
 [#rest]
 == Introduction
 
