@@ -6,6 +6,15 @@ Crux would not exist without the community of vibrant open source projects on
 which it depends, and we hope that the Crux community will serve to extend and
 reflect our gratitude.
 
+== GitHub Issues
+
+We currently use GitHub Issues to work on near-term changes to the Crux
+codebase and documentation. Please see the issues labelled with "good first
+issue" if you are looking for ideas to help push Crux forward:
+https://github.com/juxt/crux/labels/good%20first%20issue
+
+PRs with fixes and improvements to these docs are very welcome.
+
 == Commit Messages
 
 Please strive to follow the best-practices for commit messages which are outlined here:
