@@ -1,7 +1,5 @@
 = Queries
 
-= Queries
-
 == Introduction
 
 Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time. This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals. With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.

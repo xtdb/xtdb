@@ -1,6 +1,47 @@
-= What is Crux?
+== What is Crux?
 
-Crux is an unbundled, distributed, bi-temporal graph database.
+Crux is an open source document database with bitemporal graph queries.
+
+image::crux-venn-1.svg[Document database with graph queries,width=65%,align="center"]
+
+== Bitemporal
+
+Crux is a _bitemporal_ database that stores _transaction time_ and _valid time_
+histories. While a _[uni]temporal_ database enables "time travel" querying
+through the transactional sequence of database states from the moment of
+database creation to its current state, Crux also provides "time travel"
+querying for a discrete valid time axis without unnecessary design complexity
+or performance impact. This means a Crux user can populate the database with
+past and future information regardless of the order in which the information
+arrives, and make corrections to past recordings to build an ever-improving
+temporal model of a given domain.
+
+Bitemporal modelling is broadly useful for event-based architectures and is a
+critical requirement for systems any industry with strong auditing regulations,
+where you need to be able to answer the question "what did you know and when
+did you know it?".
+
+<<bitemp.adoc#,Read more about Bitemporality in Crux.>>
+
+== Query
+
+Crux supports a Datalog query interface for reading data and traversing
+relationships across all documents. Queries are executed so that the results
+are lazily streamed from the underlying indexes.
+
+Crux is ultimately a store of versioned EDN documents. The fields within these
+documents are automatically indexed as Entity-Attribute-Value triples to
+support efficient graph queries.
+
+<<queries.adoc#,Read more about how to query your data with Crux.>>
+
+== Schemaless
+
+Crux does not enforce any schema for the documents it stores. One reason for
+this is that data might come from many different places, and may not ultimately
+be owned by the service using Crux to query the data. This design enables
+schema-on-write and/or schema-on-read to be achieved outside of the core of
+Crux to meet the exact application requirements.
 
 == Unbundled
 
@@ -9,49 +50,30 @@ database. It is a database turned inside out, using:
 
 * Apache Kafka for the primary storage of transactions and documents
 as semi-immutable logs.
-* RocksDB or LMDB to host indices for rich query support.
+* RocksDB or LMDB to host indexes for rich query support.
 
-image::crux-kafka-local-node.png[Crux Kafka Cluster Node Diagram,558,571]
+This decoupled design enables Crux to be maintained as a small and efficient
+core that can be scaled and evolved to support a large variety of use-cases. 
+
+image::crux-system-1.svg[Crux Kafka Node Diagram,970,443]
 
 == Distributed
 
-Nodes can come and go, with local indices stored in a Key/Value store
-such as RocksDB, sharing the master data living in a central log topics
-(only Kafka is currently supported).
+Nodes can come and go, with local indexes stored in a Key/Value store such as
+RocksDB, whilst reading and writing master data to central log topics (only
+Kafka is currently supported). Queries are not distributed and there is no
+sharding of documents across nodes.
 
-== Bitemporality
-
-Crux is a _bitemporal_ database that stores _transaction time_ and _valid time_
-histories. While a _[uni]temporal_ database enables "time travel" querying
-through the transactional sequence of database states from the moment of
-database creation to its current state, Crux also provides "time travel"
-querying for a discrete valid time axis without unnecessary design complexity.
-This means a Crux user can populate the database with past and future
-information regardless of the order in which the information arrives, to build
-an ever-improving temporal model of a given domain.
-
-<<bitemp.adoc#,Read more about Bitemporality in Crux.>>
-
-== Query
-
-Crux supports a Datalog query interface for reads. Queries are
-executed so that the results are lazily streamed from the underlying
-indices.
-
-Crux is ultimately a store of versioned EDN documents. The attributes
-of these documents are indexed, allowing for queries.
-
-== Schemaless
-
-Crux does not use a schema for the documents. One reason for this is
-that data might come from many different places, and may not
-ultimately be owned by the service using Crux to query the data.
+Crux can also run in a non-distributed "standalone" mode, where the transaction
+and document logs exist only inside of a local Key/Value store such as RocksDB.
+This is appropriate for non-critical usage where availability and durability
+requirements do not justify the need for Kafka.
 
 == Eviction
 
-Crux supports eviction of past data, to play nicely with GDPR and
-similar concerns.
+Crux supports eviction of active and historical data to assist with technical
+compliance for information privacy regulations.
 
-The main transaction log contains only hashes and is immutable. The
-content data itself is stored in a secondary document topic that can
-be evicted by compaction.
+The main transaction log contains only hashes and is immutable. All document
+content is stored in a dedicated document topic that can be evicted by
+compaction.
