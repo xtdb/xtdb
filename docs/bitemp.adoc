@@ -92,6 +92,41 @@ for audit reasons, would you want to consider using both
 transaction-time and valid-time.
 ****
 
+== Known Uses
+
+Recording bitemporal information with your data is essential when dealing with
+lag, corrections, and efficient auditability:
+
+- Lag is found wherever there is risk of non-trivial delay until an event can
+  be recorded. This is common between systems that communicate over unreliable
+networks.
+- Corrections are needed as errors are uncovered and as facts are reconciled.
+- Ad-hoc auditing is an otherwise intensive and slow process requiring
+  significant operational complexity.
+
+With Crux you retain visibility of all historical changes whilst compensating
+for lag, making corrections, and performing audit queries. By default, deleting
+data only erases visibility of that data from the current perspective. You may
+of course still evict data completely as the legal status of information
+changes.
+
+These capabilities are known to be useful for:
+
+- Event Sourcing (e.g.
+  https://fr.slideshare.net/ThomasPierrain/as-time-goes-by-episode-2[retroactive
+and scheduled events])
+- Ingesting out-of-order temporal data from upstream timestamping systems
+- Maintaining a slowly changing dimension for decision support applications
+- Recovering from accidental data changes and application errors
+- Auditing all data changes and performing data forensics when necessary
+- Responding to new regulations and audit requirements
+- Avoiding the need to set up additional databases for historical data and
+  improving end-to-end data governance
+- Development, simulation and testing
+- Live migrations from legacy systems
+- Scheduling and previewing future states (e.g. publishing and content
+  management)
+
 == Example Queries
 
 === Crime Investigations
