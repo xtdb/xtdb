@@ -4,19 +4,20 @@
 
 == Technical
 
-Does Crux require Kafka?::
-  Not strictly. There is a local implementation called
-`crux.tx.DocTxLog` that writes transactions directly into the local KV
-store. One can also implement the `crux.db.TxLog` protocol to replace
-the `crux.db.KafkaTxLog` implementation. That said, Kafka is assumed at
-the moment. One can also run Kafka embedded as this allows later
-migration.
-
 Is Crux eventually consistent? Strongly consistent? Or something else?::
   An _easy_ answer is that Crux is "strongly consistent" with ACID semantics.
 
 What consistency does Crux provide?::
-  A Crux ClusterNode system provides sequential consistency by default due to the use of a single unpartitioned Kafka topic for the transaction log. Being able to read your writes requires stickiness to a particular node. For a ClusterNode system to be linearizable as a whole would require that every node always sees the result of every transaction immediately after it is written. This could be achieved with the cost of non-trivial additional latency. Forms of causal consistency across multiple Crux systems could potentially be achieved through the use of `valid time`. Further reading: http://www.bailis.org/papers/hat-vldb2014.pdf, https://jepsen.io/consistency/models/sequential
+  A Crux ClusterNode system provides sequential consistency by default due to
+the use of a single unpartitioned Kafka topic for the transaction log. Being
+able to read your writes requires stickiness to a particular node. For a
+ClusterNode system to be linearizable as a whole would require that every node
+always sees the result of every transaction immediately after it is written.
+This could be achieved with the cost of non-trivial additional latency. Forms
+of causal consistency across multiple Crux systems could potentially be
+achieved through the use of `valid time`. Further reading:
+http://www.bailis.org/papers/hat-vldb2014.pdf,
+https://jepsen.io/consistency/models/sequential
 
 How is consistency provided by Crux?::
   Crux does not try to enforce consistency among nodes, which all
@@ -33,7 +34,7 @@ transaction time (as above), and check that the entity got updated. More
 advanced algorithms can be built on top of this. As mentioned above, all
 CAS operations in a transaction must pass their pre-condition check for
 the transaction to proceed and get indexed, which enables one to enforce
-consistency across documents. There’s currently no way to check if a
+consistency across documents. There is currently no way to check if a
 transaction got aborted, apart from checking if the write succeeded.
 
 Will a lack of schema lead to confusion?::
@@ -84,32 +85,31 @@ ordering between nodes.
 
 Does Crux support RDF/SPARQL?::
   No. We have a simple ingestion mechanism for RDF data in `crux.rdf`
-but this is not a core feature. There’s a also a query translator for a
+but this is not a core feature. There is a also a query translator for a
 subset of SPARQL. RDF and SPARQL support could eventually be written as
 a layer on top of Crux as a module, but there are no plans for this by
 the core team.
 
 Does Crux provide transaction functions?::
 
-  Not directly, currently. As the log is ingested in the same
-order at all nodes, purely functional transformations of the tx-ops are
-possible. The current transaction operations are implemented via a
-multi-method, `crux.tx/tx-command` which is possible to extend with
-further implementations. To make this work the spec `:crux.tx/tx-op`
-also needs to be extended to accept the new operation. A transaction
-command returns a map containing the keys `:kvs` `:pre-condition-fn` and
-`:post-condition-fn` (the functions are optional). Alternatively use a
-"gatekeeper" pattern to enforce the desired level of transaction function
-consistency required.
+  Not directly, currently. As the log is ingested in the same order at all
+nodes, purely functional transformations of the tx-ops are possible. The
+current transaction operations are implemented via a multi-method,
+`crux.tx/tx-command` which is possible to extend with further implementations.
+To make this work the spec `:crux.tx/tx-op` also needs to be extended to accept
+the new operation. A transaction command returns a map containing the keys
+`:kvs` `:pre-condition-fn` and `:post-condition-fn` (the functions are
+optional). Alternatively you may use a "gatekeeper" pattern to enforce the
+desired level of transaction function consistency required.
 
 Does Crux support the full Datomic/Datascript dialect of Datalog?::
 
-  No. The `:where` part is similar, but only the map form of queries
-are supported. There’s no support for Datomic’s built-in functions, or for
-accessing the log and history directly. There’s also no support for
-variable bindings or multiple source vars.
+  No. The `:where` part is similar, but only the map form of queries are
+supported. There is no support for Datomic’s built-in functions, or for
+accessing the log and history directly. There is also no support for variable
+bindings or multiple source vars.
 +
-Differences include that `:rules` and `:args`, which is a relation
+Other differences include that `:rules` and `:args`, which is a relation
 represented as a list of maps which is joined with the query, are being
 provided in the same query map as the `:find` and `:where` clause. Crux
 additionally supports the built-in `==` for unification as well as the
@@ -117,23 +117,24 @@ additionally supports the built-in `==` for unification as well as the
 arguments, requiring at least one to match, which is basically a form of
 or.
 +
-Many of these aspects may be subject to change, but compatibility is not a
-goal for Crux.
+Many of these aspects may be subject to change, but compatibility with other
+Datalog databases is not a goal for Crux.
 
 Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
 
   The goal is to support different languages, and decouple the query
-engine from its syntax, but this is not currently the case in the MVP.
+engine from its syntax, but this is not currently the case.
 There is a query translator for a subset of SPARQL in `crux.rdf`.
 
 Does Crux support sharding?::
 
-  Not currently. At the moment the `tx-topic` must use a single
-partition to guarantee transaction ordering. We are considering support
-for sharding this topic via partitioning or by adding more transaction
-topics. Each partition / topic would have its own independent time line,
-but Crux would still support for cross shard queries. Sharding is mainly
-useful to increase throughput.
+  Not currently. We are considering support for sharding the document topic as
+this would allow nodes to easily consume only the documents they are interested
+in. At the moment the `tx-topic` must use a single partition to guarantee
+transaction ordering. We are also considering support for sharding this topic
+via partitioning or by adding more transaction topics. Each partition / topic
+would have its own independent time line, but Crux would still support for
+cross shard queries. Sharding is mainly useful to increase throughput.
 
 Does Crux support pull expressions?::
 
@@ -142,7 +143,7 @@ documents are local to the query node and can easily be accessed
 directly via the lower level read operations. We aim to make this more
 convenient soon. 
 +
-We are also considering to support remote document stores via the
+We are also considering support for remote document stores via the
 `crux.db.ObjectStore` interface, mainly to support larger data sets, but
 there would still be a local cache. The indexes would stay local as this
 is key to efficient queries.

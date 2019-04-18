@@ -1,6 +1,6 @@
 = Support
 
-For any questions relating to Software Support or Managed Hosting, contact us: info@juxt.pro
+For any questions relating to Software Support or Managed Hosting, contact us: crux@juxt.pro
 
 == Software Support
 
