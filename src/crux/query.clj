@@ -11,8 +11,7 @@
             [crux.index :as idx]
             [crux.lru :as lru]
             [crux.kv :as kv]
-            [crux.memory :as mem]
-            [datomic.api :as d])
+            [crux.memory :as mem])
   (:import java.util.Comparator
            java.util.concurrent.TimeoutException
            java.util.function.Supplier
