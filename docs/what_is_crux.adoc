@@ -6,7 +6,7 @@ Crux has been available as a *Public Alpha* since 19^th^ April 2019. The Public
 Alpha period will continue until Crux is released as a Generally Available open
 source software product by JUXT later in 2019.
 
-image::crux-venn-1.svg[Document database with graph queries,width=65%,align="center"]
+image::crux-venn-1.svg[Document database with graph queries,width=55%,align="center"]
 
 == Bitemporal
 

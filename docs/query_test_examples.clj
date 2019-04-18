@@ -643,12 +643,86 @@
 {:crux.db/id :p2
  :entry-pt :SFO
  :arrival-time #inst "2018-12-31"
- :departure-time #inst "2018-12-31"}
+ :departure-time #inst "2019-01-05"}
 
 #inst "2019-01-05"
 ;; end::bitemp5[]
 
+;; tag::bitemp7[]
+{:crux.db/id :p3
+ :entry-pt :LA
+ :arrival-time #inst "2018-12-31"
+ :departure-time :na}
+#inst "2019-01-04"
+
+{:crux.db/id :p3
+ :entry-pt :LA
+ :arrival-time #inst "2018-12-31"
+ :departure-time #inst "2019-01-07"}
+#inst "2019-01-07"
+;; end::bitemp7[]
+
+;; tag::bitemp8[]
+{:crux.db/id :p3
+ :entry-pt :SFO
+ :arrival-time #inst "2019-01-08"
+ :departure-time :na}
+#inst "2019-01-08"
+
+{:crux.db/id :p4
+ :entry-pt :LA
+ :arrival-time #inst "2019-01-08"
+ :departure-time :na}
+#inst "2019-01-08"
+;; end::bitemp8[]
+
+;; tag::bitemp9[]
+{:crux.db/id :p3
+ :entry-pt :SFO
+ :arrival-time #inst "2019-01-08"
+ :departure-time #inst "2019-01-08"}
+#inst "2019-01-09"
+;; end::bitemp9[]
+
+;; tag::bitemp10[]
+{:crux.db/id :p5
+ :entry-pt :LA
+ :arrival-time #inst "2019-01-10"
+ :departure-time :na}
+#inst "2019-01-10"
+;; end::bitemp10[]
+
+;; tag::bitemp11[]
+{:crux.db/id :p7
+ :entry-pt :NY
+ :arrival-time #inst "2019-01-11"
+ :departure-time :na}
+#inst "2019-01-11"
+;; end::bitemp11[]
+
+;; tag::bitemp12[]
+{:crux.db/id :p6
+ :entry-pt :NY
+ :arrival-time #inst "2019-01-12"
+ :departure-time :na}
+#inst "2019-01-12"
+;; end::bitemp12[]
 )
+
+;; tag::bitempq[]
+{:find [p entry-pt arrival-time departure-time]
+ :where [[p :entry-pt entry-pt]
+         [p :arrival-time arrival-time]
+         [p :departure-time departure-time]]}
+#inst "2019-01-02" ; `as of` valid time
+#inst "2019-01-03" ; `as at` transaction time
+;; end::bitempq[]
+
+;; tag::bitempr[]
+#{[:p2 :SFO #inst "2018-12-31" :na]
+  [:p3 :LA #inst "2018-12-31" :na]
+  [:p4 :NY #inst "2019-01-02" :na]}
+;; end::bitempr[]
 
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   (let [tx-log (crux.tx/->KvTxLog *kv*)]
@@ -711,7 +785,7 @@
                               {:crux.db/id :p2
                                :entry-pt :SFO
                                :arrival-time #inst "2018-12-31"
-                               :departure-time #inst "2018-12-31"}
+                               :departure-time #inst "2019-01-05"}
                               #inst "2019-01-05"]])
       ;; Day 6, nothing happens.
       @(db/submit-tx tx-log [])

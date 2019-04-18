@@ -45,10 +45,9 @@ available, valid-time and transaction-time take the same value.
 
 == Valid Time
 
-In any situation where your database isn't the ultimate owner of the
-data and where corrections to data can flow in from various sources,
-and at various times, then *transaction-time* isn't always suitable
-for historical queries.
+In situations where your database is not the ultimate owner of the data—where
+corrections to data can flow in from various sources and at various times—use
+of *transaction-time* is inappropriate for historical queries.
 
 Imagine you have a financial trading system and you want to perform
 calculations based on the official 'end of day', that occurs each day
@@ -131,6 +130,8 @@ and scheduled events])
 
 === Crime Investigations
 
+This example is based on an academic paper.
+
 .Indexing temporal data using existing B +-trees
 ****
 [%hardbreaks]
@@ -140,23 +141,40 @@ DOI:10.1016/0169-023X(95)00034-P
 See "7. Support for complex queries in bitemporal databases"
 ****
 
-During a criminal investigation it is critical to be able to refine a temporal understanding of past events as new evidence is brought to light, errors in documentation are accounted for, and speculation is corroborated. The paper referenced above gives the following query example:
+During a criminal investigation it is critical to be able to refine a temporal
+understanding of past events as new evidence is brought to light, errors in
+documentation are accounted for, and speculation is corroborated. The paper
+referenced above gives the following query example:
 
 ****
-Find all persons who are known to be present in the United States on day 2 (valid time), as of day 3 (transaction time)
+Find all persons who are known to be present in the United States on day 2
+(valid time), as of day 3 (transaction time)
 ****
 
-The paper then lists a sequence of entry and departure events at various United States border checkpoints. We as the investigator will step through this sequence to monitor a set of suspects. These events will arrive in an undetermined chronological order based on how and when each checkpoint is able to manually relay the information.
+The paper then lists a sequence of entry and departure events at various United
+States border checkpoints. We as the investigator will step through this
+sequence to monitor a set of suspects. These events will arrive in an
+undetermined chronological order based on how and when each checkpoint is able
+to manually relay the information.
 
-Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the initial documents are ingested using the Day 0 valid time:
+==== Day 0
+
+Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
+initial documents are ingested using the Day 0 valid time:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=bitemp0]
 ----
 
-The first document shows that `Person 2` was recorded entering via `:SFO` and the second document shows that `Person 3` was recorded entering `:LA`.
+The first document shows that `Person 2` was recorded entering via `:SFO` and
+the second document shows that `Person 3` was recorded entering `:LA`.
 
-No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no documents available to ingest.
+==== Day 1
+
+No new recorded events arrive on Day 1 (`#inst "2019-01-01"`), so there are no
+documents available to ingest.
+
+==== Day 2
 
 A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 [source,clj]
@@ -164,34 +182,134 @@ A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 include::./query_test_examples.clj[tags=bitemp2]
 ----
 
-Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is represented as an update to the existing document using the Day 3 valid time:
+==== Day 3
+
+Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
+represented as an update to the existing document using the Day 3 valid time:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=bitemp3]
 ----
 
-On Day 4 we begin to receive events relating to the previous days of the investigation.
+==== Day 4
 
-First we receive an event showing that `Person 1` entered `:NY` on Day 0 which must ingest using the Day 0 valid time `#inst "2018-12-31"`:
+On Day 4 we begin to receive events relating to the previous days of the
+investigation.
+
+First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
+must ingest using the Day 0 valid time `#inst "2018-12-31"`:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=bitemp4]
 ----
 
-We then receive an event showing that `Person 1` departed from `:NY` on Day 3, so again we ingest this document using the corresponding Day 3 valid time:
+We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
+so again we ingest this document using the corresponding Day 3 valid time:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=bitemp4b]
 ----
 
-Finally, we receive two events relating to Day 4, which can be ingested using the current valid time:
+Finally, we receive two events relating to Day 4, which can be ingested using
+the current valid time:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=bitemp4c]
 ----
 
-On Day 5 there is an event showing that `Person 2` departed from `:SFO` on Day 5.
+==== Day 5
 
+On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
+(which we already knew), departed from `:SFO` on Day 5.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp5]
+----
+
+==== Day 6
+
+No new recorded events arrive on Day 6 (`#inst "2019-01-06"`), so there are no
+documents available to ingest.
+
+==== Day 7
+
+On Day 7 two documents arrive. The first document corrects the previous
+assertion that `Person 3` departed on Day 4, which was misrecorded due to human
+error. The second document shows that `Person 3` has only just departed on Day
+7, which is how the previous error was noticed.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp7]
+----
+
+==== Day 8
+
+Two documents have been received relating to new arrivals on Day 8. Note that
+`Person 3` has arrived back in the country again.
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp8]
+----
+
+==== Day 9
+
+On Day 9 we learn that `Person 3` also departed on Day 8. 
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp9]
+----
+
+==== Day 10
+
+A single document arrives showing that `Person 5` entered at `:LA` earlier that
+day.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp10]
+----
+
+==== Day 11
+
+Similarly to the previous day, a single document arrives showing that `Person
+7` entered at `:NY` earlier that day.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp11]
+----
+
+==== Day 12
+
+Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitemp12]
+----
+
+==== Question Time
+
+Let's review the question we need to answer to aid our investigations:
+
+****
+Find all persons who are known to be present in the United States on day 2
+(valid time), as of day 3 (transaction time)
+****
+
+We are able to easily express this as a query in Crux:
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitempq]
+----
+
+The answer given by Crux is a simple set of the three relevant people along
+with the details of their last entry and confirmation that none of them were
+known to have yet departed at this point:
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=bitempr]
+----
 
 == References
 
