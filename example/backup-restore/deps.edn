@@ -1,0 +1,2 @@
+{:deps {juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}}
+ :paths ["cli/"]}

@@ -1,4 +1,5 @@
 (ns crux.api
+  "Public API of Crux."
   (:refer-clojure :exclude [sync])
   (:import [crux.api Crux ICruxAPI ICruxDatasource]
            java.io.Closeable
