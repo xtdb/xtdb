@@ -2,15 +2,35 @@
 
 == Introduction
 
-Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time. This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals. With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.
+Crux is a document database that provides you with a comprehensive means of
+traversing and querying across all of your documents and data without any need
+to define a schema ahead of time. This is possible because Crux is "schemaless"
+and automatically indexes the top-level fields in all of your documents to
+support efficient ad-hoc joins and retrievals. With these capabilities you can
+quickly build queries that match directly against the relations in your data
+without worrying too much about the shape of your documents or how that shape
+might change in future.
 
-Crux is also a graph database. The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations. Crux gives you the ability to construct graph queries via a Datalog query language and uses graph-friendly indexes to provide a powerful set of querying capabilties. Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
+Crux is also a graph database. The central characteristic of a graph database
+is that it can support arbitrary-depth graph queries (recursive traversals)
+very efficiently by default, without any need for schema-level optimisations.
+Crux gives you the ability to construct graph queries via a Datalog query
+language and uses graph-friendly indexes to provide a powerful set of querying
+capabilties. Additionally, when Crux's indexes are deployed directly alongside
+your application you are able to easily blend Datalog and code together to
+construct highly complex graph algorithms.
 
-This page walks through many of the more interesting queries that run as part of Crux's default test suite. See `test/crux/query_test.clj` for the full suite of query tests and how each test listed below runs in the wider context.
+This page walks through many of the more interesting queries that run as part
+of Crux's default test suite. See `test/crux/query_test.clj` for the full suite
+of query tests and how each test listed below runs in the wider context.
 
-Extensible Data Notation (edn) is used as the data format for the public Crux APIs. To gain an understanding of edn see <<resources.adoc#_essential_edn_for_using_crux>>.
+Extensible Data Notation (edn) is used as the data format for the public Crux
+APIs. To gain an understanding of edn see
+<<resources.adoc#_essential_edn_for_using_crux>>.
 
-Note that all Crux Datalog queries run using a point-in-time view of the database which means the query capabilities and patterns presented in this section are not aware of valid times or transaction times.
+Note that all Crux Datalog queries run using a point-in-time view of the
+database which means the query capabilities and patterns presented in this
+section are not aware of valid times or transaction times.
 
 == Reference
 
@@ -31,17 +51,25 @@ Note that all Crux Datalog queries run using a point-in-time view of the databas
 
 == Basic Query
 
-In the most basic case, a Datalog query works by searching for "subgraphs" in the database that match the pattern defined by the clauses. The values within these subgraphs are then returned according to the list of return variables requested in the `:find` vector within the query.
+In the most basic case, a Datalog query works by searching for "subgraphs" in
+the database that match the pattern defined by the clauses. The values within
+these subgraphs are then returned according to the list of return variables
+requested in the `:find` vector within the query.
 
-Our first query runs on a database that contains the following 3 documents which get broken apart and indexed as "entities":
+Our first query runs on a database that contains the following 3 documents
+which get broken apart and indexed as "entities":
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=test-basic-query-d]
 ----
 
-Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as document IDs in addition to UUIDs.
+Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as
+document IDs in addition to UUIDs.
 
-The following query has 3 clauses, represented as edn vectors within the `:where` vector. These clauses constrain the result set to match only the entity (or subgraph of interconnected entities) that satisfy all 3 clauses at once:
+The following query has 3 clauses, represented as edn vectors within the
+`:where` vector. These clauses constrain the result set to match only the
+entity (or subgraph of interconnected entities) that satisfy all 3 clauses at
+once:
 
 [source,clj]
 ----
@@ -50,13 +78,27 @@ include::./query_test_examples.clj[tags=test-basic-query-q]
 
 Let's try to work out what these 3 clauses do...
 
-`[p1 :name name]` is looking for all entities that have a value under the attribute of `:name` and then binds the corresponding entity ID to `p1` and the corresponding value to `name`. Since all 3 entites in our database have a `:name` attribute, this clause alone will simply return all 3 entities.
+`[p1 :name name]` is looking for all entities that have a value under the
+attribute of `:name` and then binds the corresponding entity ID to `p1` and the
+corresponding value to `name`. Since all 3 entites in our database have a
+`:name` attribute, this clause alone will simply return all 3 entities.
 
-`[p1 :last-name name]` reuses the variable `name` from the previous clause which is significant because it constrains the query to only look for entities where the value of `:name` (from the first clause) is _equal to_ the value of `:last-name` (from the second clause). Looking at documents that were processed by our database there is only one possible entity that can be returned, because it has the same values `:name` and `:last-name`.
+`[p1 :last-name name]` reuses the variable `name` from the previous clause
+which is significant because it constrains the query to only look for entities
+where the value of `:name` (from the first clause) is _equal to_ the value of
+`:last-name` (from the second clause). Looking at documents that were processed
+by our database there is only one possible entity that can be returned, because
+it has the same values `:name` and `:last-name`.
 
-`[p1 :name "Smith"]` only serves to reinforce the conclusion from the previous two clauses which is that the variable `name` can only be matched against the string `"Smith"` within our database.
+`[p1 :name "Smith"]` only serves to reinforce the conclusion from the previous
+two clauses which is that the variable `name` can only be matched against the
+string `"Smith"` within our database.
 
-...so what is the actual result of the query? Well that is defined by the `:find` vector which states that only the values corresponding to `p1` should be returned, which in this case is simply `:smith` (the keyword database ID for the document relating to our protagonist "Smith Smith"). Results are returned as an edn set, which means duplicate results will not appear.
+...so what is the actual result of the query? Well that is defined by the
+`:find` vector which states that only the values corresponding to `p1` should
+be returned, which in this case is simply `:smith` (the keyword database ID for
+the document relating to our protagonist "Smith Smith"). Results are returned
+as an edn set, which means duplicate results will not appear.
 
 The edn result set only contains the value `:smith`
 
@@ -207,7 +249,7 @@ include::./query_test_examples.clj[tags=query-at-t-q2-r]
 == History API
 
 === Full Document History
-Crux allows to retrieve all versions of a document
+Crux allows you to retrieve all versions of a document:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=history-full]
@@ -277,33 +319,33 @@ Note that because Crux is schemaless there is no need to have elsewhere declared
 
 == Rules
 
-Crux query capability is easiest summarized via an example:
+This example of a rule demonstrates a recursive traversal of entities that are
+connected to a given entity via the `:follow` attribute.
 
 [source,clj]
 ----
-(q/q db
-    '{:find  [?e2]
-      :where [(follow ?e1 ?e2)]
-      :args [{:?e1 :1}]
-      :rules [[(follow ?e1 ?e2)
-              [?e1 :follow ?e2]]
-             [(follow ?e1 ?e2)
-              [?e1 :follow ?t]
-              (follow ?t ?e2)]]})
+{:find [?e2]
+ :where [(follow ?e1 ?e2)]
+ :args [{:?e1 :1}]
+ :rules [[(follow ?e1 ?e2)
+          [?e1 :follow ?e2]]
+         [(follow ?e1 ?e2)
+          [?e1 :follow ?t]
+          (follow ?t ?e2)]]})
 ----
 
 == Lazy Queries
 
-The `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
-optionally a `snapshot` which is already opened and managed by the
-caller (using `with-open` for example). This version of the call
-returns a lazy sequence of the results, while the other version
-provides a set. A snapshot can be retreived from a `kv` instance via
-`crux.kv-store/new-snapshot`.
+The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
+optionally a `snapshot` which is already opened and managed by the caller
+(using `with-open` for example). This version of the call returns a lazy
+sequence of the results, while the other version provides a set. A snapshot can
+be retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
 
 == DataScript Differences
 
-This list is not necessarily exhaustive and is based on the partial re-usage of DataScript's query test suite within Crux's query tests.
+This list is not necessarily exhaustive and is based on the partial re-usage of
+DataScript's query test suite within Crux's query tests.
 
 Crux does not support:
 
@@ -315,6 +357,11 @@ Crux does _not yet_ support:
 - destructuring
 - source vars, e.g. function references passed into the query via `:args`
 
-Note that many of these _not yet_ supported query features can be achieved via simple function calls since you can currently fully qualify any function that is loaded. In future, limitations on available functions may be introduced to enforce security restrictions for remote query execution.
+Note that many of these _not yet_ supported query features can be achieved via
+simple function calls since you can currently fully qualify any function that
+is loaded. In future, limitations on available functions may be introduced to
+enforce security restrictions for remote query execution.
 
-_DataScript_ test queries such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the Crux tests for details.
+Test queries from DataScript such as "Rule with branches" and "Mutually
+recursive rules" work correctly with Crux and demonstrate advanced query
+patterns. See the Crux tests for details.
