@@ -1,4 +1,4 @@
-(defproject juxt/crux "0.1.0-SNAPSHOT"
+(defproject juxt/crux "19.04-1.0.0-alpha"
   :description "An open source document database with bitemporal graph queries"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
