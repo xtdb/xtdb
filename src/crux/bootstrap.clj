@@ -22,7 +22,7 @@
                    true))
 
 (def default-options {:bootstrap-servers "localhost:9092"
-                      :group-id (.getHostName (InetAddress/getLocalHost))
+                      :group-id (.trim ^String (:out (clojure.java.shell/sh "hostname")))
                       :tx-topic "crux-transaction-log"
                       :doc-topic "crux-docs"
                       :create-topics true
