@@ -1,7 +1,7 @@
 {:deps
  {
   ;; tag::CruxDep[]
-  juxt/crux {:mvn/version "0.1.0-SNAPSHOT"}
+  juxt/crux {:mvn/version "19.04-1.0.0-alpha"}
   ;; end::CruxDep[]
 
   ;; tag::KafkaDeps[]

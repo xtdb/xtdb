@@ -2,6 +2,12 @@
 
 [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
 
+## Latest version
+
+```clj
+[juxt/crux "19.04-1.0.0-alpha"]
+```
+
 Crux is an unbundled, distributed, bitemporal graph database, currently sitting
 on top of RocksDB or LMDB, and Kafka.
 
