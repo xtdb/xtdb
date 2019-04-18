@@ -14,7 +14,7 @@
     [system ^Date valid-time ^Date transaction-time]
     "Will return the latest value of the db currently known. Non-blocking.
 
-     When valid time is specified then returned db value contains only those
+     When a valid time is specified then returned db value contains only those
      documents whose valid time is not after the specified. Non-blocking.
 
      When both valid and transaction time are specified returns a db value
@@ -179,11 +179,11 @@
     transaction time. Includes the documents.")
 
   (valid-time [db]
-    "returns the valid time of this db.
+    "returns the valid time of the db.
     If valid time wasn't specified at the moment of the db value retrieval
     then valid time will be time of the latest transaction.")
 
-  (transaction-time [this]
+  (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
     If a tx time was specified when db value was acquired then returns
     the specified time."))
@@ -218,10 +218,27 @@
   (transaction-time [this]
     (.transactionTime this)))
 
-(defn start-cluster-node ^ICruxAPI [options]
+(defn start-cluster-node
+  "start Crux instance in cluster mode
+
+  options
+  {:kv-backend         \"crux.kv.rocksdb.RocksKv\"
+   :bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
+   :event-log-dir      \"data/eventlog-1\"
+   :db-dir             \"data/db-dir-1\"
+   :backup-dir         \"checkpoint\"}"
+  ^ICruxAPI [options]
   (Crux/startClusterNode options))
 
-(defn start-standalone-system ^ICruxAPI [options]
+(defn start-standalone-system
+  "start Crux instance in standalone mode
+
+   options
+  {:kv-backend         \"crux.kv.rocksdb.RocksKv\"
+   :event-log-dir      \"data/eventlog-1\"
+   :db-dir             \"data/db-dir-1\"
+   :backup-dir         \"checkpoint\"}"
+  ^ICruxAPI [options]
   (Crux/startStandaloneSystem options))
 
 (defn new-api-client ^ICruxAPI [url]
