@@ -1,5 +1,6 @@
 (ns example-standalone-webservice.main
   (:require [crux.api :as api]
+            [crux.http-server :as srv]
             [crux.backup :as backup]
             [crux.codec :as c]
             [crux.io :as crux-io]
@@ -697,19 +698,35 @@
    :db-dir index-dir
    :server-port 8080
 
+   :http-port 8081
+
    ::backup/backend ::backup/sh
    ::backup/checkpoint-directory "data/checkpoint"
    ::backup/sh-backup-script "bin/backup.sh"
    ::backup/sh-restore-script "bin/restore.sh"})
 
-(defn run-system [{:keys [server-port] :as options} with-system-fn]
+(defn run-system [{:keys [server-port http-port] :as options} with-system-fn]
   (with-open [crux-system (case (System/getenv "CRUX_MODE")
                             "CLUSTER_NODE" (api/start-cluster-node options)
                             (api/start-standalone-system options))
+              api-server (srv/start-http-server
+                           crux-system
+                           {:server-port http-port 
+                            :cors-access-control
+                            [:access-control-allow-origin [#".*"]
+                             :access-control-allow-headers ["X-Requested-With"
+                                                            "Content-Type"
+                                                            "Cache-Control"
+                                                            "Origin"
+                                                            "Accept"
+                                                            "Authorization"
+                                                            "X-Custom-Header"]
+                             :access-control-allow-methods [:get :put :post :delete]]})
               http-server
               (let [l (listener
                        (application-resource {:crux crux-system})
                        {:port server-port})]
+                (log/info "started HTTP API on port:" http-port)
                 (log/info "started webserver on port:" server-port)
                 (reify Closeable
                   (close [_]
