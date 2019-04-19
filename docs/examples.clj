@@ -28,8 +28,8 @@
 ;; tag::submit-tx[]
 (api/submit-tx
  system
- [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso ; id for Kafka
-   {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso ; id for Crux
+ [[:crux.tx/put :dbpedia.resource/Pablo-Picasso ; id for Kafka
+   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id for Crux
     :name "Pablo"
     :last-name "Picasso"}
    #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time
@@ -42,7 +42,7 @@
 ;; end::query[]
 
 ;; tag::query-entity[]
-(api/entity (api/db system) :http://dbpedia.org/resource/Pablo_Picasso)
+(api/entity (api/db system) :dbpedia.resource/Pablo-Picasso)
 ;; end::query-entity[]
 
 ;; tag::query-valid-time[]
@@ -53,11 +53,11 @@
 
 (comment
   ;; tag::should-get[]
-  #{[:http://dbpedia.org/resource/Pablo_Picasso]}
+  #{[:dbpedia.resource/Pablo-Picasso]}
   ;; end::should-get[]
 
   ;; tag::should-get-entity[]
-  {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+  {:crux.db/id :dbpedia.resource/Pablo-Picasso
    :name "Pablo"
    :last-name "Picasso"}
   ;; end::should-get-entity[]

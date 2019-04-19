@@ -37,8 +37,8 @@
 
   (db/submit-tx
     (:tx-log (:crux/cluster-node system))
-    [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-      {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+    [[:crux.tx/put :dbpedia.resource/Pablo-Picasso
+      {:crux.db/id :dbpedia.resource/Pablo-Picasso
        :name "Pablo"
        :last-name "Picasso"}
       #inst "2018-05-18T09:20:27.966-00:00"]])

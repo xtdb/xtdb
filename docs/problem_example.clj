@@ -18,8 +18,8 @@
 ;; PUT picasso
 (db/submit-tx
  (tx/->KvTxLog (kv))
- [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-   {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+ [[:crux.tx/put :dbpedia.resource/Pablo-Picasso
+   {:crux.db/id :dbpedia.resource/Pablo-Picasso
     :name "Pablo"
     :last-name "Picasso"}
    #inst "2018-05-18T09:21:27.966-00:00"]])
@@ -28,8 +28,8 @@
 (def tx
   (db/submit-tx
    (tx/->KvTxLog (kv))
-   [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
-     {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+   [[:crux.tx/put :dbpedia.resource/Pablo-Picasso
+     {:crux.db/id :dbpedia.resource/Pablo-Picasso
       :name "Pablo"
       :last-name "Picasso the great"}
      #inst "2018-06-18T09:21:27.966-00:00"]]))
