@@ -149,8 +149,9 @@
                      *kv*
 ;; tag::query-at-t-d2[]
 [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}]
-#inst "1986-10-24")
+#inst "1986-10-24"
 ;; end::query-at-t-d2[]
+                    )
         ]
     (let [q (quote
 ;; tag::query-at-t-q[]
