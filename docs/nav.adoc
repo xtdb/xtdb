@@ -2,6 +2,7 @@
 * <<queries.adoc#,Queries>>
 * <<transactions.adoc#,Transactions>>
 * <<configuration.adoc#,Configuration>>
+* <<clojure_api.adoc#,Clojure API>>
 * <<api.adoc#,Javadocs>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<advanced_queries.adoc#,Queries (advanced)>>
