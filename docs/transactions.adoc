@@ -18,7 +18,7 @@ A document looks like this:
 
 [source,clj]
 ----
-{:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+{:crux.db/id :dbpedia.resource/Pablo-Picasso
  :name "Pablo"
  :last-name "Picasso"}
 ----
@@ -28,8 +28,8 @@ sequence of transaction operations:
 
 [source,clj]
 ----
-[[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso
- {:crux.db/id :http://dbpedia.org/resource/Pablo_Picasso
+[[:crux.tx/put :dbpedia.resource/Pablo-Picasso
+ {:crux.db/id :dbpedia.resource/Pablo-Picasso
   :name "Pablo"
   :last-name "Picasso"}
  #inst "2018-05-18T09:20:27.966-00:00"]]
@@ -55,8 +55,8 @@ the supplied `valid time`.
 [source,clojure]
 ----
 [:crux.tx/put
- :http://dbpedia.org/resource/Pablo_Picasso <1>
- {:crub.db/id :http://dbpedia.org/resource/Pablo_Picasso :first-name :Pablo} <2>
+ :dbpedia.resource/Pablo-Picasso <1>
+ {:crub.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <2>
  #inst "2018-05-18T09:20:27.966-00:00"] <3>
 ----
 
@@ -79,7 +79,7 @@ newer one, if the existing document is as expected.
 [source,clojure]
 ----
 [:crux.tx/cas
- :http://dbpedia.org/resource/Pablo_Picasso <1>
+ :dbpedia.resource/Pablo-Picasso <1>
  {..} <2>
  {..} <3>
   #inst "2018-05-18T09:21:31.846-00:00"] <4>
@@ -97,7 +97,7 @@ document will still be available.
 
 [source,clojure]
 ----
-[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso
+[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
 
@@ -109,6 +109,6 @@ evicted.
 
 [source,clojure]
 ----
-[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso
+[:crux.tx/evict :dbpedia.resource/Pablo-Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
