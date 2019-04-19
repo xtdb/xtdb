@@ -3,18 +3,18 @@
             [crux.backup :as backup]))
 
 (def crux-options
-  {:kv-backend         "crux.kv.rocksdb.RocksKv"
-   :event-log-dir      "data/eventlog-1"
-   :db-dir             "data/db-dir-1"
-   :backup-dir         "checkpoint"})
+  {:kv-backend    "crux.kv.rocksdb.RocksKv"
+   :event-log-dir "data/eventlog-1"
+   :db-dir        "data/db-dir-1"
+   :backup-dir    "checkpoint"})
 
-; (backup/restore crux-options)
 
-(defonce syst (api/start-standalone-system crux-options))
+(def syst (api/start-standalone-system crux-options))
 
-; (println (api/entity (api/db syst) :id/bongo2))
 
 (comment
+
+  (backup/restore crux-options)
 
   (backup/backup crux-options syst)
 

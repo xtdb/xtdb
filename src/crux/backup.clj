@@ -34,11 +34,11 @@
   (log/info "skipping download from backend"))
 
 (defn restore
-  [{:keys [event-log-dir db-dir] :as system-options ::keys [checkpoint-directory]}]
+  [{:keys [event-log-dir db-dir backup-dir] :as system-options}]
  ;(s/assert ::system-options system-options)
   (if (or (some-> event-log-dir io/file .exists) (some-> db-dir io/file .exists))
     (log/info "found existing data dirs, restore aborted")
-    (let [^File checkpoint-directory (io/file checkpoint-directory)]
+    (let [^File checkpoint-directory (io/file backup-dir)]
       (log/infof "no data : attempting restore from backup" (.getPath checkpoint-directory))
       (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
       (let [db-dir-resp
@@ -69,9 +69,10 @@
   [{:keys [backup-dir] :as system-options} crux-system]
  ;(s/assert ::system-options system-options)
   (locking crux-system
-    (let [checkpoint-directory (io/file backup-dir)]
+    (let [checkpoint-directory (io/file backup-dir)
+          system-options (assoc system-options ::checkpoint-directory backup-dir)]
       (crux-io/delete-dir backup-dir)
-      (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
+      (sh "mkdir" "-p" (.getPath (io/file backup-dir)))
       (log/infof "creating checkpoint for crux backup: %s" (.getPath checkpoint-directory))
       (write-checkpoint crux-system system-options)
       (log/infof "checkpoint written for crux backup: %s" (.getPath checkpoint-directory)))))
