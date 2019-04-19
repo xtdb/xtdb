@@ -207,7 +207,7 @@ Next we transact a slightly more recent (though still very old!) revision of tha
 include::./query_test_examples.clj[tags=query-at-t-d2]
 ----
 
-We are then able to query at different points in the valid time axis to check for the validity of the correction.
+We are then able to query at different points in the valid time axis to check for the validity of the correction. We define a query q:
 [source,clj]
 ----
 include::./query_test_examples.clj[tags=query-at-t-q]
