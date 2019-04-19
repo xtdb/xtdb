@@ -65,7 +65,7 @@
     eid is an object that can be coerced into an entity id.
     Returns true if the entity was updated in this transaction.")
 
-  (sync [system ^Duraction timeout]
+  (sync [system ^Duration timeout]
     "Blocks until the node has caught up indexing. Will throw an
     exception on timeout. The returned date is the latest index
     time when this node has caught up as of this call. This can be
