@@ -179,7 +179,7 @@ curl -X GET $nodeURL/history/:ivan
 [#query]
 === POST `/query`
 
-Takes a Datalog query and returns its results. Note that you are able to add `:full-results true` to the query map to easily retrieve the source documents relating to the entites in the result set.
+Takes a Datalog query and returns its results.
 
 [source,bash]
 ----
@@ -192,6 +192,16 @@ curl -X POST \
 [source,clj]
 ----
 #{[:boris][:ivan]}
+----
+
+Note that you are able to add `:full-results? true` to the query map to easily retrieve the source documents relating to the entites in the result set. For instance to retrieve _all_ documents in a single query:
+
+[source,clj]
+----
+curl -X POST \
+     -H "Content-Type: application/edn" \
+     -d '{:query {:find [e] :where [[e :crux.db/id _]] :full-results? true}}' \
+     $nodeURL/query
 ----
 
 [#query-stream]
