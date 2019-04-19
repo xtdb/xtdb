@@ -164,18 +164,18 @@
 #{}
 ;; end::query-at-t-q1-r[]
 ;; tag::query-at-t-q1-q[]
-;;TODO Java & Clojure _API_
-(api/q (api/db *kv* #inst "1986-10-23") q)
+; Using Clojure: `(api/q (api/db my-crux-system #inst "1986-10-23") q)`
 ;; end::query-at-t-q1-q[]
+(api/q (api/db *kv* #inst "1986-10-23") q)
 ))
       (t/is (=
 ;; tag::query-at-t-q2-r[]
 #{[:malcolm]}
 ;; end::query-at-t-q2-r[]
 ;; tag::query-at-t-q2-q[]
-;;TODO Java & Clojure _API_
-(api/q (api/db *kv*) q)
+; Using Clojure: `(api/q (api/db my-crux-system) q)`
 ;; end::query-at-t-q2-q[]
+(api/q (api/db *kv*) q)
 )))))
 
 ;; tag::history-full[]

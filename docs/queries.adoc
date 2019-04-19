@@ -36,16 +36,12 @@ section are not aware of valid times or transaction times.
 
 * <<_basic_query>>
 * <<_arguments,`:args`>>
-* <<_a_very_basic_query,`or`>>
-* <<_a_very_basic_query,Combining `or` with `and`>>
-* <<_a_very_basic_query,`not`>>
 * <<_valid_time_travel>>
 * <<_history_api>>
   ** <<_full_document_history>>
   ** <<_document_history_range>>
 * <<_joins,Joins>>
-* <<_a_very_basic_query,Blanks>>
-* <<_a_very_basic_query,`:rules`>>
+* <<_ruels,`:rules`>>
 * <<_lazy_queries>>
 * <<_datascript_differences>>
 

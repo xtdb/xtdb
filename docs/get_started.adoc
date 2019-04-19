@@ -62,3 +62,7 @@ You should get:
 ----
 include::./examples.clj[tags=should-get-entity]
 ----
+
+== Next Steps
+
+Now you know the basics of how to interact with Crux you may want to dive into a https://juxt.pro/blog/posts/a-bitemporal-tale.html[tutorial] or continue on to read about the kinds of things you are able to do with <<queries.adoc#,Queries>>.
