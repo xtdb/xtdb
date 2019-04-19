@@ -23,7 +23,7 @@ https://clojure.org/[See Clojure.org].
 == Setting Up
 
 If you want to start playing about, it is advised you run Crux in a
-<<setup#standalone,standalone configuration>> first.
+<<configuration.adoc#standalone,standalone configuration>> first.
 
 Alternatively, if you just want to try using the REST API, follow https://github.com/juxt/crux/blob/master/example/standalone_webservice/README.md[these steps] to use a self-contained demonstration image from Docker Hub and refer to the <<rest.adoc#,REST API>> section.
 
