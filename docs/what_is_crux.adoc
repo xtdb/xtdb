@@ -81,3 +81,8 @@ compliance for information privacy regulations.
 The main transaction log contains only hashes and is immutable. All document
 content is stored in a dedicated document topic that can be evicted by
 compaction.
+
+== Get Started
+
+Reading the documentation is a good way to learn about Crux, so you are in
+the right place! <<get_started.adoc#,Let's continue the journey.>>
