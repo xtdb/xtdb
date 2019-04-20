@@ -70,7 +70,9 @@
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :java-source-paths ["src"]
-  :javac-options ["-source" "8" "-target" "8" "-Xlint" "-XDignore.symbol.file"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:deprecation" "-Werror"]
   :aot [crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}

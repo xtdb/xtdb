@@ -9,7 +9,6 @@ import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
-@SuppressWarnings("deprecation")
 public class ByteUtils {
     public static final Comparator<byte[]> UNSIGNED_BYTES_COMPARATOR = new UnsignedBytesComparator();
     public static final Comparator<DirectBuffer> UNSIGNED_BUFFER_COMPARATOR = new UnsignedBufferComparator();
