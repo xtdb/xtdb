@@ -54,16 +54,16 @@ public class ByteUtils {
              i += Short.BYTES, j += Long.BYTES) {
             if (i == maxOffset - 1) {
                 final int b = UNSAFE.getByte(byteArray, i + bufferOffset);
-                UNSAFE.putInt(acc, j, UNSAFE.getInt(TWO_BYTES_TO_HEX,
-                                                    ((b & 0xFF) << 3)
-                                                    + (Character.BYTES << 1)
-                                                    + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
+                UNSAFE.putInt(acc, (long)j, UNSAFE.getInt(TWO_BYTES_TO_HEX,
+                                                          (long)(((b & 0xFF) << 3)
+                                                                 + (Character.BYTES << 1)
+                                                                 + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET)));
             } else {
                 short s = UNSAFE.getShort(byteArray, i + bufferOffset);
                 s = IS_LITTLE_ENDIAN ? Short.reverseBytes(s) : s;
-                UNSAFE.putLong(acc, j, UNSAFE.getLong(TWO_BYTES_TO_HEX,
-                                                      ((s & 0xFFFF) << 3)
-                                                      + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET));
+                UNSAFE.putLong(acc, (long)j, UNSAFE.getLong(TWO_BYTES_TO_HEX,
+                                                            (long)(((s & 0xFFFF) << 3)
+                                                                   + sun.misc.Unsafe.ARRAY_CHAR_BASE_OFFSET)));
             }
         }
         return new String(acc);
