@@ -42,7 +42,7 @@ Please note that Clojure is not _required_ when using Crux.
 
 ``` sh
 lein uberjar
-java -jar target/crux-*-standalone.jar --hel1p
+java -jar target/crux-*-standalone.jar --help
 ```
 
 ### Developing
