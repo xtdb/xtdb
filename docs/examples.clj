@@ -15,18 +15,18 @@
 
 ;; tag::start-cluster-node-system[]
 (def ^crux.api.ICruxAPI system
-  (api/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
+  (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
                            :bootstrap-servers "localhost:29092"}))
 ;; end::start-cluster-node-system[]
 
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI system
-  (api/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
+  (crux/start-standalone-system {:kv-backend "crux.kv.rocksdb.RocksKv"
                                 :db-dir "data/db-dir-1"}))
 ;; end::start-standalone-with-rocks[]
 
 ;; tag::submit-tx[]
-(api/submit-tx
+(crux/submit-tx
  system
  [[:crux.tx/put :dbpedia.resource/Pablo-Picasso ; id for Kafka
    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id for Crux
@@ -36,17 +36,17 @@
 ;; end::submit-tx[]
 
 ;; tag::query[]
-(api/q (api/db system)
+(crux/q (crux/db system)
        '{:find [e]
          :where [[e :name "Pablo"]]})
 ;; end::query[]
 
 ;; tag::query-entity[]
-(api/entity (api/db system) :dbpedia.resource/Pablo-Picasso)
+(crux/entity (crux/db system) :dbpedia.resource/Pablo-Picasso)
 ;; end::query-entity[]
 
 ;; tag::query-valid-time[]
-(api/q (api/db system #inst "2018-05-19T09:20:27.966-00:00")
+(crux/q (crux/db system #inst "2018-05-19T09:20:27.966-00:00")
        '{:find [e]
          :where [[e :name "Pablo"]]})
 ;; end::query-valid-time[]
