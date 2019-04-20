@@ -738,6 +738,11 @@
              (->> (idx/idx->seq r)
                   (map second))))
 
+    (t/is (= [1 2 3 4 5]
+             (into []
+                   (map second)
+                   (idx/idx->series r))))
+
     (t/is (= [1 2 3]
              (->> (idx/idx->seq (idx/new-less-than-virtual-index r 4))
                   (map second))))
