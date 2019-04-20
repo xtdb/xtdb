@@ -72,7 +72,8 @@
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
-                  "-Xlint:deprecation" "-Werror"]
+                  "-Xlint:all,-options,-path"
+                  "-Werror"]
   :aot [crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
