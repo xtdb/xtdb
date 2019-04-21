@@ -21,7 +21,7 @@ arrives, and make corrections to past recordings to build an ever-improving
 temporal model of a given domain.
 
 Bitemporal modelling is broadly useful for event-based architectures and is a
-critical requirement for systems any industry with strong auditing regulations,
+critical requirement for systems in any industry with strong auditing regulations,
 where you need to be able to answer the question "what did you know and when
 did you know it?".
 
