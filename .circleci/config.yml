@@ -43,4 +43,4 @@ jobs:
 
       # TODO: only deploy when -SNAPSHOT version!
       #       official versions should be signed manualy
-      - run: lein deploy
+      - run: lein deploy clojars
