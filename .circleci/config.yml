@@ -41,6 +41,4 @@ jobs:
 
       - run: lein do version, check, test
 
-      # TODO: only deploy when -SNAPSHOT version!
-      #       official versions should be signed manualy
-      - run: lein deploy
+      - run: ./bin/deploy_clojars.sh
