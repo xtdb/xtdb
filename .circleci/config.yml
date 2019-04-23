@@ -40,3 +40,7 @@ jobs:
           key: v1-dependencies-{{ checksum "project.clj" }}
 
       - run: lein do version, check, test
+
+      # TODO: only deploy when -SNAPSHOT version!
+      #       official versions should be signed manualy
+      - run: lein deploy
