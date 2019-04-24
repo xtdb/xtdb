@@ -142,7 +142,10 @@
                             ;; Graal, not sure why this is needed,
                             ;; fails with get-proxy-class issue
                             ;; otherwise.
-                            (.submit_doc ^crux.db.TxLog tx-log (.content-hash entity-tx) nil))))
+                            (.submit_doc
+                              ^crux.db.TxLog tx-log
+                              (.content-hash entity-tx)
+                              {:crux.db/id :crux.db/evicted}))))
      :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
                      nil
                      (c/->id-buffer eid)
@@ -166,6 +169,10 @@
    :crux.tx/cas tx-command-cas
    :crux.tx/evict tx-command-evict})
 
+(defn evicted-doc?
+  [doc]
+  (= :crux.db/evicted (:crux.db/id doc)))
+
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable
   (close [_])
@@ -173,20 +180,20 @@
   db/Indexer
   (index-doc [_ content-hash doc]
     (log/debug "Indexing doc:" content-hash)
-    (when (and doc (not (contains? doc :crux.db/id)))
+    (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
           existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                          (db/get-single-object object-store snapshot content-hash))]
       (cond
-        (and doc (nil? existing-doc))
-        (do (db/put-objects object-store [[content-hash doc]])
-            (idx/index-doc kv content-hash doc))
-
-        (and (nil? doc) existing-doc)
+        (and (evicted-doc? doc) existing-doc)
         (do (db/delete-objects object-store [content-hash])
-            (idx/delete-doc-from-index kv content-hash existing-doc)))))
+            (idx/delete-doc-from-index kv content-hash existing-doc))
+
+        (and (not (evicted-doc? doc)) (nil? existing-doc))
+        (do (db/put-objects object-store [[content-hash doc]])
+            (idx/index-doc kv content-hash doc)))))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
