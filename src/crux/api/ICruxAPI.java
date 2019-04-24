@@ -30,7 +30,7 @@ public interface ICruxAPI extends Closeable {
     public ICruxDatasource db(Date validTime);
 
     /**
-     * Returns a db as of valid and transaction time time. Will
+     * Returns a db as of valid time and transaction time. Will
      * block until the transaction time is present in the index.
      *
      * @param validTime       the valid time.

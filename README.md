@@ -7,8 +7,8 @@ and Clojure APIs are provided.
 
 Crux follows an _unbundled_ architectural approach, which means that it is
 assembled from highly decoupled components through the use of semi-immutable
-logs at the core of its design. Logs can currently be stored using either
-RocksDB for standalone single-node deployments or using Kafka for clustered
+logs at the core of its design. Logs can currently be stored in LMDB or RocksDB
+for standalone single-node deployments, or using Kafka for clustered
 deployments. Indexes can currently be stored using LMDB or RocksDB.
 
 At its core Crux is built for efficient bitemporal indexing of schemaless

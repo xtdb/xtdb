@@ -49,19 +49,20 @@ which enables later deletion of documents.
 == Put
 
 Put's a document into Crux. If a document already exists with the
-given `:crub.db/id`, a new version of this document will be created at
+given `:crux.db/id`, a new version of this document will be created at
 the supplied `valid time`.
 
 [source,clojure]
 ----
 [:crux.tx/put
  :dbpedia.resource/Pablo-Picasso <1>
- {:crub.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <2>
+ {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <2>
  #inst "2018-05-18T09:20:27.966-00:00"] <3>
 ----
 
-<1> The ID of the document being written
-<2> The document itself
+<1> The ID of the document to be used for the transaction log.
+<2> The document itself. Note that the ID must also be included as part of the
+document (this requirement to state the ID twice may change in future).
 <3> `valid time`
 
 Note that `valid time` is optional and defaults to transaction time,

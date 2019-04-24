@@ -104,8 +104,7 @@ desired level of transaction function consistency required.
 
 Does Crux support the full Datomic/Datascript dialect of Datalog?::
 
-  No. The `:where` part is similar, but only the map form of queries are
-supported. There is no support for Datomic’s built-in functions, or for
+  No. There is no support for Datomic’s built-in functions, or for
 accessing the log and history directly. There is also no support for variable
 bindings or multiple source vars.
 +
@@ -124,7 +123,7 @@ Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
 
   The goal is to support different languages, and decouple the query
 engine from its syntax, but this is not currently the case.
-There is a query translator for a subset of SPARQL in `crux.rdf`.
+There is a query translator for a subset of SPARQL in `crux.sparql`.
 
 Does Crux support sharding?::
 

@@ -116,15 +116,35 @@ These capabilities are known to be useful for:
 and scheduled events])
 - Ingesting out-of-order temporal data from upstream timestamping systems
 - Maintaining a slowly changing dimension for decision support applications
-- Recovering from accidental data changes and application errors
+- Recovering from accidental data changes and application errors (e.g. billing
+  systems)
 - Auditing all data changes and performing data forensics when necessary
-- Responding to new regulations and audit requirements
+- Responding to new compliance regulations and audit requirements
 - Avoiding the need to set up additional databases for historical data and
   improving end-to-end data governance
+- Building historical models that factor in all historical data (e.g. insurance
+  calculations)
+- Accounting and financial calculations (e.g payroll systems)
 - Development, simulation and testing
 - Live migrations from legacy systems
 - Scheduling and previewing future states (e.g. publishing and content
   management)
+- Reconciling temporal data across eventually consistent systems
+
+Applied industry-specific examples include:
+
+- Legal Documentation – maintain visibility of all critical dates relating to
+  legal documents, including what laws were known to be applicable at the time,
+and any subsequent laws that may be relevant and applied retrospectively 
+- Insurance Coverage – assess the level of coverage for a beneficiary across
+  the lifecycle of care and legislation changes
+- Reconstruction of Trades – readily comply with evolving financial regulations
+- Adverse Events in Healthcare – accurately record a patient’s records over
+  time and mitigate human error
+- Intelligence Gathering – build an accurate model of currently known
+  information to aid predictions and understanding of motives across time
+- Criminal Investigations – efficiently organise analysis and evidence whilst
+  enabling a simple retracing of investigative efforts
 
 == Example Queries
 

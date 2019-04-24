@@ -43,7 +43,8 @@ Implementations of the `KvStore` include:
 |Implementation|Description
 |`crux.kv.rocksdb/RocksKv`|Uses https://rocksdb.org/[RocksDB] and the standard Java API that ships with RocksDB
 |`crux.kv.rocksdb.jnr/RocksJNRKv`|Uses https://rocksdb.org/[RocksDB] and a custom built JNR bridge
-|`crux.kv.lmdb/LMDBKv`|Uses https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database[LMBD]
+|`crux.kv.lmdb/LMDBKv`|Uses https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database[LMBD] via `lwjql`
+|`crux.kv.lmdb.jnr.LMDBJNRKv`|Uses LMDB via `lmdbjava`
 |`crux.kv.memdb/MemKv`|An in-memory KvStore
 |===
 
@@ -64,7 +65,8 @@ an appendable transaction log.
 |===
 |Implementation|Description
 |`crux.kafka.KafkaTxLog`|(default), using Kafka with separate Kafka topics for both documents and transactions
-|`crux.tx.KvTxLog`|Uses the KvStore as the transaction log. This useful if Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transacton log isn't required
+|`crux.tx.KvTxLog`|Uses the KvStore as the transaction log during testing only
+|`crux.tx.EventTxLog`| Uses the KvStore for the transaction log in standalone mode, backed by `moberg`. This is useful when Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transacton log isn't required.
 |===
 
 == Indexer
@@ -156,26 +158,3 @@ In the above example, where `UnaryJoinVirtualIndex` joins three
 as the first value found.
 
 Calling `next-values` would jump ahead to the value 5.
-
-TODO: JP: I need to understand the Nary vs Unary testing index-test.
-
-=== Indexes
-
-The Indexer writes to these indices when indexing _documents_:
-
-.Crux Document Indices
-[#table-conversion%header,cols="d,d"]
-|===
-|Implementation|Description
-|`attribute+value+entity+content-hash-key`|For querying against attribute values
-|`attribute+entity+value+entity+content-hash-key`|For querying against attribute values within entities
-|===
-
-The Indexer writes to these indices when indexing _transactions_:
-
-.Crux Transaction Indices
-[#table-conversion%header,cols="d,d"]
-|===
-|Implementation|Description
-|`entity+valid-time+transaction-time+transaction-id`|Use for `as-of` document retrieval
-|===
