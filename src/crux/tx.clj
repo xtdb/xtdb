@@ -186,14 +186,11 @@
     (let [content-hash (c/new-id content-hash)
           existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                          (db/get-single-object object-store snapshot content-hash))]
-      (cond
-        (and (evicted-doc? doc) existing-doc)
-        (do (db/delete-objects object-store [content-hash])
-            (idx/delete-doc-from-index kv content-hash existing-doc))
-
-        (and (not (evicted-doc? doc)) (nil? existing-doc))
-        (do (db/put-objects object-store [[content-hash doc]])
-            (idx/index-doc kv content-hash doc)))))
+      (db/put-objects object-store [[content-hash doc]])
+      (if (evicted-doc? doc)
+        (when existing-doc
+          (idx/delete-doc-from-index kv content-hash existing-doc))
+        (idx/index-doc kv content-hash doc))))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
