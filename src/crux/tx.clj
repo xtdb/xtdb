@@ -238,10 +238,10 @@
 
 ;; For dev/testing:
 
-(defrecord KvTxLog [kv]
+(defrecord KvTxLog [kv object-store]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (db/index-doc (->KvIndexer kv this (idx/->KvObjectStore kv)) content-hash doc))
+    (db/index-doc (->KvIndexer kv this object-store) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (cio/next-monotonic-date)

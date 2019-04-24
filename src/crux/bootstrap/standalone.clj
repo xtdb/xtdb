@@ -94,12 +94,16 @@
                                           :sync? event-log-sync?
                                           :crux.index/check-and-store-index-version false})
                                    (->> (swap! started conj))))
+
+            ; object / document store
+            object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                                                  (b/start-object-store {:kv kv-store} options))
+
             tx-log (if event-log-kv-store
                      (tx/->EventTxLog event-log-kv-store)
                      (do (log/warn "Using index KV store as event log, not suitable for production environments.")
-                         (tx/->KvTxLog kv-store)))
-            object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                                                  (b/start-object-store {:kv kv-store} options))
+                         (tx/->KvTxLog kv-store object-store)))
+
             indexer (tx/->KvIndexer kv-store tx-log object-store)
             event-log-consumer (when event-log-kv-store
                                  (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
