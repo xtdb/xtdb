@@ -87,6 +87,9 @@
            [k v])
          (into {})))
 
+  (known-keys? [this snapshot ks]
+    (db/known-keys? object-store snapshot ks))
+
   (put-objects [this kvs]
     (db/put-objects object-store kvs))
 

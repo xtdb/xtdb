@@ -213,8 +213,7 @@
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]
-      (= (set content-hashes)
-         (set (keys (db/get-objects object-store snapshot content-hashes))))))
+      (db/known-keys? object-store snapshot content-hashes)))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv k v))
