@@ -18,11 +18,13 @@ capabilities. Crux does not currently support SQL but it does provides an
 EDN-based Datalog query interface that can be used to express a comprehensive
 range of SQL-like join operations as well as recursive graph traversals.
 
-## Latest version [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
+## CircleCI Build
 
-```clj
-[juxt/crux "19.04-1.0.2-alpha"]
-```
+[![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
+
+## Latest Version
+
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux.svg)](https://clojars.org/juxt/crux)
 
 ## Documentation
 
