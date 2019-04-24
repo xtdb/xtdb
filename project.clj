@@ -24,8 +24,7 @@
                  [ring-cors "0.1.13" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.5" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.5" :scope "provided"]]
-  :plugins [[me.arrdem/lein-git-version "2.0.8"]
-            [lein-project-version "0.1.0"]]
+  :plugins [[me.arrdem/lein-git-version "2.0.8"]]
   :profiles { ;; Provided dependencies excluded from uberjar.
              :provided {:dependencies [[org.apache.kafka/kafka_2.11 "2.1.1"]
                                        [org.apache.zookeeper/zookeeper "3.4.13"
