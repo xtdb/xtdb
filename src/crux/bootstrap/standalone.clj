@@ -102,7 +102,7 @@
             tx-log (if event-log-kv-store
                      (tx/->EventTxLog event-log-kv-store)
                      (do (log/warn "Using index KV store as event log, not suitable for production environments.")
-                         (tx/->KvTxLog kv-store object-store)))
+                         (tx/->KvTxLog kv-store)))
 
             indexer (tx/->KvIndexer kv-store tx-log object-store)
             event-log-consumer (when event-log-kv-store
