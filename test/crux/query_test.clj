@@ -1204,7 +1204,7 @@
              (f/transact-people! *kv* [{:crux.db/id id-str :name "Ivan" :version 2}]))))))
 
 (t/deftest test-query-and-cas
-  (let [tx-log (crux.tx/->KvTxLog *kv*)]
+  (let [tx-log (f/kv-tx-log-w-cache *kv*)]
 
     (t/testing "can create new user"
       (let [{:crux.tx/keys [tx-time
@@ -1307,7 +1307,7 @@
 ;; t2 p2 SFO, t5 p3 LA, t9 p4 NY, t10 p4 NY (?)
 
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
-  (let [tx-log (crux.tx/->KvTxLog *kv*)]
+  (let [tx-log (f/kv-tx-log-w-cache *kv*)]
     ;; Day 0, represented as #inst "2018-12-31"
     @(db/submit-tx tx-log [[:crux.tx/put :p2
                             {:crux.db/id :p2

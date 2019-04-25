@@ -238,16 +238,16 @@
 
 ;; For dev/testing:
 
-(defrecord KvTxLog [kv]
+(defrecord KvTxLog [kv object-store]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (db/index-doc (->KvIndexer kv this (idx/->KvObjectStore kv)) content-hash doc))
+    (db/index-doc (->KvIndexer kv this object-store) content-hash doc))
 
   (submit-tx [this tx-ops]
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
-          indexer (->KvIndexer kv this (idx/->KvObjectStore kv))]
+          indexer (->KvIndexer kv this object-store)]
       (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
                      (nippy/fast-freeze conformed-tx-ops)]])
       (doseq [doc (tx-ops->docs tx-ops)]

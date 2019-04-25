@@ -18,7 +18,8 @@
             [crux.morton :as morton]
             [crux.rdf :as rdf]
             [crux.query :as q]
-            [taoensso.nippy :as nippy])
+            [taoensso.nippy :as nippy]
+            [crux.bootstrap :as b])
   (:import java.util.Date))
 
 
@@ -34,9 +35,12 @@
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
-  (let [tx-log (tx/->KvTxLog f/*kv*)
-        object-store (idx/->KvObjectStore f/*kv*)
+  (let [object-store (f/kv-object-store-w-cache f/*kv*)
+
+        tx-log (f/kv-tx-log f/*kv* object-store)
+
         indexer (tx/->KvIndexer f/*kv* tx-log object-store)
+
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)
@@ -44,11 +48,11 @@
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:crux.tx/keys [tx-time tx-id]}
         @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso valid-time]])
-        expected-entities [(c/map->EntityTx {:eid eid
+        expected-entities [(c/map->EntityTx {:eid          eid
                                              :content-hash content-hash
-                                             :vt valid-time
-                                             :tt tx-time
-                                             :tx-id tx-id})]]
+                                             :vt           valid-time
+                                             :tt           tx-time
+                                             :tx-id        tx-id})]]
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "can see entity at transact and valid time"
@@ -69,11 +73,11 @@
         (t/is (some? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time))))
 
       (t/testing "can see entity history"
-        (t/is (= [(c/map->EntityTx {:eid eid
+        (t/is (= [(c/map->EntityTx {:eid          eid
                                     :content-hash content-hash
-                                    :vt valid-time
-                                    :tt tx-time
-                                    :tx-id tx-id})]
+                                    :vt           valid-time
+                                    :tt           tx-time
+                                    :tx-id        tx-id})]
                  (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)))))
 
     (t/testing "add new version of entity in the past"
@@ -81,21 +85,21 @@
             new-content-hash (c/new-id new-picasso)
             new-valid-time #inst "2018-05-20"
             {new-tx-time :crux.tx/tx-time
-             new-tx-id :crux.tx/tx-id}
+             new-tx-id   :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
-          (t/is (= [(c/map->EntityTx {:eid eid
+          (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})]
+                                      :vt           new-valid-time
+                                      :tt           new-tx-time
+                                      :tx-id        new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid eid
+          (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
+                                      :vt           new-valid-time
+                                      :tt           new-tx-time
+                                      :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] #inst "2018-05-20" #inst "2018-05-21"))))))
 
@@ -104,27 +108,27 @@
             new-content-hash (c/new-id new-picasso)
             new-valid-time #inst "2018-05-22"
             {new-tx-time :crux.tx/tx-time
-             new-tx-id :crux.tx/tx-id}
+             new-tx-id   :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
-          (t/is (= [(c/map->EntityTx {:eid eid
+          (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})]
+                                      :vt           new-valid-time
+                                      :tt           new-tx-time
+                                      :tx-id        new-tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid eid
+          (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash content-hash
-                                      :vt valid-time
-                                      :tt tx-time
-                                      :tx-id tx-id})]
+                                      :vt           valid-time
+                                      :tt           tx-time
+                                      :tx-id        tx-id})]
                    (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time tx-time)))
-          (t/is (= [(c/map->EntityTx {:eid eid
+          (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
-                                      :vt new-valid-time
-                                      :tt new-tx-time
-                                      :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time))))
+                                      :vt           new-valid-time
+                                      :tt           new-tx-time
+                                      :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -133,21 +137,21 @@
                 prev-tx-id new-tx-id
                 new-valid-time #inst "2018-05-22"
                 {new-tx-time :crux.tx/tx-time
-                 new-tx-id :crux.tx/tx-id}
+                 new-tx-id   :crux.tx/tx-id}
                 @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
 
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
-              (t/is (= [(c/map->EntityTx {:eid eid
+              (t/is (= [(c/map->EntityTx {:eid          eid
                                           :content-hash new-content-hash
-                                          :vt new-valid-time
-                                          :tt new-tx-time
-                                          :tx-id new-tx-id})]
+                                          :vt           new-valid-time
+                                          :tt           new-tx-time
+                                          :tx-id        new-tx-id})]
                        (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
-              (t/is (= [(c/map->EntityTx {:eid eid
+              (t/is (= [(c/map->EntityTx {:eid          eid
                                           :content-hash new-content-hash
-                                          :vt new-valid-time
-                                          :tt new-tx-time
-                                          :tx-id new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
+                                          :vt           new-valid-time
+                                          :tt           new-tx-time
+                                          :tx-id        new-tx-id})] (idx/all-entities snapshot new-valid-time new-tx-time)))
 
               (t/is (= prev-tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] prev-tx-time prev-tx-time)
                                       (first)
@@ -159,11 +163,11 @@
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
                 (t/is (= cas-failure-tx-time (tx/await-tx-time indexer cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
-                  (t/is (= [(c/map->EntityTx {:eid eid
+                  (t/is (= [(c/map->EntityTx {:eid          eid
                                               :content-hash new-content-hash
-                                              :vt new-valid-time
-                                              :tt new-tx-time
-                                              :tx-id new-tx-id})]
+                                              :vt           new-valid-time
+                                              :tt           new-tx-time
+                                              :tx-id        new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time cas-failure-tx-time))))))
 
             (t/testing "compare and set updates with correct content hash"
@@ -171,15 +175,15 @@
                     new-picasso (assoc old-picasso :baz :boz)
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
-                     new-tx-id :crux.tx/tx-id}
+                     new-tx-id   :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
-                  (t/is (= [(c/map->EntityTx {:eid eid
+                  (t/is (= [(c/map->EntityTx {:eid          eid
                                               :content-hash new-content-hash
-                                              :vt new-valid-time
-                                              :tt new-tx-time
-                                              :tx-id new-tx-id})]
+                                              :vt           new-valid-time
+                                              :tt           new-tx-time
+                                              :tx-id        new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time))))))
 
             (t/testing "compare and set can update non existing nil entity"
@@ -187,21 +191,21 @@
                     new-picasso (assoc new-picasso :crux.db/id :http://dbpedia.org/resource/Pablo2)
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
-                     new-tx-id :crux.tx/tx-id}
+                     new-tx-id   :crux.tx/tx-id}
                     @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
-                  (t/is (= [(c/map->EntityTx {:eid new-eid
+                  (t/is (= [(c/map->EntityTx {:eid          new-eid
                                               :content-hash new-content-hash
-                                              :vt new-valid-time
-                                              :tt new-tx-time
-                                              :tx-id new-tx-id})]
+                                              :vt           new-valid-time
+                                              :tt           new-tx-time
+                                              :tx-id        new-tx-id})]
                            (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo2] new-valid-time new-tx-time))))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
-                 new-tx-id :crux.tx/tx-id}
+                 new-tx-id   :crux.tx/tx-id}
                 @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
@@ -218,17 +222,23 @@
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-attribute+entity+content-hash+value-key-to
-                                     nil
-                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                     (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                     (c/->id-buffer content-hash)
-                                     (c/->value-buffer "Pablo"))]]
+                                      nil
+                                      (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                      (c/->id-buffer content-hash)
+                                      (c/->value-buffer "Pablo"))]]
               (t/is (kv/get-value snapshot version-k)))))))
 
     (t/testing "can evict entity"
       (let [new-valid-time #inst "2018-05-23"
+
+            ; read documents before transaction to populate the cache
+            _ (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
+                  (db/get-objects object-store snapshot (keep :content-hash picasso-history))))
+
             {new-tx-time :crux.tx/tx-time
-             new-tx-id :crux.tx/tx-id}
+             new-tx-id   :crux.tx/tx-id}
             @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
@@ -243,10 +253,11 @@
                 (with-open [i (kv/new-iterator snapshot)]
                   (doseq [{:keys [content-hash]} picasso-history
                           :let [version-k (c/encode-attribute+entity+content-hash+value-key-to
-                                           nil
-                                           (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                           (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                           (c/->id-buffer content-hash)
-                                           (c/->value-buffer "Pablo"))]]
+                                            nil
+                                            (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                            (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                            (c/->id-buffer content-hash)
+                                            (c/->value-buffer "Pablo"))]]
                     (t/is (nil? (kv/get-value snapshot version-k)))))))))))))
+
 

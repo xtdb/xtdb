@@ -31,8 +31,8 @@
          (#(rdf/maps-by-id %)))))
 
 (t/deftest test-can-store-doc
-  (let [tx-log (tx/->KvTxLog f/*kv*)
-        object-store (idx/->KvObjectStore f/*kv*)
+  (let [object-store (idx/->KvObjectStore f/*kv*)
+        tx-log (f/kv-tx-log f/*kv*)
         picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)]
@@ -53,8 +53,8 @@
         (t/is (empty? (db/get-objects object-store snapshot [])))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
-  (let [tx-log (tx/->KvTxLog f/*kv*)
-        object-store (idx/->KvObjectStore f/*kv*)
+  (let [object-store (idx/->KvObjectStore f/*kv*)
+        tx-log (tx/->KvTxLog f/*kv* object-store)
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)
@@ -156,7 +156,7 @@
 ;; the second assertion if we want to keep it around to ensure it
 ;; keeps working.
 (t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
-  (let [tx-log (tx/->KvTxLog f/*kv*)
+  (let [tx-log (f/kv-tx-log f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
         start-valid-time #inst "2019"
         number-of-versions 1000]
@@ -369,7 +369,7 @@
                             (= expected actual)))))))))
 
 (t/deftest test-can-read-kv-tx-log
-  (let [tx-log (tx/->KvTxLog f/*kv*)
+  (let [tx-log (f/kv-tx-log f/*kv*)
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         tx1-ivan (assoc ivan :version 1)
