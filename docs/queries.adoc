@@ -76,7 +76,7 @@ Let's try to work out what these 3 clauses do...
 
 `[p1 :name name]` is looking for all entities that have a value under the
 attribute of `:name` and then binds the corresponding entity ID to `p1` and the
-corresponding value to `name`. Since all 3 entites in our database have a
+corresponding value to `name`. Since all 3 entities in our database have a
 `:name` attribute, this clause alone will simply return all 3 entities.
 
 `[p1 :last-name name]` reuses the variable `name` from the previous clause
