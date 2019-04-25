@@ -2,7 +2,7 @@ STYLESDIR = styles
 STYLESHEET = juxt.css
 
 index.html:	*.adoc ${STYLESDIR}/${STYLESHEET}
-	asciidoctor -d book -a "webfonts!" -a stylesdir=${STYLESDIR} -a stylesheet=${STYLESHEET} index.adoc
+	printf "`cat 'index.adoc'`\\n\\n`sed 's/\*\s<<\(.*\)\#.*/include::\1[]\n\n/' nav.adoc`" | asciidoctor -d book -a docdir=. -o index.html -
 
 docs.zip: index.html javadoc
 	zip -r docs.zip index.html img/* javadoc/*
