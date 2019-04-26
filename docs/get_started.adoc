@@ -1,6 +1,6 @@
 = Get Started
 
-== Recommended Reading 
+== Recommended Reading
 
 This guide contains simple steps showing how to transact data and run a simple
 query. However, there are a few topics you might benefit from learning about
@@ -26,6 +26,11 @@ If you want to start playing about, it is advised you run Crux in a
 <<configuration.adoc#standalone,standalone configuration>> first.
 
 Alternatively, if you just want to try using the REST API, follow https://github.com/juxt/crux/blob/master/example/standalone_webservice/README.md[these steps] to use a self-contained demonstration image from Docker Hub and refer to the <<rest.adoc#,REST API>> section.
+
+*Docker way*.
+See https://github.com/juxt/crux/tree/master/example/standalone_webservice[standalone webservice example]
+for a demo Docker container.
+
 
 == Transacting
 

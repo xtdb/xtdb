@@ -30,6 +30,10 @@ range of SQL-like join operations as well as recursive graph traversals.
 
 Please visit our [official documentation](https://juxt.pro/crux/docs/index.html) to get started with Crux.
 
+## Try it with Docker
+See [standalone webservice example](https://github.com/juxt/crux/tree/master/example/standalone_webservice)
+for a demo Docker container.
+
 ## Community & Contact
 
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
