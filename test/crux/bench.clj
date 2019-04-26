@@ -3,7 +3,10 @@
             [crux.db :as db]
             [crux.tx :as tx]
             [crux.query :as q]
-            [crux.fixtures :as f :refer [*kv*]])
+            [crux.fixtures :as f :refer [*kv*]]
+            [crux.lru :as lru]
+            [crux.bootstrap :as b]
+            [crux.index :as idx])
   (:import [java.util Date]))
 
 (def queries {:name '{:find [e]
@@ -29,7 +32,7 @@
 
 (defn- insert-data [n batch-size ts index]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
-    @(db/submit-tx (tx/->KvTxLog *kv*)
+    @(db/submit-tx (tx/->KvTxLog *kv* (idx/->KvObjectStore *kv*)) ; todo do we want LRU caching here?
                    (f/maps->tx-ops people ts))))
 
 (defn- perform-query [ts query index]

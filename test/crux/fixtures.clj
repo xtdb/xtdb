@@ -10,7 +10,9 @@
             [crux.kafka.embedded :as ek]
             [crux.kafka :as k]
             [crux.kv :as kv]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.index :as idx]
+            [crux.lru :as lru])
   (:import java.io.Closeable
            [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
@@ -32,11 +34,15 @@
           m
           ts])))
 
+(defn kv-tx-log
+  ([kv] (tx/->KvTxLog kv (idx/->KvObjectStore kv)))
+  ([kv object-store] (tx/->KvTxLog kv object-store)))
+
 (defn transact-entity-maps!
   ([kv entities]
    (transact-entity-maps! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (tx/->KvTxLog kv)
+   (let [tx-log (kv-tx-log kv)
          tx-ops (maps->tx-ops entities ts)]
      @(db/submit-tx tx-log tx-ops)
      entities)))
@@ -49,7 +55,7 @@
   ([kv entities]
    (delete-entities! kv entities (cio/next-monotonic-date)))
   ([kv entities ts]
-   (let [tx-log (tx/->KvTxLog kv)
+   (let [tx-log (kv-tx-log kv)
          tx-ops (entities->delete-tx-ops entities ts)]
      @(db/submit-tx tx-log tx-ops)
      entities)))
@@ -63,6 +69,14 @@
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
 (def ^:dynamic *check-and-store-index-version* true)
+
+(defn kv-object-store-w-cache [kv]
+  (lru/->CachedObjectStore
+    (lru/new-cache (:doc-cache-size b/default-options))
+    (b/start-object-store {:kv kv} b/default-options)))
+
+(defn kv-tx-log-w-cache [kv]
+  (tx/->KvTxLog kv (kv-object-store-w-cache kv)))
 
 (defn without-kv-index-version [f]
   (binding [*check-and-store-index-version* false]

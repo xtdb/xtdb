@@ -726,7 +726,7 @@
 ;; end::bitempr[]
 
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
-  (let [tx-log (crux.tx/->KvTxLog *kv*)]
+  (let [tx-log (f/kv-tx-log-w-cache *kv*)]
     ;; Day 0, represented as #inst "2018-12-31"
     @(db/submit-tx tx-log [[:crux.tx/put :p2
                             {:crux.db/id :p2
