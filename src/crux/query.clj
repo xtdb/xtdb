@@ -1113,6 +1113,18 @@
     (let [entity-tx (entity-tx snapshot db eid)]
       (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
+(defn- bounded-result-tuples->edn
+  [tuples q]
+  (if (:full-results? (s/conform ::query q))
+    (map (fn [tuple]
+           (mapv (fn [^BoundResult bound-result]
+                   {::var (:var bound-result)
+                    ::value (:value bound-result)
+                    ::doc (:doc bound-result)})
+                 tuple))
+         tuples)
+    tuples))
+
 (defrecord QueryDatasource [kv query-cache object-store valid-time transact-time]
   ICruxDatasource
   (entity [this eid]
@@ -1125,10 +1137,14 @@
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q [this q]
-    (crux.query/q this q))
+    (-> this
+        (crux.query/q q)
+        (bounded-result-tuples->edn q)))
 
   (q [this snapshot q]
-    (crux.query/q this snapshot q))
+    (-> this
+        (crux.query/q snapshot q)
+        (bounded-result-tuples->edn q)))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]

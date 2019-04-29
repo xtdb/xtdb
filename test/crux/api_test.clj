@@ -96,6 +96,17 @@
                 (t/is (= '([:ivan]) result))
                 (t/is (realized? result))))))
 
+        (t/testing "query returning full results"
+          (let [db (.db f/*api*)]
+            (with-open [snapshot (.newSnapshot db)]
+              (let [result (.q db snapshot '{:find [e]
+                                             :where [[e :name "Ivan"]]
+                                             :full-results? true})]
+                (t/is (instance? LazySeq result))
+                (t/is (not (realized? result)))
+                (t/is (= '([{:crux.query/var e, :crux.query/value :ivan, :crux.query/doc {:crux.db/id :ivan, :name "Ivan"}}]) result))
+                (t/is (realized? result))))))
+
         (t/testing "SPARQL query"
           (when (bound? #'f/*api-url*)
             (let [repo (SPARQLRepository. (str f/*api-url* "/sparql"))]
