@@ -1118,9 +1118,9 @@
   (if (:full-results? (s/conform ::query q))
     (map (fn [tuple]
            (mapv (fn [^BoundResult bound-result]
-                   {::var (:var bound-result)
-                    ::value (:value bound-result)
-                    ::doc (:doc bound-result)})
+                   {:crux.query/var (:var bound-result)
+                    :crux.query/value (:value bound-result)
+                    :crux.query/doc (:doc bound-result)})
                  tuple))
          tuples)
     tuples))
