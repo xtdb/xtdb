@@ -25,27 +25,29 @@
                           :content-hash (s/and (complement map?) ::id))
                     (s/conformer second)))
 
+(def ^:private date? (partial instance? Date))
+
 (s/def ::put-op (s/cat :op #{:crux.tx/put}
                        :id ::id
                        :doc ::doc
-                       :start-valid-time (s/? inst?)
-                       :end-valid-time (s/? inst?)))
+                       :start-valid-time (s/? date?)
+                       :end-valid-time (s/? date?)))
 
 (s/def ::delete-op (s/cat :op #{:crux.tx/delete}
                           :id ::id
-                          :start-valid-time (s/? inst?)
-                          :end-valid-time (s/? inst?)))
+                          :start-valid-time (s/? date?)
+                          :end-valid-time (s/? date?)))
 
 (s/def ::cas-op (s/cat :op #{:crux.tx/cas}
                        :id ::id
                        :old-doc ::doc
                        :new-doc ::doc
-                       :at-valid-time (s/? inst?)))
+                       :at-valid-time (s/? date?)))
 
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
                          :id ::id
-                         :start-valid-time (s/? inst?)
-                         :end-valid-time (s/? inst?)
+                         :start-valid-time (s/? date?)
+                         :end-valid-time (s/? date?)
                          :keep-latest? (s/? boolean?)
                          :keep-earliest? (s/? boolean?)))
 

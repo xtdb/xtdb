@@ -27,6 +27,7 @@
             [ring.util.time :as rt])
   (:import [java.io Closeable IOException]
            java.time.Duration
+           java.util.Date
            java.util.UUID
            org.eclipse.jetty.server.Server
            [crux.api ICruxDatasource ICruxAPI]))
@@ -154,8 +155,9 @@
       (.close ctx)
       (throw t))))
 
-(s/def ::valid-time inst?)
-(s/def ::transact-time inst?)
+(def ^:private date? (partial instance? Date))
+(s/def ::valid-time date?)
+(s/def ::transact-time date?)
 
 (s/def ::query-map (s/and #(set/superset? #{:query :valid-time :transact-time} (keys %))
                           (s/keys :req-un [:crux.query/query]
