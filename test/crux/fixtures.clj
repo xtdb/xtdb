@@ -152,7 +152,7 @@
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
               consumer (k/create-consumer
                          (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                 "group.id" "0"}
+                                 "group.id" (str (UUID/randomUUID))}
                                 *consumer-options*))]
     (binding [*producer* producer
               *consumer* consumer]
