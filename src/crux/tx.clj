@@ -146,20 +146,7 @@
                             (.submit_doc
                               ^crux.db.TxLog tx-log
                               (.content-hash entity-tx)
-                              {:crux.db/id :crux.db/evicted}))))
-     :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
-                     nil
-                     (c/->id-buffer eid)
-                     end-valid-time
-                     transact-time
-                     tx-id)
-                    (c/nil-id-buffer)]
-                   [(c/encode-entity+z+tx-id-key-to
-                     nil
-                     (c/->id-buffer eid)
-                     (c/encode-entity-tx-z-number end-valid-time transact-time)
-                     tx-id)
-                    (c/nil-id-buffer)]])}))
+                              {:crux.db/id :crux.db/evicted}))))}))
 
 (defn tx-command-unknown [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
