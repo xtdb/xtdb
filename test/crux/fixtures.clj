@@ -146,10 +146,14 @@
 (def ^:dynamic ^KafkaProducer *producer*)
 (def ^:dynamic ^KafkaConsumer *consumer*)
 
-(defn with-kafka-client [f]
+(def ^:dynamic *consumer-options* {})
+
+(defn with-kafka-client [f & {:keys [consumer-options]}]
   (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (k/create-consumer {"bootstrap.servers" *kafka-bootstrap-servers*
-                                           "group.id" "0"})]
+              consumer (k/create-consumer
+                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
+                                 "group.id" "0"}
+                                *consumer-options*))]
     (binding [*producer* producer
               *consumer* consumer]
       (f))))

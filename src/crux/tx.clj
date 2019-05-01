@@ -90,8 +90,7 @@
 (defn tx-command-put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
-                               doc (db/get-single-object object-store snapshot content-hash)
-                               correct-state? (not (nil? doc))]
+                               correct-state? (db/known-keys? object-store snapshot [content-hash])]
                            (when-not correct-state?
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
@@ -129,9 +128,9 @@
 (defn tx-command-evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
-        start-valid-time (or start-valid-time (.vt ^EntityTx (last history-descending)))
+        start-valid-time (or start-valid-time (some-> ^EntityTx (last history-descending) (.vt)))
         end-valid-time (or end-valid-time transact-time)]
-    {:post-commit-fn #(when tx-log
+    {:post-commit-fn #(when (and tx-log start-valid-time)
                         (let [range-pred (in-range-pred start-valid-time end-valid-time)]
                           (doseq [^EntityTx entity-tx (cond->> (filter (fn [^EntityTx entity-tx]
                                                                          (range-pred (.vt entity-tx)))
