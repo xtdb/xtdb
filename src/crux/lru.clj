@@ -91,6 +91,8 @@
     (db/known-keys? object-store snapshot ks))
 
   (put-objects [this kvs]
+    (doseq [[k] kvs]
+      (evict cache k))
     (db/put-objects object-store kvs))
 
   (delete-objects [this ks]

@@ -244,20 +244,8 @@
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
 
-          (t/testing "eviction adds to and keeps tx history"
+          (t/testing "eviction keeps tx history"
             (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-              (t/is (= 7 (count (map :content-hash picasso-history))))
+              (t/is (= 6 (count (map :content-hash picasso-history))))
               (t/testing "eviction removes docs"
-                (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history)))))
-              (t/testing "eviction removes secondary indexes"
-                (with-open [i (kv/new-iterator snapshot)]
-                  (doseq [{:keys [content-hash]} picasso-history
-                          :let [version-k (c/encode-attribute+entity+content-hash+value-key-to
-                                            nil
-                                            (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                            (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                            (c/->id-buffer content-hash)
-                                            (c/->value-buffer "Pablo"))]]
-                    (t/is (nil? (kv/get-value snapshot version-k)))))))))))))
-
-
+                (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history))))))))))))
