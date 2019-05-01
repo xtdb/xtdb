@@ -108,6 +108,83 @@
               (t/is (= 1 (count log)))
               (t/is (= 3 (count (:crux.tx/tx-ops (first log))))))))))))
 
+(t/deftest test-can-process-compacted-documents
+  ;; when doing a evict a tombstone document will be written to
+  ;; replace the original document. The original document will be then
+  ;; removed once kafka compacts it away.
+
+  (let [tx-topic "test-can-process-compacted-documents-tx"
+        doc-topic "test-can-process-compacted-documents-doc"
+
+        tx-ops (load-ntriples-example  "crux/picasso.nt")
+        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {"bootstrap.servers" f/*kafka-bootstrap-servers*})
+        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+
+    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
+    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
+    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
+
+    (t/testing "transacting and indexing"
+      (let [consume-opts {:indexer indexer
+                          :consumer f/*consumer*
+                          :pending-txs-state (atom [])
+                          :tx-topic tx-topic
+                          :doc-topic doc-topic}
+
+            evicted-doc {:crux.db/id :to-be-eviceted :personal "private"}
+            non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
+            evicted-doc-hash
+            (do @(db/submit-tx
+                   tx-log
+                   [[:crux.tx/put (:crux.db/id evicted-doc) evicted-doc]
+                    [:crux.tx/put (:crux.db/id non-evicted-doc) non-evicted-doc]])
+
+                (k/consume-and-index-entities consume-opts)
+                (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+                (:crux.db/content-hash (q/entity-tx (q/db f/*kv*) (:crux.db/id evicted-doc))))
+
+            after-evict-doc {:crux.db/id :after-evict :personal "private"}
+            {:crux.tx/keys [tx-id tx-time]}
+            (do
+              @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
+                @(db/submit-tx
+                   tx-log
+                   [[:crux.tx/put (:crux.db/id after-evict-doc) after-evict-doc]]))]
+
+        (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+
+        (t/testing "querying transacted data"
+          (t/is (= non-evicted-doc (q/entity (q/db f/*kv*) (:crux.db/id non-evicted-doc))))
+          (t/is (nil? (q/entity (q/db f/*kv*) (:crux.db/id evicted-doc))))
+          (t/is (= after-evict-doc (q/entity (q/db f/*kv*) (:crux.db/id after-evict-doc)))))
+
+        (t/testing "re-indexing the same transactions after doc compaction"
+          (binding [f/*consumer-options* {"max.poll.records" "1"}]
+            (f/with-kafka-client
+              (fn []
+                (f/with-kv-store
+                  (fn []
+                    (let [object-store (idx/->KvObjectStore f/*kv*)
+                          indexer (tx/->KvIndexer f/*kv* tx-log object-store)
+                          consume-opts {:indexer indexer
+                                        :consumer f/*consumer*
+                                        :pending-txs-state (atom [])
+                                        :tx-topic tx-topic
+                                        :doc-topic doc-topic}]
+                      (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
+                      (k/consume-and-index-entities consume-opts)
+                      (t/is (= {:txs 0, :docs 1} (k/consume-and-index-entities consume-opts)))
+                      ;; delete the object that would have been compacted away
+                      (db/delete-objects object-store [evicted-doc-hash])
+
+                      (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
+                      (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000))))
+
+                      (t/testing "querying transacted data"
+                        (t/is (= non-evicted-doc (q/entity (q/db f/*kv*) (:crux.db/id non-evicted-doc))))
+                        (t/is (nil? (q/entity (q/db f/*kv*) (:crux.db/id evicted-doc))))
+                        (t/is (= after-evict-doc (q/entity (q/db f/*kv*) (:crux.db/id after-evict-doc))))))))))))))))
+
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
         doc-topic "test-can-transact-and-query-dbpedia-entities-doc"

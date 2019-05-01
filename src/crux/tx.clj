@@ -92,8 +92,7 @@
 (defn tx-command-put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
-                               doc (db/get-single-object object-store snapshot content-hash)
-                               correct-state? (not (nil? doc))]
+                               correct-state? (db/known-keys? object-store snapshot [content-hash])]
                            (when-not correct-state?
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
@@ -131,9 +130,9 @@
 (defn tx-command-evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
-        start-valid-time (or start-valid-time (.vt ^EntityTx (last history-descending)))
+        start-valid-time (or start-valid-time (some-> ^EntityTx (last history-descending) (.vt)))
         end-valid-time (or end-valid-time transact-time)]
-    {:post-commit-fn #(when tx-log
+    {:post-commit-fn #(when (and tx-log start-valid-time)
                         (let [range-pred (in-range-pred start-valid-time end-valid-time)]
                           (doseq [^EntityTx entity-tx (cond->> (filter (fn [^EntityTx entity-tx]
                                                                          (range-pred (.vt entity-tx)))
@@ -144,7 +143,10 @@
                             ;; Graal, not sure why this is needed,
                             ;; fails with get-proxy-class issue
                             ;; otherwise.
-                            (.submit_doc ^crux.db.TxLog tx-log (.content-hash entity-tx) nil))))
+                            (.submit_doc
+                              ^crux.db.TxLog tx-log
+                              (.content-hash entity-tx)
+                              {:crux.db/id :crux.db/evicted}))))
      :kvs (cond-> [[(c/encode-entity+vt+tt+tx-id-key-to
                      nil
                      (c/->id-buffer eid)
@@ -168,6 +170,10 @@
    :crux.tx/cas tx-command-cas
    :crux.tx/evict tx-command-evict})
 
+(defn evicted-doc?
+  [doc]
+  (= :crux.db/evicted (:crux.db/id doc)))
+
 (defrecord KvIndexer [kv tx-log object-store]
   Closeable
   (close [_])
@@ -175,20 +181,17 @@
   db/Indexer
   (index-doc [_ content-hash doc]
     (log/debug "Indexing doc:" content-hash)
-    (when (and doc (not (contains? doc :crux.db/id)))
+    (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
           existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                          (db/get-single-object object-store snapshot content-hash))]
-      (cond
-        (and doc (nil? existing-doc))
-        (do (db/put-objects object-store [[content-hash doc]])
-            (idx/index-doc kv content-hash doc))
-
-        (and (nil? doc) existing-doc)
-        (do (db/delete-objects object-store [content-hash])
-            (idx/delete-doc-from-index kv content-hash existing-doc)))))
+      (db/put-objects object-store [[content-hash doc]])
+      (if (evicted-doc? doc)
+        (when existing-doc
+          (idx/delete-doc-from-index kv content-hash existing-doc))
+        (idx/index-doc kv content-hash doc))))
 
   (index-tx [_ tx-ops tx-time tx-id]
     (with-open [snapshot (kv/new-snapshot kv)]
@@ -211,8 +214,7 @@
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]
-      (= (set content-hashes)
-         (set (keys (db/get-objects object-store snapshot content-hashes))))))
+      (db/known-keys? object-store snapshot content-hashes)))
 
   (store-index-meta [_ k v]
     (idx/store-meta kv k v))

@@ -352,6 +352,11 @@
                        (reduce into [])))
     (update-predicate-stats kv - normalized-doc)))
 
+(defn keep-non-evicted-doc
+  [doc]
+  (when-not (= :crux.db/evicted (:crux.db/id doc))
+    doc))
+
 (defrecord KvObjectStore [kv]
   db/ObjectStore
   (init [this {:keys [kv]} options]
@@ -363,15 +368,24 @@
       (some->> (kv/get-value snapshot seek-k)
                (DirectBufferInputStream.)
                (DataInputStream.)
-               (nippy/thaw-from-in!))))
+               (nippy/thaw-from-in!)
+               (keep-non-evicted-doc))))
 
   (get-objects [this snapshot ks]
     (->> (for [k ks
                :let [seek-k (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))
                      v (kv/get-value snapshot seek-k)]
-               :when v]
-           [k (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))])
+               :when v
+               :let [doc (nippy/thaw-from-in! (DataInputStream. (DirectBufferInputStream. v)))]
+               :when (keep-non-evicted-doc doc)]
+           [k doc])
          (into {})))
+
+  (known-keys? [this snapshot ks]
+    (every?
+      (fn [k]
+        (kv/get-value snapshot (c/encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer k))))
+      ks))
 
   (put-objects [this kvs]
     (kv/store kv (for [[k v] kvs]
@@ -402,7 +416,8 @@
         (with-open [in (FileInputStream. doc-file)]
           (some->> in
                    (DataInputStream.)
-                   (nippy/thaw-from-in!))))))
+                   (nippy/thaw-from-in!)
+                   (keep-non-evicted-doc))))))
 
   (get-objects [this _ ks]
     (->> (for [k ks
@@ -416,6 +431,14 @@
             :let [doc-key (str (c/new-id k))]]
       (with-open [out (DataOutputStream. (FileOutputStream. (io/file dir doc-key)))]
         (nippy/freeze-to-out! out v))))
+
+  (known-keys? [this snapshot ks]
+    (every?
+      (fn [k]
+        (let [doc-key (str (c/new-id k))
+              doc-file (io/file dir doc-key)]
+          (.exists doc-file)))
+      ks))
 
   (delete-objects [this ks]
     (doseq [k ks
