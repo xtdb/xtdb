@@ -1,12 +1,12 @@
 = Contributing
 
-== Thank you
+== Thanks
 
 Crux would not exist without the community of vibrant open source projects on
 which it depends, and we hope that the Crux community will serve to extend and
 reflect our gratitude.
 
-== GitHub Issues
+== GitHub
 
 We currently use GitHub Issues to work on near-term changes to the Crux
 codebase and documentation. Please see the issues labelled with "good first
@@ -15,16 +15,16 @@ https://github.com/juxt/crux/labels/good%20first%20issue
 
 PRs with fixes and improvements to these docs are very welcome.
 
-== Commit Messages
+== Commits
 
 Please strive to follow the best-practices for commit messages which are outlined here:
 https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
-== Contributor License Agreement (CLA)
+== CLA
 
-A CLA is necessary for us to ensure that we can support a healthy Crux
-ecosystem over the indefinite future. Please complete the very short `.odt`
-LibreOffice template linked below and email it to us, crux@juxt.pro, along with
-a reference to your current PR on GitHub.
+A Contributor License Agreement (CLA) is necessary for us to ensure that we can
+support a healthy Crux ecosystem over the indefinite future. Please complete
+the very short `.odt` LibreOffice template linked below and email it to us,
+crux@juxt.pro, along with a reference to your current PR on GitHub.
 
 link:open-crux-individual-contributor-license-agreement-cla.odt[Open Crux CLA]

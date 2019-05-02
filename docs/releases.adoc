@@ -1,8 +1,0 @@
-= Releases
-
-== crux-19.0-alpha
-
-19 April 2019
-
-This inaugural public alpha release serves to validate the API and overall
-design with a wide audience of users and possible contributors.

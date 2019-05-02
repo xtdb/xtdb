@@ -1,6 +1,6 @@
 = Get Started
 
-== Recommended Reading
+==  Introduction
 
 This guide contains simple steps showing how to transact data and run a simple
 query. However, there are a few topics you might benefit from learning about

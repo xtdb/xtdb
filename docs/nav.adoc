@@ -11,8 +11,6 @@
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<support.adoc#,Support>>
-* <<roadmap.adoc#,Product Roadmap>>
 * <<about.adoc#,About>>
-* <<releases.adoc#,Releases>>
 * <<design.adoc#,Design>>
 * <<contributing.adoc#,Contributing>>
