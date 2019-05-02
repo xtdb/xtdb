@@ -14,11 +14,11 @@ See: https://juxt.pro/team.html
 
 == Product Roadmap
   
-=== Long-term Direction
+=== Long-term 
 
 The Crux roadmap is not opaque and JUXT is open to community involvement in defining our objectives. We currently use a private Clubhouse instance to evaluate priorities and track long-term objectives, but we hope to migrate this information into an open forum in the near future. We expect that the majority of technical changes for the rest of 2019 will be in the layers of features that sit above the Crux core.
 
-=== Enterprise Edition and Cloud Offering
+=== Enterprise and Cloud Offering
 
 JUXT is working to develop enterprise-level capabilities for operating Crux clusters and managing data across clusters. Crux can already be deployed to Kubernetes and we are aiming to provide self-service cloud instances to support production customer usage. JUXT currently offers flexible Managed Hosting for Crux. Please feel free to contact us: crux@juxt.pro
 
