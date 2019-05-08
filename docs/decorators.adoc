@@ -1,0 +1,24 @@
+= Decorators 
+
+== Introduction
+
+Decorators are features that can be built on top of Crux that can be used
+optionally and can be created easily without needing understand how the core of
+Crux works. Use of decorators is currently an advanced topic and requires a
+basic understanding of Clojure to configure.
+
+== Aggregation 
+
+The
+https://github.com/juxt/crux/blob/master/src/crux/decorators/aggregation/alpha.clj[`aggregation.alpha`]
+namespace demonstrates a good example of building a highly general aggregation
+extension to the basic Crux query. The standard `api/q` function can now be
+ignored as the `aggr/q` function is used instead (it wraps `api/q` with
+transducer magic).
+
+[source,clj]
+----
+include::./query_test_examples.clj[tags=aggr1]
+----
+
+See the https://github.com/juxt/crux/blob/master/test/crux/decorators/aggregation_test.clj[aggregation_test.clj] for more examples of usage.
