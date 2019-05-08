@@ -41,7 +41,7 @@ section are not aware of valid times or transaction times.
   ** <<_full_document_history>>
   ** <<_document_history_range>>
 * <<_joins,Joins>>
-* <<_ruels,`:rules`>>
+* <<_rules,`:rules`>>
 * <<_lazy_queries>>
 * <<_datascript_differences>>
 
@@ -336,7 +336,7 @@ The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
 optionally a `snapshot` which is already opened and managed by the caller
 (using `with-open` for example). This version of the call returns a lazy
 sequence of the results, while the other version provides a set. A snapshot can
-be retreived from a `kv` instance via `crux.kv-store/new-snapshot`.
+be retreived from a `kv` instance via `crux.api/new-snapshot`.
 
 == DataScript Differences
 

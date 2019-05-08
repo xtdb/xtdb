@@ -2,26 +2,166 @@
 
 [qanda]
 
+== Comparisons
+
+How does Crux compare to Datomic (On-Prem)?::
+
+  At a high level Crux is bitemporal, document-centric, schemaless, and
+designed to work with Kafka as an "unbundled" database. Bitemporality provides
+a user-assigned "valid time" axis for point-in-time queries in addition to the
+underlying system-assigned "transaction time". The main similarities are that
+both systems support EDN Datalog queries (though they not compatible), are
+written using Clojure, and provide elegant use of the database "as a value".
+
+In the excellent talk "Deconstructing the Database" [0], Rich Hickey outlines
+many core principles that informed the design of both Datomic and Crux:
+
+. Declarative programming is ideal
+. SQL is the most popular declarative programming language but most SQL
+databases do not provide a consistent "basis" for running these declarative
+queries because they do not store and maintain views of historical data by
+default
+. Client-server considerations should not affect how queries are constructed
+. Recording history is valuable 
+. All systems should clearly separate reaction and perception: a transactional
+component that accepts novelty and passes it to an indexer that integrates
+novelty into the indexed view of the world (reaction) + a query support
+component that accepts questions and uses the indexes to answer the questions
+quickly (perception)
+. Traditionally a database was a big complicated thing, it was a special thing,
+and you only had one. You would communicate to it with a foreign language, such
+as SQL strings. These are legacy design choices
+. Questions dominate in most applications, or in other words, most applications
+are read-oriented. Therefore arbitrary read-scalability is a more general
+problem to address than arbitrary write-scalability (if you need arbitrary
+write-scalability then you inevitably have to sacrifice system-wide
+transactions and consistent queries)
+. Using a cache for a database is not simple and should never be viewed an
+architectural necessity: "_When_ does the cache get invalidated? It's your
+problem!"
+. The relational model makes it challenging to record historical data for
+evolving domains and therefore SQL databases do not provide an adequate
+"information model"
+. Accreting "facts" over time provides a real information model and is also
+simpler than recording relations (composite facts) as seen in a typical
+relational database
+. RDF is an attempt to create a universal schema for information using
+`[subject predicate object]` triples as facts. However RDF triples are not
+sufficient because these facts do not have a temporal component (e.g. timestamp
+or transaction coordinate)
+. Perception does not require coordination and therefore queries should not
+affect concurrently executing transactions or cause resource contention (i.e.
+"stop the world")
+. "Reified process" (i.e. transaction metadata and temporal indexing) should
+enable efficient historical queries and make interactive auditing practical
+. Enabling the programmer to use the database "as a value" is dramatically less
+complex than working with typical databases in a client-server model and it
+very naturally aligns with functional programming: "The state of the database
+is a value defined by the set of facts in effect at a given moment in time."
+
+Rich then outlines how these principles are realised in the original design for
+Datomic (now "Datomic On-Prem") and this is where Crux and Datomic begin to
+diverge:
+
+. Datomic maintains a global index which can be lazily retrieved by peers from
+shared "storage". Conversely, a Crux node represents an isolated coupling of
+local storage and local indexing components together with the query engine.
+Crux nodes are therefore fully independent asides from the shared transaction
+log and document log
+. Both systems rely on existing storage technologies for the primary storage of
+data. Datomic's covering indexes are stored in a shared storage service with
+multiple backend options. Crux, when used with Kafka, uses basic Kafka topics
+as the primary distributed store for content and transaction logs.
+. Datomic peers lazily read from the global index and therefore automatically
+cache their dynamic working sets. Crux does not use a global index and
+currently does not offer any node-level sharding either so each node must
+contain the full database. Crux will support manual node-level sharding in the
+future via simple configuration. One benefit of manual sharding is that both
+the size of the Crux node on disk and the long-tail query latency will be more
+predictable
+. Datomic uses an explicit "transactor" component, whereas the role of the
+transactor in Crux is fulfilled by a passive transaction log (e.g. a
+single-partition Kafka topic) where unconfirmed transactions are optimistically
+appended, and therefore a transaction in Crux is not confirmed until a node
+reads from the transaction log and confirms it locally
+. Datomic's transactions and transaction functions are processed via a
+centralised transactor which can be configured for High-Availability using
+standby transactors. Centralised execution of transaction functions is
+effectively an optimisation that is useful for managing contention whilst
+minimising external complexity, and the trade-off is that the use of
+transcation functions will ultimately impact the serialised transaction
+throughput of the entire system. Crux does not currently provide a standard
+means of creating transaction functions but it is an area we are keen to see
+explored. If transaction functions and other kinds of validations of
+constraints are needed then it is recommended to use a gatekeeper pattern which
+involves electing a primary Crux node (e.g. using ZooKeeper) to execute
+transactions against, thereby creating a similar effect to Datomic's transactor
+component
+
+Other differences compared to Crux:
+
+. Datomic's datom model provides a very granular and comprehensive interface
+for expressing novelty through the assertion and retraction of facts. Crux
+instead uses documents (i.e. schemaless EDN maps) which are atomically ingested
+and processed as groups of facts that correspond to top-level fields with each
+document. This design choice simplifies bitemporal indexing (i.e. the use of
+valid time + transaction time coordinates) whilst satisfying typical
+requirements and improving the ergonomics of integration with other
+document-oriented systems. Additionally, the ordering of fields using the same
+key in a document is naturally preserved and can be readily retrieved, whereas
+Datomic requires explicit modelling of order for cardinality-many attributes.
+The main downside of Crux's document model is that re-transacting entire
+documents to update a single field can be considered inefficient, but this
+could be mitigated using lower-level compression techniques and
+content-addressable storage. Retractions in are implicit and deleted documents
+are simply replaced with empty documents
+. Datomic enforces a simple information schema for attributes including
+explicit reference types and cardinality constraints. Crux is schemaless as we
+believe that schema should be optional and be implemented as higher level
+"decorators" using a spectrum of schema-on-read and/or schema-on write designs.
+Since Crux does not track any reference types for attributes, Datalog queries
+simply attempt to evaluate and navigate attributes as reference types during
+execution
+. Datomic's Datalog query language is more featureful and has more built-in
+operations than Crux's equivalent. Both systems provide powerful graph query
+possibilities
+
+Note that Datomic Cloud is separate technology platform that is designed from
+the ground up to run on AWS and it is out of scope for this comparison.
+
+In summary, Datomic (On-Prem) is a proven technology with a well-reasoned
+information model and sophisticated approach to scaling. Crux offloads primary
+scaling concerns to distributed log storage systems like Kafka (following the
+"unbundled" architecture) and to standard operational features within platforms
+like Kubernetes (e.g. snapshotting of nodes with pre-built indexes for rapid
+horizontal scaling). Unlike Datomic, Crux is document-centric and uses a
+bitemporal component within its information model to enable application-level
+of use of valid time in conjunction with transaction time.
+
+[0] Rich Hickey: Deconstructing the Database
+https://www.youtube.com/watch?v=Cym4TZwTCNU
+
 == Technical
 
 Is Crux eventually consistent? Strongly consistent? Or something else?::
+
   An _easy_ answer is that Crux is "strongly consistent" with ACID semantics.
 
 What consistency does Crux provide?::
+
   A Crux ClusterNode system provides sequential consistency by default due to
 the use of a single unpartitioned Kafka topic for the transaction log. Being
 able to read your writes requires stickiness to a particular node. For a
 ClusterNode system to be linearizable as a whole would require that every node
 always sees the result of every transaction immediately after it is written.
-This could be achieved with the cost of non-trivial additional latency. Forms
-of causal consistency across multiple Crux systems could potentially be
-achieved through the use of `valid time`. Further reading:
-http://www.bailis.org/papers/hat-vldb2014.pdf,
+This could be achieved with the cost of non-trivial additional latency. Further
+reading: http://www.bailis.org/papers/hat-vldb2014.pdf,
 https://jepsen.io/consistency/models/sequential
 
 How is consistency provided by Crux?::
+
   Crux does not try to enforce consistency among nodes, which all
-consume the log in the same order, but may be at different points. A
+consume the log in the same order, but nodes may be at different points. A
 client using the same node will have a consistent view. Reading your own
 writes can be achieved by providing the transaction time Kafka assigned
 to the submitted transaction, which is returned in a promise from
@@ -84,6 +224,7 @@ ordering between nodes.
 == Feature Support
 
 Does Crux support RDF/SPARQL?::
+
   No. We have a simple ingestion mechanism for RDF data in `crux.rdf`
 but this is not a core feature. There is a also a query translator for a
 subset of SPARQL. RDF and SPARQL support could eventually be written as

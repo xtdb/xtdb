@@ -22,15 +22,16 @@ https://clojure.org/[See Clojure.org].
 
 == Setting Up
 
-If you want to start playing about, it is advised you run Crux in a
-<<configuration.adoc#standalone,standalone configuration>> first.
+If you want to start interacting with Crux in your environment then it is
+advised you run Crux in a <<configuration.adoc#standalone,standalone
+configuration>>.
 
-Alternatively, if you just want to try using the REST API, follow https://github.com/juxt/crux/blob/master/example/standalone_webservice/README.md[these steps] to use a self-contained demonstration image from Docker Hub and refer to the <<rest.adoc#,REST API>> section.
-
-*Docker way*.
-See https://github.com/juxt/crux/tree/master/example/standalone_webservice[standalone webservice example]
-for a demo Docker container.
-
+Alternatively, if you simply want to experiment with Crux using a demo Docker
+container from Docker Hub (no JVM/JDK/Clojure install required, only Docker!)
+then please see the
+https://github.com/juxt/crux/tree/master/example/standalone_webservice[standalone
+webservice example]. You can also use this self-contained demonstration image to
+experiment with the <<rest.adoc#,REST API>>.
 
 == Transacting
 
@@ -70,4 +71,4 @@ include::./examples.clj[tags=should-get-entity]
 
 == Next Steps
 
-Now you know the basics of how to interact with Crux you may want to dive into a https://juxt.pro/blog/posts/a-bitemporal-tale.html[tutorial] or continue on to read about the kinds of things you are able to do with <<queries.adoc#,Queries>>.
+Now you know the basics of how to interact with Crux you may want to dive into a https://juxt.pro/blog/posts/a-bitemporal-tale.html[REPL-based tutorial] (or use the interactive no-install browser-based https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition]!). Otherwisethe next sensible thing to read about are the kinds of things you are able to do with <<queries.adoc#,Queries>>.

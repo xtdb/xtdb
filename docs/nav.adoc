@@ -8,6 +8,7 @@
 * <<advanced_queries.adoc#,Queries (advanced)>>
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
+* <<decorators.adoc#,Decorators>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<support.adoc#,Support>>

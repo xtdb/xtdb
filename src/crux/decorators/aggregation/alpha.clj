@@ -12,9 +12,9 @@
 (s/def ::partition-by (s/coll-of variable?))
 (s/def ::vector-aggregation-expr any?)
 (s/def ::list-aggregation-expr any?)
-(s/def ::aggrigation-expr (s/or :vector ::vector-aggregation-expr
+(s/def ::aggregation-expr (s/or :vector ::vector-aggregation-expr
                                 :list ::list-aggregation-expr))
-(s/def ::select (s/map-of variable? ::aggrigation-expr))
+(s/def ::select (s/map-of variable? ::aggregation-expr))
 (s/def ::aggr (s/keys :req-un [::partition-by ::select]))
 
 (defn find-used-variables
@@ -39,7 +39,7 @@
         (recur seen res r)
         (recur (conj seen f) (conj res f) r)))))
 
-(defn aggrigation-variables
+(defn aggregation-variables
   [query]
   (->> (concat
          (->> query :aggr :partition-by)
@@ -97,20 +97,20 @@
 
 (defn running-plan
   [query]
-  (let [aggrigation-variables (aggrigation-variables query)]
-    {:query-variables aggrigation-variables
-     :output-names (vec (map variable->keyword aggrigation-variables))
+  (let [aggregation-variables (aggregation-variables query)]
+    {:query-variables aggregation-variables
+     :output-names (vec (map variable->keyword aggregation-variables))
      :partition-segments-count (->> query :aggr :partition-by count)
      :aggregators (into
                     {}
                     (for [[target-var expr] (-> query :aggr :select)]
-                      [target-var (compile-reducer expr aggrigation-variables)]))}))
+                      [target-var (compile-reducer expr aggregation-variables)]))}))
 
 (defn decorated-query
   [query]
   (-> (dissoc query :aggr)
       (assoc :order-by (query-order query))
-      (assoc :find (aggrigation-variables query))))
+      (assoc :find (aggregation-variables query))))
 
 (defn run-plan
   [db snapshot

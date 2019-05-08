@@ -6,7 +6,7 @@
 
 (t/use-fixtures :each f/with-standalone-system)
 
-(t/deftest test-count-aggrigation
+(t/deftest test-count-aggregation
   (f/transact-entity-maps!
     (:kv-store *api*)
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}

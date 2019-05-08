@@ -3,10 +3,33 @@
             [clojure.test :as t]
             [crux.db :as db]
             [crux.api :as api]
+            [crux.decorators.aggregation.alpha :as aggr]
             [crux.fixtures :as f :refer [*kv*]])
   (:import java.util.UUID))
 
 (t/use-fixtures :each f/with-kv-store)
+
+;; tag::aggr1[]
+(t/deftest test-count-aggregation
+  (f/transact-entity-maps!
+    *kv*
+    [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
+     {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
+     {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
+     {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}])
+
+  (t/testing "with vector syntax"
+    (t/is (= [{:user-name "niclas" :post-count 1 :cost-sum 8}
+              {:user-name "patrik" :post-count 3 :cost-sum 70}]
+             (aggr/q
+               (api/db *api*)
+               '{:aggr {:partition-by [?user-name]
+                        :select
+                        {?cost-sum [0 (+ acc ?post-cost)]
+                         ?post-count [0 (inc acc) ?e]}}
+                 :where [[?e :user/name ?user-name]
+                         [?e :post/cost ?post-cost]]})))))
+;; end::aggr1[]
 
 (t/deftest test-basic-query
   (f/transact-people! *kv* 
@@ -715,8 +738,8 @@
  :where [[p :entry-pt entry-pt]
          [p :arrival-time arrival-time]
          [p :departure-time departure-time]]}
-#inst "2019-01-02" ; `as of` valid time
-#inst "2019-01-03" ; `as at` transaction time
+#inst "2019-01-03" ; `as of` transaction time
+#inst "2019-01-02" ; `as at` valid time
 ;; end::bitempq[]
 
 ;; tag::bitempr[]
