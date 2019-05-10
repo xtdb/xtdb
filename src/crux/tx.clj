@@ -394,11 +394,14 @@
                              (seq)
                              (map :lag)
                              (reduce max 0))]
-    (if (cio/wait-while #(pos? (or (long (max-lag-fn)) Long/MAX_VALUE))
+    (if (cio/wait-while #(if-let [max-lag (max-lag-fn)]
+                           (pos? max-lag)
+                           true)
                         await-tx-timeout)
       (latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))
       (throw (TimeoutException.
-              (str "Timed out waiting for index to catch up, lag is: " (max-lag-fn)))))))
+               (str "Timed out waiting for index to catch up, lag is: " (or (max-lag-fn)
+                                                                            "unknown")))))))
 
 (defn await-tx-time [indexer transact-time {:crux.tx-log/keys [await-tx-timeout]
                                             :or {await-tx-timeout default-await-tx-timeout}}]
