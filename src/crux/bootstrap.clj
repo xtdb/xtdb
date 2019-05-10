@@ -103,8 +103,10 @@
         tx-log-entry)))
 
   (sync [_ timeout]
-    (tx/await-no-consumer-lag indexer (or (some-> timeout (.toMillis))
-                                          (:crux.tx-log/await-tx-timeout options))))
+    (tx/await-no-consumer-lag
+      indexer
+      (cond-> options
+        timeout (assoc :crux.tx-log/await-tx-timeout (.toMillis timeout)))))
 
   backup/ISystemBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]

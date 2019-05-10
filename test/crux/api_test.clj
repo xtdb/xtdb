@@ -29,6 +29,16 @@
   (t/testing "empty db"
     (t/is (.db f/*api*)))
 
+  (t/testing "syncing empty db"
+    (t/is
+      (try
+        (.sync f/*api* (Duration/ofMillis 10))
+        false
+        (catch Exception e
+          (or (instance? java.util.concurrent.TimeoutException e)
+              (= 500 (:status (ex-data e))) ;; http api client
+              )))))
+
   (t/testing "transaction"
     (let [valid-time (Date.)
           {:keys [crux.tx/tx-time
