@@ -75,11 +75,12 @@
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
-(defn start-standalone-system ^ICruxAPI [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
-                                                 crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options
-                                          :or {doc-cache-size (:doc-cache-size b/default-options)}}]
+(defn start-standalone-system ^ICruxAPI [options]
   (s/assert ::standalone-options options)
-  (let [started (atom [])]
+  (let [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
+                crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options}
+        (merge b/default-options options)
+        started (atom [])]
     (try
       (let [kv-store (doto (b/start-kv-store
                              (merge (when-not event-log-dir
