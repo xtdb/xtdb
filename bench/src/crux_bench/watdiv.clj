@@ -13,7 +13,7 @@
            java.util.Date))
 
 (def supported-backends
-  [:crux :datomic])
+  [:crux])
 
 (defmulti start-watdiv-runner
   (fn [key system] key))
