@@ -136,10 +136,10 @@
      (let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
        (Class/forName ~fqn))
      (catch ClassNotFoundException e#
-       ~(when-not *compile-files*
-          `(let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
-             (require (symbol ns#))
-             (resolve (symbol ~fqn)))))))
+       (when-not *compile-files*
+         (let [[_# ns#] (re-find #"(.+)(:?\..+)" ~fqn)]
+           (require (symbol ns#))
+           (resolve (symbol ~fqn)))))))
 
 (defn require-and-ensure-record ^Class [protocol record-class-name]
   (let [record-class ^Class (load-dynamic-class record-class-name)]
