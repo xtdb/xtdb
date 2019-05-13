@@ -372,7 +372,12 @@
 (defrecord CruxBackend [crux]
   WatdivBackend
   (backend-info [this]
-    {:backend :crux})
+    (assoc
+      (select-keys (crux/status crux)
+                   [:crux.version/version
+                    :crux.version/revision
+                    :crux.kv/kv-backend])
+      :backend :crux))
   (execute-with-timeout [this datalog]
     (let [db (crux/db crux)]
       (with-open [snapshot (crux/new-snapshot db)]
