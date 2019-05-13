@@ -264,6 +264,18 @@
   Closeable
   (close [_]))
 
+(defn create-kv-tx-log
+  [kv object-store]
+  (let [tx-log (->KvTxLog kv object-store)
+        indexer (->KvIndexer kv tx-log object-store)]
+    (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
+      (db/store-index-meta
+        indexer
+        :crux.tx-log/consumer-state
+        {:crux.kv.topic-partition/tx-log-0
+         {:lag 0 :time nil}}))
+    tx-log))
+
 ;; For StandaloneSystem.
 
 (s/def ::event-log-dir string?)

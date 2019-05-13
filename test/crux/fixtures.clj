@@ -35,8 +35,8 @@
           ts])))
 
 (defn kv-tx-log
-  ([kv] (tx/->KvTxLog kv (idx/->KvObjectStore kv)))
-  ([kv object-store] (tx/->KvTxLog kv object-store)))
+  ([kv] (tx/create-kv-tx-log kv (idx/->KvObjectStore kv)))
+  ([kv object-store] (tx/create-kv-tx-log kv object-store)))
 
 (defn transact-entity-maps!
   ([kv entities]
@@ -76,7 +76,7 @@
     (b/start-object-store {:kv kv} b/default-options)))
 
 (defn kv-tx-log-w-cache [kv]
-  (tx/->KvTxLog kv (kv-object-store-w-cache kv)))
+  (tx/create-kv-tx-log kv (kv-object-store-w-cache kv)))
 
 (defn without-kv-index-version [f]
   (binding [*check-and-store-index-version* false]
