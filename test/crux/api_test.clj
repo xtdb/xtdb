@@ -21,23 +21,17 @@
   (t/testing "status"
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
               :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
-              :crux.kv/estimate-num-keys 1
-              :crux.index/index-version 4
-              :crux.tx-log/consumer-state nil}
-             (dissoc (.status f/*api*) :crux.kv/size :crux.version/version :crux.version/revision))))
+              :crux.index/index-version 4}
+             (dissoc (.status f/*api*)
+                     :crux.kv/estimate-num-keys
+                     :crux.tx-log/consumer-state :crux.kv/size
+                     :crux.version/version :crux.version/revision))))
 
   (t/testing "empty db"
     (t/is (.db f/*api*)))
 
   (t/testing "syncing empty db"
-    (t/is
-      (try
-        (.sync f/*api* (Duration/ofMillis 10))
-        false
-        (catch Exception e
-          (or (instance? java.util.concurrent.TimeoutException e)
-              (= 500 (:status (ex-data e))) ;; http api client
-              )))))
+    (t/is (nil? (.sync f/*api* (Duration/ofSeconds 10)))))
 
   (t/testing "transaction"
     (let [valid-time (Date.)

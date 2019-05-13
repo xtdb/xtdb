@@ -105,6 +105,15 @@
             event-log-consumer (when event-log-kv-store
                                  (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
                                                                                            event-log-sync-interval-ms)))]
+
+        (when-not (or event-log-kv-store
+                      (db/read-index-meta indexer :crux.tx-log/consumer-state))
+          (db/store-index-meta
+            indexer
+            :crux.tx-log/consumer-state
+            {:crux.kv.topic-partition/tx-log-0
+             {:lag 0 :time nil}}))
+
         (map->StandaloneSystem {:kv-store kv-store
                                 :event-log-kv-store event-log-kv-store
                                 :tx-log tx-log

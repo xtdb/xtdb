@@ -169,17 +169,23 @@
     (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))
 
 (defn- prune-consumer-state [indexer ^KafkaConsumer consumer partitions]
-  (when-let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
-    (->> (for [^TopicPartition partition partitions]
-           (topic-partition-meta-key partition))
-         (select-keys consumer-state)
+  (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)
+        end-offsets (.endOffsets consumer (vec partitions))]
+    (->> (for [^TopicPartition partition partitions
+               :let [partition-key (topic-partition-meta-key partition)
+                     next-offset (or (get-in consumer-state [partition-key :next-offset]) 0)]]
+           (do
+             [partition-key {:next-offset next-offset
+                             :lag (- (dec (get end-offsets partition)) next-offset)
+                             :time (get-in consumer-state [partition-key :time])}]))
+         (into {})
          (db/store-index-meta indexer :crux.tx-log/consumer-state))))
 
 (defn seek-to-stored-offsets [indexer ^KafkaConsumer consumer partitions]
   (let [consumer-state (db/read-index-meta indexer :crux.tx-log/consumer-state)]
     (doseq [^TopicPartition partition partitions]
       (if-let [offset (get-in consumer-state [(topic-partition-meta-key partition) :next-offset])]
-        (.seek consumer partition offset)
+        (.seek consumer partition (long offset))
         (.seekToBeginning consumer [partition])))))
 
 (defn- index-doc-record [indexer ^ConsumerRecord record]
