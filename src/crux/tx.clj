@@ -332,7 +332,7 @@
                 next-offset (inc (long (.message-id last-message)))
                 lag (- end-offset next-offset)
                 _ (when (pos? lag)
-                    (log/warn "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
+                    (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
                 consumer-state {::event-log
                                 {:lag lag
                                  :next-offset next-offset
