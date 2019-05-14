@@ -1,9 +1,27 @@
 = Bitemporality
 
+== Overview
+
+Crux is optimised for efficient and globally consistent point-in-time queries
+using a pair of `transaction-time` and `valid-time` timestamps.
+
+Ad-hoc systems for bitemporal recordkeeping typically rely on explicitly
+tracking either `valid-from` and `valid-to` timestamps or range types directly
+within relations.  The bitemporal document model that Crux provides is very
+simple to reason about and it is universal across the entire database,
+therefore it does not require you to consider which historical information is
+worth storing in special "bitemporal tables" upfront.
+
+One or more documents may be inserted into Crux via a `put` transaction at a
+specific `valid-time`, defaulting to the `transaction time` (i.e. `now`), and
+each document remains valid until explicitly updated with a new version via
+`put` (or `cas`) or deleted via `delete`.
+
 [#bitemp-why]
 == Why?
 
-The rationale for bitemporality is also explained in this https://juxt.pro/blog/posts/value-of-bitemporality.html[blog post].
+The rationale for bitemporality is also explained in this
+https://juxt.pro/blog/posts/value-of-bitemporality.html[blog post].
 
 A baseline notion of time that is always available is
 `transaction-time`; the point at which data is transacted into the
@@ -126,7 +144,8 @@ and scheduled events])
   calculations)
 - Accounting and financial calculations (e.g payroll systems)
 - Development, simulation and testing
-- Live migrations from legacy systems
+- Live migrations from legacy systems using ad-hoc batches of backfilled
+  temporal data
 - Scheduling and previewing future states (e.g. publishing and content
   management)
 - Reconciling temporal data across eventually consistent systems

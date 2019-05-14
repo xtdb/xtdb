@@ -13,8 +13,10 @@ underlying system-assigned "transaction time". The main similarities are that
 both systems support EDN Datalog queries (though they not compatible), are
 written using Clojure, and provide elegant use of the database "as a value".
 
-In the excellent talk "Deconstructing the Database" [0], Rich Hickey outlines
-many core principles that informed the design of both Datomic and Crux:
+In the excellent talk
+https://www.youtube.com/watch?v=Cym4TZwTCNU["Deconstructing the Database"] by
+Rich Hickey, he outlines many core principles that informed the design of both
+Datomic and Crux:
 
 . Declarative programming is ideal
 . SQL is the most popular declarative programming language but most SQL
@@ -89,7 +91,7 @@ centralised transactor which can be configured for High-Availability using
 standby transactors. Centralised execution of transaction functions is
 effectively an optimisation that is useful for managing contention whilst
 minimising external complexity, and the trade-off is that the use of
-transcation functions will ultimately impact the serialised transaction
+transaction functions will ultimately impact the serialised transaction
 throughput of the entire system. Crux does not currently provide a standard
 means of creating transaction functions but it is an area we are keen to see
 explored. If transaction functions and other kinds of validations of
@@ -135,27 +137,26 @@ scaling concerns to distributed log storage systems like Kafka (following the
 "unbundled" architecture) and to standard operational features within platforms
 like Kubernetes (e.g. snapshotting of nodes with pre-built indexes for rapid
 horizontal scaling). Unlike Datomic, Crux is document-centric and uses a
-bitemporal component within its information model to enable application-level
-of use of valid time in conjunction with transaction time.
-
-[0] Rich Hickey: Deconstructing the Database
-https://www.youtube.com/watch?v=Cym4TZwTCNU
+bitemporal information model to enable business-level use of time-travel
+queries.
 
 == Technical
 
 Is Crux eventually consistent? Strongly consistent? Or something else?::
 
-  An _easy_ answer is that Crux is "strongly consistent" with ACID semantics.
+  An _easy_ answer is that Crux is "strongly consistent" with ACID semantics. 
 
 What consistency does Crux provide?::
 
   A Crux ClusterNode system provides sequential consistency by default due to
-the use of a single unpartitioned Kafka topic for the transaction log. Being
-able to read your writes requires stickiness to a particular node. For a
-ClusterNode system to be linearizable as a whole would require that every node
-always sees the result of every transaction immediately after it is written.
-This could be achieved with the cost of non-trivial additional latency. Further
-reading: http://www.bailis.org/papers/hat-vldb2014.pdf,
+the use of a single unpartitioned Kafka topic for the transaction log.
+Transactions are executed non-interleaved (i.e. a serial schedule) on every
+Crux node independently. Being able to read your writes when using the HTTP
+interface requires stickiness to a particular node. For a ClusterNode system to
+be linearizable as a whole would require that every node always sees the result
+of every transaction immediately after it is written.  This could be achieved
+with the cost of non-trivial additional latency. Further reading:
+http://www.bailis.org/papers/hat-vldb2014.pdf,
 https://jepsen.io/consistency/models/sequential
 
 How is consistency provided by Crux?::

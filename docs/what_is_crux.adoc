@@ -25,7 +25,8 @@ critical requirement for systems in any industry with strong auditing regulation
 where you need to be able to answer the question "what did you know and when
 did you know it?".
 
-<<bitemp.adoc#,Read more about Bitemporality in Crux.>>
+<<bitemp.adoc#,Read more about Bitemporality in Crux>> or specifically the
+<<bitemp.adoc#_known_uses,known uses>> for these capabilities.
 
 == Query
 
@@ -50,7 +51,16 @@ Crux to meet the exact application requirements.
 == Unbundled
 
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
-database. It is a database turned inside out, using:
+database. 
+
+[quote, Martin Kleppmann (2014)]
+____
+What do we have to gain from turning the database inside out? Simpler code,
+better scalability, better robustness, lower latency, and more flexibility for
+doing interesting things with data.
+____
+
+It is a database turned inside out, using:
 
 * Apache Kafka for the primary storage of transactions and documents
 as semi-immutable logs.
