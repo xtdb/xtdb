@@ -19,14 +19,14 @@
    "title.episode" "data/title.episode.tsv"
    "title.ratings" "data/title.ratings.tsv"})
 
-(defn injest-data
+(defn ingest-data
   [crux]
-  (log/info "starting to injest data into crux")
+  (log/info "starting to ingest data into crux")
   (let [futures
         (doall
           (for [[namespace file-path] data-files]
             (future
-              (log/infof "starting to injest: %s" file-path)
+              (log/infof "starting to ingest: %s" file-path)
               (with-open [reader (io/reader file-path)]
                 (let [submit-count (atom 0)
                       [header & rest]
@@ -69,7 +69,7 @@
     crux-options
     (fn [crux-system]
       (def crux crux-system)
-      ;;(injest-data crux)
+      ;;(ingest-data crux)
       (Thread/sleep Long/MAX_VALUE))))
 
 (comment
