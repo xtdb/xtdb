@@ -15,7 +15,8 @@
       (assert (re-find #"^\d+\.\d+\-\d+\.\d+\.\d+(\-(alpha|beta))?$" tag) "Tag format unexpected.")
       (if (and (not ahead?) (not dirty?))
         tag
-        (str tag "-SNAPSHOT")))))
+        (let [[_ prefix minor-version suffix] (re-find #"^(.*\.)(\d)+(\-(alpha|beta))?$" tag)]
+          (format "%s%s%s-SNAPSHOT" prefix (inc (Integer/parseInt minor-version)) suffix))))))
 
 (defn middleware [project]
   (assoc project :version (version-from-git)))
