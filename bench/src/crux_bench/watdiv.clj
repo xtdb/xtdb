@@ -391,31 +391,32 @@
                   (throw (IllegalStateException. "Query timed out."))))))))
 
   (injest-watdiv-data [this resource]
-    (let [time-before (Date.)
-          submit-future (future
-                          (with-open [in (io/input-stream (io/resource resource))]
-                            (rdf/submit-ntriples (:tx-log crux) in 1000)))]
-      (assert (= 521585 @submit-future))
-      (let [kafka-injest-done (Date.)
-            {:keys [crux.tx/tx-time]}
-            (crux/submit-tx
-              crux
-              [[:crux.tx/put
-                ::watdiv-injestion-status
-                {:crux.db/id ::watdiv-injestion-status :done? false}]])]
-        (crux/db crux tx-time tx-time) ;; block until indexed
-        (crux/db
-          crux (Date.)
-          (:crux.tx/tx-time
-           (crux/submit-tx
-             crux
-             [[:crux.tx/put
-               ::watdiv-injestion-status
-               {:crux.db/id ::watdiv-injestion-status
-                :watdiv/injest-start-time time-before
-                :watdiv/kafka-injest-time (- (.getTime kafka-injest-done) (.getTime time-before))
-                :watdiv/injest-time (- (.getTime (Date.)) (.getTime time-before))
-                :done? true}]])))))))
+    (when-not (:done? (crux/entity (crux/db crux) ::watdiv-injestion-status))
+      (let [time-before (Date.)
+            submit-future (future
+                            (with-open [in (io/input-stream (io/resource resource))]
+                              (rdf/submit-ntriples (:tx-log crux) in 1000)))]
+        (assert (= 521585 @submit-future))
+        (let [kafka-injest-done (Date.)
+              {:keys [crux.tx/tx-time]}
+              (crux/submit-tx
+                crux
+                [[:crux.tx/put
+                  ::watdiv-injestion-status
+                  {:crux.db/id ::watdiv-injestion-status :done? false}]])]
+          (crux/db crux tx-time tx-time) ;; block until indexed
+          (crux/db
+            crux (Date.)
+            (:crux.tx/tx-time
+             (crux/submit-tx
+               crux
+               [[:crux.tx/put
+                 ::watdiv-injestion-status
+                 {:crux.db/id ::watdiv-injestion-status
+                  :watdiv/injest-start-time time-before
+                  :watdiv/kafka-injest-time (- (.getTime kafka-injest-done) (.getTime time-before))
+                  :watdiv/injest-time (- (.getTime (Date.)) (.getTime time-before))
+                  :done? true}]]))))))))
 
 (defmethod start-watdiv-runner :crux
   [_ {:keys [crux]}]
