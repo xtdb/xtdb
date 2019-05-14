@@ -23,7 +23,7 @@
 (defprotocol WatdivBackend
   (backend-info [this])
   (execute-with-timeout [this datalog])
-  (injest-watdiv-data [this resource]))
+  (ingest-watdiv-data [this resource]))
 
 (defn entity->idents [e]
   (cons
@@ -79,15 +79,15 @@
     (d/query {:query datalog
               :timeout query-timeout-ms
               :args [(d/db conn)]}))
-  (injest-watdiv-data [this resource]
-    (when-not (d/entity (d/db conn) [:watdiv/injest-state :global])
-      (log/info "starting to injest watdiv data into datomic")
+  (ingest-watdiv-data [this resource]
+    (when-not (d/entity (d/db conn) [:watdiv/ingest-state :global])
+      (log/info "starting to ingest watdiv data into datomic")
       (let [time-before (Date.)]
         (load-rdf-into-datomic conn resource)
-        (let [injest-time (- (.getTime (Date.)) (.getTime time-before))]
-          (log/infof "completed datomic watdiv injestion time taken: %s" injest-time)
-          @(d/transact conn [{:watdiv/injest-state :global
-                              :watdiv/injest-time injest-time}]))))))
+        (let [ingest-time (- (.getTime (Date.)) (.getTime time-before))]
+          (log/infof "completed datomic watdiv ingestion time taken: %s" ingest-time)
+          @(d/transact conn [{:watdiv/ingest-state :global
+                              :watdiv/ingest-time ingest-time}]))))))
 
 ;; See: https://dsg.uwaterloo.ca/watdiv/watdiv-data-model.txt
 ;; Some things like dates are strings in the actual data.
@@ -350,10 +350,10 @@
    #:db{:ident (keyword "http://xmlns.com/foaf/homepage")
         :valueType :db.type/ref
         :cardinality :db.cardinality/one}
-   #:db{:ident :watdiv/injest-time
+   #:db{:ident :watdiv/ingest-time
         :valueType :db.type/long
         :cardinality :db.cardinality/one}
-   #:db{:ident :watdiv/injest-state
+   #:db{:ident :watdiv/ingest-state
         :valueType :db.type/keyword
         :cardinality :db.cardinality/one
         :unique :db.unique/identity
@@ -372,12 +372,16 @@
 (defrecord CruxBackend [crux]
   WatdivBackend
   (backend-info [this]
-    (assoc
-      (select-keys (crux/status crux)
-                   [:crux.version/version
-                    :crux.version/revision
-                    :crux.kv/kv-backend])
-      :backend :crux))
+    (let [ingest-stats (crux/entity (crux/db crux) ::watdiv-ingestion-status)]
+      (merge
+        {:backend :crux}
+        (select-keys ingest-stats [:watdiv/ingest-start-time
+                                   :watdiv/kafka-ingest-time
+                                   :watdiv/ingest-time])
+        (select-keys (crux/status crux) [:crux.version/version
+                                         :crux.version/revision
+                                         :crux.kv/kv-backend]))))
+
   (execute-with-timeout [this datalog]
     (let [db (crux/db crux)]
       (with-open [snapshot (crux/new-snapshot db)]
@@ -386,16 +390,33 @@
               (do (future-cancel query-future)
                   (throw (IllegalStateException. "Query timed out."))))))))
 
-  (injest-watdiv-data [this resource]
-    (let [submit-future (future
-                          (with-open [in (io/input-stream (io/resource resource))]
-                            (rdf/submit-ntriples (:tx-log crux) in 1000)))]
-      (assert (= 521585 @submit-future))
-      (crux/submit-tx crux [[:crux.tx/put
-                             ::watdiv-injestion-status
-                             {:crux.db/id ::watdiv-injestion-status
-                              :done? true}]])
-      (crux/sync crux (Duration/ofSeconds 6000)))))
+  (ingest-watdiv-data [this resource]
+    (when-not (:done? (crux/entity (crux/db crux) ::watdiv-ingestion-status))
+      (let [time-before (Date.)
+            submit-future (future
+                            (with-open [in (io/input-stream (io/resource resource))]
+                              (rdf/submit-ntriples (:tx-log crux) in 1000)))]
+        (assert (= 521585 @submit-future))
+        (let [kafka-ingest-done (Date.)
+              {:keys [crux.tx/tx-time]}
+              (crux/submit-tx
+                crux
+                [[:crux.tx/put
+                  ::watdiv-ingestion-status
+                  {:crux.db/id ::watdiv-ingestion-status :done? false}]])]
+          (crux/db crux tx-time tx-time) ;; block until indexed
+          (crux/db
+            crux (Date.)
+            (:crux.tx/tx-time
+             (crux/submit-tx
+               crux
+               [[:crux.tx/put
+                 ::watdiv-ingestion-status
+                 {:crux.db/id ::watdiv-ingestion-status
+                  :watdiv/ingest-start-time time-before
+                  :watdiv/kafka-ingest-time (- (.getTime kafka-ingest-done) (.getTime time-before))
+                  :watdiv/ingest-time (- (.getTime (Date.)) (.getTime time-before))
+                  :done? true}]]))))))))
 
 (defmethod start-watdiv-runner :crux
   [_ {:keys [crux]}]
@@ -480,8 +501,8 @@
        :running-future
        (future
          (try
-           (reset! status :injesting-watdiv-data)
-           (injest-watdiv-data backend "watdiv/data/watdiv.10M.nt")
+           (reset! status :ingesting-watdiv-data)
+           (ingest-watdiv-data backend "watdiv/data/watdiv.10M.nt")
            (reset! status :running-benchmark)
            (execute-stress-test backend tests-run out-file num-tests)
            (reset! status :uploading-results)
