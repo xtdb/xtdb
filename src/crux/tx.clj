@@ -413,7 +413,7 @@
                              (map :lag)
                              (reduce max 0))]
     (if (cio/wait-while #(if-let [max-lag (max-lag-fn)]
-                           (pos? max-lag)
+                           (pos? (long max-lag))
                            true)
                         await-tx-timeout)
       (latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))
