@@ -428,43 +428,83 @@
    "watdiv/data/watdiv-stress-100/test.4.desc" "watdiv/data/watdiv-stress-100/test.4.sparql"})
 
 (defn execute-stress-test
-  [backend tests-run out-file num-tests num-threads]
-  (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
-              sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))
-              out (io/writer out-file)]
-    (.write out "{\n")
-    (.write out (str ":test-time " (pr-str (System/currentTimeMillis)) "\n"))
-    (.write out (str ":backend-info " (pr-str (backend-info backend)) "\n"))
-    (.write out (str ":tests " "\n"))
-    (.write out "[\n")
-    (doseq [[idx [d q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
-                             (take (or num-tests 100))
-                             (map-indexed vector))]
-      (.write out "{")
-      (.write out (str ":idx " (pr-str idx) "\n"))
-      (.write out (str ":query " (pr-str q) "\n"))
-      (let [start-time (System/currentTimeMillis)]
-        (try
-          (.write out (str ":backend-results "
-                           (execute-with-timeout backend (sparql/sparql->datalog q))
-                           "\n"))
-          (catch java.util.concurrent.TimeoutException t
-            (.write out (str ":error " (pr-str (str t)) "\n")))
-          (catch IllegalStateException t
-            (.write out (str ":error " (pr-str (str t)) "\n")))
-          (catch Throwable t
-            (.write out (str ":error " (pr-str (str t)) "\n"))
-            ;; datomic wrapps the error multiple times
-            ;; doing this to get the cause exception!
-            (when-not (instance? java.util.concurrent.TimeoutException
-                                 (.getCause (.getCause (.getCause t))))
-              (throw t))))
-        (.write out (str ":time " (pr-str (-  (System/currentTimeMillis) start-time)))))
+  [backend tests-run out-file num-tests ^Long num-threads]
+  (let [all-jobs-submitted (atom false)
+        all-jobs-completed (atom false)
+        pool (java.util.concurrent.Executors/newFixedThreadPool (inc num-threads))
+        job-queue (java.util.concurrent.LinkedBlockingQueue. num-threads)
+        completed-queue (java.util.concurrent.LinkedBlockingQueue. ^Long (* 10 num-threads))
+        writer-future (.submit
+                        pool
+                        ^Runnable
+                        (fn write-result-thread []
+                          (with-open [out (io/writer out-file)]
+                            (.write out "{\n")
+                            (.write out (str ":test-time " (pr-str (System/currentTimeMillis)) "\n"))
+                            (.write out (str ":backend-info " (pr-str (backend-info backend)) "\n"))
+                            (.write out (str ":num-tests " (pr-str num-tests) "\n"))
+                            (.write out (str ":num-threads " (pr-str num-threads) "\n"))
+                            (.write out (str ":tests " "\n"))
+                            (.write out "[\n")
+                            (loop []
+                              (when-let [{:keys [idx q error results time]} (if @all-jobs-completed
+                                                                              (.poll completed-queue)
+                                                                              (.take completed-queue))]
+                                (.write out "{")
+                                (.write out (str ":idx " (pr-str idx) "\n"))
+                                (.write out (str ":query " (pr-str q) "\n"))
+                                (if error
+                                  (.write out (str ":error " (pr-str (str error)) "\n"))
+                                  (.write out (str ":backend-results " results "\n")))
+                                (.write out (str ":time " (pr-str time)))
+                                (.write out "}\n")
+                                (.flush out)
+                                (recur)))
+                            (.write out "]}"))))
 
-      (.write out "}\n")
-      (.flush out)
-      (swap! tests-run inc))
-    (.write out "]}")))
+        job-features (vec (for [i (range num-threads)]
+                            (.submit
+                              pool
+                              ^Runnable
+                              (fn run-jobs []
+                                (when-let [{:keys [idx q] :as job} (if @all-jobs-submitted
+                                                                     (.poll job-queue)
+                                                                     (.take job-queue))]
+                                  (let [start-time (System/currentTimeMillis)
+                                        result
+                                        (try
+                                          {:results (execute-with-timeout backend (sparql/sparql->datalog q))}
+                                          (catch java.util.concurrent.TimeoutException t
+                                            {:error t})
+                                          (catch IllegalStateException t
+                                            {:error t})
+                                          (catch Throwable t
+                                            (log/error t "unkown error running watdiv tests")
+                                            ;; datomic wrapps the error multiple times
+                                            ;; doing this to get the cause exception!
+                                            (when-not (instance? java.util.concurrent.TimeoutException
+                                                                 (.getCause (.getCause (.getCause t))))
+                                              (throw t))))]
+                                    (.put completed-queue
+                                          (merge
+                                            job result
+                                            {:time (- (System/currentTimeMillis) start-time)}))
+                                    (recur)))))))]
+    (try
+      (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
+                  sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))]
+        (doseq [[idx [d q]] (->> (map vector (line-seq desc-in) (line-seq sparql-in))
+                                 (take (or num-tests 100))
+                                 (map-indexed vector))]
+          (.put job-queue {:idx idx :q q})))
+      (reset! all-jobs-submitted true)
+      (doseq [^java.util.concurrent.Future f job-features] (.get f))
+      (reset! all-jobs-completed true)
+      (.get writer-future)
+
+      (catch InterruptedException e
+        (.shutdownNow pool)
+        (throw e)))))
 
 (defn run-watdiv-test
   [backend num-tests num-threads]
@@ -476,6 +516,7 @@
        :tests-run tests-run
        :out-file out-file
        :num-tests num-tests
+       :num-threads num-threads
        :backend backend
        :running-future
        (future

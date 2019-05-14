@@ -116,6 +116,7 @@
         {:post {:consumes "application/x-www-form-urlencoded"
                 :produces "text/html"
                 :parameters {:form {:test-count String
+                                    :thread-count String
                                     :backend String}}
                 :response
                 (fn [ctx]
