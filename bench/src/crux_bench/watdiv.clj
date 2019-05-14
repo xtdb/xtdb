@@ -428,7 +428,7 @@
    "watdiv/data/watdiv-stress-100/test.4.desc" "watdiv/data/watdiv-stress-100/test.4.sparql"})
 
 (defn execute-stress-test
-  [backend tests-run out-file num-tests]
+  [backend tests-run out-file num-tests num-threads]
   (with-open [desc-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.desc"))
               sparql-in (io/reader (io/resource "watdiv/data/watdiv-stress-100/test.1.sparql"))
               out (io/writer out-file)]
@@ -467,7 +467,7 @@
     (.write out "]}")))
 
 (defn run-watdiv-test
-  [backend num-tests]
+  [backend num-tests num-threads]
   (let [status (atom nil)
         tests-run (atom 0)
         out-file (io/file (format "watdiv_%s.edn" (System/currentTimeMillis)))]
@@ -483,7 +483,7 @@
            (reset! status :injesting-watdiv-data)
            (injest-watdiv-data backend "watdiv/data/watdiv.10M.nt")
            (reset! status :running-benchmark)
-           (execute-stress-test backend tests-run out-file num-tests)
+           (execute-stress-test backend tests-run out-file num-tests num-threads)
            (reset! status :uploading-results)
            (upload-watdiv-results out-file)
            (reset! status :benchmark-completed)
@@ -493,6 +493,6 @@
              false)))})))
 
 (defn start-and-run
-  [backend-name system num-tests]
+  [backend-name system num-tests num-threads]
   (let [backend (start-watdiv-runner backend-name system)]
-    (run-watdiv-test backend num-tests)))
+    (run-watdiv-test backend num-tests num-threads)))

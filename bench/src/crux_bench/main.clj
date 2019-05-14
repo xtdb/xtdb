@@ -70,8 +70,11 @@
          [:div.buttons
           [:form {:action "/start-bench" :method "POST"}
            [:div
-            [:label "Test Count:"]
+            [:label "Test Count: (default 100)"]
             [:input {:type "input" :name "test-count"}]]
+           [:div
+            [:label "Thread Count: (default 1)"]
+            [:input {:type "input" :name "thread-count"}]]
            [:div
             [:label "Backend"]
             [:select {:name "backend"}
@@ -120,6 +123,10 @@
                                     (if (str/blank? t)
                                       100
                                       (Integer/parseInt t)))
+                        num-threads (let [t (some-> ctx :parameters :form :thread-count)]
+                                      (if (str/blank? t)
+                                        1
+                                        (Integer/parseInt t)))
                         backend (some-> ctx :parameters :form :backend keyword)]
                     (log/info "starting benchmark tests")
                     (swap!
@@ -127,7 +134,7 @@
                       merge
                       {:running? true
                        :watdiv-runner
-                       (watdiv/start-and-run backend system num-tests)})
+                       (watdiv/start-and-run backend system num-tests num-threads)})
                     (assoc (:response ctx)
                            :status 302
                            :headers {"location" "/"})))}}})]
