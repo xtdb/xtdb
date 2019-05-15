@@ -3,6 +3,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.kv :as kv]
+            [crux.codec :as c]
             [crux.memory :as mem])
   (:import java.io.Closeable
            [java.util Collections LinkedHashMap]
@@ -74,14 +75,14 @@
   (get-single-object [this snapshot k]
     (compute-if-absent
      cache
-     k
+     (c/->id-buffer k)
      #(db/get-single-object object-store snapshot %)))
 
   (get-objects [this snapshot ks]
     (->> (for [k ks
                :let [v (compute-if-absent
                         cache
-                        k
+                        (c/->id-buffer k)
                         #(get (db/get-objects object-store snapshot [%]) %))]
                :when v]
            [k v])
@@ -91,14 +92,20 @@
     (db/known-keys? object-store snapshot ks))
 
   (put-objects [this kvs]
-    (doseq [[k] kvs]
-      (evict cache k))
-    (db/put-objects object-store kvs))
+    (db/put-objects
+      object-store
+      (for [[k v] kvs
+            :let [k (c/->id-buffer k)]]
+        (do
+          (evict cache k)
+          [k v]))))
 
   (delete-objects [this ks]
-    (doseq [k ks]
-      (evict cache k))
-    (db/delete-objects object-store ks))
+    (db/delete-objects
+      object-store
+      (for [k ks
+            :let [k (c/->id-buffer k)]]
+        (do (evict cache k) k))))
 
   Closeable
   (close [_]))

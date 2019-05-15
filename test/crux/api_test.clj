@@ -189,11 +189,13 @@
                         crux.tx/tx-id]
                  :as submitted-tx} (.submitTx f/*api* [[:crux.tx/evict :ivan]])]
 
-            (Thread/sleep 5000)
-            ;; Waiting for #222, then will clean up
-            ;; (while (.entity (.db f/*api*) :ivan)
-            ;;   (Thread/sleep 100)
-            ;;   (assert (< (- (.getTime (Date.)) (.getTime valid-time)) 4000)))
+            ;; actual removal of the document happends asyncronusly after
+            ;; the transaction has been processed so waiting on the
+            ;; submitted transaction time is not enough
+            (while (.entity (.db f/*api*) :ivan)
+              (assert (< (- (.getTime (Date.)) (.getTime valid-time)) 4000))
+              (Thread/sleep 100))
+
             (let [stats (.attributeStats f/*api*)]
               (t/is (= 0 (:name stats))))))))))
 
