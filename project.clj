@@ -70,6 +70,12 @@
                                   [integrant "0.6.3"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
+
+  ; hiera allows to generate ns hierarchy graph for the core
+  :hiera {:ignore-ns #{dev hakan prof patrik
+                       crux.decorators crux.http-server crux.main.graal}
+          :path "dev/ns-hierarchy.png"}
+
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
