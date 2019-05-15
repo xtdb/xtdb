@@ -1,28 +1,27 @@
 (ns crux-bench.main
   (:gen-class)
-  (:require [clojure.java.shell :refer [sh]]
+  (:require [amazonica.aws.s3 :as s3]
+            [buddy.hashers :as hashers]
+            [clojure.java.shell :refer [sh]]
             [clojure.pprint :as pp]
-            [crux.io :as crux-io]
             [clojure.string :as str]
-            [amazonica.aws.s3 :as s3]
             [clojure.tools.logging :as log]
             [crux-bench.watdiv :as watdiv]
             [crux.api :as api]
+            [crux.io :as crux-io]
             [hiccup2.core :refer [html]]
-            [yada.yada :refer [listener]]
             [yada.resource :refer [resource]]
-            yada.resources.classpath-resource)
-  (:import [crux.api IndexVersionOutOfSyncException]
-           [org.rocksdb Options RocksDB
-            CompactionStyle CompressionType LRUCache
-            HashSkipListMemTableConfig BlockBasedTableConfig]
-           [org.rocksdb.util SizeUnit]
-           java.io.Closeable))
+            yada.resources.classpath-resource
+            [yada.yada :refer [listener]])
+  (:import crux.api.IndexVersionOutOfSyncException
+           java.io.Closeable
+           org.rocksdb.RocksDB
+           org.rocksdb.util.SizeUnit))
 
 ;; getApproximateMemTableStats
 
-(defn index-handler
-  [ctx system]
+(defn- body-wrapper
+  [content]
   (str
     "<!DOCTYPE html>"
     (html
@@ -35,80 +34,118 @@
         [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/normalize.css"}]
         [:link {:rel "stylesheet" :type "text/css" :href "/static/styles/main.css"}]]
        [:body
-        [:header
-         [:h2 [:a {:href "/"} "Bench Mark runner"]]
-         [:pre
-          (with-out-str
-            (pp/pprint
-              (into
-                {}
-                (for [p ["rocksdb.estimate-table-readers-mem"
-                         "rocksdb.size-all-mem-tables"
-                         "rocksdb.cur-size-all-mem-tables"
-                         "rocksdb.estimate-num-keys"]]
-                  (let [^RocksDB db (-> system :crux :kv-store :kv :db)]
-                    [p (-> db (.getProperty (.getDefaultColumnFamily db) p))])))))]
-         [:pre
-          (with-out-str
-            (pp/pprint (.status ^crux.api.ICruxAPI (:crux system))))]
+        [:div.content content]]])))
 
-         [:pre
-          (with-out-str
-            (pp/pprint {:max-memory (.maxMemory (Runtime/getRuntime))
-                        :total-memory (.totalMemory (Runtime/getRuntime))
-                        :free-memory (.freeMemory (Runtime/getRuntime))}))]
+(defn- previus-run-reports
+  []
+  [:div.previus-benchmarks
+   [:h2 "Previous run reports"]
+   (for [obj (:object-summaries
+              (s3/list-objects-v2
+                :bucket-name (System/getenv "CRUX_BENCHMARK_BUCKET")))]
+     [:div
+      [:a {:href (s3/get-url (System/getenv "CRUX_BENCHMARK_BUCKET") (:key obj))}
+       (:key obj)]])])
 
-         [:pre
-          (slurp
-            (java.io.FileReader.
-              (format "/proc/%s/status" (.pid (java.lang.ProcessHandle/current)))))]
+(defn index-handler
+  [ctx system]
+  (body-wrapper
+    [:div
+     [:h1 "Benchmark runner"]
+     (previus-run-reports)]))
 
-         [:pre
-          (with-out-str
-            (pp/pprint (-> system :benchmark-runner :status deref)))]
+(defn admin-handler
+  [ctx system]
+  (body-wrapper
+    [:div
+     [:header
+      [:h2 [:a {:href "/"} "Bench Mark runner"]]
+      [:pre
+       (with-out-str
+         (pp/pprint
+           (into
+             {}
+             (for [p ["rocksdb.estimate-table-readers-mem"
+                      "rocksdb.size-all-mem-tables"
+                      "rocksdb.cur-size-all-mem-tables"
+                      "rocksdb.estimate-num-keys"]]
+               (let [^RocksDB db (-> system :crux :kv-store :kv :db)]
+                 [p (-> db (.getProperty (.getDefaultColumnFamily db) p))])))))]
+      [:pre
+       (with-out-str
+         (pp/pprint (.status ^crux.api.ICruxAPI (:crux system))))]
 
-         [:div.buttons
-          [:form {:action "/start-bench" :method "POST"}
-           [:div
-            [:label "Test Count: (default 100)"]
-            [:input {:type "input" :name "test-count"}]]
-           [:div
-            [:label "Thread Count: (default 1)"]
-            [:input {:type "input" :name "thread-count"}]]
-           [:div
-            [:label "Backend"]
-            [:select {:name "backend"}
-             (for [backend watdiv/supported-backends]
-               [:option {:value backend} backend])]]
-           [:input {:value "Run!" :type "submit"}]]
+      [:pre
+       (with-out-str
+         (pp/pprint {:max-memory (.maxMemory (Runtime/getRuntime))
+                     :total-memory (.totalMemory (Runtime/getRuntime))
+                     :free-memory (.freeMemory (Runtime/getRuntime))}))]
 
-          [:form {:action "/stop-bench" :method "POST"}
-           [:input {:value "Stop!" :name "run" :type "submit"}]]]]
+      [:pre
+       (slurp
+         (java.io.FileReader.
+           (format "/proc/%s/status" (.pid (java.lang.ProcessHandle/current)))))]
 
-        [:hr]
-        [:div.status-content
-         [:h3 "Status"]
-         [:pre
-          (when-let [f (-> system :benchmark-runner :status deref
-                           :watdiv-runner :out-file)]
-            (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]
+      [:pre
+       (with-out-str
+         (pp/pprint (-> system :benchmark-runner :status deref)))]
 
-        [:div.previus-benchmarks
-         (for [obj (:object-summaries
-                    (s3/list-objects-v2
-                      :bucket-name (System/getenv "CRUX_BENCHMARK_BUCKET")))]
-           [:div
-            [:a {:href (s3/get-url (System/getenv "CRUX_BENCHMARK_BUCKET") (:key obj))}
-             (:key obj)]])]]])))
+      [:div.buttons
+       [:form {:action "/start-bench" :method "POST"}
+        [:div
+         [:label "Test Count: (default 100)"]
+         [:input {:type "input" :name "test-count"}]]
+        [:div
+         [:label "Thread Count: (default 1)"]
+         [:input {:type "input" :name "thread-count"}]]
+        [:div
+         [:label "Backend"]
+         [:select {:name "backend"}
+          (for [backend watdiv/supported-backends]
+            [:option {:value backend} backend])]]
+        [:input {:value "Run!" :type "submit"}]]
 
+       [:form {:action "/stop-bench" :method "POST"}
+        [:input {:value "Stop!" :name "run" :type "submit"}]]]]
+
+     [:hr]
+     [:div.status-content
+      [:h3 "Status"]
+      [:pre
+       (when-let [f (-> system :benchmark-runner :status deref
+                        :watdiv-runner :out-file)]
+         (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]
+
+     (previus-run-reports)]))
+
+(def secret-password
+  "bcrypt+sha512$ad3066f667bdcfa2a9e0fbc79710bfdb$12$aabc70396ad92c1147f556105c8acda0c17a6f231b85c658")
 (defn application-resource
   [{:keys [benchmark-runner] :as system}]
   ["/"
    [[""
      (resource
-      {:methods
-       {:get {:produces "text/html"
-              :response #(index-handler % system)}}})]
+       {:methods
+        {:get {:produces "text/html"
+               :response #(index-handler % system)}}})]
+
+    ["admin"
+     (resource
+       {:access-control
+        {:authentication-schemes
+         [{:scheme "Basic"
+           :verify (fn [[user password]]
+                     :bcrypt+blake2b-512
+                     (when (and (= user "admin")
+                                (hashers/check password secret-password))
+                       {:roles #{:admin-user}}))}]
+
+         :authorization
+         {:methods {:get :admin-user}}}
+
+         :methods
+         {:get {:produces "text/html"
+                :response #(admin-handler % system)}}})]
 
     ["start-bench"
      (resource
