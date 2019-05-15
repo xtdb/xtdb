@@ -132,7 +132,10 @@
     (.newTxLogContext this))
 
   (tx-log [this tx-log-context from-tx-id with-documents?]
-    (.txLog this tx-log-context from-tx-id with-documents?)))
+    (.txLog this tx-log-context from-tx-id with-documents?))
+
+  (attribute-stats [this]
+    (.attributeStats this)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and

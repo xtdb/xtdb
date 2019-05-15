@@ -243,6 +243,9 @@
     (-> (success-response last-modified)
         (add-last-modified last-modified))))
 
+(defn- attribute-stats [^ICruxAPI crux-system]
+  (success-response (.attributeStats crux-system)))
+
 (def ^:private sparql-available? (try
                                    (require 'crux.sparql.protocol)
                                    true
@@ -283,6 +286,9 @@
 
     [#"^/query-stream$" [:post]]
     (query-stream crux-system request)
+
+    [#"^/attribute-stats" [:get]]
+    (attribute-stats crux-system)
 
     [#"^/sync$" [:get]]
     (sync-handler crux-system request)
