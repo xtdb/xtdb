@@ -80,6 +80,9 @@
   (status [this]
     (apply merge (map status/status-map (cons (crux-version) (vals this)))))
 
+  (attributeStats [this]
+    (idx/read-meta kv-store :crux.kv/stats))
+
   (submitTx [_ tx-ops]
     @(db/submit-tx tx-log tx-ops))
 

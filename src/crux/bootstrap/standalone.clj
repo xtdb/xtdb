@@ -36,6 +36,9 @@
   (historyRange [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (.historyRange ^CruxNode (b/map->CruxNode this) eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 
+  (attributeStats [this]
+    (idx/read-meta kv-store :crux.kv/stats))
+
   (status [this]
     (-> (.status ^CruxNode (dissoc (b/map->CruxNode this)
                                    :event-log-kv-store))
