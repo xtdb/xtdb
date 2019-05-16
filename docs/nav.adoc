@@ -9,6 +9,7 @@
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
 * <<decorators.adoc#,Decorators>>
+* <<patterns.adoc#,Patterns>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<support.adoc#,Support>>
