@@ -3,6 +3,7 @@
             [crux.db :as db]
             [crux.tx :as tx]
             [crux.query :as q]
+            [crux.api :as api]
             [crux.fixtures :as f :refer [*kv*]]
             [crux.lru :as lru]
             [crux.bootstrap :as b]
@@ -20,7 +21,10 @@
                               [e2 :last-name name1]]}
               :range '{:find [e]
                        :where [[e :age age]
-                               [(> age 20)]]}})
+                               [(> age 20)]]}
+              :hardcoded-name '{:find [e]
+                                :where [[e :name name]]
+                                :args [{:name "davros"}]}})
 
 (defmacro duration
   "Times the execution of a function,
@@ -30,21 +34,29 @@
       ~@forms
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
+(defn- insert-docs [ts docs]
+  @(db/submit-tx (tx/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
+                 (f/maps->tx-ops docs ts)))
+
 (defn- insert-data [n batch-size ts]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
-    @(db/submit-tx (tx/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
-                   (f/maps->tx-ops people ts))))
+    (insert-docs ts people)))
 
 (defn- perform-query [ts query]
   (let [q (query queries)
-        db-fn (fn [] (q/db *kv* ts))]
+        q-fn (fn []
+               (let [db (q/db *kv* ts)]
+                 (if (= query :id)
+                   (api/entity db :hardcoded-id)
+                   (q/q db q))))]
     ;; Assert this query is in good working order first:
-    (assert (pos? (count (q/q (db-fn) q))))
-
-    (q/q (db-fn) q)))
+    (assert (pos? (count (q-fn))))
+    (q-fn)))
 
 (defn- do-benchmark [ts samples speed verbose query]
-  (when verbose (print (str query "... ")) (flush))
+  (when verbose
+    (print (str query "... ")) (flush)
+    (print (str (perform-query ts query) "... ")) (flush))
   (let [result
         (-> (case speed
               :normal
@@ -69,7 +81,7 @@
     result))
 
 (defn bench
-  [& {:keys [n batch-size ts query samples kv speed verbose]
+  [& {:keys [n batch-size ts query samples kv speed verbose preload]
       :or {n 1000
            batch-size 10
            samples 100 ;; should always be >2
@@ -86,6 +98,8 @@
      (f/with-kv-store
        (fn []
          (when verbose (print ":insert... ") (flush))
+         (when preload
+           (insert-docs ts preload))
          (let [insert-time (duration (insert-data n batch-size ts))
                queries-to-bench (if (= query :all)
                                   (keys queries)
@@ -97,4 +111,19 @@
                    (map (partial do-benchmark ts samples speed verbose)
                         queries-to-bench)))))))))
 (comment
-  (bench :n 10000 :verbose true))
+  (bench)
+
+  (bench :verbose true :preload [(assoc (f/random-person)
+                                        :crux.db/id :hardcoded-id
+                                        :name "davros")]
+         :n 10000
+         :samples 10000
+         :query :hardcoded-name) ;;2.5
+
+  (bench :verbose true :preload [(assoc (f/random-person)
+                                        :crux.db/id :hardcoded-id
+                                        :name "davros")]
+         :n 10000
+         :samples 10000
+         :query :id) ;;2.3
+  )
