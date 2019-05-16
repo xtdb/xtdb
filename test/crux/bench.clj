@@ -30,12 +30,12 @@
       ~@forms
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
-(defn- insert-data [n batch-size ts index]
+(defn- insert-data [n batch-size ts]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
     @(db/submit-tx (tx/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
                    (f/maps->tx-ops people ts))))
 
-(defn- perform-query [ts query index]
+(defn- perform-query [ts query]
   (let [q (query queries)
         db-fn (fn [] (q/db *kv* ts))]
     ;; Assert this query is in good working order first:
@@ -43,24 +43,24 @@
 
     (q/q (db-fn) q)))
 
-(defn- do-benchmark [ts samples index speed verbose query]
+(defn- do-benchmark [ts samples speed verbose query]
   (when verbose (print (str query "... ")) (flush))
   (let [result
         (-> (case speed
               :normal
               (-> (crit/benchmark
-                   (perform-query ts query index) {:samples samples})
+                   (perform-query ts query) {:samples samples})
                   :mean
                   first)
 
               :quick ;; faster but "less rigorous"
               (-> (crit/quick-benchmark
-                   (perform-query ts query index) {:samples samples})
+                   (perform-query ts query) {:samples samples})
                   :mean
                   first)
 
               :instant ;; even faster, even less rigorous
-              (as-> (map (fn [_] (duration (perform-query ts query index)))
+              (as-> (map (fn [_] (duration (perform-query ts query)))
                          (range samples)) x
                 (apply + x)
                 (/ x samples)))
@@ -69,7 +69,7 @@
     result))
 
 (defn bench
-  [& {:keys [n batch-size ts query samples kv index speed verbose]
+  [& {:keys [n batch-size ts query samples kv speed verbose]
       :or {n 1000
            batch-size 10
            samples 100 ;; should always be >2
@@ -86,7 +86,7 @@
      (f/with-kv-store
        (fn []
          (when verbose (print ":insert... ") (flush))
-         (let [insert-time (duration (insert-data n batch-size ts index))
+         (let [insert-time (duration (insert-data n batch-size ts))
                queries-to-bench (if (= query :all)
                                   (keys queries)
                                   (flatten [query]))]
@@ -94,5 +94,7 @@
            (merge {:insert insert-time}
                   (zipmap
                    queries-to-bench
-                   (map (partial do-benchmark ts samples index speed verbose)
+                   (map (partial do-benchmark ts samples speed verbose)
                         queries-to-bench)))))))))
+(comment
+  (bench :n 10000 :verbose true))
