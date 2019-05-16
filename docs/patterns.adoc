@@ -155,7 +155,6 @@ link to it.
 ```
 ; Use spec to validate your operations prior to submission
 
-```
 (clojure.spec.alpha/conform
    (clojure.spec.alpha/or :put :crux.tx/put-op
                           :delete :crux.tx/delete-op
