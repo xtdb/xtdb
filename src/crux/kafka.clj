@@ -129,7 +129,7 @@
           tx-topic-partition (TopicPartition. tx-topic 0)]
       (.assign tx-topic-consumer [tx-topic-partition])
       (if from-tx-id
-        (.seek tx-topic-consumer tx-topic-partition from-tx-id)
+        (.seek tx-topic-consumer tx-topic-partition (long from-tx-id))
         (.seekToBeginning tx-topic-consumer (.assignment tx-topic-consumer)))
       ((fn step []
          (lazy-seq
