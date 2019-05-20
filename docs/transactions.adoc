@@ -113,3 +113,15 @@ evicted.
 [:crux.tx/evict :dbpedia.resource/Pablo-Picasso
 #inst "2018-05-18T09:21:52.151-00:00"]
 ----
+
+The evict transaction also supports additional parameters for straightforward
+eviction across time periods.
+
+[source,clojure]
+----
+[:crux.tx/evict :dbpedia.resource/Pablo-Picasso
+  #inst "2018-05-18T09:21:52.151-00:00" ; start-valid-time
+  #inst "2018-05-19T09:21:52.151-00:00" ; end-valid-time
+  true                                  ; keep-latest?
+  false]                                ; keep-earliest?
+----

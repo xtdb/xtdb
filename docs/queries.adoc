@@ -191,7 +191,7 @@ include::./query_test_examples.clj[tags=query-with-arguments5-r]
 
 Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
 
-Here we will sees how you are able to run queries at a given point in the valid time axis against, implicitly, the most recent transaction time.
+Here we will see how you are able to run queries at a given point in the valid time axis against, implicitly, the most recent transaction time.
 
 First, we transact a very old document into the database with the ID `:malcolm` and the `:name` `"Malcolm"`, and specify the `valid time` instant at which this document became valid in the legacy system: `#inst "1986-10-22"`.
 

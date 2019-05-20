@@ -68,11 +68,10 @@ corrections to data can flow in from various sources and at various times—use
 of *transaction-time* is inappropriate for historical queries.
 
 Imagine you have a financial trading system and you want to perform
-calculations based on the official 'end of day', that occurs each day
-at 17:00 hours. Does all the data arrive into your database at exactly
-17:00? Or does the data arrive in fact arrive from an upstream source,
-and we have to allow for some data to arrive out of order, and some
-might just arrive after 17:00?
+calculations based on the official 'end of day', that occurs each day at 17:00
+hours. Does all the data arrive into your database at exactly 17:00? Or does
+the data arrive from an upstream source where we have to allow for data to
+arrive out of order, and where some might always arrive after 17:00?
 
 This can often be the case with high throughput systems where there
 are clusters of processing nodes, enriching the data before it gets to
@@ -108,6 +107,23 @@ Only if you want to ensure consistent reads across nodes or to query
 for audit reasons, would you want to consider using both
 transaction-time and valid-time.
 ****
+
+== Domain Time
+
+Valid time is valuable for tracking a consistent view of the entire state of
+the database, however, unless you explicitly include a timestamp or other
+temporal component within your documents you cannot currently use this
+information about valid time inside of your Datalog queries.
+
+Domain time or "user-defined" time is simply the storing of any additional
+time-related information witin your documents, for instance `valid-time`,
+`duration` or timestamps relating to additional temporal life-cycles (e.g.
+decision, receipt, notification, availability).
+
+Queries that use domain times do not automatically benefit from any kind of
+native indexes to support efficient execution, however Crux encourages you to
+build additional layers of functionality to do so. See <<decorators.adoc#,
+Decorators>>.
 
 == Known Uses
 
