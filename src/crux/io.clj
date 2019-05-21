@@ -162,7 +162,7 @@
     (doto (PriorityQueue. (count sorted-seqs) pq-comp)
       (.addAll sorted-seqs))))
 
-(defn- merge-sort-pirority-queue->seq [^PriorityQueue pq]
+(defn- merge-sort-priority-queue->seq [^PriorityQueue pq]
   ((fn step []
      (lazy-seq
       (let [[x & xs] (.poll pq)]
@@ -176,7 +176,7 @@
    (merge-sort compare sorted-seqs))
   ([comp sorted-seqs]
    (->> (new-merge-sort-priority-queue comp sorted-seqs)
-        (merge-sort-pirority-queue->seq))))
+        (merge-sort-priority-queue->seq))))
 
 (def ^:const default-external-sort-part-size (* 1024 1024))
 
@@ -220,4 +220,4 @@
                      (new-merge-sort-priority-queue comp))]
          (doseq [[_ cleaner-action] seq+cleaner-actions]
            (register-cleaner pq cleaner-action))
-         (merge-sort-pirority-queue->seq pq))))))
+         (merge-sort-priority-queue->seq pq))))))
