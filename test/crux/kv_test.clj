@@ -12,7 +12,11 @@
             [crux.io :as cio])
   (:import [java.io Closeable]))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each
+                f/with-each-kv-store-implementation
+                f/without-kv-index-version
+                f/with-kv-store
+                f/with-silent-test-check)
 
 (declare value seek seek-and-iterate)
 

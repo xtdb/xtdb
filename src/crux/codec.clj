@@ -22,14 +22,46 @@
 
 (def ^:const index-id-size Byte/BYTES)
 
+; index for actual document store
 (def ^:const ^:private content-hash->doc-index-id 0)
+
+
+; two main indexes for querying
 (def ^:const ^:private attribute+value+entity+content-hash-index-id 1)
 (def ^:const ^:private attribute+entity+content-hash+value-index-id 2)
+
+; how they work
+(comment
+  (api/submit-tx syst [:crux.tx/put :ids/ivan {:crux.db/id :ids/ivan :name "ivan"}])
+
+  ; [roughly speaking] for queries by attr name and value
+  ; in attribute+value+entity+content-hash-index-id
+  ; [:name "ivan" :ids/ivan "ivan-content-hash"]
+
+  ; [roughly speaking] for entity queries by id
+  ; in attribute+entity+content-hash+value-index-id
+  ; [:name :ids/ivan "ivan-content-hash" "ivan"]
+
+  (api/q db {:find ?e
+             :where
+             [?e :name "ivan"]}))
+
+; main bitemp index
 (def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
+
+; for crux own needs
 (def ^:const ^:private meta-key->value-index-id 4)
+
+; for internal (tx-log used for testing)
 (def ^:const ^:private tx-id->tx-index-id 5)
+
+; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
 (def ^:const ^:private index-version-index-id 6)
+
+; other bitemp index
+; z combines vt and tt
 (def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
+
 
 (def ^:const ^:private value-type-id-size Byte/BYTES)
 
