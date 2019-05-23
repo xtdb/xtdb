@@ -80,8 +80,6 @@
                                    [z :ub/subOrganizationOf y]
                                    [x :ub/undergraduateDegreeFrom y]]})))))
 
-;; TODO: Publication has subClassOf children, should use rules.
-
 ;; This query is similar to Query 1 but class Publication has a wide hierarchy.
 (t/deftest test-lubm-query-03
   (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor0/Publication0]
@@ -93,37 +91,32 @@
            (api/q (api/db f/*api*)
                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
-                      :where [ ;; [x :rdf/type :ub/Publication]
-                              (or [x :rdf/type :ub/Publication]
-                                  [x :rdf/type :ub/Article]
-                                  [x :rdf/type :ub/ConferencePaper]
-                                  [x :rdf/type :ub/JournalArticle]
-                                  [x :rdf/type :ub/TechReport]
-                                  [x :rdf/type :ub/Book]
-                                  [x :rdf/type :ub/Manual]
-                                  [x :rdf/type :ub/Software]
-                                  [x :rdf/type :ub/Specification]
-                                  [x :rdf/type :ub/UnofficialPublication])
-                              [x :ub/publicationAuthor :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
+                      :rules [[(sub-class-of? type root-type)
+                               [(= type root-type)]]
+                              [(sub-class-of? type root-type)
+                               [type :rdfs/subClassOf supertype]
+                               (sub-class-of? supertype root-type)]]
+                      :where [[x :rdf/type t]
+                              (sub-class-of? t :ub/Publication)
+                              [x :ub/publicationAuthor
+                               :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
 
-;; TODO: AssociateProfessor should be Professor.
-;; Should return 35 with lubm10.ntriples.
 
 ;; This query has small input and high selectivity. It assumes subClassOf relationship
 ;; between Professor and its subclasses. Class Professor has a wide hierarchy. Another
 ;; feature is that it queries about multiple properties of a single class.
+;; Should return 34 with lubm10.ntriples.
 (t/deftest test-lubm-query-04
   (let [result (api/q (api/db f/*api*)
                       (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                         '{:find [x y1 y2 y3]
-                          :where [ ;; [x :rdf/type :ub/Professor]
-                                  (or [x :rdf/type :ub/Professor]
-                                      [x :rdf/type :ub/AssistantProfessor]
-                                      [x :rdf/type :ub/AssociateProfessor]
-                                      [x :rdf/type :ub/Chair]
-                                      [x :rdf/type :ub/Dean]
-                                      [x :rdf/type :ub/FullProfessor]
-                                      [x :rdf/type :ub/VisitingProfessor])
+                          :rules [[(sub-class-of? type root-type)
+                                   [(= type root-type)]]
+                                  [(sub-class-of? type root-type)
+                                   [type :rdfs/subClassOf supertype]
+                                   (sub-class-of? supertype root-type)]]
+                          :where [[x :rdf/type t]
+                                  (sub-class-of? t :ub/Professor)
                                   [x :ub/worksFor :http://www.Department0.University0.edu]
                                   [x :ub/name y1]
                                   [x :ub/emailAddress y2]
@@ -134,8 +127,8 @@
                                "AssistantProfessor0@Department0.University0.edu"
                                "xxx-xxx-xxxx"]))))
 
-;; TODO: This should really us rules for subClassOf and
-;; subPropertyOf.
+
+;; TODO: This could use rules for subPropertyOf.
 
 ;; This query assumes subClassOf relationship between Person and its subclasses
 ;; and subPropertyOf relationship between memberOf and its subproperties.
@@ -144,26 +137,15 @@
   (t/is (= 719 (count (api/q (api/db f/*api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x]
-                                 :where [ ;; [x :rdf/type :ub/Person]
-                                         (or [x :rdf/type :ub/Person]
-                                             [x :rdf/type :ub/Employee]
-                                             [x :rdf/type :ub/AdministrativeStaff]
-                                             [x :rdf/type :ub/Faculty]
-                                             [x :rdf/type :ub/PostDoc]
-                                             [x :rdf/type :ub/Lecturer]
-                                             [x :rdf/type :ub/Professor]
-                                             [x :rdf/type :ub/AssistantProfessor]
-                                             [x :rdf/type :ub/AssociateProfessor]
-                                             [x :rdf/type :ub/Chair]
-                                             [x :rdf/type :ub/Dean]
-                                             [x :rdf/type :ub/FullProfessor]
-                                             [x :rdf/type :ub/VisitingProfessor]
-                                             [x :rdf/type :ub/Student]
-                                             [x :rdf/type :ub/UndergraduateStudent]
-                                             [x :rdf/type :ub/GraduateStudent]
-                                             [x :rdf/type :ub/Director]
-                                             [x :rdf/type :ub/TeachingAssistant]
-                                             [x :rdf/type :ub/ResearchAssistant])
+                                 :rules [[(person? rdf-type) ; there are three root types
+                                          (or [(= rdf-type :ub/Person)]
+                                              [(= rdf-type :ub/Student)]
+                                              [(= rdf-type :ub/Employee)])]
+                                         [(person? rdf-type)
+                                          [rdf-type :rdfs/subClassOf superclass]
+                                          (person? superclass)]]
+                                 :where [[x :rdf/type t]
+                                         (person? t)
                                          ;; [x :ub/memberOf :http://www.Department0.University0.edu]
                                          (or [x :ub/memberOf :http://www.Department0.University0.edu]
                                              [x :ub/worksFor :http://www.Department0.University0.edu])]}))))))

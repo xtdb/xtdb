@@ -46,7 +46,7 @@
              :where
              [?e :name "ivan"]}))
 
-; main bitemp index
+; main bitemp index [reverse]
 (def ^:const ^:private entity+vt+tt+tx-id->content-hash-index-id 3)
 
 ; for crux own needs
@@ -58,8 +58,9 @@
 ; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
 (def ^:const ^:private index-version-index-id 6)
 
-; other bitemp index
+; second bitemp index [also reverse]
 ; z combines vt and tt
+; used when a lookup by the first index fails
 (def ^:const ^:private entity+z+tx-id->content-hash-index-id 7)
 
 
