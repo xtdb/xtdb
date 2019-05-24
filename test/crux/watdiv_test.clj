@@ -361,10 +361,11 @@
       (f))
     (f)))
 
-(defn lazy-count-with-timeout [kv q timeout-ms]
-  (let [query-future (future
-                       (with-open [snapshot (kv/new-snapshot kv)]
-                         (count (q/q (q/db kv) snapshot q))))]
+(defn lazy-count-with-timeout [crux q timeout-ms]
+  (let [db (api/db crux)
+        query-future (future
+                       (with-open [snapshot (api/new-snapshot db)]
+                         (count (api/q db snapshot q))))]
     (or (deref query-future timeout-ms nil)
         (do (future-cancel query-future)
             (throw (IllegalStateException. "Query timed out."))))))
@@ -403,7 +404,7 @@
          (when crux-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":crux-results " (lazy-count-with-timeout f/*kv* (sparql/sparql->datalog q) query-timeout-ms)
+                     (.write out (str ":crux-results " (lazy-count-with-timeout f/*api* (sparql/sparql->datalog q) query-timeout-ms)
                                       "\n"))
                      true
                      (catch Throwable t
