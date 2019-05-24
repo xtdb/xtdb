@@ -1,22 +1,17 @@
 (ns crux.watdiv-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [clojure.set :as set]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [clojure.walk :as w]
-            [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.tx :as tx]
-            [crux.lru :as lru]
             [crux.rdf :as rdf]
             [crux.query :as q]
             [crux.sparql :as sparql]
-            [crux.kafka :as k]
             [crux.fixtures :as f]
-            [datomic.api :as d])
+            [datomic.api :as d]
+            [crux.api :as api])
   (:import java.io.StringReader
            java.util.HashMap
            java.util.function.Function
@@ -330,29 +325,11 @@
 ;; Crux
 
 (defn load-rdf-into-crux [resource]
-  (let [tx-topic "test-can-run-watdiv-tx-queries"
-        doc-topic "test-can-run-watdiv-doc-queries"
-        tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-        object-store (lru/new-cached-object-store f/*kv*)
-        indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
-
-    (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
-    (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
-    (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
-    (let [submit-future (future
-                          (with-open [in (io/input-stream (io/resource resource))]
-                            (rdf/submit-ntriples tx-log in 1000)))
-          consume-args {:indexer indexer
-                        :consumer f/*consumer*
-                        :pending-txs-state (atom [])
-                        :tx-topic tx-topic
-                        :doc-topic doc-topic}]
-      (k/consume-and-index-entities consume-args)
-      (while (not= {:txs 0 :docs 0}
-                   (k/consume-and-index-entities
-                    (assoc consume-args :timeout 100))))
-      (t/is (= 521585 @submit-future))
-      (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))))
+  (let [submit-future (future
+                        (with-open [in (io/input-stream (io/resource resource))]
+                          (rdf/submit-ntriples f/*api* in 1000)))]
+    (api/sync f/*api* nil)
+    (t/is (= 521585 @submit-future))))
 
 (defn with-watdiv-data [f]
   (if run-watdiv-tests?
@@ -392,13 +369,14 @@
         (do (future-cancel query-future)
             (throw (IllegalStateException. "Query timed out."))))))
 
-(defn with-kv-backend-from-env [f]
-  (binding [f/*kv-backend* (or (System/getenv "CRUX_WATDIV_KV_BACKEND") f/*kv-backend*)]
-    (when run-watdiv-tests?
-      (println "Using KV backend:" f/*kv-backend*))
-    (f)))
-
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-sail-repository with-datomic with-neo4j with-kv-backend-from-env f/with-kv-store with-watdiv-data)
+(t/use-fixtures :once
+                f/with-embedded-kafka-cluster
+                f/with-kafka-client
+                with-sail-repository
+                with-datomic
+                with-neo4j
+                f/with-cluster-node
+                with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
 ;; add up to the same across test runs, so cannot be query
