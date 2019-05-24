@@ -160,7 +160,7 @@
                                         end-offset (get end-offsets partition)
                                         lag (- end-offset next-offset)]]
                               (do (when-not (zero? lag)
-                                    (log/warn "Falling behind" (str partition) "at:" next-offset "end:" end-offset))
+                                    (log/debug "Falling behind" (str partition) "at:" next-offset "end:" end-offset))
                                   [(topic-partition-meta-key partition)
                                    {:next-offset next-offset
                                     :time (Date. (.timestamp last-record-in-batch))
