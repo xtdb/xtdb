@@ -3,15 +3,9 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
-            [crux.tx :as tx]
-            [crux.lru :as lru]
-            [crux.query :as q]
-            [crux.kafka :as k]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.api :as api])
   (:import java.math.RoundingMode
            java.util.Date
            java.time.temporal.ChronoUnit))
@@ -29,18 +23,15 @@
                                          (io/resource weather-conditions-csv-resource)
                                          (Boolean/parseBoolean (System/getenv "CRUX_TS_WEATHER")))))
 
-(defn with-kv-backend-from-env [f]
-  (binding [f/*kv-backend* (or (System/getenv "CRUX_TS_KV_BACKEND") f/*kv-backend*)]
-    (when run-ts-weather-tests?
-      (println "Using KV backend:" f/*kv-backend*))
-    (f)))
-
 (def ^:const conditions-chunk-size 1000)
 
 (defn submit-ts-weather-data
-  ([tx-log]
-   (submit-ts-weather-data tx-log (io/resource weather-locations-csv-resource) (io/resource weather-conditions-csv-resource)))
-  ([tx-log locations-resource conditions-resource]
+  ([system]
+   (submit-ts-weather-data
+     system
+     (io/resource weather-locations-csv-resource)
+     (io/resource weather-conditions-csv-resource)))
+  ([system locations-resource conditions-resource]
    (with-open [locations-in (io/reader locations-resource)
                conditions-in (io/reader conditions-resource)]
      (let [location-tx-ops (vec (for [location (line-seq locations-in)
@@ -53,13 +44,13 @@
                                    {:crux.db/id id
                                     :location/location location
                                     :location/environment environment}]))]
-       (db/submit-tx tx-log location-tx-ops)
+       (api/submit-tx system location-tx-ops)
        (->> (line-seq conditions-in)
             (partition conditions-chunk-size)
             (reduce
              (fn [n chunk]
-               (db/submit-tx
-                tx-log
+               (api/submit-tx
+                system
                 (vec (for [condition chunk
                            :let [[time device-id temperature humidity] (str/split condition #",")
                                  time (inst/read-instant-date
@@ -79,34 +70,20 @@
                (+ n (count chunk)))
              (count location-tx-ops)))))))
 
+
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
-    (let [tx-topic "ts-weather-test-tx"
-          doc-topic "ts-weather-test-doc"
-          tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-          object-store (lru/new-cached-object-store f/*kv*)
-          indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
-
-      (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
-      (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
-      (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
-      (let [submit-future (future
-                            (submit-ts-weather-data tx-log))
-            consume-args {:indexer indexer
-                          :consumer f/*consumer*
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}]
-        (k/consume-and-index-entities consume-args)
-        (while (not= {:txs 0 :docs 0}
-                     (k/consume-and-index-entities
-                      (assoc consume-args :timeout 100))))
-        (t/is (= 1001000 @submit-future))
-        (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))
+    (let [submit-future (future (submit-ts-weather-data f/*api*))]
+      (api/sync f/*api* nil)
+      (t/is (= 1001000 @submit-future))
       (f))
     (f)))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-kv-backend-from-env f/with-kv-store with-ts-weather-data)
+(t/use-fixtures :once
+                f/with-embedded-kafka-cluster
+                f/with-kafka-client
+                f/with-cluster-node
+                with-ts-weather-data)
 
 ;; NOTE: Does not work with range, takes latest values.
 
@@ -177,7 +154,7 @@
                :location/weather-pro-000009
                91.0
                92.40000000000006]]
-             (q/q (q/db f/*kv*)
+             (api/q (api/db f/*api*)
                   '{:find [time device-id temperature humidity]
                     :where [[c :condition/time time]
                             [c :condition/device-id device-id]
@@ -268,7 +245,7 @@
                91.0
                96.9]]
              (for [[time device-id location temperature humidity]
-                   (q/q (q/db f/*kv*)
+                   (api/q (api/db f/*api*)
                         '{:find [time device-id location temperature humidity]
                           :where [[c :condition/time time]
                                   [c :condition/device-id device-id]
@@ -357,18 +334,17 @@
               [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
               [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
               [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
-             (let [kv f/*kv*
-                   condition-ids (->> (.q (q/db kv)
+             (let [condition-ids (->> (api/q (api/db f/*api*)
                                           '{:find [c]
                                             :where [[c :condition/device-id device-id]
                                                     [device-id :location/location location]
                                                     [(crux.ts-weather-test/kw-starts-with? location "field-")]]
                                             :timeout 120000})
                                       (reduce into []))
-                   db (q/db kv #inst "1970")]
-               (with-open [snapshot (.newSnapshot db)]
+                   db (api/db f/*api* #inst "1970")]
+               (with-open [snapshot (api/new-snapshot db)]
                  (->> (for [c condition-ids]
-                        (for [entity-tx (.historyAscending db snapshot c)]
+                        (for [entity-tx (api/history-ascending db snapshot c)]
                           (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                       (cio/merge-sort (fn [a b]
                                         (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))

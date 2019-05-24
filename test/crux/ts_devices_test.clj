@@ -3,15 +3,9 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.db :as db]
-            [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
-            [crux.tx :as tx]
-            [crux.lru :as lru]
-            [crux.query :as q]
-            [crux.kafka :as k]
-            [crux.fixtures :as f])
+            [crux.fixtures :as f]
+            [crux.api :as api])
   (:import java.util.Date
            java.time.temporal.ChronoUnit))
 
@@ -25,37 +19,35 @@
                                          (io/resource devices-readings-csv-resource)
                                          (Boolean/parseBoolean (System/getenv "CRUX_TS_DEVICES")))))
 
-(defn with-kv-backend-from-env [f]
-  (binding [f/*kv-backend* (or (System/getenv "CRUX_TS_KV_BACKEND") f/*kv-backend*)]
-    (when run-ts-devices-tests?
-      (println "Using KV backend:" f/*kv-backend*))
-    (f)))
-
 (def ^:const readings-chunk-size 1000)
 
 (defn submit-ts-devices-data
-  ([tx-log]
-   (submit-ts-devices-data tx-log (io/resource devices-device-info-csv-resource) (io/resource devices-readings-csv-resource)))
-  ([tx-log info-resource readings-resource]
+  ([system]
+   (submit-ts-devices-data
+     system
+     (io/resource devices-device-info-csv-resource)
+     (io/resource devices-readings-csv-resource)))
+  ([system info-resource readings-resource]
    (with-open [info-in (io/reader info-resource)
                readings-in (io/reader readings-resource)]
-     (let [info-tx-ops (vec (for [device-info (line-seq info-in)
-                                  :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")
-                                        id (keyword "device-info" device-id)]]
-                              [:crux.tx/put
-                               id
-                               {:crux.db/id id
-                                :device-info/api-version api-version
-                                :device-info/manufacturer manufacturer
-                                :device-info/model model
-                                :device-info/os-name os-name}]))]
-       (db/submit-tx tx-log info-tx-ops)
+     (let [info-tx-ops
+           (vec (for [device-info (line-seq info-in)
+                      :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")
+                            id (keyword "device-info" device-id)]]
+                  [:crux.tx/put
+                   id
+                   {:crux.db/id id
+                    :device-info/api-version api-version
+                    :device-info/manufacturer manufacturer
+                    :device-info/model model
+                    :device-info/os-name os-name}]))]
+       (api/submit-tx system info-tx-ops)
        (->> (line-seq readings-in)
             (partition readings-chunk-size)
             (reduce
              (fn [n chunk]
-               (db/submit-tx
-                tx-log
+               (api/submit-tx
+                system
                 (vec (for [reading chunk
                            :let [[time device-id battery-level battery-status
                                   battery-temperature bssid
@@ -89,32 +81,17 @@
 
 (defn with-ts-devices-data [f]
   (if run-ts-devices-tests?
-    (let [tx-topic "test-devices-ts-tx"
-          doc-topic "test-devices-ts-doc"
-          tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-          object-store (lru/new-cached-object-store f/*kv*)
-          indexer (tx/->KvIndexer f/*kv* tx-log object-store)]
-
-      (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
-      (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
-      (k/subscribe-from-stored-offsets indexer f/*consumer* [tx-topic doc-topic])
-      (let [submit-future (future
-                            (submit-ts-devices-data tx-log))
-            consume-args {:indexer indexer
-                          :consumer f/*consumer*
-                          :pending-txs-state (atom [])
-                          :tx-topic tx-topic
-                          :doc-topic doc-topic}]
-        (k/consume-and-index-entities consume-args)
-        (while (not= {:txs 0 :docs 0}
-                     (k/consume-and-index-entities
-                      (assoc consume-args :timeout 100))))
-        (t/is (= 1001000 @submit-future))
-        (tx/await-no-consumer-lag indexer {:crux.tx-log/await-tx-timeout 60000}))
+    (let [submit-future (future (submit-ts-devices-data f/*api*))]
+      (api/sync f/*api* nil)
+      (t/is (= 1001000 @submit-future))
       (f))
     (f)))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster f/with-kafka-client with-kv-backend-from-env f/with-kv-store with-ts-devices-data)
+(t/use-fixtures :once
+                f/with-embedded-kafka-cluster
+                f/with-kafka-client
+                f/with-cluster-node
+                with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices
 
@@ -149,7 +126,7 @@
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])
-          (.q (q/db f/*kv*)
+          (api/q (api/db f/*api*)
               '{:find [time device-id battery-temperature]
                 :where [[r :reading/time time]
                         [r :reading/device-id device-id]
@@ -210,7 +187,7 @@
                25.0
                :discharging
                "focus"]])
-          (.q (q/db f/*kv*)
+          (api/q (api/db f/*api*)
               '{:find [time device-id cpu-avg-1min battery-level battery-status model]
                 :where [[r :reading/time time]
                         [r :reading/device-id device-id]
@@ -261,16 +238,16 @@
               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
              (let [kv f/*kv*
-                   reading-ids (->> (.q (q/db kv)
+                   reading-ids (->> (api/q (api/db f/*api*)
                                         '{:find [r]
                                           :where [[r :reading/device-id device-id]
                                                   (or [device-id :device-info/model "pinto"]
                                                       [device-id :device-info/model "focus"])]})
                                     (reduce into []))
-                   db (q/db kv #inst "1970")]
-               (with-open [snapshot (.newSnapshot db)]
+                   db (api/db f/*api* #inst "1970")]
+               (with-open [snapshot (api/new-snapshot db)]
                  (->> (for [r reading-ids]
-                        (for [entity-tx (.historyAscending db snapshot r)]
+                        (for [entity-tx (api/history-ascending db snapshot r)]
                           (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                       (cio/merge-sort (fn [a b]
                                         (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
