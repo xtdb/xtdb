@@ -1081,7 +1081,8 @@
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
            entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
-           db (assoc db :entity-as-of-idx (lru/new-cached-index entity-as-of-idx default-entity-cache-size))
+           cached (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
+           db (assoc db :entity-as-of-idx entity-as-of-idx)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
        (doseq [var find
