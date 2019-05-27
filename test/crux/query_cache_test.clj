@@ -1,6 +1,7 @@
 (ns crux.query-cache-test
   (:require [clojure.test :as t]
             [crux.fixtures :as f]
+            [crux.bench :as bench-tools]
             [crux.api :as api]))
 
 (def currencies
@@ -27,12 +28,18 @@
      :stock/price (rand-int 1000)
      :stock/currency-id (:currency/id (rand-nth currencies))}))
 
+(def stocks-count 100000)
 
 (defn with-stocks-data [f]
   (api/submit-tx f/*api* (f/maps->tx-ops currencies))
-  (doseq [stocks-batch (partition-all 1000 (map gen-stock (range 1000)))]
-    (api/submit-tx f/*api* (f/maps->tx-ops stocks-batch)))
-  (api/sync f/*api* nil)
+  (println "stocks count" stocks-count)
+  (let [ctr (atom 0)
+        partitions-total (/ stocks-count 1000)]
+    (doseq [stocks-batch (partition-all 1000 (map gen-stock (range stocks-count)))]
+      (println "partition " @ctr "/" partitions-total)
+      (swap! ctr inc)
+      (api/submit-tx f/*api* (f/maps->tx-ops stocks-batch))))
+  (api/sync f/*api* (java.time.Duration/ofMinutes 2))
   (f))
 
 (t/use-fixtures :once
@@ -61,10 +68,26 @@
     [stock-id :stock/currency-id currency-id]
     [currency-id :currency/name currency-name]])
 
+(def sample-size 10)
+
+(defn not-really-benchmarking [db n]
+  (for [_ (range n)]
+    (crux.bench/duration-millis (api/q db query))))
+
 (t/deftest test-stocks-query
   (println "running a stocks query with join to currencies")
-  (t/is 1000000
-    (time
-      (count
-        (api/q (api/db f/*api*) query)))))
+
+  (binding [crux.query/*with-entities-cache?* false]
+    (let [db (api/db f/*api*)
+          -dry (crux.bench/duration-millis (api/q db query))
+          durations (not-really-benchmarking db sample-size)]
+      (println "without cache durations in millis are" durations "avg" (/ (apply + durations) sample-size))))
+
+  (binding [crux.query/*with-entities-cache?* true]
+    (let [db (api/db f/*api*)
+          -dry (crux.bench/duration-millis (api/q db query))
+          durations (not-really-benchmarking db sample-size)]
+      (println "with cache durations in millis are" durations "avg" (/ (apply + durations) sample-size))))
+
+  (t/is stocks-count (count (api/q (api/db f/*api*) query))))
 

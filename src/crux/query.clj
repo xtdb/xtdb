@@ -1038,6 +1038,8 @@
 
 (def default-entity-cache-size 10000)
 
+(def ^:dynamic *with-entities-cache?* true)
+
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
   ([{:keys [kv] :as db} q]
@@ -1082,7 +1084,9 @@
      (let [rule-name->rules (rule-name->rules rules)
            entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
            cached (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
-           db (assoc db :entity-as-of-idx entity-as-of-idx)
+           db (assoc db :entity-as-of-idx (if *with-entities-cache?*
+                                            cached
+                                            entity-as-of-idx))
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
        (doseq [var find
