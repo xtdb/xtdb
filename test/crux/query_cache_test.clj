@@ -92,14 +92,25 @@
   (let [db (api/db f/*api*)
         d (Date.)]
     (with-open [snapshot (api/new-snapshot db)]
-      (let [idx-clear (idx/new-entity-as-of-index snapshot d d)
-            idx-wrapped-in-cache (lru/new-cached-index idx-clear 100)
+      (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+            idx-in-cache (lru/new-cached-index idx-raw 100)
+            id-buf (c/->id-buffer :currency.id/eur)
 
-            seeked (db/seek-values idx-clear (c/->id-buffer :currency.id/eur))
-            seeked-2 (db/seek-values idx-wrapped-in-cache (c/->id-buffer :currency.id/eur))]
+            seeked (db/seek-values idx-raw id-buf)
+            seeked-2 (db/seek-values idx-in-cache id-buf)]
 
         (println "seeked" :currency.id/eur "found" seeked)
         (println "seeked-2" :currency.id/eur "found" seeked-2)
+
+        (println "microbench for raw idx")
+        (time
+          (dotimes [_ 100000]
+            (db/seek-values idx-raw id-buf)))
+
+        (println "microbench for a cached idx")
+        (time
+          (dotimes [_ 100000]
+            (db/seek-values idx-in-cache id-buf)))
 
         (t/is (some? seeked))
         (t/is (some? seeked-2))))))
