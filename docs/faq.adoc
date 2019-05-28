@@ -4,6 +4,28 @@
 
 == Comparisons
 
+How does Datalog compare to SQL::
+
+  Datalog is a well-established deductive query language that combines facts
+and rules during execution to achieve the same power as relational algebra +
+recursion (e.g. SQL with Common Table Expressions). Datalog makes heavy use of
+efficient joins over granular indexes which removes any need for thinking about
+upfront normalisation and query shapes. Datalog already has significant
+traction in both https://en.wikipedia.org/wiki/Datalog[industry and academia].
++
+The EdgeDB team wrote a popular blog post outlining
+https://edgedb.com/blog/we-can-do-better-than-sql/#critique-of-sql[the
+shortcomings of SQL] and Datalog is the only broadly-proven alternative.
+Additionally the use of EDN Datalog from Clojure makes queries "much more
+programmable" than the equivalent of building SQL strings in any other
+language, as explained in
+http://vvvvalvalval.github.io/posts/2018-01-06-so-yeah-about-clojures-syntax.html[this
+blog post]. 
++
+We plan to provide limited SQL/JDBC support for Crux in the future, potentially
+using https://calcite.apache.org/docs/index.html[Apache Calcite].
+
+
 How does Crux compare to Datomic (On-Prem)?::
 
   At a high level Crux is bitemporal, document-centric, schemaless, and
@@ -288,3 +310,13 @@ We are also considering support for remote document stores via the
 `crux.db.ObjectStore` interface, mainly to support larger data sets, but
 there would still be a local cache. The indexes would stay local as this
 is key to efficient queries.
+
+Do you have any benchmarks?::
+
+  We are releasing a public benchmark dashboard in the near future. In the
+meantime feel free to run your own local tests using the scripts in the `/test`
+directory. The RocksDB project has performed some
+https://github.com/facebook/rocksdb/wiki/Performance-Benchmarks[impressive
+benchmarks] which give a strong sense of how large a single Crux node backed by
+RocksDB can confidently scale to. LMDB is generally faster for reads and
+RocksDB is generally faster for writes.
