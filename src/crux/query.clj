@@ -1036,7 +1036,7 @@
 
 (def default-query-timeout 30000)
 
-(def default-entity-cache-size 10000)
+(def default-entity-cache-size 100)
 
 (def ^:dynamic *with-entities-cache?* true)
 
@@ -1084,6 +1084,7 @@
      (let [rule-name->rules (rule-name->rules rules)
            entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
            cached (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
+           _ (def -cached cached)
            db (assoc db :entity-as-of-idx (if *with-entities-cache?*
                                             cached
                                             entity-as-of-idx))

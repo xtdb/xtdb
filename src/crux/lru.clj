@@ -26,6 +26,10 @@
                   (> (count this) size)))
         lock (StampedLock.)]
     (reify
+      Object
+      (toString [this]
+        (.toString cache))
+
       LRUCache
       (compute-if-absent [this k stored-key-fn f]
         (let [v (.valAt this k ::not-found)] ; use ::not-found as values can be falsy
@@ -261,10 +265,12 @@
    (->CachedObjectStore (get-named-cache kv ::doc-cache (or cache-size default-doc-cache-size))
                         (idx/->KvObjectStore kv))))
 
+(def called-keys (atom []))
 
 (defrecord CachedIndex [idx index-cache]
   db/Index
   (db/seek-values [this k]
+    (swap! called-keys conj k)
     (compute-if-absent index-cache k (fn [k] (db/seek-values idx k))))
 
   (db/next-values [this]

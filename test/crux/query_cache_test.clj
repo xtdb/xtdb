@@ -2,7 +2,12 @@
   (:require [clojure.test :as t]
             [crux.fixtures :as f]
             [crux.bench :as bench-tools]
-            [crux.api :as api]))
+            [crux.api :as api]
+            [crux.index :as idx]
+            [crux.lru :as lru]
+            [crux.codec :as c]
+            [crux.db :as db])
+  (:import (java.util Date)))
 
 (def currencies
   (mapv #(assoc % :crux.db/id (:currency/id %))
@@ -21,6 +26,13 @@
          {:currency/id :currency.id/jpy
           :currency/name "Japanese Yen"}]))
 
+(def currencies-by-id
+  (reduce (fn [m v] (assoc m (:crux.db/id v) v)) {} currencies))
+
+(def id-buffer->id
+  (let [ks (keys currencies-by-id)]
+    (zipmap (map c/->id-buffer ks) ks)))
+
 (defn gen-stock [i]
   (let [id (keyword "stock.id" (str "company-" i))]
     {:stock/id id
@@ -28,7 +40,7 @@
      :stock/price (rand-int 1000)
      :stock/currency-id (:currency/id (rand-nth currencies))}))
 
-(def stocks-count 100000)
+(def stocks-count 1000)
 
 (defn with-stocks-data [f]
   (api/submit-tx f/*api* (f/maps->tx-ops currencies))
@@ -36,10 +48,10 @@
   (let [ctr (atom 0)
         partitions-total (/ stocks-count 1000)]
     (doseq [stocks-batch (partition-all 1000 (map gen-stock (range stocks-count)))]
-      (println "partition " @ctr "/" partitions-total)
       (swap! ctr inc)
+      (println "partition " @ctr "/" partitions-total)
       (api/submit-tx f/*api* (f/maps->tx-ops stocks-batch))))
-  (api/sync f/*api* (java.time.Duration/ofMinutes 2))
+  (api/sync f/*api* (java.time.Duration/ofMinutes 20))
   (f))
 
 (t/use-fixtures :once
@@ -65,14 +77,34 @@
 (def query
   '[:find stock-id currency-name
     :where
-    [stock-id :stock/currency-id currency-id]
-    [currency-id :currency/name currency-name]])
+    [currency-id :currency/name currency-name]
+    [stock-id :stock/currency-id currency-id] ])
 
 (def sample-size 10)
 
 (defn not-really-benchmarking [db n]
   (for [_ (range n)]
     (crux.bench/duration-millis (api/q db query))))
+
+
+
+(t/deftest test-cached-index
+  (let [db (api/db f/*api*)
+        d (Date.)]
+    (with-open [snapshot (api/new-snapshot db)]
+      (let [idx-clear (idx/new-entity-as-of-index snapshot d d)
+            idx-wrapped-in-cache (lru/new-cached-index idx-clear 100)
+
+            seeked (db/seek-values idx-clear (c/->id-buffer :currency.id/eur))
+            seeked-2 (db/seek-values idx-wrapped-in-cache (c/->id-buffer :currency.id/eur))]
+
+        (println "seeked" :currency.id/eur "found" seeked)
+        (println "seeked-2" :currency.id/eur "found" seeked-2)
+
+        (t/is (some? seeked))
+        (t/is (some? seeked-2))))))
+
+
 
 (t/deftest test-stocks-query
   (println "running a stocks query with join to currencies")
@@ -81,13 +113,36 @@
     (let [db (api/db f/*api*)
           -dry (crux.bench/duration-millis (api/q db query))
           durations (not-really-benchmarking db sample-size)]
-      (println "without cache durations in millis are" durations "avg" (/ (apply + durations) sample-size))))
+      (println "without cache durations in millis are" durations)
+      (println "avg" (/ (apply + durations) sample-size))))
 
   (binding [crux.query/*with-entities-cache?* true]
     (let [db (api/db f/*api*)
           -dry (crux.bench/duration-millis (api/q db query))
           durations (not-really-benchmarking db sample-size)]
-      (println "with cache durations in millis are" durations "avg" (/ (apply + durations) sample-size))))
+      (println "with cache durations in millis are" durations)
+      (println "avg" (/ (apply + durations) sample-size))))
+
+  (t/is stocks-count (count (api/q (api/db f/*api*) query))))
+
+(t/deftest test-cache-frequencies
+  (println "running a stocks query with join to currencies")
+
+  (binding [crux.query/*with-entities-cache?* true]
+    (let [db (api/db f/*api*)
+          -dry (crux.bench/duration-millis (api/q db query))
+          durations (not-really-benchmarking db sample-size)]
+      (println "with cache durations in millis are" durations)
+      (println "avg" (/ (apply + durations) sample-size))
+
+      ;(clojure.pprint/pprint (:index-cache crux.query/-cached))
+
+      (println "cache hit frequencies")
+      (let [freqs-src (frequencies @crux.lru/called-keys)
+            freqs (reverse (sort-by second freqs-src))]
+        (println (vals freqs-src)))
+
+      ))
 
   (t/is stocks-count (count (api/q (api/db f/*api*) query))))
 
