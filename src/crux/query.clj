@@ -1036,7 +1036,7 @@
 
 (def default-query-timeout 30000)
 
-(def default-entity-cache-size 100)
+(def default-entity-cache-size 10000)
 
 (def ^:dynamic *with-entities-cache?* true)
 
