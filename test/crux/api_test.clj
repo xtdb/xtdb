@@ -17,6 +17,13 @@
 
 (declare execute-sparql)
 
+(t/deftest test-content-hash-invalid
+  (let [valid-time (Date.)
+        content-ivan {:crux.db/id :ivan :name "Ivan"}
+        content-hash (str (c/new-id content-ivan))]
+    (t/is (thrown-with-msg? Exception (re-pattern  (str content-hash "|HTTP status 400"))
+                            (.submitTx f/*api* [[:crux.tx/put :ivan content-hash valid-time]])))))
+
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem f/*api*))
