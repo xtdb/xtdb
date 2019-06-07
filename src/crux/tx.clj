@@ -217,6 +217,17 @@
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
 
+(defn tx-ops->tx-events [tx-ops]
+  (let [tx-events (mapv (fn [[op id & args]]
+                          (into [op (str (c/new-id id))]
+                                (for [arg args]
+                                  (if (map? arg)
+                                    (-> arg c/new-id str)
+                                    arg))))
+                        tx-ops)]
+    (s/assert :crux.tx.event/tx-events tx-events)
+    tx-events))
+
 ;; For dev/testing:
 
 (defrecord KvTxLog [kv object-store]
@@ -228,7 +239,7 @@
     (s/assert ::tx-ops tx-ops)
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
-          tx-events (crux.tx.event/tx-ops->tx-events tx-ops)
+          tx-events (tx-ops->tx-events tx-ops)
           indexer (->KvIndexer kv this object-store)]
       (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
                      (nippy/fast-freeze tx-events)]])
@@ -282,7 +293,7 @@
     (s/assert ::tx-ops tx-ops)
     (doseq [doc (tx-ops->docs tx-ops)]
       (db/submit-doc this (str (c/new-id doc)) doc))
-    (let [tx-events (crux.tx.event/tx-ops->tx-events tx-ops)
+    (let [tx-events (tx-ops->tx-events tx-ops)
           m (moberg/send-message event-log-kv ::event-log nil tx-events {::sub-topic :txs})]
       (delay {:crux.tx/tx-id (.id m)
               :crux.tx/tx-time (.time m)})))
