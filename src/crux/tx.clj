@@ -27,36 +27,33 @@
 
 (def ^:private date? (partial instance? Date))
 
-(s/def ::put-op (s/cat :op #{:crux.tx/put}
-                       :id :crux.db/id
-                       :doc ::doc
-                       :start-valid-time (s/? date?)
-                       :end-valid-time (s/? date?)))
+(defmulti tx-op first)
 
-(s/def ::delete-op (s/cat :op #{:crux.tx/delete}
-                          :id :crux.db/id
-                          :start-valid-time (s/? date?)
-                          :end-valid-time (s/? date?)))
+(defmethod tx-op :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
+                                         :id :crux.db/id
+                                         :doc ::doc
+                                         :start-valid-time (s/? date?)
+                                         :end-valid-time (s/? date?)))
 
-(s/def ::cas-op (s/cat :op #{:crux.tx/cas}
-                       :id :crux.db/id
-                       :old-doc (s/nilable ::doc)
-                       :new-doc ::doc
-                       :at-valid-time (s/? date?)))
+(defmethod tx-op :crux.tx/delete [_] (s/cat :op #{:crux.tx/delete}
+                                            :id :crux.db/id
+                                            :start-valid-time (s/? date?)
+                                            :end-valid-time (s/? date?)))
 
-(s/def ::evict-op (s/cat :op #{:crux.tx/evict}
-                         :id :crux.db/id
-                         :start-valid-time (s/? date?)
-                         :end-valid-time (s/? date?)
-                         :keep-latest? (s/? boolean?)
-                         :keep-earliest? (s/? boolean?)))
+(defmethod tx-op :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
+                                         :id :crux.db/id
+                                         :old-doc (s/nilable ::doc)
+                                         :new-doc ::doc
+                                         :at-valid-time (s/? date?)))
 
-(s/def ::tx-op (s/and (s/or :put ::put-op
-                            :delete ::delete-op
-                            :cas ::cas-op
-                            :evict ::evict-op)
-                      (s/conformer second)))
+(defmethod tx-op :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
+                                           :id :crux.db/id
+                                           :start-valid-time (s/? date?)
+                                           :end-valid-time (s/? date?)
+                                           :keep-latest? (s/? boolean?)
+                                           :keep-earliest? (s/? boolean?)))
 
+(s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
 (defn- in-range-pred [start end]
