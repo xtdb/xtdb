@@ -6,14 +6,14 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.lru :as lru]
             [crux.memory :as mem]
             [crux.moberg :as moberg]
             [crux.status :as status]
+            crux.tx.event
             [taoensso.nippy :as nippy])
-  (:import [crux.codec EntityTx Id]
-           [crux.moberg Message]
-           [java.io Closeable Writer]
+  (:import crux.codec.EntityTx
+           crux.moberg.Message
+           java.io.Closeable
            java.util.concurrent.TimeoutException
            java.util.Date))
 
@@ -22,29 +22,30 @@
 (s/def ::id (s/conformer (comp str c/new-id)))
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
 
-(s/def ::doc (s/and (s/keys :req [:crux.db/id]) ::id))
+(s/def ::doc (s/keys :req [:crux.db/id]))
+
 
 (def ^:private date? (partial instance? Date))
 
 (s/def ::put-op (s/cat :op #{:crux.tx/put}
-                       :id ::id
+                       :id :crux.db/id
                        :doc ::doc
                        :start-valid-time (s/? date?)
                        :end-valid-time (s/? date?)))
 
 (s/def ::delete-op (s/cat :op #{:crux.tx/delete}
-                          :id ::id
+                          :id :crux.db/id
                           :start-valid-time (s/? date?)
                           :end-valid-time (s/? date?)))
 
 (s/def ::cas-op (s/cat :op #{:crux.tx/cas}
-                       :id ::id
+                       :id :crux.db/id
                        :old-doc (s/nilable ::doc)
                        :new-doc ::doc
                        :at-valid-time (s/? date?)))
 
 (s/def ::evict-op (s/cat :op #{:crux.tx/evict}
-                         :id ::id
+                         :id :crux.db/id
                          :start-valid-time (s/? date?)
                          :end-valid-time (s/? date?)
                          :keep-latest? (s/? boolean?)
@@ -54,7 +55,7 @@
                             :delete ::delete-op
                             :cas ::cas-op
                             :evict ::evict-op)
-                      (s/conformer (comp vec vals second))))
+                      (s/conformer second)))
 
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
@@ -218,10 +219,9 @@
   (s/conform ::tx-ops tx-ops))
 
 (defn tx-ops->docs [tx-ops]
-  (vec (for [[op id :as tx-op] tx-ops
-             doc (filter map? tx-op)]
-         (if (and (satisfies? c/IdToBuffer id)
-                  (= (c/new-id id) (c/new-id (get doc :crux.db/id))))
+  (vec (for [{:keys [id] :as tx-op} tx-ops
+             doc (filter map? (vals tx-op))]
+         (if (= (c/new-id id) (c/new-id (get doc :crux.db/id)))
            doc
            (throw (IllegalArgumentException.
                    (str "Document's id does not match the operation id: " (get doc :crux.db/id) " " id)))))))
@@ -237,12 +237,13 @@
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           conformed-tx-ops (conform-tx-ops tx-ops)
+          tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)
           indexer (->KvIndexer kv this object-store)]
       (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
-                     (nippy/fast-freeze conformed-tx-ops)]])
-      (doseq [doc (tx-ops->docs tx-ops)]
+                     (nippy/fast-freeze tx-events)]])
+      (doseq [doc (tx-ops->docs conformed-tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
-      (db/index-tx indexer conformed-tx-ops transact-time tx-id)
+      (db/index-tx indexer tx-events transact-time tx-id)
       (db/store-index-meta indexer
                            :crux.tx-log/consumer-state
                            {:crux.kv.topic-partition/tx-log-0
@@ -287,10 +288,11 @@
     (moberg/send-message event-log-kv ::event-log content-hash doc {::sub-topic :docs}))
 
   (submit-tx [this tx-ops]
-    (let [conformed-tx-ops (conform-tx-ops tx-ops)]
-      (doseq [doc (tx-ops->docs tx-ops)]
+    (let [conformed-tx-ops (conform-tx-ops tx-ops)
+          tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)]
+      (doseq [doc (tx-ops->docs conformed-tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
-      (let [m (moberg/send-message event-log-kv ::event-log nil conformed-tx-ops {::sub-topic :txs})]
+      (let [m (moberg/send-message event-log-kv ::event-log nil tx-events {::sub-topic :txs})]
         (delay {:crux.tx/tx-id (.id m)
                 :crux.tx/tx-time (.time m)}))))
 

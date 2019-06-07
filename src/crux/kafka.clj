@@ -106,13 +106,14 @@
   (submit-tx [this tx-ops]
     (try
       (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)
-            content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
+            tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)
+            content-hash->doc (->> (for [doc (tx/tx-ops->docs conformed-tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
         (doseq [[content-hash doc] content-hash->doc]
           (db/submit-doc this (str content-hash) doc))
         (.flush producer)
-        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil conformed-tx-ops)
+        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
                                     (-> (.headers) (.add (str :crux.tx/docs)
                                                          (nippy/fast-freeze (set (keys content-hash->doc))))))
                                   (.send producer))]
