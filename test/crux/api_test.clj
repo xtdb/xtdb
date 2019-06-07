@@ -152,7 +152,7 @@
             (t/is (instance? LazySeq result))
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
-                             :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time nil]])]
+                             :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
             (t/is (realized? result))))
 
@@ -162,7 +162,7 @@
               (t/is (instance? LazySeq result))
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
-                               :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) {:crux.db/id :ivan :name "Ivan"} valid-time nil]])]
+                               :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                        result))
               (t/is (realized? result)))))
 

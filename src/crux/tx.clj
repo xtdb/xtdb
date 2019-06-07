@@ -19,11 +19,8 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(s/def ::id (s/conformer (comp str c/new-id)))
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
-
 (s/def ::doc (s/keys :req [:crux.db/id]))
-
 
 (def ^:private date? (partial instance? Date))
 
@@ -211,13 +208,9 @@
     {:crux.index/index-version (idx/current-index-version kv)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(defn conform-tx-ops [tx-ops]
-  (s/assert ::tx-ops tx-ops)
-  (s/conform ::tx-ops tx-ops))
-
 (defn tx-ops->docs [tx-ops]
-  (vec (for [{:keys [id] :as tx-op} tx-ops
-             doc (filter map? (vals tx-op))]
+  (vec (for [[_ id & args] tx-ops
+             doc (filter map? args)]
          (if (= (c/new-id id) (c/new-id (get doc :crux.db/id)))
            doc
            (throw (IllegalArgumentException.
@@ -231,14 +224,14 @@
     (db/index-doc (->KvIndexer kv this object-store) content-hash doc))
 
   (submit-tx [this tx-ops]
+    (s/assert ::tx-ops tx-ops)
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
-          conformed-tx-ops (conform-tx-ops tx-ops)
-          tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)
+          tx-events (crux.tx.event/tx-ops->tx-events tx-ops)
           indexer (->KvIndexer kv this object-store)]
       (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
                      (nippy/fast-freeze tx-events)]])
-      (doseq [doc (tx-ops->docs conformed-tx-ops)]
+      (doseq [doc (tx-ops->docs tx-ops)]
         (db/submit-doc this (str (c/new-id doc)) doc))
       (db/index-tx indexer tx-events transact-time tx-id)
       (db/store-index-meta indexer
@@ -285,13 +278,13 @@
     (moberg/send-message event-log-kv ::event-log content-hash doc {::sub-topic :docs}))
 
   (submit-tx [this tx-ops]
-    (let [conformed-tx-ops (conform-tx-ops tx-ops)
-          tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)]
-      (doseq [doc (tx-ops->docs conformed-tx-ops)]
-        (db/submit-doc this (str (c/new-id doc)) doc))
-      (let [m (moberg/send-message event-log-kv ::event-log nil tx-events {::sub-topic :txs})]
-        (delay {:crux.tx/tx-id (.id m)
-                :crux.tx/tx-time (.time m)}))))
+    (s/assert ::tx-ops tx-ops)
+    (doseq [doc (tx-ops->docs tx-ops)]
+      (db/submit-doc this (str (c/new-id doc)) doc))
+    (let [tx-events (crux.tx.event/tx-ops->tx-events tx-ops)
+          m (moberg/send-message event-log-kv ::event-log nil tx-events {::sub-topic :txs})]
+      (delay {:crux.tx/tx-id (.id m)
+              :crux.tx/tx-time (.time m)})))
 
   (new-tx-log-context [this]
     (kv/new-snapshot event-log-kv))

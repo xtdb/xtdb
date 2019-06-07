@@ -4,39 +4,47 @@
   (:import java.util.Date))
 
 (def ^:private date? (partial instance? Date))
+(def ^:private id? (partial satisfies? c/IdToBuffer))
 
-(s/def ::id (s/conformer (comp str c/new-id)))
-(s/def ::doc (s/and (s/keys :req [:crux.db/id]) ::id))
-(s/def ::old-doc (s/nilable ::doc))
-(s/def ::new-doc ::doc)
-(s/def ::at-valid-time date?)
-(s/def ::start-valid-time date?)
-(s/def ::end-valid-time date?)
-(s/def ::keep-latest boolean?)
-(s/def ::keep-earliest boolean?)
+(defmulti tx-event first)
 
-(defmulti tx-event :op)
+(defmethod tx-event :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
+                                            :id id?
+                                            :doc id?
+                                            :start-valid-time (s/? date?)
+                                            :end-valid-time (s/? date?)))
 
-(defmethod tx-event :crux.tx/put [_] (s/and (s/keys :req-un [::doc]
-                                                    :opt-un [::start-valid-time ::end-valid-time])
-                                            (s/conformer (juxt :op :id :doc :start-valid-time :end-valid-time))))
+(defmethod tx-event :crux.tx/delete [_] (s/cat :op #{:crux.tx/delete}
+                                               :id id?
+                                               :start-valid-time (s/? date?)
+                                               :end-valid-time (s/? date?)))
 
-(defmethod tx-event :crux.tx/delete [_] (s/and (s/keys :opt-un [::start-valid-time ::end-valid-time])
-                                               (s/conformer (juxt :op :id :start-valid-time :end-valid-time))))
+(defmethod tx-event :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
+                                            :id id?
+                                            :old-doc (s/nilable id?)
+                                            :new-doc id?
+                                            :at-valid-time (s/? date?)))
 
-(defmethod tx-event :crux.tx/cas [_] (s/and (s/keys :req-un [::new-doc]
-                                                    :opt-un [::old-doc ::at-valid-time])
-                                            (s/conformer (juxt :op :id :old-doc :new-doc :at-valid-time))))
+(defmethod tx-event :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
+                                              :id id?
+                                              :start-valid-time (s/? date?)
+                                              :end-valid-time (s/? date?)
+                                              :keep-latest? (s/? boolean?)
+                                              :keep-earliest? (s/? boolean?)))
 
-(defmethod tx-event :crux.tx/evict [_] (s/and (s/keys :opt-un [::start-valid-time ::end-valid-time ::keep-latest? ::keep-earliest?])
-                                              (s/conformer (juxt :op :id :start-valid-time :end-valid-time :keep-latest? :keep-earliest?))))
 
-
-(s/def ::tx-event (s/and (s/keys :req-un [::id])
-                         (s/multi-spec tx-event :op)))
-
+(s/def ::tx-event (s/multi-spec tx-event first))
 (s/def ::tx-events (s/coll-of ::tx-event))
 
-(defn conform-tx-events [tx-ops]
-  (s/assert ::tx-events tx-ops)
-  (s/conform ::tx-events tx-ops))
+;; todo maybe move this back in tx
+(defn tx-ops->tx-events [tx-ops]
+  (def t tx-ops)
+  (let [tx-events (mapv (fn [[op id & args]]
+                          (into [op (str (c/new-id id))]
+                                (for [arg args]
+                                  (if (map? arg)
+                                    (-> arg c/new-id str)
+                                    arg))))
+                        tx-ops)]
+    (s/assert ::tx-events tx-events)
+    tx-events))

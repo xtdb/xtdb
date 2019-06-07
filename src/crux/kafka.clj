@@ -105,9 +105,9 @@
 
   (submit-tx [this tx-ops]
     (try
-      (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)
-            tx-events (crux.tx.event/conform-tx-events conformed-tx-ops)
-            content-hash->doc (->> (for [doc (tx/tx-ops->docs conformed-tx-ops)]
+      (s/assert :crux.tx/tx-ops tx-ops)
+      (let [tx-events (crux.tx.event/tx-ops->tx-events tx-ops)
+            content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
         (doseq [[content-hash doc] content-hash->doc]
