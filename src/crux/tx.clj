@@ -175,6 +175,7 @@
         (idx/index-doc kv content-hash doc))))
 
   (index-tx [_ tx-ops tx-time tx-id]
+    (s/assert :crux.tx.event/tx-events tx-ops)
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (vec (for [[op :as tx-op] tx-ops]
                                       ((get tx-op->command op tx-command-unknown)
