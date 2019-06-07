@@ -21,9 +21,8 @@
 
 (s/def ::id (s/conformer (comp str c/new-id)))
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
-(s/def ::doc (s/and (s/or :doc (s/and (s/keys :req [:crux.db/id]) ::id)
-                          :content-hash (s/and (complement map?) ::id))
-                    (s/conformer second)))
+
+(s/def ::doc (s/and (s/keys :req [:crux.db/id]) ::id))
 
 (def ^:private date? (partial instance? Date))
 
@@ -40,7 +39,7 @@
 
 (s/def ::cas-op (s/cat :op #{:crux.tx/cas}
                        :id ::id
-                       :old-doc ::doc
+                       :old-doc (s/nilable ::doc)
                        :new-doc ::doc
                        :at-valid-time (s/? date?)))
 
