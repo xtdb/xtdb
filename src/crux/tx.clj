@@ -218,8 +218,8 @@
   (s/conform ::tx-ops tx-ops))
 
 (defn tx-ops->docs [tx-ops]
-  (vec (for [[op id :as tx-op] tx-ops
-             doc (filter map? tx-op)]
+  (vec (for [[op id & rest :as tx-op] tx-ops
+             doc (filter map? rest)]
          (if (and (satisfies? c/IdToBuffer id)
                   (= (c/new-id id) (c/new-id (get doc :crux.db/id))))
            doc
