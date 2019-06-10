@@ -57,11 +57,6 @@
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
-          (and (instance? StandaloneSystem f/*api*)
-               (instance? crux.tx.KvTxLog (:tx-log f/*api*)))
-          (t/is (= {:crux.kv.topic-partition/tx-log-0 {:lag 0 :time tx-time}}
-                   (:crux.tx-log/consumer-state status-map)))
-
           :else
           (let [tx-topic-key (keyword "crux.kafka.topic-partition"
                                       (str (get-in f/*cluster-node* [:options :tx-topic]) "-0"))

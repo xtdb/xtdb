@@ -73,8 +73,8 @@
     (doseq [c [event-log-consumer tx-log kv-store]]
       (cio/try-close c))))
 
-(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
-                                    :opt-un [:crux.kv/sync? :crux.tx/event-log-dir :crux.db/object-store :crux.lru/doc-cache-size]
+(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend :crux.tx/event-log-dir]
+                                    :opt-un [:crux.kv/sync? :crux.db/object-store :crux.lru/doc-cache-size]
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
@@ -91,21 +91,16 @@
                                     options))
                        (->> (swap! started conj)))
             event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))
-            event-log-kv-store (when event-log-dir
-                                 (doto (b/start-kv-store
-                                         {:db-dir event-log-dir
-                                          :kv-backend (or event-log-kv-backend kv-backend)
-                                          :sync? event-log-sync?
-                                          :crux.index/check-and-store-index-version false})
-                                   (->> (swap! started conj))))
+            event-log-kv-store (doto (b/start-kv-store
+                                      {:db-dir event-log-dir
+                                       :kv-backend (or event-log-kv-backend kv-backend)
+                                       :sync? event-log-sync?
+                                       :crux.index/check-and-store-index-version false})
+                                 (->> (swap! started conj)))
             object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
                                                   (b/start-object-store {:kv kv-store} options))
 
-            tx-log (if event-log-kv-store
-                     (tx/->EventTxLog event-log-kv-store)
-                     (do (log/warn "Using index KV store as event log, not suitable for production environments.")
-                         (tx/create-kv-tx-log kv-store object-store)))
-
+            tx-log (tx/->EventTxLog event-log-kv-store)
 
             indexer (tx/->KvIndexer kv-store tx-log object-store)
 

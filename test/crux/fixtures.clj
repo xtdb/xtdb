@@ -1,5 +1,6 @@
 (ns crux.fixtures
-  (:require [clojure.test :as t]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [clojure.java.io :as io]
             [crux.bootstrap :as b]
@@ -12,7 +13,9 @@
             [crux.kv :as kv]
             [crux.tx :as tx]
             [crux.index :as idx]
-            [crux.lru :as lru])
+            [crux.lru :as lru]
+            [taoensso.nippy :as nippy]
+            [crux.memory :as mem])
   (:import java.io.Closeable
            [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
@@ -34,38 +37,6 @@
           m
           ts])))
 
-(defn kv-tx-log
-  ([kv] (tx/create-kv-tx-log kv (idx/->KvObjectStore kv)))
-  ([kv object-store] (tx/create-kv-tx-log kv object-store)))
-
-(defn transact-entity-maps!
-  ([kv entities]
-   (transact-entity-maps! kv entities (cio/next-monotonic-date)))
-  ([kv entities ts]
-   (let [tx-log (kv-tx-log kv)
-         tx-ops (maps->tx-ops entities ts)]
-     @(db/submit-tx tx-log tx-ops)
-     entities)))
-
-(defn entities->delete-tx-ops [entities ts]
-  (vec (for [e entities]
-         [:crux.tx/delete e ts])))
-
-(defn delete-entities!
-  ([kv entities]
-   (delete-entities! kv entities (cio/next-monotonic-date)))
-  ([kv entities ts]
-   (let [tx-log (kv-tx-log kv)
-         tx-ops (entities->delete-tx-ops entities ts)]
-     @(db/submit-tx tx-log tx-ops)
-     entities)))
-
-(defn transact-people!
-  ([kv people-mixins]
-   (transact-people! kv people-mixins (cio/next-monotonic-date)))
-  ([kv people-mixins ts]
-   (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
-
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
 (def ^:dynamic *check-and-store-index-version* true)
@@ -75,12 +46,60 @@
     (lru/new-cache (:doc-cache-size b/default-options))
     (b/start-object-store {:kv kv} b/default-options)))
 
-(defn kv-tx-log-w-cache [kv]
-  (tx/create-kv-tx-log kv (kv-object-store-w-cache kv)))
-
 (defn without-kv-index-version [f]
   (binding [*check-and-store-index-version* false]
     (f)))
+
+(defrecord KvTxLog [kv object-store]
+  db/TxLog
+  (submit-doc [this content-hash doc]
+    (db/index-doc (tx/->KvIndexer kv this object-store) content-hash doc))
+
+  (submit-tx [this tx-ops]
+    (s/assert :crux.tx/tx-ops tx-ops)
+    (let [transact-time (cio/next-monotonic-date)
+          tx-id (.getTime transact-time)
+          tx-events (tx/tx-ops->tx-events tx-ops)
+          indexer (tx/->KvIndexer kv this object-store)]
+      (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
+                     (nippy/fast-freeze tx-events)]])
+      (doseq [doc (tx/tx-ops->docs tx-ops)]
+        (db/submit-doc this (str (c/new-id doc)) doc))
+      (db/index-tx indexer tx-events transact-time tx-id)
+      (db/store-index-meta indexer
+                           :crux.tx-log/consumer-state
+                           {:crux.kv.topic-partition/tx-log-0
+                            {:lag 0
+                             :time transact-time}})
+      (delay {:crux.tx/tx-id tx-id
+              :crux.tx/tx-time transact-time})))
+
+  (new-tx-log-context [this]
+    (kv/new-snapshot kv))
+
+  (tx-log [this tx-log-context from-tx-id]
+    (let [i (kv/new-iterator tx-log-context)]
+      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
+        (assoc (c/decode-tx-log-key-from k)
+               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
+
+  Closeable
+  (close [_]))
+
+(defn create-kv-tx-log
+  [kv object-store]
+  (let [tx-log (->KvTxLog kv object-store)
+        indexer (tx/->KvIndexer kv tx-log object-store)]
+    (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
+      (db/store-index-meta
+       indexer
+       :crux.tx-log/consumer-state
+       {:crux.kv.topic-partition/tx-log-0
+        {:lag 0 :time nil}}))
+    tx-log))
+
+(defn kv-tx-log-w-cache [kv]
+  (create-kv-tx-log kv (kv-object-store-w-cache kv)))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
@@ -203,18 +222,6 @@
 (defn with-standalone-system [f]
   (assert (not (bound? #'*kv*)))
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        options {:db-dir db-dir
-                 :kv-backend *kv-backend*}]
-    (try
-      (with-open [standalone-system (Crux/startStandaloneSystem options)]
-        (binding [*api* standalone-system]
-          (f)))
-      (finally
-        (cio/delete-dir db-dir)))))
-
-(defn with-standalone-system-using-event-log [f]
-  (assert (not (bound? #'*kv*)))
-  (let [db-dir (str (cio/create-tmpdir "kv-store"))
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))
         options {:db-dir db-dir
                  :event-log-dir event-log-dir
@@ -238,8 +245,6 @@
     (with-cluster-node f))
   (t/testing "Local API StandaloneSystem"
     (with-standalone-system f))
-  (t/testing "Local API StandaloneSystem using event log"
-    (with-standalone-system-using-event-log f))
   (t/testing "Remote API"
     (with-cluster-node
       #(with-api-client f))))
@@ -247,3 +252,35 @@
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
     (f)))
+
+(defn kv-tx-log
+  ([kv] (create-kv-tx-log kv (idx/->KvObjectStore kv)))
+  ([kv object-store] (create-kv-tx-log kv object-store)))
+
+(defn transact-entity-maps!
+  ([kv entities]
+   (transact-entity-maps! kv entities (cio/next-monotonic-date)))
+  ([kv entities ts]
+   (let [tx-log (kv-tx-log kv)
+         tx-ops (maps->tx-ops entities ts)]
+     @(db/submit-tx tx-log tx-ops)
+     entities)))
+
+(defn entities->delete-tx-ops [entities ts]
+  (vec (for [e entities]
+         [:crux.tx/delete e ts])))
+
+(defn delete-entities!
+  ([kv entities]
+   (delete-entities! kv entities (cio/next-monotonic-date)))
+  ([kv entities ts]
+   (let [tx-log (kv-tx-log kv)
+         tx-ops (entities->delete-tx-ops entities ts)]
+     @(db/submit-tx tx-log tx-ops)
+     entities)))
+
+(defn transact-people!
+  ([kv people-mixins]
+   (transact-people! kv people-mixins (cio/next-monotonic-date)))
+  ([kv people-mixins ts]
+   (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
