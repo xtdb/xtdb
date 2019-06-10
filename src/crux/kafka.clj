@@ -1,9 +1,8 @@
 (ns crux.kafka
-  (:require [clojure.tools.logging :as log]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.kv :as kv]
             [crux.status :as status]
             [crux.tx :as tx]
             [taoensso.nippy :as nippy])
@@ -13,7 +12,7 @@
            [java.util Date List Map]
            java.util.concurrent.ExecutionException
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
-           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord ConsumerRecords KafkaConsumer]
+           [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            org.apache.kafka.common.errors.TopicExistsException
            org.apache.kafka.common.TopicPartition))
@@ -105,14 +104,15 @@
 
   (submit-tx [this tx-ops]
     (try
-      (let [conformed-tx-ops (tx/conform-tx-ops tx-ops)
+      (s/assert :crux.tx/tx-ops tx-ops)
+      (let [tx-events (tx/tx-ops->tx-events tx-ops)
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
         (doseq [[content-hash doc] content-hash->doc]
           (db/submit-doc this (str content-hash) doc))
         (.flush producer)
-        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil conformed-tx-ops)
+        (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
                                     (-> (.headers) (.add (str :crux.tx/docs)
                                                          (nippy/fast-freeze (set (keys content-hash->doc))))))
                                   (.send producer))]
