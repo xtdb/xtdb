@@ -35,17 +35,17 @@
 
 (t/deftest test-id-reader
   (t/testing "can read and convert to real id"
-    (t/is (c/new-id "http://google.com") #crux/id "http://google.com")
-    (t/is "234988566c9a0a9cf952cec82b143bf9c207ac16"
-          (str #crux/id "http://google.com"))
+    (t/is (= (c/new-id "http://google.com") #crux/id "http://google.com"))
+    (t/is (= "234988566c9a0a9cf952cec82b143bf9c207ac16"
+             (str #crux/id "http://google.com")))
     (t/is (instance? Id (c/new-id #crux/id "http://google.com"))))
 
   (t/testing "can create different types of ids"
-    (t/is (c/new-id :foo) #crux/id ":foo")
-    (t/is (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
-          #crux/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
-    (t/is (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")
-          #crux/id "234988566c9a0a9cf952cec82b143bf9c207ac16"))
+    (t/is (= (c/new-id :foo) #crux/id ":foo"))
+    (t/is (= (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
+             #crux/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28"))
+    (t/is (= (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")
+             #crux/id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
 
   (t/testing "can embed id in other forms"
     (t/is (= {:find ['e]
