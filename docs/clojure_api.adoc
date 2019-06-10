@@ -252,7 +252,7 @@ details.
 Options:
 ----
 {:kv-backend        "crux.kv.rocksdb.RocksKv" ; requires RocksDB as dep
-                    "crux.kv.memdb.MemKv" ; will work without addional deps
+                    "crux.kv.memdb.MemKv" ; will work without additional deps
 :bootstrap-servers  "kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092"
 :event-log-dir      "data/eventlog-1"
 :db-dir             "data/db-dir-1"

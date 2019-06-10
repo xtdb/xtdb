@@ -9,7 +9,7 @@ https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
 There are two main Crux systems: *cluster node* vs *standalone*. Use a
 cluster node system when horizontal scalability is required or when
 you want the guarantees that Kafka offers in terms of resiliency,
-availabilty, and retention of data.
+availability, and retention of data.
 
 Multiple instances of a cluster node systems may participate in a
 cluster using Kafka as the primary store and as the central means of
@@ -18,7 +18,7 @@ coordination.
 The Standalone system is where a single Crux instance has everything
 it needs locally. This is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
-is permissable.
+is permissible.
 
 .Crux Systems
 [#table-conversion%header,cols="d,d,d"]

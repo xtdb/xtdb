@@ -66,7 +66,7 @@ an appendable transaction log.
 |Implementation|Description
 |`crux.kafka.KafkaTxLog`|(default), using Kafka with separate Kafka topics for both documents and transactions
 |`crux.tx.KvTxLog`|Uses the KvStore as the transaction log during testing only
-|`crux.tx.EventTxLog`| Uses the KvStore for the transaction log in standalone mode, backed by `moberg`. This is useful when Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transacton log isn't required.
+|`crux.tx.EventTxLog`| Uses the KvStore for the transaction log in standalone mode, backed by `moberg`. This is useful when Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transaction log isn't required.
 |===
 
 == Indexer
@@ -122,7 +122,7 @@ entity->content
 `open-level` gives instructions to open and move down a level. In the
 above example if could be moving the index down to point at the values
 within a given attribute. That is to say that if we have an attribute
-`:name`, the index will interate across all values for that attribute,
+`:name`, the index will iterate across all values for that attribute,
 until there are no more `name` values.
 
 `close-level` moves the index back-up, so in the above example, we can

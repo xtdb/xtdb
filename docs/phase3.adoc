@@ -100,7 +100,7 @@ document partitions intelligently.
 
 == Subscriptions
 
-Blurs the line betweem Crux, stream processing and rule engines a bit.
+Blurs the line between Crux, stream processing and rule engines a bit.
 
 === Pros
 

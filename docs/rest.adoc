@@ -194,7 +194,7 @@ curl -X POST \
 #{[:boris][:ivan]}
 ----
 
-Note that you are able to add `:full-results? true` to the query map to easily retrieve the source documents relating to the entites in the result set. For instance to retrieve _all_ documents in a single query:
+Note that you are able to add `:full-results? true` to the query map to easily retrieve the source documents relating to the entities in the result set. For instance to retrieve _all_ documents in a single query:
 
 [source,clj]
 ----
@@ -212,7 +212,7 @@ Same as `/query` but the results are streamed.
 [#sync]
 === GET `/sync`
 
-Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in miliseconds. Returns the transaction time of the most recent transaction.
+Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write). Timeout is 10 seconds by default, but can be specified as a parameter in milliseconds. Returns the transaction time of the most recent transaction.
 
 [source,bash]
 ----

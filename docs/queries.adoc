@@ -16,7 +16,7 @@ is that it can support arbitrary-depth graph queries (recursive traversals)
 very efficiently by default, without any need for schema-level optimisations.
 Crux gives you the ability to construct graph queries via a Datalog query
 language and uses graph-friendly indexes to provide a powerful set of querying
-capabilties. Additionally, when Crux's indexes are deployed directly alongside
+capabilities. Additionally, when Crux's indexes are deployed directly alongside
 your application you are able to easily blend Datalog and code together to
 construct highly complex graph algorithms.
 
@@ -135,7 +135,7 @@ include::./query_test_examples.clj[tags=query-with-arguments1-r]
 include::./query_test_examples.clj[tags=query-with-arguments2-q]
 ----
 
-This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parametise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
+This next query shows how multiple argument values can be mapped to a single field. This allows us to usefully parameterise the input to a query such that we do not have to rerun a single query multiple times (which would be significantly less efficient!).
 
 Result Set:
 [source,clj]
@@ -150,7 +150,7 @@ include::./query_test_examples.clj[tags=query-with-arguments2-r]
 include::./query_test_examples.clj[tags=query-with-arguments3-q]
 ----
 
-Here we see how we can extend the parametisation to match using multiple fields at once.
+Here we see how we can extend the parameterisation to match using multiple fields at once.
 
 Result Set:
 [source,clj]
@@ -336,7 +336,7 @@ The function `crux.api/q` takes 2 or 3 arguments, `db` and `q` but also
 optionally a `snapshot` which is already opened and managed by the caller
 (using `with-open` for example). This version of the call returns a lazy
 sequence of the results, while the other version provides a set. A snapshot can
-be retreived from a `kv` instance via `crux.api/new-snapshot`.
+be retrieved from a `kv` instance via `crux.api/new-snapshot`.
 
 == DataScript Differences
 

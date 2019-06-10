@@ -1,6 +1,6 @@
 = Transactions
 
-== Index
+== Overview
 
 There are four transaction (write) operations:
 
@@ -45,6 +45,19 @@ hashed, and the operation and hash is submitted to the `tx-topic` in
 the event log. The document itself is submitted to the `doc-topic`,
 using its content hash as key. In Kafka, the `doc-topic` is compacted,
 which enables later deletion of documents.
+
+== Valid IDs
+
+The following types of `:crux.db/id` are allowed:
+
+* Keyword (e.g. `{:crux.db/id :my-id}` or `{:crux.db/id :dbpedia.resource/Pablo-Picasso}`)
+* UUID (e.g. `{:crux.db/id #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"}` or `{:crux.db/id #crux/id "6f0232d0-f3f9-4020-a75f-17b067f41203"}`)
+* URI (e.g. `{:crux.db/id #crux/id "mailto:crux@juxt.pro"}`)
+* URL (e.g. `{:crux.db/id #crux/id "https://github.com/juxt/crux"}`), including `http`, `https`, `ftp` and `file` protocols 
+
+The `#crux/id` reader literal will take any string and attempt to coerce it
+into a valid ID. Use of `#crux/id` with a valid ID type will also work 
+(e.g. `{:crux.db/id #crux/id :my-id}`).
 
 == Put
 

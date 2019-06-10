@@ -60,10 +60,10 @@ Crux provides utility APIs for local backup and restore when you are using the
 standalone mode (which is not recommended for production usage). For an example
 of usage, see
 https://github.com/juxt/crux/blob/e5e21352b7a466d20a7b57518e129770191de352/example/standalone_webservice/src/example_standalone_webservice/main.clj#L744[the
-standalone webservice example].
+standalone web service example].
 
 An additional example of backup and restore that only applies to a stopped
-standlone system is provided
+standalone system is provided
 https://github.com/juxt/crux/tree/master/example/backup-restore[here].
 
 In a clustered deployment, only Kafka's

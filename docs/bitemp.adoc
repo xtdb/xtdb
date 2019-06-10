@@ -47,14 +47,15 @@ new transaction with a `transaction-time` that is in the past.
  what users will typically use for query purposes.
 
 ****
-Writes can be made in the past of valid-time. Users will normally
-ask _"what is the value of this entity at valid-time?"_ regardless if
-this history has been rewritten several times at multiple
-transaction-times.
+Writes can be made in the past of valid-time as _retroactive operations_. Users
+will normally ask _"what is the value of this entity at valid-time?"_
+regardless if this history has been rewritten several times at multiple
+transaction-times. Writes can also be made in the future of valid-time as
+_proactive operations_.
 
-Only if you want to ensure consistent reads across nodes or to query
-for audit reasons, would you want to consider using both
-transaction-time and valid-time.
+Typically you only need to consider using both transaction-time and valid-time
+for ensuring globally consistent reads across nodes or to query for audit
+reasons.
 ****
 
 NOTE: In Crux, when `transaction-time` isn't specified, it is set to
@@ -116,7 +117,7 @@ temporal component within your documents you cannot currently use this
 information about valid time inside of your Datalog queries.
 
 Domain time or "user-defined" time is simply the storing of any additional
-time-related information witin your documents, for instance `valid-time`,
+time-related information within your documents, for instance `valid-time`,
 `duration` or timestamps relating to additional temporal life-cycles (e.g.
 decision, receipt, notification, availability).
 
@@ -147,7 +148,7 @@ These capabilities are known to be useful for:
 
 - Event Sourcing (e.g.
   https://fr.slideshare.net/ThomasPierrain/as-time-goes-by-episode-2[retroactive
-and scheduled events])
+and scheduled events] and https://oparu.uni-ulm.de/xmlui/bitstream/handle/123456789/4150/RetroactiveComputing_Mueller2016.pdf?sequence=5&isAllowed=y[event-driven computing on evolving graphs])
 - Ingesting out-of-order temporal data from upstream timestamping systems
 - Maintaining a slowly changing dimension for decision support applications
 - Recovering from accidental data changes and application errors (e.g. billing
@@ -365,6 +366,40 @@ known to have yet departed at this point:
 ----
 include::./query_test_examples.clj[tags=bitempr]
 ----
+
+== Related Concepts
+
+=== Retroactive Data Structures
+
+At a theoretical level Crux has similar properties to
+https://en.wikipedia.org/wiki/Retroactive_data_structure[retroactive data
+structures], which are data structures that support "efficient modifications to
+a sequence of operations that have been performed on the structure [...]
+modifications can take the form of retroactive insertion, deletion or updating
+of an operation that was performed at some time in the past".
+
+Crux's bitemporal indexes are
+https://en.wikipedia.org/wiki/Persistent_data_structure#Partial_versus_Full_Persistence[partially
+persistent] due to the immutability of transaction time. This allows you to
+query any previous version, but only update the latest version. The efficient
+representation of valid time in the indexes makes Crux "fully retroactive",
+which is analogous to partial persistence in the temporal dimension, and
+enables globally-consistent reads.
+
+Crux does not natively implement "non-oblivious retroactivity" (i.e. persisted
+queries and cascading corrections), although this is an important area of
+investigation for https://github.com/vs-uulm/retro-lambda[event]
+https://dl.acm.org/citation.cfm?doid=3210284.3219499[sourcing]
+https://martinfowler.com/eaaDev/RetroactiveEvent.html[applications],
+https://dl.acm.org/citation.cfm?id=3271883[temporal]
+http://informatique.umons.ac.be/ssi/jef/tic.pdf[constraints], and reactive
+bitemporal queries.
+
+In summary, the Crux indexes as a whole could be described as a "partially
+persistent and fully retroactive data structure".
+
+https://courses.csail.mit.edu/6.851/fall17/lectures/L02.html
+https://erikdemaine.org/papers/Retroactive_TALG/paper.pdf
 
 == References
 

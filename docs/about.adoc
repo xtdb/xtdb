@@ -24,7 +24,7 @@ JUXT is working to develop enterprise-level capabilities for operating Crux clus
 
 === Community Contribution
 
-Crux is an open source product that JUXT will support throughout its evolution. As the community continutes to grow we will incorporate quality community-led contributions into the core. However, because of Crux's unbundled architecture, we expect that sustantial contributions can be made outside of the core. JUXT aims to promote and help all community-led activities around Crux.
+Crux is an open source product that JUXT will support throughout its evolution. As the community continutes to grow we will incorporate quality community-led contributions into the core. However, because of Crux's unbundled architecture, we expect that substantial contributions can be made outside of the core. JUXT aims to promote and help all community-led activities around Crux.
 
 <<contributing.adoc#,Read more about contributing.>>
 

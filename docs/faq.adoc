@@ -94,7 +94,7 @@ Crux nodes are therefore fully independent asides from the shared transaction
 log and document log
 . Both systems rely on existing storage technologies for the primary storage of
 data. Datomic's covering indexes are stored in a shared storage service with
-multiple backend options. Crux, when used with Kafka, uses basic Kafka topics
+multiple back-end options. Crux, when used with Kafka, uses basic Kafka topics
 as the primary distributed store for content and transaction logs.
 . Datomic peers lazily read from the global index and therefore automatically
 cache their dynamic working sets. Crux does not use a global index and
@@ -266,7 +266,7 @@ the new operation. A transaction command returns a map containing the keys
 optional). Alternatively you may use a "gatekeeper" pattern to enforce the
 desired level of transaction function consistency required.
 
-Does Crux support the full Datomic/Datascript dialect of Datalog?::
+Does Crux support the full Datomic/DataScript dialect of Datalog?::
 
   No. There is no support for Datomic’s built-in functions, or for
 accessing the log and history directly. There is also no support for variable
