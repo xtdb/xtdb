@@ -264,9 +264,9 @@
   (id->buffer [this to]
     (if (hex-id? this)
       (let [^MutableDirectBuffer to (mem/limit-buffer to id-size)]
-        (do (.putByte to 0 id-value-type-id)
-            (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
-            to))
+        (.putByte to 0 id-value-type-id)
+        (mem/hex->buffer this (mem/slice-buffer to value-type-id-size hash/id-hash-size))
+        to)
       (if-let [id (or (maybe-uuid-str this)
                       (maybe-keyword-str this)
                       (maybe-url-str this))]
