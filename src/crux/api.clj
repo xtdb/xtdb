@@ -1,10 +1,46 @@
 (ns crux.api
   "Public API of Crux."
   (:refer-clojure :exclude [sync])
+  (:require [clojure.spec.alpha :as s]
+            [crux.codec :as c]            )
   (:import [crux.api Crux ICruxAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
+
+(s/def :crux.db/id (s/and (complement string?) c/valid-id?))
+(s/def ::doc (s/keys :req [:crux.db/id]))
+
+(def ^:private date? (partial instance? Date))
+
+(defmulti tx-op first)
+
+(defmethod tx-op :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
+                                         :id :crux.db/id
+                                         :doc ::doc
+                                         :start-valid-time (s/? date?)
+                                         :end-valid-time (s/? date?)))
+
+(defmethod tx-op :crux.tx/delete [_] (s/cat :op #{:crux.tx/delete}
+                                            :id :crux.db/id
+                                            :start-valid-time (s/? date?)
+                                            :end-valid-time (s/? date?)))
+
+(defmethod tx-op :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
+                                         :id :crux.db/id
+                                         :old-doc (s/nilable ::doc)
+                                         :new-doc ::doc
+                                         :at-valid-time (s/? date?)))
+
+(defmethod tx-op :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
+                                           :id :crux.db/id
+                                           :start-valid-time (s/? date?)
+                                           :end-valid-time (s/? date?)
+                                           :keep-latest? (s/? boolean?)
+                                           :keep-earliest? (s/? boolean?)))
+
+(s/def ::tx-op (s/multi-spec tx-op first))
+(s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
 (defprotocol PCruxSystem
   "Provides API access to Crux."
@@ -84,7 +120,7 @@
 
   (tx-log [system tx-log-context from-tx-id with-documents?]
     "Reads the transaction log lazily. Optionally includes
-    documents, which allow the contents under the :crux.tx/tx-ops
+    documents, which allow the contents under the :crux.api/tx-ops
     key to be piped into (submit-tx tx-ops) of another
     Crux instance.
 

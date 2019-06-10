@@ -88,7 +88,7 @@
 
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
   {:crux.tx/tx-time (Date. (.timestamp record))
-   :crux.tx/tx-ops (.value record)
+   :crux.api/tx-ops (.value record)
    :crux.tx/tx-id (.offset record)})
 
 ;;; Transacting Producer
@@ -104,7 +104,7 @@
 
   (submit-tx [this tx-ops]
     (try
-      (s/assert :crux.tx/tx-ops tx-ops)
+      (s/assert :crux.api/tx-ops tx-ops)
       (let [tx-events (tx/tx-ops->tx-events tx-ops)
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
@@ -195,9 +195,10 @@
     doc))
 
 (defn- index-tx-record [indexer ^ConsumerRecord record]
-  (let [{:crux.tx/keys [tx-time
-                        tx-ops
-                        tx-id]} (tx-record->tx-log-entry record)]
+  (let [record (tx-record->tx-log-entry record)
+        {:crux.tx/keys [tx-time
+                        tx-id]} record
+        {:crux.api/keys [tx-ops]} record]
     (db/index-tx indexer tx-ops tx-time tx-id)
     tx-ops))
 

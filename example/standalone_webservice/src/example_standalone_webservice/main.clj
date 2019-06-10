@@ -382,7 +382,7 @@
             [:thead
              [:th (str :crux.tx/tx-id)]
              [:th (str :crux.tx/tx-time)]
-             [:th (str :crux.tx/tx-ops)]]
+             [:th (str :crux.api/tx-ops)]]
             [:tbody
              (for [{:crux.tx/keys [tx-id tx-time tx-ops]} tx-log
                    :let [tx-time-str (format-date tx-time)]]

@@ -56,7 +56,7 @@
     (db/index-doc (tx/->KvIndexer kv this object-store) content-hash doc))
 
   (submit-tx [this tx-ops]
-    (s/assert :crux.tx/tx-ops tx-ops)
+    (s/assert :crux.api/tx-ops tx-ops)
     (let [transact-time (cio/next-monotonic-date)
           tx-id (.getTime transact-time)
           tx-events (tx/tx-ops->tx-events tx-ops)
@@ -81,7 +81,7 @@
     (let [i (kv/new-iterator tx-log-context)]
       (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
         (assoc (c/decode-tx-log-key-from k)
-               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
+               :crux.api/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
 
   Closeable
   (close [_]))

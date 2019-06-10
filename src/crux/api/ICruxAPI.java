@@ -141,7 +141,7 @@ public interface ICruxAPI extends Closeable {
 
     /**
      * Reads the transaction log lazily. Optionally includes
-     * documents, which allow the contents under the :crux.tx/tx-ops
+     * documents, which allow the contents under the :crux.api/tx-ops
      * key to be piped into {@link #submitTx(List txOps)} of another
      * Crux instance.
      *
