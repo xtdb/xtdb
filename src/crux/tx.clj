@@ -228,56 +228,6 @@
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 
-;; For dev/testing:
-
-(defrecord KvTxLog [kv object-store]
-  db/TxLog
-  (submit-doc [this content-hash doc]
-    (db/index-doc (->KvIndexer kv this object-store) content-hash doc))
-
-  (submit-tx [this tx-ops]
-    (s/assert ::tx-ops tx-ops)
-    (let [transact-time (cio/next-monotonic-date)
-          tx-id (.getTime transact-time)
-          tx-events (tx-ops->tx-events tx-ops)
-          indexer (->KvIndexer kv this object-store)]
-      (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
-                     (nippy/fast-freeze tx-events)]])
-      (doseq [doc (tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (c/new-id doc)) doc))
-      (db/index-tx indexer tx-events transact-time tx-id)
-      (db/store-index-meta indexer
-                           :crux.tx-log/consumer-state
-                           {:crux.kv.topic-partition/tx-log-0
-                            {:lag 0
-                             :time transact-time}})
-      (delay {:crux.tx/tx-id tx-id
-              :crux.tx/tx-time transact-time})))
-
-  (new-tx-log-context [this]
-    (kv/new-snapshot kv))
-
-  (tx-log [this tx-log-context from-tx-id]
-    (let [i (kv/new-iterator tx-log-context)]
-      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
-        (assoc (c/decode-tx-log-key-from k)
-               :crux.tx/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
-
-  Closeable
-  (close [_]))
-
-(defn create-kv-tx-log
-  [kv object-store]
-  (let [tx-log (->KvTxLog kv object-store)
-        indexer (->KvIndexer kv tx-log object-store)]
-    (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
-      (db/store-index-meta
-        indexer
-        :crux.tx-log/consumer-state
-        {:crux.kv.topic-partition/tx-log-0
-         {:lag 0 :time nil}}))
-    tx-log))
-
 ;; For StandaloneSystem.
 
 (s/def ::event-log-dir string?)

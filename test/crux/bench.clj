@@ -35,7 +35,7 @@
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
 (defn- insert-docs [ts docs]
-  @(db/submit-tx (tx/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
+  @(db/submit-tx (f/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
                  (f/maps->tx-ops docs ts)))
 
 (defn- insert-data [n batch-size ts]
