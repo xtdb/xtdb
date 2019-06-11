@@ -324,7 +324,7 @@
   dependencies explicitly as arguments (internal use)."
   (^java.io.Closeable
    [crux-system {:keys [server-port cors-access-control]
-                 :or {server-port 3000 cors-acces-control []}
+                 :or {server-port 3000 cors-access-control []}
                  :as options}]
    (s/assert ::options options)
    (let [server (j/run-jetty (-> (partial handler crux-system)
