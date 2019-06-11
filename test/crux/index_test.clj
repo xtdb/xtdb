@@ -391,11 +391,11 @@
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
                    :crux.tx/tx-time tx1-tx-time
-                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
+                   :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
                   {:crux.tx/tx-id tx2-id
                    :crux.tx/tx-time tx2-tx-time
-                   :crux.tx/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
-                                    [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
+                   :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
+                                     [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
                  log))))))
 
 (t/deftest test-can-perform-unary-join

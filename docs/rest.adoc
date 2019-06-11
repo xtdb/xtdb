@@ -237,7 +237,7 @@ curl -X GET $nodeURL/tx-log
 [source,clj]
 ----
 ({:crux.tx/tx-time #inst "2019-01-07T15:11:13.411-00:00",
-  :crux.tx/tx-ops [[
+  :crux.api/tx-ops [[
     :crux.tx/put "a15f8b81a160b4eebe5c84e9e3b65c87b9b2f18e" "c28f6d258397651106b7cb24bb0d3be234dc8bd1"
     #inst "2019-01-07T14:57:08.462-00:00"]],
   :crux.tx/tx-id 0}

@@ -9,6 +9,7 @@
             [crux.memory :as mem]
             [crux.moberg :as moberg]
             [crux.status :as status]
+            crux.api
             crux.tx.event
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
@@ -18,40 +19,6 @@
            java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(s/def :crux.db/id (s/and (complement string?) c/valid-id?))
-(s/def ::doc (s/keys :req [:crux.db/id]))
-
-(def ^:private date? (partial instance? Date))
-
-(defmulti tx-op first)
-
-(defmethod tx-op :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
-                                         :id :crux.db/id
-                                         :doc ::doc
-                                         :start-valid-time (s/? date?)
-                                         :end-valid-time (s/? date?)))
-
-(defmethod tx-op :crux.tx/delete [_] (s/cat :op #{:crux.tx/delete}
-                                            :id :crux.db/id
-                                            :start-valid-time (s/? date?)
-                                            :end-valid-time (s/? date?)))
-
-(defmethod tx-op :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
-                                         :id :crux.db/id
-                                         :old-doc (s/nilable ::doc)
-                                         :new-doc ::doc
-                                         :at-valid-time (s/? date?)))
-
-(defmethod tx-op :crux.tx/evict [_] (s/cat :op #{:crux.tx/evict}
-                                           :id :crux.db/id
-                                           :start-valid-time (s/? date?)
-                                           :end-valid-time (s/? date?)
-                                           :keep-latest? (s/? boolean?)
-                                           :keep-earliest? (s/? boolean?)))
-
-(s/def ::tx-op (s/multi-spec tx-op first))
-(s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
 (defn- in-range-pred [start end]
   #(and (or (nil? start)
@@ -240,7 +207,7 @@
     (moberg/send-message event-log-kv ::event-log content-hash doc {::sub-topic :docs}))
 
   (submit-tx [this tx-ops]
-    (s/assert ::tx-ops tx-ops)
+    (s/assert :crux.api/tx-ops tx-ops)
     (doseq [doc (tx-ops->docs tx-ops)]
       (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (tx-ops->tx-events tx-ops)
@@ -258,7 +225,7 @@
                               (take-while identity)
                               (cons m))
               :when (= :txs (get (.headers m) ::sub-topic))]
-          {:crux.tx/tx-ops (.body m)
+          {:crux.api/tx-ops (.body m)
            :crux.tx/tx-id (.message-id m)
            :crux.tx/tx-time (.message-time m)}))))
 

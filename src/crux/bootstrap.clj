@@ -100,7 +100,7 @@
     (for [tx-log-entry (db/tx-log tx-log tx-log-context from-tx-id)]
       (if with-documents?
         (update tx-log-entry
-                :crux.tx/tx-ops
+                :crux.api/tx-ops
                 #(with-open [snapshot (kv/new-snapshot kv-store)]
                    (tx/enrich-tx-ops-with-documents snapshot object-store %)))
         tx-log-entry)))

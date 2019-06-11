@@ -104,9 +104,9 @@
               ;; with random ids.
               (t/is (= {:crux.tx/tx-time tx-time
                         :crux.tx/tx-id tx-id}
-                       (dissoc (first log) :crux.tx/tx-ops)))
+                       (dissoc (first log) :crux.api/tx-ops)))
               (t/is (= 1 (count log)))
-              (t/is (= 3 (count (:crux.tx/tx-ops (first log))))))))))))
+              (t/is (= 3 (count (:crux.api/tx-ops (first log))))))))))))
 
 (t/deftest test-can-process-compacted-documents
   ;; when doing a evict a tombstone document will be written to

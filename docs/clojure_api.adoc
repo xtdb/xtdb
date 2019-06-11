@@ -129,7 +129,7 @@ toc::[]
 ----
   (tx-log [system tx-log-context from-tx-id with-documents?]
     "Reads the transaction log lazily. Optionally includes
-    documents, which allow the contents under the :crux.tx/tx-ops
+    documents, which allow the contents under the :crux.api/tx-ops
     key to be piped into (submit-tx tx-ops) of another
     Crux instance.
     tx-log-context  a context from (new-tx-log-context system)
