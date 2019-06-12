@@ -7,7 +7,7 @@
 (t/use-fixtures :each f/with-standalone-system)
 
 (t/deftest test-count-aggregation
-  (f/transact-entity-maps!
+  (f/transact!
     *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
@@ -51,7 +51,7 @@
 
 
 (t/deftest test-with-decorator
-  (f/transact-entity-maps!
+  (f/transact!
    *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}

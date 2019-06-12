@@ -1,43 +1,28 @@
 (ns crux.fixtures
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
-            [clojure.java.io :as io]
+            [crux.api :as api]
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.http-server :as srv]
-            [crux.io :as cio]
-            [crux.kafka.embedded :as ek]
-            [crux.kafka :as k]
-            [crux.kv :as kv]
-            [crux.tx :as tx]
             [crux.index :as idx]
+            [crux.io :as cio]
+            [crux.kafka :as k]
+            [crux.kafka.embedded :as ek]
+            [crux.kv :as kv]
             [crux.lru :as lru]
-            [taoensso.nippy :as nippy]
             [crux.memory :as mem]
-            [crux.api :as api])
-  (:import java.io.Closeable
+            [crux.tx :as tx]
+            [taoensso.nippy :as nippy])
+  (:import [crux.api Crux ICruxAPI]
+           java.io.Closeable
            [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
-           org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.consumer.KafkaConsumer
-           java.time.Duration
-           [crux.api Crux ICruxAPI]))
-
-(defn random-person [] {:crux.db/id (UUID/randomUUID)
-                        :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
-                        :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
-                        :sex       (rand-nth [:male :female])
-                        :age       (rand-int 100)
-                        :salary    (rand-int 100000)})
-
-(defn maps->tx-ops [maps ts]
-  (vec (for [m maps]
-         [:crux.tx/put
-          (:crux.db/id m)
-          m
-          ts])))
+           org.apache.kafka.clients.producer.KafkaProducer))
 
 (def ^:dynamic *kv*)
 (def ^:dynamic *kv-backend* "crux.kv.rocksdb.RocksKv")
@@ -257,9 +242,14 @@
   (binding [tcct/*report-completion* false]
     (f)))
 
-(defn transact-entity-maps!
+(defn maps->tx-ops [maps ts]
+  (vec (for [m maps]
+         [:crux.tx/put (:crux.db/id m) m ts])))
+
+(defn transact!
+  "Helper fn for transacting entities"
   ([api entities]
-   (transact-entity-maps! api entities (cio/next-monotonic-date)))
+   (transact! api entities (cio/next-monotonic-date)))
   ([^ICruxAPI api entities ts]
    (let [submitted-tx (api/submit-tx api (maps->tx-ops entities ts))]
      (api/db api ts (:crux.tx/tx-time submitted-tx)))
@@ -277,8 +267,12 @@
      (api/db api ts (:crux.tx/tx-time submitted-tx)))
    entities))
 
-(defn transact-people!
-  ([api people-mixins]
-   (transact-people! api people-mixins (cio/next-monotonic-date)))
-  ([api people-mixins ts]
-   (transact-entity-maps! api (->> people-mixins (map merge (repeatedly random-person))) ts)))
+(defn random-person [] {:crux.db/id (UUID/randomUUID)
+                        :name      (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
+                        :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
+                        :sex       (rand-nth [:male :female])
+                        :age       (rand-int 100)
+                        :salary    (rand-int 100000)})
+
+(defn people [people-mixins]
+  (->> people-mixins (map merge (repeatedly random-person))))
