@@ -22,7 +22,6 @@
             [crux.bootstrap :as b])
   (:import java.util.Date))
 
-
 (t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store f/with-silent-test-check)
 
 (defn load-ntriples-example [resource]
@@ -249,3 +248,187 @@
               (t/is (= 6 (count (map :content-hash picasso-history))))
               (t/testing "eviction removes docs"
                 (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history))))))))))))
+
+(t/deftest test-can-store-doc
+  (let [object-store (idx/->KvObjectStore f/*kv*)
+        tx-log (f/kv-tx-log f/*kv*)
+        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+                    :http://dbpedia.org/resource/Pablo_Picasso)
+        content-hash (c/new-id picasso)]
+    (t/is (= 48 (count picasso)))
+    (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
+
+    (db/submit-doc tx-log content-hash picasso)
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (t/is (= {content-hash picasso}
+               (db/get-objects object-store snapshot [content-hash])))
+
+      (t/testing "non existent docs are ignored"
+        (t/is (= {content-hash picasso}
+                 (db/get-objects object-store
+                                 snapshot
+                                 [content-hash
+                                  "090622a35d4b579d2fcfebf823821298711d3867"])))
+        (t/is (empty? (db/get-objects object-store snapshot [])))))))
+
+(t/deftest test-can-correct-ranges-in-the-past
+  (let [object-store (idx/->KvObjectStore f/*kv*)
+        tx-log (f/create-kv-tx-log f/*kv* object-store)
+        ivan {:crux.db/id :ivan :name "Ivan"}
+
+        v1-ivan (assoc ivan :version 1)
+        v1-valid-time #inst "2018-11-26"
+        {v1-tx-time :crux.tx/tx-time
+         v1-tx-id :crux.tx/tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v1-ivan v1-valid-time]])
+
+        v2-ivan (assoc ivan :version 2)
+        v2-valid-time #inst "2018-11-27"
+        {v2-tx-time :crux.tx/tx-time
+         v2-tx-id :crux.tx/tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v2-ivan v2-valid-time]])
+
+        v3-ivan (assoc ivan :version 3)
+        v3-valid-time #inst "2018-11-28"
+        {v3-tx-time :crux.tx/tx-time
+         v3-tx-id :crux.tx/tx-id}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-valid-time]])]
+
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (t/testing "first version of entity is visible"
+        (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time v3-tx-time)
+                              (first)
+                              :tx-id))))
+
+      (t/testing "second version of entity is visible"
+        (t/is (= v2-tx-id (-> (idx/entities-at snapshot [:ivan] v2-valid-time v3-tx-time)
+                              (first)
+                              :tx-id))))
+
+      (t/testing "third version of entity is visible"
+        (t/is (= v3-tx-id (-> (idx/entities-at snapshot [:ivan] v3-valid-time v3-tx-time)
+                              (first)
+                              :tx-id)))))
+
+    (let [corrected-ivan (assoc ivan :version 4)
+          corrected-start-valid-time #inst "2018-11-27"
+          corrected-end-valid-time #inst "2018-11-29"
+          {corrected-tx-time :crux.tx/tx-time
+           corrected-tx-id :crux.tx/tx-id}
+          @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-valid-time corrected-end-valid-time]])]
+
+      (with-open [snapshot (kv/new-snapshot f/*kv*)]
+        (t/testing "first version of entity is still there"
+          (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time corrected-tx-time)
+                                (first)
+                                :tx-id))))
+
+        (t/testing "second version of entity was corrected"
+          (t/is (= {:content-hash (c/new-id corrected-ivan)
+                    :tx-id corrected-tx-id}
+                   (-> (idx/entities-at snapshot [:ivan] v2-valid-time corrected-tx-time)
+                       (first)
+                       (select-keys [:tx-id :content-hash])))))
+
+        (t/testing "third version of entity was corrected"
+          (t/is (= {:content-hash (c/new-id corrected-ivan)
+                    :tx-id corrected-tx-id}
+                   (-> (idx/entities-at snapshot [:ivan] v3-valid-time corrected-tx-time)
+                       (first)
+                       (select-keys [:tx-id :content-hash]))))))
+
+      (let [deleted-start-valid-time #inst "2018-11-25"
+            deleted-end-valid-time #inst "2018-11-28"
+            {deleted-tx-time :crux.tx/tx-time
+             deleted-tx-id :crux.tx/tx-id}
+            @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])]
+
+        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+          (t/testing "first version of entity was deleted"
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v1-valid-time deleted-tx-time))))
+
+          (t/testing "second version of entity was deleted"
+            (t/is (empty? (idx/entities-at snapshot [:ivan] v2-valid-time deleted-tx-time))))
+
+          (t/testing "third version of entity is still there"
+            (t/is (= {:content-hash (c/new-id corrected-ivan)
+                      :tx-id corrected-tx-id}
+                     (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
+                         (first)
+                         (select-keys [:tx-id :content-hash])))))))
+
+      (t/testing "end range is exclusive"
+        (let [{deleted-tx-time :crux.tx/tx-time
+               deleted-tx-id :crux.tx/tx-id}
+              @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
+
+          (with-open [snapshot (kv/new-snapshot f/*kv*)]
+            (t/testing "third version of entity is still there"
+              (t/is (= {:content-hash (c/new-id corrected-ivan)
+                        :tx-id corrected-tx-id}
+                       (-> (idx/entities-at snapshot [:ivan] v3-valid-time deleted-tx-time)
+                           (first)
+                           (select-keys [:tx-id :content-hash])))))))))))
+
+;; TODO: This test just shows that this is an issue, if we fix the
+;; underlying issue this test should start failing. We can then change
+;; the second assertion if we want to keep it around to ensure it
+;; keeps working.
+(t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
+  (let [tx-log (f/kv-tx-log f/*kv*)
+        ivan {:crux.db/id :ivan :name "Ivan"}
+        start-valid-time #inst "2019"
+        number-of-versions 1000]
+
+    @(db/submit-tx tx-log (vec (for [n (range number-of-versions)]
+                                 [:crux.tx/put :ivan (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
+
+    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (let [baseline-time (let [start-time (System/nanoTime)
+                                valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
+                            (t/testing "last version of entity is visible at now"
+                              (t/is (= valid-time (-> (idx/entities-at snapshot [:ivan] valid-time (Date.))
+                                                      (first)
+                                                      :vt))))
+                            (- (System/nanoTime) start-time))]
+
+        (let [start-time (System/nanoTime)
+              valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
+          (t/testing "no version is visible before transactions"
+            (t/is (nil? (idx/entities-at snapshot [:ivan] valid-time valid-time)))
+            (let [corrections-time (- (System/nanoTime) start-time)]
+              ;; TODO: This can be a bit flaky. This assertion was
+              ;; mainly there to prove the opposite, but it has been
+              ;; fixed. Can be added back to sanity check when
+              ;; changing indexes.
+              #_(t/is (>= baseline-time corrections-time)))))))))
+
+(t/deftest test-can-read-kv-tx-log
+  (let [tx-log (f/kv-tx-log f/*kv*)
+        ivan {:crux.db/id :ivan :name "Ivan"}
+
+        tx1-ivan (assoc ivan :version 1)
+        tx1-valid-time #inst "2018-11-26"
+        {tx1-id :crux.tx/tx-id
+         tx1-tx-time :crux.tx/tx-time}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx1-ivan tx1-valid-time]])
+
+        tx2-ivan (assoc ivan :version 2)
+        tx2-petr {:crux.db/id :petr :name "Petr"}
+        tx2-valid-time #inst "2018-11-27"
+        {tx2-id :crux.tx/tx-id
+         tx2-tx-time :crux.tx/tx-time}
+        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-valid-time]
+                               [:crux.tx/put :petr tx2-petr tx2-valid-time]])]
+
+    (with-open [tx-log-context (db/new-tx-log-context tx-log)]
+      (let [log (db/tx-log tx-log tx-log-context nil)]
+        (t/is (not (realized? log)))
+        (t/is (= [{:crux.tx/tx-id tx1-id
+                   :crux.tx/tx-time tx1-tx-time
+                   :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx1-ivan) tx1-valid-time]]}
+                  {:crux.tx/tx-id tx2-id
+                   :crux.tx/tx-time tx2-tx-time
+                   :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
+                                     [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
+                 log))))))
