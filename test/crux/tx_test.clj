@@ -273,7 +273,7 @@
 
 (t/deftest test-can-correct-ranges-in-the-past
   (let [object-store (idx/->KvObjectStore f/*kv*)
-        tx-log (f/create-kv-tx-log f/*kv* object-store)
+        tx-log (f/kv-tx-log f/*kv* object-store)
         ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)

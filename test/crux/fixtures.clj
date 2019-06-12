@@ -88,20 +88,22 @@
   Closeable
   (close [_]))
 
-(defn create-kv-tx-log
-  [kv object-store]
-  (let [tx-log (->KvTxLog kv object-store)
-        indexer (tx/->KvIndexer kv tx-log object-store)]
-    (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
-      (db/store-index-meta
-       indexer
-       :crux.tx-log/consumer-state
-       {:crux.kv.topic-partition/tx-log-0
-        {:lag 0 :time nil}}))
-    tx-log))
+(defn kv-tx-log
+  ([kv]
+   (kv-tx-log kv (idx/->KvObjectStore kv)))
+  ([kv object-store]
+   (let [tx-log (->KvTxLog kv object-store)
+         indexer (tx/->KvIndexer kv tx-log object-store)]
+     (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
+       (db/store-index-meta
+        indexer
+        :crux.tx-log/consumer-state
+        {:crux.kv.topic-partition/tx-log-0
+         {:lag 0 :time nil}}))
+     tx-log)))
 
 (defn kv-tx-log-w-cache [kv]
-  (create-kv-tx-log kv (kv-object-store-w-cache kv)))
+  (kv-tx-log kv (kv-object-store-w-cache kv)))
 
 (defn with-kv-store [f]
   (let [db-dir (cio/create-tmpdir "kv-store")]
@@ -254,10 +256,6 @@
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
     (f)))
-
-(defn kv-tx-log
-  ([kv] (create-kv-tx-log kv (idx/->KvObjectStore kv)))
-  ([kv object-store] (create-kv-tx-log kv object-store)))
 
 (defn transact-entity-maps!
   ([api entities]
