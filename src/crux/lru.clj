@@ -75,15 +75,14 @@
   (get-single-object [this snapshot k]
     (compute-if-absent
      cache
-     (c/->id-buffer k)
+     ; todo a fix without needless key copies (see https://github.com/juxt/crux/issues/236)
+     (-> k c/new-id c/safe-id c/->id-buffer)
      #(db/get-single-object object-store snapshot %)))
+
 
   (get-objects [this snapshot ks]
     (->> (for [k ks
-               :let [v (compute-if-absent
-                        cache
-                        (c/->id-buffer k)
-                        #(get (db/get-objects object-store snapshot [%]) %))]
+               :let [v (db/get-single-object this snapshot k)]
                :when v]
            [k v])
          (into {})))
