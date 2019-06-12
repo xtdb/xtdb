@@ -8,7 +8,7 @@
 
 (t/deftest test-count-aggregation
   (f/transact-entity-maps!
-    (:kv-store *api*)
+    *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}
@@ -52,7 +52,7 @@
 
 (t/deftest test-with-decorator
   (f/transact-entity-maps!
-    (:kv-store *api*)
+   *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
      {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}

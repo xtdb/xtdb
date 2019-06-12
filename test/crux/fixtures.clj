@@ -15,12 +15,14 @@
             [crux.index :as idx]
             [crux.lru :as lru]
             [taoensso.nippy :as nippy]
-            [crux.memory :as mem])
+            [crux.memory :as mem]
+            [crux.api :as api])
   (:import java.io.Closeable
            [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.consumer.KafkaConsumer
+           java.time.Duration
            [crux.api Crux ICruxAPI]))
 
 (defn random-person [] {:crux.db/id (UUID/randomUUID)
@@ -258,29 +260,27 @@
   ([kv object-store] (create-kv-tx-log kv object-store)))
 
 (defn transact-entity-maps!
-  ([kv entities]
-   (transact-entity-maps! kv entities (cio/next-monotonic-date)))
-  ([kv entities ts]
-   (let [tx-log (kv-tx-log kv)
-         tx-ops (maps->tx-ops entities ts)]
-     @(db/submit-tx tx-log tx-ops)
-     entities)))
+  ([api entities]
+   (transact-entity-maps! api entities (cio/next-monotonic-date)))
+  ([^ICruxAPI api entities ts]
+   (let [submitted-tx (api/submit-tx api (maps->tx-ops entities ts))]
+     (api/db api ts (:crux.tx/tx-time submitted-tx)))
+   entities))
 
 (defn entities->delete-tx-ops [entities ts]
   (vec (for [e entities]
          [:crux.tx/delete e ts])))
 
 (defn delete-entities!
-  ([kv entities]
-   (delete-entities! kv entities (cio/next-monotonic-date)))
-  ([kv entities ts]
-   (let [tx-log (kv-tx-log kv)
-         tx-ops (entities->delete-tx-ops entities ts)]
-     @(db/submit-tx tx-log tx-ops)
-     entities)))
+  ([api entities]
+   (delete-entities! api entities (cio/next-monotonic-date)))
+  ([api entities ts]
+   (let [submitted-tx (api/submit-tx api (entities->delete-tx-ops entities ts))]
+     (api/db api ts (:crux.tx/tx-time submitted-tx)))
+   entities))
 
 (defn transact-people!
-  ([kv people-mixins]
-   (transact-people! kv people-mixins (cio/next-monotonic-date)))
-  ([kv people-mixins ts]
-   (transact-entity-maps! kv (->> people-mixins (map merge (repeatedly random-person))) ts)))
+  ([api people-mixins]
+   (transact-people! api people-mixins (cio/next-monotonic-date)))
+  ([api people-mixins ts]
+   (transact-entity-maps! api (->> people-mixins (map merge (repeatedly random-person))) ts)))
