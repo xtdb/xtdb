@@ -1,14 +1,10 @@
 (ns crux.bench
   (:require [criterium.core :as crit]
-            [crux.db :as db]
-            [crux.tx :as tx]
-            [crux.query :as q]
             [crux.api :as api]
-            [crux.fixtures :as f :refer [*kv*]]
-            [crux.lru :as lru]
-            [crux.bootstrap :as b]
-            [crux.index :as idx])
-  (:import [java.util Date]))
+            [crux.db :as db]
+            [crux.fixtures :as f :refer [*api*]]
+            [crux.query :as q])
+  (:import java.util.Date))
 
 (def queries {:name '{:find [e]
                       :where [[e :name "Ivan"]]}
@@ -35,8 +31,7 @@
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
 (defn- insert-docs [ts docs]
-  @(db/submit-tx (f/create-kv-tx-log *kv* (idx/->KvObjectStore *kv*))
-                 (f/maps->tx-ops docs ts)))
+  (api/submit-tx *api* (f/maps->tx-ops docs ts)))
 
 (defn- insert-data [n batch-size ts]
   (doseq [[i people] (map-indexed vector (partition-all batch-size (take n (repeatedly f/random-person))))]
@@ -45,7 +40,7 @@
 (defn- perform-query [ts query]
   (let [q (query queries)
         q-fn (fn []
-               (let [db (q/db *kv* ts)]
+               (let [db (api/db *api* ts)]
                  (if (= query :id)
                    (api/entity db :hardcoded-id)
                    (q/q db q))))]
@@ -95,7 +90,7 @@
      :lmdb f/with-lmdb
      :mem f/with-memdb)
    (fn []
-     (f/with-kv-store
+     (f/with-standalone-system
        (fn []
          (when verbose (print ":insert... ") (flush))
          (when preload
