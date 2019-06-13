@@ -362,6 +362,7 @@
             (lru/compute-if-absent
              node-cache
              (mem/as-buffer (mem/->on-heap node-hash))
+             identity
              (fn [_]
                (if (<= (.getInt v 0 ByteOrder/BIG_ENDIAN) (long branches))
                  (mem/copy-to-unpooled-buffer v)
@@ -403,6 +404,7 @@
             (lru/compute-if-absent
              matrix-cache
              (mem/as-buffer (mem/->on-heap root-hash))
+             identity
              f))))
     (new-matrix)))
 
@@ -731,6 +733,7 @@
          (lru/compute-if-absent
           node-cache
           (mem/as-buffer (mem/->on-heap (mem/slice-buffer k Integer/BYTES hash/id-hash-size)))
+          identity
           (fn [_]
             (mem/copy-to-unpooled-buffer v))))))))
 

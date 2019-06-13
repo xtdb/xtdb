@@ -30,6 +30,14 @@
       ~@forms
       (double (/ (- (System/nanoTime) start#) 1e9)))))
 
+(defmacro duration-millis
+  "Times the execution of a function,
+    discarding the output and returning the elapsed time in milliseconds"
+  ([& forms]
+   `(let [start# (System/nanoTime)]
+      ~@forms
+      (double (/ (- (System/nanoTime) start#) 1e6)))))
+
 (defn- insert-docs [ts docs]
   (api/submit-tx *api* (f/maps->tx-ops docs ts)))
 

@@ -16,7 +16,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol LRUCache
-  (compute-if-absent [this k f])
+  (compute-if-absent [this k stored-key-fn f])
+  ; key-fn sometimes used to copy the key to prevent memory leaks
   (evict [this k]))
 
 (defn new-cache [^long size]
@@ -26,23 +27,20 @@
         lock (StampedLock.)]
     (reify
       LRUCache
-      (compute-if-absent [_ k f]
-        (if (.containsKey cache k)
-          (let [stamp (.writeLock lock)]
-            (try
-              (.computeIfAbsent cache k (reify Function
-                                          (apply [_ k]
-                                            (f k))))
-              (finally
-                (.unlock lock stamp))))
-          (let [v (f k)
-                stamp (.writeLock lock)]
-            (try
-              (.computeIfAbsent cache k (reify Function
-                                          (apply [_ k]
-                                            v)))
-              (finally
-                (.unlock lock stamp))))))
+      (compute-if-absent [this k stored-key-fn f]
+        (let [v (.valAt this k ::not-found)] ; use ::not-found as values can be falsy
+          (if (= ::not-found v)
+            (let [k (stored-key-fn k)
+                  v (f k)
+                  stamp (.writeLock lock)]
+              ; lock the cache only after potentially heavy value and key calculations are done
+              (try
+                (.computeIfAbsent cache k (reify Function
+                                            (apply [_ k]
+                                              v)))
+                (finally
+                  (.unlock lock stamp))))
+            v)))
 
       (evict [_ k]
         (let [stamp (.writeLock lock)]
@@ -75,8 +73,8 @@
   (get-single-object [this snapshot k]
     (compute-if-absent
      cache
-     ; todo a fix without needless key copies (see https://github.com/juxt/crux/issues/236)
-     (-> k c/new-id c/safe-id c/->id-buffer)
+     (c/->id-buffer k)
+     mem/copy-to-unpooled-buffer
      #(db/get-single-object object-store snapshot %)))
 
 

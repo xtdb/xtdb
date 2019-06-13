@@ -242,9 +242,16 @@
   (binding [tcct/*report-completion* false]
     (f)))
 
-(defn maps->tx-ops [maps ts]
-  (vec (for [m maps]
-         [:crux.tx/put (:crux.db/id m) m ts])))
+(defn maps->tx-ops
+  ([maps]
+   (vec (for [m maps]
+          [:crux.tx/put (:crux.db/id m) m])))
+  ([maps ts]
+   (vec (for [m maps]
+          [:crux.tx/put
+           (:crux.db/id m)
+           m
+           ts]))))
 
 (defn transact!
   "Helper fn for transacting entities"
