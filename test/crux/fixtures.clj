@@ -248,10 +248,7 @@
           [:crux.tx/put (:crux.db/id m) m])))
   ([maps ts]
    (vec (for [m maps]
-          [:crux.tx/put
-           (:crux.db/id m)
-           m
-           ts]))))
+          [:crux.tx/put (:crux.db/id m) m ts]))))
 
 (defn transact!
   "Helper fn for transacting entities"
