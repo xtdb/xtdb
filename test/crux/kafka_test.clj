@@ -37,7 +37,7 @@
   (with-open [in (io/input-stream (io/resource resource))]
     (vec (for [entity (->> (rdf/ntriples-seq in)
                            (rdf/statements->maps))]
-           [:crux.tx/put (:crux.db/id entity) entity]))))
+           [:crux.tx/put entity]))))
 
 (t/deftest test-can-transact-entities
   (let [tx-topic "test-can-transact-entities-tx"
@@ -136,8 +136,8 @@
             evicted-doc-hash
             (do @(db/submit-tx
                    tx-log
-                   [[:crux.tx/put (:crux.db/id evicted-doc) evicted-doc]
-                    [:crux.tx/put (:crux.db/id non-evicted-doc) non-evicted-doc]])
+                   [[:crux.tx/put evicted-doc]
+                    [:crux.tx/put non-evicted-doc]])
 
                 (k/consume-and-index-entities consume-opts)
                 (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
@@ -149,7 +149,7 @@
               @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
                 @(db/submit-tx
                    tx-log
-                   [[:crux.tx/put (:crux.db/id after-evict-doc) after-evict-doc]]))]
+                   [[:crux.tx/put after-evict-doc]]))]
 
         (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
 

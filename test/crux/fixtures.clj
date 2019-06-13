@@ -245,10 +245,10 @@
 (defn maps->tx-ops
   ([maps]
    (vec (for [m maps]
-          [:crux.tx/put (:crux.db/id m) m])))
+          [:crux.tx/put m])))
   ([maps ts]
    (vec (for [m maps]
-          [:crux.tx/put (:crux.db/id m) m ts]))))
+          [:crux.tx/put m ts]))))
 
 (defn transact!
   "Helper fn for transacting entities"

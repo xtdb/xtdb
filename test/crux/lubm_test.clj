@@ -30,7 +30,7 @@
   (with-open [in (io/input-stream (io/resource resource))]
     (vec (for [entity (->> (rdf/ntriples-seq in)
                            (rdf/statements->maps))]
-           [:crux.tx/put (:crux.db/id entity) entity]))))
+           [:crux.tx/put entity]))))
 
 (defn with-lubm-data [f]
   (let [tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
