@@ -16,7 +16,6 @@
 (defmulti tx-op first)
 
 (defmethod tx-op :crux.tx/put [_] (s/cat :op #{:crux.tx/put}
-                                         :id :crux.db/id
                                          :doc ::doc
                                          :start-valid-time (s/? date?)
                                          :end-valid-time (s/? date?)))
@@ -27,7 +26,6 @@
                                             :end-valid-time (s/? date?)))
 
 (defmethod tx-op :crux.tx/cas [_] (s/cat :op #{:crux.tx/cas}
-                                         :id :crux.db/id
                                          :old-doc (s/nilable ::doc)
                                          :new-doc ::doc
                                          :at-valid-time (s/? date?)))
