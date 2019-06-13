@@ -4,14 +4,15 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [taoensso.nippy :as nippy])
-  (:import [java.nio.file Files FileVisitResult SimpleFileVisitor]
-           java.nio.file.attribute.FileAttribute
+  (:import [clojure.lang IPersistentMap IRecord]
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
-           [java.lang.ref ReferenceQueue PhantomReference]
-           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]
+           [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
+           [java.nio.file Files FileVisitResult SimpleFileVisitor]
+           java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
-           [clojure.lang IPersistentMap IRecord]))
+           java.time.Duration
+           [java.util Comparator Date IdentityHashMap PriorityQueue Properties]))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -61,6 +62,9 @@
   (if (re-find #"^\d+$" d)
     (Date. (Long/parseLong d))
     (instant/read-instant-date d)))
+
+(defn format-duration-millis [^Duration d]
+  (.toMillis d))
 
 (defn free-port ^long []
   (with-open [s (ServerSocket. 0)]

@@ -62,6 +62,9 @@
   (sync [this timeout]
     (.sync ^CruxNode (b/map->CruxNode this) timeout))
 
+  (sync [this transaction-time timeout]
+    (.sync ^CruxNode (b/map->CruxNode this) transaction-time timeout))
+
   backup/ISystemBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
     (kv/backup kv-store (io/file checkpoint-directory "kv-store"))

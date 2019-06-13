@@ -51,16 +51,15 @@
 
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxAPI
-  (db [_]
+  (db [this]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
       (q/db kv-store object-store tx-time tx-time options)))
 
-  (db [_ valid-time]
-    (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
-      (q/db kv-store object-store valid-time tx-time options)))
+  (db [this valid-time]
+    (let [transact-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
+      (.db this valid-time transact-time)))
 
   (db [_ valid-time transact-time]
-    (tx/await-tx-time indexer transact-time options)
     (q/db kv-store object-store valid-time transact-time options))
 
   (document [_ content-hash]
@@ -107,9 +106,12 @@
 
   (sync [_ timeout]
     (tx/await-no-consumer-lag
-      indexer
-      (cond-> options
-        timeout (assoc :crux.tx-log/await-tx-timeout (.toMillis timeout)))))
+     indexer
+     (cond-> options
+       timeout (assoc :crux.tx-log/await-tx-timeout (.toMillis timeout)))))
+
+  (sync [_ tx-time timeout]
+    (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout timeout})))
 
   backup/ISystemBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
