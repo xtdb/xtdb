@@ -46,7 +46,7 @@
                                         (update doc key str/split #"\,"))
                                       doc
                                       (filter list-columns? (keys doc)))]
-                            [:crux.tx/put doc-id (assoc doc :crux.db/id doc-id)])))))))
+                            [:crux.tx/put (assoc doc :crux.db/id doc-id)])))))))
               (log/infof "completed %s" file-path))))]
     (doseq [f futures] @f)))
 

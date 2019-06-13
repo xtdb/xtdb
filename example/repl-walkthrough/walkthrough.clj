@@ -6,18 +6,18 @@
 
 
 (def crux-options
-  {:kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage 
+  {:kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
    :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
 
 (def system (crux/start-standalone-system crux-options))
 
 
-; transaction containing a `put` operation, optionally specifying a valid time 
+; transaction containing a `put` operation, optionally specifying a valid time
 (crux/submit-tx
   system
-  [[:crux.tx/put :dbpedia.resource/Pablo-Picasso ; id used for the transaction log
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; same id inside the document
+  [[:crux.tx/put
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
@@ -27,13 +27,12 @@
 ; transaction containing a `cas` (compare-and-swap) operation
 (crux/submit-tx
   system
-  [[:crux.tx/cas 
-    :dbpedia.resource/Pablo-Picasso ; id used for the transaction log
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; old version 
+  [[:crux.tx/cas
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; old version
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; new version 
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; new version
      :name "Pablo"
      :last-name "Picasso"
      :height 1.63
@@ -77,8 +76,7 @@
 ; `put` the new version of the document again
 (crux/submit-tx
   system
-  [[:crux.tx/put 
-    :dbpedia.resource/Pablo-Picasso
+  [[:crux.tx/put
     {:crux.db/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"

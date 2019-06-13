@@ -176,13 +176,13 @@
     {:crux.index/index-version (idx/current-index-version kv)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
 
-(defmulti tx-op-format first)
+(defmulti conform-tx-op first)
 
-(defmethod tx-op-format ::put [tx-op] (let [[op doc & args] tx-op
+(defmethod conform-tx-op ::put [tx-op] (let [[op doc & args] tx-op
                                             id (:crux.db/id doc)]
                                         (into [::put id doc] args)))
 
-(defmethod tx-op-format ::cas [tx-op] (let [[op old-doc new-doc & args] tx-op
+(defmethod conform-tx-op ::cas [tx-op] (let [[op old-doc new-doc & args] tx-op
                                             new-id (:crux.db/id new-doc)
                                             old-id (:crux.db/id old-doc)]
                                         (if (or (= nil old-id) (= new-id old-id))
@@ -190,23 +190,23 @@
                                           (throw (IllegalArgumentException.
                                                   (str "CAS, document id's do not match: " old-id " " new-id))))))
 
-(defmethod tx-op-format :default [tx-op] tx-op)
+(defmethod conform-tx-op :default [tx-op] tx-op)
 
 (defn tx-ops->docs [tx-ops]
-  (let [tx-ops-w-id (into [] (for [tx-op tx-ops] (tx-op-format tx-op)))]
-    (vec (for [[op id & args] tx-ops-w-id
+  (let [conformed-tx-ops (into [] (for [tx-op tx-ops] (conform-tx-op tx-op)))]
+    (vec (for [[op id & args] conformed-tx-ops
                doc (filter map? args)]
            doc))))
 
 (defn tx-ops->tx-events [tx-ops]
-  (let [tx-ops-w-id (into [] (for [tx-op tx-ops] (tx-op-format tx-op)))
+  (let [conformed-tx-ops (into [] (for [tx-op tx-ops] (conform-tx-op tx-op)))
         tx-events (mapv (fn [[op id & args]]
                           (into [op (str (c/new-id id))]
                                 (for [arg args]
                                   (if (map? arg)
                                     (-> arg c/new-id str)
                                     arg))))
-                        tx-ops-w-id)]
+                        conformed-tx-ops)]
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 

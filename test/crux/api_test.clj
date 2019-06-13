@@ -29,9 +29,9 @@
         content-ivan {:crux.db/id :ivan :name "Ivan"}]
 
     (t/testing "put works with no id"
-      (t/is (.submitTx f/*api* [[:crux.tx/put content-ivan valid-time]])))
-
-    (Thread/sleep 1000)
+      (t/is
+       (let [submitted-tx (.submitTx f/*api* [[:crux.tx/put content-ivan valid-time]])]
+         (.db f/*api* valid-time (:crux.tx/tx-time submitted-tx)))))
 
     (t/testing "Delete works with id"
       (t/is (.submitTx f/*api* [[:crux.tx/delete :ivan]])))))

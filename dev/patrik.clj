@@ -166,13 +166,13 @@
 
   (crux.api/submit-tx
     crux
-    [[:crux.tx/put :a1
+    [[:crux.tx/put
       {:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}]
-     [:crux.tx/put :a2
+     [:crux.tx/put
       {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}]
-     [:crux.tx/put :a3
+     [:crux.tx/put
       {:crux.db/id :a3 :user/name "patrik" :user/post 3 :post/cost 5}]
-     [:crux.tx/put :a4
+     [:crux.tx/put
       {:crux.db/id :a4 :user/name "niclas" :user/post 1 :post/cost 8}]])
 
   (clojure.pprint/pprint

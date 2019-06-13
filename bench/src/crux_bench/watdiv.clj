@@ -402,7 +402,6 @@
               (crux/submit-tx
                 crux
                 [[:crux.tx/put
-                  ::watdiv-ingestion-status
                   {:crux.db/id ::watdiv-ingestion-status :done? false}]])]
           (crux/db crux tx-time tx-time) ;; block until indexed
           (crux/db
@@ -411,7 +410,6 @@
              (crux/submit-tx
                crux
                [[:crux.tx/put
-                 ::watdiv-ingestion-status
                  {:crux.db/id ::watdiv-ingestion-status
                   :watdiv/ingest-start-time time-before
                   :watdiv/kafka-ingest-time (- (.getTime kafka-ingest-done) (.getTime time-before))

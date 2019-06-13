@@ -36,7 +36,6 @@ link to it.
                 txs# (mapv
                        (fn [old-ent# ent#]
                          [:crux.tx/cas
-                          (:crux.db/id old-ent#)
                           old-ent#
                           ent#])
                        entities#
@@ -83,7 +82,7 @@ link to it.
   [entity-id new-attrs valid-time]
   (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
     (crux/submit-tx system
-      [[:crux.tx/put entity-id
+      [[:crux.tx/put
         (merge entity-prev-value new-attrs)
         valid-time]])))
 
@@ -160,7 +159,7 @@ link to it.
                           :delete :crux.tx/delete-op
                           :cas :crux.tx/cas-op
                           :evict :crux.tx/evict-op)
-   [:crux.tx/cas #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"
+   [:crux.tx/cas
     {:crux.db/id #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"
      :name "John Wayne"
      :username "jwa"}

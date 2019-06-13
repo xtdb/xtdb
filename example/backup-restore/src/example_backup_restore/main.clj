@@ -30,10 +30,10 @@
 
   (api/submit-tx
            syst
-           [[:crux.tx/put :id/jeff
+           [[:crux.tx/put
              {:crux.db/id :id/jeff
               :person/name "Jeff"}]
-            [:crux.tx/put :id/lia
+            [:crux.tx/put
              {:crux.db/id :id/lia
               :person/name "Lia"}]])
 
@@ -44,4 +44,3 @@
   (api/document
     (api/db syst #inst "2019-02-02"
             #inst "2019-04-16T12:35:05.042-00:00")))
-

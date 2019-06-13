@@ -28,7 +28,7 @@ sequence of transaction operations:
 
 [source,clj]
 ----
-[[:crux.tx/put :dbpedia.resource/Pablo-Picasso
+[[:crux.tx/put
  {:crux.db/id :dbpedia.resource/Pablo-Picasso
   :name "Pablo"
   :last-name "Picasso"}
@@ -68,15 +68,13 @@ the supplied `valid time`.
 [source,clojure]
 ----
 [:crux.tx/put
- :dbpedia.resource/Pablo-Picasso <1>
- {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <2>
- #inst "2018-05-18T09:20:27.966-00:00"] <3>
+ {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <1>
+ #inst "2018-05-18T09:20:27.966-00:00"] <2>
 ----
 
-<1> The ID of the document to be used for the transaction log.
-<2> The document itself. Note that the ID must also be included as part of the
-document (this requirement to state the ID twice may change in future).
-<3> `valid time`
+<1> The document itself. Note that the ID must be included as part of the
+document.
+<2> `valid time`
 
 Note that `valid time` is optional and defaults to transaction time,
 which is taken from the Kafka log.
@@ -93,16 +91,14 @@ newer one, if the existing document is as expected.
 [source,clojure]
 ----
 [:crux.tx/cas
- :dbpedia.resource/Pablo-Picasso <1>
+ {..} <1>
  {..} <2>
- {..} <3>
-  #inst "2018-05-18T09:21:31.846-00:00"] <4>
+  #inst "2018-05-18T09:21:31.846-00:00"] <3>
 ----
 
-<1> The ID of the document being written
-<2> Expected Document
-<3> New document
-<4> `valid time`
+<1> Expected Document
+<2> New document
+<3> `valid time`
 
 == Delete
 
