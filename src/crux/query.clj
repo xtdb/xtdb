@@ -957,6 +957,7 @@
                 attr-stats]} (lru/compute-if-absent
                               query-cache
                               [where arg-vars rule-name->rules]
+                              identity
                               (fn [_]
                                 (compile-sub-query where arg-vars rule-name->rules stats)))
         idx-id->idx (build-idx-id->idx var->joins)
