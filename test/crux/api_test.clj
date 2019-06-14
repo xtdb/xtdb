@@ -58,8 +58,7 @@
                   crux.tx/tx-id]
            :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
-      (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
-      (t/is (= tx-time (.sync f/*api* nil)))
+      (t/is (= tx-time (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)))
 
       (let [status-map (.status f/*api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
@@ -191,7 +190,7 @@
                         crux.tx/tx-id]
                  :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
             (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
-            (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
+            (t/is (= tx-time (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)))
             (t/is (= tx-time (.sync f/*api* nil))))
 
           (let [stats (.attributeStats f/*api*)]
@@ -231,10 +230,12 @@
   (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])
         version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])
         version-3-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])]
+    (.sync f/*api* (:crux.tx/tx-time version-3-submitted-tx) nil)
     (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-3-submitted-tx :ivan)))
     (let [version-2-corrected-submitted-tx (.submitTx f/*api* [[:crux.tx/put
                                                                 {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                                                                 #inst "2019-02-02"]])]
+      (.sync f/*api* (:crux.tx/tx-time version-2-corrected-submitted-tx) nil)
       (t/is (true? (.hasSubmittedTxCorrectedEntity f/*api* version-2-corrected-submitted-tx #inst "2019-02-02" :ivan)))
 
       (let [history (.history f/*api* :ivan)]

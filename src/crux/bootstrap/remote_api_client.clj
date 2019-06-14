@@ -5,6 +5,7 @@
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Duration
+           java.util.Date
            [crux.api Crux ICruxAPI ICruxDatasource]))
 
 (defn- edn-list->lazy-seq [in]
@@ -185,6 +186,7 @@
     (.hasSubmittedTxCorrectedEntity this submitted-tx tx-time eid))
 
   (hasSubmittedTxCorrectedEntity [this {:crux.tx/keys [tx-time tx-id] :as submitted-tx} valid-time eid]
+    (api-request-sync (str url "/sync?transactionTime=" (cio/format-rfc3339-date tx-time)) nil {:method :get})
     (= tx-id (:crux.tx/tx-id (.entityTx (.db this valid-time tx-time) eid))))
 
   (newTxLogContext [_]
@@ -208,6 +210,11 @@
   (sync [_ timeout]
     (api-request-sync (cond-> (str url "/sync")
                         timeout (str "?timeout=" (.toMillis timeout))) nil {:method :get}))
+
+  (sync [_ transaction-time timeout]
+    (api-request-sync (cond-> (str url "/sync")
+                        transaction-time (str "?transactionTime=" (cio/format-rfc3339-date transaction-time))
+                        timeout (str "&timeout=" (cio/format-duration-millis timeout))) nil {:method :get}))
 
   Closeable
   (close [_]))

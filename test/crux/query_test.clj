@@ -1413,12 +1413,14 @@
                             :arrival-time #inst "2019-01-11"
                             :departure-time :na}
                            #inst "2019-01-11"]])
-    (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p6
-                            :entry-pt :NY
-                            :arrival-time #inst "2019-01-12"
-                            :departure-time :na}
-                           #inst "2019-01-12"]])
+
+    (let [last-submitted-tx (api/submit-tx *api* [[:crux.tx/put
+                                                   {:crux.db/id :p6
+                                                    :entry-pt :NY
+                                                    :arrival-time #inst "2019-01-12"
+                                                    :departure-time :na}
+                                                   #inst "2019-01-12"]])]
+      (.sync f/*api* (:crux.tx/tx-time last-submitted-tx) nil))
 
     (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                [:p3 :LA #inst "2018-12-31" :na]

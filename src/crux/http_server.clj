@@ -239,9 +239,13 @@
   (let [timeout (some->> (get-in request [:query-params "timeout"])
                          (Long/parseLong)
                          (Duration/ofMillis))
-        last-modified (.sync crux-system timeout)]
-    (-> (success-response last-modified)
-        (add-last-modified last-modified))))
+        transaction-time (some->> (get-in request [:query-params "transactionTime"])
+                                  (cio/parse-rfc3339-or-millis-date))]
+    (let [last-modified (if transaction-time
+                          (.sync crux-system transaction-time timeout)
+                          (.sync crux-system timeout))]
+      (-> (success-response last-modified)
+          (add-last-modified last-modified)))))
 
 (defn- attribute-stats [^ICruxAPI crux-system]
   (success-response (.attributeStats crux-system)))

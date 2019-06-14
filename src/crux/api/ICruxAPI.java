@@ -130,6 +130,18 @@ public interface ICruxAPI extends Closeable {
     public Date sync(Duration timeout);
 
     /**
+     * Blocks until the node has indexed a transaction that is past
+     * the supplied transactionTime. Will throw a timeout. The
+     * returned date is the latest index time when this node has
+     * caught up as of this call.
+     *
+     * @param transactionTime transaction time to sync past.
+     * @param timeout max time to wait, can be null for the default.
+     * @return        the latest known transaction time.
+     */
+    public Date sync(Date transactionTime, Duration timeout);
+
+    /**
      * Returns a new transaction log context allowing for lazy reading
      * of the transaction log in a try-with-resources block using
      * {@link #txLog(Closeable txLogContext, Long fromTxId, boolean
