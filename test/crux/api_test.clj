@@ -207,6 +207,7 @@
                 {:keys [crux.tx/tx-time
                         crux.tx/tx-id]
                  :as submitted-tx} (.submitTx f/*api* [[:crux.tx/evict :ivan]])]
+            (t/is (= tx-time (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)))
 
             ;; actual removal of the document happends asyncronusly after
             ;; the transaction has been processed so waiting on the
