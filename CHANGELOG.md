@@ -5,6 +5,7 @@
 ### Changes
 
 * [#208](https://github.com/juxt/crux/issues/208): *Breaking* Remove need for specifying ID in put and cas operations
+* [#254](https://github.com/juxt/crux/issues/254): *Breaking* Move blocking `db` call to sync
 * [PR #243](https://github.com/juxt/crux/pull/243): Refactoring: Split out api spec
 
 ### Bug fixes
