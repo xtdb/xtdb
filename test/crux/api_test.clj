@@ -24,6 +24,12 @@
     (t/is (thrown-with-msg? Exception (re-pattern  (str content-hash "|HTTP status 400"))
                             (.submitTx f/*api* [[:crux.tx/put content-hash valid-time]])))))
 
+(t/deftest test-can-write-entity-using-map-as-id
+  (let [doc {:crux.db/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
+        submitted-tx (.submitTx f/*api* [[:crux.tx/put doc]])]
+    (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)
+    (t/is (.entity (.db f/*api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
+
 (t/deftest test-single-id
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}]
