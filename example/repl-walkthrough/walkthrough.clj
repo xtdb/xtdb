@@ -1,3 +1,6 @@
+; load a repl with the latest Crux dependency, e.g. using clj:
+; $ clj -Sdeps '{:deps {juxt/crux {:mvn/version "19.06-1.1.0-alpha"}}}'
+
 (ns walkthrough.crux-standalone
   (:require [crux.api :as crux])
   (:import (crux.api ICruxAPI)))
@@ -7,6 +10,7 @@
 
 (def crux-options
   {:kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
+   :event-log-dir     "data/event-log-dir-1" ; :event-log-dir is ignored when using MemKv
    :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
 
