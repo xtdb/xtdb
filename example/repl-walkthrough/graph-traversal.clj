@@ -14,12 +14,12 @@
 ;; 2) ability to transact edges before nodes
 ;; 3) keyword IDs
 
-;; nodes width edges
+;; nodes with edges
 (def nodes
   (map
     #(assoc % :crux.db/id ((first (keys %)) %))
     [{:user/name :User1
-      :hasRoleInGroups #{:U1G3R34 :U1G2R23 :U1G1R12 :U2G3R56 :U2G1R25}}
+      :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
      {:user/name :User2
       :hasRoleInGroups #{:U2G2R34 :U2G3R56 :U2G1R25}}
      {:role/name :Role1}
@@ -100,7 +100,7 @@
                :rules rules
                :args '[{?user :User1}]}))
 
-;; find common groups based on shared roles, counting shared roles using the aggregation decorator (which simply wraps the default `crux/q`) and :aggr instead of :find
+;; find common groups based on shared roles and count the number of shared roles using the aggregation decorator, which wraps the default `crux/q` and looks for :aggr instead of :find
 (aggr/q db {:aggr '{:partition-by [?groupName]
                     :select
                     {?roleCount [0 (inc acc) ?role]}}
@@ -109,3 +109,5 @@
                      [?group :group/name ?groupName]]
             :rules rules
             :args '[{?user1 :User1 ?user2 :User2}]})
+
+;; try adding additional :hasRoleInGroups values (e.g. `#{:U1G1R12 :U2G3R56 :U2G1R25}`) to :User1 by submitting a new version of the document
