@@ -1,9 +1,13 @@
-(ns crux.stocks-test
+(ns ivan
   (:require [clojure.test :as t]
             [crux.bench :as bench]
             [crux.fixtures :as f]
             [crux.api :as api]
             [crux.codec :as c]))
+
+;;;;; This is not a benchmark
+;;;;; Rather a sanity check tool for internal changes
+;;;;; Use profiles +test
 
 (def currencies
   (mapv #(assoc % :crux.db/id (:currency/id %))
@@ -39,7 +43,6 @@
 
 (def stocks-count 10000)
 (def query-size 1000)
-
 
 (defn with-stocks-data [f]
   (api/submit-tx f/*api* (f/maps->tx-ops currencies))
@@ -113,9 +116,6 @@
 (defn not-really-benchmarking [db n]
   (for [_ (range n)]
     (bench/duration-millis (api/q db query-100000))))
-
-; (not-really-benchmarking (crux.api ))
-
 
 (t/deftest test-stocks-query
   (println "running a stocks query with join to currencies")
