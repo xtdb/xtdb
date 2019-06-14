@@ -7,6 +7,7 @@
                  [org.clojure/tools.logging "0.4.1"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
+                 [com.taoensso/encore "2.114.0"]
                  [org.agrona/agrona "1.0.0"]
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.2" :scope "provided"]
@@ -21,6 +22,7 @@
                  [org.lmdbjava/lmdbjava "0.6.3" :exclusions [com.github.jnr/jffi] :scope "provided"]
                  [ring/ring-core "1.7.1" :scope "provided"]
                  [ring/ring-jetty-adapter "1.7.1" :scope "provided"]
+                 [ring/ring-codec "1.1.2" :scope "provided"]
                  [ring-cors "0.1.13" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.5.1" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.5.1" :scope "provided"]]
