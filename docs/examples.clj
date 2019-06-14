@@ -28,8 +28,8 @@
 ;; tag::submit-tx[]
 (crux/submit-tx
  system
- [[:crux.tx/put :dbpedia.resource/Pablo-Picasso ; id for Kafka
-   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id for Crux
+ [[:crux.tx/put
+   {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
     :name "Pablo"
     :last-name "Picasso"}
    #inst "2018-05-18T09:20:27.966-00:00"]]) ; valid time

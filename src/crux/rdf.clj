@@ -219,7 +219,7 @@
                  (when (zero? (long (mod n *ntriples-log-size*)))
                    (log/debug "submitted" n))
                  (let [tx-ops (vec (for [entity entities]
-                                     [:crux.tx/put (:crux.db/id entity) entity]))]
+                                     [:crux.tx/put entity]))]
                    (db/submit-tx tx-log tx-ops))
                  (+ n (count entities)))
                0)))

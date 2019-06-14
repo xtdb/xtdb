@@ -46,7 +46,7 @@
         valid-time #inst "2018-05-21"
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:crux.tx/keys [tx-time tx-id]}
-        @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso picasso valid-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put picasso valid-time]])
         expected-entities [(c/map->EntityTx {:eid          eid
                                              :content-hash content-hash
                                              :vt           valid-time
@@ -85,7 +85,7 @@
             new-valid-time #inst "2018-05-20"
             {new-tx-time :crux.tx/tx-time
              new-tx-id   :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid          eid
@@ -108,7 +108,7 @@
             new-valid-time #inst "2018-05-22"
             {new-tx-time :crux.tx/tx-time
              new-tx-id   :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
+            @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
 
         (with-open [snapshot (kv/new-snapshot f/*kv*)]
           (t/is (= [(c/map->EntityTx {:eid          eid
@@ -137,7 +137,7 @@
                 new-valid-time #inst "2018-05-22"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
-                @(db/submit-tx tx-log [[:crux.tx/put :http://dbpedia.org/resource/Pablo_Picasso new-picasso new-valid-time]])]
+                @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
 
             (with-open [snapshot (kv/new-snapshot f/*kv*)]
               (t/is (= [(c/map->EntityTx {:eid          eid
@@ -159,7 +159,7 @@
             (t/testing "compare and set does nothing with wrong content hash"
               (let [old-picasso (assoc picasso :baz :boz)
                     {cas-failure-tx-time :crux.tx/tx-time}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
                 (t/is (= cas-failure-tx-time (tx/await-tx-time indexer cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid          eid
@@ -175,7 +175,7 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo_Picasso old-picasso new-picasso new-valid-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid          eid
@@ -191,7 +191,7 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas :http://dbpedia.org/resource/Pablo2 nil new-picasso new-valid-time]])]
+                    @(db/submit-tx tx-log [[:crux.tx/cas nil new-picasso new-valid-time]])]
                 (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
                 (with-open [snapshot (kv/new-snapshot f/*kv*)]
                   (t/is (= [(c/map->EntityTx {:eid          new-eid
@@ -280,19 +280,19 @@
         v1-valid-time #inst "2018-11-26"
         {v1-tx-time :crux.tx/tx-time
          v1-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v1-ivan v1-valid-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put v1-ivan v1-valid-time]])
 
         v2-ivan (assoc ivan :version 2)
         v2-valid-time #inst "2018-11-27"
         {v2-tx-time :crux.tx/tx-time
          v2-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v2-ivan v2-valid-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put v2-ivan v2-valid-time]])
 
         v3-ivan (assoc ivan :version 3)
         v3-valid-time #inst "2018-11-28"
         {v3-tx-time :crux.tx/tx-time
          v3-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan v3-ivan v3-valid-time]])]
+        @(db/submit-tx tx-log [[:crux.tx/put v3-ivan v3-valid-time]])]
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (t/testing "first version of entity is visible"
@@ -315,7 +315,7 @@
           corrected-end-valid-time #inst "2018-11-29"
           {corrected-tx-time :crux.tx/tx-time
            corrected-tx-id :crux.tx/tx-id}
-          @(db/submit-tx tx-log [[:crux.tx/put :ivan corrected-ivan corrected-start-valid-time corrected-end-valid-time]])]
+          @(db/submit-tx tx-log [[:crux.tx/put corrected-ivan corrected-start-valid-time corrected-end-valid-time]])]
 
       (with-open [snapshot (kv/new-snapshot f/*kv*)]
         (t/testing "first version of entity is still there"
@@ -381,7 +381,7 @@
         number-of-versions 1000]
 
     @(db/submit-tx tx-log (vec (for [n (range number-of-versions)]
-                                 [:crux.tx/put :ivan (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
+                                 [:crux.tx/put (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
 
     (with-open [snapshot (kv/new-snapshot f/*kv*)]
       (let [baseline-time (let [start-time (System/nanoTime)
@@ -411,15 +411,15 @@
         tx1-valid-time #inst "2018-11-26"
         {tx1-id :crux.tx/tx-id
          tx1-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx1-ivan tx1-valid-time]])
+        @(db/submit-tx tx-log [[:crux.tx/put tx1-ivan tx1-valid-time]])
 
         tx2-ivan (assoc ivan :version 2)
         tx2-petr {:crux.db/id :petr :name "Petr"}
         tx2-valid-time #inst "2018-11-27"
         {tx2-id :crux.tx/tx-id
          tx2-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put :ivan tx2-ivan tx2-valid-time]
-                               [:crux.tx/put :petr tx2-petr tx2-valid-time]])]
+        @(db/submit-tx tx-log [[:crux.tx/put tx2-ivan tx2-valid-time]
+                               [:crux.tx/put tx2-petr tx2-valid-time]])]
 
     (with-open [tx-log-context (db/new-tx-log-context tx-log)]
       (let [log (db/tx-log tx-log tx-log-context nil)]

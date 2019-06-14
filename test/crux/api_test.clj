@@ -22,7 +22,19 @@
         content-ivan {:crux.db/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
     (t/is (thrown-with-msg? Exception (re-pattern  (str content-hash "|HTTP status 400"))
-                            (.submitTx f/*api* [[:crux.tx/put :ivan content-hash valid-time]])))))
+                            (.submitTx f/*api* [[:crux.tx/put content-hash valid-time]])))))
+
+(t/deftest test-single-id
+  (let [valid-time (Date.)
+        content-ivan {:crux.db/id :ivan :name "Ivan"}]
+
+    (t/testing "put works with no id"
+      (t/is
+       (let [submitted-tx (.submitTx f/*api* [[:crux.tx/put content-ivan valid-time]])]
+         (.db f/*api* valid-time (:crux.tx/tx-time submitted-tx)))))
+
+    (t/testing "Delete works with id"
+      (t/is (.submitTx f/*api* [[:crux.tx/delete :ivan]])))))
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
@@ -44,7 +56,7 @@
     (let [valid-time (Date.)
           {:keys [crux.tx/tx-time
                   crux.tx/tx-id]
-           :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+           :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
       (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
       (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
       (t/is (= tx-time (.sync f/*api* nil)))
@@ -177,7 +189,7 @@
           (let [valid-time (Date.)
                 {:keys [crux.tx/tx-time
                         crux.tx/tx-id]
-                 :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
+                 :as submitted-tx} (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"} valid-time]])]
             (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* submitted-tx :ivan)))
             (t/is (= tx-time (.sync f/*api* (Duration/ofMillis 1000))))
             (t/is (= tx-time (.sync f/*api* nil))))
@@ -202,10 +214,10 @@
               (t/is (= 0 (:name stats))))))))))
 
 (t/deftest test-document-bug-123
-  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 1}]])]
+  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]
     (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-1-submitted-tx :ivan))))
 
-  (let [version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 2}]])]
+  (let [version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2}]])]
     (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-2-submitted-tx :ivan))))
 
   (let [history (.history f/*api* :ivan)]
@@ -216,12 +228,11 @@
                (.document f/*api* content-hash))))))
 
 (t/deftest test-db-history-api
-  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])
-        version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])
-        version-3-submitted-tx (.submitTx f/*api* [[:crux.tx/put :ivan {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])]
+  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])
+        version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])
+        version-3-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])]
     (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-3-submitted-tx :ivan)))
     (let [version-2-corrected-submitted-tx (.submitTx f/*api* [[:crux.tx/put
-                                                                :ivan
                                                                 {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
                                                                 #inst "2019-02-02"]])]
       (t/is (true? (.hasSubmittedTxCorrectedEntity f/*api* version-2-corrected-submitted-tx #inst "2019-02-02" :ivan)))

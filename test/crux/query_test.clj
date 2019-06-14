@@ -1206,8 +1206,8 @@
   (t/testing "can create new user"
     (let [{:crux.tx/keys [tx-time
                           tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
-                                                         :name "Ivan 1st"}]])]
+          (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
+                                                   :name "Ivan 1st"}]])]
 
       (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
       (t/is (false? (api/submitted-tx-updated-entity? *api* submitted-tx :petr)))
@@ -1224,8 +1224,8 @@
   (t/testing "cannot create existing user"
     (let [{:crux.tx/keys [tx-time
                           tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/cas :ivan nil {:crux.db/id :ivan
-                                                         :name "Ivan 2nd"}]])]
+          (api/submit-tx *api* [[:crux.tx/cas nil {:crux.db/id :ivan
+                                                   :name "Ivan 2nd"}]])]
 
       (t/is (false? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
 
@@ -1237,7 +1237,7 @@
 
   (t/testing "can update existing user"
     (let [{:crux.tx/keys [tx-time] :as submitted-update-tx}
-          (api/submit-tx *api* [[:crux.tx/cas :ivan
+          (api/submit-tx *api* [[:crux.tx/cas
                                  {:crux.db/id :ivan
                                   :name "Ivan 1st"}
                                  {:crux.db/id :ivan
@@ -1250,12 +1250,12 @@
 
       (t/testing "last CAS command in tx wins"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/cas :ivan
+              (api/submit-tx *api* [[:crux.tx/cas
                                      {:crux.db/id :ivan
                                       :name "Ivan 2nd"}
                                      {:crux.db/id :ivan
                                       :name "Ivan 3rd"}]
-                                    [:crux.tx/cas :ivan
+                                    [:crux.tx/cas
                                      {:crux.db/id :ivan
                                       :name "Ivan 2nd"}
                                      {:crux.db/id :ivan
@@ -1268,7 +1268,7 @@
 
       (t/testing "normal put after CAS works"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/put :ivan
+              (api/submit-tx *api* [[:crux.tx/put
                                      {:crux.db/id :ivan
                                       :name "Ivan 5th"}]])]
 
@@ -1305,13 +1305,13 @@
 
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   ;; Day 0, represented as #inst "2018-12-31"
-  (api/submit-tx *api* [[:crux.tx/put :p2
+  (api/submit-tx *api* [[:crux.tx/put
                          {:crux.db/id :p2
                           :entry-pt :SFO
                           :arrival-time #inst "2018-12-31"
                           :departure-time :na}
                          #inst "2018-12-31"]
-                        [:crux.tx/put :p3
+                        [:crux.tx/put
                          {:crux.db/id :p3
                           :entry-pt :LA
                           :arrival-time #inst "2018-12-31"
@@ -1322,46 +1322,46 @@
   ;; Day 1, nothing happens.
   (api/submit-tx *api* [])
   ;; Day 2
-  (api/submit-tx *api* [[:crux.tx/put :p4
+  (api/submit-tx *api* [[:crux.tx/put
                          {:crux.db/id :p4
                           :entry-pt :NY
                           :arrival-time #inst "2019-01-02"
                           :departure-time :na}
                          #inst "2019-01-02"]])
   ;; Day 3
-  (let [third-day-submitted-tx (api/submit-tx *api* [[:crux.tx/put :p4
+  (let [third-day-submitted-tx (api/submit-tx *api* [[:crux.tx/put
                                                       {:crux.db/id :p4
                                                        :entry-pt :NY
                                                        :arrival-time #inst "2019-01-02"
                                                        :departure-time #inst "2019-01-03"}
                                                       #inst "2019-01-03"]])]
     ;; Day 4, correction, adding missing trip on new arrival.
-    (api/submit-tx *api* [[:crux.tx/put :p1
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2018-12-31"]
-                          [:crux.tx/put :p1
+                          [:crux.tx/put
                            {:crux.db/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-03"}
                            #inst "2019-01-03"]
-                          [:crux.tx/put :p1
+                          [:crux.tx/put
                            {:crux.db/id :p1
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-04"
                             :departure-time :na}
                            #inst "2019-01-04"]
-                          [:crux.tx/put :p3
+                          [:crux.tx/put
                            {:crux.db/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-04"}
                            #inst "2019-01-04"]])
     ;; Day 5
-    (api/submit-tx *api* [[:crux.tx/put :p2
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p2
                             :entry-pt :SFO
                             :arrival-time #inst "2018-12-31"
@@ -1371,49 +1371,49 @@
     (api/submit-tx *api* [])
     ;; Day 7-12, correction of deletion/departure on day 4. Shows
     ;; how valid time cannot be the same as arrival time.
-    (api/submit-tx *api* [[:crux.tx/put :p3
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2019-01-04"]
-                          [:crux.tx/put :p3
+                          [:crux.tx/put
                            {:crux.db/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-07"}
                            #inst "2019-01-07"]])
-    (api/submit-tx *api* [[:crux.tx/put :p3
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]
-                          [:crux.tx/put :p4
+                          [:crux.tx/put
                            {:crux.db/id :p4
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]])
-    (api/submit-tx *api* [[:crux.tx/put :p3
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time #inst "2019-01-08"}
                            #inst "2019-01-09"]])
-    (api/submit-tx *api* [[:crux.tx/put :p5
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p5
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-10"
                             :departure-time :na}
                            #inst "2019-01-10"]])
-    (api/submit-tx *api* [[:crux.tx/put :p7
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p7
                             :entry-pt :NY
                             :arrival-time #inst "2019-01-11"
                             :departure-time :na}
                            #inst "2019-01-11"]])
-    (api/submit-tx *api* [[:crux.tx/put :p6
+    (api/submit-tx *api* [[:crux.tx/put
                            {:crux.db/id :p6
                             :entry-pt :NY
                             :arrival-time #inst "2019-01-12"

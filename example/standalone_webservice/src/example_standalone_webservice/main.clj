@@ -575,7 +575,6 @@
           (api/submit-tx
            crux
            [[:crux.tx/put
-             id
              {:crux.db/id id
               :message-post/created created
               :message-post/name name
@@ -614,7 +613,6 @@
           (api/submit-tx
            crux
            [[:crux.tx/put
-             id
              {:crux.db/id id
               :message-post/created (instant/read-instant-date created)
               :message-post/edited now

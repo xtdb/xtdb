@@ -32,7 +32,7 @@
 
 ; how they work
 (comment
-  (api/submit-tx syst [:crux.tx/put :ids/ivan {:crux.db/id :ids/ivan :name "ivan"}])
+  (api/submit-tx syst [:crux.tx/put {:crux.db/id :ids/ivan :name "ivan"}])
 
   ; [roughly speaking] for queries by attr name and value
   ; in attribute+value+entity+content-hash-index-id

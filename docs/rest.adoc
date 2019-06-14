@@ -238,7 +238,7 @@ curl -X GET $nodeURL/tx-log
 ----
 ({:crux.tx/tx-time #inst "2019-01-07T15:11:13.411-00:00",
   :crux.api/tx-ops [[
-    :crux.tx/put "a15f8b81a160b4eebe5c84e9e3b65c87b9b2f18e" "c28f6d258397651106b7cb24bb0d3be234dc8bd1"
+    :crux.tx/put "c28f6d258397651106b7cb24bb0d3be234dc8bd1"
     #inst "2019-01-07T14:57:08.462-00:00"]],
   :crux.tx/tx-id 0}
 
@@ -255,8 +255,8 @@ Takes a vector of transactions (any combination of `:put`, `:delete`, `:cas` and
 ----
 curl -X POST \
      -H "Content-Type: application/edn" \
-     -d '[[:crux.tx/put :ivan {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
-          [:crux.tx/put :boris {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
+     -d '[[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
+          [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
           [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]' \
      $nodeURL/tx-log
 ----

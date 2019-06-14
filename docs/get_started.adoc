@@ -39,9 +39,6 @@ experiment with the <<rest.adoc#,REST API>>.
 ----
 include::./examples.clj[tags=submit-tx]
 ----
-Note that the ID for the Kafka transaction and the ID within the Crux document
-must be the same. Restating the ID within the Crux document is currently necessary
-although this may change in the future, as the standard API evolves.
 
 == Querying
 
