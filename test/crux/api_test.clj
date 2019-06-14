@@ -227,73 +227,67 @@
                (.document f/*api* content-hash))))))
 
 (t/deftest test-db-history-api
-  (let [version-1-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])
-        version-2-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])
-        version-3-submitted-tx (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])]
-    (.sync f/*api* (:crux.tx/tx-time version-3-submitted-tx) nil)
-    (t/is (true? (.hasSubmittedTxUpdatedEntity f/*api* version-3-submitted-tx :ivan)))
-    (let [version-2-corrected-submitted-tx (.submitTx f/*api* [[:crux.tx/put
-                                                                {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                                                                #inst "2019-02-02"]])]
-      (.sync f/*api* (:crux.tx/tx-time version-2-corrected-submitted-tx) nil)
-      (t/is (true? (.hasSubmittedTxCorrectedEntity f/*api* version-2-corrected-submitted-tx #inst "2019-02-02" :ivan)))
+  (let [version-1-submitted-tx-time (.sync f/*api* (:crux.tx/tx-time (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])) nil)
+        version-2-submitted-tx-time (.sync f/*api* (:crux.tx/tx-time (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])) nil)
+        version-3-submitted-tx-time (.sync f/*api* (:crux.tx/tx-time (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 3} #inst "2019-02-03"]])) nil)
+        version-2-corrected-submitted-tx-time (.sync f/*api* (:crux.tx/tx-time (.submitTx f/*api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true} #inst "2019-02-02"]])) nil)]
 
-      (let [history (.history f/*api* :ivan)]
-        (t/is (= 4 (count history))))
+    (let [history (.history f/*api* :ivan)]
+      (t/is (= 4 (count history))))
 
-      (let [db (.db f/*api* #inst "2019-02-03")]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
-                   (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
-                    {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                    {:crux.db/id :ivan :name "Ivan" :version 1}]
-                   (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-02-03")]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}]
+                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
+                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                  {:crux.db/id :ivan :name "Ivan" :version 1}]
+                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-02-02")]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                    {:crux.db/id :ivan :name "Ivan" :version 3}]
-                   (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                    {:crux.db/id :ivan :name "Ivan" :version 1}]
-                   (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-02-02")]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                  {:crux.db/id :ivan :name "Ivan" :version 3}]
+                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                  {:crux.db/id :ivan :name "Ivan" :version 1}]
+                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-01-31")]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
-                    {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                    {:crux.db/id :ivan :name "Ivan" :version 3}]
-                   (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-01-31")]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 1}
+                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                  {:crux.db/id :ivan :name "Ivan" :version 3}]
+                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-02-04")]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
-                    {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
-                    {:crux.db/id :ivan :name "Ivan" :version 1}]
-                   (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-02-04")]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 3}
+                  {:crux.db/id :ivan :name "Ivan" :version 2 :corrected true}
+                  {:crux.db/id :ivan :name "Ivan" :version 1}]
+                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-02-04" #inst "2019-01-31")]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-02-04" #inst "2019-01-31")]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (empty? (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-02-02" (:crux.tx/tx-time version-2-submitted-tx))]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
-                   (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
-                    {:crux.db/id :ivan :name "Ivan" :version 1}]
-                   (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
+    (let [db (.db f/*api* #inst "2019-02-02" version-2-submitted-tx-time)]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}]
+                 (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
+                  {:crux.db/id :ivan :name "Ivan" :version 1}]
+                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))
 
-      (let [db (.db f/*api* #inst "2019-02-03" (:crux.tx/tx-time version-2-submitted-tx))]
-        (with-open [snapshot (.newSnapshot db)]
-          (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
-          (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
-                    {:crux.db/id :ivan :name "Ivan" :version 1}]
-                   (map :crux.db/doc (.historyDescending db snapshot :ivan)))))))))
+    (let [db (.db f/*api* #inst "2019-02-03" version-2-submitted-tx-time)]
+      (with-open [snapshot (.newSnapshot db)]
+        (t/is (empty? (map :crux.db/doc (.historyAscending db snapshot :ivan))))
+        (t/is (= [{:crux.db/id :ivan :name "Ivan" :version 2}
+                  {:crux.db/id :ivan :name "Ivan" :version 1}]
+                 (map :crux.db/doc (.historyDescending db snapshot :ivan))))))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
