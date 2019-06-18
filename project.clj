@@ -80,7 +80,8 @@
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
-                  "-Werror"]
+                  "-Werror"
+                  "-proc:none"]
   :aot [crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
