@@ -16,11 +16,10 @@
 
 ;; nodes with edges
 (def nodes
-  (map
-    #(assoc % :crux.db/id ((first (keys %)) %))
-    [{:user/name :User1
-      :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
-     {:user/name :User2
+  (for
+    [n [{:user/name :User1
+         :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
+        {:user/name :User2
       :hasRoleInGroups #{:U2G2R34 :U2G3R56 :U2G1R25}}
      {:role/name :Role1}
      {:role/name :Role2}
@@ -48,8 +47,17 @@
       :hasRoles #{:Role2 :Role5}}
      {:roleInGroup/name :U1G1R12
       :hasGroups #{:Group1}
-      :hasRoles #{:Role1 :Role2}}]))
+      :hasRoles #{:Role1 :Role2}}]]
+      (assoc n :crux.db/id (get n (some
+                                   #{:user/name
+                                     :group/name
+                                     :role/name
+                                     :roleInGroup/name}
+                                   (keys n))))))
 
+(crux/submit-tx
+  system
+  (mapv (fn [n] [:crux.tx/put n]) nodes))
 ; this standalone configuration is the easiest way to try Crux, no Kafka needed
 (def crux-options
   {:kv-backend "crux.kv.memdb.MemKv" ; in-memory, see docs for LMDB/RocksDB storage
@@ -61,7 +69,7 @@
 
 (crux/submit-tx
   system
-  (vec (map #(identity [:crux.tx/put %]) nodes)))
+  (mapv (fn [n] [:crux.tx/put n]) nodes))
 
 (def db (crux/db system))
 
