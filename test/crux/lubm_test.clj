@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
+            [crux.fixtures.kafka :as fk]
             [crux.api :as api]))
 
 ;; See:
@@ -47,8 +48,8 @@
 ;; tests in order, but this isn't compatible with fixtures or running
 ;; individual tests.
 (t/use-fixtures :once
-                f/with-embedded-kafka-cluster
-                f/with-kafka-client
+                fk/with-embedded-kafka-cluster
+                fk/with-kafka-client
                 f/with-cluster-node
                 with-lubm-data)
 

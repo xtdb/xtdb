@@ -3,6 +3,7 @@
             [crux.bootstrap.standalone]
             [crux.codec :as c]
             [crux.fixtures :as f]
+            [crux.fixtures.kafka :as fk]
             [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
            java.util.Date
@@ -12,7 +13,7 @@
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster)
+(t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each f/with-each-api-implementation)
 
 (declare execute-sparql)

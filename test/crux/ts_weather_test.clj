@@ -1,14 +1,15 @@
 (ns crux.ts-weather-test
-  (:require [clojure.test :as t]
-            [clojure.instant :as inst]
+  (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.io :as cio]
+            [clojure.test :as t]
+            [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.api :as api])
+            [crux.fixtures.kafka :as fk]
+            [crux.io :as cio])
   (:import java.math.RoundingMode
-           java.util.Date
-           java.time.temporal.ChronoUnit))
+           java.time.temporal.ChronoUnit
+           java.util.Date))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-weather
 ;; Requires https://timescaledata.blob.core.windows.net/datasets/weather_small.tar.gz
@@ -80,8 +81,8 @@
     (f)))
 
 (t/use-fixtures :once
-                f/with-embedded-kafka-cluster
-                f/with-kafka-client
+                fk/with-embedded-kafka-cluster
+                fk/with-kafka-client
                 f/with-cluster-node
                 with-ts-weather-data)
 

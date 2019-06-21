@@ -1,17 +1,16 @@
 (ns crux.fixtures
-  (:require [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as api]
             [crux.bootstrap :as b]
-            [crux.fixtures.kv :refer [*kv* *kv-backend*]]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.fixtures.kafka :refer [*kafka-bootstrap-servers*]]
+            [crux.fixtures.kv :refer [*kv* *kv-backend*]]
             [crux.http-server :as srv]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
             [crux.kv :as kv]
             [crux.lru :as lru]
@@ -20,10 +19,7 @@
             [taoensso.nippy :as nippy])
   (:import [crux.api Crux ICruxAPI]
            java.io.Closeable
-           [java.util Properties UUID]
-           org.apache.kafka.clients.admin.AdminClient
-           org.apache.kafka.clients.consumer.KafkaConsumer
-           org.apache.kafka.clients.producer.KafkaProducer))
+           java.util.UUID))
 
 (defn kv-object-store-w-cache [kv]
   (lru/->CachedObjectStore
@@ -82,56 +78,6 @@
 
 (defn kv-tx-log-w-cache [kv]
   (kv-tx-log kv (kv-object-store-w-cache kv)))
-
-(def ^:dynamic *kafka-bootstrap-servers*)
-
-(defn write-kafka-meta-properties [log-dir broker-id]
-  (let [meta-properties (io/file log-dir "meta.properties")]
-    (when-not (.exists meta-properties)
-      (io/make-parents meta-properties)
-      (with-open [out (io/output-stream meta-properties)]
-        (doto (Properties.)
-          (.setProperty "version" "0")
-          (.setProperty "broker.id" (str broker-id))
-          (.store out ""))))))
-
-(def ^:dynamic ^AdminClient *admin-client*)
-
-(defn with-embedded-kafka-cluster [f]
-  (let [zookeeper-data-dir (cio/create-tmpdir "zookeeper")
-        zookeeper-port (cio/free-port)
-        kafka-log-dir (doto (cio/create-tmpdir "kafka-log")
-                        (write-kafka-meta-properties ek/*broker-id*))
-        kafka-port (cio/free-port)]
-    (try
-      (with-open [embedded-kafka (ek/start-embedded-kafka
-                                  #:crux.kafka.embedded{:zookeeper-data-dir (str zookeeper-data-dir)
-                                                        :zookeeper-port zookeeper-port
-                                                        :kafka-log-dir (str kafka-log-dir)
-                                                        :kafka-port kafka-port})
-                  admin-client (k/create-admin-client
-                                {"bootstrap.servers" (get-in embedded-kafka [:options :bootstrap-servers])})]
-        (binding [*admin-client* admin-client
-                  *kafka-bootstrap-servers* (get-in embedded-kafka [:options :bootstrap-servers])]
-          (f)))
-      (finally
-        (cio/delete-dir kafka-log-dir)
-        (cio/delete-dir zookeeper-data-dir)))))
-
-(def ^:dynamic ^KafkaProducer *producer*)
-(def ^:dynamic ^KafkaConsumer *consumer*)
-
-(def ^:dynamic *consumer-options* {})
-
-(defn with-kafka-client [f & {:keys [consumer-options]}]
-  (with-open [producer (k/create-producer {"bootstrap.servers" *kafka-bootstrap-servers*})
-              consumer (k/create-consumer
-                         (merge {"bootstrap.servers" *kafka-bootstrap-servers*
-                                 "group.id" (str (UUID/randomUUID))}
-                                *consumer-options*))]
-    (binding [*producer* producer
-              *consumer* consumer]
-      (f))))
 
 (def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxAPI *api*)

@@ -1,26 +1,25 @@
 (ns crux.watdiv-test
-  (:require [clojure.test :as t]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
             [clojure.string :as str]
+            [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [crux.api :as api]
+            [crux.fixtures :as f]
+            [crux.fixtures.kafka :as fk]
             [crux.index :as idx]
             [crux.io :as cio]
-            [crux.kv :as kv]
             [crux.rdf :as rdf]
-            [crux.query :as q]
             [crux.sparql :as sparql]
-            [crux.fixtures :as f]
-            [datomic.api :as d]
-            [crux.api :as api])
+            [datomic.api :as d])
   (:import java.io.StringReader
-           java.util.HashMap
-           java.util.function.Function
            java.util.concurrent.TimeUnit
-           org.eclipse.rdf4j.repository.sail.SailRepository
-           org.eclipse.rdf4j.repository.RepositoryConnection
-           org.eclipse.rdf4j.sail.nativerdf.NativeStore
-           org.eclipse.rdf4j.rio.RDFFormat
+           java.util.function.Function
+           java.util.HashMap
            org.eclipse.rdf4j.query.Binding
+           org.eclipse.rdf4j.repository.RepositoryConnection
+           org.eclipse.rdf4j.repository.sail.SailRepository
+           org.eclipse.rdf4j.rio.RDFFormat
+           org.eclipse.rdf4j.sail.nativerdf.NativeStore
            [org.neo4j.graphdb GraphDatabaseService Label Node RelationshipType]
            org.neo4j.graphdb.factory.GraphDatabaseFactory))
 
@@ -372,8 +371,8 @@
             (throw (IllegalStateException. "Query timed out."))))))
 
 (t/use-fixtures :once
-                f/with-embedded-kafka-cluster
-                f/with-kafka-client
+                fk/with-embedded-kafka-cluster
+                fk/with-kafka-client
                 with-sail-repository
                 with-datomic
                 with-neo4j
