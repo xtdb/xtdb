@@ -1,80 +1,15 @@
 (ns crux.fixtures
-  (:require [clojure.spec.alpha :as s]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as api]
-            [crux.bootstrap :as b]
-            [crux.codec :as c]
-            [crux.db :as db]
             [crux.fixtures.kafka :refer [*kafka-bootstrap-servers*]]
             [crux.fixtures.kv :refer [*kv* *kv-backend*]]
             [crux.http-server :as srv]
-            [crux.index :as idx]
             [crux.io :as cio]
             [crux.kafka.embedded :as ek]
-            [crux.kv :as kv]
-            [crux.lru :as lru]
-            [crux.memory :as mem]
-            [crux.tx :as tx]
-            [taoensso.nippy :as nippy])
+            [crux.tx :as tx])
   (:import [crux.api Crux ICruxAPI]
-           java.io.Closeable
            java.util.UUID))
-
-(defn kv-object-store-w-cache [kv]
-  (lru/->CachedObjectStore
-    (lru/new-cache (:doc-cache-size b/default-options))
-    (b/start-object-store {:kv kv} b/default-options)))
-
-(defrecord KvTxLog [kv object-store]
-  db/TxLog
-  (submit-doc [this content-hash doc]
-    (db/index-doc (tx/->KvIndexer kv this object-store) content-hash doc))
-
-  (submit-tx [this tx-ops]
-    (s/assert :crux.api/tx-ops tx-ops)
-    (let [transact-time (cio/next-monotonic-date)
-          tx-id (.getTime transact-time)
-          tx-events (tx/tx-ops->tx-events tx-ops)
-          indexer (tx/->KvIndexer kv this object-store)]
-      (kv/store kv [[(c/encode-tx-log-key-to nil tx-id transact-time)
-                     (nippy/fast-freeze tx-events)]])
-      (doseq [doc (tx/tx-ops->docs tx-ops)]
-        (db/submit-doc this (str (c/new-id doc)) doc))
-      (db/index-tx indexer tx-events transact-time tx-id)
-      (db/store-index-meta indexer
-                           :crux.tx-log/consumer-state
-                           {:crux.kv.topic-partition/tx-log-0
-                            {:lag 0
-                             :time transact-time}})
-      (delay {:crux.tx/tx-id tx-id
-              :crux.tx/tx-time transact-time})))
-
-  (new-tx-log-context [this]
-    (kv/new-snapshot kv))
-
-  (tx-log [this tx-log-context from-tx-id]
-    (let [i (kv/new-iterator tx-log-context)]
-      (for [[k v] (idx/all-keys-in-prefix i (c/encode-tx-log-key-to nil from-tx-id) (c/encode-tx-log-key-to nil) true)]
-        (assoc (c/decode-tx-log-key-from k)
-               :crux.api/tx-ops (nippy/fast-thaw (mem/->on-heap v))))))
-
-  Closeable
-  (close [_]))
-
-(defn kv-tx-log
-  ([kv]
-   (kv-tx-log kv (idx/->KvObjectStore kv)))
-  ([kv object-store]
-   (let [tx-log (->KvTxLog kv object-store)
-         indexer (tx/->KvIndexer kv tx-log object-store)]
-     (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
-       (db/store-index-meta
-        indexer
-        :crux.tx-log/consumer-state
-        {:crux.kv.topic-partition/tx-log-0
-         {:lag 0 :time nil}}))
-     tx-log)))
 
 (def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxAPI *api*)

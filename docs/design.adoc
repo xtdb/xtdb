@@ -65,7 +65,6 @@ an appendable transaction log.
 |===
 |Implementation|Description
 |`crux.kafka.KafkaTxLog`|(default), using Kafka with separate Kafka topics for both documents and transactions
-|`crux.tx.KvTxLog`|Uses the KvStore as the transaction log during testing only
 |`crux.tx.EventTxLog`| Uses the KvStore for the transaction log in standalone mode, backed by `moberg`. This is useful when Kafka isn't desired, and the topology of having distributed Crux nodes feeding of a centralised transaction log isn't required.
 |===
 
