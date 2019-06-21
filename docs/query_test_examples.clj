@@ -32,7 +32,7 @@
 ;; end::aggr1[]
 
 (t/deftest test-basic-query
-  (f/transact-people! *kv* 
+  (f/transact-people! *kv*
 ;; tag::test-basic-query-d[]
 [{:crux.db/id :ivan
   :name "Ivan"
@@ -49,7 +49,7 @@
 )
 
   (t/testing "Can query across fields for same value when value is passed in"
-    (t/is (= 
+    (t/is (=
 ;; tag::test-basic-query-r[]
 #{[:smith]}
 ;; end::test-basic-query-r[]
@@ -63,7 +63,7 @@
 ))))))
 
 (t/deftest test-query-with-arguments
-  (let [[ivan petr] (f/transact-people! *kv* 
+  (let [[ivan petr] (f/transact-people! *kv*
 ;; tag::query-with-arguments-d[]
 [{:crux.db/id :ivan
   :name "Ivan"
@@ -90,7 +90,7 @@
 ;; tag::query-with-arguments1-q[]
 {:find [name]
  :where [[e :name name]]
- :args [{:e :ivan 
+ :args [{:e :ivan
          :name "Ivan"}]}
 ;; end::query-with-arguments1-q[]
 )))))
@@ -112,7 +112,7 @@
 )))))
 
     (t/testing "Can query entity with tuple arguments"
-      (t/is (= 
+      (t/is (=
 ;; tag::query-with-arguments3-r[]
 #{[:ivan] [:petr]}
 ;; end::query-with-arguments3-r[]
@@ -129,7 +129,7 @@
                  )))))
 
     (t/testing "Can query predicates based on arguments alone"
-      (t/is (= 
+      (t/is (=
 ;; tag::query-with-arguments4-r[]
 #{["Ivan"]}
 ;; end::query-with-arguments4-r[]
@@ -146,7 +146,7 @@
                  ))))
 
       (t/testing "Can use range constraints on arguments"
-        (t/is (= 
+        (t/is (=
 ;; tag::query-with-arguments5-r[]
 #{[22]}
 ;; end::query-with-arguments5-r[]
@@ -272,7 +272,7 @@
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
-  (f/transact-people! *kv* 
+  (f/transact-people! *kv*
 ;; tag::join-d[]
 [{:crux.db/id :ivan :name "Ivan"}
  {:crux.db/id :petr :name "Petr"}
@@ -283,7 +283,7 @@
 )
 
   (t/testing "Every person joins once, plus 2 more matches"
-    (t/is (= 
+    (t/is (=
 ;; tag::join-r[]
 #{[:ivan :ivan]
   [:petr :petr]
@@ -302,14 +302,14 @@
 ))))))
 
 (t/deftest test-join-over-two-attributes
-  (f/transact-people! *kv* 
+  (f/transact-people! *kv*
 ;; tag::join2-d[]
 [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
  {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]
 ;; end::join2-d[]
 )
 
-  (t/is (= 
+  (t/is (=
 ;; tag::join2-r[]
 #{[:petr]}
 ;; end::join2-r[]
@@ -604,7 +604,7 @@
  :entry-pt :SFO
  :arrival-time #inst "2018-12-31"
  :departure-time :na}
- 
+
 {:crux.db/id :p3
  :entry-pt :LA
  :arrival-time #inst "2018-12-31"
@@ -748,132 +748,7 @@
   [:p4 :NY #inst "2019-01-02" :na]}
 ;; end::bitempr[]
 
-(t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
-  (let [tx-log (f/kv-tx-log-w-cache *kv*)]
-    ;; Day 0, represented as #inst "2018-12-31"
-    @(db/submit-tx tx-log [[:crux.tx/put :p2
-                            {:crux.db/id :p2
-                             :entry-pt :SFO
-                             :arrival-time #inst "2018-12-31"
-                             :departure-time :na}
-                            #inst "2018-12-31"]
-                           [:crux.tx/put :p3
-                            {:crux.db/id :p3
-                             :entry-pt :LA
-                             :arrival-time #inst "2018-12-31"
-                             :departure-time :na}
-                            #inst "2018-12-31"]])
-    ;; Day 1, nothing happens.
-    @(db/submit-tx tx-log [])
-    ;; Day 2
-    @(db/submit-tx tx-log [[:crux.tx/put :p4
-                            {:crux.db/id :p4
-                             :entry-pt :NY
-                             :arrival-time #inst "2019-01-02"
-                             :departure-time :na}
-                            #inst "2019-01-02"]])
-    ;; Day 3
-    (let [third-day-submitted-tx @(db/submit-tx tx-log [[:crux.tx/put :p4
-                                                         {:crux.db/id :p4
-                                                          :entry-pt :NY
-                                                          :arrival-time #inst "2019-01-02"
-                                                          :departure-time #inst "2019-01-03"}
-                                                         #inst "2019-01-03"]])]
-      ;; Day 4, correction, adding missing trip on new arrival.
-      @(db/submit-tx tx-log [[:crux.tx/put :p1
-                              {:crux.db/id :p1
-                               :entry-pt :NY
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time :na}
-                              #inst "2018-12-31"]
-                             [:crux.tx/put :p1
-                              {:crux.db/id :p1
-                               :entry-pt :NY
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time #inst "2019-01-03"}
-                              #inst "2019-01-03"]
-                             [:crux.tx/put :p1
-                              {:crux.db/id :p1
-                               :entry-pt :LA
-                               :arrival-time #inst "2019-01-04"
-                               :departure-time :na}
-                              #inst "2019-01-04"]
-                             [:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :LA
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time #inst "2019-01-04"}
-                              #inst "2019-01-04"]])
-      ;; Day 5
-      @(db/submit-tx tx-log [[:crux.tx/put :p2
-                              {:crux.db/id :p2
-                               :entry-pt :SFO
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time #inst "2019-01-05"}
-                              #inst "2019-01-05"]])
-      ;; Day 6, nothing happens.
-      @(db/submit-tx tx-log [])
-      ;; Day 7-12, correction of deletion/departure on day 4. Shows
-      ;; how valid time cannot be the same as arrival time.
-      @(db/submit-tx tx-log [[:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :LA
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time :na}
-                              #inst "2019-01-04"]
-                             [:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :LA
-                               :arrival-time #inst "2018-12-31"
-                               :departure-time #inst "2019-01-07"}
-                              #inst "2019-01-07"]])
-      @(db/submit-tx tx-log [[:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :SFO
-                               :arrival-time #inst "2019-01-08"
-                               :departure-time :na}
-                              #inst "2019-01-08"]
-                             [:crux.tx/put :p4
-                              {:crux.db/id :p4
-                               :entry-pt :LA
-                               :arrival-time #inst "2019-01-08"
-                               :departure-time :na}
-                              #inst "2019-01-08"]])
-      @(db/submit-tx tx-log [[:crux.tx/put :p3
-                              {:crux.db/id :p3
-                               :entry-pt :SFO
-                               :arrival-time #inst "2019-01-08"
-                               :departure-time #inst "2019-01-08"}
-                              #inst "2019-01-09"]])
-      @(db/submit-tx tx-log [[:crux.tx/put :p5
-                              {:crux.db/id :p5
-                               :entry-pt :LA
-                               :arrival-time #inst "2019-01-10"
-                               :departure-time :na}
-                              #inst "2019-01-10"]])
-      @(db/submit-tx tx-log [[:crux.tx/put :p7
-                              {:crux.db/id :p7
-                               :entry-pt :NY
-                               :arrival-time #inst "2019-01-11"
-                               :departure-time :na}
-                              #inst "2019-01-11"]])
-      @(db/submit-tx tx-log [[:crux.tx/put :p6
-                              {:crux.db/id :p6
-                               :entry-pt :NY
-                               :arrival-time #inst "2019-01-12"
-                               :departure-time :na}
-                              #inst "2019-01-12"]])
-
-      (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
-                 [:p3 :LA #inst "2018-12-31" :na]
-                 [:p4 :NY #inst "2019-01-02" :na]}
-               (api/q (api/db f/*kv* #inst "2019-01-02" (:crux.tx/tx-time third-day-submitted-tx))
-                    '{:find [p entry-pt arrival-time departure-time]
-                      :where [[p :entry-pt entry-pt]
-                              [p :arrival-time arrival-time]
-                              [p :departure-time departure-time]]}))))))
-
-;; Tests borrowed from Datascript:
+  ;; Tests borrowed from Datascript:
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
 
 (defn populate-datascript-test-db []

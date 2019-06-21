@@ -76,9 +76,6 @@
          {:lag 0 :time nil}}))
      tx-log)))
 
-(defn kv-tx-log-w-cache [kv]
-  (kv-tx-log kv (kv-object-store-w-cache kv)))
-
 (def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxAPI *api*)
 (def ^:dynamic ^ICruxAPI *cluster-node*)
