@@ -3,6 +3,7 @@
             [crux.api :as api]
             [crux.db :as db]
             [crux.fixtures :as f :refer [*api*]]
+            [crux.fixtures.kv :as fkv]
             [crux.query :as q])
   (:import java.util.Date))
 
@@ -94,9 +95,9 @@
            speed :instant
            verbose false}}]
   ((case kv
-     :rocks f/with-rocksdb
-     :lmdb f/with-lmdb
-     :mem f/with-memdb)
+     :rocks fkv/with-rocksdb
+     :lmdb fkv/with-lmdb
+     :mem fkv/with-memdb)
    (fn []
      (f/with-standalone-system
        (fn []

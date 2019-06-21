@@ -6,6 +6,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures :as f]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.rdf :as rdf]
@@ -17,7 +18,7 @@
            org.apache.kafka.common.TopicPartition))
 
 (t/use-fixtures :once f/with-embedded-kafka-cluster)
-(t/use-fixtures :each f/with-kafka-client f/with-kv-store)
+(t/use-fixtures :each f/with-kafka-client fkv/with-kv-store)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
@@ -44,7 +45,7 @@
         doc-topic "test-can-transact-entities-doc"
         tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -67,7 +68,7 @@
         doc-topic "test-can-transact-and-query-entities-doc"
         tx-ops (load-ntriples-example  "crux/picasso.nt")
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {"bootstrap.servers" f/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -91,7 +92,7 @@
 
         (t/testing "querying transacted data"
           (t/is (= #{[:http://example.org/Picasso]}
-                   (q/q (q/db f/*kv*)
+                   (q/q (q/db *kv*)
                         (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                           '{:find [e]
                             :where [[e :foaf/firstName "Pablo"]]})))))
@@ -118,7 +119,7 @@
 
         tx-ops (load-ntriples-example  "crux/picasso.nt")
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {"bootstrap.servers" f/*kafka-bootstrap-servers*})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -135,37 +136,37 @@
             non-evicted-doc {:crux.db/id :not-evicted :personal "private"}
             evicted-doc-hash
             (do @(db/submit-tx
-                   tx-log
-                   [[:crux.tx/put evicted-doc]
-                    [:crux.tx/put non-evicted-doc]])
+                  tx-log
+                  [[:crux.tx/put evicted-doc]
+                   [:crux.tx/put non-evicted-doc]])
 
                 (k/consume-and-index-entities consume-opts)
                 (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
-                (:crux.db/content-hash (q/entity-tx (q/db f/*kv*) (:crux.db/id evicted-doc))))
+                (:crux.db/content-hash (q/entity-tx (q/db *kv*) (:crux.db/id evicted-doc))))
 
             after-evict-doc {:crux.db/id :after-evict :personal "private"}
             {:crux.tx/keys [tx-id tx-time]}
             (do
               @(db/submit-tx tx-log [[:crux.tx/evict (:crux.db/id evicted-doc)]])
-                @(db/submit-tx
-                   tx-log
-                   [[:crux.tx/put after-evict-doc]]))]
+              @(db/submit-tx
+                tx-log
+                [[:crux.tx/put after-evict-doc]]))]
 
         (while (not= {:txs 0 :docs 0} (k/consume-and-index-entities consume-opts)))
 
         (t/testing "querying transacted data"
-          (t/is (= non-evicted-doc (q/entity (q/db f/*kv*) (:crux.db/id non-evicted-doc))))
-          (t/is (nil? (q/entity (q/db f/*kv*) (:crux.db/id evicted-doc))))
-          (t/is (= after-evict-doc (q/entity (q/db f/*kv*) (:crux.db/id after-evict-doc)))))
+          (t/is (= non-evicted-doc (q/entity (q/db *kv*) (:crux.db/id non-evicted-doc))))
+          (t/is (nil? (q/entity (q/db *kv*) (:crux.db/id evicted-doc))))
+          (t/is (= after-evict-doc (q/entity (q/db *kv*) (:crux.db/id after-evict-doc)))))
 
         (t/testing "re-indexing the same transactions after doc compaction"
           (binding [f/*consumer-options* {"max.poll.records" "1"}]
             (f/with-kafka-client
               (fn []
-                (f/with-kv-store
+                (fkv/with-kv-store
                   (fn []
-                    (let [object-store (idx/->KvObjectStore f/*kv*)
-                          indexer (tx/->KvIndexer f/*kv* tx-log object-store)
+                    (let [object-store (idx/->KvObjectStore *kv*)
+                          indexer (tx/->KvIndexer *kv* tx-log object-store)
                           consume-opts {:indexer indexer
                                         :consumer f/*consumer*
                                         :pending-txs-state (atom [])
@@ -181,9 +182,9 @@
                       (t/is (empty? (.poll f/*consumer* (Duration/ofMillis 1000))))
 
                       (t/testing "querying transacted data"
-                        (t/is (= non-evicted-doc (q/entity (q/db f/*kv*) (:crux.db/id non-evicted-doc))))
-                        (t/is (nil? (q/entity (q/db f/*kv*) (:crux.db/id evicted-doc))))
-                        (t/is (= after-evict-doc (q/entity (q/db f/*kv*) (:crux.db/id after-evict-doc))))))))))))))))
+                        (t/is (= non-evicted-doc (q/entity (q/db *kv*) (:crux.db/id non-evicted-doc))))
+                        (t/is (nil? (q/entity (q/db *kv*) (:crux.db/id evicted-doc))))
+                        (t/is (= after-evict-doc (q/entity (q/db *kv*) (:crux.db/id after-evict-doc))))))))))))))))
 
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
@@ -193,7 +194,7 @@
                     (map #(rdf/use-default-language % :en))
                     (vec))
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -213,13 +214,13 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                       '{:find [e]
                         :where [[e :foaf/givenName "Pablo"]]}))))
 
       (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
                                       :dbo "http://dbpedia.org/ontology/"}
                       '{:find [g]
@@ -268,7 +269,7 @@
         n-transacted (atom -1)
         mappingbased-properties-file (io/file "../dbpedia/mappingbased_properties_en.nt")
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (if (and run-dbpedia-tests? (.exists mappingbased-properties-file))
       (do (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
@@ -293,7 +294,7 @@
                        #{[:dbr/Aristotle]
                          [(keyword "dbr/Aristotle_(painting)")]
                          [(keyword "dbr/Aristotle_(book)")]})
-                     (q/q (q/db f/*kv*)
+                     (q/q (q/db *kv*)
                           (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"})
                           '{:find [e]
                             :where [[e :foaf/name "Aristotle"]]})))))
@@ -307,7 +308,7 @@
                     (map #(rdf/use-default-language % :en))
                     (vec))
         tx-log (k/->KafkaTxLog f/*producer* tx-topic doc-topic {})
-        indexer (tx/->KvIndexer f/*kv* tx-log (idx/->KvObjectStore f/*kv*))]
+        indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
     (k/create-topic f/*admin-client* tx-topic 1 1 k/tx-topic-config)
     (k/create-topic f/*admin-client* doc-topic 1 1 k/doc-topic-config)
@@ -326,7 +327,7 @@
 
     (t/testing "querying transacted data"
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 SELECT ?x
@@ -336,7 +337,7 @@ WHERE { ?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  \"John Smith\" }"))))
                  [(keyword "http://somewhere/SarahJones/") "Sarah Jones"]
                  [(keyword "http://somewhere/JohnSmith/") "John Smith"]
                  [(keyword "http://somewhere/MattJones/") "Matt Jones"]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 SELECT ?x ?fname
@@ -344,7 +345,7 @@ WHERE {?x  <http://www.w3.org/2001/vcard-rdf/3.0#FN>  ?fname}"))))
 
       (t/is (= #{["John"]
                  ["Rebecca"]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 SELECT ?givenName
@@ -355,7 +356,7 @@ WHERE
 
       (t/is (= #{["Rebecca"]
                  ["Sarah"]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
@@ -366,7 +367,7 @@ WHERE
   FILTER regex(?g, \"r\", \"i\") }"))))
 
       (t/is (= #{[(keyword "http://somewhere/JohnSmith/")]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 PREFIX info: <http://somewhere/peopleInfo#>
@@ -383,7 +384,7 @@ WHERE
                  ["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
                  ["Matt Jones" :crux.sparql/optional]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 PREFIX info:    <http://somewhere/peopleInfo#>
@@ -398,7 +399,7 @@ WHERE
 
       (t/is (= #{["Becky Smith" 23]
                  ["John Smith" 25]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 PREFIX info:   <http://somewhere/peopleInfo#>
@@ -414,7 +415,7 @@ WHERE
       (t/is (= #{["Sarah Jones" :crux.sparql/optional]
                  ["John Smith" 25]
                  ["Matt Jones" :crux.sparql/optional]}
-               (q/q (q/db f/*kv*)
+               (q/q (q/db *kv*)
                     (sparql/sparql->datalog
                      "
 PREFIX info:        <http://somewhere/peopleInfo#>

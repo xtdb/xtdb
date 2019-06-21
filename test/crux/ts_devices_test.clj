@@ -5,6 +5,7 @@
             [clojure.string :as str]
             [crux.io :as cio]
             [crux.fixtures :as f]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.api :as api])
   (:import java.util.Date
            java.time.temporal.ChronoUnit))
@@ -237,7 +238,7 @@
               [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-             (let [kv f/*kv*
+             (let [kv *kv*
                    reading-ids (->> (api/q (api/db f/*api*)
                                         '{:find [r]
                                           :where [[r :reading/device-id device-id]
