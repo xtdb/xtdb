@@ -1,9 +1,8 @@
 (ns ivan
-  (:require [clojure.test :as t]
-            [crux.bench :as bench]
-            [crux.fixtures :as f]
-            [crux.api :as api]
-            [crux.codec :as c]))
+  (:require [crux.api :as api]
+            [crux.codec :as c]
+            [crux.bootstrap.standalone :as bs]
+            [clojure.spec.alpha :as s]))
 
 ;;;;; This is not a benchmark
 ;;;;; Rather a sanity check tool for internal changes
@@ -32,6 +31,8 @@
 (def id-buffer->id
   (let [ks (keys currencies-by-id)]
     (zipmap (map c/->id-buffer ks) ks)))
+
+(s/assert ::bs/standalone-options {:db-dir "ee" :kv-backend "ee"})
 
 (defn gen-stock [i]
   (let [id (keyword "stock.id" (str "company-" i))]
@@ -65,7 +66,7 @@
 (comment
 
   (def system
-    (crux.api/start-standalone-system
+    (api/start-standalone-system
       {:kv-backend "crux.kv.memdb.MemKv"
        :db-dir     "data/db-dir-1"}))
 
@@ -81,27 +82,27 @@
     :limit 1000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-10000
   '[:find stock-id currency-id
     :limit 10000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-100000
   '[:find stock-id currency-id
     :limit 100000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-2
   '[:find stock-id currency-id
     :where
     [currency-id :currency/name "Euro"]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-3
   '[:find stock-id currency-name
