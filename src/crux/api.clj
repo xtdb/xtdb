@@ -130,7 +130,10 @@
     from-tx-id      optional transaction id to start from.
     with-documents? should the documents be included?
 
-    Returns a lazy sequence of the transaction log."))
+    Returns a lazy sequence of the transaction log.")
+
+  (attribute-stats [system]
+    "Returns frequencies map for indexed attributes"))
 
 (extend-protocol PCruxSystem
   ICruxAPI
