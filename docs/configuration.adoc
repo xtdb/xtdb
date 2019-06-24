@@ -146,6 +146,7 @@ Set the following properties when configuring Crux systems:
 |Property|Value
 |`kv-backend`|`"crux.kv.rocksdb.RocksKv"`
 |`db-dir`|i.e. `"data/db-dir-1"`
+|`event-log-dir`|i.e. `"data/eventlog-1"`
 |===
 
 For example when constructing the standalone system:

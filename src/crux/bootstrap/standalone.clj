@@ -76,8 +76,8 @@
     (doseq [c [event-log-consumer tx-log kv-store]]
       (cio/try-close c))))
 
-(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.kv/kv-backend]
-                                    :opt-un [:crux.kv/sync? :crux.tx/event-log-dir :crux.db/object-store :crux.lru/doc-cache-size]
+(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.tx/event-log-dir :crux.kv/kv-backend]
+                                    :opt-un [:crux.kv/sync? :crux.db/object-store :crux.lru/doc-cache-size]
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
