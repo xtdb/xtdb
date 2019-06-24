@@ -33,6 +33,13 @@
     (.sync fb/*api* (:crux.tx/tx-time submitted-tx) nil)
     (t/is (.entity (.db fb/*api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))))
 
+(t/deftest test-can-use-crux-ids
+  (let [id #crux/id :https://adam.com
+        doc {:crux.db/id id, :name "Adam"}
+        submitted-tx (.submitTx f/*api* [[:crux.tx/put doc]])]
+    (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)
+    (t/is (.entity (.db f/*api*) id))))
+
 (t/deftest test-single-id
   (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}]

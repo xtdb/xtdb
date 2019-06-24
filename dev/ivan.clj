@@ -72,6 +72,8 @@
        :db-dir     "data/db-dir-1"
        :event-log-dir "data/eventlog-1"}))
 
+  (def s #crux/id :https://thing)
+
   (binding [fb/*api* system]
     (with-stocks-data println))
 
@@ -84,27 +86,27 @@
     :limit 1000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-10000
   '[:find stock-id currency-id
     :limit 10000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-100000
   '[:find stock-id currency-id
     :limit 100000
     :where
     [currency-id :currency/name currency-name]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-2
   '[:find stock-id currency-id
     :where
     [currency-id :currency/name "Euro"]
-    [stock-id :stock/currency-id currency-id] ])
+    [stock-id :stock/currency-id currency-id]])
 
 (def query-3
   '[:find stock-id currency-name

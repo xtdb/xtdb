@@ -709,7 +709,7 @@
                             (api/start-standalone-system options))
               api-server (srv/start-http-server
                            crux-system
-                           {:server-port http-port 
+                           {:server-port http-port
                             :cors-access-control
                             [:access-control-allow-origin [#".*"]
                              :access-control-allow-headers ["X-Requested-With"
@@ -746,11 +746,15 @@
     (catch Exception e
       (log/error e "what happened" (ex-data e)))))
 
+(defn start-from-repl []
+  (def s
+   (future
+     (run-system
+       crux-options
+       (fn [_]
+         (def crux)
+         (Thread/sleep Long/MAX_VALUE))))))
+
 (comment
-  (def s (future
-           (run-system
-            crux-options
-            (fn [_]
-              (def crux)
-              (Thread/sleep Long/MAX_VALUE)))))
+  (start-from-repl)
   (future-cancel s))
