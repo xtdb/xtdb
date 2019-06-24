@@ -111,7 +111,7 @@
        timeout (assoc :crux.tx-log/await-tx-timeout (.toMillis timeout)))))
 
   (sync [_ tx-time timeout]
-    (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout timeout})))
+    (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout (.toMillis timeout)})))
 
   backup/ISystemBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
