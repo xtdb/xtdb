@@ -2,52 +2,44 @@
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as api]
+            [crux.fixtures.http-server :refer [*api-url*]]
             [crux.fixtures.kafka :refer [*kafka-bootstrap-servers*]]
             [crux.fixtures.kv :refer [*kv* *kv-backend*]]
-            [crux.http-server :as srv]
             [crux.io :as cio]
-            [crux.kafka.embedded :as ek]
             [crux.tx :as tx])
   (:import [crux.api Crux ICruxAPI]
            java.util.UUID))
 
-(def ^:dynamic *api-url*)
 (def ^:dynamic ^ICruxAPI *api*)
-(def ^:dynamic ^ICruxAPI *cluster-node*)
+(def ^:dynamic ^String *tx-topic*)
+(def ^:dynamic ^String *doc-topic*)
 
 (defn with-cluster-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
   (assert (not (bound? #'*kv*)))
-  (let [server-port (cio/free-port)
-        db-dir (str (cio/create-tmpdir "kv-store"))
-        test-id (UUID/randomUUID)
-        tx-topic (str "tx-topic-" test-id)
-        doc-topic (str "doc-topic-" test-id)
-        options {:server-port server-port
-                 :db-dir db-dir
-                 :tx-topic tx-topic
-                 :doc-topic doc-topic
-                 :kv-backend *kv-backend*
-                 :bootstrap-servers *kafka-bootstrap-servers*}]
-    (try
-      (with-open [cluster-node (Crux/startClusterNode options)
-                  http-server (srv/start-http-server cluster-node options)]
-        (binding [*cluster-node* cluster-node
-                  *api* cluster-node
-                  *api-url* (str "http://" ek/*host* ":" server-port)]
-          (f)))
-      (finally
-        (cio/delete-dir db-dir)))))
+  (let [db-dir (str (cio/create-tmpdir "kv-store"))
+        test-id (UUID/randomUUID)]
+    (binding [*tx-topic* (str "tx-topic-" test-id)
+              *doc-topic* (str "doc-topic-" test-id)]
+      (try
+        (with-open [cluster-node (Crux/startClusterNode {:db-dir db-dir
+                                                         :kv-backend *kv-backend*
+                                                         :tx-topic *tx-topic*
+                                                         :doc-topic *doc-topic*
+                                                         :bootstrap-servers *kafka-bootstrap-servers*})]
+          (binding [*api* cluster-node]
+            (f)))
+        (finally
+          (cio/delete-dir db-dir))))))
 
 (defn with-standalone-system [f]
   (assert (not (bound? #'*kv*)))
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        event-log-dir (str (cio/create-tmpdir "event-log-dir"))
-        options {:db-dir db-dir
-                 :event-log-dir event-log-dir
-                 :kv-backend *kv-backend*}]
+        event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-system (Crux/startStandaloneSystem options)]
+      (with-open [standalone-system (Crux/startStandaloneSystem {:db-dir db-dir
+                                                                 :kv-backend *kv-backend*
+                                                                 :event-log-dir event-log-dir})]
         (binding [*api* standalone-system]
           (f)))
       (finally
@@ -67,7 +59,10 @@
     (with-standalone-system f))
   (t/testing "Remote API"
     (with-cluster-node
-      #(with-api-client f))))
+      (fn []
+        (crux.fixtures.http-server/with-http-server *api*
+          (fn []
+            (with-api-client f)))))))
 
 (defn with-silent-test-check [f]
   (binding [tcct/*report-completion* false]
