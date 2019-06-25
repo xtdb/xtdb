@@ -3,7 +3,8 @@
             [integrant.core :as ig]))
 
 (def config {:crux/standalone {:kv-backend "crux.kv.memdb.MemKv"
-                               :db-dir "data/db-dir-1"}})
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}})
 
 (defmethod ig/init-key :crux/standalone [_ opts]
   (api/start-standalone-system opts))
