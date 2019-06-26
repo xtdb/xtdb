@@ -74,7 +74,6 @@
                                                         {"Content-Type" "application/edn"})
                                              :body (some-> body pr-str)}
                                             opts))]
-     (prn "body resp " body)
      (cond
        (= 404 status)
        nil
