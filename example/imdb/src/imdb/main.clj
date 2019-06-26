@@ -69,16 +69,20 @@
     crux-options
     (fn [crux-system]
       (def crux crux-system)
-      ;;(ingest-data crux)
+      ;; ingest may take a while, may be more than 15 mins
+      ;; (ingest-data crux)
       (Thread/sleep Long/MAX_VALUE))))
 
-(comment
+(defn start-from-repl []
   (def s (future
            (run-system
-            crux-options
-            (fn [crux-system]
-              (def crux crux-system)
-              (Thread/sleep Long/MAX_VALUE)))))
+             crux-options
+             (fn [crux-system]
+               (def crux crux-system)
+               (Thread/sleep Long/MAX_VALUE))))))
+
+(comment
+  (start-from-repl)
   (future-cancel s))
 
 
