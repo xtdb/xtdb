@@ -5,33 +5,34 @@
             [clojure.test.check.properties :as prop]
             [crux.codec :as c]
             [crux.fixtures :as f]
+            [crux.fixtures.kv :as fkv :refer [*kv* *kv-backend*]]
             [crux.kv :as kv]
             [crux.moberg :as moberg]
             [crux.status :as status])
   (:import crux.api.NonMonotonicTimeException))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/without-kv-index-version f/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fkv/without-kv-index-version fkv/with-kv-store f/with-silent-test-check)
 
 (t/deftest test-can-send-and-receive-message
-  (t/is (= 1 (moberg/end-message-id-offset f/*kv* :my-topic)))
+  (t/is (= 1 (moberg/end-message-id-offset *kv* :my-topic)))
   (let [{:crux.moberg/keys [message-id message-time topic]
-         :as submitted-message} (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))]
+         :as submitted-message} (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World"))]
     (t/is (integer? message-id))
     (t/is (inst? message-time))
     (t/is (= :my-topic topic))
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)
+    (with-open [snapshot (kv/new-snapshot *kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge submitted-message
                       {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
       (t/is (nil? (moberg/next-message i :my-topic))))
 
-    (t/is (= (inc message-id) (moberg/end-message-id-offset f/*kv* :my-topic)))))
+    (t/is (= (inc message-id) (moberg/end-message-id-offset *kv* :my-topic)))))
 
 (t/deftest test-detects-backwards-clock-drift
   (let [{:crux.moberg/keys [message-id message-time]
-         :as submitted-message} (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))]
-    (t/is (= (inc message-id) (moberg/end-message-id-offset f/*kv* :my-topic)))
+         :as submitted-message} (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World"))]
+    (t/is (= (inc message-id) (moberg/end-message-id-offset *kv* :my-topic)))
 
     (with-redefs [crux.moberg/now (fn [] #inst "2019")]
       (t/is (thrown-with-msg?
@@ -42,18 +43,18 @@
                               " lowest valid next id: "
                               (inc message-id)
                               " was generated using " (pr-str message-time)))
-             (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World")))))))
+             (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World")))))))
 
 (t/deftest test-can-send-and-receive-message-on-two-topics
-  (let [my-topic-message (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic "Hello World"))
-        your-topic-message (moberg/sent-message->edn (moberg/send-message f/*kv* :your-topic "Hello World"))]
-    (with-open [snapshot (kv/new-snapshot f/*kv*)
+  (let [my-topic-message (moberg/sent-message->edn (moberg/send-message *kv* :my-topic "Hello World"))
+        your-topic-message (moberg/sent-message->edn (moberg/send-message *kv* :your-topic "Hello World"))]
+    (with-open [snapshot (kv/new-snapshot *kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge my-topic-message
                       {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic))))
       (t/is (nil? (moberg/next-message i :my-topic))))
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)
+    (with-open [snapshot (kv/new-snapshot *kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge your-topic-message
                       {:crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :your-topic))))
@@ -61,8 +62,8 @@
 
 (t/deftest test-can-send-and-receive-multiple-messages
   (dotimes [n 10]
-    (moberg/send-message f/*kv* :my-topic n))
-  (with-open [snapshot (kv/new-snapshot f/*kv*)
+    (moberg/send-message *kv* :my-topic n))
+  (with-open [snapshot (kv/new-snapshot *kv*)
               i (kv/new-iterator snapshot)]
     (t/is (= 0 (.body (moberg/seek-message i :my-topic))))
     (dotimes [n 9]
@@ -72,16 +73,16 @@
     (t/is (= 0 (.body (moberg/seek-message i :my-topic))))))
 
 (t/deftest test-can-send-and-receive-messages-with-compaction
-  (let [compacted-message (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic :my-key "Hello World"))]
-    (with-open [snapshot (kv/new-snapshot f/*kv*)
+  (let [compacted-message (moberg/sent-message->edn (moberg/send-message *kv* :my-topic :my-key "Hello World"))]
+    (with-open [snapshot (kv/new-snapshot *kv*)
                 i (kv/new-iterator snapshot)]
       (t/is (= (merge compacted-message
                       {:crux.moberg/topic :my-topic
                        :crux.moberg/key :my-key
                        :crux.moberg/body "Hello World"}) (moberg/message->edn (moberg/seek-message i :my-topic)))))
 
-    (let [submitted-message (moberg/sent-message->edn (moberg/send-message f/*kv* :my-topic :my-key "Goodbye."))]
-      (with-open [snapshot (kv/new-snapshot f/*kv*)
+    (let [submitted-message (moberg/sent-message->edn (moberg/send-message *kv* :my-topic :my-key "Goodbye."))]
+      (with-open [snapshot (kv/new-snapshot *kv*)
                   i (kv/new-iterator snapshot)]
         (t/is (= (merge submitted-message
                         {:crux.moberg/topic :my-topic
@@ -99,13 +100,13 @@
                                                        10))
                                        (gen/one-of [(gen/return nil)
                                                     (gen/large-integer* {:min 0 :max 10})])))]
-                (f/with-kv-store
+                (fkv/with-kv-store
                   (fn []
                     (let [submitted-messages (vec (for [[topic body] messages]
-                                                    (merge (moberg/sent-message->edn (moberg/send-message f/*kv* topic body))
+                                                    (merge (moberg/sent-message->edn (moberg/send-message *kv* topic body))
                                                            {:crux.moberg/topic topic
                                                             :crux.moberg/body body})))]
-                      (with-open [snapshot (kv/new-snapshot f/*kv*)
+                      (with-open [snapshot (kv/new-snapshot *kv*)
                                   i (kv/new-iterator snapshot)]
                         (->> (for [[topic messages] (group-by :crux.moberg/topic submitted-messages)
                                    :let [messages (sort-by :crux.moberg/message-id messages)
@@ -135,14 +136,14 @@
                                              (gen/elements topics)
                                              (gen/elements keys)
                                              (gen/not-empty gen/string-ascii)))))]
-                (f/with-kv-store
+                (fkv/with-kv-store
                   (fn []
                     (let [submitted-messages (vec (for [[topic key body] messages]
-                                                    (merge (moberg/sent-message->edn (moberg/send-message f/*kv* topic key body))
+                                                    (merge (moberg/sent-message->edn (moberg/send-message *kv* topic key body))
                                                            {:crux.moberg/topic topic
                                                             :crux.moberg/key key
                                                             :crux.moberg/body body})))]
-                      (with-open [snapshot (kv/new-snapshot f/*kv*)
+                      (with-open [snapshot (kv/new-snapshot *kv*)
                                   i (kv/new-iterator snapshot)]
                         (->> (for [[topic messages] (group-by :crux.moberg/topic submitted-messages)
                                    :let [messages (for [[k messages] (group-by :crux.moberg/key messages)]
@@ -157,15 +158,15 @@
 (t/deftest test-micro-bench
   (if (Boolean/parseBoolean (System/getenv "CRUX_MOBERG_PERFORMANCE"))
     (let [n 1000000]
-      (println f/*kv-backend*)
+      (println *kv-backend*)
       (time
        (dotimes [n n]
-         (moberg/send-message f/*kv* :my-topic (str "Hello World-" n))))
+         (moberg/send-message *kv* :my-topic (str "Hello World-" n))))
 
-      (prn (status/status-map f/*kv*))
+      (prn (status/status-map *kv*))
 
       (time
-       (with-open [snapshot (kv/new-snapshot f/*kv*)
+       (with-open [snapshot (kv/new-snapshot *kv*)
                    i (kv/new-iterator snapshot)]
          (t/is (= (str "Hello World-" 0)
                   (.body (moberg/seek-message i :my-topic))))

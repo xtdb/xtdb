@@ -1,13 +1,15 @@
 (ns crux.ts-devices-test
-  (:require [clojure.test :as t]
-            [clojure.instant :as inst]
+  (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.io :as cio]
+            [clojure.test :as t]
+            [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.api :as api])
-  (:import java.util.Date
-           java.time.temporal.ChronoUnit))
+            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
+            [crux.io :as cio])
+  (:import java.time.temporal.ChronoUnit
+           java.util.Date))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
 ;; Requires https://timescaledata.blob.core.windows.net/datasets/devices_small.tar.gz
@@ -88,8 +90,8 @@
     (f)))
 
 (t/use-fixtures :once
-                f/with-embedded-kafka-cluster
-                f/with-kafka-client
+                fk/with-embedded-kafka-cluster
+                fk/with-kafka-client
                 f/with-cluster-node
                 with-ts-devices-data)
 
@@ -237,7 +239,7 @@
               [#inst "2016-11-15T18:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
-             (let [kv f/*kv*
+             (let [kv *kv*
                    reading-ids (->> (api/q (api/db f/*api*)
                                         '{:find [r]
                                           :where [[r :reading/device-id device-id]

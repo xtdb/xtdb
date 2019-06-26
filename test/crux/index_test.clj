@@ -6,12 +6,13 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as f]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.index :as idx]
             [crux.kv :as kv]
             [crux.tx :as tx])
   (:import java.util.Date))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fkv/with-kv-store f/with-silent-test-check)
 
 ;; NOTE: These tests does not go via the TxLog, but writes its own
 ;; transactions direct into the KV store so it can generate random
@@ -93,11 +94,11 @@
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
                    queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
-                  (f/with-kv-store
+                  (fkv/with-kv-store
                     (fn []
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
-                        (write-vt+tt->entities-direct-to-index f/*kv* vt+tt->entity)
-                        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                        (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
+                        (with-open [snapshot (kv/new-snapshot *kv*)]
                           (->> (for [[vt tt] (concat txs queries)
                                      :let [expected (entity-as-of vt+tt->entity vt tt)
                                            content-hash (c/new-id (:crux.db/content-hash expected))
@@ -114,11 +115,11 @@
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
                    queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
-                  (f/with-kv-store
+                  (fkv/with-kv-store
                     (fn []
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
-                        (write-vt+tt->entities-direct-to-index f/*kv* vt+tt->entity)
-                        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                        (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
+                        (with-open [snapshot (kv/new-snapshot *kv*)]
                           (->> (for [[[vt-start tt-start] [vt-end tt-end]] (partition 2 (concat txs queries))
                                      :let [[vt-start vt-end] (sort [vt-start vt-end])
                                            [tt-start tt-end] (sort [tt-start tt-end])
@@ -137,11 +138,11 @@
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
                    queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
-                  (f/with-kv-store
+                  (fkv/with-kv-store
                     (fn []
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
-                        (write-vt+tt->entities-direct-to-index f/*kv* vt+tt->entity)
-                        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                        (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
+                        (with-open [snapshot (kv/new-snapshot *kv*)]
                           (->> (for [[vt-start tt-start] (concat txs queries)
                                      :let [vt-end (Date. Long/MAX_VALUE)
                                            tt-end (Date. Long/MAX_VALUE)
@@ -160,11 +161,11 @@
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)
                    queries (gen/vector (gen-query-vt+tt query-start-date query-end-date)) 100]
-                  (f/with-kv-store
+                  (fkv/with-kv-store
                     (fn []
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
-                        (write-vt+tt->entities-direct-to-index f/*kv* vt+tt->entity)
-                        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                        (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
+                        (with-open [snapshot (kv/new-snapshot *kv*)]
                           (->> (for [[vt-end tt-end] (concat txs queries)
                                      :let [vt-start (Date. Long/MIN_VALUE)
                                            tt-start (Date. Long/MIN_VALUE)
@@ -182,11 +183,11 @@
         query-start-date #inst "2018"
         query-end-date #inst "2021"]
     (prop/for-all [txs (gen/vector-distinct-by second (gen-vt+tt+deleted? start-date end-date) 50)]
-                  (f/with-kv-store
+                  (fkv/with-kv-store
                     (fn []
                       (let [vt+tt->entity (vt+tt+deleted?->vt+tt->entities eid txs)]
-                        (write-vt+tt->entities-direct-to-index f/*kv* vt+tt->entity)
-                        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                        (write-vt+tt->entities-direct-to-index *kv* vt+tt->entity)
+                        (with-open [snapshot (kv/new-snapshot *kv*)]
                           (let [vt-start (Date. Long/MIN_VALUE)
                                 tt-start (Date. Long/MIN_VALUE)
                                 vt-end (Date. Long/MAX_VALUE)
@@ -399,14 +400,14 @@
                (second (db/next-values idx)))))))
 
 (t/deftest test-store-and-retrieve-meta
-  (t/is (nil? (idx/read-meta f/*kv* :bar)))
-  (idx/store-meta f/*kv* :bar {:bar 2})
-  (t/is (= {:bar 2} (idx/read-meta f/*kv* :bar)))
+  (t/is (nil? (idx/read-meta *kv* :bar)))
+  (idx/store-meta *kv* :bar {:bar 2})
+  (t/is (= {:bar 2} (idx/read-meta *kv* :bar)))
 
   (t/testing "need exact match"
     ;; :bar 0062cdb7020ff920e5aa642c3d4066950dd1f01f4d
     ;; :foo 000beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
-    (t/is (nil? (idx/read-meta f/*kv* :foo)))))
+    (t/is (nil? (idx/read-meta *kv* :foo)))))
 
 ;; NOTE: variable order must align up with relation position order
 ;; here. This implies that a relation cannot use the same variable

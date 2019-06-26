@@ -1,28 +1,19 @@
 (ns crux.tx-test
   (:require [clojure.test :as t]
-            [clojure.test.check.clojure-test :as tcct]
-            [clojure.test.check.generators :as gen]
-            [clojure.test.check.properties :as prop]
             [clojure.java.io :as io]
-            [clojure.spec.alpha :as s]
-            [clojure.set :as set]
-            [crux.byte-utils :as bu]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.fixtures :as f]
+            [crux.fixtures :as f :refer [*api*]]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.tx :as tx]
             [crux.kv :as kv]
-            [crux.lru :as lru]
-            [crux.memory :as mem]
-            [crux.morton :as morton]
+            [crux.api :as api]
             [crux.rdf :as rdf]
-            [crux.query :as q]
-            [taoensso.nippy :as nippy]
-            [crux.bootstrap :as b])
+            [crux.query :as q])
   (:import java.util.Date))
 
-(t/use-fixtures :each f/with-each-kv-store-implementation f/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation f/with-standalone-system  fkv/with-kv-store f/with-silent-test-check)
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]
@@ -34,26 +25,21 @@
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
-  (let [object-store (f/kv-object-store-w-cache f/*kv*)
-
-        tx-log (f/kv-tx-log f/*kv* object-store)
-
-        indexer (tx/->KvIndexer f/*kv* tx-log object-store)
-
-        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)
         valid-time #inst "2018-05-21"
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
         {:crux.tx/keys [tx-time tx-id]}
-        @(db/submit-tx tx-log [[:crux.tx/put picasso valid-time]])
+        (api/submit-tx *api* [[:crux.tx/put picasso valid-time]])
+        _ (api/sync *api* tx-time nil)
         expected-entities [(c/map->EntityTx {:eid          eid
                                              :content-hash content-hash
                                              :vt           valid-time
                                              :tt           tx-time
                                              :tx-id        tx-id})]]
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/testing "can see entity at transact and valid time"
         (t/is (= expected-entities
                  (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] tx-time tx-time)))
@@ -85,9 +71,10 @@
             new-valid-time #inst "2018-05-20"
             {new-tx-time :crux.tx/tx-time
              new-tx-id   :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
+            (api/submit-tx *api* [[:crux.tx/put new-picasso new-valid-time]])
+            _ (api/sync *api* new-tx-time nil)]
 
-        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
@@ -108,9 +95,10 @@
             new-valid-time #inst "2018-05-22"
             {new-tx-time :crux.tx/tx-time
              new-tx-id   :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
+            (api/submit-tx *api* [[:crux.tx/put new-picasso new-valid-time]])
+            _ (api/sync *api* new-tx-time nil)]
 
-        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid          eid
                                       :content-hash new-content-hash
                                       :vt           new-valid-time
@@ -137,9 +125,10 @@
                 new-valid-time #inst "2018-05-22"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
-                @(db/submit-tx tx-log [[:crux.tx/put new-picasso new-valid-time]])]
+                (api/submit-tx *api* [[:crux.tx/put new-picasso new-valid-time]])
+                _ (api/sync *api* new-tx-time nil)]
 
-            (with-open [snapshot (kv/new-snapshot f/*kv*)]
+            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
               (t/is (= [(c/map->EntityTx {:eid          eid
                                           :content-hash new-content-hash
                                           :vt           new-valid-time
@@ -159,9 +148,10 @@
             (t/testing "compare and set does nothing with wrong content hash"
               (let [old-picasso (assoc picasso :baz :boz)
                     {cas-failure-tx-time :crux.tx/tx-time}
-                    @(db/submit-tx tx-log [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= cas-failure-tx-time (tx/await-tx-time indexer cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
-                (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])
+                    _ (api/sync *api* cas-failure-tx-time nil)]
+                (t/is (= cas-failure-tx-time (tx/await-tx-time (:indexer *api*) cas-failure-tx-time {:crux.tx-log/await-tx-timeout 1000})))
+                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          eid
                                               :content-hash new-content-hash
                                               :vt           new-valid-time
@@ -175,9 +165,9 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
-                (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                    (api/submit-tx *api* [[:crux.tx/cas old-picasso new-picasso new-valid-time]])]
+                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
+                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          eid
                                               :content-hash new-content-hash
                                               :vt           new-valid-time
@@ -191,9 +181,10 @@
                     new-content-hash (c/new-id new-picasso)
                     {new-tx-time :crux.tx/tx-time
                      new-tx-id   :crux.tx/tx-id}
-                    @(db/submit-tx tx-log [[:crux.tx/cas nil new-picasso new-valid-time]])]
-                (t/is (= new-tx-time (tx/await-tx-time indexer new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
-                (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                    (api/submit-tx *api* [[:crux.tx/cas nil new-picasso new-valid-time]])
+                    _ (api/sync *api* new-tx-time nil)]
+                (t/is (= new-tx-time (tx/await-tx-time (:indexer *api*) new-tx-time {:crux.tx-log/await-tx-timeout 1000})))
+                (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                   (t/is (= [(c/map->EntityTx {:eid          new-eid
                                               :content-hash new-content-hash
                                               :vt           new-valid-time
@@ -205,8 +196,9 @@
           (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
-                @(db/submit-tx tx-log [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
-            (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                (api/submit-tx *api* [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])
+                _ (api/sync *api* new-tx-time nil)]
+            (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
               (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
               (t/testing "first version of entity is still visible in the past"
                 (t/is (= tx-id (-> (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] valid-time new-tx-time)
@@ -214,87 +206,93 @@
                                    :tx-id)))))))))
 
     (t/testing "can retrieve history of entity"
-      (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
           (t/is (= 6 (count (map :content-hash picasso-history))))
           (with-open [i (kv/new-iterator snapshot)]
             (doseq [{:keys [content-hash]} picasso-history
                     :when (not (= (c/new-id nil) content-hash))
                     :let [version-k (c/encode-attribute+entity+content-hash+value-key-to
-                                      nil
-                                      (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
-                                      (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
-                                      (c/->id-buffer content-hash)
-                                      (c/->value-buffer "Pablo"))]]
+                                     nil
+                                     (c/->id-buffer :http://xmlns.com/foaf/0.1/givenName)
+                                     (c/->id-buffer :http://dbpedia.org/resource/Pablo_Picasso)
+                                     (c/->id-buffer content-hash)
+                                     (c/->value-buffer "Pablo"))]]
               (t/is (kv/get-value snapshot version-k)))))))
 
     (t/testing "can evict entity"
       (let [new-valid-time #inst "2018-05-23"
 
-            ; read documents before transaction to populate the cache
-            _ (with-open [snapshot (kv/new-snapshot f/*kv*)]
+                                        ; read documents before transaction to populate the cache
+            _ (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
                 (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
-                  (db/get-objects object-store snapshot (keep :content-hash picasso-history))))
+                  (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))
 
             {new-tx-time :crux.tx/tx-time
              new-tx-id   :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-valid-time]])]
+            (api/submit-tx *api* [[:crux.tx/evict :http://dbpedia.org/resource/Pablo_Picasso #inst "1970" new-valid-time]])
+            _ (api/sync *api* new-tx-time nil)]
 
-        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+        ;; TODO some race condition going on here:
+        (Thread/sleep 1000)
+
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
           (t/is (empty? (idx/entities-at snapshot [:http://dbpedia.org/resource/Pablo_Picasso] new-valid-time new-tx-time)))
 
           (t/testing "eviction keeps tx history"
             (let [picasso-history (idx/entity-history snapshot :http://dbpedia.org/resource/Pablo_Picasso)]
               (t/is (= 6 (count (map :content-hash picasso-history))))
               (t/testing "eviction removes docs"
-                (t/is (empty? (db/get-objects object-store snapshot (keep :content-hash picasso-history))))))))))))
+                (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))))))))))
 
 (t/deftest test-can-store-doc
-  (let [object-store (idx/->KvObjectStore f/*kv*)
-        tx-log (f/kv-tx-log f/*kv*)
-        picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
+  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
                     :http://dbpedia.org/resource/Pablo_Picasso)
         content-hash (c/new-id picasso)]
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))
 
-    (db/submit-doc tx-log content-hash picasso)
-    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+    (db/submit-doc (:tx-log *api*) content-hash picasso)
+
+    (Thread/sleep 1000)
+
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/is (= {content-hash picasso}
-               (db/get-objects object-store snapshot [content-hash])))
+               (db/get-objects (:object-store *api*) snapshot [content-hash])))
 
       (t/testing "non existent docs are ignored"
         (t/is (= {content-hash picasso}
-                 (db/get-objects object-store
+                 (db/get-objects (:object-store *api*)
                                  snapshot
                                  [content-hash
                                   "090622a35d4b579d2fcfebf823821298711d3867"])))
-        (t/is (empty? (db/get-objects object-store snapshot [])))))))
+        (t/is (empty? (db/get-objects (:object-store *api*) snapshot [])))))))
 
 (t/deftest test-can-correct-ranges-in-the-past
-  (let [object-store (idx/->KvObjectStore f/*kv*)
-        tx-log (f/kv-tx-log f/*kv* object-store)
-        ivan {:crux.db/id :ivan :name "Ivan"}
+  (let [ivan {:crux.db/id :ivan :name "Ivan"}
 
         v1-ivan (assoc ivan :version 1)
         v1-valid-time #inst "2018-11-26"
         {v1-tx-time :crux.tx/tx-time
          v1-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put v1-ivan v1-valid-time]])
+        (api/submit-tx *api* [[:crux.tx/put v1-ivan v1-valid-time]])
+        _ (api/sync *api* v1-tx-time nil)
 
         v2-ivan (assoc ivan :version 2)
         v2-valid-time #inst "2018-11-27"
         {v2-tx-time :crux.tx/tx-time
          v2-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put v2-ivan v2-valid-time]])
+        (api/submit-tx *api* [[:crux.tx/put v2-ivan v2-valid-time]])
+        _ (api/sync *api* v2-tx-time nil)
 
         v3-ivan (assoc ivan :version 3)
         v3-valid-time #inst "2018-11-28"
         {v3-tx-time :crux.tx/tx-time
          v3-tx-id :crux.tx/tx-id}
-        @(db/submit-tx tx-log [[:crux.tx/put v3-ivan v3-valid-time]])]
+        (api/submit-tx *api* [[:crux.tx/put v3-ivan v3-valid-time]])
+        _ (api/sync *api* v3-tx-time nil)]
 
-    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (t/testing "first version of entity is visible"
         (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time v3-tx-time)
                               (first)
@@ -315,9 +313,10 @@
           corrected-end-valid-time #inst "2018-11-29"
           {corrected-tx-time :crux.tx/tx-time
            corrected-tx-id :crux.tx/tx-id}
-          @(db/submit-tx tx-log [[:crux.tx/put corrected-ivan corrected-start-valid-time corrected-end-valid-time]])]
+          (api/submit-tx *api* [[:crux.tx/put corrected-ivan corrected-start-valid-time corrected-end-valid-time]])
+          _ (api/sync *api* corrected-tx-time nil)]
 
-      (with-open [snapshot (kv/new-snapshot f/*kv*)]
+      (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (t/testing "first version of entity is still there"
           (t/is (= v1-tx-id (-> (idx/entities-at snapshot [:ivan] v1-valid-time corrected-tx-time)
                                 (first)
@@ -341,9 +340,10 @@
             deleted-end-valid-time #inst "2018-11-28"
             {deleted-tx-time :crux.tx/tx-time
              deleted-tx-id :crux.tx/tx-id}
-            @(db/submit-tx tx-log [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])]
+            (api/submit-tx *api* [[:crux.tx/delete :ivan deleted-start-valid-time deleted-end-valid-time]])
+            _ (api/sync *api* deleted-tx-time nil)]
 
-        (with-open [snapshot (kv/new-snapshot f/*kv*)]
+        (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
           (t/testing "first version of entity was deleted"
             (t/is (empty? (idx/entities-at snapshot [:ivan] v1-valid-time deleted-tx-time))))
 
@@ -360,9 +360,9 @@
       (t/testing "end range is exclusive"
         (let [{deleted-tx-time :crux.tx/tx-time
                deleted-tx-id :crux.tx/tx-id}
-              @(db/submit-tx tx-log [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
+              (api/submit-tx *api* [[:crux.tx/delete :ivan v3-valid-time v3-valid-time]])]
 
-          (with-open [snapshot (kv/new-snapshot f/*kv*)]
+          (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
             (t/testing "third version of entity is still there"
               (t/is (= {:content-hash (c/new-id corrected-ivan)
                         :tx-id corrected-tx-id}
@@ -375,15 +375,15 @@
 ;; the second assertion if we want to keep it around to ensure it
 ;; keeps working.
 (t/deftest test-corrections-in-the-past-slowes-down-bitemp-144
-  (let [tx-log (f/kv-tx-log f/*kv*)
-        ivan {:crux.db/id :ivan :name "Ivan"}
+  (let [ivan {:crux.db/id :ivan :name "Ivan"}
         start-valid-time #inst "2019"
-        number-of-versions 1000]
+        number-of-versions 1000
+        {tx-time :crux.tx/tx-time}
+        (api/submit-tx *api* (vec (for [n (range number-of-versions)]
+                                    [:crux.tx/put (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
+        _ (api/sync *api* tx-time nil)]
 
-    @(db/submit-tx tx-log (vec (for [n (range number-of-versions)]
-                                 [:crux.tx/put (assoc ivan :verison n) (Date. (+ (.getTime start-valid-time) (inc (long n))))])))
-
-    (with-open [snapshot (kv/new-snapshot f/*kv*)]
+    (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
@@ -404,25 +404,26 @@
               #_(t/is (>= baseline-time corrections-time)))))))))
 
 (t/deftest test-can-read-kv-tx-log
-  (let [tx-log (f/kv-tx-log f/*kv*)
-        ivan {:crux.db/id :ivan :name "Ivan"}
+  (let [ivan {:crux.db/id :ivan :name "Ivan"}
 
         tx1-ivan (assoc ivan :version 1)
         tx1-valid-time #inst "2018-11-26"
         {tx1-id :crux.tx/tx-id
          tx1-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put tx1-ivan tx1-valid-time]])
+        (api/submit-tx *api* [[:crux.tx/put tx1-ivan tx1-valid-time]])
+        _ (api/sync *api* tx1-tx-time nil)
 
         tx2-ivan (assoc ivan :version 2)
         tx2-petr {:crux.db/id :petr :name "Petr"}
         tx2-valid-time #inst "2018-11-27"
         {tx2-id :crux.tx/tx-id
          tx2-tx-time :crux.tx/tx-time}
-        @(db/submit-tx tx-log [[:crux.tx/put tx2-ivan tx2-valid-time]
-                               [:crux.tx/put tx2-petr tx2-valid-time]])]
+        (api/submit-tx *api* [[:crux.tx/put tx2-ivan tx2-valid-time]
+                              [:crux.tx/put tx2-petr tx2-valid-time]])
+        _ (api/sync *api* tx2-tx-time nil)]
 
-    (with-open [tx-log-context (db/new-tx-log-context tx-log)]
-      (let [log (db/tx-log tx-log tx-log-context nil)]
+    (with-open [tx-log-context (db/new-tx-log-context (:tx-log *api*))]
+      (let [log (db/tx-log (:tx-log *api*) tx-log-context nil)]
         (t/is (not (realized? log)))
         (t/is (= [{:crux.tx/tx-id tx1-id
                    :crux.tx/tx-time tx1-tx-time

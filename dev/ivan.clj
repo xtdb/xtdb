@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [crux.bench :as bench]
             [crux.fixtures :as f]
+            [crux.fixtures.kafka :as fk]
             [crux.api :as api]
             [crux.codec :as c]))
 
@@ -57,8 +58,8 @@
   (f))
 
 (t/use-fixtures :once
-                f/with-embedded-kafka-cluster
-                f/with-kafka-client
+                fk/with-embedded-kafka-cluster
+                fk/with-kafka-client
                 f/with-cluster-node
                 with-stocks-data)
 
@@ -128,4 +129,3 @@
   (t/is (min stocks-count 1000)   (count (api/q (api/db f/*api*) query-1000)))
   (t/is (min stocks-count 10000)  (count (api/q (api/db f/*api*) query-10000)))
   (t/is (min stocks-count 100000) (count (api/q (api/db f/*api*) query-100000))))
-

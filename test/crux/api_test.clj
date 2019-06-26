@@ -3,6 +3,8 @@
             [crux.bootstrap.standalone]
             [crux.codec :as c]
             [crux.fixtures :as f]
+            [crux.fixtures.kafka :as fk]
+            [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
            java.util.Date
@@ -12,7 +14,7 @@
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
 
-(t/use-fixtures :once f/with-embedded-kafka-cluster)
+(t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each f/with-each-api-implementation)
 
 (declare execute-sparql)
@@ -75,10 +77,8 @@
                    (:crux.tx-log/consumer-state status-map)))
 
           :else
-          (let [tx-topic-key (keyword "crux.kafka.topic-partition"
-                                      (str (get-in f/*cluster-node* [:options :tx-topic]) "-0"))
-                doc-topic-key (keyword "crux.kafka.topic-partition"
-                                       (str (get-in f/*cluster-node* [:options :doc-topic]) "-0"))]
+          (let [tx-topic-key (keyword "crux.kafka.topic-partition" (str f/*tx-topic* "-0"))
+                doc-topic-key (keyword "crux.kafka.topic-partition" (str f/*doc-topic* "-0"))]
             (t/is (= {:lag 0
                       :next-offset 1
                       :time tx-time}
@@ -131,8 +131,8 @@
                 (t/is (realized? result))))))
 
         (t/testing "SPARQL query"
-          (when (bound? #'f/*api-url*)
-            (let [repo (SPARQLRepository. (str f/*api-url* "/sparql"))]
+          (when (bound? #'fh/*api-url*)
+            (let [repo (SPARQLRepository. (str fh/*api-url* "/sparql"))]
               (try
                 (.initialize repo)
                 (with-open [conn (.getConnection repo)]
