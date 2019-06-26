@@ -147,8 +147,9 @@ Since Crux does not track any reference types for attributes, Datalog queries
 simply attempt to evaluate and navigate attributes as reference types during
 execution
 . Datomic's Datalog query language is more featureful and has more built-in
-operations than Crux's equivalent. Both systems provide powerful graph query
-possibilities
+operations than Crux's equivalent, however Crux also returns results lazily and
+can spill to disk when sorting large result sets. Both systems provide powerful
+graph query possibilities
 
 Note that Datomic Cloud is separate technology platform that is designed from
 the ground up to run on AWS and it is out of scope for this comparison.
