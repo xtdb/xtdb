@@ -2,7 +2,8 @@
   (:require [criterium.core :as crit]
             [crux.api :as api]
             [crux.db :as db]
-            [crux.fixtures :as f :refer [*api*]]
+            [crux.fixtures :as f]
+            [crux.fixtures.bootstrap :as fb :refer [*api*]]
             [crux.fixtures.kv :as fkv]
             [crux.query :as q])
   (:import java.util.Date))
@@ -99,7 +100,7 @@
      :lmdb fkv/with-lmdb
      :mem fkv/with-memdb)
    (fn []
-     (f/with-standalone-system
+     (fb/with-standalone-system
        (fn []
          (when verbose (print ":insert... ") (flush))
          (when preload

@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [crux.bench :as bench]
             [crux.fixtures :as f]
+            [crux.fixtures.bootstrap :as fb]
             [crux.fixtures.kafka :as fk]
             [crux.api :as api]
             [crux.codec :as c]))
@@ -46,21 +47,21 @@
 (def query-size 1000)
 
 (defn with-stocks-data [f]
-  (api/submit-tx f/*api* (f/maps->tx-ops currencies))
+  (api/submit-tx fb/*api* (f/maps->tx-ops currencies))
   (println "stocks count" stocks-count)
   (let [ctr (atom 0)
         partitions-total (/ stocks-count 1000)]
     (doseq [stocks-batch (partition-all 1000 (map gen-stock (range stocks-count)))]
       (swap! ctr inc)
       (println "partition " @ctr "/" partitions-total)
-      (api/submit-tx f/*api* (f/maps->tx-ops stocks-batch))))
-  (api/sync f/*api* (java.time.Duration/ofMinutes 20))
+      (api/submit-tx fb/*api* (f/maps->tx-ops stocks-batch))))
+  (api/sync fb/*api* (java.time.Duration/ofMinutes 20))
   (f))
 
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                f/with-cluster-node
+                fb/with-cluster-node
                 with-stocks-data)
 
 (comment
@@ -71,7 +72,7 @@
        :db-dir     "data/db-dir-1"
        :event-log-dir "data/eventlog-1"}))
 
-  (binding [f/*api* system]
+  (binding [fb/*api* system]
     (with-stocks-data println))
 
   stocks
@@ -121,11 +122,11 @@
 
 (t/deftest test-stocks-query
   (println "running a stocks query with join to currencies")
-  (let [db (api/db f/*api*)
+  (let [db (api/db fb/*api*)
         -dry (bench/duration-millis (api/q db query-1000))
         durations (not-really-benchmarking db sample-size)]
     (println "with cache durations in millis are" durations)
     (println "avg" (/ (apply + durations) sample-size)))
-  (t/is (min stocks-count 1000)   (count (api/q (api/db f/*api*) query-1000)))
-  (t/is (min stocks-count 10000)  (count (api/q (api/db f/*api*) query-10000)))
-  (t/is (min stocks-count 100000) (count (api/q (api/db f/*api*) query-100000))))
+  (t/is (min stocks-count 1000)   (count (api/q (api/db fb/*api*) query-1000)))
+  (t/is (min stocks-count 10000)  (count (api/q (api/db fb/*api*) query-10000)))
+  (t/is (min stocks-count 100000) (count (api/q (api/db fb/*api*) query-100000))))

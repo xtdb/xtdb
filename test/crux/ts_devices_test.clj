@@ -6,6 +6,7 @@
             [crux.api :as api]
             [crux.fixtures :as f]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.bootstrap :as fb]
             [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.io :as cio])
   (:import java.time.temporal.ChronoUnit
@@ -83,8 +84,8 @@
 
 (defn with-ts-devices-data [f]
   (if run-ts-devices-tests?
-    (let [submit-future (future (submit-ts-devices-data f/*api*))]
-      (api/sync f/*api* nil)
+    (let [submit-future (future (submit-ts-devices-data fb/*api*))]
+      (api/sync fb/*api* nil)
       (t/is (= 1001000 @submit-future))
       (f))
     (f)))
@@ -92,7 +93,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                f/with-cluster-node
+                fb/with-cluster-node
                 with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices
@@ -128,7 +129,7 @@
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000992 87.6]
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000991 93.1]
               [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000990 89.9]])
-          (api/q (api/db f/*api*)
+          (api/q (api/db fb/*api*)
               '{:find [time device-id battery-temperature]
                 :where [[r :reading/time time]
                         [r :reading/device-id device-id]
@@ -189,7 +190,7 @@
                25.0
                :discharging
                "focus"]])
-          (api/q (api/db f/*api*)
+          (api/q (api/db fb/*api*)
               '{:find [time device-id cpu-avg-1min battery-level battery-status model]
                 :where [[r :reading/time time]
                         [r :reading/device-id device-id]
@@ -240,13 +241,13 @@
               [#inst "2016-11-15T19:00:00.000-00:00" 6.0 100.0]
               [#inst "2016-11-15T20:00:00.000-00:00" 6.0 100.0]]
              (let [kv *kv*
-                   reading-ids (->> (api/q (api/db f/*api*)
+                   reading-ids (->> (api/q (api/db fb/*api*)
                                         '{:find [r]
                                           :where [[r :reading/device-id device-id]
                                                   (or [device-id :device-info/model "pinto"]
                                                       [device-id :device-info/model "focus"])]})
                                     (reduce into []))
-                   db (api/db f/*api* #inst "1970")]
+                   db (api/db fb/*api* #inst "1970")]
                (with-open [snapshot (api/new-snapshot db)]
                  (->> (for [r reading-ids]
                         (for [entity-tx (api/history-ascending db snapshot r)]

@@ -5,6 +5,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
+            [crux.fixtures.bootstrap :as fb :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.index :as idx]
             [crux.io :as cio]
@@ -326,9 +327,9 @@
 (defn load-rdf-into-crux [resource]
   (let [submit-future (future
                         (with-open [in (io/input-stream (io/resource resource))]
-                          (rdf/submit-ntriples (:tx-log f/*api*) in 1000)))]
+                          (rdf/submit-ntriples (:tx-log *api*) in 1000)))]
     (println "Loaded into kafka awaiting Crux to catch up indexing...")
-    (api/sync f/*api* (java.time.Duration/ofMinutes 20))
+    (api/sync *api* (java.time.Duration/ofMinutes 20))
     (t/is (= 521585 @submit-future))))
 
 (defn with-watdiv-data [f]
@@ -376,7 +377,7 @@
                 with-sail-repository
                 with-datomic
                 with-neo4j
-                f/with-cluster-node
+                fb/with-cluster-node
                 with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all
@@ -404,7 +405,7 @@
          (when crux-tests?
            (let [start-time (System/currentTimeMillis)]
              (t/is (try
-                     (.write out (str ":crux-results " (lazy-count-with-timeout f/*api* (sparql/sparql->datalog q) query-timeout-ms)
+                     (.write out (str ":crux-results " (lazy-count-with-timeout *api* (sparql/sparql->datalog q) query-timeout-ms)
                                       "\n"))
                      true
                      (catch Throwable t

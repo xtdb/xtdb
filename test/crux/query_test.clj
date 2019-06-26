@@ -3,10 +3,11 @@
             [clojure.test :as t]
             [crux.api :as api]
             [crux.db :as db]
-            [crux.fixtures :as f :refer [*api*]])
+            [crux.fixtures.bootstrap :as fb :refer [*api*]]
+            [crux.fixtures :as f])
   (:import java.util.UUID))
 
-(t/use-fixtures :each f/with-standalone-system)
+(t/use-fixtures :each fb/with-standalone-system)
 
 (t/deftest test-sanity-check
   (f/transact! *api* (f/people [{:name "Ivan"}]))
@@ -1420,7 +1421,7 @@
                                                     :arrival-time #inst "2019-01-12"
                                                     :departure-time :na}
                                                    #inst "2019-01-12"]])]
-      (.sync f/*api* (:crux.tx/tx-time last-submitted-tx) nil))
+      (.sync *api* (:crux.tx/tx-time last-submitted-tx) nil))
 
     (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                [:p3 :LA #inst "2018-12-31" :na]

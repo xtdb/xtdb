@@ -4,7 +4,8 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.fixtures :as f :refer [*api*]]
+            [crux.fixtures :as f]
+            [crux.fixtures.bootstrap :as fb :refer [*api*]]
             [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.tx :as tx]
             [crux.kv :as kv]
@@ -13,7 +14,7 @@
             [crux.query :as q])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation f/with-standalone-system  fkv/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fb/with-standalone-system  fkv/with-kv-store f/with-silent-test-check)
 
 (defn load-ntriples-example [resource]
   (with-open [in (io/input-stream (io/resource resource))]

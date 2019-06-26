@@ -1,10 +1,11 @@
 (ns crux.decorators.aggregation-test
-  (:require [crux.decorators.aggregation.alpha :as aggr]
-            [crux.fixtures :as f :refer [*api*]]
+  (:require [clojure.test :as t]
             [crux.api :as api]
-            [clojure.test :as t]))
+            [crux.decorators.aggregation.alpha :as aggr]
+            [crux.fixtures :as f]
+            [crux.fixtures.bootstrap :as fb :refer [*api*]]))
 
-(t/use-fixtures :each f/with-standalone-system)
+(t/use-fixtures :each fb/with-standalone-system)
 
 (t/deftest test-count-aggregation
   (f/transact!

@@ -9,6 +9,8 @@
            org.apache.kafka.clients.producer.KafkaProducer))
 
 (def ^:dynamic *kafka-bootstrap-servers*)
+(def ^:dynamic ^String *tx-topic*)
+(def ^:dynamic ^String *doc-topic*)
 
 (defn write-kafka-meta-properties [log-dir broker-id]
   (let [meta-properties (io/file log-dir "meta.properties")]
