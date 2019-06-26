@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.bootstrap.standalone]
             [crux.codec :as c]
-            [crux.fixtures :as f]
             [crux.fixtures.bootstrap :as fb]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.http-server :as fh]
@@ -36,9 +35,9 @@
 (t/deftest test-can-use-crux-ids
   (let [id #crux/id :https://adam.com
         doc {:crux.db/id id, :name "Adam"}
-        submitted-tx (.submitTx f/*api* [[:crux.tx/put doc]])]
-    (.sync f/*api* (:crux.tx/tx-time submitted-tx) nil)
-    (t/is (.entity (.db f/*api*) id))))
+        submitted-tx (.submitTx fb/*api* [[:crux.tx/put doc]])]
+    (.sync fb/*api* (:crux.tx/tx-time submitted-tx) nil)
+    (t/is (.entity (.db fb/*api*) id))))
 
 (t/deftest test-single-id
   (let [valid-time (Date.)
@@ -101,8 +100,8 @@
         (t/is (= #{[:ivan]} (.q (.db fb/*api*)
                                 '{:find [e]
                                   :where [[e :name "Ivan"]]})))
-        (t/is (= #{} (.q (.db fb/*api* #inst "1999") '{:find [e]
-                                                      :where [[e :name "Ivan"]]})))
+        (t/is (= #{} (.q (.db fb/*api* #inst "1999") '{:find  [e]
+                                                       :where [[e :name "Ivan"]]})))
 
         (t/testing "query string"
           (t/is (= #{[:ivan]} (.q (.db fb/*api*)
@@ -110,7 +109,7 @@
 
         (t/testing "query vector"
           (t/is (= #{[:ivan]} (.q (.db fb/*api*) '[:find e
-                                                  :where [e :name "Ivan"]]))))
+                                                   :where [e :name "Ivan"]]))))
 
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
