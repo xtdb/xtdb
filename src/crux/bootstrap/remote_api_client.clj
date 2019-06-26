@@ -2,6 +2,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [crux.io :as cio]
+            [crux.codec :as c]
             [crux.query :as q])
   (:import [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Duration
@@ -80,7 +81,7 @@
        (and (<= 200 status) (< status 400)
             (= "application/edn" (:content-type headers)))
        (if (string? body)
-         (edn/read-string body)
+         (edn/read-string {:readers {'crux/id c/id-edn-reader}} body)
          body)
 
        :else

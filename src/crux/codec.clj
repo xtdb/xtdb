@@ -312,11 +312,11 @@
 
 (defmethod print-method Id [id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (str id)))
+  (.write w (pr-str (str id))))
 
 (defmethod print-dup Id [id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (str id)))
+  (.write w (pr-str (str id))))
 
 (extend-protocol IdOrBuffer
   Id
@@ -389,11 +389,11 @@
 
 (defmethod print-method EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (str (or (.original-id id) (.hex id)))))
+  (.write w (pr-str (str (or (.original-id id) (.hex id))))))
 
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (str (or (.original-id id) (.hex id)))))
+  (.write w (pr-str (str (or (.original-id id) (.hex id))))))
 
 (nippy/extend-freeze
  EDNId

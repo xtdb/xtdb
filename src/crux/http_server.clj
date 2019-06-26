@@ -36,9 +36,9 @@
 ;; Utils
 
 (defn- body->edn [request]
-  (-> request
+  (->> request
       req/body-string
-      edn/read-string))
+      (edn/read-string {:readers {'crux/id c/id-edn-reader}})))
 
 (defn- check-path [[path-pattern valid-methods] request]
   (let [path (req/path-info request)
@@ -304,7 +304,7 @@
     (transact crux-system request)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
-             sparql-available? )
+             sparql-available?)
       ((resolve 'crux.sparql.protocol/sparql-query) crux-system request)
       {:status 400
        :headers {"Content-Type" "text/plain"}

@@ -122,4 +122,4 @@
       (catch Throwable t
         (doseq [c (reverse @started)]
           (cio/try-close c))
-        (throw t))))  )
+        (throw t)))))
