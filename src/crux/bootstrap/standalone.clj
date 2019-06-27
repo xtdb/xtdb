@@ -103,14 +103,15 @@
             object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
                                                   (b/start-object-store {:kv kv-store} options))
 
-            tx-log (tx/->EventTxLog event-log-kv-store)
+            tx-log (doto (tx/->EventTxLog event-log-kv-store)
+                     (->> (swap! started conj)))
 
             indexer (tx/->KvIndexer kv-store tx-log object-store)
 
             event-log-consumer (when event-log-kv-store
-                                 (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
-                                                                                           event-log-sync-interval-ms)))]
-
+                                 (doto (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
+                                                                                                 event-log-sync-interval-ms))
+                                   (->> (swap! started conj))))]
 
         (map->StandaloneSystem {:kv-store kv-store
                                 :event-log-kv-store event-log-kv-store
