@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
+            [crux.fixtures.rdf :as frdf]
             [crux.fixtures.bootstrap :as fb :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.api :as api]))
@@ -28,17 +29,11 @@
 
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 
-(defn load-ntriples-example [resource]
-  (with-open [in (io/input-stream (io/resource resource))]
-    (vec (for [entity (->> (rdf/ntriples-seq in)
-                           (rdf/statements->maps))]
-           [:crux.tx/put entity]))))
-
 (defn with-lubm-data [f]
-  (let [tx-ops (->> (concat (load-ntriples-example "lubm/univ-bench.ntriples")
-                            (load-ntriples-example lubm-triples-resource))
-                    (map #(rdf/use-default-language % :en))
-                    (vec))]
+  (let [tx-ops (->> (concat (frdf/->tx-ops (frdf/ntriples "lubm/univ-bench.ntriples"))
+                            (frdf/->tx-ops (frdf/ntriples lubm-triples-resource)))
+                    (frdf/->default-language)
+                    vec)]
     (doseq [tx-ops (partition-all 1000 tx-ops)]
       (api/submit-tx *api* (vec tx-ops)))
     (api/sync *api* nil)

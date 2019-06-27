@@ -156,11 +156,6 @@
                        (.getSubject s)))
        (map entity-statements->map)))
 
-(defn maps-by-id [rdf-maps]
-  (->> (for [m rdf-maps]
-         {(:crux.db/id m) m})
-       (into {})))
-
 (def ^"[Lorg.eclipse.rdf4j.model.Resource;"
   empty-resource-array (make-array Resource 0))
 

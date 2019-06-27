@@ -11,23 +11,19 @@
             [crux.kv :as kv]
             [crux.api :as api]
             [crux.rdf :as rdf]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.fixtures.rdf :as frdf])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation fb/with-standalone-system  fkv/with-kv-store f/with-silent-test-check)
-
-(defn load-ntriples-example [resource]
-  (with-open [in (io/input-stream (io/resource resource))]
-    (->> (rdf/ntriples-seq in)
-         (rdf/statements->maps)
-         (map #(rdf/use-default-language % :en))
-         (#(rdf/maps-by-id %)))))
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fb/with-standalone-system fkv/with-kv-store f/with-silent-test-check)
 
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
-  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                    :http://dbpedia.org/resource/Pablo_Picasso)
+  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
+                                                                 (frdf/ntriples)
+                                                                 (frdf/->default-language)
+                                                                 (frdf/->maps-by-id)))
         content-hash (c/new-id picasso)
         valid-time #inst "2018-05-21"
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
@@ -247,8 +243,11 @@
                 (t/is (empty? (db/get-objects (:object-store *api*) snapshot (keep :content-hash picasso-history))))))))))))
 
 (t/deftest test-can-store-doc
-  (let [picasso (-> (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                    :http://dbpedia.org/resource/Pablo_Picasso)
+  (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
+                                                                 (frdf/ntriples)
+                                                                 (frdf/->default-language)
+                                                                 (frdf/->maps-by-id)))
+
         content-hash (c/new-id picasso)]
     (t/is (= 48 (count picasso)))
     (t/is (= "Pablo" (:http://xmlns.com/foaf/0.1/givenName picasso)))

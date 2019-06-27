@@ -8,6 +8,7 @@
             [crux.fixtures :as f]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.kv :as fkv :refer [*kv*]]
+            [crux.fixtures.rdf :as frdf]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.rdf :as rdf]
@@ -35,16 +36,10 @@
       (t/is (= 1 (count (seq records))))
       (t/is (= person (first (map k/consumer-record->value records)))))))
 
-(defn load-ntriples-example [resource]
-  (with-open [in (io/input-stream (io/resource resource))]
-    (vec (for [entity (->> (rdf/ntriples-seq in)
-                           (rdf/statements->maps))]
-           [:crux.tx/put entity]))))
-
 (t/deftest test-can-transact-entities
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
-        tx-ops (load-ntriples-example  "crux/example-data-artists.nt")
+        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -67,7 +62,7 @@
 (t/deftest test-can-transact-and-query-entities
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
-        tx-ops (load-ntriples-example  "crux/picasso.nt")
+        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/picasso.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -118,7 +113,8 @@
   (let [tx-topic "test-can-process-compacted-documents-tx"
         doc-topic "test-can-process-compacted-documents-doc"
 
-        tx-ops (load-ntriples-example  "crux/picasso.nt")
+        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/picasso.nt"))
+
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -190,10 +186,9 @@
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
         doc-topic "test-can-transact-and-query-dbpedia-entities-doc"
-        tx-ops (->> (concat (load-ntriples-example "crux/Pablo_Picasso.ntriples")
-                            (load-ntriples-example "crux/Guernica_(Picasso).ntriples"))
-                    (map #(rdf/use-default-language % :en))
-                    (vec))
+        tx-ops (->> (concat (frdf/->tx-ops (frdf/ntriples "crux/Pablo_Picasso.ntriples"))
+                            (frdf/->tx-ops (frdf/ntriples "crux/Guernica_(Picasso).ntriples")))
+                    (frdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -305,9 +300,7 @@
 (t/deftest test-can-transact-and-query-using-sparql
   (let [tx-topic "test-can-transact-and-query-using-sparql-tx"
         doc-topic "test-can-transact-and-query-using-sparql-doc"
-        tx-ops (->> (load-ntriples-example "crux/vc-db-1.nt")
-                    (map #(rdf/use-default-language % :en))
-                    (vec))
+        tx-ops (->> (frdf/ntriples "crux/vc-db-1.nt") (frdf/->tx-ops) (frdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
