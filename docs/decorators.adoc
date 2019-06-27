@@ -1,4 +1,4 @@
-= Decorators 
+= Decorators
 
 == Introduction
 
@@ -7,7 +7,7 @@ optionally and can be created easily without needing understand how the core of
 Crux works. Use of decorators is currently an advanced topic and requires a
 basic understanding of Clojure to configure.
 
-== Aggregation 
+== Aggregation
 
 The
 https://github.com/juxt/crux/blob/master/src/crux/decorators/aggregation/alpha.clj[`aggregation.alpha`]
@@ -18,7 +18,7 @@ transducer magic).
 
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=aggr1]
+include::./query_examples.clj[tags=aggr1]
 ----
 
 See the https://github.com/juxt/crux/blob/master/test/crux/decorators/aggregation_test.clj[aggregation_test.clj] for more examples of usage.

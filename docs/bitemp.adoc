@@ -171,7 +171,7 @@ Applied industry-specific examples include:
 
 - Legal Documentation – maintain visibility of all critical dates relating to
   legal documents, including what laws were known to be applicable at the time,
-and any subsequent laws that may be relevant and applied retrospectively 
+and any subsequent laws that may be relevant and applied retrospectively
 - Insurance Coverage – assess the level of coverage for a beneficiary across
   the lifecycle of care and legislation changes
 - Reconstruction of Trades – readily comply with evolving financial regulations
@@ -219,7 +219,7 @@ Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
 initial documents are ingested using the Day 0 valid time:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp0]
+include::.//query_examples.clj[tags=bitemp0]
 ----
 
 The first document shows that `Person 2` was recorded entering via `:SFO` and
@@ -235,7 +235,7 @@ documents available to ingest.
 A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp2]
+include::.//query_examples.clj[tags=bitemp2]
 ----
 
 ==== Day 3
@@ -244,7 +244,7 @@ Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
 represented as an update to the existing document using the Day 3 valid time:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp3]
+include::.//query_examples.clj[tags=bitemp3]
 ----
 
 ==== Day 4
@@ -256,21 +256,21 @@ First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
 must ingest using the Day 0 valid time `#inst "2018-12-31"`:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp4]
+include::.//query_examples.clj[tags=bitemp4]
 ----
 
 We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
 so again we ingest this document using the corresponding Day 3 valid time:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp4b]
+include::.//query_examples.clj[tags=bitemp4b]
 ----
 
 Finally, we receive two events relating to Day 4, which can be ingested using
 the current valid time:
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp4c]
+include::.//query_examples.clj[tags=bitemp4c]
 ----
 
 ==== Day 5
@@ -279,7 +279,7 @@ On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
 (which we already knew), departed from `:SFO` on Day 5.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp5]
+include::.//query_examples.clj[tags=bitemp5]
 ----
 
 ==== Day 6
@@ -295,7 +295,7 @@ error. The second document shows that `Person 3` has only just departed on Day
 7, which is how the previous error was noticed.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp7]
+include::.//query_examples.clj[tags=bitemp7]
 ----
 
 ==== Day 8
@@ -305,15 +305,15 @@ Two documents have been received relating to new arrivals on Day 8. Note that
 
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp8]
+include::.//query_examples.clj[tags=bitemp8]
 ----
 
 ==== Day 9
 
-On Day 9 we learn that `Person 3` also departed on Day 8. 
+On Day 9 we learn that `Person 3` also departed on Day 8.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp9]
+include::.//query_examples.clj[tags=bitemp9]
 ----
 
 ==== Day 10
@@ -322,7 +322,7 @@ A single document arrives showing that `Person 5` entered at `:LA` earlier that
 day.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp10]
+include::.//query_examples.clj[tags=bitemp10]
 ----
 
 ==== Day 11
@@ -331,7 +331,7 @@ Similarly to the previous day, a single document arrives showing that `Person
 7` entered at `:NY` earlier that day.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp11]
+include::.//query_examples.clj[tags=bitemp11]
 ----
 
 ==== Day 12
@@ -339,7 +339,7 @@ include::./query_test_examples.clj[tags=bitemp11]
 Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitemp12]
+include::.//query_examples.clj[tags=bitemp12]
 ----
 
 ==== Question Time
@@ -355,7 +355,7 @@ We are able to easily express this as a query in Crux:
 
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitempq]
+include::.//query_examples.clj[tags=bitempq]
 ----
 
 The answer given by Crux is a simple set of the three relevant people along
@@ -364,7 +364,7 @@ known to have yet departed at this point:
 
 [source,clj]
 ----
-include::./query_test_examples.clj[tags=bitempr]
+include::.//query_examples.clj[tags=bitempr]
 ----
 
 == Related Concepts
