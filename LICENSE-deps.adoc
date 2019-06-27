@@ -1,6 +1,6 @@
-* Overview of Dependencies and Licenses
+= Overview of Dependencies and Licenses
 
-** Crux JAR dependencies
+== Crux JAR dependencies
 
 ----
 ([(org.clojure/clojure "1.10.0") "Eclipse Public License 1.0"]
@@ -18,7 +18,7 @@
  [(org.agrona/agrona "1.0.0") "Apache v2.0 license"])
 ----
 
-** Crux uber-jar dependencies
+== Crux uber-jar dependencies
 
 ----
 ([[joda-time "2.9.9"] "Apache 2"]

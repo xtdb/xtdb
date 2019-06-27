@@ -44,6 +44,7 @@ section are not aware of valid times or transaction times.
 * <<_ordering_and_pagination>>
 * <<_rules,`:rules`>>
 * <<_lazy_queries>>
+* <<_clojure_tips>>
 * <<_datascript_differences>>
 
 == Basic Query
@@ -86,10 +87,13 @@ include::./query_examples.clj[tags=basic-query]
 
 Let's try to work out what these 3 clauses do...
 
+`p1` and `n` are logical variables. Logic variables are often prefixed with `?`
+for clarity but this is optional.
+
 `[p1 :name n]` is looking for all entities that have a value under the
 attribute of `:name` and then binds the corresponding entity ID to `p1` and the
-corresponding value to `n`. Since all 3 entities in our database have a
-`:name` attribute, this clause alone will simply return all 3 entities.
+corresponding value to `n`. Since all 3 entities in our database have a `:name`
+attribute, this clause alone will simply return all 3 entities.
 
 `[p1 :last-name n]` reuses the variable `n` from the previous clause
 which is significant because it constrains the query to only look for entities
@@ -412,6 +416,44 @@ optionally a `snapshot` which is already opened and managed by the caller
 (using `with-open` for example). This version of the call returns a lazy
 sequence of the results, while the other version provides a set. A snapshot can
 be retrieved from a `kv` instance via `crux.api/new-snapshot`.
+
+== Clojure Tips
+
+=== Quoting
+
+Logic variables used in queries must always be quoted in the `:find` and
+`:where` clauses, which in the most minimal case could look like the following: 
+
+[source,clj]
+----
+(crux/q db 
+  {:find ['?e]
+   :where [['?e :event/employee-code '?code]]}))
+----
+
+However it is often convenient to quote entire clauses or even the entire query
+map rather than each individual use of every logical variable, for instance:
+
+[source,clj]
+----
+(crux/q db 
+  '{:find [?e]
+    :where [[?e :event/employee-code ?code]]}))
+----
+
+Confusion may arise when you later attempt to introduce references to Clojure
+variables within your query map, such as when using `:args`. This can be
+resolved by introducing more granular quoting for specific parts of the query
+map: 
+
+[source,clj]
+----
+(let [my-code 101214]
+  (crux/q db
+    {:find '[?e]
+     :where '[[?e :event/employee-code ?code]]
+     :args [{:?code my-code}]}))
+----
 
 == DataScript Differences
 
