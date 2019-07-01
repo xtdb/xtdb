@@ -30,3 +30,5 @@ bench/datomic-data/**/*
 
 /example/imdb/data/**/*
 example/imdb/.nrepl-port
+/crux-core/.lein-failures
+/crux-core/pom.xml

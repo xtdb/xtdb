@@ -13,6 +13,7 @@
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.5.1" :scope "provided"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.5.1" :scope "provided"]
                  [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]]
+  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
