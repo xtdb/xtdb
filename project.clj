@@ -13,7 +13,6 @@
 
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.2" :scope "provided"]
-                 [org.apache.kafka/kafka-clients "2.2.0" :scope "provided"]
 
                  [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]
 

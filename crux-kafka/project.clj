@@ -5,11 +5,14 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/tools.logging "0.4.1"]
+
                  [juxt/crux-core :derived-from-git]
                  [juxt/crux-dev :derived-from-git]
 
-                 ;; Kafka
+                 [org.apache.kafka/kafka-clients "2.2.0" :scope "provided"]
                  [org.apache.kafka/kafka_2.12 "2.2.0"]
+
+                 ;; TODO should be moved, as dev depdendencies?
                  [org.apache.zookeeper/zookeeper "3.4.14"
                   :exclusions [io.netty/netty
                                jline
