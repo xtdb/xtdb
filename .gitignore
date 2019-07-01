@@ -34,3 +34,5 @@ example/imdb/.nrepl-port
 /crux-core/pom.xml
 /crux-kafka/pom.xml
 /crux-lmdb/pom.xml
+/crux-dev/.lein-failures
+/crux-lmdb/.lein-failures
