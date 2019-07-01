@@ -5,10 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/tools.logging "0.4.1"]
-                 [com.stuartsierra/dependency "0.2.0"]
-                 [com.taoensso/nippy "2.14.0"]
                  [com.taoensso/encore "2.114.0"]
-                 [org.agrona/agrona "1.0.0"]
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.2" :scope "provided"]
                  [org.apache.kafka/kafka-clients "2.2.0" :scope "provided"]
@@ -50,7 +47,6 @@
                      :main crux.main.graal}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
                                   [criterium "0.4.5"]
-                                  [org.clojure/test.check "0.10.0-alpha3"]
                                   [com.datomic/datomic-free "0.9.5697"
                                    :exclusions [org.slf4j/slf4j-nop]]
                                   [org.neo4j/neo4j "3.5.5"
