@@ -19,6 +19,7 @@
                                org.apache.yetus/audience-annotations
                                org.slf4j/slf4j-log4j12
                                log4j]]]
-  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]]}}
+  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]
+                                  [juxt/crux-rdf :derived-from-git]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"])

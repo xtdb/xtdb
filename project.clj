@@ -11,14 +11,12 @@
                  [juxt/crux-lmdb :derived-from-git]
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-http-server :derived-from-git]
+                 [juxt/crux-rdf :derived-from-git]
 
                  ;; Provided dependencies included in uberjar.
                  [org.clojure/tools.cli "0.4.2" :scope "provided"]
 
-                 [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]
-
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.5.1" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.5.1" :scope "provided"]]
+                 [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
   :profiles { ;; Provided dependencies excluded from uberjar.
              :provided {:dependencies [[clj-http "3.10.0"]
@@ -65,7 +63,7 @@
           :path "dev/ns-hierarchy.png"}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-kafka" "crux-lmdb" "crux-core" "crux-dev" "crux-http-server"]
+  :sub ["crux-core" "crux-rdf" "crux-dev" "crux-lmdb" "crux-kafka" "crux-http-server"]
 
   :aot [crux.main]
   :main crux.main
