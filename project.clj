@@ -68,7 +68,7 @@
           :path "dev/ns-hierarchy.png"}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-kafka" "crux-lmdb" "crux-core" "crux-dev"]
+  :sub ["crux-core" "crux-dev" "crux-lmdb" "crux-kafka"]
 
   :aot [crux.main]
   :main crux.main
