@@ -73,10 +73,6 @@
   ;; TODO: Leiningen vs CIDER nREPL version issue.
   ;;       https://github.com/technomancy/leiningen/pull/2367
   ;; :pedantic? :abort
-  :jvm-opts ~(vec (remove nil?
-                          [(when-let [f (System/getenv "YOURKIT_AGENT")]
-                             (str "-agentpath:" (clojure.java.io/as-file f)))]))
-
   :repositories [["snapshots" {:url "https://repo.clojars.org"
                                :username :env/clojars_username
                                :password :env/clojars_password}]])
