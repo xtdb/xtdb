@@ -54,11 +54,6 @@
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
 
-  ; hiera allows to generate ns hierarchy graph for the core
-  :hiera {:ignore-ns #{dev hakan prof patrik
-                       crux.decorators crux.http-server crux.main.graal}
-          :path "dev/ns-hierarchy.png"}
-
   :plugins [[lein-sub "0.3.0"]]
   :sub ["crux-core" "crux-rdf" "crux-dev" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
 
