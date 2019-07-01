@@ -17,7 +17,6 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.bootstrap :as b]
-            [crux.kafka]
             [crux.tx :as tx]
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
@@ -312,8 +311,7 @@
 
 (s/def ::server-port :crux.io/port)
 
-(s/def ::options (s/keys :req-un [::server-port]
-                         :opt-un [:crux.kafka/bootstrap-servers]))
+(s/def ::options (s/keys :req-un [::server-port]))
 
 (defrecord HTTPServer [^Server server options]
   Closeable
