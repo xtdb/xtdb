@@ -5,7 +5,8 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures :as f]
-            [crux.fixtures.bootstrap :as fb :refer [*api*]]
+            [crux.fixtures.standalone :as fs]
+            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kv :as fkv]
             [crux.tx :as tx]
             [crux.kv :as kv]
@@ -15,7 +16,7 @@
             [crux.fixtures.rdf :as frdf])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation fb/with-standalone-system f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fs/with-standalone-system f/with-silent-test-check)
 
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.

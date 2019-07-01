@@ -3,9 +3,10 @@
             [crux.api :as api]
             [crux.decorators.aggregation.alpha :as aggr]
             [crux.fixtures :as f]
-            [crux.fixtures.bootstrap :as fb :refer [*api*]]))
+            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.standalone :as fs]))
 
-(t/use-fixtures :each fb/with-standalone-system)
+(t/use-fixtures :each fs/with-standalone-system)
 
 (t/deftest test-count-aggregation
   (f/transact!

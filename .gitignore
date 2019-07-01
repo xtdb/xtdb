@@ -36,3 +36,6 @@ example/imdb/.nrepl-port
 /crux-lmdb/pom.xml
 /crux-dev/.lein-failures
 /crux-lmdb/.lein-failures
+/crux-http-server/.lein-failures
+/crux-http-server/pom.xml
+/crux-core/.nrepl-port

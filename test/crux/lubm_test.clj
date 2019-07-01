@@ -3,8 +3,8 @@
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
+            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.rdf :as frdf]
-            [crux.fixtures.bootstrap :as fb :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.api :as api]))
 
@@ -46,7 +46,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fb/with-cluster-node
+                fk/with-cluster-node
                 with-lubm-data)
 
 ;; This query bears large input and high selectivity. It queries about just one class and
