@@ -74,12 +74,6 @@
                        crux.decorators crux.http-server crux.main.graal}
           :path "dev/ns-hierarchy.png"}
 
-  :java-source-paths ["src"]
-  :javac-options ["-source" "8" "-target" "8"
-                  "-XDignore.symbol.file"
-                  "-Xlint:all,-options,-path"
-                  "-Werror"
-                  "-proc:none"]
   :aot [crux.main]
   :main crux.main
   :global-vars {*warn-on-reflection* true}
