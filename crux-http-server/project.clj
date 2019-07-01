@@ -12,5 +12,7 @@
                  [ring/ring-jetty-adapter "1.7.1"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]]
-  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]]}}
+  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]
+                                  [juxt/crux-rdf :derived-from-git]
+                                  [juxt/crux-http-client :derived-from-git]]}}
   :middleware [leiningen.project-version/middleware])

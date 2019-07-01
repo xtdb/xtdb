@@ -7,7 +7,6 @@
                  [org.clojure/tools.logging "0.4.1"]
 
                  [juxt/crux-core :derived-from-git]
-                 [juxt/crux-dev :derived-from-git]
 
                  [org.apache.kafka/kafka-clients "2.2.0" :scope "provided"]
                  [org.apache.kafka/kafka_2.12 "2.2.0"]

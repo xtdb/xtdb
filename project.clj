@@ -18,10 +18,7 @@
 
                  [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
-  :profiles { ;; Provided dependencies excluded from uberjar.
-             :provided {:dependencies [[clj-http "3.10.0"]
-                                       [http-kit "2.3.0"]]}
-             :uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
+  :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
                        :resource-paths ["resources-uberjar"]}
              :graal {:dependencies [[org.clojure/clojure "1.9.0"]
                                     [org.slf4j/slf4j-simple "1.7.26"]]
@@ -63,7 +60,7 @@
           :path "dev/ns-hierarchy.png"}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-core" "crux-rdf" "crux-dev" "crux-lmdb" "crux-kafka" "crux-http-server"]
+  :sub ["crux-core" "crux-rdf" "crux-dev" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
 
   :aot [crux.main]
   :main crux.main
