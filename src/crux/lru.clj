@@ -265,16 +265,11 @@
    (->CachedObjectStore (get-named-cache kv ::doc-cache (or cache-size default-doc-cache-size))
                         (idx/->KvObjectStore kv))))
 
-(def called-keys (atom []))
-(def inside-called-keys (atom {}))
-
 (defrecord CachedIndex [idx index-cache]
   db/Index
   (db/seek-values [this k]
-    (swap! called-keys conj k)
     (compute-if-absent index-cache k identity
                        (fn [k]
-                           (swap! inside-called-keys update k (fnil inc 0))
                            (db/seek-values idx k))))
 
   (db/next-values [this]
