@@ -1,5 +1,17 @@
 # Changelog
 
+## 19.07-1.1.1-alpha
+
+### Changes
+
+* [#266](https://github.com/juxt/crux/issues/266): `event-log-dir` is mandatory for standalone mode
+* [PR #235](https://github.com/juxt/crux/pull/235): Add entity cache to improve large query performance
+
+### Bug fixes
+
+* [#268](https://github.com/juxt/crux/issues/268): `sync` timeout must be a duration
+* [#272](https://github.com/juxt/crux/issues/272):  HTTP server can use `#crux/id` reader
+
 ## 19.06-1.1.0-alpha
 
 ### Changes
@@ -33,5 +45,3 @@
 * [#180](https://github.com/juxt/crux/issues/180): Fix indexer replay of eviction transactions
 * [#189](https://github.com/juxt/crux/issues/189): Fix evictions in standalone mode
 * [#184](https://github.com/juxt/crux/issues/184): Improved testing for document eviction support
-
-

@@ -14,7 +14,7 @@
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.5"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.5"]
 
-                 [juxt/crux "19.06-1.1.0-alpha"]
+                 [juxt/crux "19.07-1.1.1-alpha"]
                  [yada "1.3.0-alpha7"]
                  [hiccup "2.0.0-alpha2"]
                  [org.rocksdb/rocksdbjni "5.17.2"]
