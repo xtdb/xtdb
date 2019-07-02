@@ -28,7 +28,8 @@
                                      crux.kv.rocksdb
                                      crux.main.graal]
                      :main crux.main.graal}
-             :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
+             :dev {:dependencies [[juxt/crux-kafka-embedded :derived-from-git]
+                                  [org.clojure/tools.namespace "0.2.11"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [criterium "0.4.5"]
                                   [org.clojure/test.check "0.10.0-alpha3"]
@@ -54,7 +55,7 @@
                    :repl-options {:init-ns user}}}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-core" "crux-rdf" "crux-rocksdb" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
+  :sub ["crux-core" "crux-rdf" "crux-rocksdb" "crux-lmdb" "crux-kafka-embedded" "crux-kafka" "crux-http-client" "crux-http-server"]
 
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
 
