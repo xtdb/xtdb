@@ -4,7 +4,7 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [org.clojure/tools.cli "0.4.2" :scope "provided"]
+                 [org.clojure/tools.cli "0.4.2"]
                  [ch.qos.logback/logback-classic "1.2.3"]
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-core :derived-from-git]
