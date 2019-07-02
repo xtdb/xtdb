@@ -89,7 +89,7 @@ Crux supports eviction of active and historical data to assist with technical
 compliance for information privacy regulations.
 
 The main transaction log contains only hashes and is immutable. All document
-content is stored in a dedicated document topic that can be evicted by
+content is stored in a dedicated document log that can be evicted by
 compaction.
 
 == Get Started
