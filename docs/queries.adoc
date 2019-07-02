@@ -339,12 +339,12 @@ control the result order.
 
 [source,clj]
 ----
-{:find [time device-id temperature humidity]
- :where [[c :condition/time time]
-         [c :condition/device-id device-id]
-         [c :condition/temperature temperature]
-         [c :condition/humidity humidity]]
- :order-by [[time :desc] [device-id :asc]]}
+'{:find [time device-id temperature humidity]
+  :where [[c :condition/time time]
+          [c :condition/device-id device-id]
+          [c :condition/temperature temperature]
+          [c :condition/humidity humidity]]
+  :order-by [[time :desc] [device-id :asc]]}
 ----
 
 Use of `:order-by` will typically require that results are fully-realised by
@@ -357,14 +357,14 @@ naively scroll through the initial result set each time.
 
 [source,clj]
 ----
-{:find [time device-id temperature humidity]
- :where [[c :condition/time time]
-         [c :condition/device-id device-id]
-         [c :condition/temperature temperature]
-         [c :condition/humidity humidity]]
- :order-by [[device-id :asc]]
- :limit 10
- :offset 90}
+'{:find [time device-id temperature humidity]
+  :where [[c :condition/time time]
+          [c :condition/device-id device-id]
+          [c :condition/temperature temperature]
+          [c :condition/humidity humidity]]
+  :order-by [[device-id :asc]]
+  :limit 10
+  :offset 90}
 ----
 
 Pagination relies on efficient retrieval of explicitly ordered documents and
@@ -374,15 +374,15 @@ queries to apply range filters using predicates.
 
 [source,clj]
 ----
-{:find [time device-id temperature humidity]
- :where [[c :condition/time time]
-         [c :condition/device-id device-id]
-         [(>= device-id my-offset)]
-         [c :condition/temperature temperature]
-         [c :condition/humidity humidity]]
- :order-by [[device-id :asc]]
+{:find '[time device-id temperature humidity]
+ :where '[[c :condition/time time]
+          [c :condition/device-id device-id]
+          [(>= device-id my-offset)]
+          [c :condition/temperature temperature]
+          [c :condition/humidity humidity]]
+ :order-by '[[device-id :asc]]
  :limit 10
- :args [{:my-offset 990}]}
+ :args [{'my-offset 990}]}
 ----
 
 Additionally, since Crux stores documents and can traverse arbitrary keys as
@@ -399,14 +399,14 @@ connected to a given entity via the `:follow` attribute.
 
 [source,clj]
 ----
-{:find [?e2]
- :where [(follow ?e1 ?e2)]
- :args [{:?e1 :1}]
- :rules [[(follow ?e1 ?e2)
-          [?e1 :follow ?e2]]
-         [(follow ?e1 ?e2)
-          [?e1 :follow ?t]
-          (follow ?t ?e2)]]})
+'{:find [?e2]
+  :where [(follow ?e1 ?e2)]
+  :args [{?e1 :1}]
+  :rules [[(follow ?e1 ?e2)
+           [?e1 :follow ?e2]]
+          [(follow ?e1 ?e2)
+           [?e1 :follow ?t]
+           (follow ?t ?e2)]]})
 ----
 
 == Lazy Queries
@@ -422,11 +422,11 @@ be retrieved from a `kv` instance via `crux.api/new-snapshot`.
 === Quoting
 
 Logic variables used in queries must always be quoted in the `:find` and
-`:where` clauses, which in the most minimal case could look like the following: 
+`:where` clauses, which in the most minimal case could look like the following:
 
 [source,clj]
 ----
-(crux/q db 
+(crux/q db
   {:find ['?e]
    :where [['?e :event/employee-code '?code]]}))
 ----
@@ -436,7 +436,7 @@ map rather than each individual use of every logical variable, for instance:
 
 [source,clj]
 ----
-(crux/q db 
+(crux/q db
   '{:find [?e]
     :where [[?e :event/employee-code ?code]]}))
 ----
@@ -444,7 +444,7 @@ map rather than each individual use of every logical variable, for instance:
 Confusion may arise when you later attempt to introduce references to Clojure
 variables within your query map, such as when using `:args`. This can be
 resolved by introducing more granular quoting for specific parts of the query
-map: 
+map:
 
 [source,clj]
 ----
@@ -452,7 +452,7 @@ map:
   (crux/q db
     {:find '[?e]
      :where '[[?e :event/employee-code ?code]]
-     :args [{:?code my-code}]}))
+     :args [{'?code my-code}]}))
 ----
 
 == DataScript Differences
