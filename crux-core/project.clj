@@ -8,6 +8,7 @@
                  [org.clojure/spec.alpha "0.2.176"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
+                 [com.taoensso/encore "2.114.0"]
                  [org.agrona/agrona "1.0.0"]]
   :profiles {:dev {:dependencies [[org.clojure/test.check "0.10.0-alpha3"]
                                   [ch.qos.logback/logback-classic "1.2.3"]]}}
