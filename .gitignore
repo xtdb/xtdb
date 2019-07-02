@@ -58,3 +58,4 @@ example/imdb/.nrepl-port
 /crux-decorators/pom.xml
 /crux-rdf/.lein-failures
 /crux-uberjar/.lein-failures
+/crux-test/.lein-failures

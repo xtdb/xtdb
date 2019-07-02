@@ -1,6 +1,5 @@
 (ns crux.fixtures.standalone
   (:require [crux.fixtures.http-server :refer [*api-url*]]
-            crux.fixtures.kafka
             [crux.fixtures.kv :refer [*kv* *kv-backend*]]
             [crux.fixtures.api :refer [*api*]]
             [crux.io :as cio])
