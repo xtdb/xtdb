@@ -260,7 +260,26 @@
                    (or (str/index-of line \tab p-start) len))
         p (NTriplesUtil/parseURI (subs line p-start p-end) factory)
         o-start (inc p-end)
-        o-end (str/last-index-of line \. (max (or (str/last-index-of line \#) len)
-                                              (or (str/last-index-of line \.) len)))
+        o-end (or (str/last-index-of line \.) len)
         o (NTriplesUtil/parseValue (str/trimr (subs line o-start o-end)) factory)]
     (.createStatement factory ^Resource s ^IRI p ^Value o)))
+
+;; Usefor for testing:
+
+(defn ntriples [resource]
+  (with-open [in (io/input-stream (io/resource resource))]
+    (doall
+     (->> (ntriples-seq in)
+          (statements->maps)))))
+
+(defn ->tx-ops [ntriples]
+  (vec (for [entity ntriples]
+         [:crux.tx/put entity])))
+
+(defn ->default-language [c]
+  (mapv #(use-default-language % :en) c))
+
+(defn ->maps-by-id [rdf-maps]
+  (->> (for [m rdf-maps]
+         {(:crux.db/id m) m})
+       (into {})))

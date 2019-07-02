@@ -2,12 +2,12 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [crux.io :as cio]
+            [crux.bootstrap :as b]
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.index :as idx]
-            [crux.fixtures :as f]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.fixtures.rdf :as frdf]
             [crux.kafka :as k]
             [crux.query :as q]
@@ -19,12 +19,24 @@
            org.apache.kafka.clients.producer.ProducerRecord
            org.apache.kafka.common.TopicPartition))
 
+(def ^:dynamic *kv*)
+
+(defn- with-kv-store [f]
+  (let [db-dir (cio/create-tmpdir "kv-store")]
+    (try
+      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir)
+                                        :kv-backend "crux.kv.memdb.MemKv"})]
+        (with-open [*kv* ^Closeable *kv*]
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)))))
+
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-kafka-client fkv/with-kv-store)
+(t/use-fixtures :each fk/with-kafka-client with-kv-store)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
-        person (f/random-person)
+        person {:crux.db/id "foo"}
         partitions [(TopicPartition. topic 0)]]
 
     (k/create-topic fk/*admin-client* topic 1 1 {})

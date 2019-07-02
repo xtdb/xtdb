@@ -42,3 +42,8 @@ example/imdb/.nrepl-port
 /crux-rdf/pom.xml
 /crux-http-client/.lein-failures
 /crux-http-client/pom.xml
+/crux-dev/pom.xml
+/crux-rocksdb/.lein-failures
+/crux-kafka/.lein-failures
+/crux-rocksdb/pom.xml
+/crux-kafka/.nrepl-port

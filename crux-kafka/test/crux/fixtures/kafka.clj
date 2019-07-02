@@ -2,8 +2,6 @@
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
             [crux.kafka :as k]
-            [crux.fixtures.kv :refer [*kv* *kv-backend*]]
-            [crux.fixtures.api :refer [*api*]]
             [crux.api]
             [crux.kafka.embedded :as ek])
   (:import [java.util Properties UUID]
@@ -65,20 +63,21 @@
               *consumer* consumer]
       (f))))
 
+(def ^:dynamic *cluster-node*)
+
 (defn with-cluster-node [f]
   (assert (bound? #'*kafka-bootstrap-servers*))
-  (assert (not (bound? #'*kv*)))
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         test-id (UUID/randomUUID)]
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
       (try
         (with-open [cluster-node (Crux/startClusterNode {:db-dir db-dir
-                                                         :kv-backend *kv-backend*
+                                                         :kv-backend "crux.kv.memdb.MemKv"
                                                          :tx-topic *tx-topic*
                                                          :doc-topic *doc-topic*
                                                          :bootstrap-servers *kafka-bootstrap-servers*})]
-          (binding [*api* cluster-node]
+          (binding [*cluster-node* cluster-node]
             (f)))
         (finally
           (cio/delete-dir db-dir))))))

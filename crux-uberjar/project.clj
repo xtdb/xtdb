@@ -1,20 +1,20 @@
-(defproject juxt/crux :derived-from-git
-  :description "An open source document database with bitemporal graph queries"
+(defproject juxt/crux-uberjar :derived-from-git
+  :description "Crux Uberjar"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [org.clojure/tools.logging "0.4.1"]
 
                  [juxt/crux-core :derived-from-git]
-                 [juxt/crux-rocksdb :derived-from-git]
                  [juxt/crux-lmdb :derived-from-git]
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-http-server :derived-from-git]
                  [juxt/crux-rdf :derived-from-git]
 
                  ;; Provided dependencies included in uberjar.
-                 [org.clojure/tools.cli "0.4.2" :scope "provided"]]
+                 [org.clojure/tools.cli "0.4.2"]
+
+                 [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
   :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
                        :resource-paths ["resources-uberjar"]}
@@ -44,6 +44,7 @@
                                   [org.eclipse.rdf4j/rdf4j-repository-sail "2.5.1"
                                    :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]
                                   [org.eclipse.rdf4j/rdf4j-repository-sparql "2.5.1"]
+                                  [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.ejml/ejml-dsparse "0.38"
                                    :exclusions [com.google.code.findbugs/jsr305]]
                                   [org.roaringbitmap/RoaringBitmap "0.8.2"]
@@ -52,7 +53,7 @@
                    :repl-options {:init-ns user}}}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-core" "crux-rdf" "crux-dev" "crux-rocksdb" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
+  :sub ["crux-core" "crux-rdf" "crux-dev" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
 
   :aot [crux.main]
   :main crux.main

@@ -96,7 +96,6 @@
                 with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices
-
 ;; SELECT time, device_id, battery_temperature
 ;; FROM readings
 ;; WHERE battery_status = 'charging'

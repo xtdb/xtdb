@@ -1,14 +1,13 @@
 (ns crux.rdf-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [crux.fixtures.rdf :as frdf]
             [crux.rdf :as rdf]))
 
 ;; Example based on:
 ;; https://github.com/eclipse/rdf4j-doc/blob/master/examples/src/main/resources/example-data-artists.ttl
 (t/deftest test-can-parse-ntriples-into-maps
-  (let [iri->entity (->> (frdf/ntriples "crux/example-data-artists.nt")
-                         (frdf/->maps-by-id))]
+  (let [iri->entity (->> (rdf/ntriples "crux/example-data-artists.nt")
+                         (rdf/->maps-by-id))]
     (t/is (= 7 (count iri->entity)))
 
     (let [artist (:http://example.org/Picasso iri->entity)
@@ -29,8 +28,8 @@
                    (dissoc :crux.db/id)))))))
 
 (t/deftest test-can-parse-dbpedia-entity
-  (let [picasso (-> (->> (frdf/ntriples "crux/Pablo_Picasso.ntriples")
-                         (frdf/->maps-by-id))
+  (let [picasso (-> (->> (rdf/ntriples "crux/Pablo_Picasso.ntriples")
+                         (rdf/->maps-by-id))
                     :http://dbpedia.org/resource/Pablo_Picasso)]
     (t/is (= 48 (count picasso)))
     (t/is (= {:http://xmlns.com/foaf/0.1/givenName #crux.rdf.Lang{:en "Pablo"}

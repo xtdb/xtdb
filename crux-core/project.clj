@@ -7,12 +7,7 @@
                  [org.clojure/tools.logging "0.4.1"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [com.taoensso/nippy "2.14.0"]
-                 [org.agrona/agrona "1.0.0"]
-
-                 ;; TODO, consider moving RDF to crux-dev
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.5.1" :scope "provided"]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.5.1" :scope "provided"]
-                 [org.rocksdb/rocksdbjni "6.0.1" :scope "provided"]]
+                 [org.agrona/agrona "1.0.0"]]
   :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]

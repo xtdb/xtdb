@@ -9,6 +9,6 @@
 (t/deftest test-can-write-and-retrieve-entity-via-http
   (let [id #crux/id :https://adam.com
         doc {:crux.db/id id, :name "Adam"}
-        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]fh/with-http-server
+        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
     (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
     (t/is (.entity (.db *api*) id))))
