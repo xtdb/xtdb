@@ -51,7 +51,7 @@
         "crux-kafka"
         "crux-http-client"
         "crux-http-server"
-        "crux-ubjerar"]
+        "crux-uberjar"]
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
 
   :global-vars {*warn-on-reflection* true}
