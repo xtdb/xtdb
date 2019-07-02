@@ -2,8 +2,8 @@
 
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
 
-Crux is an open source document database with bitemporal graph queries. Java
-and Clojure APIs are provided.
+Crux is an open source document database with bitemporal graph queries. Java,
+Clojure and HTTP APIs are provided.
 
 Crux follows an _unbundled_ architectural approach, which means that it is
 assembled from highly decoupled components through the use of semi-immutable
@@ -14,9 +14,10 @@ deployments. Indexes can currently be stored using LMDB or RocksDB.
 Crux is built for efficient bitemporal indexing of schemaless documents, and
 this simplicity enables broad possibilities for creating layered extensions on
 top, such as to add additional transaction, query, and schema capabilities.
-Crux does not currently support SQL but it does provides an EDN-based Datalog
-query interface that can be used to express a comprehensive range of SQL-like
-join operations as well as recursive graph traversals.
+Crux does not currently support SQL but it does provide an EDN-based
+[Datalog](https://en.wikipedia.org/wiki/Datalog) query interface that can be
+used to express a comprehensive range of SQL-like join operations as well as
+recursive graph traversals.
 
 Crux has been available as a *Public Alpha* since 19<sup>th</sup> April 2019.
 The Public Alpha period will continue until Crux is released as a Generally
@@ -57,7 +58,7 @@ round-trip overheads when running complex application queries.
 <img alt="Document database with graph queries" role="img" aria-label="Crux Venn" src="./docs/img/crux-venn-1.svg" width="500px">
 
 Crux is fundamentally a store of versioned EDN documents. The only requirement
-is that you specificy a valid `:crux.db/id` key. The fields within these
+is that you specify a valid `:crux.db/id` key. The fields within these
 documents are automatically indexed as Entity-Attribute-Value triples to
 support efficient graph queries. Document versions are indexed by `valid-time`
 in addition to `transaction-time` which allows you to make updates into the
@@ -85,41 +86,81 @@ crux@juxt.pro
 
 ## Using Clojure
 
-Please note that Clojure is not _required_ when using Crux.
+Please note that Clojure is not _required_ when using Crux. HTTP and Java
+APIs are also available.
 
-### Building
+### REPL
+
+Launch a REPL using the latest Clojars release:
 
 ``` sh
-lein uberjar
-java -jar target/crux-*-standalone.jar --help
+clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 ```
 
-### Developing
-
-Start a REPL. To run the system with embedded Kafka and ZK:
+Start a standalone in-memory system:
 
 ``` clojure
-(dev)
-(start)
+(require '[crux.api :as crux])
+(import '[crux.api ICruxAPI])
+
+(def my-system
+  (crux/start-standalone-system
+    {:kv-backend "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
+     :event-log-dir "data/event-log-dir-1"
+     :db-dir "data/db-dir-1"}))
 ```
 
-This will store data under `dev-storage` in the checkout directory.
+`put` a document:
+
+``` clojure
+(def my-document
+  {:crux.db/id :some/fancy-id
+   :arbitrary-key ["an untyped value" 123]
+   {:maps "can be" :keys 2} {"and values" :can-be-arbitrarily-nested}})
+
+(crux/submit-tx my-system [[:crux.tx/put my-document]])
+```
+
+Take an immutable snapshot of the database:
+
+``` clojure
+(def my-db (crux/db my-system))
+```
+
+Retrieve the current version of the document:
+
+``` clojure
+(crux/entity my-db :some/fancy-id)
+```
 
 ### Testing
 
-The recommended way of running the primary tests is `lein test`.
+The recommended way of running the primary tests is `lein build`.
 
 ## Copyright & License
 The MIT License (MIT)
 
 Copyright © 2018-2019 JUXT LTD.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ### Dependencies
 
-A list of compiled dependencies and corresponding licenses is available [here](LICENSE-deps.adoc).
+A list of compiled dependencies and corresponding licenses is available
+[here](LICENSE-deps.adoc).
