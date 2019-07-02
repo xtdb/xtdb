@@ -5,8 +5,9 @@
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.fixtures :as f]
-            [crux.fixtures.bootstrap :as fb :refer [*api*]]
+            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.rdf :as rdf]
@@ -377,7 +378,7 @@
                 with-sail-repository
                 with-datomic
                 with-neo4j
-                fb/with-cluster-node
+                cn/with-cluster-node
                 with-watdiv-data)
 
 ;; TODO: What do the numbers in the .desc file represent? They all

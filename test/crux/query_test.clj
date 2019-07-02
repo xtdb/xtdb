@@ -3,11 +3,12 @@
             [clojure.test :as t]
             [crux.api :as api]
             [crux.db :as db]
-            [crux.fixtures.bootstrap :as fb :refer [*api*]]
+            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.standalone :as fs]
             [crux.fixtures :as f])
   (:import java.util.UUID))
 
-(t/use-fixtures :each fb/with-standalone-system)
+(t/use-fixtures :each fs/with-standalone-system)
 
 (t/deftest test-sanity-check
   (f/transact! *api* (f/people [{:name "Ivan"}]))

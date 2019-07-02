@@ -1,6 +1,7 @@
 (ns leiningen.project-version
   (:require [clojure.java.shell :as sh]
-            [clojure.string]))
+            [clojure.string]
+            [clojure.walk :refer [postwalk]]))
 
 (defn project-version [project & args]
   (println (:version project)))
@@ -19,4 +20,7 @@
           (format "%s%s%s-SNAPSHOT" prefix (inc (Integer/parseInt minor-version)) suffix))))))
 
 (defn middleware [project]
-  (assoc project :version (version-from-git)))
+  (let [project-version (version-from-git)]
+    (postwalk (fn [x] (if (= :derived-from-git x)
+                        project-version x))
+              project)))

@@ -4,9 +4,9 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [crux.api :as api]
-            [crux.fixtures :as f]
-            [crux.fixtures.bootstrap :as fb]
+            [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.io :as cio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
@@ -75,8 +75,8 @@
 
 (defn with-ts-weather-data [f]
   (if run-ts-weather-tests?
-    (let [submit-future (future (submit-ts-weather-data fb/*api*))]
-      (api/sync fb/*api* nil)
+    (let [submit-future (future (submit-ts-weather-data *api*))]
+      (api/sync *api* nil)
       (t/is (= 1001000 @submit-future))
       (f))
     (f)))
@@ -84,7 +84,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fb/with-cluster-node
+                cn/with-cluster-node
                 with-ts-weather-data)
 
 ;; NOTE: Does not work with range, takes latest values.
@@ -156,7 +156,7 @@
                :location/weather-pro-000009
                91.0
                92.40000000000006]]
-             (api/q (api/db fb/*api*)
+             (api/q (api/db *api*)
                   '{:find [time device-id temperature humidity]
                     :where [[c :condition/time time]
                             [c :condition/device-id device-id]
@@ -247,7 +247,7 @@
                91.0
                96.9]]
              (for [[time device-id location temperature humidity]
-                   (api/q (api/db fb/*api*)
+                   (api/q (api/db *api*)
                         '{:find [time device-id location temperature humidity]
                           :where [[c :condition/time time]
                                   [c :condition/device-id device-id]
@@ -336,14 +336,14 @@
               [#inst "2016-11-16T09:00:00.000-00:00" 77.17 70.1 83.2]
               [#inst "2016-11-16T10:00:00.000-00:00" 77.18 70.1 83.6]
               [#inst "2016-11-16T11:00:00.000-00:00" 78.17 71.0 84.8]]
-             (let [condition-ids (->> (api/q (api/db fb/*api*)
+             (let [condition-ids (->> (api/q (api/db *api*)
                                           '{:find [c]
                                             :where [[c :condition/device-id device-id]
                                                     [device-id :location/location location]
                                                     [(crux.ts-weather-test/kw-starts-with? location "field-")]]
                                             :timeout 120000})
                                       (reduce into []))
-                   db (api/db fb/*api* #inst "1970")]
+                   db (api/db *api* #inst "1970")]
                (with-open [snapshot (api/new-snapshot db)]
                  (->> (for [c condition-ids]
                         (for [entity-tx (api/history-ascending db snapshot c)]
