@@ -1,14 +1,12 @@
 (ns crux.kafka-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [crux.io :as cio]
             [crux.bootstrap :as b]
             [clojure.tools.logging :as log]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures.kafka :as fk]
-            [crux.fixtures.rdf :as frdf]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.rdf :as rdf]
@@ -17,7 +15,8 @@
   (:import java.time.Duration
            java.util.List
            org.apache.kafka.clients.producer.ProducerRecord
-           org.apache.kafka.common.TopicPartition))
+           org.apache.kafka.common.TopicPartition
+           java.io.Closeable))
 
 (def ^:dynamic *kv*)
 
@@ -51,7 +50,7 @@
 (t/deftest test-can-transact-entities
   (let [tx-topic "test-can-transact-entities-tx"
         doc-topic "test-can-transact-entities-doc"
-        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/example-data-artists.nt"))
+        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/example-data-artists.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -74,7 +73,7 @@
 (t/deftest test-can-transact-and-query-entities
   (let [tx-topic "test-can-transact-and-query-entities-tx"
         doc-topic "test-can-transact-and-query-entities-doc"
-        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/picasso.nt"))
+        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -125,7 +124,7 @@
   (let [tx-topic "test-can-process-compacted-documents-tx"
         doc-topic "test-can-process-compacted-documents-doc"
 
-        tx-ops (frdf/->tx-ops (frdf/ntriples "crux/picasso.nt"))
+        tx-ops (rdf/->tx-ops (rdf/ntriples "crux/picasso.nt"))
 
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {"bootstrap.servers" fk/*kafka-bootstrap-servers*})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
@@ -172,7 +171,7 @@
           (binding [fk/*consumer-options* {"max.poll.records" "1"}]
             (fk/with-kafka-client
               (fn []
-                (fkv/with-kv-store
+                (with-kv-store
                   (fn []
                     (let [object-store (idx/->KvObjectStore *kv*)
                           indexer (tx/->KvIndexer *kv* tx-log object-store)
@@ -198,9 +197,9 @@
 (t/deftest test-can-transact-and-query-dbpedia-entities
   (let [tx-topic "test-can-transact-and-query-dbpedia-entities-tx"
         doc-topic "test-can-transact-and-query-dbpedia-entities-doc"
-        tx-ops (->> (concat (frdf/->tx-ops (frdf/ntriples "crux/Pablo_Picasso.ntriples"))
-                            (frdf/->tx-ops (frdf/ntriples "crux/Guernica_(Picasso).ntriples")))
-                    (frdf/->default-language))
+        tx-ops (->> (concat (rdf/->tx-ops (rdf/ntriples "crux/Pablo_Picasso.ntriples"))
+                            (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
+                    (rdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 
@@ -312,7 +311,7 @@
 (t/deftest test-can-transact-and-query-using-sparql
   (let [tx-topic "test-can-transact-and-query-using-sparql-tx"
         doc-topic "test-can-transact-and-query-using-sparql-doc"
-        tx-ops (->> (frdf/ntriples "crux/vc-db-1.nt") (frdf/->tx-ops) (frdf/->default-language))
+        tx-ops (->> (rdf/ntriples "crux/vc-db-1.nt") (rdf/->tx-ops) (rdf/->default-language))
         tx-log (k/->KafkaTxLog fk/*producer* tx-topic doc-topic {})
         indexer (tx/->KvIndexer *kv* tx-log (idx/->KvObjectStore *kv*))]
 

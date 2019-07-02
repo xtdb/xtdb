@@ -1,0 +1,21 @@
+<http://somewhere/MattJones/>  <http://www.w3.org/2001/vcard-rdf/3.0#FN>   "Matt Jones" .
+<http://somewhere/MattJones/>  <http://www.w3.org/2001/vcard-rdf/3.0#N>    _:b0 .
+_:b0  <http://www.w3.org/2001/vcard-rdf/3.0#Family> "Jones" .
+_:b0  <http://www.w3.org/2001/vcard-rdf/3.0#Given>  "Matthew" .
+
+<http://somewhere/RebeccaSmith/> <http://www.w3.org/2001/vcard-rdf/3.0#FN>    "Becky Smith" .
+<http://somewhere/RebeccaSmith/> <http://somewhere/peopleInfo#age>            "23"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://somewhere/RebeccaSmith/> <http://www.w3.org/2001/vcard-rdf/3.0#N>     _:b1 .
+_:b1 <http://www.w3.org/2001/vcard-rdf/3.0#Family> "Smith" .
+_:b1 <http://www.w3.org/2001/vcard-rdf/3.0#Given>  "Rebecca" .
+
+<http://somewhere/JohnSmith/>    <http://www.w3.org/2001/vcard-rdf/3.0#FN>    "John Smith" .
+<http://somewhere/JohnSmith/>    <http://somewhere/peopleInfo#age>            "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://somewhere/JohnSmith/>    <http://www.w3.org/2001/vcard-rdf/3.0#N>     _:b2 .
+_:b2 <http://www.w3.org/2001/vcard-rdf/3.0#Family> "Smith" .
+_:b2 <http://www.w3.org/2001/vcard-rdf/3.0#Given> "John"  .
+
+<http://somewhere/SarahJones/>   <http://www.w3.org/2001/vcard-rdf/3.0#FN>    "Sarah Jones" .
+<http://somewhere/SarahJones/>   <http://www.w3.org/2001/vcard-rdf/3.0#N>     _:b3 .
+_:b3 <http://www.w3.org/2001/vcard-rdf/3.0#Family>  "Jones" .
+_:b3 <http://www.w3.org/2001/vcard-rdf/3.0#Given>   "Sarah" .

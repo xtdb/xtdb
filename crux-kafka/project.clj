@@ -17,11 +17,9 @@
                                jline
                                org.apache.yetus/audience-annotations
                                org.slf4j/slf4j-log4j12
-                               log4j]]
-
-                 ]
-  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]
-                                  [juxt/crux-rdf :derived-from-git]
+                               log4j]]]
+  :profiles {:dev {:dependencies [[juxt/crux-rdf :derived-from-git]
+                                  [ch.qos.logback/logback-classic "1.2.3"]
                                   [org.clojure/tools.namespace "0.2.11"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"])

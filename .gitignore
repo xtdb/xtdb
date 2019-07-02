@@ -47,3 +47,4 @@ example/imdb/.nrepl-port
 /crux-kafka/.lein-failures
 /crux-rocksdb/pom.xml
 /crux-kafka/.nrepl-port
+.projectile

@@ -6,14 +6,9 @@
   :dependencies [[org.clojure/clojure "1.10.0"]
 
                  [juxt/crux-core :derived-from-git]
-                 [juxt/crux-dev :derived-from-git]
 
                  [ring/ring-core "1.7.1"]
                  [ring/ring-jetty-adapter "1.7.1"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]]
-  :profiles {:dev {:dependencies [[juxt/crux-dev :derived-from-git]
-                                  [juxt/crux-rocksdb :derived-from-git]
-                                  [juxt/crux-rdf :derived-from-git]
-                                  [juxt/crux-http-client :derived-from-git]]}}
   :middleware [leiningen.project-version/middleware])

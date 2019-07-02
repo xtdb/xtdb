@@ -1,0 +1,11 @@
+<http://example.org/Picasso> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Artist> .
+<http://example.org/Picasso> <http://xmlns.com/foaf/0.1/firstName> "Pablo" .
+<http://example.org/Picasso> <http://xmlns.com/foaf/0.1/surname> "Picasso" .
+<http://example.org/Picasso> <http://example.org/creatorOf> <http://example.org/guernica> .
+<http://example.org/Picasso> <http://example.org/homeAddress> _:node1 .
+_:node1 <http://example.org/street> "31 Art Gallery" .
+_:node1 <http://example.org/city> "Madrid" .
+_:node1 <http://example.org/country> "Spain" .
+<http://example.org/guernica> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Painting> .
+<http://example.org/guernica> <http://www.w3.org/2000/01/rdf-schema#label> "Guernica" .
+<http://example.org/guernica> <http://example.org/technique> "oil on canvas" .
