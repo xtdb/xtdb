@@ -44,7 +44,7 @@
 (def crux-version
   (memoize
    (fn []
-     (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux/pom.properties"))]
+     (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux-uberjar/pom.properties"))]
        (let [{:strs [version
                      revision]} (cio/load-properties in)]
          (->CruxVersion version revision))))))

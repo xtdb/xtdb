@@ -13,22 +13,10 @@
                  [juxt/crux-http-server :derived-from-git]
                  [juxt/crux-rdf :derived-from-git]
 
-                 ;; Provided dependencies included in uberjar.
-                 [com.taoensso/encore "2.114.0"]
-                 [org.clojure/tools.cli "0.4.2" :scope "provided"]]
+                 ;; TODO, understand where this is used and move accordingly:
+                 [com.taoensso/encore "2.114.0"]]
   :middleware [leiningen.project-version/middleware]
-  :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
-                       :resource-paths ["resources-uberjar"]}
-             :graal {:dependencies [[org.clojure/clojure "1.9.0"]
-                                    [org.slf4j/slf4j-simple "1.7.26"]]
-                     :clean-targets []
-                     :jvm-opts ["-Dclojure.compiler.direct-linking=true"
-                                "-Dclojure.spec.compile-asserts=false"]
-                     :aot ^:replace [crux.kv.memdb
-                                     crux.kv.rocksdb
-                                     crux.main.graal]
-                     :main crux.main.graal}
-             :dev {:dependencies [[juxt/crux-kafka-embedded :derived-from-git]
+  :profiles {:dev {:dependencies [[juxt/crux-kafka-embedded :derived-from-git]
                                   [org.clojure/tools.namespace "0.2.11"]
                                   [ch.qos.logback/logback-classic "1.2.3"]
                                   [criterium "0.4.5"]
@@ -55,12 +43,17 @@
                    :repl-options {:init-ns user}}}
 
   :plugins [[lein-sub "0.3.0"]]
-  :sub ["crux-core" "crux-rdf" "crux-rocksdb" "crux-lmdb" "crux-kafka-embedded" "crux-kafka" "crux-http-client" "crux-http-server"]
-
+  :sub ["crux-core"
+        "crux-rdf"
+        "crux-rocksdb"
+        "crux-lmdb"
+        "crux-kafka-embedded"
+        "crux-kafka"
+        "crux-http-client"
+        "crux-http-server"
+        "crux-ubjerar"]
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
 
-  :aot [crux.main]
-  :main crux.main
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
   ;;       https://github.com/technomancy/leiningen/pull/2367

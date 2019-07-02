@@ -50,3 +50,5 @@ example/imdb/.nrepl-port
 .projectile
 /crux-kafka-embedded/pom.xml
 /crux-kafka-embedded/.lein-failures
+/crux-uberjar/.nrepl-port
+/crux-uberjar/data
