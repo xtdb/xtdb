@@ -55,6 +55,7 @@
         "crux-uberjar"
         "crux-decorators"]
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
+  :aliases {"build" ["do" ["sub" "install"] ["sub" "test"] "test"]}
 
   :global-vars {*warn-on-reflection* true}
   ;; TODO: Leiningen vs CIDER nREPL version issue.
