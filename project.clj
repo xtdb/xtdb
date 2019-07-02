@@ -23,4 +23,5 @@
   ;; :pedantic? :abort
   :repositories [["snapshots" {:url "https://repo.clojars.org"
                                :username :env/clojars_username
-                               :password :env/clojars_password}]])
+                               :password :env/clojars_password
+                               :creds :gpg}]])
