@@ -12,8 +12,7 @@
             [crux.kv :as kv]
             [crux.api :as api]
             [crux.rdf :as rdf]
-            [crux.query :as q]
-            [crux.fixtures.rdf :as frdf])
+            [crux.query :as q])
   (:import java.util.Date))
 
 (t/use-fixtures :each fkv/with-each-kv-store-implementation fs/with-standalone-system f/with-silent-test-check)
@@ -22,9 +21,9 @@
 ;; might be better split up.
 (t/deftest test-can-index-tx-ops-acceptance-test
   (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
-                                                                 (frdf/ntriples)
-                                                                 (frdf/->default-language)
-                                                                 (frdf/->maps-by-id)))
+                                                                 (rdf/ntriples)
+                                                                 (rdf/->default-language)
+                                                                 (rdf/->maps-by-id)))
         content-hash (c/new-id picasso)
         valid-time #inst "2018-05-21"
         eid (c/new-id :http://dbpedia.org/resource/Pablo_Picasso)
@@ -245,9 +244,9 @@
 
 (t/deftest test-can-store-doc
   (let [picasso (:http://dbpedia.org/resource/Pablo_Picasso (->> "crux/Pablo_Picasso.ntriples"
-                                                                 (frdf/ntriples)
-                                                                 (frdf/->default-language)
-                                                                 (frdf/->maps-by-id)))
+                                                                 (rdf/ntriples)
+                                                                 (rdf/->default-language)
+                                                                 (rdf/->maps-by-id)))
 
         content-hash (c/new-id picasso)]
     (t/is (= 48 (count picasso)))

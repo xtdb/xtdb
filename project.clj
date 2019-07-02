@@ -14,6 +14,7 @@
                  [juxt/crux-rdf :derived-from-git]
 
                  ;; Provided dependencies included in uberjar.
+                 [com.taoensso/encore "2.114.0"]
                  [org.clojure/tools.cli "0.4.2" :scope "provided"]]
   :middleware [leiningen.project-version/middleware]
   :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
@@ -28,7 +29,9 @@
                                      crux.main.graal]
                      :main crux.main.graal}
              :dev {:dependencies [[org.clojure/tools.namespace "0.2.11"]
+                                  [ch.qos.logback/logback-classic "1.2.3"]
                                   [criterium "0.4.5"]
+                                  [org.clojure/test.check "0.10.0-alpha3"]
                                   [com.datomic/datomic-free "0.9.5697"
                                    :exclusions [org.slf4j/slf4j-nop]]
                                   [org.neo4j/neo4j "3.5.5"
@@ -52,6 +55,8 @@
 
   :plugins [[lein-sub "0.3.0"]]
   :sub ["crux-core" "crux-rdf" "crux-rocksdb" "crux-lmdb" "crux-kafka" "crux-http-client" "crux-http-server"]
+
+  :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
 
   :aot [crux.main]
   :main crux.main

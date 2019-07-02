@@ -5,6 +5,7 @@
             [clojure.test :as t]
             [crux.api :as api]
             [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.io :as cio])
@@ -92,7 +93,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                cn/with-cluster-node
                 with-ts-devices-data)
 
 ;; 10 most recent battery temperature readings for charging devices

@@ -5,6 +5,7 @@
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf])
   (:import clojure.lang.LazySeq
@@ -17,14 +18,14 @@
 
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
-    (fk/with-cluster-node f))
+    (cn/with-cluster-node f))
   (t/testing "Local API StandaloneSystem"
     (fs/with-standalone-system f))
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server
         (fn [f]
-          (fk/with-cluster-node f))))))
+          (cn/with-cluster-node f))))))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each with-each-api-implementation)
@@ -66,9 +67,9 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem *api*))
-              :crux.kv/kv-backend "crux.kv.rocksdb.RocksKv"
               :crux.index/index-version 4}
              (dissoc (.status *api*)
+                     :crux.kv/kv-backend
                      :crux.kv/estimate-num-keys
                      :crux.tx-log/consumer-state :crux.kv/size
                      :crux.version/version :crux.version/revision))))

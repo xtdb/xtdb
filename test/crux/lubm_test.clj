@@ -4,8 +4,8 @@
             [crux.rdf :as rdf]
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.rdf :as frdf]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.api :as api]))
 
 ;; See:
@@ -30,9 +30,9 @@
 (def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
 
 (defn with-lubm-data [f]
-  (let [tx-ops (->> (concat (frdf/->tx-ops (frdf/ntriples "lubm/univ-bench.ntriples"))
-                            (frdf/->tx-ops (frdf/ntriples lubm-triples-resource)))
-                    (frdf/->default-language)
+  (let [tx-ops (->> (concat (rdf/->tx-ops (rdf/ntriples "lubm/univ-bench.ntriples"))
+                            (rdf/->tx-ops (rdf/ntriples lubm-triples-resource)))
+                    (rdf/->default-language)
                     vec)]
     (doseq [tx-ops (partition-all 1000 tx-ops)]
       (api/submit-tx *api* (vec tx-ops)))
@@ -46,7 +46,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                cn/with-cluster-node
                 with-lubm-data)
 
 ;; This query bears large input and high selectivity. It queries about just one class and

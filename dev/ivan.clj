@@ -4,6 +4,7 @@
             [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.api :as api]
             [crux.codec :as c]))
 
@@ -61,7 +62,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                cn/with-cluster-node
                 with-stocks-data)
 
 (comment

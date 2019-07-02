@@ -2,10 +2,9 @@
   (:require [crux.fixtures.http-server :refer [*api-url*]]
             crux.fixtures.kafka
             [crux.fixtures.kv :refer [*kv* *kv-backend*]]
+            [crux.fixtures.api :refer [*api*]]
             [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI]))
-
-(def ^:dynamic ^ICruxAPI *api*)
 
 (defn with-standalone-system [f]
   (assert (not (bound? #'*kv*)))

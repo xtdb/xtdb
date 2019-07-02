@@ -6,6 +6,7 @@
             [crux.api :as api]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.cluster-node :as cn]
             [crux.io :as cio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
@@ -83,7 +84,7 @@
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fk/with-cluster-node
+                cn/with-cluster-node
                 with-ts-weather-data)
 
 ;; NOTE: Does not work with range, takes latest values.
