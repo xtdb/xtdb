@@ -44,10 +44,11 @@
 (def crux-version
   (memoize
    (fn []
-     (with-open [in (io/reader (io/resource "META-INF/maven/juxt/crux-uberjar/pom.properties"))]
-       (let [{:strs [version
-                     revision]} (cio/load-properties in)]
-         (->CruxVersion version revision))))))
+     (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-uberjar/pom.properties")]
+       (with-open [in (io/reader pom-file)]
+         (let [{:strs [version
+                       revision]} (cio/load-properties in)]
+           (->CruxVersion version revision)))))))
 
 (defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
   ICruxAPI
