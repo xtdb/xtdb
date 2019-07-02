@@ -3,6 +3,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [crux.kafka.embedded :as ek]
             [crux.api :as api]))
 
 (def list-columns?
@@ -55,13 +56,21 @@
 
 (def crux-options
   {:kv-backend "crux.kv.rocksdb.RocksKv"
-   :bootstrap-servers "localhost:29092"
+   :bootstrap-servers "localhost:9092"
    :event-log-dir log-dir
    :db-dir index-dir
    :server-port 8080})
 
+(def storage-dir "dev-storage")
+(def embedded-kafka-options
+  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+   :crux.kafka.embedded/kafka-port 9092})
+
+
 (defn run-system [{:keys [server-port] :as options} with-system-fn]
-  (with-open [crux-system (api/start-cluster-node options)]
+  (with-open [embedded-kafka (ek/start-embedded-kafka embedded-kafka-options)
+              crux-system (api/start-cluster-node options)]
     (with-system-fn crux-system)))
 
 (defn -main []
@@ -69,16 +78,24 @@
     crux-options
     (fn [crux-system]
       (def crux crux-system)
+      ;; ingest may take a while, more than 15 mins on 2018 15" mbp
       ;;(ingest-data crux)
       (Thread/sleep Long/MAX_VALUE))))
 
-(comment
+(defn start-from-repl []
   (def s (future
            (run-system
-            crux-options
-            (fn [crux-system]
-              (def crux crux-system)
-              (Thread/sleep Long/MAX_VALUE)))))
+             crux-options
+             (fn [crux-system]
+               (def crux crux-system)
+               (Thread/sleep Long/MAX_VALUE))))))
+
+(comment
+
+  (start-from-repl)
+
+  (ingest-data crux)
+
   (future-cancel s))
 
 
