@@ -55,14 +55,15 @@
                          [:crux.tx/put m]))))
 
 
-(api/q (api/db system) (quote
-;; tag::basic-query[]
-{:find [p1]
- :where [[p1 :name n]
-         [p1 :last-name n]
-         [p1 :name "Smith"]]}
-;; end::basic-query[]
-))
+(api/q
+ (api/db system)
+ ;; tag::basic-query[]
+ '{:find [p1]
+   :where [[p1 :name n]
+           [p1 :last-name n]
+           [p1 :name "Smith"]]}
+ ;; end::basic-query[]
+ )
 
 ;; tag::basic-query-r[]
 #{[:smith]}
@@ -70,14 +71,13 @@
 
 (api/q
  (api/db system)
- (quote
   ;; tag::query-with-arguments1[]
-  {:find [n]
-   :where [[e :name n]]
-   :args [{:e :ivan
-           :n "Ivan"}]}
+ {:find '[n]
+  :where '[[e :name n]]
+  :args [{'e :ivan
+          'n "Ivan"}]}
   ;; end::query-with-arguments1[]
-  ))
+  )
 
 ;; tag::query-with-arguments1-r[]
 #{["Ivan"]}
@@ -85,14 +85,13 @@
 
 (api/q
  (api/db system)
- (quote
   ;; tag::query-with-arguments2[]
-  {:find [e]
-   :where [[e :name n]]
-   :args [{:n "Ivan"}
-          {:n "Petr"}]}
+ {:find '[e]
+  :where '[[e :name n]]
+  :args [{'n "Ivan"}
+         {'n "Petr"}]}
   ;; end::query-with-arguments2[]
-  ))
+  )
 
 ;; tag::query-with-arguments2-r[]
 #{[:petr] [:ivan]}
@@ -100,15 +99,15 @@
 
 (api/q
  (api/db system)
- (quote
-  ;; tag::query-with-arguments3[]
-  {:find [e]
-   :where [[e :name n]
+ ;; tag::query-with-arguments3[]
+ {:find '[e]
+  :where '[[e :name n]
            [e :last-name l]]
-   :args [{:n "Ivan" :l "Ivanov"}
-          {:n "Petr" :l "Petrov"}]}
-  ;; end::query-with-arguments3[]
-  ))
+  :args [{'n "Ivan" 'l "Ivanov"}
+         {'n "Petr" 'l "Petrov"
+          }]}
+ ;; end::query-with-arguments3[]
+ )
 
 ;; tag::query-with-arguments3-r[]
 #{[:petr] [:ivan]}
@@ -116,15 +115,14 @@
 
 (api/q
  (api/db system)
- (quote
-  ;; tag::query-with-arguments4[]
-  {:find [n]
-   :where [[(re-find #"I" n)]
+ ;; tag::query-with-arguments4[]
+ {:find '[n]
+  :where '[[(re-find #"I" n)]
            [(= l "Ivanov")]]
-   :args [{:n "Ivan" :l "Ivanov"}
-          {:n "Petr" :l "Petrov"}]}
-  ;; end::query-with-arguments4[]
-  ))
+  :args [{'n "Ivan" 'l "Ivanov"}
+         {'n "Petr" 'l "Petrov"}]}
+ ;; end::query-with-arguments4[]
+ )
 
 ;; tag::query-with-arguments4-r[]
 #{["Ivan"]}
@@ -132,13 +130,12 @@
 
 (api/q
  (api/db system)
- (quote
-  ;; tag::query-with-arguments5[]
-  {:find [age]
-   :where [[(>= age 21)]]
-   :args [{:age 22}]}
-  ;; end::query-with-arguments5[]
-  ))
+ ;; tag::query-with-arguments5[]
+ {:find '[age]
+  :where '[[(>= age 21)]]
+  :args [{'age 22}]}
+ ;; end::query-with-arguments5[]
+ )
 
 ;; tag::query-with-arguments5-r[]
 #{[22]}
@@ -165,13 +162,12 @@
 (api/q
  (api/db
   system #inst "1986-10-23")
- (quote
-  ;; tag::query-at-t-q1[]
-  {:find [e]
+ ;; tag::query-at-t-q1[]
+ '{:find [e]
    :where [[e :name "Malcolma"]
            [e :last-name "Sparks"]]}
-  ;; end::query-at-t-q1[]
-  ))
+ ;; end::query-at-t-q1[]
+ )
 
 ;; tag::query-at-t-q1-q[]
 ; Using Clojure: `(api/q (api/db my-crux-system #inst "1986-10-23") q)`
@@ -281,13 +277,12 @@
 
 (api/q
  (api/db system)
- (quote
-  ;; tag::join-q[]
-  {:find [p1 p2]
+ ;; tag::join-q[]
+ '{:find [p1 p2]
    :where [[p1 :name n]
            [p2 :name n]]}
-  ;; end::join-q[]
-  ))
+ ;; end::join-q[]
+ )
 
 (let [maps
       ;; tag::join2-d[]
@@ -305,14 +300,13 @@
 
 (api/q
  (api/db system)
- (quote
-  ;; tag::join2-q[]
-  {:find [e2]
+ ;; tag::join2-q[]
+ '{:find [e2]
    :where [[e :last-name l]
            [e2 :follows l]
            [e :name "Ivan"]]}
-  ;; end::join2-q[]
-  ))
+ ;; end::join2-q[]
+ )
 
 (comment
 
