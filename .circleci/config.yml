@@ -32,6 +32,7 @@ jobs:
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
 
+      - run: lein sub install
       - run: lein deps
 
       - save_cache:
@@ -39,6 +40,6 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
 
-      - run: lein do version, sub install, sub test, check, test
+      - run: lein do version, sub test, check, test
 
       - run: ./.circleci/bin/deploy_clojars.sh
