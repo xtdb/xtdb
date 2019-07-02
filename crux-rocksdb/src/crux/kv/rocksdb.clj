@@ -1,7 +1,5 @@
 (ns crux.kv.rocksdb
-  "RocksDB KV backend for Crux.
-
-  Requires org.rocksdb/rocksdbjni on the classpath."
+  "RocksDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.kv :as kv]

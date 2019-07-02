@@ -1,9 +1,6 @@
 (ns crux.kv.rocksdb.jnr
   "RocksDB KV backend for Crux using JNR:
-  https://github.com/jnr/jnr-ffi
-
-  Requires org.rocksdb/rocksdbjni and com.github.jnr/jnr-ffi on the
-  classpath."
+  https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [crux.io :as cio]

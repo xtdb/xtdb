@@ -4,8 +4,6 @@
   https://www.w3.org/TR/rdf11-primer/
   https://www.w3.org/TR/n-triples/
 
-  Requires org.eclipse.rdf4j/rdf4j-rio-ntriples on the classpath.
-
   See http://docs.rdf4j.org/"
   (:require [clojure.java.io :as io]
             [clojure.string :as str]

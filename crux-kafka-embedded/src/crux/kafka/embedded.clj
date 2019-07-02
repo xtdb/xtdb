@@ -1,8 +1,5 @@
 (ns crux.kafka.embedded
-  "Embedded Kafka for self-contained Crux deployments.
-
-  Requires org.apache.kafka/kafka_2.11 and
-  org.apache.zookeeper/zookeeper on the classpath."
+  "Embedded Kafka for self-contained Crux deployments."
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
             [clojure.spec.alpha :as s])

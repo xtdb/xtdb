@@ -1,8 +1,5 @@
 (ns crux.kv.lmdb.jnr
-  "LMDB KV backend for Crux (alternative).
-
-  Requires org.lmdbjava/lmdbjava on the classpath,
-  including native dependencies."
+  "LMDB KV backend for Crux (alternative)."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]

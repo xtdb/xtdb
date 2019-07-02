@@ -1,11 +1,7 @@
 (ns crux.http-server
   "HTTP API for Crux.
 
-  Requires ring/ring-core, ring/ring-jetty-adapter and
-  org.apache.kafka/kafka-clients on the classpath.
-
-  The optional SPARQL handler requires further dependencies on the
-  classpath, see crux.sparql.protocol for details."
+  The optional SPARQL handler requires juxt.crux/rdf."
   (:require [clojure.edn :as edn]
             [clojure.instant :as instant]
             [clojure.java.io :as io]

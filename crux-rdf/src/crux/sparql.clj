@@ -3,9 +3,6 @@
 
   https://www.w3.org/TR/2013/REC-sparql11-query-20130321/
 
-  Requires org.eclipse.rdf4j/rdf4j-queryparser-sparql on the
-  classpath.
-
   See http://docs.rdf4j.org/"
   (:require [clojure.walk :as w]
             [clojure.set :as set]
