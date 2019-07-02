@@ -234,7 +234,7 @@
             ;; submitted transaction time is not enough
             (while (.entity (.db *api*) :ivan)
               (assert (< (- (.getTime (Date.)) (.getTime valid-time)) 4000))
-              (Thread/sleep 100))
+              (Thread/sleep 500))
 
             (let [stats (.attributeStats *api*)]
               (t/is (= 0 (:name stats))))))))))
