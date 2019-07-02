@@ -102,13 +102,16 @@ toc::[]
 === sync
 
 ----
-  (sync [system ^Duration timeout]
-    "Blocks until the node has caught up indexing. Will throw an
-    exception on timeout. The returned date is the latest index
-    time when this node has caught up as of this call. This can be
-    used as the second parameter in (db valid-time, transaction-time)
-    for consistent reads.
-
+  (sync
+    [system ^Duration timeout]
+    [system ^Date transaction-time ^Duration timeout]
+    "If the transaction-time is supplied, blocks until indexing has
+    processed a tx with a greater-than transaction-time, otherwise
+    blocks until the node has caught up indexing the tx-log
+    backlog. Will throw an exception on timeout. The returned date is
+    the latest index time when this node has caught up as of this
+    call. This can be used as the second parameter in (db valid-time,
+    transaction-time) for consistent reads.
     timeout – max time to wait, can be null for the default.
     Returns the latest known transaction time.")
 ----
