@@ -34,4 +34,5 @@
                "../crux-decorators/test"
                "../crux-test/test"]
   :jvm-opts ["-Dlogback.configurationFile=logback-dev.xml"]
-  :middleware [leiningen.project-version/middleware])
+  :middleware [leiningen.project-version/middleware]
+  :global-vars {*warn-on-reflection* true})
