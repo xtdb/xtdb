@@ -7,7 +7,8 @@
             [crux.lru :as lru]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.fixtures.bootstrap :as fb]
+            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.kafka :as fk])
   (:import (java.util Date)))
 
@@ -81,7 +82,7 @@
 
 (defn with-stocks-data [f]
   (when run-entity-cache-tests?
-    (api/submit-tx fb/*api* (f/maps->tx-ops currencies))
+    (api/submit-tx *api* (f/maps->tx-ops currencies))
     (println "stocks count" stocks-count)
     (let [ctr (atom 0)
           stocks (map gen-stock (range stocks-count))
@@ -90,8 +91,8 @@
       (doseq [stocks-batch (partition-all 1000 stocks)]
         (swap! ctr inc)
         (println "partition " @ctr "/" partitions-total)
-        (api/submit-tx fb/*api* (f/maps->tx-ops stocks-batch))))
-    (api/sync fb/*api* (java.time.Duration/ofMinutes 20)))
+        (api/submit-tx *api* (f/maps->tx-ops stocks-batch))))
+    (api/sync *api* (java.time.Duration/ofMinutes 20)))
   (f))
 
 (defn with-stocks-history-data [f]
@@ -109,18 +110,18 @@
         (doseq [stocks-batch (partition-all 1000 stocks-batch)]
           (swap! ctr inc)
           (println "day " i "\t" "partition " @ctr "/" partitions-total)
-          (api/submit-tx fb/*api* (f/maps->tx-ops stocks-batch)))
-        (api/submit-tx fb/*api* (f/maps->tx-ops t-currencies date)))
+          (api/submit-tx *api* (f/maps->tx-ops stocks-batch)))
+        (api/submit-tx *api* (f/maps->tx-ops t-currencies date)))
       (println
         "Sync takes: "
         (crux.bench/duration-millis
-          (api/sync fb/*api* (java.time.Duration/ofMinutes 20))))))
+          (api/sync *api* (java.time.Duration/ofMinutes 20))))))
   (f))
 
 (t/use-fixtures :once
                 fk/with-embedded-kafka-cluster
                 fk/with-kafka-client
-                fb/with-cluster-node
+                cn/with-cluster-node
                 with-stocks-history-data)
 
 (defn not-really-benchmarking [query db n]
@@ -130,7 +131,7 @@
 (t/deftest test-cached-index
   (when run-entity-cache-tests?
     (t/testing "cache hit gains"
-      (let [db (api/db fb/*api*)
+      (let [db (api/db *api*)
             d (Date.)]
         (with-open [snapshot (api/new-snapshot db)]
           (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
@@ -157,7 +158,7 @@
             (t/is (some? seeked-2))))))
 
     (t/testing "cache miss overhead"
-      (let [db (api/db fb/*api*)
+      (let [db (api/db *api*)
             d (Date.)]
         (with-open [snapshot (api/new-snapshot db)]
           (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
@@ -186,7 +187,7 @@
 
 (defn- test-query [test-id query cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
-     (let [db (api/db fb/*api*)
+     (let [db (api/db *api*)
            -dry (crux.bench/duration-millis (api/q db query))
            durations (not-really-benchmarking query db sample-size)
            res (api/q db query)]
