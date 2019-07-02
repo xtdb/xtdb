@@ -253,12 +253,11 @@
   (or (get arg (symbol (name var)))
       (get arg (keyword (name var)))))
 
-(defn- update-binary-index! [snapshot {:keys [valid-time transact-time]} binary-idx vars-in-join-order v-var->range-constraints]
+(defn- update-binary-index! [snapshot {:keys [entity-as-of-idx]} binary-idx vars-in-join-order v-var->range-constraints]
   (let [{:keys [clause names]} (meta binary-idx)
         {:keys [e a v]} clause
         order (filter (set (vals names)) vars-in-join-order)
-        v-range-constraints (get v-var->range-constraints v)
-        entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)]
+        v-range-constraints (get v-var->range-constraints v)]
     (if (= (:v names) (first order))
       (let [v-doc-idx (idx/new-doc-attribute-value-entity-value-index snapshot a)
             e-idx (idx/new-doc-attribute-value-entity-entity-index snapshot a v-doc-idx entity-as-of-idx)]
@@ -1037,6 +1036,10 @@
 
 (def default-query-timeout 30000)
 
+(def default-entity-cache-size 10000)
+
+(def ^:dynamic *with-entities-cache?* true)
+
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
   ([{:keys [kv] :as db} q]
@@ -1072,13 +1075,18 @@
      (if (instance? Throwable result)
        (throw result)
        result)))
-  ([{:keys [object-store kv] :as db} snapshot q]
+  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot q]
    (let [q (normalize-query (s/assert ::query q))
          {:keys [find where args rules offset limit order-by full-results?] :as q-conformed} (s/conform ::query q)
          stats (idx/read-meta kv :crux.kv/stats)]
      (log/debug :query (pr-str q))
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
+           entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
+           cached (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
+           db (assoc db :entity-as-of-idx (if *with-entities-cache?*
+                                            cached
+                                            entity-as-of-idx))
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
        (doseq [var find
@@ -1126,7 +1134,7 @@
          tuples)
     tuples))
 
-(defrecord QueryDatasource [kv query-cache object-store valid-time transact-time]
+(defrecord QueryDatasource [kv query-cache object-store valid-time transact-time entity-as-of-idx]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1186,7 +1194,8 @@
                         (lru/get-named-cache kv ::query-cache query-cache-size)
                         (or object-store (lru/new-cached-object-store kv doc-cache-size))
                         (or valid-time now)
-                        (or transact-time now)))))
+                        (or transact-time now)
+                        nil))))
 
 (defn submitted-tx-updated-entity?
   ([kv {:crux.tx/keys [tx-time] :as submitted-tx} eid]

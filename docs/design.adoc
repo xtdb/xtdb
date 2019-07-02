@@ -7,7 +7,7 @@ swapped out for alternative implementations. We are attempting to
 follow the https://en.wikipedia.org/wiki/Unix_philosophy[Unix
 philosophy] of each part doing one thing well.
 
-This document walks through some of the high-level Crux component.
+This document walks through some of the high-level Crux components.
 
 == ObjectStore
 
@@ -119,7 +119,7 @@ entity->content
 ....
 
 `open-level` gives instructions to open and move down a level. In the
-above example if could be moving the index down to point at the values
+above example it could be moving the index down to point at the values
 within a given attribute. That is to say that if we have an attribute
 `:name`, the index will iterate across all values for that attribute,
 until there are no more `name` values.

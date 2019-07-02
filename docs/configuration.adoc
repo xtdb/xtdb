@@ -98,11 +98,11 @@ Add Crux as a project dependency:
 include::./deps.edn[tags=CruxDep]
 ----
 
-And Kafka:
+And Kafka Clients:
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=KafkaDeps]
+include::./deps.edn[tags=KafkaClientsDeps]
 ----
 
 Use the API to start a cluster node system, configuring it with the
@@ -172,7 +172,7 @@ of how to interact with Crux over HTTP.
 
 === Embedded Kafka
 
-Crux has an embedded Kafka that can be used.
+Crux is ready to work with an embedded Kafka.
 
 Add Kafka and Zookeeper to your project dependencies:
 

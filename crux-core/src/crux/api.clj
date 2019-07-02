@@ -2,7 +2,7 @@
   "Public API of Crux."
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
-            [crux.codec :as c]            )
+            [crux.codec :as c])
   (:import [crux.api Crux ICruxAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
@@ -141,7 +141,7 @@
     ([this]
      (.db this))
     ([this ^Date valid-time]
-     (.db this valid-time) )
+     (.db this valid-time))
     ([this ^Date valid-time ^Date transaction-time]
      (.db this valid-time transaction-time)))
 

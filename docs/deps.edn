@@ -4,6 +4,10 @@
   juxt/crux {:mvn/version "19.06-1.1.0-alpha"}
   ;; end::CruxDep[]
 
+  ;; tag::KafkaClientsDeps[]
+  org.apache.kafka/kafka-clients {:mvn/version "2.1.0"}
+  ;; end::KafkaClientsDeps[]
+
   ;; tag::KafkaDeps[]
   org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
   ;; end::KafkaDeps[]
