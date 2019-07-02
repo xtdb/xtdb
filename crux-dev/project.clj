@@ -13,6 +13,15 @@
                  [juxt/crux-rdf :derived-from-git]
                  [juxt/crux-decorators :derived-from-git]
                  [juxt/crux-test :derived-from-git]]
+  :profiles {:dev {:dependencies [;; General:
+                                  [org.clojure/tools.namespace "0.2.11"]
+                                  ;; Hakan:
+                                  [org.ejml/ejml-dsparse "0.38"
+                                   :exclusions [com.google.code.findbugs/jsr305]]
+                                  ;; Matrix:
+                                  [org.roaringbitmap/RoaringBitmap "0.8.2"]]
+                   :source-paths ["dev"]
+                   :repl-options {:init-ns user}}}
   :test-paths ["../crux-core/test"
                "../crux-rdf/test"
                "../crux-rocksdb/test"
