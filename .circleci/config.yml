@@ -39,6 +39,6 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum "project.clj" }}
 
-      - run: lein do version, sub install, sub test, check, test
+      - run: lein do version, sub install, sub test, check
 
       - run: ./.circleci/bin/deploy_clojars.sh
