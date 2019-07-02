@@ -53,7 +53,8 @@
         "crux-http-client"
         "crux-http-server"
         "crux-uberjar"
-        "crux-decorators"]
+        "crux-decorators"
+        "crux-test"]
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
   :aliases {"build" ["do" ["sub" "install"] ["sub" "test"] "test"]}
 
