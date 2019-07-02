@@ -53,3 +53,6 @@ example/imdb/.nrepl-port
 /crux-uberjar/.nrepl-port
 /crux-uberjar/data
 /crux-uberjar/pom.xml
+/crux-decorators/.lein-failures
+/crux-decorators/.nrepl-port
+/crux-decorators/pom.xml

@@ -1,15 +1,47 @@
 (ns crux.decorators.aggregation-test
   (:require [clojure.test :as t]
             [crux.api :as api]
-            [crux.decorators.aggregation.alpha :as aggr]
-            [crux.fixtures :as f]
-            [crux.fixtures.api :refer [*api*]]
-            [crux.fixtures.standalone :as fs]))
+            [crux.io :as cio]
+            [crux.decorators.aggregation.alpha :as aggr])
+  (:import [crux.api Crux ICruxAPI]
+           java.util.UUID))
 
-(t/use-fixtures :each fs/with-standalone-system)
+(def ^:dynamic ^ICruxAPI *api*)
+
+(defn maps->tx-ops
+  ([maps]
+   (vec (for [m maps]
+          [:crux.tx/put m])))
+  ([maps ts]
+   (vec (for [m maps]
+          [:crux.tx/put m ts]))))
+
+(defn transact!
+  "Helper fn for transacting entities"
+  ([api entities]
+   (transact! api entities (cio/next-monotonic-date)))
+  ([^ICruxAPI api entities ts]
+   (let [submitted-tx (api/submit-tx api (maps->tx-ops entities ts))]
+     (api/sync api (:crux.tx/tx-time submitted-tx) nil))
+   entities))
+
+(defn with-standalone-system [f]
+  (let [db-dir (str (cio/create-tmpdir "kv-store"))
+        event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
+    (try
+      (with-open [standalone-system (Crux/startStandaloneSystem {:db-dir db-dir
+                                                                 :kv-backend "crux.kv.memdb.MemKv"
+                                                                 :event-log-dir event-log-dir})]
+        (binding [*api* standalone-system]
+          (f)))
+      (finally
+        (cio/delete-dir db-dir)
+        (cio/delete-dir event-log-dir)))))
+
+(t/use-fixtures :each with-standalone-system)
 
 (t/deftest test-count-aggregation
-  (f/transact!
+  (transact!
     *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}
@@ -51,9 +83,8 @@
                  :where [[?e :user/name ?user-name]
                          [?e :post/cost ?post-cost]]})))))
 
-
 (t/deftest test-with-decorator
-  (f/transact!
+  (transact!
    *api*
     [{:crux.db/id :a1 :user/name "patrik" :user/post 1 :post/cost 30}
      {:crux.db/id :a2 :user/name "patrik" :user/post 2 :post/cost 35}

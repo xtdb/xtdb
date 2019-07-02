@@ -12,6 +12,7 @@
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-http-server :derived-from-git]
                  [juxt/crux-rdf :derived-from-git]
+                 [juxt/crux-decorators :derived-from-git]
 
                  ;; TODO, understand where this is used and move accordingly:
                  [com.taoensso/encore "2.114.0"]]
@@ -51,7 +52,8 @@
         "crux-kafka"
         "crux-http-client"
         "crux-http-server"
-        "crux-uberjar"]
+        "crux-uberjar"
+        "crux-decorators"]
   :jvm-opts ["-Dlogback.configurationFile=test/logback-test.xml"]
 
   :global-vars {*warn-on-reflection* true}
