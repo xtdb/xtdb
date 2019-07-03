@@ -30,7 +30,7 @@ Available open source software product by JUXT later in 2019.
 
 ## Latest Version
 
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux.svg)](https://clojars.org/juxt/crux)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux)
 
 ## Unbundled Architecture
 
@@ -42,7 +42,7 @@ information privacy regulations.
 > What do we have to gain from turning the database inside out? Simpler code,
 > better scalability, better robustness, lower latency, and more flexibility for
 > doing interesting things with data.
-> 
+>
 > — Martin Kleppmann (2014)
 
 <img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/img/crux-system-1.svg" width="1000px">
@@ -51,7 +51,7 @@ This design makes it feasible and desirable to embed Crux nodes directly in
 your application processes, which reduces deployment complexity and eliminates
 round-trip overheads when running complex application queries.
 
-### 
+###
 
 ## Data Model
 
