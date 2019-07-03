@@ -1,0 +1,45 @@
+= Crux-integrant
+
+A convenient crux/integrant integration, for creating your crux systems with pure data.
+
+== Usage
+
+As well as this library, you will need a dependency on crux and either rocksdb or lmdb:
+
+[source,clojure]
+----
+juxt.crux/ig {:local/root "../lib/crux.ig"}
+juxt/crux {:mvn/version "19.04-1.0.2-alpha"}
+
+;; Only one of these required:
+org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
+;;
+lmdb {:TODO TODO}
+----
+
+
+=== System components
+
+System components all derive from `:juxt.crux.ig/system`.
+
+Parameters take configuration as defined in Crux docs: https://juxt.pro/crux/docs/configuration.html#_properties
+
+.Derivations from standard Crux config
+event-log-dir:: If unspecified, will be a temporary directory that is consistent for the JVM
+db-dir:: If unspecified, will be a temporary directory that is consistent for the JVM
+
+.System Components
+* `juxt.crux.ig.system/standalone`
+* `juxt.crux.ig.system/local-node`
+
+Example:
+
+[source,clojure]
+----
+:juxt.crux.ig.system/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"}
+:my-web-server {:system #ig/ref :juxt.crux.ig/system}
+----
+
+=== Embedded Kafka
+
+TBD

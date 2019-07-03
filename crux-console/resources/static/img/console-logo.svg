@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Generator: Adobe Illustrator 23.0.2, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   viewBox="0 0 412.4273 130.59492"
+   xml:space="preserve"
+   sodipodi:docname="crux-logo.svg"
+   inkscape:version="0.92.4 5da689c313, 2019-01-14"
+   width="412.42731"
+   height="130.59492"><metadata
+   id="metadata35"><rdf:RDF><cc:Work
+       rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type
+         rdf:resource="http://purl.org/dc/dcmitype/StillImage" /><dc:title></dc:title><dc:title /></cc:Work></rdf:RDF></metadata><defs
+   id="defs33" /><sodipodi:namedview
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1"
+   objecttolerance="10"
+   gridtolerance="10"
+   guidetolerance="10"
+   inkscape:pageopacity="0"
+   inkscape:pageshadow="2"
+   inkscape:window-width="3840"
+   inkscape:window-height="2031"
+   id="namedview31"
+   showgrid="false"
+   fit-margin-top="10"
+   fit-margin-left="10"
+   fit-margin-right="10"
+   fit-margin-bottom="10"
+   inkscape:zoom="3.5340364"
+   inkscape:cx="253.0852"
+   inkscape:cy="152.50843"
+   inkscape:window-x="0"
+   inkscape:window-y="55"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+<style
+   type="text/css"
+   id="style2">
+	.st0{fill:#C9C9C9;stroke:#C9C9C9;stroke-miterlimit:10;}
+	.st1{fill:#C9C9C9;}
+	.st2{fill:#F8961D;}
+</style>
+
+<g
+   id="g28"
+   transform="matrix(0.90555083,0,0,0.90555083,-27.951635,0.46454976)">
+	<line
+   class="st0"
+   x1="90.860001"
+   y1="62.68"
+   x2="90.559998"
+   y2="10.99"
+   id="line14"
+   style="fill:#c9c9c9;stroke:#c9c9c9;stroke-miterlimit:10" />
+	<polygon
+   class="st1"
+   points="138.34,97.39 90.86,62.68 42.8,97.39 42.36,96.78 90.86,61.76 91.08,61.92 139.14,97.04 "
+   id="polygon16"
+   style="fill:#c9c9c9" />
+	<polygon
+   points="43.13,47.05 90.56,12.38 138.09,46.71 138.09,96.48 90.56,130.81 43.19,96.18 41.91,97.1 90.12,132.34 90.56,132.66 139.59,97.25 139.59,45.94 90.78,10.69 90.56,10.53 42.31,45.8 "
+   id="polygon18" />
+	<polygon
+   points="42.31,47.66 90.12,82.61 90.56,82.93 90.57,82.92 90.57,81.07 90.56,81.07 42.31,45.8 "
+   id="polygon20" />
+	<g
+   id="g26">
+		<line
+   class="st2"
+   x1="90.57"
+   y1="82.93"
+   x2="90.57"
+   y2="82.93"
+   id="line22"
+   style="fill:#f8961d" />
+		<polygon
+   class="st2"
+   points="90.57,81.07 90.58,81.07 90.58,82.92 139.6,47.52 139.6,45.94 "
+   id="polygon24"
+   style="fill:#f8961d" />
+	</g>
+</g>
+<text
+   xml:space="preserve"
+   style="font-style:normal;font-weight:normal;font-size:36.10736465px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.90268415"
+   x="131.36772"
+   y="76.62619"
+   id="text830"><tspan
+     sodipodi:role="line"
+     x="131.36772"
+     y="76.62619"
+     style="font-style:normal;font-weight:normal;line-height:60.84999847;letter-spacing:9.13345909px;stroke-width:0.90268415"
+     id="tspan857"><tspan
+   style="font-weight:bold;stroke-width:0.90268415"
+   id="tspan865">[?</tspan>console<tspan
+   style="font-weight:bold;stroke-width:0.90268415"
+   id="tspan867">]</tspan></tspan></text>
+<text
+   xml:space="preserve"
+   style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none"
+   x="231.24884"
+   y="126.47746"
+   id="text834"><tspan
+     sodipodi:role="line"
+     id="tspan832"
+     x="231.24884"
+     y="161.86809"></tspan></text>
+</svg>

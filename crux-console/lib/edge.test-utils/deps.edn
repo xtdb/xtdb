@@ -1,0 +1,3 @@
+{:paths ["src"]
+ :deps {integrant/integrant {:mvn/version "0.7.0"}
+        juxt.edge/edge.system {:local/root "../edge.system"}}}

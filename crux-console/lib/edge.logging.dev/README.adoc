@@ -1,0 +1,35 @@
+= Development-oriented logging configuration
+
+A complete logging environment for dev.
+
+== Log output
+
+Log messages at WARN or ERROR will be printed to STDOUT.
+All application log messages will go to log/app.log.
+All log messages will go to log/all.log.
+
+Your application log messages are detected by looking at log_dev_app.properties, which will look like `app_root_logger=acme.app`.
+
+Log messages are limited to a maximum size of 512MB for each file (for a total of 1GB), when this happens the oldest files are deleted.
+Logs older than 15 days are deleted automatically.
+
+== Log input
+
+Logs are collected from 
+
+* SLF4J
+* Log4j 1
+* Log4j 2
+* Commons Logging
+* OSGI LogService
+* java.util.logging (only when used in conjunction with `dev-extras` from lib.dev.app)
+
+== Notes
+
+Make sure your production logback.xml is not activated at the same time as this library (usually the `:dev` alias).
+This will commonly happen if you place your logback.xml in `src` or `resources`.
+You should instead create a `prod` folder for production-only assets like your production logback.xml.
+
+== Attribution
+
+This would not have been possible without Stuart Sierra's foundation in link:https://github.com/stuartsierra/log.dev/[log.dev].

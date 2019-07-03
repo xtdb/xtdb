@@ -1,0 +1,25 @@
+{:ig/system
+ {:juxt.crux-ui.server.main/read-write {:system #ig/ref :juxt.crux.ig/system}
+  :juxt.crux-ui.server.main/home {:system #ig/ref :juxt.crux.ig/system}
+  :juxt.crux-ui.server.main/console {:system #ig/ref :juxt.crux.ig/system}
+  :juxt.crux.ig.system/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"
+                                   :event-log-dir "data/eventlog-1"
+                                   :db-dir "data/db-dir-1"
+                                   :http-opts {:server-port 8080}}
+  :edge.yada.ig/listener {:handler #ig/ref :edge.bidi.ig/vhost
+                          :port 8300}
+
+  [:juxt.crux-ui.server.main/cljsjs :edge.yada.ig/resources] {:path "cljsjs/"}
+  [:juxt.crux-ui.server.main/static :edge.yada.ig/resources] {:path "static/"}
+  [:juxt.crux-ui.server/assets :edge.yada.ig/resources] {:path "public/"}
+
+  :edge.bidi.ig/vhost [["http://localhost:8300"
+                        [""
+                         [["/" #ig/ref :juxt.crux-ui.server.main/home]
+                          ["/console" #ig/ref :juxt.crux-ui.server.main/console]
+                          ["/static/" #ig/ref [:juxt.crux-ui.server.main/static :edge.yada.ig/resources]]
+                          ["/cljsjs/" #ig/ref [:juxt.crux-ui.server.main/cljsjs :edge.yada.ig/resources]]
+                          ["/rw" #ig/ref :juxt.crux-ui.server.main/read-write]
+                          ["" #ig/ref [:juxt.crux-ui.server/assets :edge.yada.ig/resources]]]]]]
+
+ }}

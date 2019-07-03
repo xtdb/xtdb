@@ -1,0 +1,13 @@
+**/.cpcache
+**/.rebel_readline_history
+**/.nrepl-port
+**/target/*/**
+**/log/*
+!**/target/*/.gitkeep
+data
+resources/static/crux-ui/compiled
+resources/static/crux-ui/test
+
+# pack'd output
+/*.jar
+**/*.jar
