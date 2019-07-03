@@ -10,7 +10,8 @@
                  [com.taoensso/nippy "2.14.0"]
                  [org.clojure/tools.reader "1.3.2"]
                  [com.taoensso/encore "2.114.0"]
-                 [org.agrona/agrona "1.0.0"]]
+                 [org.agrona/agrona "1.0.0"]
+                 [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]]
   :profiles {:dev {:dependencies [[org.clojure/test.check "0.10.0-alpha3"]
                                   [ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]

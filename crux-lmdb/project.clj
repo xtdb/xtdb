@@ -4,6 +4,8 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
+                 [org.clojure/tools.logging "0.4.1"]
+                 [juxt/crux-core :derived-from-git]
                  [com.github.jnr/jnr-ffi "2.1.9"]
                  [org.lmdbjava/lmdbjava "0.6.3" :exclusions [com.github.jnr/jffi]]
                  [org.lwjgl/lwjgl "3.2.2" :classifier "natives-linux" :native-prefix ""]
