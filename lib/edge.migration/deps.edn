@@ -1,0 +1,11 @@
+{:paths ["src"]
+ :deps
+ {org.clojure/clojure {:mvn/version "1.10.0"}
+  io.dominic/ednup {:git/url "https://github.com/SevereOverfl0w/ednup.git"
+                    :sha "87b2734303d815e6209495b9c6a6ee77aa17ab4b"}
+  org.clojure/tools.cli {:mvn/version "0.4.1"}
+  jansi-clj {:mvn/version "0.1.1"}}
+ 
+ :aliases
+ {:test
+  {:extra-paths ["test"]}}}

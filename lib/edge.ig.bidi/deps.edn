@@ -1,0 +1,4 @@
+{:paths ["src"]
+ :deps
+ {integrant {:mvn/version "0.6.3"}
+  bidi {:mvn/version "2.1.4"}}}

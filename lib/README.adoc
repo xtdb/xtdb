@@ -1,0 +1,20 @@
+= lib
+
+Here you will find libraries which support your applications.
+Some are Edge libraries (prefixed with "edge.") and some of them are yours.
+
+Feel free to add new libraries to this folder to support your application.
+You can refer to them from your `deps.edn` like so:
+
+[source,clojure]
+----
+group/name {:local/root "../lib/group.name"}
+----
+
+In a library, you should add a dependency on another library by doing "../".
+
+[source,clojure]
+.edge.app/deps.edn
+----
+juxt.edge/edge.system {:local/root "../edge.system"}
+----

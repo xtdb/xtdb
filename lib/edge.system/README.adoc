@@ -1,0 +1,17 @@
+= aero/integrant
+
+An opinionated aero/integrant integration.
+
+== Usage
+
+Add a key, `:ig/system` to your config.edn containing your integrant system.
+For now, config.edn is hardcoded and cannot be overriden.
+
+.Example
+[source,clojure]
+----
+{:http/port 8080
+ :ig/system {:yada.ig/httpd {:port #ref [:http/port]
+                             :handler #ig/ref :bidi.ig/handler}
+             :bidi.ig/handler {:routes […]}}}
+----

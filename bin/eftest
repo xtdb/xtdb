@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+deps='{:deps {eftest {:mvn/version "0.5.7"} cider/orchard {:mvn/version "0.4.0"}}}'
+args=()
+
+while :; do
+    case $1 in
+        -A*)
+	    args+=("$1")
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+	    break
+            ;;
+        *)
+            break
+    esac
+done
+
+# Particularly use illegal-access=deny here due to the pretty output of eftest.
+clojure -J--illegal-access=deny "-J-Dlogback.configurationFile=$(dirname "$0")/.eftest.logback.xml" "${args[@]}" -Sdeps "$deps" "$(dirname "$0")/.eftest.clj" "$@"

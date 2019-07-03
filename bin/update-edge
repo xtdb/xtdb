@@ -1,0 +1,7 @@
+#!/bin/sh
+
+git pull --no-rebase https://github.com/juxt/edge.git
+
+repo_root="${PWD}/$(dirname "$0")/.."
+
+cd "$(dirname "$0")/../lib/edge.migration" && clojure -m edge.migration "$repo_root"
