@@ -17,10 +17,6 @@
         "crux-decorators"
         "crux-test"]
   :aliases {"build" ["do" ["sub" "install"] ["sub" "test"] "test"]}
-  :global-vars {*warn-on-reflection* true}
-  ;; TODO: Leiningen vs CIDER nREPL version issue.
-  ;;       https://github.com/technomancy/leiningen/pull/2367
-  ;; :pedantic? :abort
   :repositories [["snapshots" {:url "https://repo.clojars.org"
                                :username :env/clojars_username
                                :password :env/clojars_password

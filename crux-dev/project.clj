@@ -35,4 +35,5 @@
                "../crux-test/test"]
   :jvm-opts ["-Dlogback.configurationFile=logback-dev.xml"]
   :middleware [leiningen.project-version/middleware]
+  :pedantic? :abort
   :global-vars {*warn-on-reflection* true})

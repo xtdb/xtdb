@@ -26,6 +26,7 @@
                   :exclusions [org.slf4j/slf4j-nop]]
                  [org.neo4j/neo4j "3.5.5"
                   :exclusions [com.github.ben-manes.caffeine/caffeine
+                               com.github.luben/zstd-jni
                                io.netty/netty-all
                                org.ow2.asm/asm
                                org.ow2.asm/asm-analysis
