@@ -258,41 +258,41 @@
                                                :next-offset 0
                                                :time nil}}))
   (while @running?
-    (with-open [snapshot (kv/new-snapshot event-log-kv)
-                i (kv/new-iterator snapshot)]
-      (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
-                                [::event-log
-                                 :next-offset])]
-        (if-let [m (moberg/seek-message i ::event-log next-offset)]
-          (let [_ (log/debug "Consuming from:" next-offset)
-                ^Message last-message (loop [m m
-                                             n 1]
-                                        (do (log/debug "Consuming message:" (pr-str (moberg/message->edn m)))
-                                            (case (get (.headers m) ::sub-topic)
-                                              :docs
-                                              (db/index-doc indexer (.key m) (.body m))
-                                              :txs
-                                              (db/index-tx indexer
-                                                           (.body m)
-                                                           (.message-time m)
-                                                           (.message-id m)))
-                                            (if (>= n (long batch-size))
-                                              m
-                                              (if-let [next-m (moberg/next-message i ::event-log)]
-                                                (recur next-m (inc n))
-                                                m))))
-                end-offset (moberg/end-message-id-offset event-log-kv ::event-log)
-                next-offset (inc (long (.message-id last-message)))
-                lag (- end-offset next-offset)
-                _ (when (pos? lag)
-                    (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
-                consumer-state {::event-log
-                                {:lag lag
-                                 :next-offset next-offset
-                                 :time (.message-time last-message)}}]
-            (log/debug "Event log consumer state:" (pr-str consumer-state))
+    (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
+                              [::event-log
+                               :next-offset])]
+      (if-let [consumer-state (with-open [snapshot (kv/new-snapshot event-log-kv)
+                                          i (kv/new-iterator snapshot)]
+                                (when-let [m (moberg/seek-message i ::event-log next-offset)]
+                                  (log/debug "Consuming from:" next-offset)
+                                  (let [^Message last-message (loop [m m
+                                                                     n 1]
+                                                                (do (log/debug "Consuming message:" (pr-str (moberg/message->edn m)))
+                                                                    (case (get (.headers m) ::sub-topic)
+                                                                      :docs
+                                                                      (db/index-doc indexer (.key m) (.body m))
+                                                                      :txs
+                                                                      (db/index-tx indexer
+                                                                                   (.body m)
+                                                                                   (.message-time m)
+                                                                                   (.message-id m)))
+                                                                    (if (>= n (long batch-size))
+                                                                      m
+                                                                      (if-let [next-m (moberg/next-message i ::event-log)]
+                                                                        (recur next-m (inc n))
+                                                                        m))))
+                                        end-offset (moberg/end-message-id-offset event-log-kv ::event-log)
+                                        next-offset (inc (long (.message-id last-message)))
+                                        lag (- end-offset next-offset)]
+                                    (when (pos? lag)
+                                      (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
+                                    {::event-log
+                                     {:lag lag
+                                      :next-offset next-offset
+                                      :time (.message-time last-message)}})))]
+        (do (log/debug "Event log consumer state:" (pr-str consumer-state))
             (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))
-          (Thread/sleep idle-sleep-ms))))))
+        (Thread/sleep idle-sleep-ms)))))
 
 (defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer event-log-sync-interval-ms]
   (let [running? (atom true)
