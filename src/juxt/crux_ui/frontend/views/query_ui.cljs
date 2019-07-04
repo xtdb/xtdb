@@ -6,9 +6,11 @@
             [juxt.crux-ui.frontend.views.query.form :as q-form]
             [juxt.crux-ui.frontend.views.query.output :as q-output]
             [juxt.crux-ui.frontend.views.query.time-controls :as time-controls]
+            [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.subs :as sub]))
 
-(def q-ui-border "1px solid hsl(0,0%,85%)")
+
+(def q-ui-border s/q-ui-border)
 
 
 
@@ -39,6 +41,7 @@
 
       [:&__controls
         {:padding "16px 0"
+         :border-right q-ui-border
          :grid-area :controls}]
         ;:border "1px solid orange"
 

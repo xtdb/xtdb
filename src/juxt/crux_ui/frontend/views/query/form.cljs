@@ -53,7 +53,7 @@
        [:&__editor-err
         :&__examples
         {:position :absolute
-         :left     :32px
+         :left     :8px
          :border-radius :2px
          :background :white
          :padding  :8px
