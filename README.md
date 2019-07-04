@@ -75,7 +75,7 @@ point-in-time snapshots of your database (by specifying `transaction-time` and/o
 Please visit our [official documentation](https://juxt.pro/crux/docs/index.html) to get started with Crux.
 
 ## Try it with Docker
-See [standalone webservice example](https://github.com/juxt/crux/tree/master/example/standalone_webservice)
+See [standalone webservice example](https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice)
 for a demo Docker container.
 
 ## Community & Contact
