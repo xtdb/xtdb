@@ -75,10 +75,12 @@
 
 (rf/reg-sub
   :subs.ui/output-side-tab
+  :<- [:subs.query/result]
   :<- [:subs.db.ui/output-side-tab]
-  (fn [out-tab]
+  (fn [[q-res out-tab]]
     (cond
       out-tab out-tab
+      q-res   :db.ui.output-tab/tree
       :else   :db.ui.output-tab/attr-stats)))
 
 (rf/reg-sub

@@ -7,33 +7,17 @@
 (def ^:private -sub-attr-stats (rf/subscribe [:subs.query/attr-stats-table]))
 
 (def style
-  (garden/css
-    [:.q-table
-     {:border          s/q-ui-border
-      :border-top      :none
-      :border-left     :none
-      :border-collapse :separate
-      :border-radius   :2px
-      :width           :100%
-      :position        :relative}
+  [:style
+    (garden/css
+      [:.attr-stats
+       [:&__header
+        {:padding :16px
+         :border-bottom s/q-ui-border}]])])
 
-     ["&__body-cell"
-      "&__head-cell"
-       {:border-left s/q-ui-border
-        :border-top  s/q-ui-border
-        :padding     "6px 12px"}]
-     ["&__head-cell"
-      {:border-top :none
-       :background :white
-       :font-weight 400
-       :letter-spacing :.09em}
-      [:&:first-child
-       {:border-left :none}]]
-     ["&__body-cell"
-      {:letter-spacing :.04em}
-      [:&:first-child
-       {:border-left :none}]]]))
+
 
 (defn root []
   [:div.attr-stats
+   style
+   [:header.attr-stats__header [:strong "Indexed attributes frequencies"]]
    [q-results-table/root @-sub-attr-stats]])
