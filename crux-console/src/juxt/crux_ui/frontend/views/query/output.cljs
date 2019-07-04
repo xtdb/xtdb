@@ -5,14 +5,12 @@
             [garden.core :as garden]
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.codemirror :as cm]))
 
 
 (def ^:private -sub-query-res (rf/subscribe [:subs.query/result]))
 (def ^:private -sub-output-tab (rf/subscribe [:subs.ui/output-tab]))
-(def color-placeholder :grey)
-
-(def q-ui-border "1px solid hsl(0,0%,85%)")
 
 (defn- query-output-edn []
   (let [raw @-sub-query-res
@@ -33,7 +31,7 @@
       [:.output-tabs
        {:display :flex}
        [:&__item
-        {}]
+        {:ee 3}]
        [:&__sep
         {:padding "0 8px"}]])])
 
@@ -62,7 +60,7 @@
         :position :relative
         :grid-template "'side main' 1fr / minmax(200px, 300px) 1fr"}
        [:&__side
-        {:border-right q-ui-border
+        {:border-right s/q-ui-border
          :grid-area :side
          :overflow :auto}]
        [:&__main
@@ -81,7 +79,7 @@
       [:.q-output-empty
        {:height :100%
         :display :flex
-        :color color-placeholder
+        :color s/color-placeholder
         :align-items :center
         :justify-content :center}]
       (gs/at-media {:max-width :1000px}

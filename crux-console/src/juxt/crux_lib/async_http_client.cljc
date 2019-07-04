@@ -1,4 +1,5 @@
 (ns juxt.crux-lib.async-http-client
+; @author refset
 ; this ns has been adapted from https://github.com/juxt/crux/blob/master/src/crux/bootstrap/remote_api_client.clj
   (:require #?(:clj [clojure.tools.reader.edn :as edn]
                :cljs [cljs.reader :as edn])

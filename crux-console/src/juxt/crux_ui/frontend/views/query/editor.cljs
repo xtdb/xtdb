@@ -13,7 +13,8 @@
   [:style
     (garden/css
       [:.query-editor
-       {:height :100%}])])
+       {:padding "16px"
+        :height :100%}])])
 
 (defn root []
   [:div.query-editor
