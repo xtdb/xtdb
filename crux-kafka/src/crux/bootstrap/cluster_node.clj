@@ -45,6 +45,7 @@
                           doc-topic
                           server-port
                           kafka-properties-file
+                          kafka-properties-map
                           doc-cache-size]
                    :as options
                    :or {doc-cache-size (:doc-cache-size b/default-options)}}
@@ -52,7 +53,8 @@
   (s/assert ::options options)
   (log/info "starting system")
   (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
-                            (read-kafka-properties-file kafka-properties-file))
+                            (read-kafka-properties-file kafka-properties-file)
+                            kafka-properties-map)
         producer-config kafka-config
         consumer-config (merge {"group.id" (:group-id options)}
                                kafka-config)]
