@@ -1,0 +1,8 @@
+{:paths ["src"]
+ :deps
+ {juxt/crux {:mvn/version "19.06-1.1.0-alpha"}
+  integrant {:mvn/version "0.7.0"}}
+ :aliases
+ {:dev
+  {:extra-deps
+   {org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}}}}}

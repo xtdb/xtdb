@@ -1,0 +1,3 @@
+#!/bin/sh
+
+clojure -Sdeps '{:deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git" :sha "73552d02e43fa7fac4e3f245257742a9534ea0f2"}}}' -m mach.pack.alpha.capsule "$@"

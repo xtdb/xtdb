@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+echo "[Edge] Starting development environment, please wait…"
+
+# Dependencies are stored in a Bash array.
+dependencies=( 'com.bhauman/rebel-readline {:mvn/version "0.1.4"}'
+        'juxt.edge/rebel.auto-dev {:local/root "./lib/edge.rebel.auto-dev"}' )
+
+jvm_opts=()
+
+cljs=0
+nrepl=0
+
+while :; do
+    case $1 in
+        --cljs)
+            cljs=1
+	        dependencies+=( 'com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}' )
+            shift
+            ;;
+        --nrepl)
+            nrepl=1
+            dependencies+=( 'juxt.edge/dev.nrepl {:local/root "./lib/edge.dev.nrepl"}' )
+            jvm_opts+=( '-J-Dedge.load_edge.dev.nrepl=true' )
+            shift
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+	    break
+            ;;
+        *)
+            break
+    esac
+done
+
+if [ "$cljs" -eq 1 ] && [ "$nrepl" -eq 1 ]; then
+    dependencies+=( 'cider/piggieback {:mvn/version "0.4.1"}' )
+fi
+
+# Build up the EDN dependency string to pass to `clojure`.
+deps="{:deps { ${dependencies[*]} }}"
+
+clojure "${jvm_opts[@]}" -Sdeps "$deps" "$@" -m edge.rebel.main

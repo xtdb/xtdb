@@ -1,0 +1,25 @@
+{:paths ["src"],
+ :deps
+ {juxt.edge/edge.system {:local/root "../edge.system"},
+  integrant/integrant {:mvn/version "0.7.0"},
+  integrant/repl {:mvn/version "0.3.1"},
+  io.aviso/pretty {:mvn/version "0.1.35"},
+
+  org.clojure/tools.namespace {:mvn/version "0.3.0-alpha4"}
+  org.clojure/java.classpath {:mvn/version "0.3.0"}
+
+  ;; Spyscope's version of fipp doesn't work with Java 11
+  spyscope/spyscope {:mvn/version "0.1.6"
+                     :exclusions [fipp/fipp]}
+  fipp/fipp {:mvn/version "0.6.14"}
+
+  juxt.edge/logging.dev {:local/root "../edge.logging.dev"}
+
+  ;; add-lib branch, see http://insideclojure.org/2018/05/04/add-lib/
+
+  ;; aws-maven brings in a logback.xml, causing horrible errors.  Using a fork
+  ;; which has removed it.
+  org.clojure/tools.deps.alpha {:git/url "https://github.com/SevereOverfl0w/tools.deps.alpha.git"
+                                :sha "a4173975e22e5a41cc3be85270729ed102be3917"
+                                :exclusions [org.slf4j/slf4j-nop
+                                             ]}}}
