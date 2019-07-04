@@ -64,7 +64,7 @@ standalone web service example].
 
 An additional example of backup and restore that only applies to a stopped
 standalone system is provided
-https://github.com/juxt/crux/tree/master/example/backup-restore[here].
+https://github.com/juxt/crux/tree/master/docs/example/backup-restore[here].
 
 In a clustered deployment, only Kafka's
 https://docs.confluent.io/current/kafka/post-deployment.html#backup-and-restoration[official

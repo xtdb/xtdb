@@ -30,7 +30,7 @@ Available open source software product by JUXT later in 2019.
 
 ## Latest Version
 
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux.svg)](https://clojars.org/juxt/crux)
 
 ## Unbundled Architecture
 
