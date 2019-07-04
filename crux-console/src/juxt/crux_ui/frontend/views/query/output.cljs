@@ -6,11 +6,14 @@
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.style :as s]
+            [juxt.crux-ui.frontend.views.attr-stats :as attr-stats]
             [juxt.crux-ui.frontend.views.codemirror :as cm]))
 
 
 (def ^:private -sub-query-res (rf/subscribe [:subs.query/result]))
-(def ^:private -sub-output-tab (rf/subscribe [:subs.ui/output-tab]))
+(def ^:private -sub-output-tab (rf/subscribe [:subs.ui/output-main-tab]))
+(def ^:private -sub-output-side-tab (rf/subscribe [:subs.ui/output-side-tab]))
+(def ^:private -sub-results-table (rf/subscribe [:subs.query/results-table]))
 
 (defn- query-output-edn []
   (let [raw @-sub-query-res
@@ -21,8 +24,11 @@
 (def empty-placeholder
   [:div.q-output-empty "Your query or transaction results here shall be"])
 
-(defn set-tab [tab-name]
-  #(rf/dispatch [:evt.ui.output/tab-switch tab-name]))
+(defn set-side-tab [tab-name]
+  (rf/dispatch [:evt.ui.output/side-tab-switch tab-name]))
+
+(defn set-main-tab [tab-name]
+  (rf/dispatch [:evt.ui.output/main-tab-switch tab-name]))
 
 
 (def ^:private q-output-tabs-styles
@@ -35,19 +41,29 @@
        [:&__sep
         {:padding "0 8px"}]])])
 
-(defn out-tab-item [tab active-tab]
+(defn out-tab-item [tab active-tab on-click]
   [comps/button-textual
-   {:on-click (set-tab tab) :active? (= tab active-tab) :text (name tab)}])
+   {:on-click on-click :active? (= tab active-tab) :text (name tab)}])
 
 
-(defn output-tabs [active-tab]
-  [:div.output-tabs
+(defn side-output-tabs [active-tab]
+  [:div.output-tabs.output-tabs--side
    q-output-tabs-styles
-   [out-tab-item :db.ui.output-tab/table active-tab]
-   [:div.output-tabs__sep "/"]
-   [out-tab-item :db.ui.output-tab/tree active-tab]
-   [:div.output-tabs__sep "/"]
-   [out-tab-item :db.ui.output-tab/edn active-tab]])
+   (interpose
+     [:div.output-tabs__sep "/"]
+     (for [tab-type [:db.ui.output-tab/tree :db.ui.output-tab/attr-stats]]
+       [out-tab-item tab-type active-tab #(set-side-tab tab-type)]))])
+
+(defn main-output-tabs [active-tab]
+  [:div.output-tabs.output-tabs--main
+   q-output-tabs-styles
+   (interpose
+     [:div.output-tabs__sep "/"]
+     (for [tab-type [:db.ui.output-tab/table
+                     :db.ui.output-tab/tree
+                     :db.ui.output-tab/edn]]
+       ^{:key tab-type}
+       [out-tab-item tab-type active-tab #(set-main-tab tab-type)]))])
 
 
 (def ^:private q-output-styles
@@ -62,18 +78,21 @@
        [:&__side
         {:border-right s/q-ui-border
          :grid-area :side
-         :overflow :auto}]
+         :overflow :auto
+         :position :relative}]
        [:&__main
         {:border-radius :2px
          :grid-area :main
-         :overflow :auto}
-        [:&__links
-         {:position :absolute
-          :z-index 10
-          :background :white
-          :padding :8px
-          :bottom :0px
-          :right  :0px}]]]
+         :position :relative
+         :overflow :auto}]
+       ["&__main__links"
+        "&__side__links"
+        {:position :absolute
+         :z-index 10
+         :background :white
+         :padding :8px
+         :bottom  :0px
+         :right   :0px}]]
       [:.q-output-edn
        {:padding :8px}]
       [:.q-output-empty
@@ -91,17 +110,26 @@
 (defn root []
   [:div.q-output
    q-output-styles
+
    [:div.q-output__side
-     [q-results-tree/root]]
+    (let [out-tab @-sub-output-side-tab]
+      [:<>
+       (case out-tab
+         :db.ui.output-tab/attr-stats [attr-stats/root]
+         :db.ui.output-tab/empty empty-placeholder
+         [q-results-tree/root])
+       [:div.q-output__side__links
+        [side-output-tabs out-tab]]])]
+
    [:div.q-output__main
     (if-let [out-tab @-sub-output-tab]
       [:<>
        (case out-tab
-         :db.ui.output-tab/table [q-results-table/root]
+         :db.ui.output-tab/table [q-results-table/root @-sub-results-table]
          :db.ui.output-tab/tree  [q-results-tree/root]
          :db.ui.output-tab/edn   [query-output-edn]
          :db.ui.output-tab/empty empty-placeholder
-         [q-results-table/root])
+         [q-results-table/root @-sub-results-table])
        [:div.q-output__main__links
-         [output-tabs out-tab]]]
-       empty-placeholder)]])
+        [main-output-tabs out-tab]]]
+      empty-placeholder)]])

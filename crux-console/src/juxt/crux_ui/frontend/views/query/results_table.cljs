@@ -1,15 +1,12 @@
 (ns juxt.crux-ui.frontend.views.query.results-table
   (:require [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.views.style :as s]
             [garden.core :as garden]))
-
-(def ^:private -sub-results-table (rf/subscribe [:subs.query/results-table]))
-(def col-border "hsl(0, 0%, 85%)")
-(def border (str "1px solid " col-border))
 
 (def style
   (garden/css
     [:.q-table
-     {:border  border
+     {:border  s/q-ui-border
       :border-top :none
       :border-left :none
       :border-collapse :separate
@@ -19,8 +16,8 @@
 
      ["&__body-cell"
       "&__head-cell"
-       {:border-left border
-        :border-top  border
+       {:border-left s/q-ui-border
+        :border-top  s/q-ui-border
         :padding "6px 12px"}]
      ["&__head-cell"
       {:border-top :none
@@ -34,9 +31,15 @@
       [:&:first-child
        {:border-left :none}]]]))
 
+(defn table-row [i r]
+  ^{:key i}
+  [:tr.q-table__body-row
+   (for [c r]
+     ^{:key c}
+     [:td.q-table__body-cell (and c (pr-str c))])])
 
-(defn root []
-  (let [{:keys [headers rows]} @-sub-results-table]
+(defn root [table-data]
+  (let [{:keys [headers rows]} table-data]
     [:table.q-table
      [:style style]
      [:thead.q-table__head
@@ -44,7 +47,6 @@
        (for [h headers]
          [:th.q-table__head-cell (pr-str h)])]]
      [:tbody.q-table__body
-      (for [r rows]
-        [:tr.q-table__body-row
-         (for [c r]
-           [:td.q-table__body-cell (and c (pr-str c))])])]]))
+      (map-indexed table-row rows)]]))
+
+

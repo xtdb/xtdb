@@ -2,7 +2,7 @@
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]))
 
-(rf/reg-sub :subs.query/stats  (fnil :db.meta/stats  false))
+(rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  false))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  false))
@@ -58,11 +58,32 @@
                     (map #(map % q-headers)))
                q-res)})))
 
-(rf/reg-sub :subs.db.ui/output-tab (fnil :db.ui/output-tab :db.ui.output-tab/table))
+(rf/reg-sub
+  :subs.query/attr-stats-table
+  :<- [:subs.query/stats]
+  (fn [stats]
+    {:headers [:attribute :frequency]
+     :rows (if-not (map? stats)
+             []
+             (into [[:crux.db/id (:crux.db/id stats)]]
+                   (dissoc stats :crux.db/id)))}))
+
+
+
+(rf/reg-sub :subs.db.ui/output-side-tab (fnil :db.ui/output-side-tab :db.ui.output-tab/table))
+(rf/reg-sub :subs.db.ui/output-main-tab (fnil :db.ui/output-main-tab :db.ui.output-tab/table))
 
 (rf/reg-sub
-  :subs.ui/output-tab
-  :<- [:subs.db.ui/output-tab]
+  :subs.ui/output-side-tab
+  :<- [:subs.db.ui/output-side-tab]
+  (fn [out-tab]
+    (cond
+      out-tab out-tab
+      :else   :db.ui.output-tab/attr-stats)))
+
+(rf/reg-sub
+  :subs.ui/output-main-tab
+  :<- [:subs.db.ui/output-main-tab]
   :<- [:subs.query/analysis-committed]
   :<- [:subs.query/result]
   (fn [[out-tab q-info q-res :as args]]

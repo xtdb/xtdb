@@ -98,9 +98,14 @@
     (update db :db.query/time dissoc time-type)))
 
 (rf/reg-event-db
-  :evt.ui.output/tab-switch
+  :evt.ui.output/main-tab-switch
   (fn [db [_ new-tab-id]]
-    (assoc db :db.ui/output-tab new-tab-id)))
+    (assoc db :db.ui/output-main-tab new-tab-id)))
+
+(rf/reg-event-db
+  :evt.ui.output/side-tab-switch
+  (fn [db [_ new-tab-id]]
+    (assoc db :db.ui/output-side-tab new-tab-id)))
 
 (rf/reg-event-db
   :evt.ui/query-change
