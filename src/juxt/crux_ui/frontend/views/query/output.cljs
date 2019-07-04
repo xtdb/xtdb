@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.views.query.output
   (:require [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.views.query.results-tree :as q-results-tree]
-            [juxt.crux-ui.frontend.views.query.results-table :as q-results-table]
+           ;[juxt.crux-ui.frontend.views.query.results-table :as q-results-table]
+            [juxt.crux-ui.frontend.views.query.results-grid :as q-results-table]
             [garden.core :as garden]
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
@@ -78,13 +79,16 @@
        [:&__side
         {:border-right s/q-ui-border
          :grid-area :side
-         :overflow :auto
-         :position :relative}]
+         :overflow :hidden
+         :position :relative}
+        [:&__content
+         {:overflow :auto
+          :height :100%}]]
        [:&__main
         {:border-radius :2px
          :grid-area :main
          :position :relative
-         :overflow :auto}]
+         :overflow :hidden}]
        ["&__main__links"
         "&__side__links"
         {:position :absolute
@@ -114,12 +118,13 @@
    [:div.q-output__side
     (let [out-tab @-sub-output-side-tab]
       [:<>
-       (case out-tab
-         :db.ui.output-tab/attr-stats [attr-stats/root]
-         :db.ui.output-tab/empty empty-placeholder
-         [q-results-tree/root])
-       [:div.q-output__side__links
-        [side-output-tabs out-tab]]])]
+        [:div.q-output__side__content
+            (case out-tab
+              :db.ui.output-tab/attr-stats [attr-stats/root]
+              :db.ui.output-tab/empty empty-placeholder
+              [q-results-tree/root])]
+        [:div.q-output__side__links
+         [side-output-tabs out-tab]]])]
 
    [:div.q-output__main
     (if-let [out-tab @-sub-output-tab]
