@@ -91,13 +91,13 @@ APIs are also available.
 
 ### REPL
 
-Launch a REPL using the latest Clojars release:
+Launch a REPL using the very latest Clojars `-SNAPSHOT` release:
 
 ``` sh
 clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 ```
 
-Start a standalone in-memory system:
+Start a standalone in-memory (i.e. not persisted anywhere) system:
 
 ``` clojure
 (require '[crux.api :as crux])
@@ -132,6 +132,10 @@ Retrieve the current version of the document:
 ``` clojure
 (crux/entity my-db :some/fancy-id)
 ```
+
+### Development "uber" REPL
+
+To run a REPL that includes depedencies for all components of Crux, `cd` into `crux-dev` and run `lein repl`
 
 ### Testing
 
