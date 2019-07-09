@@ -1,0 +1,7 @@
+= crux-dev
+
+This project contains notes, utilities and experiments from the Crux team. Feel
+free to take a look.
+
+You can run `lein repl` within this directory to create an uber repl for your
+own easy experimentation with the internals of Crux.

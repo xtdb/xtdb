@@ -1,0 +1,8 @@
+= crux-http-server
+
+This project contains a complete mapping of Crux APIs to HTTP endpoints that
+are exposed when running `start-http-server` using Ring middleware and Jetty.
+This can be used in conjunction with both cluster-node mode and standalone
+mode.  A `:server-port` number and CORS configuration may also be provided.
+
+For tests, see usage of `/crux-test/test/crux/fixtures/http_server.clj`.

@@ -1,0 +1,6 @@
+= crux-rocksdb
+
+This project contains `RocksKv` which is an implementation of `kv/KvStore`,
+used for indexes and the standalone mode event logs.
+
+For tests, see `/crux-test/test/crux/kv_test.clj`.

@@ -84,6 +84,42 @@ for a demo Docker container.
 
 crux@juxt.pro
 
+## Repo Structure
+
+Crux is split across multiple projects which are maintained within this
+repository. `crux-core` contains the main functional components of Crux along
+with interfaces for the pluggable storage components (Kafka, LMDB, RocksDB
+etc.). Implementations of these storage options are located in their own
+projects.
+
+Project directories are published to Clojars independently (with corresponding
+names) so that you can maintain granular dependencies on precisely the
+individual components needed for your application. Alternatively you can depend
+on `crux-uberjar` to spend less time worrying about which parts of Crux you
+need now or in the future.
+
+Core:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux-core)
+
+Cluster Node storage:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka.svg)](https://clojars.org/juxt/crux-kafka)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka-embedded.svg)](https://clojars.org/juxt/crux-kafka-embedded)
+
+Local KV and Standalone mode storage:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-lmdb.svg)](https://clojars.org/juxt/crux-lmdb)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rocksdb.svg)](https://clojars.org/juxt/crux-rocksdb)
+
+HTTP:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-server.svg)](https://clojars.org/juxt/crux-http-server)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-client.svg)](https://clojars.org/juxt/crux-http-client)
+
+Additional:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-decorators.svg)](https://clojars.org/juxt/crux-decorators)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rdf.svg)](https://clojars.org/juxt/crux-rdf)
+
+Uberjar:
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-uberjar.svg)](https://clojars.org/juxt/crux-uberjar)
+
 ## Using Clojure
 
 Please note that Clojure is not _required_ when using Crux. HTTP and Java
@@ -135,7 +171,8 @@ Retrieve the current version of the document:
 
 ### Development "uber" REPL
 
-To run a REPL that includes depedencies for all components of Crux, `cd` into `crux-dev` and run `lein repl`
+To run a REPL that includes depedencies for all components of Crux, `cd` into
+`crux-dev` and run `lein repl`
 
 ### Testing
 

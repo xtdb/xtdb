@@ -1,0 +1,7 @@
+= crux-lmdb
+
+This project contains `LMDBKv` which is an implementation of `kv/KvStore`, used
+for indexes and the standalone mode event logs. There is also an alternative
+JNR-based LMDB implementation called `LMDBJNRKv`.
+
+For tests, see `/crux-test/test/crux/kv_test.clj`.

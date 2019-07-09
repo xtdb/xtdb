@@ -1,0 +1,8 @@
+= crux-uberjar
+
+This project is used to run `lein uberjar` which creates a cluster-node uberjar
+and a standalone uberjar.
+
+An uberjar is a single jar file that contains the contents of all your
+dependencies. Users can run it with a simple java invocation, or on some
+systems just by double-clicking the jar file.

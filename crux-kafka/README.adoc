@@ -1,0 +1,10 @@
+= crux-kafka
+
+This project contains `crux.kafka.KafkaTxLog` which is an implementation of
+`TxLog` backed underpinned by Apache Kafka for strong durability and
+scalability guarantees. 
+
+For tests, see `/crux-test/test/crux/kafka_test.clj`.
+
+This project also contains the `crux.bootstrap.cluster-node` namespace which
+manages the lifecycle of a Kafka-based `cluster-node` system.

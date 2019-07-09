@@ -343,7 +343,7 @@
   calls to `db`.
 
   NOTE: requires either clj-http or http-kit on the classpath,
-  see crux.bootstrap.remove-api-client/*internal-http-request-fn*
+  see crux.bootstrap.remote-api-client/*internal-http-request-fn*
   for more information.
 
   url the URL to a Crux HTTP end-point.

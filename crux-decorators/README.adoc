@@ -1,0 +1,11 @@
+= Decorators
+
+== Overview
+
+This project contains a small set of utilities for extending the core APIs with
+new functionality using a "decorator" pattern.
+
+== Aggregation
+
+This project also includes an aggregation decorator. For usage examples, see
+`aggregation_test.clj` and `graph-traversal.clj`.
