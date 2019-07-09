@@ -28,7 +28,7 @@ Available open source software product by JUXT later in 2019.
 
 [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
 
-## Latest Version
+## Latest Release
 
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux.svg)](https://clojars.org/juxt/crux)
 
@@ -84,7 +84,7 @@ for a demo Docker container.
 
 crux@juxt.pro
 
-## Repo Structure
+## Repo Layout
 
 Crux is split across multiple projects which are maintained within this
 repository. `crux-core` contains the main functional components of Crux along
@@ -98,26 +98,72 @@ individual components needed for your application. Alternatively you can depend
 on `crux-uberjar` to spend less time worrying about which parts of Crux you
 need now or in the future.
 
-Core:
+### Core
+
+#### crux-core
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux-core)
 
-Cluster Node storage:
+### Cluster Node storage
+
+#### crux-kafka
+
+For scalability and durability.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka.svg)](https://clojars.org/juxt/crux-kafka)
+
+#### crux-kafka-embedded
+
+Useful for experimentation and testing.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-kafka-embedded.svg)](https://clojars.org/juxt/crux-kafka-embedded)
 
-Local KV and Standalone mode storage:
+### Local KV and Standalone mode storage
+
+#### crux-lmdb
+
+Better read performance for intensive querying. 
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-lmdb.svg)](https://clojars.org/juxt/crux-lmdb)
+
+#### crux-rocksdb
+
+Better write performance for heavy ingestion.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rocksdb.svg)](https://clojars.org/juxt/crux-rocksdb)
 
-HTTP:
+`crux-rocksdb` is a good default choice.
+
+### HTTP
+
+#### Server
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-server.svg)](https://clojars.org/juxt/crux-http-server)
+
+#### Client
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-http-client.svg)](https://clojars.org/juxt/crux-http-client)
 
-Additional:
+### Additional
+
+#### crux-decorators
+
+Aggregation decorator and experimental API composition.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-decorators.svg)](https://clojars.org/juxt/crux-decorators)
+
+#### crux-rdf
+
+Import RDF data and run a subset of SPARQL queries.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-rdf.svg)](https://clojars.org/juxt/crux-rdf)
 
-Uberjar:
+### Uberjar
+
+#### crux-uberjar
+
+One dependency to rule them all.
+
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-uberjar.svg)](https://clojars.org/juxt/crux-uberjar)
 
 ## Using Clojure
