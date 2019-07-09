@@ -85,9 +85,8 @@
    ["put 10"                   :examples/put-10]
    ["put with valid time"      :examples/put-w-valid]
    ["simple query"             :examples/query]
-  ;["query with valid time"    :examples/query-w-valid]
    ["query with full-results"  :examples/query-w-full-res]
-   ["Hello Crux Night" :examples/crux-night]
+  ;["Hello Crux Night"         :examples/crux-night]
    ["delete"                   :examples/delete]
    ["evict"                    :examples/evict]
    ["evict with vt"            :examples/evict-w-valid]])

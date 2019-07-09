@@ -4,7 +4,8 @@
             [garden.stylesheet :as gs]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.views.query.editor :as q-editor]
-            [juxt.crux-ui.frontend.views.comps :as comps]))
+            [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-lib.http-functions :as hf]))
 
 (def ^:private -sub-query-input-malformed (rf/subscribe [:subs.query/input-malformed?]))
 (def ^:private -sub-query-analysis (rf/subscribe [:subs.query/analysis]))
@@ -21,8 +22,13 @@
    :padding       "12px 16px"
    :border-radius :2px})
 
+(defn on-examples-add []
+  (let [gh-link (js/prompt "Paste a GitHub gist link")]
+    (hf/fetch gh-link)))
+
 (defn query-examples []
   [:div.examples
+   [:div.examples__add {:on-click on-examples-add}]
    (for [[ex-title ex-id] ex/examples]
      ^{:key ex-id}
      [:div.examples__item
