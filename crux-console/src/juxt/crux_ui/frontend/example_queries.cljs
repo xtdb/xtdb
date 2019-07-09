@@ -81,12 +81,21 @@
     (gen-fn)))
 
 (def examples
-  [["[crux.tx/put :some-data]" :examples/put]
-   ["put 10"                   :examples/put-10]
-   ["put with valid time"      :examples/put-w-valid]
-   ["simple query"             :examples/query]
-   ["query with full-results"  :examples/query-w-full-res]
-  ;["Hello Crux Night"         :examples/crux-night]
-   ["delete"                   :examples/delete]
-   ["evict"                    :examples/evict]
-   ["evict with vt"            :examples/evict-w-valid]])
+  [{:title "[crux.tx/put :some-data]"
+    :generator (:examples/put generators)}
+   {:title "put 10"
+    :generator (:examples/put-10 generators)}
+   {:title "put with valid time"
+    :generator (:examples/put-w-valid generators)}
+   {:title "simple query"
+    :generator (:examples/query generators)}
+   {:title "query with full-results"
+    :generator (:examples/query-w-full-res generators)}
+   {:title "Hello Crux Night"
+    :generator (:examples/crux-night generators)}
+   {:title "delete"
+    :generator (:examples/delete generators)}
+   {:title "evict"
+    :generator (:examples/evict generators)}
+   {:title "evict with vt"
+    :generator (:examples/evict-w-valid generators)}])

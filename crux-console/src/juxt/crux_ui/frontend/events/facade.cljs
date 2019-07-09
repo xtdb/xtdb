@@ -1,5 +1,6 @@
 (ns juxt.crux-ui.frontend.events.facade
   (:require [re-frame.core :as rf]
+            [cljs.tools.reader.edn :as edn]
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
@@ -19,10 +20,16 @@
   (fn [_]
     (q/fetch-stats)))
 
+(rf/reg-fx
+  :fx.ui/alert
+  (fn [message]
+    (js/alert message)))
+
 
 
 ; ----- events -----
 
+; system and lifecycle
 (rf/reg-event-fx
   :evt.db/init
   (fn [_ [_ db]]
@@ -42,6 +49,21 @@
                 (if (:full-results? q-info)
                   (flatten res) res)))))
 
+(rf/reg-event-fx
+  :evt.io/gist-err
+  (fn [ctx [_ res]]
+    (assoc ctx :fx.ui/alert "Gist import didn't go well")))
+
+
+(rf/reg-event-fx
+  :evt.io/gist-success
+  (fn [{:keys [db] :as ctx} [_ res]]
+    (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
+      (assoc-in ctx [:db :db.ui.examples/imported] edn)
+      (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
+
+
+
 (rf/reg-event-db
   :evt.io/tx-success
   (fn [db [_ res]]
@@ -49,6 +71,8 @@
       (assoc db :db.query/result
                 (if (:full-results? q-info)
                   (flatten res) res)))))
+
+;
 
 (rf/reg-event-fx
   :evt.keyboard/ctrl-enter
@@ -75,6 +99,11 @@
                        :query-tt tt
                        :query-analysis analysis}})))
 
+(rf/reg-event-fx
+  :evt.ui/github-examples-request
+  (fn [{:keys [db] :as ctx} [_ link]]
+    {:db db
+     :fx/get-github-gist link}))
 
 (rf/reg-event-db
   :evt.ui.editor/set-example

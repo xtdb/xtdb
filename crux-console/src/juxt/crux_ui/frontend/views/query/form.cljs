@@ -2,10 +2,9 @@
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
             [garden.stylesheet :as gs]
-            [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.views.query.editor :as q-editor]
-            [juxt.crux-ui.frontend.views.comps :as comps]
-            [juxt.crux-lib.http-functions :as hf]))
+            [juxt.crux-ui.frontend.views.query.examples :as query-examples]))
+
 
 (def ^:private -sub-query-input-malformed (rf/subscribe [:subs.query/input-malformed?]))
 (def ^:private -sub-query-analysis (rf/subscribe [:subs.query/analysis]))
@@ -21,21 +20,6 @@
    :border        0
    :padding       "12px 16px"
    :border-radius :2px})
-
-(defn on-examples-add []
-  (let [gh-link (js/prompt "Paste a GitHub gist link")]
-    (hf/fetch gh-link)))
-
-(defn query-examples []
-  [:div.examples
-   [:div.examples__add {:on-click on-examples-add}]
-   (for [[ex-title ex-id] ex/examples]
-     ^{:key ex-id}
-     [:div.examples__item
-      [comps/button-textual
-       {:on-click #(rf/dispatch [:evt.ui.editor/set-example ex-id])
-        :text ex-title}]])])
-
 
 (def q-form-styles
   (garden/css
@@ -67,7 +51,6 @@
          :color    "hsl(0,0%,50%)"
          :z-index  10}]
 
-
        [:&__type
         {:position :absolute
          :right    :8px
@@ -98,7 +81,7 @@
      [:div.q-form__editor-err
       "Query input appears to be malformed: " (.-message e)]
      [:div.q-form__examples
-      [query-examples]])
+      [query-examples/root]])
    [:div.q-form__submit
     [:button.q-form__submit-btn {:on-click on-submit} "Run Query [ctrl + enter]"]]])
 
