@@ -5,7 +5,9 @@
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.functions :as f]
-            [medley.core :as m]))
+            [medley.core :as m]
+            [juxt.crux-lib.http-functions :as hf]
+            [promesa.core :as p]))
 
 
 (defn calc-query [db ex-title]
@@ -31,6 +33,17 @@
   :fx.ui/alert
   (fn [message]
     (js/alert message)))
+
+(defn grab-gh-gist [gh-link]
+  (-> (hf/fetch gh-link)
+      (p/catch #(rf/dispatch [:evt.io/gist-err %]))
+      (p/then #(rf/dispatch [:evt.io/gist-success (:body %)]))))
+
+(rf/reg-fx
+  :fx/get-github-gist
+  grab-gh-gist)
+
+(def url "https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/572396dec0791500c965fea443b2f26a60f500d4/examples.edn")
 
 
 
