@@ -4,7 +4,7 @@
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.comps :as comps]))
 
-(def ^:private -sub-examples @(rf/subscribe [:subs.query/examples]))
+(def ^:private -sub-examples (rf/subscribe [:subs.query/examples]))
 
 (defn- grab-gh-gist [gh-link]
   (-> (hf/fetch gh-link)

@@ -4,7 +4,14 @@
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
-            [juxt.crux-ui.frontend.functions :as f]))
+            [juxt.crux-ui.frontend.functions :as f]
+            [medley.core :as m]))
+
+
+(defn calc-query [db ex-title]
+  (if-let [imported (:db.ui.examples/imported db)]
+    (:query (m/find-first #(= (:title %) ex-title) imported))
+    (ex/generate ex-title)))
 
 
 
@@ -107,9 +114,9 @@
 
 (rf/reg-event-db
   :evt.ui.editor/set-example
-  (fn [db [_ ex-id]]
-    (let [ex-edn (ex/generate ex-id)
-          str (f/pprint-str ex-edn)]
+  (fn [db [_ ex-title]]
+    (let [query (calc-query db ex-title)
+          str   (f/pprint-str query)]
       (-> db
           (update :db.ui/editor-key inc)
           (assoc :db.query/input str

@@ -1,4 +1,5 @@
-(ns juxt.crux-ui.frontend.example-queries)
+(ns juxt.crux-ui.frontend.example-queries
+  (:require [medley.core :as m]))
 
 
 (def currencies
@@ -73,13 +74,6 @@
    :examples/evict-w-valid (fn [] [[:crux.tx/evict (get-id) (gen-vt)]])})
 
 
-
-
-
-(defn generate [ex-id]
-  (if-let [gen-fn (get generators ex-id)]
-    (gen-fn)))
-
 (def examples
   [{:title "[crux.tx/put :some-data]"
     :generator (:examples/put generators)}
@@ -99,3 +93,8 @@
     :generator (:examples/evict generators)}
    {:title "evict with vt"
     :generator (:examples/evict-w-valid generators)}])
+
+(defn generate [ex-id]
+  (if-let [gen-fn (:generator (m/find-first #(= ex-id (:title %)) examples))]
+    (gen-fn)))
+
