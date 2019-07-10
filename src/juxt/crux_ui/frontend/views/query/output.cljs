@@ -53,6 +53,7 @@
    (interpose
      [:div.output-tabs__sep "/"]
      (for [tab-type [:db.ui.output-tab/tree :db.ui.output-tab/attr-stats]]
+       ^{:key tab-type}
        [out-tab-item tab-type active-tab #(set-side-tab tab-type)]))])
 
 (defn main-output-tabs [active-tab]
