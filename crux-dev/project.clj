@@ -4,15 +4,15 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [juxt/crux-core :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-rocksdb :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-lmdb :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-kafka :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-kafka-embedded :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-http-server :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-rdf :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-decorators :derived-from-git :exclusions [org.clojure/tools.reader]]
-                 [juxt/crux-test :derived-from-git :exclusions [org.clojure/tools.reader com.github.luben/zstd-jni]]]
+                 [juxt/crux-core :derived-from-git]
+                 [juxt/crux-rocksdb :derived-from-git]
+                 [juxt/crux-lmdb :derived-from-git]
+                 [juxt/crux-kafka :derived-from-git]
+                 [juxt/crux-kafka-embedded :derived-from-git]
+                 [juxt/crux-http-server :derived-from-git]
+                 [juxt/crux-rdf :derived-from-git]
+                 [juxt/crux-decorators :derived-from-git]
+                 [juxt/crux-test :derived-from-git]]
   :profiles {:dev {:dependencies [;; General:
                                   [org.clojure/tools.namespace "0.2.11"]
                                   ;; Hakan:
