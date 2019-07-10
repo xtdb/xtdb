@@ -2985,6 +2985,16 @@ planar-graph-to-polyline@^1.0.0:
     two-product "^1.0.0"
     uniq "^1.0.0"
 
+plotly.js-dist@^1.48.3:
+  version "1.48.3"
+  resolved "https://registry.yarnpkg.com/plotly.js-dist/-/plotly.js-dist-1.48.3.tgz#b160b2d080ad87720121c9119f28036f35a301dc"
+  integrity sha512-Ocy2WWjzh4Ofk293AgTvP0ga053nTV7TvUbYEzmq1E9Eh7wc6HCPBxo55YcZThHw3hVycEnhktLQK94en1bYSw==
+
+plotly.js-gl3d-dist@^1.48.3:
+  version "1.48.3"
+  resolved "https://registry.yarnpkg.com/plotly.js-gl3d-dist/-/plotly.js-gl3d-dist-1.48.3.tgz#42742b3753d6fd40b4a91e0cd6126ce8354717e3"
+  integrity sha512-ofbPX7gMDwkZZGKRV0h7XoMGpNAPb8RJR+fJEqENPMGHU8PytUkCNxGUScKX1EfWf/+gFc2XdP0jDfUzT9YRTA==
+
 plotly.js@^1.48.3:
   version "1.48.3"
   resolved "https://registry.yarnpkg.com/plotly.js/-/plotly.js-1.48.3.tgz#701a17bfa02f53e5079b0fc35cb4e4c411036a80"

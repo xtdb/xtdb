@@ -1,16 +1,9 @@
 (ns juxt.crux-ui.frontend.views.query.line-chart
-  (:require ["plotly.js/lib/core" :as Plotly]
+  (:require ["plotly.js-gl3d-dist" :as Plotly]
             [reagent.core :as r]
             [garden.core :as css]
-            [garden.core :as garden]))
-
-(def csv-src "https://raw.githubusercontent.com/plotly/datasets/master/api_docs/mt_bruno_elevation.csv")
-
-(def d3 (.-d3 Plotly))
-
-(.csv d3 csv-src #(println :loaded))
-
-(.csv (.-d3 Plotly))
+            [garden.core :as garden]
+            [juxt.crux-ui.frontend.logging :as log]))
 
 
 (def ^:private plot-styling
@@ -20,14 +13,41 @@
        {:background :blue
         :height :100%}])])
 
+(defn my-rand []
+  (.toFixed (* 100 (rand)) 4))
+
+(defn gen-v [f c]
+  (vec (take c (repeatedly f))))
+
 (def z-data
-  [[1 2 1]
-   [2 3 2]
-   [1 2 1]])
+  (gen-v #(gen-v my-rand 20) 20))
 
 (def data
-  #js [#js {:z z-data
-            :type "surface"}])
+  (clj->js
+    [{:z z-data
+      :type "surface"}]))
+
+(def opts
+  (clj->js
+    {:title "Mt Bruno Elevation",
+     :autosize false,
+     :width 500,
+     :height 500,
+     :xaxis {:range [0 21]}
+     :yaxis {:range [0 21]}
+     :zaxis {:range [0 100]}
+     :margin
+     {:l 65,
+      :r 50,
+      :b 65,
+      :t 90}}))
+
+
+
+(log/log data)
+(set! js/window.data data)
+(set! js/window.layout opts)
+(set! js/window.Plotly Plotly)
 
 
 (defn root
@@ -37,17 +57,7 @@
      {:component-did-mount
       (fn [this]
         (let [el   (r/dom-node this)
-              opts
-              #js {:title "Mt Bruno Elevation",
-                   :autosize false,
-                   :width 500,
-                   :height 500,
-                   :margin
-                   #js {:l 65,
-                        :r 50,
-                        :b 65,
-                        :t 90}}
-              inst (.newPlot Plotly el data opts)]
+              inst (.newPlot Plotly "plotly-container" data opts)]
           (reset! -inst inst)))
 
       :reagent-render
