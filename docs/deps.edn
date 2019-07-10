@@ -1,11 +1,11 @@
 {:deps
  {
   ;; tag::CruxDep[]
-  juxt/crux {:mvn/version "19.07-1.1.1-alpha"}
+  juxt/crux-core {:mvn/version "19.07-1.2.0-alpha"}
   ;; end::CruxDep[]
 
   ;; tag::KafkaClientsDeps[]
-  org.apache.kafka/kafka-clients {:mvn/version "2.1.0"}
+  juxt/crux-kafka {:mvn/version "19.07-1.2.0-alpha"}
   ;; end::KafkaClientsDeps[]
 
   ;; tag::KafkaDeps[]
@@ -13,7 +13,7 @@
   ;; end::KafkaDeps[]
 
   ;; tag::RocksDeps[]
-  org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
+  juxt/crux-rocksdb {:mvn/version "19.07-1.2.0-alpha"}
   ;; end::RocksDeps[]
 
   integrant/integrant {:mvn/version "0.6.3"}

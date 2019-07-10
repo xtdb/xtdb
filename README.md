@@ -30,7 +30,7 @@ Available open source software product by JUXT later in 2019.
 
 ## Latest Release
 
-[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux.svg)](https://clojars.org/juxt/crux)
+[![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-core.svg)](https://clojars.org/juxt/crux-core)
 
 ## Unbundled Architecture
 
@@ -95,8 +95,8 @@ projects.
 Project directories are published to Clojars independently (with corresponding
 names) so that you can maintain granular dependencies on precisely the
 individual components needed for your application. Alternatively you can depend
-on `crux-uberjar` to spend less time worrying about which parts of Crux you
-need now or in the future.
+on `crux-uberjar` whilst in development to spend less time worrying about which
+parts of Crux you need now or in the future.
 
 ### Core
 

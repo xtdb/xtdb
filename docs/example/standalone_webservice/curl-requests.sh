@@ -13,9 +13,6 @@ curl -X POST http://localhost:8081/tx-log \
     [:crux.tx/put
      {:crux.db/id :id/jane
       :skill :singing}]]'
-# note that #crux/id over HTTP requires crux version
-#  "19.06-1.1.1-alpha-SNAPSHOT"
-# or higher
 
 # query
 curl -X POST http://localhost:8081/query \

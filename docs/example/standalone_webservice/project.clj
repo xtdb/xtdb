@@ -9,17 +9,11 @@
 ;                 [ring/ring-jetty-adapter "1.7.1"]
                  [ring-cors "0.1.13"]
 
-                 ; these are needed when using [crux.http-server :as srv] TODO
-                 [org.eclipse.rdf4j/rdf4j-rio-api "2.4.5"]
-                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "2.4.5"]
-                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "2.4.5"]
-
-                 [juxt/crux "19.07-1.1.1-alpha"]
+                 [juxt/crux-core "19.07-1.2.0-alpha"]
+                 [juxt/crux-rocksdb "19.07-1.2.0-alpha"]
+                 [juxt/crux-http-server "19.07-1.2.0-alpha"]
                  [yada "1.3.0-alpha7"]
                  [hiccup "2.0.0-alpha2"]
-                 [org.rocksdb/rocksdbjni "5.17.2"]
-                 [ch.qos.logback/logback-classic "1.2.3"]
-                 [org.apache.kafka/kafka-clients "2.1.0"]
                  [cljsjs/vega "4.4.0-0"]
                  [cljsjs/vega-lite "3.0.0-rc10-0"]
                  [cljsjs/vega-embed "3.26.0-0"]

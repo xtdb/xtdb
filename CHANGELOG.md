@@ -1,5 +1,16 @@
 # Changelog
 
+## 19.07-1.2.0-alpha
+
+### Changes
+
+* [PR #281](https://github.com/juxt/crux/pull/281): *Breaking* deprecate `juxt/crux` release, use `crux-core` and new modular deps
+* [#288](https://github.com/juxt/crux/issues/288): Allow `crux-kafka` client configuration via `:kafka-properties-map`
+
+### New features
+
+* [PR #289](https://github.com/juxt/crux/issues/289): Merge WIP `crux-console` UI
+
 ## 19.07-1.1.1-alpha
 
 ### Changes
