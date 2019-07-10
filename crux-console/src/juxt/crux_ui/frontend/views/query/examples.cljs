@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.frontend.views.query.examples
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.svg-icons :as icon]
             [garden.core :as garden]
             [garden.stylesheet :as gs]))
 
@@ -32,6 +33,11 @@
          :cursor :pointer}
         [:&:hover
          {:color :black}]]
+       [:&__close
+        {:line-height 0
+         :padding "0 8px"
+         :display :inline-flex
+         :align-items :center}]
        [:&__title
         {:padding :8px}]
        [:&__import
@@ -45,7 +51,7 @@
   (if-let [examples @-sub-examples]
     [:div.examples
      q-form-styles
-     [:div.examples__close {:on-click dispatch-examples-close} "close"]
+     [:div.examples__close {:on-click dispatch-examples-close} icon/close]
      [:div.examples__title "Examples: "]
      (for [{ex-title :title} examples]
        ^{:key ex-title}
