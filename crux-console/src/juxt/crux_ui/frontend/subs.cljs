@@ -101,6 +101,7 @@
 
 (rf/reg-sub
   :subs.query/examples
-  (fn [db]
-    (or (:db.ui.examples/imported db) ex/examples)))
+  (fn [{:db.ui.examples/keys [imported closed?] :as db}]
+    (if-not closed?
+      (or imported ex/examples))))
 

@@ -4,7 +4,8 @@
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.facade :as views]
             [juxt.crux-ui.frontend.events.facade :as events]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [juxt.crux-ui.frontend.cookies :as c]))
 
 
 (def example-query-str
@@ -16,14 +17,15 @@
            " :full-results? true}"]))
 
 (def default-db
-  {:db.query/input  example-query-str
-   :db.query/input-committed  example-query-str
-   :db.ui/output-side-tab nil ;:db.ui.output-tab/table
-   :db.ui/output-main-tab nil ;:db.ui.output-tab/table
-   :db.ui/editor-key 0
-   :db.query/key    0
-   :db.query/error  nil
-   :db.query/result nil})
+  {:db.query/input           example-query-str
+   :db.query/input-committed example-query-str
+   :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
+   :db.ui/output-main-tab    nil ;:db.ui.output-tab/table
+   :db.ui/editor-key         0
+   :db.ui.examples/closed?   (c/get :db.ui.examples/closed? false)
+   :db.query/key             0
+   :db.query/error           nil
+   :db.query/result          nil})
 
 
 (defn mount-root []

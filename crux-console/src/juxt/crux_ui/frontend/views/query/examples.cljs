@@ -7,6 +7,9 @@
 
 (def ^:private -sub-examples (rf/subscribe [:subs.query/examples]))
 
+(defn dispatch-examples-close []
+  (rf/dispatch [:evt.ui.examples/close]))
+
 (defn is-gist-link? [s]
   (let [url (js/URL. s)]
     (= "gist.githubusercontent.com" (.-hostname url))))
@@ -24,6 +27,7 @@
        {:display :flex
         :font-size :13px}
        [:&__item
+        :&__close
         {:padding :8px
          :cursor :pointer}
         [:&:hover
@@ -38,16 +42,18 @@
          {:display :none}]))])
 
 (defn root []
-  [:div.examples
-   q-form-styles
-   [:div.examples__title "Examples: "]
-   (for [{ex-title :title} @-sub-examples]
-     ^{:key ex-title}
-     [:div.examples__item
-      [comps/button-textual
-       {:on-click #(rf/dispatch [:evt.ui.editor/set-example ex-title])
-        :text ex-title}]])
-   [:div.examples__import
-    {:on-click on-examples-add}
-    "Set my examples"]])
+  (if-let [examples @-sub-examples]
+    [:div.examples
+     q-form-styles
+     [:div.examples__close {:on-click dispatch-examples-close} "close"]
+     [:div.examples__title "Examples: "]
+     (for [{ex-title :title} examples]
+       ^{:key ex-title}
+       [:div.examples__item
+        [comps/button-textual
+         {:on-click #(rf/dispatch [:evt.ui.editor/set-example ex-title])
+          :text ex-title}]])
+     [:div.examples__import
+      {:on-click on-examples-add}
+      "Set my examples"]]))
 

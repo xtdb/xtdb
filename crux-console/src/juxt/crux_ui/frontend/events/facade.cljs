@@ -5,6 +5,7 @@
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.functions :as f]
+            [juxt.crux-ui.frontend.cookies :as c]
             [medley.core :as m]
             [juxt.crux-lib.http-functions :as hf]
             [promesa.core :as p]))
@@ -14,6 +15,12 @@
   (if-let [imported (:db.ui.examples/imported db)]
     (:query (m/find-first #(= (:title %) ex-title) imported))
     (ex/generate ex-title)))
+
+(defn o-set-example [db str]
+  (-> db
+      (update :db.ui/editor-key inc)
+      (assoc :db.query/input str
+             :db.query/input-committed str)))
 
 
 
@@ -28,6 +35,11 @@
   :fx/query-stats
   (fn [_]
     (q/fetch-stats)))
+
+(rf/reg-fx
+  :fx.sys/set-cookie
+  (fn [[cookie-name value]]
+    (c/set! cookie-name value {:max-age 86400})))
 
 (rf/reg-fx
   :fx.ui/alert
@@ -79,10 +91,10 @@
   :evt.io/gist-success
   (fn [{:keys [db] :as ctx} [_ res]]
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
-      (assoc-in ctx [:db :db.ui.examples/imported] edn)
+      (-> ctx
+          (assoc-in [:db :db.ui.examples/imported] edn)
+          (update :db o-set-example (some-> edn first :query pr-str)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
-
-
 
 (rf/reg-event-db
   :evt.io/tx-success
@@ -130,11 +142,13 @@
   (fn [db [_ ex-title]]
     (let [query (calc-query db ex-title)
           str   (f/pprint-str query)]
-      (-> db
-          (update :db.ui/editor-key inc)
-          (assoc :db.query/input str
-                 :db.query/input-committed str)))))
+      (o-set-example db str))))
 
+(rf/reg-event-fx
+  :evt.ui.examples/close
+  (fn [{db :db}]
+    {:db (assoc db :db.ui.examples/closed? true)
+     :fx.sys/set-cookie [:db.ui.examples/closed? true]}))
 
 (rf/reg-event-db
   :evt.ui.query/time-change
