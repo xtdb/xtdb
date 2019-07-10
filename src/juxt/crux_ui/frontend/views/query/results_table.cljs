@@ -45,6 +45,7 @@
      [:thead.q-table__head
       [:tr.q-table__head-row
        (for [h headers]
+         ^{:key h}
          [:th.q-table__head-cell (pr-str h)])]]
      [:tbody.q-table__body
       (map-indexed table-row rows)]]))
