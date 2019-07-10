@@ -1,13 +1,20 @@
 (ns juxt.crux-lib.async-http-client
 ; @author refset
 ; this ns has been adapted from https://github.com/juxt/crux/blob/master/src/crux/bootstrap/remote_api_client.clj
-  (:require #?(:clj [clojure.tools.reader.edn :as edn]
-               :cljs [cljs.reader :as edn])
-            [clojure.string :as str]
-            [promesa.core :as p]
-            #?(:clj [clojure.java.io :as io])
-            #?(:cljs [promesa.async-cljs :refer-macros [async]] :clj [promesa.async :refer [async]])
-            #?(:cljs [goog.string :as gs]) #?(:clj [clojure.instant :as instant]))
+  ;
+  #?(:cljs (:require [cljs.reader :as edn]
+                     [clojure.string :as str]
+                     [promesa.core :as p]
+                     [juxt.crux-lib.http-functions :as hf]
+                     [promesa.async-cljs :refer-macros [async]]
+                     [goog.string :as gs]))
+  ;
+  #?(:clj  (:require [clojure.tools.reader.edn :as edn]
+                     [clojure.string :as str]
+                     [promesa.core :as p]
+                     [clojure.java.io :as io]
+                     [promesa.async :refer [async]]
+                     [clojure.instant :as instant]))
   #?(:clj (:import
             [java.io Closeable InputStreamReader IOException PushbackReader]
             [java.util Date]
@@ -93,17 +100,7 @@
   (when-not (fn? internal-http-request-fn)
     (def
      internal-http-request-fn
-     #?(:cljs (fn [opts]
-                (assert (#{nil :post :get} (:method opts)) (str "Unsupported HTTP method: " (:method opts)))
-                (p/map
-                  #(let [[b s h] %] (p/promise {:body b :status s :headers h}))
-                  (p/map
-                    #(p/map (fn [a] [a
-                                     (.. % -status)
-                                     {:content-type (.get (.. % -headers) "Content-Type")}]) (.text %))
-                    (js/fetch
-                      (:url opts)
-                      (-> opts (update :method (fnil name :get)) clj->js)))))
+     #?(:cljs #'hf/fetch
         :clj
         (constantly
           (binding [*warn-on-reflection* false]
@@ -140,22 +137,20 @@
                                :body (if (string? body)
                                        body
                                        (some-> body pr-str))}
-                              opts)))]
-           (let [{:keys [body status headers]
-                  :as result}
-                 result]
-             (cond
-               (= 404 status)
-               nil
+                              opts)))
+            {:keys [body status headers]} result]
+     (cond
+       (= 404 status)
+       nil
 
-               (and (<= 200 status) (< status 400)
-                    (= "application/edn" (:content-type headers)))
-               (if (string? body)
-                 (edn/read-string body)
-                 body)
+       (and (<= 200 status) (< status 400)
+            (= "application/edn" (:content-type headers)))
+       (if (string? body)
+         (edn/read-string body)
+         body)
 
-               :else
-               (throw (ex-info (str "HTTP status " status) result)))))))
+       :else
+       (throw (ex-info (str "HTTP status " status) result))))))
 
 (comment (defrecord RemoteApiStream [streams-state]
   Closeable

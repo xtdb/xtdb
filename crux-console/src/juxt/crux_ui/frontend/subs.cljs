@@ -1,11 +1,13 @@
 (ns juxt.crux-ui.frontend.subs
   (:require [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]))
 
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  false))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  false))
+; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result (fnil :db.query/result false))
 (rf/reg-sub :subs.query/error  (fnil :db.query/error  false))
 (rf/reg-sub :subs.ui/editor-key  (fnil :db.ui/editor-key 0))
@@ -97,28 +99,9 @@
       (= 1 (count q-res)) :db.ui.output-tab/tree
       :else    :db.ui.output-tab/table)))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+(rf/reg-sub
+  :subs.query/examples
+  (fn [{:db.ui.examples/keys [imported closed?] :as db}]
+    (if-not closed?
+      (or imported ex/examples))))
 
