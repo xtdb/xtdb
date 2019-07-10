@@ -11,6 +11,7 @@
         "crux-lmdb"
         "crux-kafka-embedded"
         "crux-kafka"
+        "crux-jdbc"
         "crux-http-client"
         "crux-http-server"
         "crux-uberjar"

@@ -75,6 +75,14 @@ public class Crux {
     }
 
     /**
+     * Some interested javadocs. Also, this doesn't belong here at all.
+     */
+    public static ICruxAPI startJDBCSystem(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.jdbc"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap.jdbc/start-jdbc-system").invoke(options);
+    }
+
+    /**
      * Creates a new remote API client ICruxAPI. The remote client
      * requires valid and transaction time to be specified for all
      * calls to {@link ICruxAPI#db()}.
