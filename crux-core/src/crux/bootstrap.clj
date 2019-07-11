@@ -50,7 +50,7 @@
                        revision]} (cio/load-properties in)]
            (->CruxVersion version revision)))))))
 
-(defrecord CruxNode [close-promise kv-store tx-log indexer object-store consumer-config options ^Thread node-thread]
+(defrecord CruxNode [kv-store tx-log indexer object-store consumer-config options close-fn]
   ICruxAPI
   (db [this]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
@@ -120,8 +120,17 @@
 
   Closeable
   (close [_]
-    (some-> close-promise (deliver true))
-    (some-> node-thread (.join))))
+    (when close-fn (close-fn))))
+
+(defn start-crux-node [& bindings]
+  (let [to-close (map last (partition 2 bindings))
+        close-fn (fn []
+                   (log/info "stopping system")
+                   (doseq [c to-close]
+                     (when (and c (instance? Closeable c))
+                       (cio/try-close c))))]
+    (map->CruxNode (into {:close-fn close-fn}
+                         (map vec (partition 2 bindings))))))
 
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend

@@ -36,72 +36,43 @@
     (with-open [in (io/reader (io/file f))]
       (cio/load-properties in))))
 
-;; Inspired by
-;; https://medium.com/@maciekszajna/reloaded-workflow-out-of-the-box-be6b5f38ea98
-
-(defn run-system [{:keys [bootstrap-servers
-                          group-id
-                          tx-topic
-                          doc-topic
-                          server-port
-                          kafka-properties-file
-                          kafka-properties-map
-                          doc-cache-size]
-                   :as options
-                   :or {doc-cache-size (:doc-cache-size b/default-options)}}
-                  with-system-fn]
-  (s/assert ::options options)
-  (log/info "starting system")
-  (let [kafka-config (merge {"bootstrap.servers" bootstrap-servers}
+(defn start-cluster-node ^ICruxAPI [options]
+  (let [options (merge b/default-options options)
+        _ (s/assert ::options options)
+        {:keys [bootstrap-servers
+                group-id
+                tx-topic
+                doc-topic
+                server-port
+                kafka-properties-file
+                kafka-properties-map
+                doc-cache-size]
+         :as options
+         :or {doc-cache-size (:doc-cache-size b/default-options)}} options
+        kafka-config (merge {"bootstrap.servers" bootstrap-servers}
                             (read-kafka-properties-file kafka-properties-file)
                             kafka-properties-map)
         producer-config kafka-config
         consumer-config (merge {"group.id" (:group-id options)}
-                               kafka-config)]
-    (with-open [kv-store (b/start-kv-store options)
-                producer (k/create-producer producer-config)
-                tx-log ^java.io.Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
-                object-store ^java.io.Closeable (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                                                                         (b/start-object-store {:kv kv-store} options))
-                indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
-                admin-client (k/create-admin-client kafka-config)
-                indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
-      (log/info "system started")
-      (with-system-fn
-        {:kv-store kv-store
-         :tx-log tx-log
-         :producer producer
-         :consumer-config consumer-config
-         :object-store object-store
-         :indexer indexer
-         :admin-client admin-client
-         :indexing-consumer indexing-consumer})
-      (log/info "stopping system")))
-  (log/info "system stopped"))
+                               kafka-config)
 
-(defn start-cluster-node ^ICruxAPI [options]
-  (let [system-promise (promise)
-        close-promise (promise)
-        error-promise (promise)
-        options (merge b/default-options options)
-        node-thread (doto (Thread. (fn []
-                                     (try
-                                       (run-system
-                                         options
-                                         (fn with-system-callback [system]
-                                           (deliver system-promise system)
-                                           @close-promise))
-                                       (catch Throwable t
-                                         (if (realized? system-promise)
-                                           (throw t)
-                                           (deliver error-promise t)))))
-                                   "crux.bootstrap.cluster-node.main-thread")
-                      (.start))]
-    (while (and (nil? (deref system-promise 100 nil))
-                (.isAlive node-thread)))
-    (when (realized? error-promise)
-      (throw @error-promise))
-    (b/map->CruxNode (merge {:close-promise close-promise
-                             :options options
-                             :node-thread node-thread}
-                            @system-promise))))
+        _ (log/info "starting system")
+
+        kv-store (b/start-kv-store options)
+        producer (k/create-producer producer-config)
+        tx-log ^java.io.Closeable (k/->KafkaTxLog producer tx-topic doc-topic kafka-config)
+        object-store ^java.io.Closeable (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                                                                 (b/start-object-store {:kv kv-store} options))
+        indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
+        admin-client (k/create-admin-client kafka-config)
+        indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
+    (log/info "system started")
+    (b/start-crux-node :kv-store kv-store
+                       :producer producer
+                       :tx-log tx-log
+                       :object-store object-store
+                       :indexer indexer
+                       :admin-client admin-client
+                       :consumer-config consumer-config
+                       :indexing-consumer indexing-consumer
+                       :options options)))
