@@ -76,17 +76,18 @@
   (.getLong k (+ idx-id-size c/id-size) ByteOrder/BIG_ENDIAN))
 
 (defn end-message-id-offset ^long [kv topic]
-  (with-open [snapshot (kv/new-snapshot kv)
-              i (kv/new-iterator snapshot)]
-    (let [seek-k (topic-key topic Long/MAX_VALUE)
-          k (kv/seek i seek-k)]
-      (if (and k (same-topic? seek-k k))
-        (or (when-let [k ^DirectBuffer (kv/prev i)]
-              (when (same-topic? k seek-k)
-                (inc (message-key->message-id k))))
-            1)
-        (do (kv/store kv [[seek-k c/empty-buffer]])
-            (end-message-id-offset kv topic))))))
+  (or (with-open [snapshot (kv/new-snapshot kv)
+                  i (kv/new-iterator snapshot)]
+        (let [seek-k (topic-key topic Long/MAX_VALUE)
+              k (kv/seek i seek-k)]
+          (if (and k (same-topic? seek-k k))
+            (or (when-let [k ^DirectBuffer (kv/prev i)]
+                  (when (same-topic? k seek-k)
+                    (inc (message-key->message-id k))))
+                1)
+            (do (kv/store kv [[seek-k c/empty-buffer]])
+                nil))))
+      (recur kv topic)))
 
 (deftype SentMessage [^Date time ^long id topic])
 
