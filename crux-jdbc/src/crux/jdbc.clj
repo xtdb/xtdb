@@ -53,7 +53,7 @@
                                       nil
                                       (next-events ds next-offset))]
 
-        (let [end-offset (max-tx-id ds)
+        (let [end-offset (inc (max-tx-id ds))
               next-offset (inc (long (:TX_EVENTS/OFFSET last-message)))
               lag (- end-offset next-offset)
               _ (when (pos? lag)
