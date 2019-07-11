@@ -5,6 +5,8 @@
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            crux.jdbc
+            [crux.jdbc.fixtures.jdbc :as fj]
             [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf])
@@ -20,6 +22,8 @@
     (cn/with-cluster-node f))
   (t/testing "Local API StandaloneSystem"
     (fs/with-standalone-system f))
+  (t/testing "JDBC System"
+    (fj/with-jdbc-system f))
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server
@@ -93,6 +97,10 @@
         (cond
           (instance? crux.tx.EventTxLog (:tx-log *api*))
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
+                   (:crux.tx-log/consumer-state status-map)))
+
+          (instance? crux.jdbc.JdbcTxLog (:tx-log *api*))
+          (t/is (= {:crux.jdbc/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
           :else

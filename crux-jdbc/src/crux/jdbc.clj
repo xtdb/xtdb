@@ -14,8 +14,8 @@
 
 (defn- tx-result->tx-data [ds tx-result]
   (let [tx-id (get tx-result (keyword "SCOPE_IDENTITY()"))
-        tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
-    (Tx. tx-time tx-id)))
+        ^java.sql.Timestamp tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
+    (Tx. (java.util.Date. (.getTime tx-time)) tx-id)))
 
 (defn- insert-event! [ds id v topic]
   (let [b (nippy/freeze v)]
