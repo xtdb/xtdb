@@ -291,8 +291,8 @@
                                  :next-offset next-offset
                                  :time (.message-time last-message)}}]
             (log/debug "Event log consumer state:" (pr-str consumer-state))
-            (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))
-          (Thread/sleep idle-sleep-ms))))))
+            (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))))
+    (Thread/sleep idle-sleep-ms)))
 
 (defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer event-log-sync-interval-ms]
   (let [running? (atom true)
