@@ -236,26 +236,20 @@
       (println :skipping-key [sc hd :q1 true]))))
 
 
-(defn ->avg-by-stock-count [vs]
-  (->> vs
-       (map #(vector (:stocks-count %) (:avg %)))
-       (sort-by first)
-       (mapv second)))
-
 (defn res->matrix [values]
-  (let [by-day-count (group-by :history-days values)
-        with-sorted-stocks
-        (->> by-day-count
-             (map (fn [[k v]] [k (->avg-by-stock-count v)]))
-             (sort-by first))
-        pluck-stock-count #(mapv :stocks-count %)
-        stocks-counts (-> by-day-count first second pluck-stock-count)]
-    (def wss with-sorted-stocks)
-    {:x {:title :history-days
-         :ticks (mapv first with-sorted-stocks)}
-     :y {:title :stocks-count
-         :ticks stocks-counts}
-     :data (mapv second with-sorted-stocks)}))
+  (let [hday-set (->> (map :history-days values) set sort)
+        scount-set (->> (map :stocks-count values) set sort)]
+    {:x {:title "History size (10x)"
+         :ticks hday-set}
+     :y {:title "Stocks count (10000x)"
+         :ticks scount-set}
+     :data
+     (for [sc scount-set
+           :let [local-values (filter #(= sc (:stocks-count %)) values)]]
+       (for [hd hday-set]
+         (:avg (first (filter #(= hd (:history-days %)) local-values)) 0)))}))
+
+(res->matrix t)
 
 (defn with-matrix [[k v]]
   [k (res->matrix v)])
