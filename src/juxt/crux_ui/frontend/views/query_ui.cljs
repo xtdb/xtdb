@@ -47,7 +47,13 @@
 
       [:&__form
         {:padding "0px 0"
-         :grid-area :form}]]
+         :grid-area :form}]
+      [:&--large-output
+       {:grid-template
+        "'output output' calc(100% - 50px)
+         'controls form' 50px
+         / minmax(200px, 50px) 1fr"}]
+      ]
 
       (gs/at-media
         {:max-width :1000px}
@@ -57,6 +63,11 @@
           'form form' 330px
           / 1fr 1fr"
           :margin-bottom 0}
+         [:&--large-output
+          {:grid-template
+          "'output output' calc(100% - 50px)
+          'form form' 50px
+          / 1fr 1fr"}]
          [:&__controls
           {:display :none}]])))
         ;:border "1px solid green"
@@ -64,7 +75,7 @@
 
 
 (defn query-ui []
-  [:div.query-ui
+  [:div.query-ui.query-ui--large-output
    [:style query-ui-styles]
    [:div.query-ui__output
     [q-output/root]]
