@@ -159,7 +159,7 @@
 
   Closeable
   (close [_]
-    (let [stamp (.readLock lock)]
+    (let [stamp (.writeLock lock)]
       (try
         (ensure-iterator-open closed-state)
         (reset! closed-state true)
