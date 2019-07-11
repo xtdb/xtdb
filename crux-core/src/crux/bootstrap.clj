@@ -50,7 +50,7 @@
                        revision]} (cio/load-properties in)]
            (->CruxVersion version revision)))))))
 
-(defrecord CruxNode [kv-store tx-log indexer object-store consumer-config options close-fn]
+(defrecord CruxNode [kv-store tx-log indexer object-store options close-fn]
   ICruxAPI
   (db [this]
     (let [tx-time (tx/latest-completed-tx-time (db/read-index-meta indexer :crux.tx-log/consumer-state))]
@@ -115,8 +115,10 @@
     (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout (.toMillis timeout)})))
 
   backup/ISystemBackup
-  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
-    (kv/backup kv-store (io/file checkpoint-directory "kv-store")))
+  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
+    (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
+    (when (satisfies? tx-log backup/ISystemBackup)
+      (backup/write-checkpoint tx-log opts)))
 
   Closeable
   (close [_]

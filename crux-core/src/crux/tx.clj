@@ -2,9 +2,11 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
+            [crux.backup :as backup]
             [crux.db :as db]
             [crux.index :as idx]
             [crux.io :as cio]
+            [clojure.java.io :as io]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.moberg :as moberg]
@@ -246,7 +248,11 @@
 
   Closeable
   (close [_]
-    (.close ^Closeable event-log-kv)))
+    (.close ^Closeable event-log-kv))
+
+  backup/ISystemBackup
+  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
+    (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
 
 (defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100

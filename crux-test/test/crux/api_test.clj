@@ -11,7 +11,6 @@
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
-           crux.bootstrap.standalone.StandaloneSystem
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
@@ -67,7 +66,7 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= (merge {:crux.index/index-version 4}
-                    (when (not (instance? StandaloneSystem *api*))
+                    (when (not (instance? crux.tx.EventTxLog (:tx-log *api*)))
                       {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
@@ -92,8 +91,7 @@
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
         (cond
-          (and (instance? StandaloneSystem *api*)
-               (instance? crux.tx.EventTxLog (:tx-log *api*)))
+          (instance? crux.tx.EventTxLog (:tx-log *api*))
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
