@@ -10,9 +10,8 @@
 (def ^:private plot-styling
   [:style
     (garden/css
-      [:.plot
-       {:background :blue
-        :height :100%}])])
+      [:.plotly-container
+       {:height :100%}])])
 
 (defn my-rand []
   (.toFixed (* 100 (rand)) 4))
@@ -31,10 +30,16 @@
 (def q1-data
   (and plots-data (:q1 plots-data)))
 
+(def q1-cache-data
+  (and plots-data (:q1-with-cache plots-data)))
+
 (def data
   (clj->js
-    [{:z (:data q1-data)
-      :type "surface"}]))
+    [{:z (take 9 (map #(take 9 %) (:data q1-data)))
+      :colorscale "Viridis"
+      :type "surface"}
+     {:z (take 9 (map #(take 9 %) (:data q1-cache-data)))
+      :type "surface"} ]))
 
 
 (defn axis [{:keys [title ticks] :as axis}]
@@ -46,13 +51,15 @@
 
 (def opts
   (clj->js
-    {:title "Query-1 avg execution time",
-     :autosize false,
-     :width 500,
-     :legend true
-     :height 500,
-     :xaxis (axis (:x q1-data))
-     :yaxis (axis (:y q1-data))
+    {:title "Query-1 avg execution time"
+     :autosize false
+     :showlegend true
+     :height 800
+     :width  1200
+     :scene
+     {:xaxis (axis (:x q1-data))
+      :yaxis (axis (:y q1-data))
+      :zaxis {:title "time"}}
      :margin
      {:l 65,
       :r 50,
