@@ -40,9 +40,7 @@
     (idx/read-meta kv-store :crux.kv/stats))
 
   (status [this]
-    (-> (.status ^CruxNode (dissoc (b/map->CruxNode this)
-                                   :event-log-kv-store))
-        (assoc :crux.zk/zk-active? false)))
+    (.status ^CruxNode (b/map->CruxNode this)))
 
   (submitTx [this tx-ops]
     (.submitTx ^CruxNode (b/map->CruxNode this) tx-ops))

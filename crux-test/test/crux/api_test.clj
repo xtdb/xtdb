@@ -66,8 +66,9 @@
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
-    (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem *api*))
-              :crux.index/index-version 4}
+    (t/is (= (merge {:crux.index/index-version 4}
+                    (when (not (instance? StandaloneSystem *api*))
+                      {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
                      :crux.kv/estimate-num-keys
@@ -114,7 +115,7 @@
                                 '{:find [e]
                                   :where [[e :name "Ivan"]]})))
         (t/is (= #{} (.q (.db *api* #inst "1999") '{:find  [e]
-                                                       :where [[e :name "Ivan"]]})))
+                                                    :where [[e :name "Ivan"]]})))
 
         (t/testing "query string"
           (t/is (= #{[:ivan]} (.q (.db *api*)
@@ -122,7 +123,7 @@
 
         (t/testing "query vector"
           (t/is (= #{[:ivan]} (.q (.db *api*) '[:find e
-                                                   :where [e :name "Ivan"]]))))
+                                                :where [e :name "Ivan"]]))))
 
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
