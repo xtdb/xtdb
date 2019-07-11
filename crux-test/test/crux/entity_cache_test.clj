@@ -252,9 +252,9 @@
         stocks-counts (-> by-day-count first second pluck-stock-count)]
     (def wss with-sorted-stocks)
     {:x {:title :history-days
-         :legend-items (mapv first with-sorted-stocks)}
+         :ticks (mapv first with-sorted-stocks)}
      :y {:title :stocks-count
-         :legend-items stocks-counts}
+         :ticks stocks-counts}
      :data (mapv second with-sorted-stocks)}))
 
 (defn with-matrix [[k v]]
@@ -278,8 +278,6 @@
     (spit "plots-data.edn" (pr-str plots-data))))
 
 (untangle-plot-data (read-string (slurp "test-times.edn")))
-
-wss
 
 ; (do-plot-data)
 
