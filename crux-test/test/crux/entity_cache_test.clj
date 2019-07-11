@@ -15,8 +15,8 @@
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
 
-(def run-entity-cache-tests? (Boolean/parseBoolean (System/getenv "CRUX_TEST_ENTITY_CACHE")))
-;(def run-entity-cache-tests? true)
+(def ^:dynamic run-entity-cache-tests? (Boolean/parseBoolean (System/getenv "CRUX_TEST_ENTITY_CACHE")))
+; (def run-entity-cache-tests? true)
 
 (def currencies
   (mapv #(assoc % :crux.db/id (:currency/id %))
@@ -60,8 +60,8 @@
   (map alter-stock pack))
 
 (def query-size 100000)
-(def stocks-count 100000)
-(def history-days 1)
+(def ^:dynamic stocks-count 1000)
+(def ^:dynamic history-days 1)
 (def sample-size 20)
 
 (def -stocks (atom nil))
@@ -79,6 +79,8 @@
     [backup-currency-id :currency/name backup-currency-name]
     [stock-id :stock/currency-id currency-id]
     [stock-id :stock/backup-currency-id backup-currency-id]])
+
+(def sync-times (atom {}))
 
 (defn with-stocks-data [f]
   (when run-entity-cache-tests?
@@ -112,10 +114,11 @@
           (println "day " i "\t" "partition " @ctr "/" partitions-total)
           (api/submit-tx *api* (f/maps->tx-ops stocks-batch)))
         (api/submit-tx *api* (f/maps->tx-ops t-currencies date)))
-      (println
-        "Sync takes: "
-        (crux.bench/duration-millis
-          (api/sync *api* (java.time.Duration/ofMinutes 20))))))
+      (let [sync-time
+            (crux.bench/duration-millis
+              (api/sync *api* (java.time.Duration/ofMinutes 20)))]
+        (swap! sync-times assoc [stocks-count history-days] sync-time)
+        (println "Sync takes: " sync-time))))
   (f))
 
 (t/use-fixtures :once
@@ -128,85 +131,156 @@
   (for [_ (range n)]
     (crux.bench/duration-millis (api/q db query))))
 
-(t/deftest test-cached-index
-  (when run-entity-cache-tests?
-    (t/testing "cache hit gains"
-      (let [db (api/db *api*)
-            d (Date.)]
-        (with-open [snapshot (api/new-snapshot db)]
-          (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
-                idx-in-cache (lru/new-cached-index idx-raw 100)
-                id-buf (c/->id-buffer :currency.id/eur)
+#_(t/deftest test-cached-index
+    (when run-entity-cache-tests?
+      (t/testing "cache hit gains"
+        (let [db (api/db *api*)
+              d (Date.)]
+          (with-open [snapshot (api/new-snapshot db)]
+            (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+                  idx-in-cache (lru/new-cached-index idx-raw 100)
+                  id-buf (c/->id-buffer :currency.id/eur)
 
-                seeked (db/seek-values idx-raw id-buf)
-                seeked-2 (db/seek-values idx-in-cache id-buf)]
+                  seeked (db/seek-values idx-raw id-buf)
+                  seeked-2 (db/seek-values idx-in-cache id-buf)]
 
-            (println "seeked" :currency.id/eur "found" seeked)
-            (println "seeked-2" :currency.id/eur "found" seeked-2)
+              (println "seeked" :currency.id/eur "found" seeked)
+              (println "seeked-2" :currency.id/eur "found" seeked-2)
 
-            (println "microbench for raw idx")
-            (time
-              (dotimes [_ 100000]
-                (db/seek-values idx-raw id-buf)))
+              (println "microbench for raw idx")
+              (time
+                (dotimes [_ 100000]
+                  (db/seek-values idx-raw id-buf)))
 
-            (println "microbench for a cached idx")
-            (time
-              (dotimes [_ 100000]
-                (db/seek-values idx-in-cache id-buf)))
+              (println "microbench for a cached idx")
+              (time
+                (dotimes [_ 100000]
+                  (db/seek-values idx-in-cache id-buf)))
 
-            (t/is (some? seeked))
-            (t/is (some? seeked-2))))))
+              (t/is (some? seeked))
+              (t/is (some? seeked-2))))))
 
-    (t/testing "cache miss overhead"
-      (let [db (api/db *api*)
-            d (Date.)]
-        (with-open [snapshot (api/new-snapshot db)]
-          (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
-                idx-in-cache (lru/new-cached-index idx-raw 100)
-                stock-id-buffs (mapv (comp c/->id-buffer :crux.db/id) @-stocks)
-                id-buf (c/->id-buffer :currency.id/eur)
+      (t/testing "cache miss overhead"
+        (let [db (api/db *api*)
+              d (Date.)]
+          (with-open [snapshot (api/new-snapshot db)]
+            (let [idx-raw (idx/new-entity-as-of-index snapshot d d)
+                  idx-in-cache (lru/new-cached-index idx-raw 100)
+                  stock-id-buffs (mapv (comp c/->id-buffer :crux.db/id) @-stocks)
+                  id-buf (c/->id-buffer :currency.id/eur)
 
-                seeked (db/seek-values idx-raw id-buf)
-                seeked-2 (db/seek-values idx-in-cache id-buf)]
+                  seeked (db/seek-values idx-raw id-buf)
+                  seeked-2 (db/seek-values idx-in-cache id-buf)]
 
-            (println "seeked" :currency.id/eur "found" seeked)
-            (println "seeked-2" :currency.id/eur "found" seeked-2)
+              (println "seeked" :currency.id/eur "found" seeked)
+              (println "seeked-2" :currency.id/eur "found" seeked-2)
 
-            (println "microbench for raw idx")
-            (time
-              (doseq [id-buf stock-id-buffs]
-                (db/seek-values idx-raw id-buf)))
+              (println "microbench for raw idx")
+              (time
+                (doseq [id-buf stock-id-buffs]
+                  (db/seek-values idx-raw id-buf)))
 
-            (println "microbench for a cached idx")
-            (time
-              (doseq [id-buf stock-id-buffs]
-                (db/seek-values idx-in-cache id-buf)))
+              (println "microbench for a cached idx")
+              (time
+                (doseq [id-buf stock-id-buffs]
+                  (db/seek-values idx-in-cache id-buf)))
 
-            (t/is (some? seeked))
-            (t/is (some? seeked-2))))))))
+              (t/is (some? seeked))
+              (t/is (some? seeked-2))))))))
 
-(defn- test-query [test-id query cache-on?]
+(def test-times (atom {}))
+
+(defn- test-query [test-id query query-id cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
      (let [db (api/db *api*)
            -dry (crux.bench/duration-millis (api/q db query))
            durations (not-really-benchmarking query db sample-size)
-           res (api/q db query)]
+           res (api/q db query)
+           avg (avg durations)
+           res
+           {:durations durations
+            :avg avg}]
        (println test-id :durations durations)
-       (println test-id :avg (avg durations))
+       (println test-id :avg avg)
        #_(println "res-size" (count res))
        #_(println "rand-sample" (take 10 (random-sample 0.1 res)))
-       (t/is true))))
+       (swap! test-times assoc [stocks-count history-days query-id cache-on?] res))))
+
 
 (t/deftest test-cache-frequencies-2
   (when run-entity-cache-tests?
     (println "\n")
     (println :days history-days :stocks stocks-count)
     (println)
-    (test-query :q1-entity-cache-off query-1 false)
-    (test-query :q1-entity-cache-on query-1 true)
+    (test-query :q1-entity-cache-off query-1 :q1 false)
+    (test-query :q1-entity-cache-on  query-1 :q1 true)
     (println "\n")
-    (test-query :q3-entity-cache-off query-3 false)
-    (test-query :q3-entity-cache-on query-3 true)
-    (println "\n")))
+    (test-query :q3-entity-cache-off query-3 :q3 false)
+    (test-query :q3-entity-cache-on  query-3 :q3 true)
+    (println "\n")
+    (t/is true)))
 
-;(t/run-tests 'crux.entity-cache-test)
+(reset! test-times (read-string (slurp "test-times.edn")))
+(reset! sync-times (read-string (slurp "sync-times.edn")))
+
+(defn do-plot-data []
+  (doseq [sc (range 1000 11000 1000)
+          hd (cons 1 (range 10 110 10))]
+    (if-not (contains? @test-times [sc hd :q1 true])
+      (binding [run-entity-cache-tests? true
+                stocks-count sc
+                history-days hd]
+        (t/run-tests 'crux.entity-cache-test)
+        (spit "sync-times.edn" (pr-str @sync-times))
+        (spit "test-times.edn" (pr-str @test-times)))
+      (println :skipping-key [sc hd :q1 true]))))
+
+
+(defn ->avg-by-stock-count [vs]
+  (->> vs
+       (map #(vector (:stocks-count %) (:avg %)))
+       (sort-by first)
+       (mapv second)))
+
+(defn res->matrix [values]
+  (let [by-day-count (group-by :history-days values)
+        with-sorted-stocks
+        (->> by-day-count
+             (map (fn [[k v]] [k (->avg-by-stock-count v)]))
+             (sort-by first))
+        pluck-stock-count #(mapv :stocks-count %)
+        stocks-counts (-> by-day-count first second pluck-stock-count)]
+    (def wss with-sorted-stocks)
+    {:x {:title :history-days
+         :legend-items (mapv first with-sorted-stocks)}
+     :y {:title :stocks-count
+         :legend-items stocks-counts}
+     :data (mapv second with-sorted-stocks)}))
+
+(defn with-matrix [[k v]]
+  [k (res->matrix v)])
+
+(defn untangle-plot-data [plot-data]
+  (let [entry->v
+        (fn [[k v]]
+          (let [[stocks-count history-days query-id cache-on?] k]
+            (-> v
+                (dissoc :durations)
+                (assoc  :stocks-count stocks-count
+                        :query-id query-id
+                        :cache-on? cache-on?
+                        :history-days history-days))))
+        mash (map entry->v plot-data)
+        key-fn (fn [{:keys [cache-on? query-id]}]
+                 (keyword (str (name query-id) (if cache-on? "-with-cache"))))
+        per-query-data (group-by key-fn mash)
+        plots-data (into {} (map with-matrix per-query-data))]
+    (spit "plots-data.edn" (pr-str plots-data))))
+
+(untangle-plot-data (read-string (slurp "test-times.edn")))
+
+wss
+
+; (do-plot-data)
+
+; (t/run-tests 'crux.entity-cache-test)

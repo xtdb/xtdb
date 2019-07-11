@@ -1,7 +1,7 @@
 (ns juxt.crux-ui.frontend.views.query.output
   (:require [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.views.query.results-tree :as q-results-tree]
-            [juxt.crux-ui.frontend.views.query.line-chart :as line-chart]
+            [juxt.crux-ui.frontend.views.query.surface-chart :as line-chart]
             [juxt.crux-ui.frontend.views.query.results-grid :as q-results-table]
             [garden.core :as garden]
             [garden.stylesheet :as gs]

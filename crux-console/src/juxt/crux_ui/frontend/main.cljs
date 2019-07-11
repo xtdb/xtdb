@@ -44,12 +44,12 @@
 
 ; (lookup-gist)
 
-(defn ^:export init []
+(defn init []
   (js/window.addEventListener "keydown" listen-keyboard-shortcuts)
   (rf/dispatch-sync [:evt.db/init default-db])
   (lookup-gist)
   (mount-root))
 
 ;; This is called every time you make a code change
-(defn ^:after-load on-reload []
+(defn reload! []
   (mount-root))
