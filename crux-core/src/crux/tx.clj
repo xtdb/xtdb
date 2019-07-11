@@ -250,7 +250,7 @@
 
 (defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100
-                                           idle-sleep-ms 100}}]
+                                           idle-sleep-ms 10}}]
   (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
     (db/store-index-meta
      indexer
