@@ -16,13 +16,10 @@
  :builds
  {:app
   {:target :browser
-   :modules {:app {:entries [juxt.crux-ui.frontend.main]}}
+   :modules {:app {:init-fn juxt.crux-ui.frontend.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
-   :compiler-options
-   {:optimizations :advanced
-   ;:source-map true
-    }
-   :asset-path "/static/crux-ui/compiled" }
+   :compiler-options {:optimizations :advanced}
+   :asset-path "/static/crux-ui/compiled"}
 
 
   :test
@@ -34,18 +31,19 @@
    {:http-port  4001
     :http-root  "resources/static/crux-ui/test"}}
 
-   :dev
-   {:target :browser
-    :modules {:app {:entries [juxt.crux-ui.frontend.main]}}
-    :output-dir "resources/static/crux-ui/compiled"
-    :asset-path "/static/crux-ui/compiled"
-    :compiler-options {:closure-warnings {:global-this :off}
-                       :closure-defines  {re-frame.trace.trace-enabled? true}
-                       :optimizations :none}
+  :dev
+  {:target :browser
+   :modules
+   {:app {:init-fn juxt.crux-ui.frontend.main/init}}
+   :output-dir "resources/static/crux-ui/compiled"
+   :asset-path "/static/crux-ui/compiled"
+   :compiler-options {:closure-warnings {:global-this :off}
+                      :closure-defines  {re-frame.trace.trace-enabled? true}
+                      :optimizations :none}
 
     :devtools
-    {:after-load juxt.crux-ui.frontend.main/on-reload
-     :preloads   [day8.re-frame-10x.preload] }}}
+    {:after-load juxt.crux-ui.frontend.main/reload
+     :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55000
          :init-ns user}}
