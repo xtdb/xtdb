@@ -149,14 +149,6 @@
         (finally
           (.unlock lock stamp)))))
 
-  (refresh [this]
-    (let [stamp (.readLock lock)]
-      (try
-        (ensure-iterator-open closed-state)
-        (assoc this :i (kv/refresh i))
-        (finally
-          (.unlock lock stamp)))))
-
   Closeable
   (close [_]
     (let [stamp (.writeLock lock)]
@@ -174,7 +166,7 @@
                                               @(.closed-state i)))
                                     (first))]
       (if (compare-and-set! (.closed-state i) true false)
-        (kv/refresh i)
+        i
         (recur))
       (let [i (kv/new-iterator snapshot)
             i (->CachedIterator i lock (atom false))]

@@ -11,8 +11,7 @@
   (seek [this k])
   (next [this])
   (prev [this])
-  (value [this])
-  (refresh [this]))
+  (value [this]))
 
 (defprotocol KvSnapshot
   (new-iterator ^java.io.Closeable [this])

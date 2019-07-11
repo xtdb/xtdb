@@ -49,9 +49,6 @@
              :first
              (val)))
 
-  (refresh [this]
-    this)
-
   Closeable
   (close [_]))
 

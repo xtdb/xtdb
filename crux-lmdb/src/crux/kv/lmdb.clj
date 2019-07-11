@@ -175,10 +175,6 @@
   (value [this]
     (UnsafeBuffer. (.mv_data dv) 0 (.mv_size dv)))
 
-  (refresh [this]
-    (LMDB/mdb_cursor_renew (.txn tx) (.cursor cursor))
-    this)
-
   Closeable
   (close [_]
     (.close cursor)))

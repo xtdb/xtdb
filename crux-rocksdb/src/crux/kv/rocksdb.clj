@@ -35,10 +35,6 @@
   (value [this]
     (mem/on-heap-buffer (.value i)))
 
-  (kv/refresh [this]
-    ;; TODO: https://github.com/facebook/rocksdb/pull/3465
-    this)
-
   Closeable
   (close [this]
     (.close i)))

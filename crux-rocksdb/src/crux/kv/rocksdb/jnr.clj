@@ -168,10 +168,6 @@
     (let [p-v (.rocksdb_iter_value rocksdb i len-out)]
       (pointer+len->buffer p-v len-out)))
 
-  (kv/refresh [this]
-    ;; TODO: https://github.com/facebook/rocksdb/pull/3465
-    this)
-
   Closeable
   (close [this]
     (.rocksdb_iter_destroy rocksdb i)))

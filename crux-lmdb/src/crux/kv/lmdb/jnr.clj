@@ -22,9 +22,6 @@
       (.key cursor)))
   (value [this]
     (.val cursor))
-  (refresh [this]
-    (.renew cursor tx)
-    this)
 
   Closeable
   (close [_]
