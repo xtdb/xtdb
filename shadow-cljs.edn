@@ -42,7 +42,7 @@
                       :optimizations :none}
 
     :devtools
-    {:after-load juxt.crux-ui.frontend.main/reload
+    {:after-load juxt.crux-ui.frontend.main/reload!
      :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55000

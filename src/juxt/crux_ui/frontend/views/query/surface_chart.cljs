@@ -23,22 +23,36 @@
 (def z-data
   (gen-v #(gen-v my-rand 20) 20))
 
-; (def plots-data (edn/read-string (.-textContent (js/document.getElementById "plots-data"))))
+(def plots-data
+  (if-let [script (js/document.getElementById "plots-data")]
+    (edn/read-string (.-textContent script))
+    (println :plots-data-not-found)))
+
+(def q1-data
+  (and plots-data (:q1 plots-data)))
 
 (def data
   (clj->js
-    [{:z z-data
+    [{:z (:data q1-data)
       :type "surface"}]))
+
+
+(defn axis [{:keys [title ticks] :as axis}]
+  {:title  (name (:title axis))
+   :tick0  (first ticks)
+   :showticklabels true
+   :dtick  (- (nth ticks 2) (second ticks))
+   :nticks (count ticks)})
 
 (def opts
   (clj->js
-    {:title "Mt Bruno Elevation",
+    {:title "Query-1 avg execution time",
      :autosize false,
      :width 500,
+     :legend true
      :height 500,
-     :xaxis {:range [0 21]}
-     :yaxis {:range [0 21]}
-     :zaxis {:range [0 100]}
+     :xaxis (axis (:x q1-data))
+     :yaxis (axis (:y q1-data))
      :margin
      {:l 65,
       :r 50,
@@ -48,6 +62,8 @@
 
 
 (log/log data)
+(set! js/window.data2 (clj->js q1-data))
+(log/log js/window.data2)
 (set! js/window.data data)
 (set! js/window.layout opts)
 (set! js/window.Plotly Plotly)

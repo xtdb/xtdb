@@ -31,10 +31,7 @@
      [[:style#_stylefy-constant-styles_]
       [:style#_stylefy-styles_]
       [:meta {:name "google" :content "notranslate"}]]
-     :body
-     [:body
-      [:div#app preloader/root]]}))
-
+     :body [:body [:div#app preloader/root]]}))
 
 (defn- q-perf-page [ctx]
   (pr/render-page
@@ -43,11 +40,9 @@
      :doc-attrs        {:data-scenario :perf-plot}
      :stylesheet-async "/static/styles/reset.css"
      :script      "/static/crux-ui/compiled/app.js"
-     :head-tags        [[:script {:id "plots-data"} (slurp (io/resource "static/plots-data.edn"))]]
-     :body
-                       [:body
-                        [:div#app preloader/root]]}))
-
+     :head-tags
+     [[:script {:id "plots-data" :type "text/edn"} (slurp (io/resource "static/plots-data.edn"))]]
+     :body [:body [:div#app preloader/root]]}))
 
 (defn- gen-home-page [ctx]
   (pr/render-page
