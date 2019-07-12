@@ -11,7 +11,6 @@
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
-           crux.bootstrap.standalone.StandaloneSystem
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
@@ -66,8 +65,9 @@
 
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
-    (t/is (= {:crux.zk/zk-active? (not (instance? StandaloneSystem *api*))
-              :crux.index/index-version 4}
+    (t/is (= (merge {:crux.index/index-version 4}
+                    (when (not (instance? crux.tx.EventTxLog (:tx-log *api*)))
+                      {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
                      :crux.kv/estimate-num-keys
@@ -91,8 +91,7 @@
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
         (cond
-          (and (instance? StandaloneSystem *api*)
-               (instance? crux.tx.EventTxLog (:tx-log *api*)))
+          (instance? crux.tx.EventTxLog (:tx-log *api*))
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
@@ -114,7 +113,7 @@
                                 '{:find [e]
                                   :where [[e :name "Ivan"]]})))
         (t/is (= #{} (.q (.db *api* #inst "1999") '{:find  [e]
-                                                       :where [[e :name "Ivan"]]})))
+                                                    :where [[e :name "Ivan"]]})))
 
         (t/testing "query string"
           (t/is (= #{[:ivan]} (.q (.db *api*)
@@ -122,7 +121,7 @@
 
         (t/testing "query vector"
           (t/is (= #{[:ivan]} (.q (.db *api*) '[:find e
-                                                   :where [e :name "Ivan"]]))))
+                                                :where [e :name "Ivan"]]))))
 
         (t/testing "malformed query"
           (t/is (thrown-with-msg? Exception
