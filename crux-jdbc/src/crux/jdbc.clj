@@ -15,10 +15,13 @@
 
 (deftype Tx [^Date time ^long id])
 
+(defn- ->date [^java.sql.Timestamp t]
+  (java.util.Date. (.getTime t)))
+
 (defn- tx-result->tx-data [ds tx-result]
   (let [tx-id (get tx-result (keyword "SCOPE_IDENTITY()"))
-        ^java.sql.Timestamp tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
-    (Tx. (java.util.Date. (.getTime tx-time)) tx-id)))
+        tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
+    (Tx. (->date tx-time) tx-id)))
 
 (defn- insert-event! [ds id v topic]
   (let [b (nippy/freeze v)]
@@ -112,7 +115,7 @@
       (future
         (r/reduce (fn [_ y]
                     (.put q {:crux.tx/tx-id (:TX_EVENTS/OFFSET y)
-                             :crux.tx/tx-time (java.util.Date. (.getTime ^java.sql.Timestamp (:TX_EVENTS/TX_TIME y)))
+                             :crux.tx/tx-time (->date (:TX_EVENTS/TX_TIME y))
                              :crux.api/tx-ops (nippy/thaw (:TX_EVENTS/V y))})
                     (if @running?
                       nil
