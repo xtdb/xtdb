@@ -67,12 +67,17 @@
         admin-client (k/create-admin-client kafka-config)
         indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
     (log/info "system started")
-    (b/start-crux-node :kv-store kv-store
-                       :producer producer
-                       :tx-log tx-log
-                       :object-store object-store
-                       :indexer indexer
-                       :admin-client admin-client
-                       :consumer-config consumer-config
-                       :indexing-consumer indexing-consumer
-                       :options options)))
+    (b/map->CruxNode {:kv-store kv-store
+                      :producer producer
+                      :tx-log tx-log
+                      :object-store object-store
+                      :indexer indexer
+                      :admin-client admin-client
+                      :consumer-config consumer-config
+                      :indexing-consumer indexing-consumer
+                      :options options
+                      :close-fn (fn []
+                                  (doseq [c [kv-store producer tx-log object-store indexer indexing-consumer]]
+                                    (log/info "stopping system")
+                                    (cio/try-close c))
+                                  (.close admin-client))})))

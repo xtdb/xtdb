@@ -124,16 +124,6 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defn start-crux-node [& bindings]
-  (let [to-close (map last (partition 2 bindings))
-        close-fn (fn []
-                   (log/info "stopping system")
-                   (doseq [c to-close]
-                     (when (and c (instance? Closeable c))
-                       (cio/try-close c))))]
-    (map->CruxNode (into {:close-fn close-fn}
-                         (map vec (partition 2 bindings))))))
-
 (defn start-kv-store ^java.io.Closeable [{:keys [db-dir
                                                  kv-backend
                                                  sync?
