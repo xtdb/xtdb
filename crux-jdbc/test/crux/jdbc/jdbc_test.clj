@@ -33,5 +33,5 @@
     (t/is (= [doc] (docs (:ds (:tx-log *api*)) doc-hash)))
 
     (t/testing "Compaction"
-      (db/submit-doc tx-log doc-hash {:a :evicted})
-      (t/is (= [{:a :evicted}] (docs (:ds (:tx-log *api*)) doc-hash))))))
+      (db/submit-doc tx-log doc-hash {:crux.db/id (c/new-id :some-id) :a :evicted})
+      (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs (:ds (:tx-log *api*)) doc-hash))))))
