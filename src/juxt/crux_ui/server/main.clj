@@ -41,7 +41,8 @@
      :stylesheet-async "/static/styles/reset.css"
      :script      "/static/crux-ui/compiled/app.js"
      :head-tags
-     [[:script {:id "plots-data" :type "text/edn"} (slurp (io/resource "static/plots-data.edn"))]]
+     [[:script {:id "plots-data" :type "text/edn"}
+       (slurp (io/resource "static/plots-data.edn"))]]
      :body [:body [:div#app preloader/root]]}))
 
 (defn- gen-home-page [ctx]
@@ -52,7 +53,8 @@
       [:body
        [:header
         [:div.nav
-         [:div.logo {:style {:opacity "0"}} [:a {:href "/"} [:img.logo-img {:src "/static/img/crux-logo.svg"}]]]
+         [:div.logo {:style {:opacity "0"}}
+          [:a {:href "/"} [:img.logo-img {:src "/static/img/crux-logo.svg"}]]]
          [:div.n0
           [:a {:href "https://juxt.pro/crux/docs/index.html"} [:span.n "Documentation"]]
           [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux"} [:span.n "Community Chat"]]
