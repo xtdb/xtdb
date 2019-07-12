@@ -7,7 +7,8 @@
             [crux.tx :as tx]
             [taoensso.nippy :as nippy]
             [clojure.tools.logging :as log]
-            [clojure.core.reducers :as r])
+            [clojure.core.reducers :as r]
+            [next.jdbc.result-set :as jdbcr])
   (:import java.io.Closeable
            java.util.Date
            java.util.concurrent.LinkedBlockingQueue
@@ -18,23 +19,31 @@
 (defn- ->date [^java.sql.Timestamp t]
   (java.util.Date. (.getTime t)))
 
-(defn- tx-result->tx-data [ds tx-result]
-  (let [tx-id (get tx-result (keyword "SCOPE_IDENTITY()"))
-        tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
-    (Tx. (->date tx-time) tx-id)))
+(defn- tx-result->tx-data [ds dbtype tx-result]
+  (condp contains? dbtype
+    #{"h2"}
+    (let [tx-id (get tx-result (keyword "SCOPE_IDENTITY()"))
+          tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE EVENT_OFFSET = ?" tx-id])))]
+      (Tx. (->date tx-time) tx-id))
+
+    #{"postgresql" "pgsql"}
+    (let [tx-id (:tx_events/event_offset tx-result)
+          tx-time (:tx_events/tx_time tx-result)]
+      (Tx. (->date tx-time) tx-id))))
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
     (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic] {:return-keys true})))
 
 (defn- next-events [ds next-offset]
-  (jdbc/execute! ds ["SELECT OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE OFFSET >= ?" next-offset] {:max-rows 10}))
+  (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE EVENT_OFFSET >= ?" next-offset]
+                 {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps}))
 
 (defn- max-tx-id [ds]
-  (val (first (jdbc/execute-one! ds ["SELECT max(OFFSET) FROM TX_EVENTS"]))))
+  (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM TX_EVENTS"]))))
 
 (defn- delete-previous-events! [ds topic event-key offset]
-  (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = ? AND EVENT_KEY = ? AND OFFSET < ?" topic event-key offset]))
+  (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = ? AND EVENT_KEY = ? AND EVENT_OFFSET < ?" topic event-key offset]))
 
 (defn- event-log-consumer-main-loop [{:keys [running? ds indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100
@@ -48,29 +57,28 @@
   (while @running?
     (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [::event-log :next-offset])]
       (when-let [last-message (reduce (fn [last-message result]
-                                        (case (:TX_EVENTS/TOPIC result)
+                                        (case (:topic result)
                                           "tx"
                                           (db/index-tx indexer
-                                                       (nippy/thaw (:TX_EVENTS/V result))
-                                                       (:TX_EVENTS/TX_TIME result)
-                                                       (:TX_EVENTS/OFFSET result))
+                                                       (nippy/thaw (:v result))
+                                                       (:tx_time result)
+                                                       (:event_offset result))
                                           "doc"
                                           (db/index-doc indexer
-                                                        (:TX_EVENTS/EVENT_KEY result)
-                                                        (nippy/thaw (:TX_EVENTS/V result))))
+                                                        (:event_key result)
+                                                        (nippy/thaw (:v result))))
                                         result)
                                       nil
                                       (next-events ds next-offset))]
-
         (let [end-offset (inc (max-tx-id ds))
-              next-offset (inc (long (:TX_EVENTS/OFFSET last-message)))
+              next-offset (inc (long (:event_offset last-message)))
               lag (- end-offset next-offset)
               _ (when (pos? lag)
                   (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
               consumer-state {::event-log
                               {:lag lag
                                :next-offset next-offset
-                               :time (:TX_EVENTS/TX_TIME last-message)}}]
+                               :time (:tx_time last-message)}}]
           (log/debug "Event log consumer state:" (pr-str consumer-state))
           (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state))))
     (Thread/sleep idle-sleep-ms)))
@@ -95,20 +103,19 @@
   (close [_]
     (reset! running? false)))
 
-(defrecord JdbcTxLog [ds]
+(defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)
-          result (insert-event! ds id  doc "doc")
-          offset (get result (keyword "SCOPE_IDENTITY()"))]
-      (delete-previous-events! ds "doc" id offset)))
+          ^Tx result (tx-result->tx-data ds dbtype (insert-event! ds id  doc "doc"))]
+      (delete-previous-events! ds "doc" id (.id result))))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
     (doseq [doc (tx/tx-ops->docs tx-ops)]
       (db/submit-doc this (str (c/new-id doc)) doc))
     (let [tx-events (tx/tx-ops->tx-events tx-ops)
-          ^Tx tx (tx-result->tx-data ds (insert-event! ds nil tx-events "tx"))]
+          ^Tx tx (tx-result->tx-data ds dbtype (insert-event! ds nil tx-events "tx"))]
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
@@ -120,14 +127,16 @@
           running? (:running? tx-log-context)]
       (future
         (r/reduce (fn [_ y]
-                    (.put q {:crux.tx/tx-id (:TX_EVENTS/OFFSET y)
-                             :crux.tx/tx-time (->date (:TX_EVENTS/TX_TIME y))
-                             :crux.api/tx-ops (nippy/thaw (:TX_EVENTS/V y))})
+                    (.put q {:crux.tx/tx-id (:event_offset y)
+                             :crux.tx/tx-time (->date (:tx_time y))
+                             :crux.api/tx-ops (nippy/thaw (:v y))})
                     (if @running?
                       nil
                       (reduced nil)))
                   nil
-                  (jdbc/plan ds ["SELECT OFFSET, ID, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'tx' and OFFSET >= ?" (or from-tx-id 0)]))
+                  (jdbc/plan ds ["SELECT EVENT_OFFSET, ID, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'tx' and EVENT_OFFSET >= ?"
+                                 (or from-tx-id 0)]
+                             {:builder-fn jdbcr/as-unqualified-lower-maps}))
         (.put q -1))
       ((fn step []
          (lazy-seq

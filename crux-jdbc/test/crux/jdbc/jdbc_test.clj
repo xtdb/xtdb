@@ -8,7 +8,8 @@
             [crux.jdbc.fixtures.jdbc :as fj]
             [crux.jdbc.fixtures.postgres :as fp]
             [crux.codec :as c]
-            [crux.kafka :as k])
+            [crux.kafka :as k]
+            [next.jdbc.result-set :as jdbcr])
   (:import crux.api.ICruxAPI))
 
 (defn- with-each-jdbc-system [f]
@@ -26,7 +27,8 @@
     (t/is (.entity (.db *api*) :origin-man))))
 
 (defn- docs [ds id]
-  (map (comp nippy/thaw :TX_EVENTS/V) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id])))
+  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id]
+                                           {:builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)
