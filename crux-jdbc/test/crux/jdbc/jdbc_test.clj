@@ -6,11 +6,18 @@
             [next.jdbc :as jdbc]
             [crux.fixtures.api :refer [*api*]]
             [crux.jdbc.fixtures.jdbc :as fj]
+            [crux.jdbc.fixtures.postgres :as fp]
             [crux.codec :as c]
             [crux.kafka :as k])
   (:import crux.api.ICruxAPI))
 
-(t/use-fixtures :each fj/with-jdbc-system)
+(defn- with-each-jdbc-system [f]
+  (t/testing "H2 Database"
+    (fj/with-jdbc-system f))
+  (t/testing "Postgresql Database"
+    (fp/with-embedded-postgres f)))
+
+(t/use-fixtures :each with-each-jdbc-system)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}

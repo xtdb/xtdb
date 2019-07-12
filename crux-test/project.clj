@@ -13,6 +13,9 @@
                  [juxt/crux-rdf :derived-from-git]
                  [juxt/crux-decorators :derived-from-git]
 
+                 ;; JDBC
+                 [com.opentable.components/otj-pg-embedded "0.13.1"]
+
                  ;; General:
                  [org.clojure/test.check "0.10.0-alpha3"]
                  [ch.qos.logback/logback-classic "1.2.3"]

@@ -8,5 +8,6 @@
                  [seancorfield/next.jdbc "1.0.1"]
                  [com.taoensso/nippy "2.14.0"]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [com.h2database/h2 "1.4.199"]]}}
+                                  [com.h2database/h2 "1.4.199"]
+                                  [com.opentable.components/otj-pg-embedded "0.13.1"]]}}
   :middleware [leiningen.project-version/middleware])
