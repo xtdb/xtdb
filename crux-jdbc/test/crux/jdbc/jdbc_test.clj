@@ -19,7 +19,7 @@
     (t/is (.entity (.db *api*) :origin-man))))
 
 (defn- docs [ds id]
-  (map (comp nippy/thaw :TX_EVENTS/V) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND ID = ?" id])))
+  (map (comp nippy/thaw :TX_EVENTS/V) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id])))
 
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)

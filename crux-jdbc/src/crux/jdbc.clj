@@ -23,18 +23,18 @@
         tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE OFFSET = ?" tx-id])))]
     (Tx. (->date tx-time) tx-id)))
 
-(defn- insert-event! [ds id v topic]
+(defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (ID, V, TOPIC) VALUES (?,?,?)" id b topic] {:return-keys true})))
+    (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic] {:return-keys true})))
 
 (defn- next-events [ds next-offset]
-  (jdbc/execute! ds ["SELECT OFFSET, ID, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE OFFSET >= ?" next-offset] {:max-rows 10}))
+  (jdbc/execute! ds ["SELECT OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE OFFSET >= ?" next-offset] {:max-rows 10}))
 
 (defn- max-tx-id [ds]
   (val (first (jdbc/execute-one! ds ["SELECT max(OFFSET) FROM TX_EVENTS"]))))
 
-(defn- delete-previous-events! [ds topic id offset]
-  (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = ? AND ID = ? AND OFFSET < ?" topic id offset]))
+(defn- delete-previous-events! [ds topic event-key offset]
+  (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = ? AND EVENT_KEY = ? AND OFFSET < ?" topic event-key offset]))
 
 (defn- event-log-consumer-main-loop [{:keys [running? ds indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100
@@ -56,7 +56,7 @@
                                                        (:TX_EVENTS/OFFSET result))
                                           "doc"
                                           (db/index-doc indexer
-                                                        (:TX_EVENTS/ID result)
+                                                        (:TX_EVENTS/EVENT_KEY result)
                                                         (nippy/thaw (:TX_EVENTS/V result))))
                                         result)
                                       nil

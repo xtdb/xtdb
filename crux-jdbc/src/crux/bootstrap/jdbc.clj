@@ -17,7 +17,7 @@
   (jdbc/execute! ds ["
   create table if not exists tx_events (
   offset int auto_increment PRIMARY KEY,
-  id VARCHAR,
+  event_key VARCHAR,
   tx_time datetime default CURRENT_TIMESTAMP,
   topic VARCHAR NOT NULL,
   v BINARY NOT NULL)"]))
