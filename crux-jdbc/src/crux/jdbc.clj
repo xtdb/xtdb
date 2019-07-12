@@ -95,7 +95,7 @@
 (defrecord JdbcTxLog [ds]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (insert-event! ds content-hash doc "doc"))
+    (insert-event! ds (str content-hash) doc "doc"))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
