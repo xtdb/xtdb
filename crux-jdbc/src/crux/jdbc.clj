@@ -6,9 +6,12 @@
             crux.api
             [crux.tx :as tx]
             [taoensso.nippy :as nippy]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [clojure.core.reducers :as r])
   (:import java.io.Closeable
-           java.util.Date))
+           java.util.Date
+           java.util.concurrent.LinkedBlockingQueue
+           java.util.concurrent.TimeUnit))
 
 (deftype Tx [^Date time ^long id])
 
@@ -81,6 +84,11 @@
         (reset! running? false)
         (.join worker-thread)))))
 
+(defrecord JdbcLogQueryContext [running?]
+  Closeable
+  (close [_]
+    (reset! running? false)))
+
 (defrecord JdbcTxLog [ds]
   db/TxLog
   (submit-doc [this content-hash doc]
@@ -95,11 +103,25 @@
       (delay {:crux.tx/tx-id (.id tx)
               :crux.tx/tx-time (.time tx)})))
 
-  (new-tx-log-context [this])
+  (new-tx-log-context [this]
+    (JdbcLogQueryContext. (atom true)))
 
-  (tx-log [this tx-log-context from-tx-id])
-
-  Closeable
-  (close [_]
-    ;; Todo ? What what exactly
-    ))
+  (tx-log [this tx-log-context from-tx-id]
+    (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
+          running? (:running? tx-log-context)]
+      (future
+        (r/reduce (fn [_ y]
+                    (.put q {:crux.tx/tx-id (:TX_EVENTS/OFFSET y)
+                             :crux.tx/tx-time (java.util.Date. (.getTime ^java.sql.Timestamp (:TX_EVENTS/TX_TIME y)))
+                             :crux.api/tx-ops (nippy/thaw (:TX_EVENTS/V y))})
+                    (if @running?
+                      nil
+                      (reduced nil)))
+                  nil
+                  (jdbc/plan ds ["SELECT OFFSET, ID, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'tx' and OFFSET >= ?" (or from-tx-id 0)]))
+        (.put q -1))
+      ((fn step []
+         (lazy-seq
+          (when-let [x (.poll q 10000 TimeUnit/MILLISECONDS)]
+            (when (not= -1 x)
+              (cons x (step))))))))))

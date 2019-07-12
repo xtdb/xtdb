@@ -4,18 +4,6 @@
             [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI]))
 
-(def db {:dbtype "h2"
-         :dbname "test-eventlog"})
-
-(def ^:dynamic *ds*)
-
-(defn with-datasource [f]
-  (binding [*ds* (jdbc/get-datasource db)]
-    (try
-      (f)
-      (finally
-        (jdbc/execute! *ds* ["DROP ALL OBJECTS"])))))
-
 (defn with-jdbc-system [f]
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         jdbc-event-log-dir (str (cio/create-tmpdir "jdbc-event-log-dir"))
