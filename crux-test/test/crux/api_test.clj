@@ -70,7 +70,7 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= (merge {:crux.index/index-version 4}
-                    (when (not (instance? crux.tx.EventTxLog (:tx-log *api*)))
+                    (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                       {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
@@ -236,7 +236,7 @@
                  :as submitted-tx} (.submitTx *api* [[:crux.tx/evict :ivan]])]
             (t/is (.sync *api* tx-time nil))
 
-            ;; actual removal of the document happends asyncronusly after
+            ;; actual removal of the document happens asynchronously after
             ;; the transaction has been processed so waiting on the
             ;; submitted transaction time is not enough
             (while (.entity (.db *api*) :ivan)

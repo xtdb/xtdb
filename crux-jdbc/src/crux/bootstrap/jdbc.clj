@@ -44,4 +44,5 @@
                       :event-log-consumer event-log-consumer
                       :options options
                       :close-fn (fn []
-                                  (cio/try-close event-log-consumer kv-store))})))
+                                  (doseq [c [event-log-consumer kv-store]]
+                                    (cio/try-close c)))})))
