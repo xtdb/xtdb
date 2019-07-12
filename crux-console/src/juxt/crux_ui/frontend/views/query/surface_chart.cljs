@@ -51,7 +51,7 @@
      {:z  (:data q1-cache-data)
       :name "Cache on"
       :colorscale "Viridis"
-      :type "surface"} ]))
+      :type "surface"}]))
 
 (def data-q3
   (clj->js
@@ -62,7 +62,7 @@
      {:z  (:data q3-cache-data)
       :name "Cache on"
       :colorscale "Viridis"
-      :type "surface"} ]))
+      :type "surface"}]))
 
 
 (defn axis [{:keys [title ticks] :as axis}]

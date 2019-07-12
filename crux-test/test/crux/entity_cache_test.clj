@@ -81,6 +81,7 @@
     [stock-id :stock/backup-currency-id backup-currency-id]])
 
 (def sync-times (atom {}))
+(def test-times (atom {}))
 
 (defn with-stocks-data [f]
   (when run-entity-cache-tests?
@@ -188,8 +189,6 @@
               (t/is (some? seeked))
               (t/is (some? seeked-2))))))))
 
-(def test-times (atom {}))
-
 (defn- test-query [test-id query query-id cache-on?]
   (binding [crux.query/*with-entities-cache?* cache-on?]
      (let [db (api/db *api*)
@@ -220,20 +219,23 @@
     (println "\n")
     (t/is true)))
 
-(reset! test-times (read-string (slurp "test-times.edn")))
-(reset! sync-times (read-string (slurp "sync-times.edn")))
 
 (defn do-plot-data []
-  (doseq [sc (range 1000 11000 1000)
-          hd (cons 1 (range 10 110 10))]
-    (if-not (contains? @test-times [sc hd :q1 true])
+  (reset! test-times (read-string (slurp "test-times.edn")))
+  (reset! sync-times (read-string (slurp "sync-times.edn")))
+  (doseq [sc (range 9000 11000 1000)
+          hd (range 100 110 10) #_(cons 1 (range 100 110 10))]
+    (if-not false ;(contains? @test-times [sc hd :q1 true])
       (binding [run-entity-cache-tests? true
                 stocks-count sc
                 history-days hd]
+        (println "starting a case for " sc hd)
         (t/run-tests 'crux.entity-cache-test)
         (spit "sync-times.edn" (pr-str @sync-times))
         (spit "test-times.edn" (pr-str @test-times)))
       (println :skipping-key [sc hd :q1 true]))))
+
+; (do-plot-data)
 
 
 (defn res->matrix [values]
@@ -249,7 +251,7 @@
        (for [hd hday-set]
          (:avg (first (filter #(= hd (:history-days %)) local-values)) 0)))}))
 
-(res->matrix t)
+; (res->matrix t)
 
 (defn with-matrix [[k v]]
   [k (res->matrix v)])
@@ -271,8 +273,8 @@
         plots-data (into {} (map with-matrix per-query-data))]
     (spit "plots-data.edn" (pr-str plots-data))))
 
-(untangle-plot-data (read-string (slurp "test-times.edn")))
+; (untangle-plot-data (read-string (slurp "test-times.edn")))
 
-; (do-plot-data)
+; (clojure.pprint/pprint (read-string (slurp "plots-data.edn")))
 
 ; (t/run-tests 'crux.entity-cache-test)
