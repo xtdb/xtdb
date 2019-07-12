@@ -33,6 +33,9 @@
 (defn- max-tx-id [ds]
   (val (first (jdbc/execute-one! ds ["SELECT max(OFFSET) FROM TX_EVENTS"]))))
 
+(defn- delete-previous-events! [ds topic id offset]
+  (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = ? AND ID = ? AND OFFSET < ?" topic id offset]))
+
 (defn- event-log-consumer-main-loop [{:keys [running? ds indexer batch-size idle-sleep-ms]
                                       :or {batch-size 100
                                            idle-sleep-ms 100}}]
@@ -95,7 +98,10 @@
 (defrecord JdbcTxLog [ds]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (insert-event! ds (str content-hash) doc "doc"))
+    (let [id (str content-hash)
+          result (insert-event! ds id  doc "doc")
+          offset (get result (keyword "SCOPE_IDENTITY()"))]
+      (delete-previous-events! ds "doc" id offset)))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
