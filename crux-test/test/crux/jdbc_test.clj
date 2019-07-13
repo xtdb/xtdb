@@ -1,0 +1,56 @@
+(ns crux.jdbc-test
+  (:require [clojure.test :as t]
+            [crux.db :as db]
+            [crux.jdbc :as j]
+            [taoensso.nippy :as nippy]
+            [next.jdbc :as jdbc]
+            [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.jdbc :as fj]
+            [crux.fixtures.postgres :as fp]
+            [crux.codec :as c]
+            [crux.kafka :as k]
+            [next.jdbc.result-set :as jdbcr])
+  (:import crux.api.ICruxAPI))
+
+(defn- with-each-jdbc-system [f]
+  (t/testing "H2 Database"
+    (fj/with-jdbc-system f))
+  (t/testing "Postgresql Database"
+    (fp/with-embedded-postgres f)))
+
+(t/use-fixtures :each with-each-jdbc-system)
+
+(t/deftest test-happy-path-jdbc-event-log
+  (let [doc {:crux.db/id :origin-man :name "Adam"}
+        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
+    (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
+    (t/is (.entity (.db *api*) :origin-man))
+
+    (t/testing "Tx log"
+      (with-open [tx-log-context (.newTxLogContext *api*)]
+        (t/is (= [{:crux.tx/tx-id 2,
+                   :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
+                   :crux.api/tx-ops
+                   [[:crux.tx/put
+                     (str (c/new-id (:crux.db/id doc)))
+                     (str (c/new-id doc))]]}]
+                 (.txLog *api* tx-log-context 0 false)))))))
+
+(defn- docs [ds id]
+  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id]
+                                           {:builder-fn jdbcr/as-unqualified-lower-maps})))
+
+(t/deftest test-docs-retention
+  (let [tx-log (:tx-log *api*)
+
+        doc {:crux.db/id (c/new-id :some-id) :a :b}
+        doc-hash (str (c/new-id doc))
+
+        tx-1 (db/submit-tx tx-log [[:crux.tx/put doc]])]
+
+    (t/is (= 1 (count (docs (:ds (:tx-log *api*)) doc-hash))))
+    (t/is (= [doc] (docs (:ds (:tx-log *api*)) doc-hash)))
+
+    (t/testing "Compaction"
+      (db/submit-doc tx-log doc-hash {:crux.db/id (c/new-id :some-id) :a :evicted})
+      (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs (:ds (:tx-log *api*)) doc-hash))))))

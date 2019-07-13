@@ -5,6 +5,8 @@
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            crux.jdbc
+            [crux.fixtures.jdbc :as fj]
             [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf])
@@ -20,6 +22,8 @@
     (cn/with-cluster-node f))
   (t/testing "Local API StandaloneSystem"
     (fs/with-standalone-system f))
+  (t/testing "JDBC System"
+    (fj/with-jdbc-system f))
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server
@@ -66,7 +70,7 @@
 (t/deftest test-can-use-api-to-access-crux
   (t/testing "status"
     (t/is (= (merge {:crux.index/index-version 4}
-                    (when (not (instance? crux.tx.EventTxLog (:tx-log *api*)))
+                    (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                       {:crux.zk/zk-active? true}))
              (dissoc (.status *api*)
                      :crux.kv/kv-backend
@@ -93,6 +97,10 @@
         (cond
           (instance? crux.tx.EventTxLog (:tx-log *api*))
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
+                   (:crux.tx-log/consumer-state status-map)))
+
+          (instance? crux.jdbc.JdbcTxLog (:tx-log *api*))
+          (t/is (= {:crux.jdbc/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
           :else
@@ -228,7 +236,7 @@
                  :as submitted-tx} (.submitTx *api* [[:crux.tx/evict :ivan]])]
             (t/is (.sync *api* tx-time nil))
 
-            ;; actual removal of the document happends asyncronusly after
+            ;; actual removal of the document happens asynchronously after
             ;; the transaction has been processed so waiting on the
             ;; submitted transaction time is not enough
             (while (.entity (.db *api*) :ivan)

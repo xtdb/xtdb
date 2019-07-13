@@ -9,6 +9,7 @@
                  [juxt/crux-lmdb :derived-from-git]
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-kafka-embedded :derived-from-git]
+                 [juxt/crux-jdbc :derived-from-git]
                  [juxt/crux-http-server :derived-from-git]
                  [juxt/crux-rdf :derived-from-git]
                  [juxt/crux-decorators :derived-from-git]
@@ -28,6 +29,7 @@
                "../crux-lmdb/test"
                "../crux-kafka-embedded/test"
                "../crux-kafka/test"
+               "../crux-jdbc/test"
                "../crux-http-client/test"
                "../crux-http-server/test"
                "../crux-uberjar/test"
@@ -35,5 +37,5 @@
                "../crux-test/test"]
   :jvm-opts ["-Dlogback.configurationFile=logback-dev.xml"]
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :abort
+;;  :pedantic? :abort
   :global-vars {*warn-on-reflection* true})
