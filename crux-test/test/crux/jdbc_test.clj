@@ -1,12 +1,12 @@
-(ns crux.jdbc.jdbc-test
+(ns crux.jdbc-test
   (:require [clojure.test :as t]
             [crux.db :as db]
             [crux.jdbc :as j]
             [taoensso.nippy :as nippy]
             [next.jdbc :as jdbc]
             [crux.fixtures.api :refer [*api*]]
-            [crux.jdbc.fixtures.jdbc :as fj]
-            [crux.jdbc.fixtures.postgres :as fp]
+            [crux.fixtures.jdbc :as fj]
+            [crux.fixtures.postgres :as fp]
             [crux.codec :as c]
             [crux.kafka :as k]
             [next.jdbc.result-set :as jdbcr])
@@ -24,7 +24,17 @@
   (let [doc {:crux.db/id :origin-man :name "Adam"}
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
     (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
-    (t/is (.entity (.db *api*) :origin-man))))
+    (t/is (.entity (.db *api*) :origin-man))
+
+    (t/testing "Tx log"
+      (with-open [tx-log-context (.newTxLogContext *api*)]
+        (t/is (= [{:crux.tx/tx-id 2,
+                   :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
+                   :crux.api/tx-ops
+                   [[:crux.tx/put
+                     (str (c/new-id (:crux.db/id doc)))
+                     (str (c/new-id doc))]]}]
+                 (.txLog *api* tx-log-context 0 false)))))))
 
 (defn- docs [ds id]
   (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id]

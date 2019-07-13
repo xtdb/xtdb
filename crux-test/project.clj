@@ -9,11 +9,13 @@
                  [juxt/crux-lmdb :derived-from-git]
                  [juxt/crux-kafka :derived-from-git]
                  [juxt/crux-kafka-embedded :derived-from-git]
+                 [juxt/crux-jdbc :derived-from-git]
                  [juxt/crux-http-server :derived-from-git]
                  [juxt/crux-rdf :derived-from-git]
                  [juxt/crux-decorators :derived-from-git]
 
                  ;; JDBC
+                 [com.h2database/h2 "1.4.199"]
                  [com.opentable.components/otj-pg-embedded "0.13.1"]
 
                  ;; General:

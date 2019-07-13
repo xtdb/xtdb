@@ -6,7 +6,7 @@
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             crux.jdbc
-            [crux.jdbc.fixtures.jdbc :as fj]
+            [crux.fixtures.jdbc :as fj]
             [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
             [crux.rdf :as rdf])

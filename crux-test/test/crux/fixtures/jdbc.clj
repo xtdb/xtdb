@@ -1,4 +1,4 @@
-(ns crux.jdbc.fixtures.jdbc
+(ns crux.fixtures.jdbc
   (:require [next.jdbc :as jdbc]
             [crux.fixtures.api :refer [*api*]]
             [crux.io :as cio])

@@ -20,20 +20,14 @@
   (java.util.Date. (.getTime t)))
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
-  (condp contains? dbtype
-    #{"h2"}
-    (let [tx-id (get tx-result (keyword "SCOPE_IDENTITY()"))
-          tx-time (:TX_EVENTS/TX_TIME (first (jdbc/execute! ds ["SELECT TX_TIME FROM TX_EVENTS WHERE EVENT_OFFSET = ?" tx-id])))]
-      (Tx. (->date tx-time) tx-id))
-
-    #{"postgresql" "pgsql"}
-    (let [tx-id (:tx_events/event_offset tx-result)
-          tx-time (:tx_events/tx_time tx-result)]
-      (Tx. (->date tx-time) tx-id))))
+  (let [tx-id (:event_offset tx-result)
+        tx-time (:tx_time tx-result)]
+    (Tx. (->date tx-time) tx-id)))
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic] {:return-keys true})))
+    (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic]
+                       {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (defn- next-events [ds next-offset]
   (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE EVENT_OFFSET >= ?" next-offset]
@@ -126,20 +120,23 @@
     (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
           running? (:running? tx-log-context)]
       (future
-        (r/reduce (fn [_ y]
-                    (.put q {:crux.tx/tx-id (:event_offset y)
-                             :crux.tx/tx-time (->date (:tx_time y))
-                             :crux.api/tx-ops (nippy/thaw (:v y))})
-                    (if @running?
-                      nil
-                      (reduced nil)))
-                  nil
-                  (jdbc/plan ds ["SELECT EVENT_OFFSET, ID, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'tx' and EVENT_OFFSET >= ?"
-                                 (or from-tx-id 0)]
-                             {:builder-fn jdbcr/as-unqualified-lower-maps}))
+        (try
+          (r/reduce (fn [_ y]
+                      (.put q {:crux.tx/tx-id (:event_offset y)
+                               :crux.tx/tx-time (->date (:tx_time y))
+                               :crux.api/tx-ops (nippy/thaw (:v y))})
+                      (if @running?
+                        nil
+                        (reduced nil)))
+                    nil
+                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'tx' and EVENT_OFFSET >= ?"
+                                   (or from-tx-id 0)]
+                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
+          (catch Throwable t
+            (log/error t "Exception occured reading event log")))
         (.put q -1))
       ((fn step []
          (lazy-seq
-          (when-let [x (.poll q 10000 TimeUnit/MILLISECONDS)]
+          (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
             (when (not= -1 x)
               (cons x (step))))))))))
