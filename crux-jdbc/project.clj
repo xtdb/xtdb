@@ -5,6 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [org.clojure/tools.logging "0.4.1"]
+                 [juxt/crux-core :derived-from-git]
                  [seancorfield/next.jdbc "1.0.1"]
                  [com.taoensso/nippy "2.14.0"]]
   :middleware [leiningen.project-version/middleware])
