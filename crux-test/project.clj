@@ -41,5 +41,7 @@
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.5.1"]
                  [org.eclipse.rdf4j/rdf4j-repository-sail "2.5.1"
                   :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
-  :jvm-opts ["-Dlogback.configurationFile=logback.xml"]
+  :jvm-opts
+  ["-server" "-Xmx8g"
+   "-Dlogback.configurationFile=logback.xml"]
   :middleware [leiningen.project-version/middleware])

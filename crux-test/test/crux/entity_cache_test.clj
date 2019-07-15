@@ -112,9 +112,10 @@
                     t-currencies (map alter-currency currencies)]]
         (doseq [stocks-batch (partition-all 1000 stocks-batch)]
           (swap! ctr inc)
-          (println "day " i "\t" "partition " @ctr "/" partitions-total)
+          (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
           (api/submit-tx *api* (f/maps->tx-ops stocks-batch)))
         (api/submit-tx *api* (f/maps->tx-ops t-currencies date)))
+      (println "Txes submitted, synchronizing...")
       (let [sync-time
             (crux.bench/duration-millis
               (api/sync *api* (java.time.Duration/ofMinutes 20)))]
@@ -223,7 +224,7 @@
 (defn do-plot-data []
   (reset! test-times (read-string (slurp "test-times.edn")))
   (reset! sync-times (read-string (slurp "sync-times.edn")))
-  (doseq [sc (range 9000 11000 1000)
+  (doseq [sc (range 1000 11000 1000)
           hd (range 100 110 10) #_(cons 1 (range 100 110 10))]
     (if-not false ;(contains? @test-times [sc hd :q1 true])
       (binding [run-entity-cache-tests? true
@@ -243,7 +244,7 @@
         scount-set (->> (map :stocks-count values) set sort)]
     {:x {:title "History size (10x)"
          :ticks hday-set}
-     :y {:title "Stocks count (10000x)"
+     :y {:title "Stocks count (1000x)"
          :ticks scount-set}
      :data
      (for [sc scount-set
