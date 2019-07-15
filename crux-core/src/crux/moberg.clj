@@ -2,10 +2,23 @@
   (:require [crux.codec :as c]
             [crux.memory :as mem]
             [crux.kv :as kv]
-            [taoensso.nippy :as nippy])
+            [clojure.spec.alpha :as s]
+            [crux.db :as db]
+            [clojure.java.io :as io]
+            [crux.tx :as tx]
+            [crux.backup :as backup]
+            [crux.api :as api]
+            [taoensso.nippy :as nippy]
+            [crux.tx.polling :as p]
+            [clojure.tools.logging :as log]
+            [crux.moberg.types]
+            [crux.tx.consumer])
   (:import [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.io.DirectBufferInputStream
            crux.api.NonMonotonicTimeException
+           crux.tx.consumer.Message
+           crux.moberg.types.CompactKVsAndKey
+           crux.moberg.types.SentMessage
            java.util.function.Supplier
            [java.io Closeable DataInputStream DataOutput]
            java.nio.ByteOrder
@@ -52,9 +65,7 @@
        (.putBytes (+ idx-id-size c/id-size) k 0 (.capacity k)))
      (+ idx-id-size c/id-size c/id-size))))
 
-(deftype CompactKVsAndKey [kvs key])
-
-(defn- compact-topic-kvs+compact-k ^crux.moberg.CompactKVsAndKey [snapshot topic k new-message-k]
+(defn- compact-topic-kvs+compact-k ^crux.moberg.types.CompactKVsAndKey [snapshot topic k new-message-k]
   (let [seek-k (reverse-key-key topic k)
         compact-k (kv/get-value snapshot seek-k)]
     (CompactKVsAndKey.
@@ -89,14 +100,12 @@
                 nil))))
       (recur kv topic)))
 
-(deftype SentMessage [^Date time ^long id topic])
-
 (defn- now ^java.util.Date []
   (Date.))
 
 (def ^:const detect-clock-drift? (not (Boolean/parseBoolean (System/getenv "CRUX_NO_CLOCK_DRIFT_CHECK"))))
 
-(defn- next-message-id ^crux.moberg.SentMessage [kv topic]
+(defn- next-message-id ^crux.moberg.types.SentMessage [kv topic]
   (let [message-time (now)
         seq (long (get (swap! topic+date->count
                               (fn [topic+date->count]
@@ -118,8 +127,6 @@
 
       :else
       (SentMessage. message-time message-id topic))))
-
-(deftype Message [body topic ^long message-id ^Date message-time key headers])
 
 (defn message->edn [^Message m]
   (cond-> {::body (.body m)
@@ -181,7 +188,7 @@
          (kv/delete kv [compact-k]))
        id))))
 
-(defn next-message ^crux.moberg.Message [i topic]
+(defn next-message ^Message [i topic]
   (let [seek-k (topic-key topic 0)]
     (when-let [k ^DirectBuffer (kv/next i)]
       (when (same-topic? k seek-k)
@@ -189,11 +196,80 @@
             (recur i topic))))))
 
 (defn seek-message
-  (^crux.moberg.Message [i topic]
+  (^crux.tx.consumer.Message [i topic]
    (seek-message i topic nil))
-  (^crux.moberg.Message [i topic message-id]
+  (^crux.tx.consumer.Message [i topic message-id]
    (let [seek-k (topic-key topic (or message-id 0))]
      (when-let [k ^DirectBuffer (kv/seek i seek-k)]
        (when (same-topic? k seek-k)
          (or (nippy-thaw-message topic (message-key->message-id k) (kv/value i))
              (next-message i topic)))))))
+
+(defrecord MobergTxLog [event-log-kv]
+  db/TxLog
+  (submit-doc [this content-hash doc]
+    (send-message event-log-kv ::event-log content-hash doc {:crux.tx/sub-topic :docs}))
+
+  (submit-tx [this tx-ops]
+    (s/assert :crux.api/tx-ops tx-ops)
+    (doseq [doc (tx/tx-ops->docs tx-ops)]
+      (db/submit-doc this (str (c/new-id doc)) doc))
+    (let [tx-events (tx/tx-ops->tx-events tx-ops)
+          m (send-message event-log-kv ::event-log nil tx-events {:crux.tx/sub-topic :txs})]
+      (delay {:crux.tx/tx-id (.id m)
+              :crux.tx/tx-time (.time m)})))
+
+  (new-tx-log-context [this]
+    (kv/new-snapshot event-log-kv))
+
+  (tx-log [this tx-log-context from-tx-id]
+    (let [i (kv/new-iterator tx-log-context)]
+      (when-let [m (seek-message i ::event-log from-tx-id)]
+        (for [^Message m (->> (repeatedly #(next-message i ::event-log))
+                              (take-while identity)
+                              (cons m))
+              :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
+          {:crux.api/tx-ops (.body m)
+           :crux.tx/tx-id (.message-id m)
+           :crux.tx/tx-time (.message-time m)}))))
+
+  Closeable
+  (close [_]
+    (.close ^Closeable event-log-kv))
+
+  backup/INodeBackup
+  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
+    (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
+
+(defrecord MobergEventLogContext [^Closeable snapshot ^Closeable i]
+  Closeable
+  (close [_]
+    (.close i)
+    (.close snapshot)))
+
+(defrecord MobergEventLogConsumer [event-log-kv batch-size]
+  crux.tx.consumer/PolledEventLog
+
+  (new-event-log-context [this]
+    (let [snapshot (kv/new-snapshot event-log-kv)]
+      (MobergEventLogContext. snapshot (kv/new-iterator snapshot))))
+
+  (next-events [this context next-offset]
+    (let [i (:i context)]
+      (reify clojure.lang.IReduceInit
+        (reduce [_ f init]
+          (if-let [m (seek-message i ::event-log next-offset)]
+            (do
+              (log/debug "Consuming message:" (pr-str (message->edn m)))
+              (loop [init' init m m n 1]
+                (let [result (f init' m)]
+                  (if (reduced? result)
+                    @result
+                    (if-let [next-m (and (< n (long batch-size))
+                                         (next-message i ::event-log))]
+                      (recur result next-m (inc n))
+                      result)))))
+            init)))))
+
+  (end-offset [this]
+    (end-message-id-offset event-log-kv ::event-log)))
