@@ -56,13 +56,13 @@
            [:div.splash {:style {:max-width "25vw" :margin-left "auto" :margin-right "auto"}} [:a {:href "/"} [:img.splash-img {:src "/static/img/crux-logo.svg"}]]]
 
         [:div {:style {:height "4em"}}]
-        [:h3 "You should now be able to access this Crux standalone demo system using the HTTP API via localhost:8080"]]
+        [:h3 "You should now be able to access this Crux standalone demo node using the HTTP API via localhost:8080"]]
 
        [:div#app]]}))
 
 
 (defmethod ig/init-key ::console
-  [_ {:keys [system]}]
+  [_ {:keys [node]}]
   (yada/resource
     {:id ::console
      :methods
@@ -71,7 +71,7 @@
        :response gen-console-page}}}))
 
 (defmethod ig/init-key ::home
-  [_ {:keys [system]}]
+  [_ {:keys [node]}]
   (yada/resource
     {:id ::home
      :methods
@@ -81,14 +81,14 @@
 
 
 (defmethod ig/init-key ::read-write
-  [_ {:keys [system]}]
+  [_ {:keys [node]}]
   (yada/resource
     {:id ::read-write
      :methods
      {:get
       {:produces ["text/html" "application/edn" "application/json"]
        :response (fn [ctx]
-                   (let [db (crux.api/db system)]
+                   (let [db (crux.api/db node)]
                      (map
                        #(crux.api/entity db (first %))
                        (crux.api/q
@@ -101,7 +101,7 @@
        :response
        (fn [ctx]
          (crux.api/submit-tx
-           system
+           node
            [[:crux.tx/put id
              (merge {:crux.db/id id} (:body ctx))]])
          (yada/redirect ctx ::read-write))}}}))
