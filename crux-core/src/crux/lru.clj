@@ -197,7 +197,7 @@
 ;; TODO: this should be changed to something more sensible, this is to
 ;; simplify API usage, and the kv instance is the main
 ;; object. Potentially these caches should simply just live in the
-;; main system directly, but that requires passing more stuff around
+;; main node directly, but that requires passing more stuff around
 ;; to the lower levels.
 (defrecord CacheProvidingKvStore [kv cache-state]
   kv/KvStore

@@ -1,20 +1,20 @@
 = (ns crux.api)
 :toc: macro
 
-`crux.api` exposes a union of methods from `ICruxSystem` and `ICruxDatasource`,
+`crux.api` exposes a union of methods from `ICruxNode` and `ICruxDatasource`,
 with few lifecycle members added.
 
 toc::[]
 
-== ICruxSystem
+== ICruxNode
 
 ==== db
 
 ----
   (db
-    [system]
-    [system ^Date valid-time]
-    [system ^Date valid-time ^Date transaction-time]
+    [node]
+    [node ^Date valid-time]
+    [node ^Date valid-time ^Date transaction-time]
     "Will return the latest value of the db currently known. Non-blocking.
 
      When a valid time is specified then returned db value contains only those
@@ -29,7 +29,7 @@ toc::[]
 ==== document
 
 ----
-  (document [system content-hash]
+  (document [node content-hash]
     "Reads a document from the document store based on its
     content hash.")
 ----
@@ -38,7 +38,7 @@ toc::[]
 ==== history
 
 ----
-  (history [system eid]
+  (history [node eid]
     "Returns the transaction history of an entity, in reverse
     chronological order. Includes corrections, but does not include
     the actual documents.")
@@ -47,7 +47,7 @@ toc::[]
 === history-range
 
 ----
-  (history-range [system eid
+  (history-range [node eid
                   ^Date valid-time-start
                   ^Date transaction-time-start
                   ^Date valid-time-end
@@ -64,14 +64,14 @@ toc::[]
 === status
 
 ----
-  (status [system]
+  (status [node]
     "Returns the status of this node as a map.")
 ----
 
 === submit-tx
 
 ----
-  (submit-tx [system tx-ops]
+  (submit-tx [node tx-ops]
     "Writes transactions to the log for processing
      tx-ops datalog style transactions.
      Returns a map with details about the submitted transaction,
@@ -81,7 +81,7 @@ toc::[]
 === submitted-tx-updated-entity?
 
 ----
-  (submitted-tx-updated-entity? [system submitted-tx eid]
+  (submitted-tx-updated-entity? [node submitted-tx eid]
     "Checks if a submitted tx did update an entity.
     submitted-tx must be a map returned from `submit-tx`
     eid is an object that can be coerced into an entity id.
@@ -91,7 +91,7 @@ toc::[]
 === submitted-tx-corrected-entity?
 
 ----
-  (submitted-tx-corrected-entity? [system submitted-tx ^Date valid-time eid]
+  (submitted-tx-corrected-entity? [node submitted-tx ^Date valid-time eid]
     "Checks if a submitted tx did correct an entity as of valid time.
     submitted-tx must be a map returned from `submit-tx`
     valid-time valid time of the correction to check.
@@ -103,8 +103,8 @@ toc::[]
 
 ----
   (sync
-    [system ^Duration timeout]
-    [system ^Date transaction-time ^Duration timeout]
+    [node ^Duration timeout]
+    [node ^Date transaction-time ^Duration timeout]
     "If the transaction-time is supplied, blocks until indexing has
     processed a tx with a greater-than transaction-time, otherwise
     blocks until the node has caught up indexing the tx-log
@@ -119,7 +119,7 @@ toc::[]
 === new-tx-log-context
 
 ----
-  (new-tx-log-context ^java.io.Closeable [system]
+  (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
     of the transaction log in a try-with-resources block using
     (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-documents?).
@@ -130,12 +130,12 @@ toc::[]
 === tx-log
 
 ----
-  (tx-log [system tx-log-context from-tx-id with-documents?]
+  (tx-log [node tx-log-context from-tx-id with-documents?]
     "Reads the transaction log lazily. Optionally includes
     documents, which allow the contents under the :crux.api/tx-ops
     key to be piped into (submit-tx tx-ops) of another
     Crux instance.
-    tx-log-context  a context from (new-tx-log-context system)
+    tx-log-context  a context from (new-tx-log-context node)
     from-tx-id      optional transaction id to start from.
     with-documents? should the documents be included?
 
@@ -145,7 +145,7 @@ toc::[]
 === attribute-stats
 
 ----
-  (attribute-stats [system]
+  (attribute-stats [node]
     "Returns frequencies of indexed attributes")
 ----
 
@@ -255,7 +255,7 @@ NOTE: requires any KV store dependencies and kafka-clients on
 the classpath. The crux.kv.memdb.MemKv KV backend works without
 additional dependencies.
 
-The HTTP API can be started by passing the system to
+The HTTP API can be started by passing the node to
 crux.http-server/start-http-server. This will require further
 dependencies on the classpath, see crux.http-server for
 details.
@@ -282,18 +282,18 @@ Options:
 ----
 
 Returns the started local node that implements ICruxAPI and
-java.io.Closeable. Latter allows the system to be stopped
+java.io.Closeable. Latter allows the node to be stopped
 by calling `(.close node)`.
 
 Throws IndexVersionOutOfSyncException if the index needs rebuilding.
 
-=== start-standalone-system
+=== start-standalone-node
 
 ----
-(defn start-standalone-system ^ICruxAPI [options])
+(defn start-standalone-node ^ICruxAPI [options])
 ----
 
-Creates a minimal standalone system writing the transaction log
+Creates a minimal standalone node writing the transaction log
 into its local KV store without relying on
 Kafka. Alternatively, when the event-log-dir option is
 provided, using two KV stores to enable rebuilding the index
@@ -313,8 +313,8 @@ Options:
 
 See `start-cluster-node` doc for more options
 
-Returns a standalone system which implements ICruxAPI and
-java.io.Closeable. Latter allows the system to be stopped
+Returns a standalone node which implements ICruxAPI and
+java.io.Closeable. Latter allows the node to be stopped
 by calling `(.close node)`.
 
 Throws IndexVersionOutOfSyncException if the index needs rebuilding.

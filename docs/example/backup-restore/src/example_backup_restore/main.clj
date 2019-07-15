@@ -9,7 +9,7 @@
    :backup-dir    "checkpoint"})
 
 
-(def syst (api/start-standalone-system crux-options))
+(def syst (api/start-standalone-node crux-options))
 
 
 (comment

@@ -68,26 +68,26 @@
    :crux.kafka.embedded/kafka-port 9092})
 
 
-(defn run-system [{:keys [server-port] :as options} with-system-fn]
+(defn run-node [{:keys [server-port] :as options} with-node-fn]
   (with-open [embedded-kafka (ek/start-embedded-kafka embedded-kafka-options)
-              crux-system (api/start-cluster-node options)]
-    (with-system-fn crux-system)))
+              crux-node (api/start-cluster-node options)]
+    (with-node-fn crux-node)))
 
 (defn -main []
-  (run-system
+  (run-node
     crux-options
-    (fn [crux-system]
-      (def crux crux-system)
+    (fn [crux-node]
+      (def crux crux-node)
       ;; ingest may take a while, more than 15 mins on 2018 15" mbp
       ;;(ingest-data crux)
       (Thread/sleep Long/MAX_VALUE))))
 
 (defn start-from-repl []
   (def s (future
-           (run-system
+           (run-node
              crux-options
-             (fn [crux-system]
-               (def crux crux-system)
+             (fn [crux-node]
+               (def crux crux-node)
                (Thread/sleep Long/MAX_VALUE))))))
 
 (comment

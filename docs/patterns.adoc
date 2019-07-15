@@ -20,13 +20,13 @@ link to it.
 ; A macro for doing CAS updates to multiple documents
 
 (defmacro update!
- [[system-binding get-system
+ [[node-binding get-node
    & bindings]
   & body]
  (let [[entity-binding get-entities] (take-last 2 bindings)
        bindings (drop-last 2 bindings)]
-   `(let [system# ~get-system
-          ~system-binding system#]
+   `(let [node# ~get-node
+          ~node-binding node#]
       (loop [count# 0]
         (if (>= count# *max-update!-count*)
           (throw (ex-info "Exhausted attempts at CAS" {:count count#}))
@@ -41,9 +41,9 @@ link to it.
                        entities#
                        (do ~@body))]
             (let [submitted-tx# (crux.api/submit-tx
-                                  system#
+                                  node#
                                   txs#)]
-              (if (txs-succeeded? system# txs# submitted-tx#)
+              (if (txs-succeeded? node# txs# submitted-tx#)
                 submitted-tx#
                 (recur (inc count#))))))))))
 
@@ -51,15 +51,15 @@ link to it.
 
 (let [eid #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"]
    (update!
-     [system (::standalone dev-extras/system)
-      [entity] [(crux.api/entity (crux.api/db system) eid)]]
+     [node (::standalone dev-extras/node)
+      [entity] [(crux.api/entity (crux.api/db node) eid)]]
      [(update entity :magic-value inc)]))
 
 ;; usage for a set of entities returned by a query
 
 (update!
-  [system (::standalone dev-extras/system)
-   db (crux.api/db system)
+  [node (::standalone dev-extras/node)
+   db (crux.api/db node)
    q (crux.api/q
        db
        '{:find [?e]
@@ -70,7 +70,7 @@ link to it.
 ; Works like `let`
 ; This macro is not ideal as it requires you to return the list of entities in
 ; the same order that you query them in. It is still somewhat complex in that
-; it requires the first binding to be the system, and the last binding to be
+; it requires the first binding to be the node, and the last binding to be
 ; your entities (and everything in the middle will be rerun on CAS failure).
 ; The middle is a good place for running `(crux/db)`.
 
@@ -80,8 +80,8 @@ link to it.
 ```
 (defn entity-update
   [entity-id new-attrs valid-time]
-  (let [entity-prev-value (crux/entity (crux/db system) entity-id)]
-    (crux/submit-tx system
+  (let [entity-prev-value (crux/entity (crux/db node) entity-id)]
+    (crux/submit-tx node
       [[:crux.tx/put
         (merge entity-prev-value new-attrs)
         valid-time]])))
@@ -89,16 +89,16 @@ link to it.
 ; by @spacegangster
 ```
 
-== Implicit System
+== Implicit Node
 
 ```
 (defn q
   [query]
-  (crux/q (crux/db system) query))
+  (crux/q (crux/db node) query))
 
 (defn entity
   [entity-id]
-  (crux/entity (crux/db system) entity-id))
+  (crux/entity (crux/db node) entity-id))
 
 ; by @spacegangster
 ```
@@ -124,11 +124,11 @@ link to it.
 ```
 (defn entity-at
   [entity-id valid-time]
-  (crux/entity (crux/db system valid-time) entity-id))
+  (crux/entity (crux/db node valid-time) entity-id))
 
 (defn entity-with-adjacent
   [entity-id keys-to-pull]
-  (let [db (crux/db system)
+  (let [db (crux/db node)
         ids->entities
         (fn [ids]
           (cond-> (map #(crux/entity db %) ids)

@@ -25,12 +25,12 @@
 (def ^:const readings-chunk-size 1000)
 
 (defn submit-ts-devices-data
-  ([system]
+  ([node]
    (submit-ts-devices-data
-     system
+     node
      (io/resource devices-device-info-csv-resource)
      (io/resource devices-readings-csv-resource)))
-  ([system info-resource readings-resource]
+  ([node info-resource readings-resource]
    (with-open [info-in (io/reader info-resource)
                readings-in (io/reader readings-resource)]
      (let [info-tx-ops
@@ -44,13 +44,13 @@
                     :device-info/manufacturer manufacturer
                     :device-info/model model
                     :device-info/os-name os-name}]))]
-       (api/submit-tx system info-tx-ops)
+       (api/submit-tx node info-tx-ops)
        (->> (line-seq readings-in)
             (partition readings-chunk-size)
             (reduce
              (fn [n chunk]
                (api/submit-tx
-                system
+                node
                 (vec (for [reading chunk
                            :let [[time device-id battery-level battery-status
                                   battery-temperature bssid

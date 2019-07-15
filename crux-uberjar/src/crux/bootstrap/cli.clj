@@ -62,8 +62,8 @@
 
    ["-h" "--help"]])
 
-;; NOTE: This isn't registered until the system manages to start up
-;; cleanly, so ctrl-c keeps working as expected in case the system
+;; NOTE: This isn't registered until the node manages to start up
+;; cleanly, so ctrl-c keeps working as expected in case the node
 ;; fails to start.
 (defn- shutdown-hook-promise []
   (let [main-thread (Thread/currentThread)
@@ -75,7 +75,7 @@
                                    (shutdown-agents)
                                    (.join main-thread shutdown-ms)
                                    (when (.isAlive main-thread)
-                                     (log/warn "could not stop system cleanly after" shutdown-ms "ms, forcing exit")
+                                     (log/warn "could not stop node cleanly after" shutdown-ms "ms, forcing exit")
                                      (.halt (Runtime/getRuntime) 1))))
                                "crux.bootstrap.shutdown-hook-thread"))
     shutdown?))
@@ -95,7 +95,7 @@
     (pp/print-table (for [[k v] options]
                       {:key k :value v}))))
 
-(defn start-system-from-command-line [args]
+(defn start-node-from-command-line [args]
   (b/install-uncaught-exception-handler!)
   (let [{:keys [options
                 errors
@@ -116,9 +116,9 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (ln/run-system
+          (ln/run-node
            options
-           (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-system}]
+           (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-node}]
              (with-open [http-server ^Closeable (srv/start-http-server
                                                  kv-store tx-log indexer consumer-config options)]
                @(shutdown-hook-promise))))))))

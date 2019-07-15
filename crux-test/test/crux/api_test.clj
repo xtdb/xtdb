@@ -20,10 +20,10 @@
 (defn- with-each-api-implementation [f]
   (t/testing "Local API ClusterNode"
     (cn/with-cluster-node f))
-  (t/testing "Local API StandaloneSystem"
-    (fs/with-standalone-system f))
-  (t/testing "JDBC System"
-    (fj/with-jdbc-system f))
+  (t/testing "Local API StandaloneNode"
+    (fs/with-standalone-node f))
+  (t/testing "JDBC Node"
+    (fj/with-jdbc-node f))
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server

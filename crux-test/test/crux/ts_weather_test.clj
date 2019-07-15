@@ -28,12 +28,12 @@
 (def ^:const conditions-chunk-size 1000)
 
 (defn submit-ts-weather-data
-  ([system]
+  ([node]
    (submit-ts-weather-data
-     system
+     node
      (io/resource weather-locations-csv-resource)
      (io/resource weather-conditions-csv-resource)))
-  ([system locations-resource conditions-resource]
+  ([node locations-resource conditions-resource]
    (with-open [locations-in (io/reader locations-resource)
                conditions-in (io/reader conditions-resource)]
      (let [location-tx-ops (vec (for [location (line-seq locations-in)
@@ -46,13 +46,13 @@
                                    {:crux.db/id id
                                     :location/location location
                                     :location/environment environment}]))]
-       (api/submit-tx system location-tx-ops)
+       (api/submit-tx node location-tx-ops)
        (->> (line-seq conditions-in)
             (partition conditions-chunk-size)
             (reduce
              (fn [n chunk]
                (api/submit-tx
-                system
+                node
                 (vec (for [condition chunk
                            :let [[time device-id temperature humidity] (str/split condition #",")
                                  time (inst/read-instant-date

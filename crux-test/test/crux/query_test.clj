@@ -8,7 +8,7 @@
             [crux.fixtures :as f])
   (:import java.util.UUID))
 
-(t/use-fixtures :each fs/with-standalone-system)
+(t/use-fixtures :each fs/with-standalone-node)
 
 (t/deftest test-sanity-check
   (f/transact! *api* (f/people [{:name "Ivan"}]))

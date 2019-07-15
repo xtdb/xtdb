@@ -7,4 +7,4 @@ scalability guarantees.
 For tests, see `/crux-test/test/crux/kafka_test.clj`.
 
 This project also contains the `crux.bootstrap.cluster-node` namespace which
-manages the lifecycle of a Kafka-based `cluster-node` system.
+manages the lifecycle of a Kafka-based `cluster` node.

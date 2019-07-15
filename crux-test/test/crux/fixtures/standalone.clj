@@ -5,15 +5,15 @@
             [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI]))
 
-(defn with-standalone-system [f]
+(defn with-standalone-node [f]
   (assert (not (bound? #'*kv*)))
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-system (Crux/startStandaloneSystem {:db-dir db-dir
+      (with-open [standalone-node (Crux/startStandaloneNode {:db-dir db-dir
                                                                  :kv-backend *kv-backend*
                                                                  :event-log-dir event-log-dir})]
-        (binding [*api* standalone-system]
+        (binding [*api* standalone-node]
           (f)))
       (finally
         (cio/delete-dir db-dir)

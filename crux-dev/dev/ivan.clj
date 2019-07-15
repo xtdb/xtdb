@@ -67,20 +67,20 @@
 
 (comment
 
-  (def system
-    (crux.api/start-standalone-system
+  (def node
+    (crux.api/start-standalone-node
       {:kv-backend "crux.kv.memdb.MemKv"
        :db-dir     "data/db-dir-1"
        :event-log-dir "data/eventlog-1"}))
 
   (def s #crux/id :https://thing)
 
-  (binding [*api* system]
+  (binding [*api* node]
     (with-stocks-data println))
 
   stocks
 
-  (api/q (api/db system) query))
+  (api/q (api/db node) query))
 
 (def query-1000
   '[:find stock-id currency-id

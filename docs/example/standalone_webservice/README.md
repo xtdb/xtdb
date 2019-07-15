@@ -25,7 +25,7 @@ Or view the demo application: `http://localhost:8090`
 
 lein repl
 example-standalone-webservice.main=> (def s (future
-                                #_=>            (run-system
+                                #_=>            (run-node
                                 #_=>             crux-options
                                 #_=>             (fn [_]
                                 #_=>               (def crux)

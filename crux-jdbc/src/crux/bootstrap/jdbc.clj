@@ -27,11 +27,11 @@
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v bytea NOT NULL)")]))
 
-(defn ^ICruxAPI start-jdbc-system [{:keys [dbtype
+(defn ^ICruxAPI start-jdbc-node [{:keys [dbtype
                                            dbname]
                                     :as options}]
   (s/assert ::options options)
-  (log/info "starting system")
+  (log/info "starting node")
   (let [{:keys [doc-cache-size] :as options} (merge b/default-options options)
         ds (jdbc/get-datasource options)
         _ (setup-schema! ds dbtype)

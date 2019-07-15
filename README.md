@@ -45,7 +45,7 @@ information privacy regulations.
 >
 > — Martin Kleppmann (2014)
 
-<img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/img/crux-system-1.svg" width="1000px">
+<img alt="Unbundled Architecture Diagram" role="img" aria-label="Crux Venn" src="./docs/img/crux-node-1.svg" width="1000px">
 
 This design makes it feasible and desirable to embed Crux nodes directly in
 your application processes, which reduces deployment complexity and eliminates
@@ -179,14 +179,14 @@ Launch a REPL using the very latest Clojars `-SNAPSHOT` release:
 clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
 ```
 
-Start a standalone in-memory (i.e. not persisted anywhere) system:
+Start a standalone in-memory (i.e. not persisted anywhere) node:
 
 ``` clojure
 (require '[crux.api :as crux])
 (import '[crux.api ICruxAPI])
 
-(def my-system
-  (crux/start-standalone-system
+(def my-node
+  (crux/start-standalone-node
     {:kv-backend "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
      :event-log-dir "data/event-log-dir-1"
      :db-dir "data/db-dir-1"}))
@@ -200,13 +200,13 @@ Start a standalone in-memory (i.e. not persisted anywhere) system:
    :arbitrary-key ["an untyped value" 123]
    {:maps "can be" :keys 2} {"and values" :can-be-arbitrarily-nested}})
 
-(crux/submit-tx my-system [[:crux.tx/put my-document]])
+(crux/submit-tx my-node [[:crux.tx/put my-document]])
 ```
 
 Take an immutable snapshot of the database:
 
 ``` clojure
-(def my-db (crux/db my-system))
+(def my-db (crux/db my-node))
 ```
 
 Retrieve the current version of the document:

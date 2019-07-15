@@ -10,18 +10,18 @@
 (s/def ::checkpoint-directory string?)
 (s/def ::backend keyword?)
 
-(s/def ::system-options
+(s/def ::node-options
   (s/keys :req-un [:crux.kv/db-dir]
           :gen    [:backup-dir]
           :opt-un [:crux.tx/event-log-dir]))
 
-(s/def ::system-options-w-backend
+(s/def ::node-options-w-backend
   (s/keys :req-un [:crux.kv/db-dir]
           :req [::checkpoint-directory ::backend]
           :opt-un [:crux.tx/event-log-dir]))
 
-(defprotocol ISystemBackup
-  (write-checkpoint [this system-options]))
+(defprotocol INodeBackup
+  (write-checkpoint [this node-options]))
 
 (defmulti upload-to-backend ::backend)
 
@@ -34,8 +34,8 @@
   (log/info "skipping download from backend"))
 
 (defn restore
-  [{:keys [event-log-dir db-dir backup-dir] :as system-options}]
- ;(s/assert ::system-options system-options)
+  [{:keys [event-log-dir db-dir backup-dir] :as node-options}]
+ ;(s/assert ::node-options node-options)
   (if (or (some-> event-log-dir io/file .exists) (some-> db-dir io/file .exists))
     (log/info "found existing data dirs, restore aborted")
     (let [^File checkpoint-directory (io/file backup-dir)]
@@ -66,26 +66,26 @@
                       "; evt-dir not written")))))))
 
 (defn backup
-  [{:keys [backup-dir] :as system-options} crux-system]
- ;(s/assert ::system-options system-options)
-  (locking crux-system
+  [{:keys [backup-dir] :as node-options} crux-node]
+ ;(s/assert ::node-options node-options)
+  (locking crux-node
     (let [checkpoint-directory (io/file backup-dir)
-          system-options (assoc system-options ::checkpoint-directory backup-dir)]
+          node-options (assoc node-options ::checkpoint-directory backup-dir)]
       (crux-io/delete-dir backup-dir)
       (sh "mkdir" "-p" (.getPath (io/file backup-dir)))
       (log/infof "creating checkpoint for crux backup: %s" (.getPath checkpoint-directory))
-      (write-checkpoint crux-system system-options)
+      (write-checkpoint crux-node node-options)
       (log/infof "checkpoint written for crux backup: %s" (.getPath checkpoint-directory)))))
 
 (defn check-and-restore
-  [{:keys [event-log-dir db-dir] :as system-options ::keys [checkpoint-directory]}]
-  (s/assert ::system-options-w-backend system-options)
+  [{:keys [event-log-dir db-dir] :as node-options ::keys [checkpoint-directory]}]
+  (s/assert ::node-options-w-backend node-options)
   (when-not (or (some-> event-log-dir io/file .exists)
                 (some-> db-dir io/file .exists))
     (let [^File checkpoint-directory (io/file checkpoint-directory)]
       (log/infof "no data attempting restore from backup" (.getPath checkpoint-directory))
       (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
-      (download-from-backend system-options)
+      (download-from-backend node-options)
 
       (when db-dir
         (sh "mkdir" "-p" (.getParent (io/file db-dir)))
@@ -102,15 +102,15 @@
       (crux-io/delete-dir checkpoint-directory))))
 
 (defn backup-current-version
-  [{:keys [::checkpoint-directory] :as system-options} crux]
-  (s/assert ::system-options-w-backend system-options)
+  [{:keys [::checkpoint-directory] :as node-options} crux]
+  (s/assert ::node-options-w-backend node-options)
   (locking crux
     (let [checkpoint-directory (io/file checkpoint-directory)]
       (crux-io/delete-dir checkpoint-directory)
       (sh "mkdir" "-p" (.getPath (io/file checkpoint-directory)))
       (log/infof "creating checkpoint for crux backup: %s" (.getPath checkpoint-directory))
-      (write-checkpoint crux system-options)
-      (upload-to-backend system-options)
+      (write-checkpoint crux node-options)
+      (upload-to-backend node-options)
       (crux-io/delete-dir checkpoint-directory))))
 
 (comment

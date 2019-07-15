@@ -16,7 +16,7 @@
   [:crux])
 
 (defmulti start-watdiv-runner
-  (fn [key system] key))
+  (fn [key node] key))
 
 (def query-timeout-ms 15000)
 
@@ -360,7 +360,7 @@
         :index true}])
 
 (defmethod start-watdiv-runner :datomic
-  [_ system]
+  [_ node]
   (let [uri (str "datomic:free://"
                  (or (System/getenv "DATOMIC_TRANSACTOR_URI") "datomic")
                  ":4334/bench?password=password")
@@ -553,6 +553,6 @@
              false)))})))
 
 (defn start-and-run
-  [backend-name system num-tests num-threads]
-  (let [backend (start-watdiv-runner backend-name system)]
+  [backend-name node num-tests num-threads]
+  (let [backend (start-watdiv-runner backend-name node)]
     (run-watdiv-test backend num-tests num-threads)))

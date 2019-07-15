@@ -1,50 +1,49 @@
 = Configuration
 
-== Systems
+== Nodes
 
-To start a Crux system, use the
+To start a Crux node, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
 
-There are two main Crux systems: *cluster node* vs *standalone*. Use a
-cluster node system when horizontal scalability is required or when
+There are two types of Crux nodes: *cluster* and *standalone*. Use a
+cluster node when horizontal scalability is required or when
 you want the guarantees that Kafka offers in terms of resiliency,
 availability, and retention of data.
 
-Multiple instances of a cluster node systems may participate in a
-cluster using Kafka as the primary store and as the central means of
-coordination.
+Multiple cluster nodes participate in a cluster using Kafka as the primary
+store and as the central means of coordination.
 
-The Standalone system is where a single Crux instance has everything
+The Standalone node is where a single Crux instance has everything
 it needs locally. This is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
 is permissible.
 
-.Crux Systems
+.Crux Nodes
 [#table-conversion%header,cols="d,d,d"]
 |===
 |Name|Transaction Log|Java API
 |Cluster Node|Uses Kafka|`Crux.startClusterNode options;`
-|Standalone|Uses local event log|`Crux.startStandaloneSystem options;`
+|Standalone|Uses local event log|`Crux.startStandaloneNode options;`
 |===
 
-Crux systems implement the `ICruxAPI` interface and are the
-starting point for making use of Crux. Systems also implement
+Crux nodes implement the `ICruxAPI` interface and are the
+starting point for making use of Crux. Nodes also implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 
-NOTE: To see an example of a Crux System being integrated into a
+NOTE: To see an example of a Crux Node being integrated into a
 Clojure lifecycle management framework such as Integrant, see the
-https://github.com/juxt/crux/blob/master/docs/example_standalone_integrant_system.clj[example
-Integrant system].
+https://github.com/juxt/crux/blob/master/docs/example_standalone_integrant_node.clj[example
+Integrant node].
 
 == Properties
 
-Crux Systems will use the following properties:
+Crux Nodes will use the following properties:
 
-.Systems Configuration
+.Nodes Configuration
 [#table-conversion%header,cols="d,d,d,d"]
 |===
-|System|Component|Property|Description
+|Node|Component|Property|Description
 |Both|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
 |Both|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
 |Standalone|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
@@ -52,9 +51,9 @@ Crux Systems will use the following properties:
 |===
 
 [#standalone]
-== Standalone System
+== Standalone Node
 
-Using the Crux standalone system is the best way to get started. Once
+Using a Crux standalone node is the best way to get started. Once
 you've started a standalone Crux instance as described below, you can
 then follow the <<get_started.adoc#,getting started
 example>>.
@@ -68,28 +67,28 @@ To add Crux as a project dependency:
 include::./deps.edn[tags=CruxDep]
 ----
 
-=== Start the standalone system:
+=== Start the standalone node:
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-system]
+include::./examples.clj[tags=start-node]
 ----
 
 For the purposes of this Hello World, we are using the simplest
 configuration of Crux, where all of the pluggable components are
 in-memory. There is no Kafka or RocksDB to worry about.
 
-You can later stop the system if you wish:
+You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::./examples.clj[tags=close-system]
+include::./examples.clj[tags=close-node]
 ----
 
-== Cluster Node System
+== Cluster Nodes 
 
-When using Crux at scale it is recommended to use Crux as nodes
-connecting to a Kafka cluster.
+When using Crux at scale it is recommended to use multiple Crux nodes connected
+via a Kafka cluster.
 
 Add Crux as a project dependency:
 
@@ -105,23 +104,23 @@ And Kafka Clients:
 include::./deps.edn[tags=KafkaClientsDeps]
 ----
 
-Use the API to start a cluster node system, configuring it with the
+Use the API to start a cluster node, configuring it with the
 `bootstrap-servers` property in order to connect to Kafka:
 
 [source,clj]
 ----
-include::./examples.clj[tags=start-cluster-node-system]
+include::./examples.clj[tags=start-cluster-node]
 ----
 
 NOTE: If you don't specify `kv-backend` then by default the
-cluster-node system will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
+cluster node will use RocksDB. You will need to <<#rocksdep,add RocksDB>> to
 your list of project dependencies.
 
-You can later stop the system if you wish:
+You can later stop the node if you wish:
 
 [source,clj]
 ----
-include::./examples.clj[tags=close-system]
+include::./examples.clj[tags=close-node]
 ----
 
 == RocksDB
@@ -138,7 +137,7 @@ include::./deps.edn[tags=RocksDeps]
 
 === Configuration
 
-Set the following properties when configuring Crux systems:
+Set the following properties when configuring Crux nodes:
 
 .Rocks Configuration
 [#table-conversion%header,cols="d,d"]
@@ -149,7 +148,7 @@ Set the following properties when configuring Crux systems:
 |`event-log-dir`|i.e. `"data/eventlog-1"`
 |===
 
-For example when constructing the standalone system:
+For example when constructing the standalone node:
 
 [source,clj]
 ----
@@ -162,7 +161,7 @@ Crux can be used programmatically as a library, but Crux also ships
 with an embedded HTTP server, that allows clients to use the API
 remotely via REST.
 
-Set the `server-port` configuration property on a Crux system to
+Set the `server-port` configuration property on a Crux node to
 expose a HTTP port that will accept REST requests.
 
 Visit the guide on using the <<rest#rest,REST api>> for examples

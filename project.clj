@@ -17,7 +17,7 @@
         "crux-uberjar"
         "crux-decorators"
         "crux-test"]
-  :aliases {"build" ["do" ["sub" "install"] ["sub" "test"] "test"]}
+  :aliases {"build" ["do" ["sub" "install"] ["sub" "test"]]}
   :repositories [["snapshots" {:url "https://repo.clojars.org"
                                :username :env/clojars_username
                                :password :env/clojars_password

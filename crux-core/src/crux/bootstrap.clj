@@ -114,10 +114,10 @@
   (sync [_ tx-time timeout]
     (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout (.toMillis timeout)})))
 
-  backup/ISystemBackup
+  backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
     (kv/backup kv-store (io/file checkpoint-directory "kv-store"))
-    (when (satisfies? tx-log backup/ISystemBackup)
+    (when (satisfies? tx-log backup/INodeBackup)
       (backup/write-checkpoint tx-log opts)))
 
   Closeable
@@ -142,12 +142,12 @@
         (.close ^Closeable kv)
         (throw t)))))
 
-(defn start-object-store ^java.io.Closeable [partial-system {:keys [object-store]
+(defn start-object-store ^java.io.Closeable [partial-node {:keys [object-store]
                                                              :or {object-store (:object-store default-options)}
                                                              :as options}]
   (-> (db/require-and-ensure-object-store-record object-store)
       (cio/new-record)
-      (db/init partial-system options)))
+      (db/init partial-node options)))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)

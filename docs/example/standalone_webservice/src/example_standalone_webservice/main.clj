@@ -622,42 +622,42 @@
     (redirect-with-time ctx now tx-time)))
 
 (defn application-resource
-  [system]
+  [node]
   ["/"
    [[""
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(index-handler % system)}}})]
+              :response #(index-handler % node)}}})]
     ["tx-log"
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(tx-log-handler % system)}}})]
+              :response #(tx-log-handler % node)}}})]
 
     ["timeline"
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(timeline-graph-handler % system)}}})]
+              :response #(timeline-graph-handler % node)}}})]
 
     [["document/" :content-hash]
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(document-handler % system)}}})]
+              :response #(document-handler % node)}}})]
 
     [["entity/" :eid]
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(entity-handler % system)}}})]
+              :response #(entity-handler % node)}}})]
 
     ["query"
      (resource
       {:methods
        {:get {:produces "text/html"
-              :response #(query-handler % system)}}})]
+              :response #(query-handler % node)}}})]
 
     ["comment"
      (resource
@@ -668,7 +668,7 @@
                                    :message String
                                    :_action String}}
                :produces "text/html"
-               :response #(post-comment-handler % system)}}})]
+               :response #(post-comment-handler % node)}}})]
 
     [["comment/" :id]
      (resource
@@ -679,7 +679,7 @@
                                    :message String
                                    :_action String}}
                :produces "text/html"
-               :response #(edit-comment-handler % system)}}})]
+               :response #(edit-comment-handler % node)}}})]
     ["cljsjs"
      (yada.resources.classpath-resource/new-classpath-resource "cljsjs")]
 
@@ -703,12 +703,12 @@
    ::backup/sh-backup-script "bin/backup.sh"
    ::backup/sh-restore-script "bin/restore.sh"})
 
-(defn run-system [{:keys [server-port http-port] :as options} with-system-fn]
-  (with-open [crux-system (case (System/getenv "CRUX_MODE")
+(defn run-node [{:keys [server-port http-port] :as options} with-node-fn]
+  (with-open [crux-node (case (System/getenv "CRUX_MODE")
                             "CLUSTER_NODE" (api/start-cluster-node options)
-                            (api/start-standalone-system options))
+                            (api/start-standalone-node options))
               api-server (srv/start-http-server
-                           crux-system
+                           crux-node
                            {:server-port http-port
                             :cors-access-control
                             [:access-control-allow-origin [#".*"]
@@ -722,24 +722,24 @@
                              :access-control-allow-methods [:get :put :post :delete]]})
               http-server
               (let [l (listener
-                       (application-resource {:crux crux-system})
+                       (application-resource {:crux crux-node})
                        {:port server-port})]
                 (log/info "started HTTP API on port:" http-port)
                 (log/info "started webserver on port:" server-port)
                 (reify Closeable
                   (close [_]
                     ((:close l)))))]
-    (with-system-fn crux-system)))
+    (with-node-fn crux-node)))
 
 (defn -main []
   (backup/check-and-restore crux-options)
   (try
-    (run-system
+    (run-node
       crux-options
-      (fn [crux-system]
+      (fn [crux-node]
         (while (not (.isInterrupted (Thread/currentThread)))
           (Thread/sleep (* 1000 60 60 1)) ;; every hour
-          (backup/backup-current-version crux-options crux-system))))
+          (backup/backup-current-version crux-options crux-node))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main))
@@ -749,7 +749,7 @@
 (defn start-from-repl []
   (def s
    (future
-     (run-system
+     (run-node
        crux-options
        (fn [_]
          (def crux)

@@ -56,7 +56,7 @@
                                    (keys n))))))
 
 (crux/submit-tx
-  system
+  node
   (mapv (fn [n] [:crux.tx/put n]) nodes))
 ; this standalone configuration is the easiest way to try Crux, no Kafka needed
 (def crux-options
@@ -65,13 +65,13 @@
    :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
 
-(def system (crux/start-standalone-system crux-options))
+(def node (crux/start-standalone-node crux-options))
 
 (crux/submit-tx
-  system
+  node
   (mapv (fn [n] [:crux.tx/put n]) nodes))
 
-(def db (crux/db system))
+(def db (crux/db node))
 
 ;; find roles for user and particular groups
 (crux/q db '{:find [?roleName]

@@ -1,4 +1,4 @@
-(ns crux-node-only-system
+(ns crux-node-embedded-kafka
   (:require [clojure.tools.logging :as log]
             [crux.bootstrap.cluster-node :as cluster-node]
             [crux.http-server :as srv]
@@ -20,29 +20,29 @@
 (defmethod ig/halt-key! :crux/cluster-node [_ ^java.io.Closeable closeable]
   (.close closeable))
 
-(declare system)
+(declare node)
 
-(defn start-system []
-  (alter-var-root #'system (fn [_] (ig/init config)))
+(defn start-node []
+  (alter-var-root #'node (fn [_] (ig/init config)))
   :started)
 
-(defn stop-system []
-  (when (and (bound? #'system)
-             (not (nil? system)))
-    (alter-var-root #'system (fn [system] (ig/halt! system)))
+(defn stop-node []
+  (when (and (bound? #'node)
+             (not (nil? node)))
+    (alter-var-root #'node (fn [node] (ig/halt! node)))
     :stopped))
 
 (comment
-  (start-system)
+  (start-node)
 
   (db/submit-tx
-    (:tx-log (:crux/cluster-node system))
+    (:tx-log (:crux/cluster-node node))
     [[:crux.tx/put
       {:crux.db/id :dbpedia.resource/Pablo-Picasso
        :name "Pablo"
        :last-name "Picasso"}
       #inst "2018-05-18T09:20:27.966-00:00"]])
 
-  (q/q (q/db (:kv-store (:crux/cluster-node system)))
+  (q/q (q/db (:kv-store (:crux/cluster-node node)))
        '{:find [e]
          :where [[e :name "Pablo"]]}))

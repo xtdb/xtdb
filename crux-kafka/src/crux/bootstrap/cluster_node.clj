@@ -56,7 +56,7 @@
         consumer-config (merge {"group.id" (:group-id options)}
                                kafka-config)
 
-        _ (log/info "starting system")
+        _ (log/info "starting node")
 
         kv-store (b/start-kv-store options)
         producer (k/create-producer producer-config)
@@ -66,7 +66,7 @@
         indexer ^java.io.Closeable (tx/->KvIndexer kv-store tx-log object-store)
         admin-client (k/create-admin-client kafka-config)
         indexing-consumer (k/start-indexing-consumer admin-client consumer-config indexer options)]
-    (log/info "system started")
+    (log/info "node started")
     (b/map->CruxNode {:kv-store kv-store
                       :producer producer
                       :tx-log tx-log
@@ -78,6 +78,6 @@
                       :options options
                       :close-fn (fn []
                                   (doseq [c [kv-store producer tx-log object-store indexer indexing-consumer]]
-                                    (log/info "stopping system")
+                                    (log/info "stopping node")
                                     (cio/try-close c))
                                   (.close admin-client))})))

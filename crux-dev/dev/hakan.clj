@@ -1144,10 +1144,10 @@
 ;; run 3: 8690 37.78260869565217
 
 (comment
-  (swap! (:cache-state (:kv-store system)) empty)
+  (swap! (:cache-state (:kv-store node)) empty)
   (crux.query/query-plan-for (crux.sparql/sparql->datalog
                               "")
-                             (crux.index/read-meta (:kv-store system) :crux.kv/stats))
+                             (crux.index/read-meta (:kv-store node) :crux.kv/stats))
   (defn run-watdiv-reference
     ([]
      (run-watdiv-reference (io/resource "watdiv/watdiv_crux.edn") #{35 67}))
@@ -1156,7 +1156,7 @@
                   (fn [{:keys [idx query crux-results]}]
                     (let [start (System/currentTimeMillis)]
                       (try
-                        (let [result (count (.q (.db system)
+                        (let [result (count (.q (.db node)
                                                 (crux.sparql/sparql->datalog query)))]
                           (assert (= crux-results result)
                                   (pr-str [idx crux-results result])))

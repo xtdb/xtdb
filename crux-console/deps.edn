@@ -10,7 +10,6 @@
 
   org.clojure/tools.logging {:mvn/version "0.5.0-alpha"}
   juxt.crux/ig {:local/root "./lib/crux.ig"}
-  org.rocksdb/rocksdbjni {:mvn/version "5.17.2"}
 
   hiccup {:mvn/version "2.0.0-alpha2"}
   ch.qos.logback/logback-classic {:mvn/version "1.2.3"}
@@ -26,10 +25,6 @@
   ring {:mvn/version "1.7.0"} ; 1.7.1 breaks with Jetty ClassNotFound https://github.com/bhauman/figwheel-main/issues/95
   ring-cors {:mvn/version "0.1.13"}
 
-  ; these are currently needed when using [crux.http-server :as srv] ;TODO
-  org.eclipse.rdf4j/rdf4j-rio-api {:mvn/version "2.4.5"}
-  org.eclipse.rdf4j/rdf4j-rio-ntriples {:mvn/version "2.4.5"}
-  org.eclipse.rdf4j/rdf4j-queryparser-sparql {:mvn/version "2.4.5"}
   juxt.edge/lib.app.logging {:local/root "./lib/edge.app.logging"}
 
   ; cljs deps

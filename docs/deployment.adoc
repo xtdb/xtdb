@@ -1,44 +1,44 @@
 = Deployment
 
-== Kafka ClusterNode Mode
+== Kafka Cluster Modes
 
 Use Kafka for transaction log and document log persistence.
 
-=== Local ClusterNode
+=== Local Cluster
 
 Embed the Crux node in your application:
 
-image::system-mode-local-clusternode.svg[Local ClusterNode,width=70%,align="center"]
+image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
 
-=== Remote ClusterNode
+=== Remote Cluster
 
 Use the Crux node over HTTP:
 
-image::system-mode-remote-clusternode.svg[Remote ClusterNode,width=70%,align="center"]
+image::remote-cluster-mode.svg[Remote Cluster Mode,width=70%,align="center"]
 
-== Standalone Mode
+== Standalone Modes
 
 Use a second local KV instance for durable transaction log and document log
-persistence. This is not recommended for production systems.
+persistence. This is not recommended for production usage.
 
 === Local Standalone
 
 Embed a fully independent instance of Crux in your application:
 
-image::system-mode-local-standalone.svg[Local Standalone,width=50%,align="center"]
+image::local-standalone-mode.svg[Local Standalone Mode,width=50%,align="center"]
 
 === Remote Standalone
 
 Use a single standalone instance of Crux over HTTP:
 
-image::system-mode-remote-standalone.svg[Remote Standalone,width=50%,align="center"]
+image::remote-standalone-mode.svg[Remote Standalone Mode,width=50%,align="center"]
 
 == Migration
 
 You can rebuild nodes whenever needed as long as the transaction log and
 document log is durably stored. Nodes will need rebuilding when index formats
-have breaking changes. Migrating from a Standalone Mode system to a ClusterNode
-system is possible to address evolving scaling and availability requirements.
+have breaking changes. Migrating from a standalone node to a cluster node is
+possible, to address evolving scaling and availability requirements.
 
 == Security
 
@@ -62,8 +62,8 @@ of usage, see
 https://github.com/juxt/crux/blob/e5e21352b7a466d20a7b57518e129770191de352/example/standalone_webservice/src/example_standalone_webservice/main.clj#L744[the
 standalone web service example].
 
-An additional example of backup and restore that only applies to a stopped
-standalone system is provided
+An additional example of backup and restore is provided that only applies to a stopped
+standalone node
 https://github.com/juxt/crux/tree/master/docs/example/backup-restore[here].
 
 In a clustered deployment, only Kafka's

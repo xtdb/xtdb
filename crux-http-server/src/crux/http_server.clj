@@ -83,8 +83,8 @@
 ;; ---------------------------------------------------
 ;; Services
 
-(defn- status [^ICruxAPI crux-system]
-  (let [status-map (.status crux-system)]
+(defn- status [^ICruxAPI crux-node]
+  (let [status-map (.status crux-node)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
             (:crux.zk/zk-active? status-map)
             (not= (System/getenv "CRUX_MODE") "CLUSTER_NODE"))
@@ -93,18 +93,18 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
-(defn- document [^ICruxAPI crux-system request]
+(defn- document [^ICruxAPI crux-node request]
   (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
     (success-response
-     (.document crux-system (c/new-id content-hash)))))
+     (.document crux-node (c/new-id content-hash)))))
 
-(defn- history [^ICruxAPI crux-system request]
+(defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
-        history (.history crux-system (c/new-id eid))]
+        history (.history crux-node (c/new-id eid))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
-(defn- history-range [^ICruxAPI crux-system request]
+(defn- history-range [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
         valid-time-start (some->> (get-in request [:query-params "valid-time-start"])
                                   (cio/parse-rfc3339-or-millis-date))
@@ -114,26 +114,26 @@
                                 (cio/parse-rfc3339-or-millis-date))
         transaction-time-end (some->> (get-in request [:query-params "transaction-time-end"])
                                       (cio/parse-rfc3339-or-millis-date))
-        history (.historyRange crux-system (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
+        history (.historyRange crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
         last-modified (:crux.tx/tx-time (last history))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (last history))))))
 
-(defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-system {:keys [valid-time transact-time]}]
+(defn- db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time transact-time]}]
   (cond
     (and valid-time transact-time)
-    (.db crux-system valid-time transact-time)
+    (.db crux-node valid-time transact-time)
 
     valid-time
-    (.db crux-system valid-time)
+    (.db crux-node valid-time)
 
     ;; TODO: This could also be an error, depending how you see it,
     ;; not supported via the Java API itself.
     transact-time
-    (.db crux-system (cio/next-monotonic-date) transact-time)
+    (.db crux-node (cio/next-monotonic-date) transact-time)
 
     :else
-    (.db crux-system)))
+    (.db crux-node)))
 
 (defn- streamed-edn-response [^Closeable ctx edn]
   (try
@@ -161,16 +161,16 @@
 
 ;; TODO: Potentially require both valid and transaction time sent by
 ;; the client?
-(defn- query [^ICruxAPI crux-system request]
+(defn- query [^ICruxAPI crux-node request]
   (let [query-map (s/assert ::query-map (body->edn request))
-        db (db-for-request crux-system query-map)]
+        db (db-for-request crux-node query-map)]
     (-> (success-response
          (.q db (:query query-map)))
         (add-last-modified (.transactionTime db)))))
 
-(defn- query-stream [^ICruxAPI crux-system request]
+(defn- query-stream [^ICruxAPI crux-node request]
   (let [query-map (s/assert ::query-map (body->edn request))
-        db (db-for-request crux-system query-map)
+        db (db-for-request crux-node query-map)
         snapshot (.newSnapshot db)
         result (.q db snapshot (:query query-map))]
     (-> (streamed-edn-response snapshot result)
@@ -183,67 +183,67 @@
                                             ::transact-time])))
 
 ;; TODO: Could support as-of now via path and GET.
-(defn- entity [^ICruxAPI crux-system request]
+(defn- entity [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-system body)
+        db (db-for-request crux-node body)
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response (.entity db eid))
         (add-last-modified tx-time))))
 
-(defn- entity-tx [^ICruxAPI crux-system request]
+(defn- entity-tx [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-system body)
+        db (db-for-request crux-node body)
         {:keys [crux.tx/tx-time] :as entity-tx} (.entityTx db eid)]
     (-> (success-response entity-tx)
         (add-last-modified tx-time))))
 
-(defn- history-ascending [^ICruxAPI crux-system request]
+(defn- history-ascending [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-system body)
+        db (db-for-request crux-node body)
         snapshot (.newSnapshot db)
         history (.historyAscending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-node)))))))
 
-(defn- history-descending [^ICruxAPI crux-system request]
+(defn- history-descending [^ICruxAPI crux-node request]
   (let [{:keys [eid] :as body} (s/assert ::entity-map (body->edn request))
-        db (db-for-request crux-system body)
+        db (db-for-request crux-node body)
         snapshot (.newSnapshot db)
         history (.historyDescending db snapshot (c/new-id eid))]
     (-> (streamed-edn-response snapshot history)
-        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-node)))))))
 
-(defn- transact [^ICruxAPI crux-system request]
+(defn- transact [^ICruxAPI crux-node request]
   (let [tx-ops (body->edn request)
-        {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx crux-system tx-ops)]
+        {:keys [crux.tx/tx-time] :as submitted-tx} (.submitTx crux-node tx-ops)]
     (-> (success-response submitted-tx)
         (assoc :status 202)
         (add-last-modified tx-time))))
 
 ;; TODO: Could add from date parameter.
-(defn- tx-log [^ICruxAPI crux-system request]
+(defn- tx-log [^ICruxAPI crux-node request]
   (let [with-documents? (Boolean/parseBoolean (get-in request [:query-params "with-documents"]))
         from-tx-id (some->> (get-in request [:query-params "from-tx-id"])
                             (Long/parseLong))
-        ctx (.newTxLogContext crux-system)
-        result (.txLog crux-system ctx from-tx-id with-documents?)]
+        ctx (.newTxLogContext crux-node)
+        result (.txLog crux-node ctx from-tx-id with-documents?)]
     (-> (streamed-edn-response ctx result)
-        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-system)))))))
+        (add-last-modified (tx/latest-completed-tx-time (:crux.tx-log/consumer-state (.status crux-node)))))))
 
-(defn- sync-handler [^ICruxAPI crux-system request]
+(defn- sync-handler [^ICruxAPI crux-node request]
   (let [timeout (some->> (get-in request [:query-params "timeout"])
                          (Long/parseLong)
                          (Duration/ofMillis))
         transaction-time (some->> (get-in request [:query-params "transactionTime"])
                                   (cio/parse-rfc3339-or-millis-date))]
     (let [last-modified (if transaction-time
-                          (.sync crux-system transaction-time timeout)
-                          (.sync crux-system timeout))]
+                          (.sync crux-node transaction-time timeout)
+                          (.sync crux-node timeout))]
       (-> (success-response last-modified)
           (add-last-modified last-modified)))))
 
-(defn- attribute-stats [^ICruxAPI crux-system]
-  (success-response (.attributeStats crux-system)))
+(defn- attribute-stats [^ICruxAPI crux-node]
+  (success-response (.attributeStats crux-node)))
 
 (def ^:private sparql-available? (try
                                    (require 'crux.sparql.protocol)
@@ -254,53 +254,53 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
-(defn- handler [crux-system request]
+(defn- handler [crux-node request]
   (condp check-path request
     [#"^/$" [:get]]
-    (status crux-system)
+    (status crux-node)
 
     [#"^/document/.+$" [:get :post]]
-    (document crux-system request)
+    (document crux-node request)
 
     [#"^/entity$" [:post]]
-    (entity crux-system request)
+    (entity crux-node request)
 
     [#"^/entity-tx$" [:post]]
-    (entity-tx crux-system request)
+    (entity-tx crux-node request)
 
     [#"^/history/.+$" [:get :post]]
-    (history crux-system request)
+    (history crux-node request)
 
     [#"^/history-range/.+$" [:get]]
-    (history-range crux-system request)
+    (history-range crux-node request)
 
     [#"^/history-ascending$" [:post]]
-    (history-ascending crux-system request)
+    (history-ascending crux-node request)
 
     [#"^/history-descending$" [:post]]
-    (history-descending crux-system request)
+    (history-descending crux-node request)
 
     [#"^/query$" [:post]]
-    (query crux-system request)
+    (query crux-node request)
 
     [#"^/query-stream$" [:post]]
-    (query-stream crux-system request)
+    (query-stream crux-node request)
 
     [#"^/attribute-stats" [:get]]
-    (attribute-stats crux-system)
+    (attribute-stats crux-node)
 
     [#"^/sync$" [:get]]
-    (sync-handler crux-system request)
+    (sync-handler crux-node request)
 
     [#"^/tx-log$" [:get]]
-    (tx-log crux-system request)
+    (tx-log crux-node request)
 
     [#"^/tx-log$" [:post]]
-    (transact crux-system request)
+    (transact crux-node request)
 
     (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
              sparql-available?)
-      ((resolve 'crux.sparql.protocol/sparql-query) crux-system request)
+      ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
       {:status 400
        :headers {"Content-Type" "text/plain"}
        :body "Unsupported method on this address."})))
@@ -321,11 +321,11 @@
   the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
   dependencies explicitly as arguments (internal use)."
   (^java.io.Closeable
-   [crux-system {:keys [server-port cors-access-control]
+   [crux-node {:keys [server-port cors-access-control]
                  :or {server-port 3000 cors-access-control []}
                  :as options}]
    (s/assert ::options options)
-   (let [server (j/run-jetty (-> (partial handler crux-system)
+   (let [server (j/run-jetty (-> (partial handler crux-node)
                                  (#(apply wrap-cors (into [%] cors-access-control)))
                                  (p/wrap-params)
                                  (wrap-exception-handling))

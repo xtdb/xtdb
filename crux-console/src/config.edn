@@ -1,8 +1,8 @@
 {:ig/system
- {:juxt.crux-ui.server.main/read-write {:system #ig/ref :juxt.crux.ig/system}
-  :juxt.crux-ui.server.main/home {:system #ig/ref :juxt.crux.ig/system}
-  :juxt.crux-ui.server.main/console {:system #ig/ref :juxt.crux.ig/system}
-  :juxt.crux.ig.system/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"
+ {:juxt.crux-ui.server.main/read-write {:node #ig/ref :juxt.crux.ig/node}
+  :juxt.crux-ui.server.main/home {:node #ig/ref :juxt.crux.ig/node}
+  :juxt.crux-ui.server.main/console {:node #ig/ref :juxt.crux.ig/node}
+  :juxt.crux.ig.node/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"
                                    :event-log-dir "data/eventlog-1"
                                    :db-dir "data/db-dir-1"
                                    :http-opts {:server-port 8080}}

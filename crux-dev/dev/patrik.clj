@@ -159,7 +159,7 @@
 
   (require 'crux.api)
 
-  (def crux (crux.api/start-standalone-system
+  (def crux (crux.api/start-standalone-node
               {:kv-backend "crux.kv.rocksdb.RocksKv"
                :db-dir "data/db-dir"
                :event-log-dir "data/event-log-db"}))

@@ -14,12 +14,12 @@
    :db-dir     "data/db-dir-1"}) ; :db-dir is ignored when using MemKv
 
 
-(def system (crux/start-standalone-system crux-options))
+(def node (crux/start-standalone-node crux-options))
 
 
 ; transaction containing a `put` operation, optionally specifying a valid time
 (crux/submit-tx
-  system
+  node
   [[:crux.tx/put
     {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
      :name "Pablo"
@@ -30,7 +30,7 @@
 
 ; transaction containing a `cas` (compare-and-swap) operation
 (crux/submit-tx
-  system
+  node
   [[:crux.tx/cas
     {:crux.db/id :dbpedia.resource/Pablo-Picasso ; old version
      :name "Pablo"
@@ -46,14 +46,14 @@
 
 ; transaction containing a `delete` operation, historical versions remain
 (crux/submit-tx
-  system
+  node
   [[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
     #inst "1973-04-08T09:20:27.966-00:00"]])
 
 
 ; transaction containing an `evict` operation, historical data is destroyed
 (crux/submit-tx
-  system
+  node
   [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso
     #inst "1973-04-07T09:20:27.966-00:00" ; start-valid-time
     #inst "1973-04-09T09:20:27.966-00:00" ; end-valid-time (optional)
@@ -61,17 +61,17 @@
     true]])                               ; keep-earliest? (optional)
 
 
-; query the system as-of now
+; query the node as-of now
 (crux/q
-  (crux/db system)
+  (crux/db node)
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true}) ; using `:full-results?` is useful for manual queries
 
 
-; query the system as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
+; query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
 (crux/q
-  (crux/db system #inst "1973-04-07T09:20:27.966-00:00")
+  (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true})
@@ -79,7 +79,7 @@
 
 ; `put` the new version of the document again
 (crux/submit-tx
-  system
+  node
   [[:crux.tx/put
     {:crux.db/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
@@ -89,44 +89,44 @@
     #inst "1973-04-08T09:20:27.966-00:00"]])
 
 
-; again, query the system as-of now
+; again, query the node as-of now
 (crux/q
-  (crux/db system)
+  (crux/db node)
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true})
 
 
-; again, query the system as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
+; again, query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
 (crux/q
-  (crux/db system #inst "1973-04-07T09:20:27.966-00:00")
+  (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
   '{:find [e]
     :where [[e :name "Pablo"]]
     :full-results? true})
 
 
 (comment
-  ; use the following to help when not starting the system from the REPL 
+  ; use the following to help when not starting the node from the REPL 
 
-  (defn run-system [{:keys [server-port] :as options} with-system-fn]
-    (with-open [crux-system (crux/start-standalone-system options)]
-      (with-system-fn crux-system)))
+  (defn run-node [{:keys [server-port] :as options} with-node-fn]
+    (with-open [crux-node (crux/start-standalone-node options)]
+      (with-node-fn crux-node)))
 
-  (declare s system)
+  (declare s node)
 
-  ; run a system and return control to the REPL
+  ; run a node and return control to the REPL
   (def ^ICruxAPI s
     (future
-      (run-system
+      (run-node
         crux-options
-        (fn [crux-system]
-          (def system crux-system)
+        (fn [crux-node]
+          (def node crux-node)
           (Thread/sleep Long/MAX_VALUE)))))
 
-  ; close the system by cancelling the future
+  ; close the node by cancelling the future
   (future-cancel s)
 
-  ; ...or close the system directly
-  (.close system)
+  ; ...or close the node directly
+  (.close node)
 
 )
