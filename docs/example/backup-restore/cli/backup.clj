@@ -10,6 +10,6 @@
    :backup-dir     "checkpoint"})
 
 (defn -main []
-  (let [system (api/start-standalone-system opts)]
-    (backup/backup opts system)
+  (let [node (api/start-standalone-node opts)]
+    (backup/backup opts node)
     (System/exit 0)))

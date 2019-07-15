@@ -69,7 +69,7 @@ as semi-immutable logs.
 This decoupled design enables Crux to be maintained as a small and efficient
 core that can be scaled and evolved to support a large variety of use-cases. 
 
-image::crux-system-1.svg[Crux Kafka Node Diagram,970,443]
+image::crux-node-1.svg[Crux Kafka Node Diagram,970,443]
 
 == Distributed
 

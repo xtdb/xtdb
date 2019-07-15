@@ -34,22 +34,22 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/system-start-fn cluster-node/start-cluster-node
+   :dev/node-start-fn cluster-node/start-cluster-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
 
 (def dev-options (dev-option-defaults storage-dir))
 
-(def ^ICruxAPI system)
+(def ^ICruxAPI node)
 
-(defn start-dev-system ^crux.api.ICruxAPI [{:dev/keys [embed-kafka? http-server? system-start-fn] :as options}]
+(defn start-dev-node ^crux.api.ICruxAPI [{:dev/keys [embed-kafka? http-server? node-start-fn] :as options}]
   (let [started (atom [])]
     (try
       (let [embedded-kafka (when embed-kafka?
                              (doto (ek/start-embedded-kafka options)
                                (->> (swap! started conj))))
-            cluster-node (doto (system-start-fn options)
+            cluster-node (doto (node-start-fn options)
                          (->> (swap! started conj)))
             http-server (when http-server?
                           (srv/start-http-server cluster-node options))]
@@ -61,22 +61,22 @@
           (cio/try-close c))
         (throw t)))))
 
-(defn stop-dev-system ^crux.api.ICruxAPI [{:keys [http-server embedded-kafka] :as system}]
-  (doseq [c [http-server system embedded-kafka]]
+(defn stop-dev-node ^crux.api.ICruxAPI [{:keys [http-server embedded-kafka] :as node}]
+  (doseq [c [http-server node embedded-kafka]]
     (cio/try-close c)))
 
 (defn start []
-  (alter-var-root #'system (fn [_] (start-dev-system dev-options)))
+  (alter-var-root #'node (fn [_] (start-dev-node dev-options)))
   :started)
 
 (defn stop []
-  (when (and (bound? #'system)
-             (not (nil? system)))
-    (alter-var-root #'system stop-dev-system))
+  (when (and (bound? #'node)
+             (not (nil? node)))
+    (alter-var-root #'node stop-dev-node))
   :stopped)
 
 (defn clear []
-  (alter-var-root #'system (constantly nil)))
+  (alter-var-root #'node (constantly nil)))
 
 (defn reset []
   (stop)
@@ -108,7 +108,7 @@
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
 ;;                         {:server-port 9090}))
 
-;; Example to use a standalone system with the normal Crux dev
+;; Example to use a standalone node with the normal Crux dev
 ;; workflow:
 
 ;; (ns dev)
@@ -118,7 +118,7 @@
 ;;                          :crux.tx/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
-;;                          :dev/system-start-fn standalone/start-standalone-system}))
+;;                          :dev/node-start-fn standalone/start-standalone-node}))
 
 (when (io/resource (str (System/getenv "USER") ".clj"))
   (load (System/getenv "USER")))

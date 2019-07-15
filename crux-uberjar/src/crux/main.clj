@@ -3,4 +3,4 @@
 
 (defn -main [& args]
   (require 'crux.bootstrap.cli)
-  ((resolve 'crux.bootstrap.cli/start-system-from-command-line) args))
+  ((resolve 'crux.bootstrap.cli/start-node-from-command-line) args))

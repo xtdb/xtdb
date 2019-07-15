@@ -1,7 +1,7 @@
 (ns crux.decorators.core
   (:require [crux.api :as api]))
 
-(defrecord CruxDecoratorSystem [methods decorated])
+(defrecord CruxDecoratorNode [methods decorated])
 (defrecord CruxDecoratorDataSource [methods decorated])
 
 (defn default-delegate-method
@@ -27,7 +27,7 @@
                  (keys (:method-builders protocol))))])))))
 
 (extend-default-method
-  CruxDecoratorSystem api/PCruxSystem
+  CruxDecoratorNode api/PCruxNode
   :db (fn [{:keys [decorated methods] :as decorator} & args]
         (map->CruxDecoratorDataSource
           {:methods (:data-source methods)
@@ -35,9 +35,9 @@
 
 (extend-default-method CruxDecoratorDataSource api/PCruxDatasource)
 
-(defn system-decorator
+(defn node-decorator
   [overide-methods]
   (fn decorator [decorated]
-    (map->CruxDecoratorSystem
+    (map->CruxDecoratorNode
       {:methods overide-methods
        :decorated decorated})))

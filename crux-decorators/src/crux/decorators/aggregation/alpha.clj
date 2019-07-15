@@ -166,4 +166,4 @@
      (api/q db snapshot query))))
 
 (def aggregation-decorator
-  (decorators/system-decorator {:data-source {#'api/q q}}))
+  (decorators/node-decorator {:data-source {#'api/q q}}))

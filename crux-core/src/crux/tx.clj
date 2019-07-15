@@ -212,7 +212,7 @@
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 
-;; For StandaloneSystem.
+;; For StandaloneNode.
 
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
@@ -250,7 +250,7 @@
   (close [_]
     (.close ^Closeable event-log-kv))
 
-  backup/ISystemBackup
+  backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
     (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
 

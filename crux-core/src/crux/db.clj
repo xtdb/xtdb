@@ -39,7 +39,7 @@
 ;; hide it.
 ;; tag::ObjectStore[]
 (defprotocol ObjectStore
-  (init [this partial-system options])
+  (init [this partial-node options])
   (get-single-object [this snapshot k])
   (get-objects [this snapshot ks])
   (known-keys? [this snapshot ks])

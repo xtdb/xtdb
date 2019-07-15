@@ -15,7 +15,7 @@
             [crux.query :as q])
   (:import java.util.Date))
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation fs/with-standalone-system f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-each-kv-store-implementation fs/with-standalone-node f/with-silent-test-check)
 
 ;; TODO: This is a large, useful, test that exercises many parts, but
 ;; might be better split up.

@@ -101,7 +101,7 @@
      :lmdb fkv/with-lmdb
      :mem fkv/with-memdb)
    (fn []
-     (fs/with-standalone-system
+     (fs/with-standalone-node
        (fn []
          (when verbose (print ":insert... ") (flush))
          (when preload

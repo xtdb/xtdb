@@ -48,14 +48,14 @@
        (:key obj)]])])
 
 (defn index-handler
-  [ctx system]
+  [ctx node]
   (body-wrapper
     [:div
      [:h1 "Benchmark runner"]
      (previus-run-reports)]))
 
 (defn admin-handler
-  [ctx system]
+  [ctx node]
   (body-wrapper
     [:div
      [:header
@@ -69,11 +69,11 @@
                       "rocksdb.size-all-mem-tables"
                       "rocksdb.cur-size-all-mem-tables"
                       "rocksdb.estimate-num-keys"]]
-               (let [^RocksDB db (-> system :crux :kv-store :kv :db)]
+               (let [^RocksDB db (-> node :crux :kv-store :kv :db)]
                  [p (-> db (.getProperty (.getDefaultColumnFamily db) p))])))))]
       [:pre
        (with-out-str
-         (pp/pprint (.status ^crux.api.ICruxAPI (:crux system))))]
+         (pp/pprint (.status ^crux.api.ICruxAPI (:crux node))))]
 
       [:pre
        (with-out-str
@@ -88,7 +88,7 @@
 
       [:pre
        (with-out-str
-         (pp/pprint (-> system :benchmark-runner :status deref)))]
+         (pp/pprint (-> node :benchmark-runner :status deref)))]
 
       [:div.buttons
        [:form {:action "/start-bench" :method "POST"}
@@ -112,7 +112,7 @@
      [:div.status-content
       [:h3 "Status"]
       [:pre
-       (when-let [f (-> system :benchmark-runner :status deref
+       (when-let [f (-> node :benchmark-runner :status deref
                         :watdiv-runner :out-file)]
          (:out (sh "tail" "-40" (.getPath ^java.io.File f))))]]
 
@@ -121,13 +121,13 @@
 (def secret-password
   "bcrypt+sha512$ad3066f667bdcfa2a9e0fbc79710bfdb$12$aabc70396ad92c1147f556105c8acda0c17a6f231b85c658")
 (defn application-resource
-  [{:keys [benchmark-runner] :as system}]
+  [{:keys [benchmark-runner] :as node}]
   ["/"
    [[""
      (resource
        {:methods
         {:get {:produces "text/html"
-               :response #(index-handler % system)}}})]
+               :response #(index-handler % node)}}})]
 
     ["admin"
      (resource
@@ -145,7 +145,7 @@
 
          :methods
          {:get {:produces "text/html"
-                :response #(admin-handler % system)}}})]
+                :response #(admin-handler % node)}}})]
 
     ["start-bench"
      (resource
@@ -172,7 +172,7 @@
                       merge
                       {:running? true
                        :watdiv-runner
-                       (watdiv/start-and-run backend system num-tests num-threads)})
+                       (watdiv/start-and-run backend node num-tests num-threads)})
                     (assoc (:response ctx)
                            :status 302
                            :headers {"location" "/"})))}}})]
@@ -211,45 +211,45 @@
    :doc-topic "crux-bench-docs"
    :server-port 8080})
 
-(defrecord BenchMarkRunner [status crux-system]
+(defrecord BenchMarkRunner [status crux-node]
   Closeable
   (close [_]
     (when-let [watdiv-runner (:watdiv-runner @status)]
       (.close ^Closeable watdiv-runner))))
 
-(defn ^BenchMarkRunner bench-mark-runner [crux-system]
+(defn ^BenchMarkRunner bench-mark-runner [crux-node]
   (map->BenchMarkRunner
-    {:crux-system crux-system
+    {:crux-node crux-node
      :status (atom {:running? false})}))
 
-(defn run-system
-  [{:keys [server-port] :as options} with-system-fn]
-  (with-open [crux-system (case (System/getenv "CRUX_MODE")
+(defn run-node
+  [{:keys [server-port] :as options} with-node-fn]
+  (with-open [crux-node (case (System/getenv "CRUX_MODE")
                             "CLUSTER_NODE" (api/start-cluster-node options)
-                            (api/start-standalone-system options))
+                            (api/start-standalone-node options))
 
-              benchmark-runner (bench-mark-runner crux-system)
+              benchmark-runner (bench-mark-runner crux-node)
 
               http-server
               (let [l (listener
                         (application-resource
-                          {:crux crux-system
+                          {:crux crux-node
                            :benchmark-runner benchmark-runner})
                         {:port server-port})]
                 (log/info "started webserver on port:" server-port)
                 (reify Closeable
                   (close [_]
                     ((:close l)))))]
-    (with-system-fn
-      {:crux crux-system
+    (with-node-fn
+      {:crux crux-node
        :benchmark-runner benchmark-runner})))
 
 (defn -main []
   (log/info "bench runner starting")
   (try
-    (run-system
+    (run-node
       crux-options
-      (fn [system]
+      (fn [node]
         (while true
           (Thread/sleep 3000)
           (log/info
@@ -259,7 +259,7 @@
                           :free-memory (.freeMemory (Runtime/getRuntime))})))
           (log/info
             (with-out-str
-              (pp/pprint (some-> system :benchmark-runner :status deref)))))))
+              (pp/pprint (some-> node :benchmark-runner :status deref)))))))
     (catch IndexVersionOutOfSyncException e
       (crux-io/delete-dir index-dir)
       (-main)))
@@ -268,7 +268,7 @@
 (comment
   (def s (future
            (try
-             (run-system
+             (run-node
                crux-options
                (fn [c]
                  (def crux c)

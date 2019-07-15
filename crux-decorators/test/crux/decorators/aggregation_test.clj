@@ -25,20 +25,20 @@
      (api/sync api (:crux.tx/tx-time submitted-tx) nil))
    entities))
 
-(defn with-standalone-system [f]
+(defn with-standalone-node [f]
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-system (Crux/startStandaloneSystem {:db-dir db-dir
+      (with-open [standalone-node (Crux/startStandaloneNode {:db-dir db-dir
                                                                  :kv-backend "crux.kv.memdb.MemKv"
                                                                  :event-log-dir event-log-dir})]
-        (binding [*api* standalone-system]
+        (binding [*api* standalone-node]
           (f)))
       (finally
         (cio/delete-dir db-dir)
         (cio/delete-dir event-log-dir)))))
 
-(t/use-fixtures :each with-standalone-system)
+(t/use-fixtures :each with-standalone-node)
 
 (t/deftest test-count-aggregation
   (transact!

@@ -20,20 +20,20 @@ public class Crux {
      * :bootstrap-servers etc.
      *
      * Returns a crux.api.ICruxAPI component that implements
-     * java.io.Closeable, which allows the system to be stopped by
+     * java.io.Closeable, which allows the node to be stopped by
      * calling close.
      *
      * NOTE: requires any KV store dependencies and kafka-clients on
      * the classpath. The crux.kv.memdb.MemKv KV backend works without
      * additional dependencies.
      *
-     * The HTTP API can be started by passing the system to
+     * The HTTP API can be started by passing the node to
      * crux.http-server/start-http-server. This will require further
      * dependencies on the classpath, see crux.http-server for
      * details.
      *
      * See also crux.kafka.embedded or {@link
-     * #startStandaloneSystem(Map options)} for self-contained
+     * #startStandaloneNode(Map options)} for self-contained
      * deployments.
      *
      * @param options see crux.bootstrap/cli-options.
@@ -47,7 +47,7 @@ public class Crux {
     }
 
     /**
-     * Creates a minimal standalone system writing the transaction log
+     * Creates a minimal standalone node writing the transaction log
      * into its local KV store without relying on
      * Kafka. Alternatively, when the event-log-dir option is
      * provided, using two KV stores to enable rebuilding the index
@@ -55,31 +55,31 @@ public class Crux {
      * Kafka but for a single process only.
 
      * Returns a ICruxAPI component that implements
-     * java.io.Closeable, which allows the system to be stopped by
+     * java.io.Closeable, which allows the node to be stopped by
      * calling close.
 
      * NOTE: requires any KV store dependencies on the classpath. The
      * crux.kv.memdb.MemKv KV backend works without additional dependencies.
      *
      * @param options see crux.bootstrap/start-kv-store.
-     * @return        a standalone system.
+     * @return        a standalone node.
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      * @throws NonMonotonicTimeException if the clock has moved
      * backwards since last run. Only applicable when using the event
      * log.
      */
-    public static ICruxAPI startStandaloneSystem(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+    public static ICruxAPI startStandaloneNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.standalone"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.standalone/start-standalone-system").invoke(options);
+        return (ICruxAPI) Clojure.var("crux.bootstrap.standalone/start-standalone-node").invoke(options);
     }
 
     /**
      * Some interested javadocs. Also, this doesn't belong here at all.
      */
-    public static ICruxAPI startJDBCSystem(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.jdbc"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.jdbc/start-jdbc-system").invoke(options);
+        return (ICruxAPI) Clojure.var("crux.bootstrap.jdbc/start-jdbc-node").invoke(options);
     }
 
     /**

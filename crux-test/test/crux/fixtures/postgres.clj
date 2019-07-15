@@ -16,8 +16,8 @@
                    :kv-backend "crux.kv.memdb.MemKv"}
           ds (jdbc/get-datasource options)]
       (try
-        (with-open [standalone-system (Crux/startJDBCSystem options)]
-          (binding [*api* standalone-system]
+        (with-open [standalone-node (Crux/startJDBCNode options)]
+          (binding [*api* standalone-node]
             (f)))
         (finally
           (cio/delete-dir db-dir))))))

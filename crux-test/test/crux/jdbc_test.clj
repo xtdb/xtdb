@@ -12,13 +12,13 @@
             [next.jdbc.result-set :as jdbcr])
   (:import crux.api.ICruxAPI))
 
-(defn- with-each-jdbc-system [f]
+(defn- with-each-jdbc-node [f]
   (t/testing "H2 Database"
-    (fj/with-jdbc-system f))
+    (fj/with-jdbc-node f))
   (t/testing "Postgresql Database"
     (fp/with-embedded-postgres f)))
 
-(t/use-fixtures :each with-each-jdbc-system)
+(t/use-fixtures :each with-each-jdbc-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}

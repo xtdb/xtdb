@@ -21,7 +21,7 @@
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
 
-(defn start-standalone-system ^ICruxAPI [options]
+(defn start-standalone-node ^ICruxAPI [options]
   (s/assert ::standalone-options options)
   (let [{:keys [db-dir sync? kv-backend event-log-dir doc-cache-size
                 crux.tx/event-log-kv-backend crux.tx/event-log-sync-interval-ms] :as options}

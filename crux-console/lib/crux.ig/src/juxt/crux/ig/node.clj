@@ -1,4 +1,4 @@
-(ns juxt.crux.ig.system
+(ns juxt.crux.ig.node
   (:require [clojure.java.io :as io]
             crux.api
             [crux.http-server :as srv]
@@ -24,14 +24,14 @@
        (.mkdir (.toFile path))
        (str path)))))
 
-(declare syshttp)
+(declare nhttp)
 
-(defmethod ig/halt-key! :juxt.crux.ig/system
-  [_ system]
-  (.close syshttp)
-  (.close system))
+(defmethod ig/halt-key! :juxt.crux.ig/node
+  [_ node]
+  (.close nhttp)
+  (.close node))
 
-(defmethod ig/prep-key :juxt.crux.ig/system
+(defmethod ig/prep-key :juxt.crux.ig/node
   [k opts]
   (cond-> opts
     (not (contains? opts :event-log-dir))
@@ -39,12 +39,12 @@
     (not (contains? opts :db-dir))
     (assoc :db-dir (tmp-dir [k "db-dir"]))))
 
-(derive ::standalone :juxt.crux.ig/system)
+(derive ::standalone :juxt.crux.ig/node)
 
 (defmethod ig/init-key ::standalone
   [_ opts]
-  (let [sys (crux.api/start-standalone-system opts)
-        syshttp (srv/start-http-server sys (assoc (:http-opts sys)
+  (let [n (crux.api/start-standalone-node opts)
+        nhttp (srv/start-http-server n (assoc (:http-opts n)
                                                   :server-port 8080
                                                   :cors-access-control
                                                   [:access-control-allow-origin [#".*"]
@@ -57,10 +57,10 @@
                                                                                   "X-Custom-Header"]
                                                    :access-control-allow-methods [:get :put :post :delete]]))]
     (println "The Crux demo HTTP API is now available at http://localhost:8080")
-    (def syshttp syshttp)
-    sys))
+    (def nhttp nhttp)
+    n))
 
-(derive ::cluster-node :juxt.crux.ig/system)
+(derive ::cluster-node :juxt.crux.ig/node)
 
 (defmethod ig/init-key ::cluster-node
   [_ opts]

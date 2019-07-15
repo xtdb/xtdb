@@ -46,7 +46,7 @@ code to connect to your cluster and make a transaction:
 (require '[crux.api :as crux])
 (import (crux.api ICruxAPI))
 
-(def ^crux.api.ICruxAPI system
+(def ^crux.api.ICruxAPI node
   (crux/start-cluster-node
    {:kv-backend "crux.kv.memdb.MemKv"
     :tx-topic "tx-1" ; choose your tx-topic name
@@ -69,9 +69,9 @@ code to connect to your cluster and make a transaction:
    ; note the escaped string characters surrounding your username and password SASL values
    "security.protocol" "SASL_SSL"})
 
-(crux/submit-tx system [[:crux.tx/put {:crux.db/id :my-first-doc :very "cool"}]])
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id :my-first-doc :very "cool"}]])
 
-(crux/q (crux/db system) {:find '[e] :where '[[e :crux.db/id _]] :full-results? true})
+(crux/q (crux/db node) {:find '[e] :where '[[e :crux.db/id _]] :full-results? true})
 ----
 
 Note that Crux will automatically generate topics with the required

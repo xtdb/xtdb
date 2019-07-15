@@ -61,7 +61,7 @@
 
 ; ----- events -----
 
-; system and lifecycle
+; node and lifecycle
 (rf/reg-event-fx
   :evt.db/init
   (fn [_ [_ db]]

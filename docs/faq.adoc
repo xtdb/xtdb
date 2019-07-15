@@ -175,7 +175,7 @@ What consistency does Crux provide?::
 the use of a single unpartitioned Kafka topic for the transaction log.
 Transactions are executed non-interleaved (i.e. a serial schedule) on every
 Crux node independently. Being able to read your writes when using the HTTP
-interface requires stickiness to a particular node. For a ClusterNode system to
+interface requires stickiness to a particular node. For a cluster of nodes to
 be linearizable as a whole would require that every node always sees the result
 of every transaction immediately after it is written.  This could be achieved
 with the cost of non-trivial additional latency. Further reading:
@@ -302,7 +302,7 @@ cross shard queries. Sharding is mainly useful to increase throughput.
 
 Does Crux support pull expressions?::
 
-  No. As each Crux query node is its own document store, the
+  No. As each Crux node is its own document store, the
 documents are local to the query node and can easily be accessed
 directly via the lower level read operations. We aim to make this more
 convenient soon. 
