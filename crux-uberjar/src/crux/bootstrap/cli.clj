@@ -116,7 +116,7 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (ln/run-node
+          (ln/start-cluster-node
            options
            (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-node}]
              (with-open [http-server ^Closeable (srv/start-http-server
