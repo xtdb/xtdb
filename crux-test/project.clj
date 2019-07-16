@@ -1,18 +1,18 @@
-(defproject juxt/crux-test :derived-from-git
+(defproject juxt/crux-test "derived-from-git"
   :description "Crux Tests Project"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [juxt/crux-core :derived-from-git]
-                 [juxt/crux-rocksdb :derived-from-git]
-                 [juxt/crux-lmdb :derived-from-git]
-                 [juxt/crux-kafka :derived-from-git]
-                 [juxt/crux-kafka-embedded :derived-from-git]
-                 [juxt/crux-jdbc :derived-from-git]
-                 [juxt/crux-http-server :derived-from-git]
-                 [juxt/crux-rdf :derived-from-git]
-                 [juxt/crux-decorators :derived-from-git]
+                 [juxt/crux-core "derived-from-git"]
+                 [juxt/crux-rocksdb "derived-from-git"]
+                 [juxt/crux-lmdb "derived-from-git"]
+                 [juxt/crux-kafka "derived-from-git"]
+                 [juxt/crux-kafka-embedded "derived-from-git"]
+                 [juxt/crux-jdbc "derived-from-git"]
+                 [juxt/crux-http-server "derived-from-git"]
+                 [juxt/crux-rdf "derived-from-git"]
+                 [juxt/crux-decorators "derived-from-git"]
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.199"]

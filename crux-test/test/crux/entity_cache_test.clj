@@ -15,7 +15,8 @@
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
 
-(def ^:dynamic run-entity-cache-tests? (Boolean/parseBoolean (System/getenv "CRUX_TEST_ENTITY_CACHE")))
+(def ^:dynamic run-entity-cache-tests?
+  (Boolean/parseBoolean (System/getenv "CRUX_TEST_ENTITY_CACHE")))
 ; (def run-entity-cache-tests? true)
 
 (def currencies
@@ -98,29 +99,31 @@
     (api/sync *api* (java.time.Duration/ofMinutes 20)))
   (f))
 
+(defn upload-stocks-with-history [crux-node]
+  (let [base-stocks (map gen-stock (range stocks-count))
+        base-date #inst "2019"
+        partitions-total (/ stocks-count 1000)]
+    (reset! -stocks base-stocks)
+    (doseq [i (range history-days)
+            :let [date (Date. ^long (+ (.getTime base-date) (* 1000 60 60 24 i)))
+                  ctr (atom 0)
+                  stocks-batch (alter-stocks base-stocks)
+                  t-currencies (map alter-currency currencies)]]
+      (doseq [stocks-batch (partition-all 1000 stocks-batch)]
+        (swap! ctr inc)
+        (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
+        (api/submit-tx crux-node (f/maps->tx-ops stocks-batch)))
+      (api/submit-tx crux-node (f/maps->tx-ops t-currencies date)))
+    (println "Txes submitted, synchronizing...")
+    (let [sync-time
+          (crux.bench/duration-millis
+            (api/sync crux-node (java.time.Duration/ofMinutes 20)))]
+      (swap! sync-times assoc [stocks-count history-days] sync-time)
+      (println "Sync takes: " sync-time))))
+
 (defn with-stocks-history-data [f]
   (when run-entity-cache-tests?
-    (println "stocks count" stocks-count)
-    (let [base-stocks (map gen-stock (range stocks-count))
-          base-date #inst "2019"
-          partitions-total (/ stocks-count 1000)]
-      (reset! -stocks base-stocks)
-      (doseq [i (range history-days)
-              :let [date (Date. ^long (+ (.getTime base-date) (* 1000 60 60 24 i)))
-                    ctr (atom 0)
-                    stocks-batch (alter-stocks base-stocks)
-                    t-currencies (map alter-currency currencies)]]
-        (doseq [stocks-batch (partition-all 1000 stocks-batch)]
-          (swap! ctr inc)
-          (println "day " (inc i) "\t" "partition " @ctr "/" partitions-total)
-          (api/submit-tx *api* (f/maps->tx-ops stocks-batch)))
-        (api/submit-tx *api* (f/maps->tx-ops t-currencies date)))
-      (println "Txes submitted, synchronizing...")
-      (let [sync-time
-            (crux.bench/duration-millis
-              (api/sync *api* (java.time.Duration/ofMinutes 20)))]
-        (swap! sync-times assoc [stocks-count history-days] sync-time)
-        (println "Sync takes: " sync-time))))
+    (upload-stocks-with-history *api*))
   (f))
 
 (t/use-fixtures :once
@@ -240,9 +243,9 @@
 
 
 (defn res->matrix [values]
-  (let [hday-set (->> (map :history-days values) set sort)
+  (let [hday-set   (->> (map :history-days values) set sort)
         scount-set (->> (map :stocks-count values) set sort)]
-    {:x {:title "History size (10x)"
+    {:x {:title "History size (10x)" ; hd
          :ticks hday-set}
      :y {:title "Stocks count (1000x)"
          :ticks scount-set}
@@ -276,6 +279,29 @@
 
 ; (untangle-plot-data (read-string (slurp "test-times.edn")))
 
-; (clojure.pprint/pprint (read-string (slurp "plots-data.edn")))
+(def s (read-string (slurp "plots-data.edn")))
+
+(def q3 (:q3 s))
+
+(def q3-data (:data q3))
+
+(clojure.pprint/pprint s)
+
+(def node
+  (api/start-standalone-node
+    {:db-dir        "console-data"
+     :event-log-dir "console-data-log"
+     :kv-backend    "crux.kv.rocksdb.RocksKv"}))
+
+(defn upload-fiddle-data []
+  (binding [history-days 10
+            stocks-count 10]
+    (upload-stocks-with-history node)))
+
+(api/q node '{:find e :where [[e :crux.db/id]]})
+
+(api/history)
+
+; (upload-fiddle-data)
 
 ; (t/run-tests 'crux.entity-cache-test)
