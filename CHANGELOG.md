@@ -1,5 +1,16 @@
 # Changelog
 
+## 19.07-1.3.0-alpha
+
+### Changes
+
+* [PR #300](https://github.com/juxt/crux/pull/300): *Breaking* replace all
+  usage of the word "system" with "node" (including APIs/docs/examples) e.g. `start-standalone-system` is now `start-standalone-node`
+
+### New features
+
+* [PR #297](https://github.com/juxt/crux/pull/297): New `crux-jdbc` backend as an alternative to Kafka for clustered deployments
+
 ## 19.07-1.2.0-alpha
 
 ### Changes

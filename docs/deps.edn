@@ -1,29 +1,20 @@
 {:deps
  {
   ;; tag::CruxDep[]
-  juxt/crux-core {:mvn/version "19.07-1.2.0-alpha"}
+  juxt/crux-core {:mvn/version "19.07-1.3.0-alpha"}
   ;; end::CruxDep[]
 
   ;; tag::KafkaClientsDeps[]
-  juxt/crux-kafka {:mvn/version "19.07-1.2.0-alpha"}
+  juxt/crux-kafka {:mvn/version "19.07-1.3.0-alpha"}
   ;; end::KafkaClientsDeps[]
 
-  ;; tag::KafkaDeps[]
-  org.apache.kafka/kafka_2.11 {:mvn/version "2.1.0"}
-  ;; end::KafkaDeps[]
+  ;; tag::KafkaEmbeddedDeps[]
+  juxt/crux-kafka-embedded {:mvn/version "19.07-1.3.0-alpha"}
+  ;; end::KafkaEmbeddedDeps[]
 
   ;; tag::RocksDeps[]
-  juxt/crux-rocksdb {:mvn/version "19.07-1.2.0-alpha"}
+  juxt/crux-rocksdb {:mvn/version "19.07-1.3.0-alpha"}
   ;; end::RocksDeps[]
 
   integrant/integrant {:mvn/version "0.6.3"}
-
-  ;; tag::ZookeeperDeps[]
-  org.apache.zookeeper/zookeeper {:mvn/version "3.4.13"
-                                  :exclusions [io.netty/netty
-                                               jline
-                                               org.apache.yetus/audience-annotations
-                                               org.slf4j/slf4j-log4j12
-                                               log4j]}
-  ;; end::ZookeeperDeps[]
   }}

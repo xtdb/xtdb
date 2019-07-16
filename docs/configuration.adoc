@@ -171,15 +171,14 @@ of how to interact with Crux over HTTP.
 
 === Embedded Kafka
 
-Crux is ready to work with an embedded Kafka.
+Crux is ready to work with an embedded Kafka for when you don't have a indendepently
+running Kafka available to connect to (such as during development).
 
-Add Kafka and Zookeeper to your project dependencies:
+Add `crux-kafka-embedded` to your project dependencies:
 
 [source,clj,subs="normal"]
 ----
-include::./deps.edn[tags=KafkaDeps]
-include::./deps.edn[tags=ZookeeperDeps]
-
+include::./deps.edn[tags=KafkaEmbeddedDeps]
 ----
 
 See the below example code:

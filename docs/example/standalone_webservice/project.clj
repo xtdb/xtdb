@@ -9,9 +9,9 @@
 ;                 [ring/ring-jetty-adapter "1.7.1"]
                  [ring-cors "0.1.13"]
 
-                 [juxt/crux-core "19.07-1.2.0-alpha"]
-                 [juxt/crux-rocksdb "19.07-1.2.0-alpha"]
-                 [juxt/crux-http-server "19.07-1.2.0-alpha"]
+                 [juxt/crux-core "19.07-1.3.0-alpha"]
+                 [juxt/crux-rocksdb "19.07-1.3.0-alpha"]
+                 [juxt/crux-http-server "19.07-1.3.0-alpha"]
                  [yada "1.3.0-alpha7"]
                  [hiccup "2.0.0-alpha2"]
                  [cljsjs/vega "4.4.0-0"]
