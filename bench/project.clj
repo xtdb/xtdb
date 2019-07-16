@@ -18,7 +18,8 @@
 
                  [amazonica "0.3.139"]]
   :global-vars {*warn-on-reflection* true}
-  :resource-paths ["/watdiv-data/resources" "resources"]
+  :resource-paths ["resources"
+                   #_"/watdiv-data/resources"]
   :uberjar-name "crux-bench-uberjar.jar"
   :jar-name "crux-bench.jar"
   :aot [crux-bench.main]
