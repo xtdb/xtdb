@@ -225,7 +225,7 @@
   (reset! test-times (read-string (slurp "test-times.edn")))
   (reset! sync-times (read-string (slurp "sync-times.edn")))
   (doseq [sc (range 1000 11000 1000)
-          hd (range 100 110 10) #_(cons 1 (range 100 110 10))]
+          hd (cons 1 (range 100 110 10))]
     (if-not false ;(contains? @test-times [sc hd :q1 true])
       (binding [run-entity-cache-tests? true
                 stocks-count sc
