@@ -12,6 +12,12 @@
 (rf/reg-sub :subs.query/error  (fnil :db.query/error  false))
 (rf/reg-sub :subs.ui/editor-key  (fnil :db.ui/editor-key 0))
 
+(rf/reg-sub :subs.ui/root-tab
+            (fn [db]
+              (case js/location.pathname
+                "/query-perf" :subs.ui.root-tab/query-perf
+                :subs.ui.root-tab/query-ui)))
+
 (rf/reg-sub :subs.query/input-edn-committed
             :<- [:subs.query/input-committed]
             qa/try-read-string)

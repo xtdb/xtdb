@@ -1,4 +1,4 @@
-(ns juxt.crux-ui.frontend.views.query.surface-chart
+(ns juxt.crux-ui.frontend.views.query.query-perf-plots
   (:require ["plotly.js-gl3d-dist" :as Plotly]
             [reagent.core :as r]
             [garden.core :as css]
@@ -52,21 +52,17 @@
 (defn do-plot [container query-data]
   (.newPlot Plotly container (z-data query-data) (opts query-data)))
 
-(defn root []
-  [:div.placeholder])
+(defn root
+  [data]
+  (let [-inst      (atom nil)]
+    (r/create-class
+     {:component-did-mount
+      (fn [this]
+        (let [el   (r/dom-node this)
+              inst (do-plot el data)]
+          (reset! -inst inst)))
 
-#_(defn root
-    [{:keys [headers rows] :as table}]
-    (let [-inst      (atom nil)]
-      (r/create-class
-       {:component-did-mount
-        (fn [this]
-          (let [el   (r/dom-node this)
-                data q3-data
-                inst (do-plot "plotly-container" data)]
-            (reset! -inst inst)))
-
-        :reagent-render
-        (fn [_ _ _]
-          [:div#plotly-container.plotly-container
-           [:style plot-styling]])})))
+      :reagent-render
+      (fn [_ _ _]
+        [:div.plotly-container
+         [:style plot-styling]])})))
