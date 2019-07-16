@@ -1,7 +1,7 @@
 (ns juxt.crux-ui.frontend.views.query.output
   (:require [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.views.query.results-tree :as q-results-tree]
-            [juxt.crux-ui.frontend.views.query.surface-chart :as line-chart]
+            [juxt.crux-ui.frontend.views.query.surface-chart :as surface-chart]
             [juxt.crux-ui.frontend.views.query.results-grid :as q-results-table]
             [garden.core :as garden]
             [garden.stylesheet :as gs]
@@ -131,15 +131,15 @@
          [side-output-tabs out-tab]]])]
 
    [:div.q-output__main
-    [line-chart/root @-sub-results-table]
-    #_(if-let [out-tab @-sub-output-tab]
-        [:<>
-         (case out-tab
-           :db.ui.output-tab/table [q-results-table/root @-sub-results-table]
-           :db.ui.output-tab/tree  [q-results-tree/root]
-           :db.ui.output-tab/edn   [query-output-edn]
-           :db.ui.output-tab/empty empty-placeholder
-           [q-results-table/root @-sub-results-table])
-         [:div.q-output__main__links
-          [main-output-tabs out-tab]]]
-        empty-placeholder)]])
+    (if-let [out-tab @-sub-output-tab]
+      [:<>
+       (case out-tab
+         :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
+         :db.ui.output-tab/tree           [q-results-tree/root]
+         :db.ui.output-tab/edn            [query-output-edn]
+         :db.ui.output-tab/surface-chart  [surface-chart/root]
+         :db.ui.output-tab/empty          empty-placeholder
+         [q-results-table/root @-sub-results-table])
+       [:div.q-output__main__links
+        [main-output-tabs out-tab]]]
+      empty-placeholder)]])
