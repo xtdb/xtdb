@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [crux.bootstrap.standalone]
             [crux.fixtures.standalone :as fs]
+            [crux.moberg]
             [crux.codec :as c]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
@@ -95,12 +96,12 @@
       (let [status-map (.status *api*)]
         (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
         (cond
-          (instance? crux.tx.EventTxLog (:tx-log *api*))
+          (instance? crux.moberg.MobergTxLog (:tx-log *api*))
           (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
           (instance? crux.jdbc.JdbcTxLog (:tx-log *api*))
-          (t/is (= {:crux.jdbc/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
+          (t/is (= {:crux.tx/event-log {:lag 0 :next-offset (inc tx-id) :time tx-time}}
                    (:crux.tx-log/consumer-state status-map)))
 
           :else

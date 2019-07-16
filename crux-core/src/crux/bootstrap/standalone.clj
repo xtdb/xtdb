@@ -4,6 +4,8 @@
             [clojure.java.io :as io]
             [crux.backup :as backup]
             [crux.bootstrap :as b]
+            [crux.moberg :as moberg]
+            [crux.tx.polling :as p]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
@@ -20,6 +22,24 @@
                                     :opt-un [:crux.kv/sync? :crux.db/object-store :crux.lru/doc-cache-size]
                                     :opt [:crux.tx/event-log-sync-interval-ms
                                           :crux.tx/event-log-kv-backend]))
+
+(defn- start-event-log-fsync ^java.io.Closeable [event-log-kv event-log-sync-interval-ms]
+  (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
+  (let [running? (atom true)
+        fsync-thread (when event-log-sync-interval-ms
+
+                       (doto (Thread. #(while @running?
+                                         (try
+                                           (Thread/sleep event-log-sync-interval-ms)
+                                           (kv/fsync event-log-kv)
+                                           (catch Throwable t
+                                             (log/error t "Event log fsync threw exception:"))))
+                                      "crux.tx.event-log-fsync-thread")
+                         (.start)))]
+    (reify Closeable
+      (close [_]
+        (reset! running? false)
+        (.join fsync-thread)))))
 
 (defn start-standalone-node ^ICruxAPI [options]
   (s/assert ::standalone-options options)
@@ -40,18 +60,24 @@
                                        :sync? event-log-sync?
                                        :crux.index/check-and-store-index-version false})
                                  (->> (swap! started conj)))
+
             object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
                                                   (b/start-object-store {:kv kv-store} options))
 
-            tx-log (doto (tx/->EventTxLog event-log-kv-store)
+            tx-log (doto (moberg/->MobergTxLog event-log-kv-store)
                      (->> (swap! started conj)))
 
             indexer (tx/->KvIndexer kv-store tx-log object-store)
 
             event-log-consumer (when event-log-kv-store
-                                 (doto (tx/start-event-log-consumer event-log-kv-store indexer (when-not sync?
-                                                                                                 event-log-sync-interval-ms))
-                                   (->> (swap! started conj))))]
+                                 (doto (p/start-event-log-consumer indexer
+                                                                   (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv-store
+                                                                                                        :batch-size 100}))
+                                   (->> (swap! started conj))))
+
+            event-log-fsync (when (and sync? event-log-sync-interval-ms)
+                              (doto (start-event-log-fsync event-log-kv-store event-log-sync-interval-ms)
+                                (->> (swap! started conj))))]
 
         (b/map->CruxNode {:kv-store kv-store
                           :tx-log tx-log
@@ -59,8 +85,9 @@
                           :indexer indexer
                           :options options
                           :close-fn (fn []
-                                      (doseq [c [event-log-consumer tx-log kv-store]]
-                                        (cio/try-close c)))}))
+                                      (doseq [c [event-log-consumer event-log-fsync tx-log kv-store]]
+                                        (when c
+                                          (cio/try-close c))))}))
       (catch Throwable t
         (doseq [c (reverse @started)]
           (cio/try-close c))

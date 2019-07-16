@@ -37,7 +37,7 @@
                  (.txLog *api* tx-log-context 0 false)))))))
 
 (defn- docs [ds id]
-  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'doc' AND EVENT_KEY = ?" id]
+  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
                                            {:builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (t/deftest test-docs-retention

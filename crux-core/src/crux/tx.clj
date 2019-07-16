@@ -9,13 +9,13 @@
             [clojure.java.io :as io]
             [crux.kv :as kv]
             [crux.memory :as mem]
-            [crux.moberg :as moberg]
             [crux.status :as status]
+            [crux.tx.polling :as p]
             crux.api
             crux.tx.event
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
-           crux.moberg.Message
+           crux.tx.consumer.Message
            java.io.Closeable
            java.util.concurrent.TimeoutException
            java.util.Date))
@@ -217,114 +217,6 @@
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
 (s/def ::event-log-sync-interval-ms nat-int?)
-
-(defrecord EventTxLog [event-log-kv]
-  db/TxLog
-  (submit-doc [this content-hash doc]
-    (moberg/send-message event-log-kv ::event-log content-hash doc {::sub-topic :docs}))
-
-  (submit-tx [this tx-ops]
-    (s/assert :crux.api/tx-ops tx-ops)
-    (doseq [doc (tx-ops->docs tx-ops)]
-      (db/submit-doc this (str (c/new-id doc)) doc))
-    (let [tx-events (tx-ops->tx-events tx-ops)
-          m (moberg/send-message event-log-kv ::event-log nil tx-events {::sub-topic :txs})]
-      (delay {:crux.tx/tx-id (.id m)
-              :crux.tx/tx-time (.time m)})))
-
-  (new-tx-log-context [this]
-    (kv/new-snapshot event-log-kv))
-
-  (tx-log [this tx-log-context from-tx-id]
-    (let [i (kv/new-iterator tx-log-context)]
-      (when-let [m (moberg/seek-message i ::event-log from-tx-id)]
-        (for [^Message m (->> (repeatedly #(moberg/next-message i ::event-log))
-                              (take-while identity)
-                              (cons m))
-              :when (= :txs (get (.headers m) ::sub-topic))]
-          {:crux.api/tx-ops (.body m)
-           :crux.tx/tx-id (.message-id m)
-           :crux.tx/tx-time (.message-time m)}))))
-
-  Closeable
-  (close [_]
-    (.close ^Closeable event-log-kv))
-
-  backup/INodeBackup
-  (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
-    (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
-
-(defn- event-log-consumer-main-loop [{:keys [running? event-log-kv indexer batch-size idle-sleep-ms]
-                                      :or {batch-size 100
-                                           idle-sleep-ms 10}}]
-  (when-not (db/read-index-meta indexer :crux.tx-log/consumer-state)
-    (db/store-index-meta
-     indexer
-     :crux.tx-log/consumer-state {::event-log {:lag 0
-                                               :next-offset 0
-                                               :time nil}}))
-  (while @running?
-    (with-open [snapshot (kv/new-snapshot event-log-kv)
-                i (kv/new-iterator snapshot)]
-      (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state)
-                                [::event-log
-                                 :next-offset])]
-        (if-let [m (moberg/seek-message i ::event-log next-offset)]
-          (let [_ (log/debug "Consuming from:" next-offset)
-                ^Message last-message (loop [m m
-                                             n 1]
-                                        (do (log/debug "Consuming message:" (pr-str (moberg/message->edn m)))
-                                            (case (get (.headers m) ::sub-topic)
-                                              :docs
-                                              (db/index-doc indexer (.key m) (.body m))
-                                              :txs
-                                              (db/index-tx indexer
-                                                           (.body m)
-                                                           (.message-time m)
-                                                           (.message-id m)))
-                                            (if (>= n (long batch-size))
-                                              m
-                                              (if-let [next-m (moberg/next-message i ::event-log)]
-                                                (recur next-m (inc n))
-                                                m))))
-                end-offset (moberg/end-message-id-offset event-log-kv ::event-log)
-                next-offset (inc (long (.message-id last-message)))
-                lag (- end-offset next-offset)
-                _ (when (pos? lag)
-                    (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
-                consumer-state {::event-log
-                                {:lag lag
-                                 :next-offset next-offset
-                                 :time (.message-time last-message)}}]
-            (log/debug "Event log consumer state:" (pr-str consumer-state))
-            (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))))
-    (Thread/sleep idle-sleep-ms)))
-
-(defn start-event-log-consumer ^java.io.Closeable [event-log-kv indexer event-log-sync-interval-ms]
-  (let [running? (atom true)
-        worker-thread (doto (Thread. #(try
-                                        (event-log-consumer-main-loop {:running? running?
-                                                                       :event-log-kv event-log-kv
-                                                                       :indexer indexer})
-                                        (catch Throwable t
-                                          (log/fatal t "Event log consumer threw exception, consumption has stopped:")))
-                                     "crux.tx.event-log-consumer-thread")
-                        (.start))
-        fsync-thread (when event-log-sync-interval-ms
-                       (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
-                       (doto (Thread. #(while @running?
-                                         (try
-                                           (Thread/sleep event-log-sync-interval-ms)
-                                           (kv/fsync event-log-kv)
-                                           (catch Throwable t
-                                             (log/error t "Event log fsync threw exception:"))))
-                                      "crux.tx.event-log-fsync-thread")
-                         (.start)))]
-    (reify Closeable
-      (close [_]
-        (reset! running? false)
-        (.join worker-thread)
-        (some-> fsync-thread (.join))))))
 
 (defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
   (vec (for [op tx-ops]

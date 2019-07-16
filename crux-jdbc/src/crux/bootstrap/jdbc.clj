@@ -6,9 +6,11 @@
             [crux.io :as cio]
             [clojure.tools.logging :as log]
             [next.jdbc :as jdbc]
+            [crux.tx.polling :as p]
             [crux.jdbc :as j])
   (:import crux.api.ICruxAPI
-           crux.bootstrap.CruxNode))
+           crux.bootstrap.CruxNode
+           crux.jdbc.JDBCEventLogConsumer))
 
 (s/def ::options (s/keys :req-un [::dbtype
                                   ::dbname]))
@@ -40,7 +42,7 @@
                                               (b/start-object-store {:kv kv-store} options))
         tx-log (j/map->JdbcTxLog {:ds ds :dbtype dbtype})
         indexer (tx/->KvIndexer kv-store tx-log object-store)
-        event-log-consumer (j/start-event-log-consumer ds indexer)]
+        event-log-consumer (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds))]
 
     (b/map->CruxNode {:kv-store kv-store
                       :tx-log tx-log
