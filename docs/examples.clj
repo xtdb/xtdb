@@ -14,11 +14,11 @@
 (.close node)
 ;; end::close-node[]
 
-;; tag::start-cluster-node-node[]
+;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node
   (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
                             :bootstrap-servers "localhost:29092"}))
-;; end::start-cluster-node-node[]
+;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI node
