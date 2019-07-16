@@ -48,34 +48,32 @@
       [:&__form
         {:padding "0px 0"
          :grid-area :form}]
-      [:&--large-output
+      [:&--form-minimised
        {:grid-template
         "'output output' calc(100% - 50px)
          'controls form' 50px
-         / minmax(200px, 50px) 1fr"}]
-      ]
+         / minmax(200px, 50px) 1fr"}]]
 
-      (gs/at-media
-        {:max-width :1000px}
-        [:.query-ui
-         {:grid-template
-          "'output output' calc(100% - 330px)
-          'form form' 330px
-          / 1fr 1fr"
-          :margin-bottom 0}
-         [:&--large-output
-          {:grid-template
-          "'output output' calc(100% - 50px)
-          'form form' 50px
-          / 1fr 1fr"}]
-         [:&__controls
-          {:display :none}]])))
+    (gs/at-media
+      {:max-width :1000px}
+      [:.query-ui
+       {:grid-template
+        "'output output' calc(100% - 330px)
+        'form form' 330px
+        / 1fr 1fr"
+        :margin-bottom 0}
+       [:&--form-minimised
+        {:grid-template
+         "'output output' calc(100% - 50px)
+         'form form' 50px
+         / 1fr 1fr"}]
+       [:&__controls
+        {:display :none}]])))
         ;:border "1px solid green"
 
 
-
 (defn query-ui []
-  [:div.query-ui.query-ui--large-output
+  [:div.query-ui
    [:style query-ui-styles]
    [:div.query-ui__output
     [q-output/root]]
@@ -87,13 +85,13 @@
 
 (defn query [r]
   (let [q []
-               ;conformed-query (s/conform :crux.query/query q)
-               ;query-invalid? (= :clojure.spec.alpha/invalid conformed-query)
-          ;start-time (System/currentTimeMillis)
-          ;result (when-not query-invalid?
-          ;         (api/q db q))
-          ;query-time (- (System/currentTimeMillis) start-time)
-          invalid? false; (and query-invalid? (not (str/blank? q)))
-          on-cm-change-js "cm.save();"]
+        ;conformed-query (s/conform :crux.query/query q)
+        ;query-invalid? (= :clojure.spec.alpha/invalid conformed-query)
+        ;start-time (System/currentTimeMillis)
+        ;result (when-not query-invalid?
+        ;         (api/q db q))
+        ;query-time (- (System/currentTimeMillis) start-time)
+        invalid? false; (and query-invalid? (not (str/blank? q)))
+        on-cm-change-js "cm.save();"]
     [:div.query-editor {:style {:padding "2em"}}
      [cluster-health/root]]))
