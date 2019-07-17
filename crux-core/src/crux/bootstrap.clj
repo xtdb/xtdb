@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.java.io :as io]
+            [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
             [crux.codec :as c]
             [crux.db :as db]
@@ -157,3 +158,45 @@
      (reify Thread$UncaughtExceptionHandler
        (uncaughtException [_ thread throwable]
          (log/error throwable "Uncaught exception:"))))))
+
+(defn- start-order [system]
+  (let [g (reduce-kv (fn [g k v]
+                       (if (vector? v)
+                         (reduce (fn [g d] (dep/depend g k d)) g (rest v))
+                         g))
+                     (dep/graph)
+                     system)
+        dep-order (dep/topo-sort g)
+        dep-order (->> (keys system)
+                       (remove #(contains? (set dep-order) %))
+                       (into dep-order))]
+    dep-order))
+
+(defn- start-modules [node-system options]
+  (let [started (atom {})
+        start-order (start-order node-system)
+        started-modules (try
+                          (for [k start-order]
+                            (let [m (get node-system k)
+                                  start-fn (if (vector? m) (first m) m)
+                                  deps (when (vector? m) (select-keys @started (rest m)))]
+                              [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
+                          (catch Throwable t
+                            (doseq [c (reverse @started)]
+                              (when (instance? Closeable c)
+                                (cio/try-close c)))
+                            (throw t)))]
+    [(into {} started-modules) (fn []
+                                 (doseq [k (reverse start-order)
+                                         :let [m (get @started k)]
+                                         :when (instance? Closeable m)]
+                                   (cio/try-close m)))]))
+
+(comment
+  (start-modules {:a [(fn [deps] (println deps) :start-a) :b]
+                  :b (fn [deps] :start-b)
+                  :c (fn [deps] :start-c)}))
+
+(defn start-node ^ICruxAPI [node-setup options]
+  (let [[node-modules close-fn] (start-modules node-setup options)]
+    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))
