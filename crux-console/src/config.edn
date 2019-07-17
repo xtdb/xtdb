@@ -23,5 +23,3 @@
                           ["/cljsjs/" #ig/ref [:juxt.crux-ui.server.main/cljsjs :edge.yada.ig/resources]]
                           ["/rw" #ig/ref :juxt.crux-ui.server.main/read-write]
                           ["" #ig/ref [:juxt.crux-ui.server/assets :edge.yada.ig/resources]]]]]]}}
-
-

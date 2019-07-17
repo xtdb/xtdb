@@ -7,7 +7,7 @@
             [clojure.spec.alpha :as s]
             [crux.bootstrap :as b]
             [crux.bootstrap.cluster-node :as cluster-node]
-            [crux.bootstrap.standalone :as standalone]
+            [crux.standalone :as standalone]
             [crux.byte-utils :as bu]
             [crux.db :as db]
             [crux.index :as idx]
@@ -115,7 +115,7 @@
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
 ;;                         {:event-log-dir (str storage-dir "/event-log")
-;;                          :crux.tx/event-log-sync-interval-ms 1000
+;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
 ;;                          :dev/node-start-fn standalone/start-standalone-node}))

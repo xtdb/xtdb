@@ -11,8 +11,8 @@
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
       (with-open [standalone-node (Crux/startStandaloneNode {:db-dir db-dir
-                                                                 :kv-backend *kv-backend*
-                                                                 :event-log-dir event-log-dir})]
+                                                             :kv-backend *kv-backend*
+                                                             :event-log-dir event-log-dir})]
         (binding [*api* standalone-node]
           (f)))
       (finally

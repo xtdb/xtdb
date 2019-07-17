@@ -1,4 +1,4 @@
-(ns crux.bootstrap.standalone
+(ns crux.standalone
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
@@ -10,7 +10,8 @@
   (:import java.io.Closeable
            crux.api.ICruxAPI))
 
-(defn- start-event-log-fsync ^java.io.Closeable [{:keys [event-log-kv]} {:keys [sync? event-log-sync-interval-ms]}]
+(defn- start-event-log-fsync ^java.io.Closeable [{:keys [event-log-kv]}
+                                                 {:keys [sync? crux.standalone/event-log-sync-interval-ms]}]
   (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
   (let [running? (atom true)
         fsync-thread (when (and sync? event-log-sync-interval-ms)
@@ -25,10 +26,11 @@
     (reify Closeable
       (close [_]
         (reset! running? false)
-        (.join fsync-thread)))))
+        (some-> fsync-thread (.join fsync-thread))))))
 
-(defn- start-event-log-kv [_ {:keys [event-log-dir crux.tx/event-log-kv-backend kv-backend
-                                     sync? crux.tx/event-log-sync-interval-ms]}]
+(defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-backend
+                                     crux.standalone/event-log-sync-interval-ms
+                                     event-log-dir kv-backend sync?]}]
   (let [event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))]
     (b/start-kv-store
      {:db-dir event-log-dir
@@ -66,10 +68,14 @@
                              :object-store [start-object-store :kv-store]
                              :indexer [start-kv-indexer :kv-store :tx-log :object-store]})
 
-(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir :crux.tx/event-log-dir :crux.kv/kv-backend]
+(s/def ::event-log-dir string?)
+(s/def ::event-log-kv-backend :crux.kv/kv-backend)
+(s/def ::event-log-sync-interval-ms nat-int?)
+
+(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir ::event-log-dir :crux.kv/kv-backend]
                                     :opt-un [:crux.kv/sync? :crux.db/object-store :crux.lru/doc-cache-size]
-                                    :opt [:crux.tx/event-log-sync-interval-ms
-                                          :crux.tx/event-log-kv-backend]))
+                                    :opt [::event-log-sync-interval-ms
+                                          ::event-log-kv-backend]))
 
 (defn start-standalone-node ^ICruxAPI [options]
   (s/assert ::standalone-options options)

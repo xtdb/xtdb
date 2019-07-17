@@ -70,8 +70,8 @@ public class Crux {
      * log.
      */
     public static ICruxAPI startStandaloneNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.standalone"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.standalone/start-standalone-node").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.standalone"));
+        return (ICruxAPI) Clojure.var("crux.standalone/start-standalone-node").invoke(options);
     }
 
     /**

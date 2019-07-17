@@ -1,6 +1,6 @@
 (ns crux.main.graal
   (:require [clojure.tools.logging :as log]
-            [crux.bootstrap.standalone :as sa]
+            [crux.standalone :as sa]
             [crux.kv.memdb]
             [crux.kv.rocksdb])
   (:gen-class))
