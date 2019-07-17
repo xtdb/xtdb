@@ -1,4 +1,4 @@
-(ns juxt.crux-ui.frontend.views.query.results-tree
+(ns juxt.crux-ui.frontend.views.output.tree
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
             [clojure.string :as str]

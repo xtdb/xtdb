@@ -151,6 +151,9 @@
   (history [this eid]
     (.history this eid))
 
+  (history-range [this eid]
+    (.historyRange this eid nil nil nil nil))
+
   (history-range [this eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (.historyRange this eid valid-time-start transaction-time-start valid-time-end transaction-time-end))
 

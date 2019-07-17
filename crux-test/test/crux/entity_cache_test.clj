@@ -9,8 +9,7 @@
             [crux.db :as db]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.cluster-node :as cn]
-            [crux.fixtures.kafka :as fk])
-  (:import (java.util Date)))
+            [crux.fixtures.kafka :as fk]))
 
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
@@ -287,7 +286,9 @@
 
   (def q3-data (:data q3))
 
-  (clojure.pprint/pprint s)
+  (clojure.pprint/pprint q3-data)
+
+  (require '[crux.api :as api])
 
   (def node
     (api/start-standalone-node
@@ -295,15 +296,33 @@
        :event-log-dir "console-data-log"
        :kv-backend    "crux.kv.rocksdb.RocksKv"}))
 
+  (api/q (api/db node) '{:find [e] :where [[e :crux.db/id]]})
+
   (defn upload-fiddle-data []
     (binding [history-days 10
               stocks-count 10]
       (upload-stocks-with-history node)))
 
-  (api/q node '{:find e :where [[e :crux.db/id]]})
 
-  (api/history))
 
-  ; (upload-fiddle-data)
+  (api/history node :stock.id/company-8)
+
+  (api/history-range node :stock.id/company-8)
+
+  (def e-hist (api/history-range node :stock.id/company-8 nil nil nil nil))
+
+  (def e1 (first e-hist))
+
+  (api/document node (:crux.db/content-hash e1))
+
+  (api/entity (api/db node) (:crux.db/id e1))
+
+  (api/entity (api/db node) (:crux.db/id e1))
+
+  (mapv (comp (partial api/document node) :crux.db/content-hash) e-hist)
+
+  (upload-fiddle-data)
+
+  )
 
 ; (t/run-tests 'crux.entity-cache-test)
