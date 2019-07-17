@@ -3,7 +3,6 @@
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.comps :as comps]
-            [juxt.crux-ui.frontend.views.output.surface-chart :as surface-chart]
             [juxt.crux-ui.frontend.views.output.tree :as q-results-tree]
             [juxt.crux-ui.frontend.views.output.tx-history :as output-txes]
             [juxt.crux-ui.frontend.views.output.attr-history :as output-attr-history]
@@ -137,7 +136,6 @@
          :db.ui.output-tab/tx-history     [output-txes/root]
          :db.ui.output-tab/attr-history   [output-attr-history/root]
          :db.ui.output-tab/edn            [output-edn/root @-sub-query-res]
-         :db.ui.output-tab/surface-chart  [surface-chart/root]
          :db.ui.output-tab/empty          empty-placeholder
          [q-results-table/root @-sub-results-table])
        [:div.q-output__main__links

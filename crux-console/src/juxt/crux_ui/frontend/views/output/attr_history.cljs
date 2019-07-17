@@ -1,8 +1,8 @@
-(ns juxt.crux-ui.frontend.views.output.tx-history
+(ns juxt.crux-ui.frontend.views.output.attr-history
   (:require [re-frame.core :as rf]
             [garden.core :as garden]))
 
-(def ^:private -sub-tx-history (rf/subscribe [:subs.output/tx-history]))
+(def ^:private -sub-attr-history (rf/subscribe [:subs.output/attr-history]))
 
 ; History
 
@@ -18,8 +18,8 @@
 (def ^:private root-styles
   [:style
    (garden/css
-     [:.tx-history
+     [:.attr-history
       {}])])
 
 (defn root []
-  [:div.tx-history])
+  [:div.attr-history])
