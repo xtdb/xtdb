@@ -228,7 +228,7 @@
   (reset! test-times (read-string (slurp "test-times.edn")))
   (reset! sync-times (read-string (slurp "sync-times.edn")))
   (doseq [sc (range 1000 11000 1000)
-          hd (cons 1 (range 100 110 10))]
+          hd (cons 1 (range 10 110 10))]
     (if-not false ;(contains? @test-times [sc hd :q1 true])
       (binding [run-entity-cache-tests? true
                 stocks-count sc
@@ -279,29 +279,31 @@
 
 ; (untangle-plot-data (read-string (slurp "test-times.edn")))
 
-(def s (read-string (slurp "plots-data.edn")))
+(comment
 
-(def q3 (:q3 s))
+  (def s (read-string (slurp "plots-data.edn")))
 
-(def q3-data (:data q3))
+  (def q3 (:q3 s))
 
-(clojure.pprint/pprint s)
+  (def q3-data (:data q3))
 
-(def node
-  (api/start-standalone-node
-    {:db-dir        "console-data"
-     :event-log-dir "console-data-log"
-     :kv-backend    "crux.kv.rocksdb.RocksKv"}))
+  (clojure.pprint/pprint s)
 
-(defn upload-fiddle-data []
-  (binding [history-days 10
-            stocks-count 10]
-    (upload-stocks-with-history node)))
+  (def node
+    (api/start-standalone-node
+      {:db-dir        "console-data"
+       :event-log-dir "console-data-log"
+       :kv-backend    "crux.kv.rocksdb.RocksKv"}))
 
-(api/q node '{:find e :where [[e :crux.db/id]]})
+  (defn upload-fiddle-data []
+    (binding [history-days 10
+              stocks-count 10]
+      (upload-stocks-with-history node)))
 
-(api/history)
+  (api/q node '{:find e :where [[e :crux.db/id]]})
 
-; (upload-fiddle-data)
+  (api/history))
+
+  ; (upload-fiddle-data)
 
 ; (t/run-tests 'crux.entity-cache-test)
