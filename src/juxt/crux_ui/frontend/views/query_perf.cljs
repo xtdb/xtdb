@@ -10,7 +10,7 @@
     (println :plots-data-not-found)))
 
 (def q1-data
-  {:title "Simple query (Query 1) execution time"
+  {:title "Simple query execution time"
    :plain (:q1 plots-data)
    :with-cache (:q1-with-cache plots-data)})
 
