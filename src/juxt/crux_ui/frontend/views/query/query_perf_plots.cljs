@@ -18,7 +18,7 @@
 
 (defn z-data [{:keys [plain with-cache] :as query-data}]
   (clj->js
-    [{:z (take 11 (map #(take 10 %) (:data plain)))
+    [{:z (:data plain)
       :name "Cache off"
       :colorscale "YIOrRd"
       :type "surface"}

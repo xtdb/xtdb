@@ -23,7 +23,6 @@
              :db.query/input-committed str)))
 
 
-
 ; ----- effects -----
 
 (rf/reg-fx

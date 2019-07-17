@@ -1,4 +1,4 @@
-(ns juxt.crux-ui.frontend.views.query.line-chart
+(ns juxt.crux-ui.frontend.views.charts.line-chart
   (:require ["plotly.js-dist" :as Plotly]
             [reagent.core :as r]
             [garden.core :as css]

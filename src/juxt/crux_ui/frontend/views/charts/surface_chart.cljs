@@ -1,4 +1,4 @@
-(ns juxt.crux-ui.frontend.views.query.surface-chart
+(ns juxt.crux-ui.frontend.views.charts.surface-chart
   (:require ["plotly.js-gl3d-dist" :as Plotly]
             [reagent.core :as r]
             [garden.core :as css]

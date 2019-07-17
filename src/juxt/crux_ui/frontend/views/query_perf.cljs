@@ -10,12 +10,12 @@
     (println :plots-data-not-found)))
 
 (def q1-data
-  {:title "Query-1 execution time"
+  {:title "Simple query (Query 1) execution time"
    :plain (:q1 plots-data)
    :with-cache (:q1-with-cache plots-data)})
 
 (def q3-data
-  {:title "Query-3 execution time"
+  {:title "Query with joins execution time"
    :plain (:q3 plots-data)
    :with-cache (:q3-with-cache plots-data)})
 
