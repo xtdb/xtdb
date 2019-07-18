@@ -47,23 +47,11 @@
 (defn- start-moberg-event-log [{:keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
-(defn- start-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
-  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                           (b/start-object-store {:kv kv-store} options)))
-
-(defn- start-kv-store [_ options]
-  (b/start-kv-store options))
-
-(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
-  (tx/->KvIndexer kv-store tx-log object-store))
-
-(def standalone-node-config {:event-log-kv start-event-log-kv
-                             :event-log-sync [start-event-log-fsync :event-log-kv]
-                             :event-log-consumer [start-event-log-consumer :event-log-kv :indexer]
-                             :tx-log [start-moberg-event-log :event-log-kv]
-                             :kv-store start-kv-store
-                             :object-store [start-object-store :kv-store]
-                             :indexer [start-kv-indexer :kv-store :tx-log :object-store]})
+(def standalone-node-config (merge b/base-node-config
+                                   {:event-log-kv start-event-log-kv
+                                    :event-log-sync [start-event-log-fsync :event-log-kv]
+                                    :event-log-consumer [start-event-log-consumer :event-log-kv :indexer]
+                                    :tx-log [start-moberg-event-log :event-log-kv]}))
 
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)

@@ -127,27 +127,30 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defn start-kv-store ^java.io.Closeable [{:keys [db-dir
-                                                 kv-backend
-                                                 sync?
-                                                 crux.index/check-and-store-index-version]
-                                          :as options
-                                          :or {check-and-store-index-version true}}]
-  (s/assert :crux.kv/options options)
-  (let [kv (-> (kv/new-kv-store kv-backend)
-               (lru/new-cache-providing-kv-store)
-               (kv/open options))]
-    (try
-      (if check-and-store-index-version
-        (idx/check-and-store-index-version kv)
-        kv)
-      (catch Throwable t
-        (.close ^Closeable kv)
-        (throw t)))))
+(defn start-kv-store ^java.io.Closeable
+  ([_ options]
+   (start-kv-store options))
+  ([{:keys [db-dir
+             kv-backend
+             sync?
+             crux.index/check-and-store-index-version]
+      :as options
+     :or {check-and-store-index-version true}}]
+   (s/assert :crux.kv/options options)
+   (let [kv (-> (kv/new-kv-store kv-backend)
+                (lru/new-cache-providing-kv-store)
+                (kv/open options))]
+     (try
+       (if check-and-store-index-version
+         (idx/check-and-store-index-version kv)
+         kv)
+       (catch Throwable t
+         (.close ^Closeable kv)
+         (throw t))))))
 
 (defn start-object-store ^java.io.Closeable [partial-node {:keys [object-store]
-                                                             :or {object-store (:object-store default-options)}
-                                                             :as options}]
+                                                           :or {object-store (:object-store default-options)}
+                                                           :as options}]
   (-> (db/require-and-ensure-object-store-record object-store)
       (cio/new-record)
       (db/init partial-node options)))
@@ -196,6 +199,17 @@
   (start-modules {:a [(fn [deps] (println deps) :start-a) :b]
                   :b (fn [deps] :start-b)
                   :c (fn [deps] :start-c)}))
+
+(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
+  (tx/->KvIndexer kv-store tx-log object-store))
+
+(defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
+  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                           (start-object-store {:kv kv-store} options)))
+
+(def base-node-config {:kv-store start-kv-store
+                       :object-store [start-cached-object-store :kv-store]
+                       :indexer [start-kv-indexer :kv-store :tx-log :object-store]})
 
 (defn start-node ^ICruxAPI [node-setup options]
   (let [[node-modules close-fn] (start-modules node-setup options)]
