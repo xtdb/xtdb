@@ -67,18 +67,25 @@
     {:db             db
      :fx/query-stats nil}))
 
+
+; queries
+
 (rf/reg-event-db
   :evt.io/stats-success
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
-(rf/reg-event-db
+(rf/reg-event-fx
   :evt.io/query-success
-  (fn [db [_ res]]
-    (let [q-info (:db.query/analysis-committed db)]
-      (assoc db :db.query/result
-                (if (:full-results? q-info)
-                  (flatten res) res)))))
+  (fn [{db :db :as ctx} [_ res]]
+    (let [q-info (:db.query/analysis-committed db)
+          res    (if (:full-results? q-info) (flatten res) res)
+          res-analysis (qa/analyse-results q-info res)
+          db     (assoc db :db.query/result res
+                           :db.query/result-analysis res-analysis)]
+
+      (cond-> {:db db}))))
+
 
 (rf/reg-event-fx
   :evt.io/gist-err

@@ -240,6 +240,8 @@
 
 ; (do-plot-data)
 
+; (reset! test-times (read-string (slurp "test-times.edn")))
+; (get @test-times [10000 1 :q3 false])
 
 (defn res->matrix [values]
   (let [hday-set   (->> (map :history-days values) set sort)

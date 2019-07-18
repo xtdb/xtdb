@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:source-paths ["src" "../common/src" "node_modules"]
+{:source-paths ["src" "../common/src" "test" "node_modules"]
 
  :dependencies
    [[reagent                      "0.8.1"]
@@ -26,7 +26,7 @@
   {:target      :browser-test
    :test-dir    "resources/static/crux-ui/test"
    :ns-regexp   "-test$"
-   :runner-ns   juxt.crux-ui.frontend.test-runner
+   :runner-ns   crux-console.test-runner
    :devtools
    {:http-port  4001
     :http-root  "resources/static/crux-ui/test"}}
@@ -46,4 +46,4 @@
      :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55000
-         :init-ns user}}
+         :init-ns juxt.crux-ui.frontend.main}}
