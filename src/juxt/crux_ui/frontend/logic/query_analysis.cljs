@@ -63,8 +63,34 @@
 (defn query-map? [edn]
   (and (map? edn) (every? edn [:find :where])))
 
+(defn third [coll]
+  (nth coll 2 nil))
+
+(defn infer-symbol-attr-map
+  "Given a simple datalog query map returns a map symbol -> attribute
+  "
+  [qmap]
+  (let [symbols-queried   (set (:find qmap))
+        where-vec         (:where qmap)
+        attr-triplets     (filter (comp keyword? second) where-vec)
+        eid-triplets      (filter (comp symbol? first) where-vec)
+        retained-triplets (filter #(symbols-queried (third %)) attr-triplets)
+        eid-symbols       (set (map first eid-triplets))
+        retained-eids     (set (filter symbols-queried eid-symbols))
+        lookup-symbol-attr (fn [symbol]
+                             (second (m/find-first #(= (third %) symbol) retained-triplets)))
+        symbol-attr-pair  (fn [symbol]
+                            [symbol
+                              (if (retained-eids symbol)
+                                :crux.db/id
+                                (lookup-symbol-attr symbol))])
+        symbol->attr      (into {} (map symbol-attr-pair symbols-queried))]
+    symbol->attr))
+
+
 (defn with-query-map-data [qmap]
-  (assoc qmap :crux.ui/query-type :crux.ui.query-type/query))
+  (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
+              :query/attributes (infer-symbol-attr-map qmap)))
 
 (defn analyse-query [input-edn]
   (cond
@@ -73,3 +99,27 @@
     (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
     (query-map? input-edn)        (with-query-map-data input-edn)
     :else                         false))
+
+(defn analyse-results [query-info results]
+  (if (not-empty results)
+    (let [r-count (count results)
+          ids-queried? false
+          full-results? (:full-results? query-info)
+          first-res (if full-results?
+                      (-> results first :crux.query/doc)
+                      (-> first results))
+          ids-pluck
+          (cond
+            full-results? :crux.db/id
+            ids-queried? first
+            :else identity)
+          attrs (if full-results?
+                  (keys first-res)
+                  (:query/attributes query-info))
+          ids (if ids-queried? (map ids-pluck results))]
+      {:single-entity? (= 1 r-count)
+       :results-count  r-count
+       :entity-ids     ids
+       :entity-id      (first ids)
+       :first-res      first-res
+       :attributes     attrs})))

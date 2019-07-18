@@ -20,7 +20,7 @@
   (clj->js
     [{:z (:data plain)
       :name "Cache off"
-      :colorscale "YIOrRd"
+      :colorscale "Picnic"
       :type "surface"}
      {:z  (:data with-cache)
       :name "Cache on"
