@@ -36,6 +36,11 @@
     (q/fetch-stats)))
 
 (rf/reg-fx
+  :fx.query/history
+  (fn [eids]
+    (q/fetch-histories eids)))
+
+(rf/reg-fx
   :fx.sys/set-cookie
   (fn [[cookie-name value]]
     (c/set! cookie-name value {:max-age 86400})))
@@ -75,16 +80,22 @@
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
+(def ^:const ui--history-max-entities 7)
+
 (rf/reg-event-fx
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
           res    (if (:full-results? q-info) (flatten res) res)
           res-analysis (qa/analyse-results q-info res)
+          nums?  (:ra/has-numeric-attrs? res-analysis)
           db     (assoc db :db.query/result res
                            :db.query/result-analysis res-analysis)]
 
-      (cond-> {:db db}))))
+      (println :evt.io/query-success nums? (:ra/entity-ids res-analysis))
+      (cond-> {:db db}
+              nums? (assoc :fx.query/history
+                           (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))
 
 
 (rf/reg-event-fx

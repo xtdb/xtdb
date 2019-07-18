@@ -114,8 +114,6 @@
     (query-map? input-edn)        (with-query-map-data input-edn)
     :else                         false))
 
-(defn- scan-numeric-attributes [query-res pos->attr])
-
 (defn- calc-numeric-keys [m]
   (map first (filter (comp number? second) m)))
 
@@ -125,7 +123,9 @@
      attr-vec]
     :as query-info}
    results]
-  (if (not-empty results)
+  (def args [query-info results])
+  (if (and (= (:crux.ui/query-type query-info) :crux.ui.query-type/query)
+           (not-empty results))
     (let [r-count (count results)
           ids-received? (or (attr-set :crux.db/id) (:full-results? query-info))
           full-results? (:full-results? query-info)
@@ -143,11 +143,14 @@
           numeric-attrs (disj (set (calc-numeric-keys first-res-map)) :crux.db/id)
           discrete-attrs (cset/difference (disj attr-set :crux.db/id)  numeric-attrs)
           ids (if ids-received? (map ids-pluck results))]
-      {:ra/single-entity? (= 1 r-count)
-       :ra/results-count  r-count
-       :ra/numeric-attrs  numeric-attrs
-       :ra/discrete-attrs discrete-attrs
-       :ra/entity-ids     ids
-       :ra/entity-id      (first ids)
-       :ra/first-res-map  first-res-map
-       :ra/first-res      first-res})))
+      {:ra/single-entity?     (= 1 r-count)
+       :ra/results-count      r-count
+       :ra/has-results?       (> r-count 0)
+       :ra/numeric-attrs      numeric-attrs
+       :ra/has-numeric-attrs? (> (count numeric-attrs) 0)
+       :ra/discrete-attrs     discrete-attrs
+       :ra/entity-ids         ids
+       :ra/entity-id          (first ids)
+       :ra/first-res-map      first-res-map
+       :ra/first-res          first-res})
+    (println :bailing-out query-info results)))
