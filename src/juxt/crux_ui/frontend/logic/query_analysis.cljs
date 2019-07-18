@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.frontend.logic.query-analysis
   (:require [medley.core :as m]
-            [cljs.reader]))
+            [clojure.set :as cset]
+            [cljs.reader :as reader]))
 
 
 (defn calc-vector-headers [query-vector]
@@ -44,7 +45,7 @@
 
 (defn try-read-string [input-str]
   (try
-    (cljs.reader/read-string input-str)
+    (reader/read-string input-str)
     (catch js/Error e
       {:error e})))
 
@@ -88,9 +89,22 @@
     symbol->attr))
 
 
-(defn with-query-map-data [qmap]
-  (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
-              :query/attributes (infer-symbol-attr-map qmap)))
+(defn with-query-map-data [{:keys [full-results?] :as qmap}]
+  (let [s->a (infer-symbol-attr-map qmap)
+        a->s (cset/map-invert s->a)
+        attr-seq (vals s->a)
+        attr-set (set attr-seq)
+        find-vec (:find qmap)
+        symbol-positions (into {} (map vector find-vec (range)))
+        attr-positions (zipmap attr-seq (map (comp symbol-positions a->s) attr-seq))]
+    (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
+                :query/ids-queried? (attr-set :crux.db/id)
+                :query/symbol-positions symbol-positions
+                :query/attr-set attr-set
+                :query/attr-vec (mapv s->a find-vec)
+                :query/attr-positions attr-positions
+                :query/pos->attr (cset/map-invert attr-positions)
+                :query/attributes s->a)))
 
 (defn analyse-query [input-edn]
   (cond
@@ -100,26 +114,40 @@
     (query-map? input-edn)        (with-query-map-data input-edn)
     :else                         false))
 
-(defn analyse-results [query-info results]
+(defn- scan-numeric-attributes [query-res pos->attr])
+
+(defn- calc-numeric-keys [m]
+  (map first (filter (comp number? second) m)))
+
+(defn analyse-results
+  [{:query/keys
+    [attr-set
+     attr-vec]
+    :as query-info}
+   results]
   (if (not-empty results)
     (let [r-count (count results)
-          ids-queried? false
+          ids-received? (or (attr-set :crux.db/id) (:full-results? query-info))
           full-results? (:full-results? query-info)
           first-res (if full-results?
                       (-> results first :crux.query/doc)
-                      (-> first results))
+                      (-> results first))
+          first-res-map (if full-results?
+                          first-res
+                          (zipmap attr-vec first-res))
           ids-pluck
           (cond
             full-results? :crux.db/id
-            ids-queried? first
+            ids-received? first
             :else identity)
-          attrs (if full-results?
-                  (keys first-res)
-                  (:query/attributes query-info))
-          ids (if ids-queried? (map ids-pluck results))]
-      {:single-entity? (= 1 r-count)
-       :results-count  r-count
-       :entity-ids     ids
-       :entity-id      (first ids)
-       :first-res      first-res
-       :attributes     attrs})))
+          numeric-attrs (disj (set (calc-numeric-keys first-res-map)) :crux.db/id)
+          discrete-attrs (cset/difference (disj attr-set :crux.db/id)  numeric-attrs)
+          ids (if ids-received? (map ids-pluck results))]
+      {:ra/single-entity? (= 1 r-count)
+       :ra/results-count  r-count
+       :ra/numeric-attrs  numeric-attrs
+       :ra/discrete-attrs discrete-attrs
+       :ra/entity-ids     ids
+       :ra/entity-id      (first ids)
+       :ra/first-res-map  first-res-map
+       :ra/first-res      first-res})))
