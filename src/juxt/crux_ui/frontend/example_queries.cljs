@@ -42,18 +42,34 @@
     (-gen-id)
     (rand-nth @used-ids)))
 
-(defn- gen-vt []
-  #inst "2018-09-12T03:30")
+(def ^{:private true :const true} day-millis (* 24 60 60 1000))
+
+(defn- gen-vt
+  ([] (gen-vt 0))
+  ([offset-in-days]
+   (js/Date. (+ (js/Date.now) (* offset-in-days day-millis)))))
 
 (defn- gen-ticker []
-  {:crux.db/id (gen-id)
-   :price      (inc (rand-int 100))
-   :currency   (rand-nth currencies)})
+  {:crux.db/id        (gen-id)
+   :ticker/price      (inc (rand-int 100))
+   :ticker/currency   (rand-nth currencies)})
+
+(defn- gen-put-with-offset-days [ticker offset-in-days]
+  [:crux.tx/put ticker (gen-vt offset-in-days)])
+
+(defn- int-rand-inc [x]
+  (+ x (rand-int 7)))
+
+(defn- alter-ticker [ticker]
+  (update ticker :ticker/price int-rand-inc))
 
 (def generators
   {:examples/put (fn [] [[:crux.tx/put (gen-ticker)]])
    :examples/put-10 (fn [] (mapv (fn [_] [:crux.tx/put (gen-ticker)]) (range 10)))
-   :examples/put-w-valid (fn [] [[:crux.tx/put (gen-ticker) (gen-vt)]])
+   :examples/put-w-valid
+   (fn []
+     (let [ticker (gen-ticker)]
+       (mapv #(gen-put-with-offset-days (alter-ticker ticker) %) (range -10 1 1))))
 
    :examples/query
    (fn []
