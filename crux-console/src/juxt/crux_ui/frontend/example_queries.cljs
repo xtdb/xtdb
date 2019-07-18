@@ -73,8 +73,9 @@
 
    :examples/query
    (fn []
-     '{:find [e]
-       :where [[e :crux.db/id _]]})
+     '{:find [e p]
+       :where [[e :crux.db/id _]
+               [e :ticker/price p]]})
 
    :examples/crux-night
    (fn [] [[:crux.tx/put {:crux.db/id :github/some-username :crux-night/question "Where can I find the docs for Crux?"}]])

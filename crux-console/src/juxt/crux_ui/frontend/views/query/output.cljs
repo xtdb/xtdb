@@ -60,6 +60,8 @@
    (->>
      (for [tab-type [:db.ui.output-tab/table
                      :db.ui.output-tab/tree
+                     :db.ui.output-tab/attr-history
+                     :db.ui.output-tab/tx-history
                      :db.ui.output-tab/edn]]
        ^{:key tab-type}
        [out-tab-item tab-type active-tab #(set-main-tab tab-type)])
