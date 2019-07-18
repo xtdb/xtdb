@@ -29,27 +29,22 @@
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v bytea NOT NULL)")]))
 
-(defn ^ICruxAPI start-jdbc-node [{:keys [dbtype
-                                           dbname]
-                                    :as options}]
-  (s/assert ::options options)
-  (log/info "starting node")
-  (let [{:keys [doc-cache-size] :as options} (merge b/default-options options)
-        ds (jdbc/get-datasource options)
-        _ (setup-schema! ds dbtype)
-        kv-store (b/start-kv-store options)
-        object-store (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                                              (b/start-object-store {:kv kv-store} options))
-        tx-log (j/map->JdbcTxLog {:ds ds :dbtype dbtype})
-        indexer (tx/->KvIndexer kv-store tx-log object-store)
-        event-log-consumer (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds))]
+(defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
+  (let [ds (jdbc/get-datasource options)]
+    (setup-schema! ds dbtype)
+    ds))
 
-    (b/map->CruxNode {:kv-store kv-store
-                      :tx-log tx-log
-                      :object-store object-store
-                      :indexer indexer
-                      :event-log-consumer event-log-consumer
-                      :options options
-                      :close-fn (fn []
-                                  (doseq [c [event-log-consumer kv-store]]
-                                    (cio/try-close c)))})))
+(defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
+  (j/map->JdbcTxLog {:ds ds :dbtype dbtype}))
+
+(defn- start-event-log-consumer [{:keys [indexer ds]} _]
+  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds)))
+
+(def node-config (merge b/base-node-config
+                        {:ds start-jdbc-ds
+                         :tx-log [start-tx-log :ds]
+                         :event-log-consumer [start-event-log-consumer :indexer :ds]}))
+
+(defn ^ICruxAPI start-jdbc-node [options]
+  (s/assert ::options options)
+  (b/start-node node-config (merge b/default-options options)))

@@ -47,11 +47,11 @@
 (defn- start-moberg-event-log [{:keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
-(def standalone-node-config (merge b/base-node-config
-                                   {:event-log-kv start-event-log-kv
-                                    :event-log-sync [start-event-log-fsync :event-log-kv]
-                                    :event-log-consumer [start-event-log-consumer :event-log-kv :indexer]
-                                    :tx-log [start-moberg-event-log :event-log-kv]}))
+(def node-config (merge b/base-node-config
+                        {:event-log-kv start-event-log-kv
+                         :event-log-sync [start-event-log-fsync :event-log-kv]
+                         :event-log-consumer [start-event-log-consumer :event-log-kv :indexer]
+                         :tx-log [start-moberg-event-log :event-log-kv]}))
 
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
@@ -64,4 +64,4 @@
 
 (defn start-standalone-node ^ICruxAPI [options]
   (s/assert ::standalone-options options)
-  (b/start-node standalone-node-config (merge b/default-options options)))
+  (b/start-node node-config (merge b/default-options options)))
