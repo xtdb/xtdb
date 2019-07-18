@@ -51,11 +51,8 @@
   (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
                            (b/start-object-store {:kv kv-store} options)))
 
-(defn- start-kv-store [_ {:keys [event-log-dir crux.tx/event-log-sync-interval-ms sync?] :as options}]
-  (b/start-kv-store
-   (merge (when-not event-log-dir
-            {:sync? true})
-          options)))
+(defn- start-kv-store [_ options]
+  (b/start-kv-store options))
 
 (defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
   (tx/->KvIndexer kv-store tx-log object-store))
