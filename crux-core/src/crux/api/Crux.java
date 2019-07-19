@@ -42,9 +42,12 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
+    @SuppressWarnings("unchecked")
     public static ICruxAPI startClusterNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.cluster-node"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.cluster-node/start-cluster-node").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka"));
+        IFn deref = Clojure.var("clojure.core", "deref");
+        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.kafka/node-config"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 
     /**

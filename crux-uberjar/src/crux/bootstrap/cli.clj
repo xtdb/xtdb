@@ -6,7 +6,7 @@
             [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
             [crux.db :as db]
-            [crux.bootstrap.cluster-node :as ln]
+            [crux.kafka :as k]
             [crux.http-server :as srv]
             [crux.io :as cio]
             [crux.kv :as kv])
@@ -116,9 +116,6 @@
       :else
       (do (log/infof "Crux version: %s revision: %s" version revision)
           (log/info "options:" (options->table options))
-          (ln/start-cluster-node
-           options
-           (fn [{:keys [kv-store tx-log indexer consumer-config] :as running-node}]
-             (with-open [http-server ^Closeable (srv/start-http-server
-                                                 kv-store tx-log indexer consumer-config options)]
-               @(shutdown-hook-promise))))))))
+          (with-open [node (b/start-node k/node-config options)
+                      http-server ^Closeable (srv/start-http-server node)]
+            @(shutdown-hook-promise))))))
