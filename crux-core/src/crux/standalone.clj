@@ -10,6 +10,10 @@
   (:import java.io.Closeable
            crux.api.ICruxAPI))
 
+(s/def ::event-log-sync-interval-ms nat-int?)
+(s/def ::event-log-fsync-opts (s/keys :opt-un [:crux.kv/sync?]
+                                      :opt [::event-log-sync-interval-ms]))
+
 (defn- start-event-log-fsync ^java.io.Closeable [{:keys [event-log-kv]}
                                                  {:keys [sync? crux.standalone/event-log-sync-interval-ms]}]
   (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
@@ -28,6 +32,17 @@
         (reset! running? false)
         (some-> fsync-thread (.join fsync-thread))))))
 
+(defmethod b/define-module ::event-log-sync [_] [start-event-log-fsync [:event-log-kv] ::event-log-fsync-opts])
+
+(s/def ::event-log-dir string?)
+(s/def ::event-log-kv-backend :crux.kv/kv-backend)
+(s/def ::event-log-kv-opts (s/keys :req-un [:crux.kv/db-dir
+                                            ::event-log-dir]
+                                   :opt-un [:crux.kv/kv-backend
+                                            :crux.kv/sync?]
+                                   :opt [::event-log-sync-interval-ms
+                                         ::event-log-kv-backend]))
+
 (defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-backend
                                      crux.standalone/event-log-sync-interval-ms
                                      event-log-dir kv-backend sync?]}]
@@ -38,30 +53,26 @@
       :sync? event-log-sync?
       :crux.index/check-and-store-index-version false})))
 
+(defmethod b/define-module ::event-log-kv [_] [start-event-log-kv [] ::event-log-kv-opts])
+
 (defn- start-event-log-consumer [{:keys [event-log-kv indexer]} _]
   (when event-log-kv
     (p/start-event-log-consumer indexer
                                 (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
                                                                      :batch-size 100}))))
 
+(defmethod b/define-module ::event-log-consumer [_] [start-event-log-consumer [:event-log-kv :indexer]])
+
 (defn- start-moberg-event-log [{:keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
+(defmethod b/define-module ::tx-log [_] [start-moberg-event-log [:event-log-kv]])
+
 (def node-config (merge b/base-node-config
-                        {:event-log-kv start-event-log-kv
-                         :event-log-sync [start-event-log-fsync :event-log-kv]
-                         :event-log-consumer [start-event-log-consumer :event-log-kv :indexer]
-                         :tx-log [start-moberg-event-log :event-log-kv]}))
-
-(s/def ::event-log-dir string?)
-(s/def ::event-log-kv-backend :crux.kv/kv-backend)
-(s/def ::event-log-sync-interval-ms nat-int?)
-
-(s/def ::standalone-options (s/keys :req-un [:crux.kv/db-dir ::event-log-dir :crux.kv/kv-backend]
-                                    :opt-un [:crux.kv/sync? :crux.db/object-store :crux.lru/doc-cache-size]
-                                    :opt [::event-log-sync-interval-ms
-                                          ::event-log-kv-backend]))
+                        {:event-log-kv ::event-log-kv
+                         :event-log-sync ::event-log-sync
+                         :event-log-consumer ::event-log-consumer
+                         :tx-log ::tx-log}))
 
 (defn start-standalone-node ^ICruxAPI [options]
-  (s/assert ::standalone-options options)
   (b/start-node node-config (merge b/default-options options)))
