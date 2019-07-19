@@ -83,9 +83,9 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.jdbc"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
         IFn deref = Clojure.var("clojure.core", "deref");
-        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.bootstrap.jdbc/node-config"));
+        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
         return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 

@@ -10,7 +10,8 @@
             [crux.tx.polling :as p]
             crux.tx.consumer
             [clojure.core.reducers :as r]
-            [next.jdbc.result-set :as jdbcr])
+            [next.jdbc.result-set :as jdbcr]
+            [crux.bootstrap :as b])
   (:import java.io.Closeable
            java.util.Date
            java.util.concurrent.LinkedBlockingQueue
@@ -102,3 +103,36 @@
 
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM TX_EVENTS"]))))))
+
+(defn- setup-schema! [ds dbtype]
+  (jdbc/execute! ds [(condp contains? dbtype
+                       #{"h2"}
+                       "create table if not exists tx_events (
+  event_offset int auto_increment PRIMARY KEY, event_key VARCHAR,
+  tx_time datetime default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
+  v BINARY NOT NULL)"
+
+                       #{"postgresql" "pgsql"}
+                       "create table tx_events (
+  event_offset serial PRIMARY KEY, event_key VARCHAR,
+  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
+  v bytea NOT NULL)")]))
+
+(defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
+  (let [ds (jdbc/get-datasource options)]
+    (setup-schema! ds dbtype)
+    ds))
+
+(defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
+  (map->JdbcTxLog {:ds ds :dbtype dbtype}))
+
+(defn- start-event-log-consumer [{:keys [indexer ds]} _]
+  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds)))
+
+(defmethod b/define-module ::ds [_] [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])])
+(defmethod b/define-module ::tx-log [_] [start-tx-log [:ds]])
+(defmethod b/define-module ::event-log-consumer [_] [start-event-log-consumer [:indexer :ds]])
+
+(def node-config {:ds ::ds
+                  :tx-log ::tx-log
+                  :event-log-consumer ::event-log-consumer})
