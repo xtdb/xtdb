@@ -1,6 +1,6 @@
 (ns juxt.crux-ui.frontend.views.query-perf
   (:require [garden.core :as garden]
-            [juxt.crux-ui.frontend.views.query.query-perf-plots :as perf-plots]
+            [juxt.crux-ui.frontend.views.charts.query-perf-plots :as perf-plots]
             [cljs.reader :as edn]))
 
 
