@@ -90,6 +90,12 @@
    :examples/evict (fn [] [[:crux.tx/evict (get-id)]])
    :examples/evict-w-valid (fn [] [[:crux.tx/evict (get-id) (gen-vt)]])})
 
+'{:find [e p],
+  :where
+  [(or [e :crux.db/id :ids/agriculture-ticker-6]
+       [e :crux.db/id :ids/fashion-ticker-2]
+       [e :crux.db/id :ids/oil-ticker-2])
+   [e :ticker/price p]]}
 
 (def examples
   [{:title "[crux.tx/put :some-data]"
