@@ -29,18 +29,13 @@
   (println :docs eid->history)
   (rf/dispatch [:evt.io/histories-with-docs-fetch-success eid->history]))
 
-(defn submit-tx []
-  (let [tx [[:crux.tx/put :dbpedia.resource/Pablo-Picasso3 ; id for Kafka
-             {:crux.db/id :dbpedia.resource/Pablo-Picasso3 ; id for Crux
-              :name "Pablo"
-              :last-name "Picasso3"}]]
-        promise (crux-api/submitTx node-client tx)]
-    (.then on-tx-success)))
+
 
 (defn exec-q [query-text vt tt]
-  (let [db (crux-api/db node-client vt tt)
-        promise (crux-api/q db query-text)]
-    (.then promise on-exec-success)))
+  (-> node-client
+      (crux-api/db vt tt)
+      (crux-api/q query-text)
+      (p/then on-exec-success)))
 
 (defn exec-tx [query-text]
   (-> node-client
@@ -50,7 +45,7 @@
 (defn exec [{:keys [query-vt query-tt raw-input query-analysis] :as query}]
   (let [qtype (:crux.ui/query-type query-analysis)]
     (if (false? query-analysis)
-      (println "err") ; TODO feedback to UI, or rather, UI should let it get this far
+      (println "err") ; TODO feedback to UI, or rather, UI shouldn't let it get this far
       (case qtype
         :crux.ui.query-type/query     (exec-q raw-input query-vt query-tt)
         :crux.ui.query-type/tx-multi  (exec-tx raw-input)
@@ -77,7 +72,6 @@
   (p/all (map #(crux-api/document node-client %) hashes)))
 
 (defn- merge-docs-into-histories [eids->histories hash->doc]
-  (def t [eids->histories hash->doc])
   (let [with-doc
         (fn [{ch :crux.db/content-hash :as history-entry}]
           (assoc history-entry :crux.query/doc (hash->doc ch)))
@@ -109,6 +103,7 @@
         (p/then (fn [hash->doc] (merge-docs-into-histories eids->histories hash->doc)))
         (p/then on-histories-docs-success)
         (p/catch on-histories-docs-error))))
+
 
 #_(fetch-histories-docs
     {:ids/fashion-ticker-2

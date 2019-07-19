@@ -1,14 +1,15 @@
 (ns juxt.crux-ui.frontend.events.facade
   (:require [re-frame.core :as rf]
             [cljs.tools.reader.edn :as edn]
+            [medley.core :as m]
+            [promesa.core :as p]
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
-            [medley.core :as m]
-            [juxt.crux-lib.http-functions :as hf]
-            [promesa.core :as p]))
+            [juxt.crux-ui.frontend.logic.history-perversions :as hp]
+            [juxt.crux-lib.http-functions :as hf]))
 
 
 (defn calc-query [db ex-title]
@@ -121,14 +122,18 @@
 
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
-  (fn [{db :db :as ctx} [_ res]]
-    {:db (assoc db :db.query/histories res)
-     :fx.query/histories-docs res}))
+  (fn [{db :db :as ctx} [_ eid->history-range]]
+    {:db (assoc db :db.query/histories eid->history-range)
+     :fx.query/histories-docs eid->history-range}))
+
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
-  (fn [{db :db :as ctx} [_ res]]
-    {:db (assoc db :db.query/histories res)}))
+  (fn [{db :db :as ctx} [_ eid->history-range]]
+    (let [ra (:db.query/result-analysis db)
+          ts (hp/calc-entity-time-series (:ra/numeric-attrs ra) eid->history-range)]
+      {:db (assoc db :db.query/histories eid->history-range
+                     :db.query/entities-over-time ts)})))
 
 
 (rf/reg-event-db
