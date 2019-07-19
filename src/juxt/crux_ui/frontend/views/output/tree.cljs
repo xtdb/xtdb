@@ -154,7 +154,7 @@
   (apply (partial conj [:div (us (parent-styleg (:countc tree-data)))])
       (mapcat identity (for [{:keys [r c h t]} (:v tree-data)]
 ;(reverse (map #(get (:v tree-data) %) (keys (:v tree-data))))
-        [[:div (us (divnb r c h)) ""] (println h)
+        [[:div (us (divnb r c h)) ""] #_(println h)
          [:div (us (divn r c)) (if (= r 3) [:span (us {:position "absolute" :font-size "0.6rem" :transform "translateX(calc(-100% - 0.2rem))"}) "▶"]) [:span (us (merge {:box-decoration-break "clone" :-webkit-box-decoration-break "clone" :padding "0.32rem" :text-align "justify" :text-align-last "left" :border-left "1px solid grey"
                                                                                                                                                      #_( ::stylefy/mode {:after {:content "''" :width (if true "2rem" "100%") :height "0px" :position "absolute" :left "0" :bottom "0" :border-bottom "1px solid grey"}}
                                                                                                                                                                         )
@@ -197,7 +197,7 @@
 
 (defn root []
   (let [{:keys [headers rows]} @-sub-results-table]
-    (println headers rows)
+    #_(println headers rows)
     [:div.q-tree
      [:style style]
      (tree-ui

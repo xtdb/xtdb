@@ -288,18 +288,14 @@
  ;   (->RemoteApiStream (atom [])))
 
   (txLog [_ tx-log-context from-tx-id with-documents?]
-    (p/alet [params (s/join "&"
-                            (remove nil?
-             [(when from-tx-id
-                         (str "from-tx-id=" from-tx-id))
-                       (when with-documents?
-                         (str "with-documents=" with-documents?))])
-                            )
-          in (p/await (api-request-async (cond-> (str url "/tx-log")
-                                 (seq params) (str "?" params))
-                               nil
-                               {:method :get
-                                :as :stream}))]
+    (p/alet [params {:from-tx-id from-tx-id, :with-documents with-documents?}
+             qs (params->query-string (filter second params))
+             in (p/await (api-request-async
+                           (cond-> (str url "/tx-log")
+                                   (seq qs) (str "?" qs))
+                           nil
+                           {:method :get
+                            :as :stream}))]
       (register-stream-with-remote-stream! tx-log-context in)
       (edn-list->lazy-seq in)))
 
