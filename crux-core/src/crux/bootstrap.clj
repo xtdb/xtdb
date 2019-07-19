@@ -162,11 +162,24 @@
        (uncaughtException [_ thread throwable]
          (log/error throwable "Uncaught exception:"))))))
 
+(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
+  (tx/->KvIndexer kv-store tx-log object-store))
+
+(defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
+  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                           (start-object-store {:kv kv-store} options)))
+
+;; Todo, consider moving these registrations
+(defmulti define-module identity)
+(defmethod define-module :crux.kv/kv-store [_] [start-kv-store])
+(defmethod define-module :crux.bootstrap/cached-object-store [_] [start-cached-object-store [:kv-store]])
+(defmethod define-module :crux.indexer/kv-indexer [_] [start-kv-indexer [:kv-store :tx-log :object-store]])
+
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k v]
-                       (if (vector? v)
-                         (reduce (fn [g d] (dep/depend g k d)) g (rest v))
-                         g))
+                       (let [module-def (define-module v)]
+                         (assert module-def (str "Crux module not found: " k))
+                         (reduce (fn [g d] (dep/depend g k d)) g (second module-def))))
                      (dep/graph)
                      system)
         dep-order (dep/topo-sort g)
@@ -180,9 +193,8 @@
         start-order (start-order node-system)
         started-modules (try
                           (for [k start-order]
-                            (let [m (get node-system k)
-                                  start-fn (if (vector? m) (first m) m)
-                                  deps (when (vector? m) (select-keys @started (rest m)))]
+                            (let [[start-fn deps] (define-module (node-system k))
+                                  deps (select-keys @started deps)]
                               [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
                           (catch Throwable t
                             (doseq [c (reverse @started)]
@@ -200,16 +212,9 @@
                   :b (fn [deps] :start-b)
                   :c (fn [deps] :start-c)}))
 
-(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
-  (tx/->KvIndexer kv-store tx-log object-store))
-
-(defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
-  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
-                           (start-object-store {:kv kv-store} options)))
-
-(def base-node-config {:kv-store start-kv-store
-                       :object-store [start-cached-object-store :kv-store]
-                       :indexer [start-kv-indexer :kv-store :tx-log :object-store]})
+(def base-node-config {:kv-store :crux.kv/kv-store
+                       :object-store :crux.bootstrap/cached-object-store
+                       :indexer :crux.indexer/kv-indexer})
 
 (defn start-node ^ICruxAPI [node-setup options]
   (let [[node-modules close-fn] (start-modules node-setup options)]

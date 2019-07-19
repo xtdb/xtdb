@@ -29,6 +29,10 @@
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v bytea NOT NULL)")]))
 
+(s/def ::options (s/keys :req-un [::dbtype
+                                  ::dbname
+                                  ::blow-up]))
+
 (defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
   (let [ds (jdbc/get-datasource options)]
     (setup-schema! ds dbtype)
@@ -40,10 +44,14 @@
 (defn- start-event-log-consumer [{:keys [indexer ds]} _]
   (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds)))
 
+(defmethod b/define-module ::ds [_] [start-jdbc-ds nil ::options])
+(defmethod b/define-module ::tx-log [_] [start-tx-log [:ds]])
+(defmethod b/define-module ::event-log-consumer [_] [start-event-log-consumer [:indexer :ds]])
+
 (def node-config (merge b/base-node-config
-                        {:ds start-jdbc-ds
-                         :tx-log [start-tx-log :ds]
-                         :event-log-consumer [start-event-log-consumer :indexer :ds]}))
+                        {:ds ::ds
+                         :tx-log ::tx-log
+                         :event-log-consumer ::event-log-consumer}))
 
 (defn ^ICruxAPI start-jdbc-node [options]
   (s/assert ::options options)
