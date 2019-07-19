@@ -193,8 +193,10 @@
         start-order (start-order node-system)
         started-modules (try
                           (for [k start-order]
-                            (let [[start-fn deps] (define-module (node-system k))
+                            (let [[start-fn deps spec] (define-module (node-system k))
                                   deps (select-keys @started deps)]
+                              (when spec
+                                (s/assert spec options))
                               [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
                           (catch Throwable t
                             (doseq [c (reverse @started)]
