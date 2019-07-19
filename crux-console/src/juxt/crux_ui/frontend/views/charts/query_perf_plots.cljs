@@ -1,4 +1,4 @@
-(ns juxt.crux-ui.frontend.views.query.query-perf-plots
+(ns juxt.crux-ui.frontend.views.charts.query-perf-plots
   (:require ["plotly.js-gl3d-dist" :as Plotly]
             [reagent.core :as r]
             [garden.core :as css]

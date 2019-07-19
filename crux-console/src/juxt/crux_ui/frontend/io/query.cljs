@@ -26,7 +26,6 @@
   (rf/dispatch [:evt.io/histories-fetch-success eid->history]))
 
 (defn on-histories-docs-success [eid->history]
-  (println :docs eid->history)
   (rf/dispatch [:evt.io/histories-with-docs-fetch-success eid->history]))
 
 
