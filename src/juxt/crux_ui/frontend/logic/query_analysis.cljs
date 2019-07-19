@@ -137,7 +137,7 @@
                           (zipmap attr-vec first-res))
           ids-pluck
           (cond
-            full-results? :crux.db/id
+            full-results? (comp :crux.db/id :crux.query/doc)
             ids-received? first
             :else identity)
           numeric-attrs (disj (set (calc-numeric-keys first-res-map)) :crux.db/id)
