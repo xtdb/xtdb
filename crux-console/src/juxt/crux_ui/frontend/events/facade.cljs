@@ -41,6 +41,12 @@
     (q/fetch-histories eids)))
 
 (rf/reg-fx
+  :fx.query/histories-docs
+  (fn [eids->histories]
+    (q/fetch-histories-docs eids->histories)))
+
+
+(rf/reg-fx
   :fx.sys/set-cookie
   (fn [[cookie-name value]]
     (c/set! cookie-name value {:max-age 86400})))
@@ -111,6 +117,19 @@
           (assoc-in [:db :db.ui.examples/imported] edn)
           (update :db o-set-example (some-> edn first :query pr-str)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
+
+
+(rf/reg-event-fx
+  :evt.io/histories-fetch-success
+  (fn [{db :db :as ctx} [_ res]]
+    {:db (assoc db :db.query/histories res)
+     :fx.query/histories-docs res}))
+
+(rf/reg-event-fx
+  :evt.io/histories-with-docs-fetch-success
+  (fn [{db :db :as ctx} [_ res]]
+    {:db (assoc db :db.query/histories res)}))
+
 
 (rf/reg-event-db
   :evt.io/tx-success
