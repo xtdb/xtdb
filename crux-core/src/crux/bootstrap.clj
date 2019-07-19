@@ -224,11 +224,13 @@
                   :b (fn [deps] :start-b)
                   :c (fn [deps] :start-c)}))
 
-(defn start-node ^ICruxAPI [node-setup options]
-  (let [[node-modules close-fn] (start-modules node-setup options)]
-    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))
-
 (def base-node-config {:kv-store :crux.kv/kv-store
                        :raw-object-store ::raw-object-store
                        :object-store ::object-store
                        :indexer :crux.indexer/kv-indexer})
+
+(defn start-node ^ICruxAPI [node-config options]
+  (let [options (merge default-options options)
+        node-config (merge base-node-config node-config)
+        [node-modules close-fn] (start-modules node-config options)]
+    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))

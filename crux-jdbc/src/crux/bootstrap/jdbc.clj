@@ -46,10 +46,6 @@
 (defmethod b/define-module ::tx-log [_] [start-tx-log [:ds]])
 (defmethod b/define-module ::event-log-consumer [_] [start-event-log-consumer [:indexer :ds]])
 
-(def node-config (merge b/base-node-config
-                        {:ds ::ds
-                         :tx-log ::tx-log
-                         :event-log-consumer ::event-log-consumer}))
-
-(defn ^ICruxAPI start-jdbc-node [options]
-  (b/start-node node-config (merge b/default-options options)))
+(def node-config {:ds ::ds
+                  :tx-log ::tx-log
+                  :event-log-consumer ::event-log-consumer})

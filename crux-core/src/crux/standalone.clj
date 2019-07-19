@@ -68,11 +68,7 @@
 
 (defmethod b/define-module ::tx-log [_] [start-moberg-event-log [:event-log-kv]])
 
-(def node-config (merge b/base-node-config
-                        {:event-log-kv ::event-log-kv
-                         :event-log-sync ::event-log-sync
-                         :event-log-consumer ::event-log-consumer
-                         :tx-log ::tx-log}))
-
-(defn start-standalone-node ^ICruxAPI [options]
-  (b/start-node node-config (merge b/default-options options)))
+(def node-config {:event-log-kv ::event-log-kv
+                  :event-log-sync ::event-log-sync
+                  :event-log-consumer ::event-log-consumer
+                  :tx-log ::tx-log})
