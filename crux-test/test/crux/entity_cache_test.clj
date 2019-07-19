@@ -9,7 +9,8 @@
             [crux.db :as db]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.cluster-node :as cn]
-            [crux.fixtures.kafka :as fk]))
+            [crux.fixtures.kafka :as fk])
+  (:import (java.sql Date)))
 
 (defn avg [nums]
   (/ (reduce + nums) (count nums)))
@@ -323,8 +324,8 @@
 
   (mapv (comp (partial api/document node) :crux.db/content-hash) e-hist)
 
-  (upload-fiddle-data)
+  (upload-fiddle-data))
 
-  )
+
 
 ; (t/run-tests 'crux.entity-cache-test)
