@@ -92,7 +92,6 @@
           db     (assoc db :db.query/result res
                            :db.query/result-analysis res-analysis)]
 
-      (println :evt.io/query-success nums? (:ra/entity-ids res-analysis))
       (cond-> {:db db}
               nums? (assoc :fx.query/history
                            (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))

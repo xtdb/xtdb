@@ -27,6 +27,7 @@
    :db.query/error           nil
    :db.query/result          nil})
 
+(set! js/window.tojs clj->js)
 
 (defn mount-root []
   (r/render [views/root] (js/document.getElementById "app")))

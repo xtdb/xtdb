@@ -3,14 +3,14 @@
 ; this ns has been adapted from https://github.com/juxt/crux/blob/master/src/crux/bootstrap/remote_api_client.clj
   ;
   #?(:cljs (:require [cljs.reader :as edn]
-                     [clojure.string :as str]
+                     [clojure.string :as s]
                      [promesa.core :as p]
                      [juxt.crux-lib.http-functions :as hf]
                      [promesa.async-cljs :refer-macros [async]]
                      [goog.string :as gs]))
   ;
   #?(:clj  (:require [clojure.tools.reader.edn :as edn]
-                     [clojure.string :as str]
+                     [clojure.string :as s]
                      [promesa.core :as p]
                      [clojure.java.io :as io]
                      [promesa.async :refer [async]]
@@ -239,6 +239,9 @@
   (sync [_ timeout])
   ))
 
+(defn params->query-string [m]
+  (clojure.string/join "&" (for [[k v] m] (str (name k) "=" v))))
+
 (defrecord RemoteApiClient [url]
   ICruxAPI
   (db [_]
@@ -258,12 +261,12 @@
 
   (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end]
     (api-request-async (str url "/history-range/" eid "?"
-                           (str/join "&"
-                                     (map (partial str/join "=")
-                                          [["valid-time-start" (format-rfc3339-date valid-time-start)]
-                                           ["transaction-time-start" (format-rfc3339-date transaction-time-start)]
-                                           ["valid-time-end" (format-rfc3339-date valid-time-end)]
-                                           ["transaction-time-end" (format-rfc3339-date transaction-time-end)]])))
+                           (params->query-string
+                             (filter second
+                               {:valid-time-start       (some-> valid-time-start format-rfc3339-date)
+                                :transaction-time-start (some-> transaction-time-start format-rfc3339-date)
+                                :valid-time-end         (some-> valid-time-end format-rfc3339-date)
+                                :transaction-time-end   (some-> transaction-time-end format-rfc3339-date)})))
                       nil {:method :get}))
 
   (status [_]
@@ -285,13 +288,13 @@
  ;   (->RemoteApiStream (atom [])))
 
   (txLog [_ tx-log-context from-tx-id with-documents?]
-    (p/alet [params (str/join "&"
-                      (remove nil?
+    (p/alet [params (s/join "&"
+                            (remove nil?
              [(when from-tx-id
                          (str "from-tx-id=" from-tx-id))
                        (when with-documents?
                          (str "with-documents=" with-documents?))])
-                      )
+                            )
           in (p/await (api-request-async (cond-> (str url "/tx-log")
                                  (seq params) (str "?" params))
                                nil

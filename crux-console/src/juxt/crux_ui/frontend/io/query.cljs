@@ -59,6 +59,8 @@
 (defn fetch-history [eid]
   (crux-api/historyRange node-client eid nil nil nil nil))
 
+(fetch-history :ids/fashion-ticker-2)
+
 (defn fetch-histories [eids]
   (-> (p/all (map fetch-history eids))
       (p/then on-histories-success)))
