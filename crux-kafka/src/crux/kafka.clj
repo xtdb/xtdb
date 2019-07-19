@@ -373,3 +373,7 @@
                   :admin-wrapper ::admin-wrapper
                   :producer ::producer
                   :indexing-consumer ::indexing-consumer})
+
+(comment
+  ;; Start a Kafka node:
+  (b/start-node node-config some-options))

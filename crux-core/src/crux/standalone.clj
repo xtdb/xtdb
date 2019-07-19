@@ -72,3 +72,7 @@
                   :event-log-sync ::event-log-sync
                   :event-log-consumer ::event-log-consumer
                   :tx-log ::tx-log})
+
+(comment
+  ;; Start a Standalone node:
+  (b/start-node node-config some-options))

@@ -136,3 +136,7 @@
 (def node-config {:ds ::ds
                   :tx-log ::tx-log
                   :event-log-consumer ::event-log-consumer})
+
+(comment
+  ;; Start a JDBC node:
+  (b/start-node node-config some-options))
