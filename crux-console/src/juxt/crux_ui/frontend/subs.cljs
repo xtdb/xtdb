@@ -31,7 +31,8 @@
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis false))
 
 ; returns a map entity-id->simple-histories
-(rf/reg-sub :subs.query/entities-simple-histories (fnil :db.query/entities-over-time false))
+(rf/reg-sub :subs.query/entities-simple-histories (fnil :db.query/eid->simple-history false))
+(rf/reg-sub :subs.query/entities-txes (fnil :db.query/histories false))
 
 
 ; query derivatives
@@ -98,6 +99,18 @@
    :type "scatter"
    :x (map :crux.db/valid-time simple-history)
    :y (map attr-key simple-history)})
+
+(defn calc-plotly-trace--tx-scatter [eid tx]
+  {:title (name eid)
+   :type  "markers"
+   :x     (map :crux.db/valid-time tx)
+   :y     (map :crux.tx/tx-time tx)})
+
+(rf/reg-sub
+  :subs.output/tx-history-plot-data
+  :<- [:subs.query/entities-txes]
+  (fn [eids->txes]
+    (map (fn [[k v]] (calc-plotly-trace--tx-scatter k v)) eids->txes)))
 
 (rf/reg-sub
   :subs.query/attr-history-plot-data

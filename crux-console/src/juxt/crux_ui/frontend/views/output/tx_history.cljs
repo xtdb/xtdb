@@ -1,8 +1,10 @@
 (ns juxt.crux-ui.frontend.views.output.tx-history
   (:require [re-frame.core :as rf]
-            [garden.core :as garden]))
+            [garden.core :as garden]
+            [juxt.crux-ui.frontend.views.charts.core :as charts]))
 
-(def ^:private -sub-tx-history (rf/subscribe [:subs.output/tx-history]))
+(def ^:private -sub-tx-history (rf/subscribe [:subs.output/tx-history-plot-data]))
+
 
 ; History
 
@@ -22,4 +24,5 @@
       {}])])
 
 (defn root []
-  [:div.tx-history])
+  [:div.tx-history
+    [charts/plotly-wrapper @-sub-tx-history]])

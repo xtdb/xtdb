@@ -133,7 +133,7 @@
     (let [ra (:db.query/result-analysis db)
           ts (hp/calc-entity-time-series (:ra/numeric-attrs ra) eid->history-range)]
       {:db (assoc db :db.query/histories eid->history-range
-                     :db.query/entities-over-time ts)})))
+                     :db.query/eid->simple-history ts)})))
 
 
 (rf/reg-event-db

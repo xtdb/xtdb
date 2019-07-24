@@ -1,5 +1,5 @@
 (ns juxt.crux-lib.http-functions
-  (:require [promesa.core :as p]
+  (:require [promesa.core :as p :include-macros true]
             [clojure.edn :as edn]))
 
 (defmulti fetch type)
