@@ -14,7 +14,7 @@
             [crux.status :as status]
             [crux.tx :as tx])
   (:import java.io.Closeable
-           java.net.InetAddress
+           java.util.UUID
            crux.api.ICruxAPI))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
@@ -22,7 +22,9 @@
                    true))
 
 (def default-options {:bootstrap-servers "localhost:9092"
-                      :group-id (.trim ^String (:out (clojure.java.shell/sh "hostname")))
+                      :group-id (.trim ^String (or (System/getenv "HOSTNAME")
+                                                   (System/getenv "COMPUTERNAME")
+                                                   (.toString (java.util.UUID/randomUUID))))
                       :tx-topic "crux-transaction-log"
                       :doc-topic "crux-docs"
                       :create-topics true
