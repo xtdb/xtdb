@@ -1,31 +1,31 @@
-  (ns crux.http-server
-    "HTTP API for Crux.
+(ns crux.http-server
+  "HTTP API for Crux.
 
   The optional SPARQL handler requires juxt.crux/rdf."
-    (:require [clojure.edn :as edn]
-              [clojure.instant :as instant]
-              [clojure.java.io :as io]
-              [clojure.string :as str]
-              [clojure.pprint :as pp]
-              [clojure.set :as set]
-              [clojure.spec.alpha :as s]
-              [clojure.tools.logging :as log]
-              [crux.codec :as c]
-              [crux.io :as cio]
-              [crux.bootstrap :as b]
-              [crux.tx :as tx]
-              [ring.adapter.jetty :as j]
-              [ring.middleware.params :as p]
-              [ring.middleware.cors :refer [wrap-cors]]
-              [ring.util.request :as req]
-              [ring.util.io :as rio]
-              [ring.util.time :as rt])
-    (:import [java.io Closeable IOException]
-             java.time.Duration
-             java.util.Date
-             java.util.UUID
-             org.eclipse.jetty.server.Server
-             [crux.api ICruxDatasource ICruxAPI]))
+  (:require [clojure.edn :as edn]
+            [clojure.instant :as instant]
+            [clojure.java.io :as io]
+            [clojure.string :as str]
+            [clojure.pprint :as pp]
+            [clojure.set :as set]
+            [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
+            [crux.codec :as c]
+            [crux.io :as cio]
+            [crux.bootstrap :as b]
+            [crux.tx :as tx]
+            [ring.adapter.jetty :as j]
+            [ring.middleware.params :as p]
+            [ring.middleware.cors :refer [wrap-cors]]
+            [ring.util.request :as req]
+            [ring.util.io :as rio]
+            [ring.util.time :as rt])
+  (:import [java.io Closeable IOException]
+           java.time.Duration
+           java.util.Date
+           java.util.UUID
+           org.eclipse.jetty.server.Server
+           [crux.api ICruxDatasource ICruxAPI]))
 
 ;; ---------------------------------------------------
 ;; Utils

@@ -14,6 +14,7 @@
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
+           crux.moberg.MobergTxLog
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.query.Binding))
