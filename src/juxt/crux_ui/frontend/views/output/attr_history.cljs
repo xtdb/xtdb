@@ -11,7 +11,13 @@
      [:.attr-history
       {}])])
 
+(defn attr-layout [attr]
+  {:title (str (pr-str attr) " over time")
+   :xaxis {:title "Valid Time"}
+   :yaxis {:title (pr-str attr)}})
+
 (defn root []
   [:div.attr-history
-   [charts/plotly-wrapper @-sub-plotly-data]])
+   (let [{:keys [traces attribute] :as p-data} @-sub-plotly-data]
+     [charts/plotly-wrapper traces (attr-layout attribute)])])
 

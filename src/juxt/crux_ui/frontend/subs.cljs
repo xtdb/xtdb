@@ -95,14 +95,15 @@
                    (dissoc stats :crux.db/id)))}))
 
 (defn calc-plotly-trace [attr-key eid simple-history]
-  {:title (name eid)
+  {:name (name eid)
    :type "scatter"
    :x (map :crux.db/valid-time simple-history)
    :y (map attr-key simple-history)})
 
 (defn calc-plotly-trace--tx-scatter [eid tx]
-  {:title (name eid)
-   :type  "markers"
+  {:name (name eid)
+   :mode "markers"
+   :type "scatter"
    :x     (map :crux.db/valid-time tx)
    :y     (map :crux.tx/tx-time tx)})
 
@@ -118,7 +119,8 @@
   :<- [:subs.query/entities-simple-histories]
   (fn [[result-analysis eids->simple-history]]
     (if-let [first-numeric (first (:ra/numeric-attrs result-analysis))]
-      (map (fn [[k v]] (calc-plotly-trace first-numeric k v)) eids->simple-history))))
+      {:attribute first-numeric
+       :traces (map (fn [[k v]] (calc-plotly-trace first-numeric k v)) eids->simple-history)})))
 
 (rf/reg-sub
   :subs.query/examples

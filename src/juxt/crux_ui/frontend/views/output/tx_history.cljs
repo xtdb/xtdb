@@ -5,24 +5,17 @@
 
 (def ^:private -sub-tx-history (rf/subscribe [:subs.output/tx-history-plot-data]))
 
-
-; History
-
-; query yielding one entity
-;  - txes on a scatter plot
-;  - single / multiple attrs over time dynamic on a line chart
-
-
-; query yielding multiple entities
-;  - txes on a scatter plot, colored
-;  - single attr history over time dynamic on a line chart for multiple entities
-
 (def ^:private root-styles
   [:style
    (garden/css
      [:.tx-history
       {}])])
 
+(def tx-layout
+  {:title "Queried entities transactions"
+   :xaxis {:title "Valid Time"}
+   :yaxis {:title "Transaction time"}})
+
 (defn root []
   [:div.tx-history
-    [charts/plotly-wrapper @-sub-tx-history]])
+    [charts/plotly-wrapper @-sub-tx-history tx-layout]])
