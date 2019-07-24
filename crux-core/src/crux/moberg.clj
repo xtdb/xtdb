@@ -233,10 +233,6 @@
            :crux.tx/tx-id (.message-id m)
            :crux.tx/tx-time (.message-time m)}))))
 
-  Closeable
-  (close [_]
-    (.close ^Closeable event-log-kv))
-
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory]}]
     (kv/backup event-log-kv (io/file checkpoint-directory "event-log-kv-store"))))
