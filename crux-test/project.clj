@@ -17,6 +17,7 @@
                  ;; JDBC
                  [com.h2database/h2 "1.4.199"]
                  [com.opentable.components/otj-pg-embedded "0.13.1"]
+                 [org.xerial/sqlite-jdbc "3.7.2"]
 
                  ;; General:
                  [org.clojure/test.check "0.10.0-alpha3"]

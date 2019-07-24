@@ -25,7 +25,7 @@
   (t/testing "Local API StandaloneNode"
     (fs/with-standalone-node f))
   (t/testing "JDBC Node"
-    (fj/with-jdbc-node f))
+    (fj/with-jdbc-node :h2 f))
   (t/testing "Remote API"
     (fn [f]
       (fh/with-http-server

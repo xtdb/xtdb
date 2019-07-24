@@ -14,18 +14,29 @@
             [taoensso.nippy :as nippy])
   (:import crux.tx.consumer.Message
            java.io.Closeable
+           java.text.SimpleDateFormat
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
 
 (deftype Tx [^Date time ^long id])
 
-(defn- ->date [^java.sql.Timestamp t]
-  (java.util.Date. (.getTime t)))
+(def ^SimpleDateFormat sqlite-df (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss.SSS"))
+(defn- ->date [dbtype t]
+  (assert t)
+  (case dbtype
+    "sqlite"
+    (.parse sqlite-df ^String t)
+    (java.util.Date. (.getTime ^java.sql.Timestamp t))))
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
-  (let [tx-id (:event_offset tx-result)
-        tx-time (:tx_time tx-result)]
-    (Tx. (->date tx-time) tx-id)))
+  (let [tx-result (if (= "sqlite" dbtype)
+                    (let [id (first (vals tx-result))]
+                      (jdbc/execute-one! ds ["SELECT * FROM TX_EVENTS WHERE EVENT_OFFSET = ?" id]
+                                         {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
+                    tx-result)]
+    (let [tx-id (:event_offset tx-result)
+          tx-time (:tx_time tx-result)]
+      (Tx. (->date dbtype tx-time) tx-id))))
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
@@ -63,7 +74,7 @@
         (try
           (r/reduce (fn [_ y]
                       (.put q {:crux.tx/tx-id (:event_offset y)
-                               :crux.tx/tx-time (->date (:tx_time y))
+                               :crux.tx/tx-time (->date dbtype (:tx_time y))
                                :crux.api/tx-ops (nippy/thaw (:v y))})
                       (if @running?
                         nil
@@ -81,7 +92,7 @@
             (when (not= -1 x)
               (cons x (step))))))))))
 
-(defrecord JDBCEventLogConsumer [ds]
+(defrecord JDBCEventLogConsumer [ds dbtype]
   crux.tx.consumer/PolledEventLog
 
   (new-event-log-context [this]
@@ -90,11 +101,12 @@
 
   (next-events [this context next-offset]
     (map (fn [result]
+           (println result)
            (Message. (nippy/thaw
                       (:v result))
                      nil
                      (:event_offset result)
-                     (->date (:tx_time result))
+                     (->date dbtype (:tx_time result))
                      (:event_key result)
                      {:crux.tx/sub-topic (keyword (:topic result))}))
          (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE EVENT_OFFSET >= ?" next-offset]
@@ -111,6 +123,12 @@
   tx_time datetime default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v BINARY NOT NULL)"
 
+                       #{"sqlite"}
+                       "create table if not exists tx_events (
+  event_offset integer PRIMARY KEY, event_key VARCHAR,
+  tx_time datetime DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), topic VARCHAR NOT NULL,
+  v BINARY NOT NULL)"
+
                        #{"postgresql" "pgsql"}
                        "create table tx_events (
   event_offset serial PRIMARY KEY, event_key VARCHAR,
@@ -125,8 +143,8 @@
 (defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
   (map->JdbcTxLog {:ds ds :dbtype dbtype}))
 
-(defn- start-event-log-consumer [{:keys [indexer ds]} _]
-  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds)))
+(defn- start-event-log-consumer [{:keys [indexer ds]} {:keys [dbtype]}]
+  (p/start-event-log-consumer indexer (JDBCEventLogConsumer. ds dbtype)))
 
 (def ds [start-jdbc-ds [] (s/keys :req-un [::dbtype ::dbname])])
 (def tx-log [start-tx-log [:ds]])

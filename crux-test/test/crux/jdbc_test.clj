@@ -14,7 +14,9 @@
 
 (defn- with-each-jdbc-node [f]
   (t/testing "H2 Database"
-    (fj/with-jdbc-node f))
+    (fj/with-jdbc-node :h2 f))
+  (t/testing "SQLite Database"
+    (fj/with-jdbc-node :sqlite f))
   (t/testing "Postgresql Database"
     (fp/with-embedded-postgres f)))
 

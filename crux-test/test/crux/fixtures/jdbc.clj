@@ -4,16 +4,20 @@
             [crux.io :as cio])
   (:import [crux.api Crux ICruxAPI]))
 
-(defn with-jdbc-node [f]
+(defn with-jdbc-node [dbtype f]
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         jdbc-event-log-dir (str (cio/create-tmpdir "jdbc-event-log-dir"))
-        options {:dbtype "h2"
+        options {:dbtype (name dbtype)
                  :dbname "cruxtest"
                  :db-dir db-dir
                  :kv-backend "crux.kv.memdb.MemKv"
                  :jdbc-event-log-dir jdbc-event-log-dir}
         ds (jdbc/get-datasource options)]
-    (jdbc/execute! ds ["DROP ALL OBJECTS"])
+    (case dbtype
+      :h2
+      (jdbc/execute! ds ["DROP ALL OBJECTS"])
+      :sqlite
+      (jdbc/execute! ds ["DROP TABLE IF EXISTS tx_events"]))
     (try
       (with-open [standalone-node (Crux/startJDBCNode options)]
         (binding [*api* standalone-node]
