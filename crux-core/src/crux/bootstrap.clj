@@ -2,20 +2,20 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [clojure.java.io :as io]
+            [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
             [crux.tx :as tx])
-  (:import java.io.Closeable
-           java.util.UUID
-           crux.api.ICruxAPI))
+  (:import crux.api.ICruxAPI
+           java.io.Closeable
+           java.util.UUID))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -126,30 +126,40 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defn start-kv-store ^java.io.Closeable [{:keys [db-dir
-                                                 kv-backend
-                                                 sync?
-                                                 crux.index/check-and-store-index-version]
-                                          :as options
-                                          :or {check-and-store-index-version true}}]
-  (s/assert :crux.kv/options options)
-  (let [kv (-> (kv/new-kv-store kv-backend)
-               (lru/new-cache-providing-kv-store)
-               (kv/open options))]
-    (try
-      (if check-and-store-index-version
-        (idx/check-and-store-index-version kv)
-        kv)
-      (catch Throwable t
-        (.close ^Closeable kv)
-        (throw t)))))
+(defn start-kv-store ^java.io.Closeable
+  ([_ options]
+   (start-kv-store options))
+  ([{:keys [db-dir
+            kv-backend
+            sync?
+            crux.index/check-and-store-index-version]
+     :as options
+     :or {check-and-store-index-version true}}]
+   (s/assert :crux.kv/options options)
+   (let [kv (-> (kv/new-kv-store kv-backend)
+                (lru/new-cache-providing-kv-store)
+                (kv/open options))]
+     (try
+       (if check-and-store-index-version
+         (idx/check-and-store-index-version kv)
+         kv)
+       (catch Throwable t
+         (.close ^Closeable kv)
+         (throw t))))))
 
 (defn start-object-store ^java.io.Closeable [partial-node {:keys [object-store]
-                                                             :or {object-store (:object-store default-options)}
-                                                             :as options}]
+                                                           :or {object-store (:object-store default-options)}
+                                                           :as options}]
   (-> (db/require-and-ensure-object-store-record object-store)
       (cio/new-record)
       (db/init partial-node options)))
+
+(defn start-raw-object-store [{:keys [kv-store]} options]
+  (start-object-store {:kv kv-store} options))
+
+(defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
+  (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
+                           (start-object-store {:kv kv-store} options)))
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
@@ -157,3 +167,59 @@
      (reify Thread$UncaughtExceptionHandler
        (uncaughtException [_ thread throwable]
          (log/error throwable "Uncaught exception:"))))))
+
+(defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
+  (tx/->KvIndexer kv-store tx-log object-store))
+
+(defn- start-order [system]
+  (let [g (reduce-kv (fn [g k module-def]
+                       (reduce (fn [g d] (dep/depend g k d)) g (second module-def)))
+                     (dep/graph)
+                     system)
+        dep-order (dep/topo-sort g)
+        dep-order (->> (keys system)
+                       (remove #(contains? (set dep-order) %))
+                       (into dep-order))]
+    dep-order))
+
+(defn- start-modules [node-system options]
+  (let [started (atom {})
+        start-order (start-order node-system)
+        started-modules (try
+                          (for [k start-order]
+                            (let [[start-fn deps spec] (node-system k)
+                                  deps (select-keys @started deps)]
+                              (when spec
+                                (s/assert spec options))
+                              [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
+                          (catch Throwable t
+                            (doseq [c (reverse @started)]
+                              (when (instance? Closeable c)
+                                (cio/try-close c)))
+                            (throw t)))]
+    [(into {} started-modules) (fn []
+                                 (doseq [k (reverse start-order)
+                                         :let [m (get @started k)]
+                                         :when (instance? Closeable m)]
+                                   (cio/try-close m)))]))
+
+(comment
+  (start-modules {:a [(fn [deps] (println deps) :start-a) :b]
+                  :b (fn [deps] :start-b)
+                  :c (fn [deps] :start-c)}))
+
+(def raw-object-store [start-raw-object-store [:kv-store] (s/keys :opt-un [:crux.db/object-store])])
+(def object-store [start-cached-object-store [:kv-store] (s/keys :opt-un [:crux.lru/doc-cache-size])])
+(def kv-indexer [start-kv-indexer [:kv-store :tx-log :object-store]])
+(def kv-store [start-kv-store [] :crux.kv/options])
+
+(def base-node-config {:kv-store kv-store
+                       :raw-object-store raw-object-store
+                       :object-store object-store
+                       :indexer kv-indexer})
+
+(defn start-node ^ICruxAPI [node-config options]
+  (let [options (merge default-options options)
+        node-config (merge base-node-config node-config)
+        [node-modules close-fn] (start-modules node-config options)]
+    (map->CruxNode (assoc node-modules :close-fn close-fn :options options))))

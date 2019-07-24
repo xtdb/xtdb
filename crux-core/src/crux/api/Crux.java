@@ -4,6 +4,7 @@ import java.util.Map;
 
 import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
+import clojure.lang.IFn;
 
 /**
  * Public API entry point for starting a {@link ICruxAPI}.
@@ -41,9 +42,12 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
+    @SuppressWarnings("unchecked")
     public static ICruxAPI startClusterNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.cluster-node"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.cluster-node/start-cluster-node").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka"));
+        IFn deref = Clojure.var("clojure.core", "deref");
+        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.kafka/node-config"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 
     /**
@@ -69,17 +73,23 @@ public class Crux {
      * backwards since last run. Only applicable when using the event
      * log.
      */
+    @SuppressWarnings("unchecked")
     public static ICruxAPI startStandaloneNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.standalone"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.standalone/start-standalone-node").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.standalone"));
+        IFn deref = Clojure.var("clojure.core", "deref");
+        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.standalone/node-config"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 
     /**
      * Some interested javadocs. Also, this doesn't belong here at all.
      */
+    @SuppressWarnings("unchecked")
     public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.jdbc"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap.jdbc/start-jdbc-node").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
+        IFn deref = Clojure.var("clojure.core", "deref");
+        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 
     /**

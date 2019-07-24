@@ -1,9 +1,9 @@
 (ns crux-node-embedded-kafka
   (:require [clojure.tools.logging :as log]
-            [crux.bootstrap.cluster-node :as cluster-node]
             [crux.http-server :as srv]
             [crux.kafka.embedded :as ek]
             [crux.db :as db]
+            [crux.bootstrap :as b]
             [crux.query :as q]
             [integrant.core :as ig]
             [crux.kafka :as k]))
@@ -15,7 +15,7 @@
                                  :bootstrap-servers "localhost:9092"}})
 
 (defmethod ig/init-key :crux/cluster-node [_ opts]
-  (cluster-node/start-cluster-node opts))
+  (b/start-node k/node-config opts))
 
 (defmethod ig/halt-key! :crux/cluster-node [_ ^java.io.Closeable closeable]
   (.close closeable))

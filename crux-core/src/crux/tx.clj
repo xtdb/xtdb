@@ -212,12 +212,6 @@
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 
-;; For StandaloneNode.
-
-(s/def ::event-log-dir string?)
-(s/def ::event-log-kv-backend :crux.kv/kv-backend)
-(s/def ::event-log-sync-interval-ms nat-int?)
-
 (defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
   (vec (for [op tx-ops]
          (vec (for [x op]

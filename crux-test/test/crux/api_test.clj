@@ -1,6 +1,6 @@
 (ns crux.api-test
   (:require [clojure.test :as t]
-            [crux.bootstrap.standalone]
+            [crux.standalone]
             [crux.fixtures.standalone :as fs]
             [crux.moberg]
             [crux.codec :as c]

@@ -6,8 +6,7 @@
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
             [crux.bootstrap :as b]
-            [crux.bootstrap.cluster-node :as cluster-node]
-            [crux.bootstrap.standalone :as standalone]
+            [crux.standalone :as standalone]
             [crux.byte-utils :as bu]
             [crux.db :as db]
             [crux.index :as idx]
@@ -34,7 +33,7 @@
    :crux.kafka.embedded/kafka-port 9092
    :dev/embed-kafka? true
    :dev/http-server? true
-   :dev/node-start-fn cluster-node/start-cluster-node
+   :dev/node-start-fn b/start-node
    :db-dir (str storage-dir "/data")
    :bootstrap-servers "localhost:9092"
    :server-port 3000})
@@ -115,7 +114,7 @@
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
 ;;                         {:event-log-dir (str storage-dir "/event-log")
-;;                          :crux.tx/event-log-sync-interval-ms 1000
+;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
 ;;                          :dev/node-start-fn standalone/start-standalone-node}))

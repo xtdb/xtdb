@@ -312,31 +312,20 @@
   (close [_]
     (.stop server)))
 
-;; TODO: The direct dependency on ClusterNode here will go.
-
 (defn start-http-server
   "Starts a HTTP server listening to the specified server-port, serving
   the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
   dependencies explicitly as arguments (internal use)."
-  (^java.io.Closeable
-   [crux-node {:keys [server-port cors-access-control]
-                 :or {server-port 3000 cors-access-control []}
-                 :as options}]
-   (s/assert ::options options)
-   (let [server (j/run-jetty (-> (partial handler crux-node)
-                                 (#(apply wrap-cors (into [%] cors-access-control)))
-                                 (p/wrap-params)
-                                 (wrap-exception-handling))
-                             {:port server-port
-                              :join? false})]
-     (log/info "HTTP server started on port: " server-port)
-     (->HTTPServer server options)))
-  (^crux.http_server.HTTPServer
-   [kv-store tx-log indexer consumer-config {:keys [server-port]
-                                             :as options}]
-   (start-http-server (b/map->CruxNode {:kv-store kv-store
-                                        :tx-log tx-log
-                                        :indexer indexer
-                                        :consumer-config consumer-config
-                                        :options options})
-                      options)))
+  ^java.io.Closeable
+  [crux-node {:keys [server-port cors-access-control]
+              :or {server-port 3000 cors-access-control []}
+              :as options}]
+  (s/assert ::options options)
+  (let [server (j/run-jetty (-> (partial handler crux-node)
+                                (#(apply wrap-cors (into [%] cors-access-control)))
+                                (p/wrap-params)
+                                (wrap-exception-handling))
+                            {:port server-port
+                             :join? false})]
+    (log/info "HTTP server started on port: " server-port)
+    (->HTTPServer server options)))
