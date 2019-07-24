@@ -1,14 +1,15 @@
 (ns juxt.crux-ui.frontend.events.facade
   (:require [re-frame.core :as rf]
             [cljs.tools.reader.edn :as edn]
+            [medley.core :as m]
+            [promesa.core :as p]
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
-            [medley.core :as m]
-            [juxt.crux-lib.http-functions :as hf]
-            [promesa.core :as p]))
+            [juxt.crux-ui.frontend.logic.history-perversions :as hp]
+            [juxt.crux-lib.http-functions :as hf]))
 
 
 (defn calc-query [db ex-title]
@@ -23,7 +24,6 @@
              :db.query/input-committed str)))
 
 
-
 ; ----- effects -----
 
 (rf/reg-fx
@@ -35,6 +35,17 @@
   :fx/query-stats
   (fn [_]
     (q/fetch-stats)))
+
+(rf/reg-fx
+  :fx.query/history
+  (fn [eids]
+    (q/fetch-histories eids)))
+
+(rf/reg-fx
+  :fx.query/histories-docs
+  (fn [eids->histories]
+    (q/fetch-histories-docs eids->histories)))
+
 
 (rf/reg-fx
   :fx.sys/set-cookie
@@ -68,18 +79,30 @@
     {:db             db
      :fx/query-stats nil}))
 
+
+; queries
+
 (rf/reg-event-db
   :evt.io/stats-success
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
-(rf/reg-event-db
+(def ^:const ui--history-max-entities 7)
+
+(rf/reg-event-fx
   :evt.io/query-success
-  (fn [db [_ res]]
-    (let [q-info (:db.query/analysis-committed db)]
-      (assoc db :db.query/result
-                (if (:full-results? q-info)
-                  (flatten res) res)))))
+  (fn [{db :db :as ctx} [_ res]]
+    (let [q-info (:db.query/analysis-committed db)
+          res    (if (:full-results? q-info) (flatten res) res)
+          res-analysis (qa/analyse-results q-info res)
+          nums?  (:ra/has-numeric-attrs? res-analysis)
+          db     (assoc db :db.query/result res
+                           :db.query/result-analysis res-analysis)]
+
+      (cond-> {:db db}
+              nums? (assoc :fx.query/history
+                           (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))
+
 
 (rf/reg-event-fx
   :evt.io/gist-err
@@ -95,6 +118,23 @@
           (assoc-in [:db :db.ui.examples/imported] edn)
           (update :db o-set-example (some-> edn first :query pr-str)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
+
+
+(rf/reg-event-fx
+  :evt.io/histories-fetch-success
+  (fn [{db :db :as ctx} [_ eid->history-range]]
+    {:db (assoc db :db.query/histories eid->history-range)
+     :fx.query/histories-docs eid->history-range}))
+
+
+(rf/reg-event-fx
+  :evt.io/histories-with-docs-fetch-success
+  (fn [{db :db :as ctx} [_ eid->history-range]]
+    (let [ra (:db.query/result-analysis db)
+          ts (hp/calc-entity-time-series (:ra/numeric-attrs ra) eid->history-range)]
+      {:db (assoc db :db.query/histories eid->history-range
+                     :db.query/entities-over-time ts)})))
+
 
 (rf/reg-event-db
   :evt.io/tx-success

@@ -1,5 +1,5 @@
 ;; shadow-cljs configuration
-{:source-paths ["src" "../common/src" "node_modules"]
+{:source-paths ["src" "../common/src" "test" "node_modules"]
 
  :dependencies
    [[reagent                      "0.8.1"]
@@ -16,36 +16,34 @@
  :builds
  {:app
   {:target :browser
-   :modules {:app {:entries [juxt.crux-ui.frontend.main]}}
+   :modules {:app {:init-fn juxt.crux-ui.frontend.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
-   :compiler-options
-   {:optimizations :advanced
-   ;:source-map true
-    }
-   :asset-path "/static/crux-ui/compiled" }
+   :compiler-options {:optimizations :advanced}
+   :asset-path "/static/crux-ui/compiled"}
 
 
   :test
   {:target      :browser-test
    :test-dir    "resources/static/crux-ui/test"
    :ns-regexp   "-test$"
-   :runner-ns   juxt.crux-ui.frontend.test-runner
+   :runner-ns   crux-console.test-runner
    :devtools
    {:http-port  4001
     :http-root  "resources/static/crux-ui/test"}}
 
-   :dev
-   {:target :browser
-    :modules {:app {:entries [juxt.crux-ui.frontend.main]}}
-    :output-dir "resources/static/crux-ui/compiled"
-    :asset-path "/static/crux-ui/compiled"
-    :compiler-options {:closure-warnings {:global-this :off}
-                       :closure-defines  {re-frame.trace.trace-enabled? true}
-                       :optimizations :none}
+  :dev
+  {:target :browser
+   :modules
+   {:app {:init-fn juxt.crux-ui.frontend.main/init}}
+   :output-dir "resources/static/crux-ui/compiled"
+   :asset-path "/static/crux-ui/compiled"
+   :compiler-options {:closure-warnings {:global-this :off}
+                      :closure-defines  {re-frame.trace.trace-enabled? true}
+                      :optimizations :none}
 
     :devtools
-    {:after-load juxt.crux-ui.frontend.main/on-reload
-     :preloads   [day8.re-frame-10x.preload] }}}
+    {:after-load juxt.crux-ui.frontend.main/reload!
+     :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55000
-         :init-ns user}}
+         :init-ns juxt.crux-ui.frontend.main}}

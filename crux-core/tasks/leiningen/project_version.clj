@@ -21,6 +21,6 @@
 
 (defn middleware [project]
   (let [project-version (version-from-git)]
-    (postwalk (fn [x] (if (= :derived-from-git x)
+    (postwalk (fn [x] (if (= "derived-from-git" x)
                         project-version x))
               project)))

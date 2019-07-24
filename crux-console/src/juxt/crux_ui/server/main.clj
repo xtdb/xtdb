@@ -12,48 +12,56 @@
     [juxt.crux-ui.server.preloader :as preloader]
     [yada.yada :as yada]
     [page-renderer.core :as pr]
-    [integrant.core :as ig]))
+    [integrant.core :as ig]
+    [clojure.java.io :as io]))
 
 (def id #uuid "50005565-299f-4c08-86d0-b1919bf4b7a9")
 
 (defn- gen-console-page [ctx]
   (pr/render-page
     {:title "Crux Console"
-     :doc-attrs {:lang "en"}
-     :stylesheet
+     :lang "en"
+     :stylesheet-async
        ["/static/styles/reset.css"
         "/static/styles/codemirror.css"
         "/static/styles/monokai.css"
         "/static/styles/eclipse.css"]
-     :script-sync "/static/crux-ui/compiled/app.js"
+     :script "/static/crux-ui/compiled/app.js"
      :head-tags
-     [[:meta {:http-equiv "Content-Language" :content "en"}]
-      [:style#_stylefy-constant-styles_]
+     [[:style#_stylefy-constant-styles_]
       [:style#_stylefy-styles_]
       [:meta {:name "google" :content "notranslate"}]]
-     :body
-     [:body
-          [:div#app preloader/root]
-          [:script {:type "text/javascript"}
-           (hiccup.util/raw-string
-             "console.log('calling init');"
-             "juxt.crux_ui.frontend.main.init()")]]}))
+     :body [:body [:div#app preloader/root]]}))
+
+(defn- q-perf-page [ctx]
+  (pr/render-page
+    {:title            "Crux Console"
+     :lang             "en"
+     :doc-attrs        {:data-scenario :perf-plot}
+     :stylesheet-async "/static/styles/reset.css"
+     :script      "/static/crux-ui/compiled/app.js"
+     :head-tags
+     [[:script {:id "plots-data" :type "text/edn"}
+       (slurp (io/resource "static/plots-data.edn"))]]
+     :body [:body [:div#app preloader/root]]}))
 
 (defn- gen-home-page [ctx]
   (pr/render-page
     {:title "Crux Standalone Demo with HTTP"
-     :doc-attrs {:lang "en"}
+     :lang "en"
      :body
       [:body
        [:header
         [:div.nav
-         [:div.logo {:style {:opacity "0"}} [:a {:href "/"} [:img.logo-img {:src "/static/img/crux-logo.svg"}]]]
+         [:div.logo {:style {:opacity "0"}}
+          [:a {:href "/"} [:img.logo-img {:src "/static/img/crux-logo.svg"}]]]
          [:div.n0
           [:a {:href "https://juxt.pro/crux/docs/index.html"} [:span.n "Documentation"]]
           [:a {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux"} [:span.n "Community Chat"]]
           [:a {:href "mailto:crux@juxt.pro"} [:span.n "crux@juxt.pro"]]]]]
        [:div {:style {:text-align "center" :width "100%" :margin-top "6em"}}
-           [:div.splash {:style {:max-width "25vw" :margin-left "auto" :margin-right "auto"}} [:a {:href "/"} [:img.splash-img {:src "/static/img/crux-logo.svg"}]]]
+           [:div.splash {:style {:max-width "25vw" :margin-left "auto" :margin-right "auto"}}
+            [:a {:href "/"} [:img.splash-img {:src "/static/img/crux-logo.svg"}]]]
 
         [:div {:style {:height "4em"}}]
         [:h3 "You should now be able to access this Crux standalone demo node using the HTTP API via localhost:8080"]]
@@ -67,8 +75,17 @@
     {:id ::console
      :methods
      {:get
-      {:produces ["text/html" "application/edn" "application/json"]
+      {:produces ["text/html"]
        :response gen-console-page}}}))
+
+(defmethod ig/init-key ::query-perf
+  [_ {:keys [system]}]
+  (yada/resource
+    {:id ::query-perf
+     :methods
+     {:get
+      {:produces ["text/html"]
+       :response q-perf-page}}}))
 
 (defmethod ig/init-key ::home
   [_ {:keys [node]}]
@@ -76,7 +93,7 @@
     {:id ::home
      :methods
      {:get
-      {:produces ["text/html" "application/edn" "application/json"]
+      {:produces ["text/html"]
        :response gen-home-page}}}))
 
 

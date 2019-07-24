@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.frontend.logic.query-analysis
   (:require [medley.core :as m]
-            [cljs.reader]))
+            [clojure.set :as cset]
+            [cljs.reader :as reader]))
 
 
 (defn calc-vector-headers [query-vector]
@@ -44,7 +45,7 @@
 
 (defn try-read-string [input-str]
   (try
-    (cljs.reader/read-string input-str)
+    (reader/read-string input-str)
     (catch js/Error e
       {:error e})))
 
@@ -63,8 +64,47 @@
 (defn query-map? [edn]
   (and (map? edn) (every? edn [:find :where])))
 
-(defn with-query-map-data [qmap]
-  (assoc qmap :crux.ui/query-type :crux.ui.query-type/query))
+(defn third [coll]
+  (nth coll 2 nil))
+
+(defn infer-symbol-attr-map
+  "Given a simple datalog query map returns a map symbol -> attribute
+  "
+  [qmap]
+  (let [symbols-queried   (set (:find qmap))
+        where-vec         (:where qmap)
+        attr-triplets     (filter (comp keyword? second) where-vec)
+        eid-triplets      (filter (comp symbol? first) where-vec)
+        retained-triplets (filter #(symbols-queried (third %)) attr-triplets)
+        eid-symbols       (set (map first eid-triplets))
+        retained-eids     (set (filter symbols-queried eid-symbols))
+        lookup-symbol-attr (fn [symbol]
+                             (second (m/find-first #(= (third %) symbol) retained-triplets)))
+        symbol-attr-pair  (fn [symbol]
+                            [symbol
+                              (if (retained-eids symbol)
+                                :crux.db/id
+                                (lookup-symbol-attr symbol))])
+        symbol->attr      (into {} (map symbol-attr-pair symbols-queried))]
+    symbol->attr))
+
+
+(defn with-query-map-data [{:keys [full-results?] :as qmap}]
+  (let [s->a (infer-symbol-attr-map qmap)
+        a->s (cset/map-invert s->a)
+        attr-seq (vals s->a)
+        attr-set (set attr-seq)
+        find-vec (:find qmap)
+        symbol-positions (into {} (map vector find-vec (range)))
+        attr-positions (zipmap attr-seq (map (comp symbol-positions a->s) attr-seq))]
+    (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
+                :query/ids-queried? (attr-set :crux.db/id)
+                :query/symbol-positions symbol-positions
+                :query/attr-set attr-set
+                :query/attr-vec (mapv s->a find-vec)
+                :query/attr-positions attr-positions
+                :query/pos->attr (cset/map-invert attr-positions)
+                :query/attributes s->a)))
 
 (defn analyse-query [input-edn]
   (cond
@@ -73,3 +113,44 @@
     (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
     (query-map? input-edn)        (with-query-map-data input-edn)
     :else                         false))
+
+(defn- calc-numeric-keys [m]
+  (map first (filter (comp number? second) m)))
+
+(defn analyse-results
+  [{:query/keys
+    [attr-set
+     attr-vec]
+    :as query-info}
+   results]
+  (def args [query-info results])
+  (if (and (= (:crux.ui/query-type query-info) :crux.ui.query-type/query)
+           (not-empty results))
+    (let [r-count (count results)
+          ids-received? (or (attr-set :crux.db/id) (:full-results? query-info))
+          full-results? (:full-results? query-info)
+          first-res (if full-results?
+                      (-> results first :crux.query/doc)
+                      (-> results first))
+          first-res-map (if full-results?
+                          first-res
+                          (zipmap attr-vec first-res))
+          ids-pluck
+          (cond
+            full-results? (comp :crux.db/id :crux.query/doc)
+            ids-received? first
+            :else identity)
+          numeric-attrs (disj (set (calc-numeric-keys first-res-map)) :crux.db/id)
+          discrete-attrs (cset/difference (disj attr-set :crux.db/id)  numeric-attrs)
+          ids (if ids-received? (map ids-pluck results))]
+      {:ra/single-entity?     (= 1 r-count)
+       :ra/results-count      r-count
+       :ra/has-results?       (> r-count 0)
+       :ra/numeric-attrs      numeric-attrs
+       :ra/has-numeric-attrs? (> (count numeric-attrs) 0)
+       :ra/discrete-attrs     discrete-attrs
+       :ra/entity-ids         ids
+       :ra/entity-id          (first ids)
+       :ra/first-res-map      first-res-map
+       :ra/first-res          first-res})
+    (println :bailing-out query-info results)))

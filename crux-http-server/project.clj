@@ -1,11 +1,11 @@
-(defproject juxt/crux-http-server :derived-from-git
+(defproject juxt/crux-http-server "derived-from-git"
   :description "Crux HTTP Server"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.0"]
 
-                 [juxt/crux-core :derived-from-git]
+                 [juxt/crux-core "derived-from-git"]
 
                  [ring/ring-core "1.7.1"]
                  [ring/ring-jetty-adapter "1.7.1"]

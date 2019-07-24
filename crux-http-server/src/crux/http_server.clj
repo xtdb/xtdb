@@ -104,16 +104,14 @@
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
-(defn- history-range [^ICruxAPI crux-node request]
+(defn- parse-history-range-params [{:keys [query-params] :as request}]
   (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
-        valid-time-start (some->> (get-in request [:query-params "valid-time-start"])
-                                  (cio/parse-rfc3339-or-millis-date))
-        transaction-time-start (some->> (get-in request [:query-params "transaction-time-start"])
-                                        (cio/parse-rfc3339-or-millis-date))
-        valid-time-end (some->> (get-in request [:query-params "valid-time-end"])
-                                (cio/parse-rfc3339-or-millis-date))
-        transaction-time-end (some->> (get-in request [:query-params "transaction-time-end"])
-                                      (cio/parse-rfc3339-or-millis-date))
+        times (map #(some-> (get query-params %) not-empty cio/parse-rfc3339-or-millis-date)
+                   ["valid-time-start" "transaction-time-start" "valid-time-end" "transaction-time-end"])]
+    (cons eid times)))
+
+(defn- history-range [^ICruxAPI crux-node request]
+  (let [[eid valid-time-start transaction-time-start valid-time-end transaction-time-end] (parse-history-range-params request)
         history (.historyRange crux-node (c/new-id eid) valid-time-start transaction-time-start valid-time-end transaction-time-end)
         last-modified (:crux.tx/tx-time (last history))]
     (-> (success-response history)

@@ -9,6 +9,9 @@
   "dependencies": {
     "codemirror": "5.47.0",
     "create-react-class": "^15.6.3",
+    "plotly.js": "^1.48.3",
+    "plotly.js-dist": "^1.48.3",
+    "plotly.js-gl3d-dist": "^1.48.3",
     "process": "^0.11.10",
     "quill": ">=1.3.6",
     "quill-auto-links": ">=0.1.3",

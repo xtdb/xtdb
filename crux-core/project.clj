@@ -1,4 +1,4 @@
-(defproject juxt/crux-core :derived-from-git
+(defproject juxt/crux-core "derived-from-git"
   :description "Crux Core"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"

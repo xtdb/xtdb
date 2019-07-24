@@ -1,11 +1,13 @@
 (ns juxt.crux-ui.frontend.views.query.output
-  (:require [juxt.crux-ui.frontend.views.comps :as comps]
-            [juxt.crux-ui.frontend.views.query.results-tree :as q-results-tree]
-           ;[juxt.crux-ui.frontend.views.query.results-table :as q-results-table]
-            [juxt.crux-ui.frontend.views.query.results-grid :as q-results-table]
-            [garden.core :as garden]
+  (:require [garden.core :as garden]
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.views.output.tree :as q-results-tree]
+            [juxt.crux-ui.frontend.views.output.tx-history :as output-txes]
+            [juxt.crux-ui.frontend.views.output.attr-history :as output-attr-history]
+            [juxt.crux-ui.frontend.views.output.edn :as output-edn]
+            [juxt.crux-ui.frontend.views.output.table :as q-results-table]
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.attr-stats :as attr-stats]
             [juxt.crux-ui.frontend.views.codemirror :as cm]))
@@ -15,11 +17,6 @@
 (def ^:private -sub-output-tab (rf/subscribe [:subs.ui/output-main-tab]))
 (def ^:private -sub-output-side-tab (rf/subscribe [:subs.ui/output-side-tab]))
 (def ^:private -sub-results-table (rf/subscribe [:subs.query/results-table]))
-
-(defn- query-output-edn []
-  (let [raw @-sub-query-res
-        fmt (with-out-str (cljs.pprint/pprint raw))]
-    [cm/code-mirror fmt {:read-only? true}]))
 
 
 (def empty-placeholder
@@ -50,22 +47,27 @@
 (defn side-output-tabs [active-tab]
   [:div.output-tabs.output-tabs--side
    q-output-tabs-styles
-   (interpose
-     [:div.output-tabs__sep "/"]
+   (->>
      (for [tab-type [:db.ui.output-tab/tree :db.ui.output-tab/attr-stats]]
-       ^{:key tab-type}
-       [out-tab-item tab-type active-tab #(set-side-tab tab-type)]))])
+         [out-tab-item tab-type active-tab #(set-side-tab tab-type)])
+     (interpose [:div.output-tabs__sep "/"])
+     (map-indexed #(with-meta %2 {:key %1})))])
+
 
 (defn main-output-tabs [active-tab]
   [:div.output-tabs.output-tabs--main
    q-output-tabs-styles
-   (interpose
-     [:div.output-tabs__sep "/"]
+   (->>
      (for [tab-type [:db.ui.output-tab/table
                      :db.ui.output-tab/tree
+                     :db.ui.output-tab/attr-history
+                     :db.ui.output-tab/tx-history
                      :db.ui.output-tab/edn]]
        ^{:key tab-type}
-       [out-tab-item tab-type active-tab #(set-main-tab tab-type)]))])
+       [out-tab-item tab-type active-tab #(set-main-tab tab-type)])
+     (interpose [:div.output-tabs__sep "/"])
+     (map-indexed #(with-meta %2 {:key %1})))])
+
 
 
 (def ^:private q-output-styles
@@ -131,10 +133,12 @@
     (if-let [out-tab @-sub-output-tab]
       [:<>
        (case out-tab
-         :db.ui.output-tab/table [q-results-table/root @-sub-results-table]
-         :db.ui.output-tab/tree  [q-results-tree/root]
-         :db.ui.output-tab/edn   [query-output-edn]
-         :db.ui.output-tab/empty empty-placeholder
+         :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
+         :db.ui.output-tab/tree           [q-results-tree/root]
+         :db.ui.output-tab/tx-history     [output-txes/root]
+         :db.ui.output-tab/attr-history   [output-attr-history/root]
+         :db.ui.output-tab/edn            [output-edn/root @-sub-query-res]
+         :db.ui.output-tab/empty          empty-placeholder
          [q-results-table/root @-sub-results-table])
        [:div.q-output__main__links
         [main-output-tabs out-tab]]]
