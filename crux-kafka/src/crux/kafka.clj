@@ -1,11 +1,11 @@
->(ns crux.kafka
-  (:require [clojure.spec.alpha :as s]
+(ns crux.kafka
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [clojure.java.io :as io]
-            [crux.io :as cio]
             [crux.bootstrap :as b]
+            [crux.codec :as c]
             [crux.db :as db]
+            [crux.io :as cio]
             [crux.status :as status]
             [crux.tx :as tx]
             [taoensso.nippy :as nippy])
@@ -335,44 +335,44 @@
                     "crux.kafka.indexing-consumer-thread")
        (.start)))))
 
-(defmethod b/define-module ::indexing-consumer [_] [(fn [{:keys [admin-client indexer]} options]
-                                                      (let [kafka-config (derive-kafka-config options)
-                                                            consumer-config (merge {"group.id" (:group-id options)}
-                                                                                   kafka-config)]
-                                                        (start-indexing-consumer admin-client consumer-config indexer options)))
-                                                    [:indexer :admin-client]
-                                                    (s/keys :opt-un [::bootstrap-servers
-                                                                     ::tx-topic
-                                                                     ::doc-topic
-                                                                     ::doc-partitions
-                                                                     ::create-topics
-                                                                     ::replication-factor])])
+(def indexing-consumer [(fn [{:keys [admin-client indexer]} options]
+                          (let [kafka-config (derive-kafka-config options)
+                                consumer-config (merge {"group.id" (:group-id options)}
+                                                       kafka-config)]
+                            (start-indexing-consumer admin-client consumer-config indexer options)))
+                        [:indexer :admin-client]
+                        (s/keys :opt-un [::bootstrap-servers
+                                         ::tx-topic
+                                         ::doc-topic
+                                         ::doc-partitions
+                                         ::create-topics
+                                         ::replication-factor])])
 
-(defmethod b/define-module ::admin-client [_] [(fn [_ options]
-                                                 (create-admin-client (derive-kafka-config options)))])
+(def admin-client [(fn [_ options]
+                     (create-admin-client (derive-kafka-config options)))])
 
-(defmethod b/define-module ::admin-wrapper [_] [(fn [{:keys [admin-client]} _]
-                                                  (reify Closeable
-                                                    (close [_])))
-                                                [:admin-client]])
+(def admin-wrapper [(fn [{:keys [admin-client]} _]
+                      (reify Closeable
+                        (close [_])))
+                    [:admin-client]])
 
-(defmethod b/define-module ::producer [_] [(fn [_ options]
-                                             (create-producer (derive-kafka-config options)))])
+(def producer [(fn [_ options]
+                 (create-producer (derive-kafka-config options)))])
 
-(defmethod b/define-module ::tx-log [_] [(fn [{:keys [producer]} {:keys [tx-topic doc-topic] :as options}]
-                                           (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
-                                         [:producer]
-                                         (s/keys :opt-un [::tx-topic
-                                                          ::doc-topic
-                                                          ::bootstrap-servers
-                                                          ::kafka-properties-file
-                                                          ::kafka-properties-map])])
+(def tx-log [(fn [{:keys [producer]} {:keys [tx-topic doc-topic] :as options}]
+               (->KafkaTxLog producer tx-topic doc-topic (derive-kafka-config options)))
+             [:producer]
+             (s/keys :opt-un [::tx-topic
+                              ::doc-topic
+                              ::bootstrap-servers
+                              ::kafka-properties-file
+                              ::kafka-properties-map])])
 
-(def node-config {:tx-log ::tx-log
-                  :admin-client ::admin-client
-                  :admin-wrapper ::admin-wrapper
-                  :producer ::producer
-                  :indexing-consumer ::indexing-consumer})
+(def node-config {:tx-log tx-log
+                  :admin-client admin-client
+                  :admin-wrapper admin-wrapper
+                  :producer producer
+                  :indexing-consumer indexing-consumer})
 
 (comment
   ;; Start a Kafka node:

@@ -2,21 +2,20 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [clojure.java.io :as io]
             [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.io :as cio]
             [crux.index :as idx]
+            [crux.io :as cio]
             [crux.kv :as kv]
             [crux.lru :as lru]
             [crux.query :as q]
             [crux.status :as status]
             [crux.tx :as tx])
-  (:import java.io.Closeable
-           java.util.UUID
-           crux.api.ICruxAPI))
+  (:import crux.api.ICruxAPI
+           java.io.Closeable
+           java.util.UUID))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
                    (Boolean/parseBoolean check-asserts)
@@ -127,8 +126,6 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defmulti define-module identity)
-
 (defn start-kv-store ^java.io.Closeable
   ([_ options]
    (start-kv-store options))
@@ -150,8 +147,6 @@
          (.close ^Closeable kv)
          (throw t))))))
 
-(defmethod define-module :crux.kv/kv-store [_] [start-kv-store [] :crux.kv/options])
-
 (defn start-object-store ^java.io.Closeable [partial-node {:keys [object-store]
                                                            :or {object-store (:object-store default-options)}
                                                            :as options}]
@@ -159,18 +154,12 @@
       (cio/new-record)
       (db/init partial-node options)))
 
-(defmethod define-module ::raw-object-store [_] [(fn [{:keys [kv-store]} options]
-                                                   (start-object-store {:kv kv-store} options))
-                                                 [:kv-store]
-                                                 (s/keys :opt-un [:crux.db/object-store])])
+(defn start-raw-object-store [{:keys [kv-store]} options]
+  (start-object-store {:kv kv-store} options))
 
 (defn- start-cached-object-store [{:keys [kv-store]} {:keys [doc-cache-size] :as options}]
   (lru/->CachedObjectStore (lru/new-cache doc-cache-size)
                            (start-object-store {:kv kv-store} options)))
-
-(defmethod define-module ::object-store [_] [start-cached-object-store
-                                             [:kv-store]
-                                             (s/keys :opt-un [:crux.lru/doc-cache-size])])
 
 (defn install-uncaught-exception-handler! []
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
@@ -182,14 +171,9 @@
 (defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
   (tx/->KvIndexer kv-store tx-log object-store))
 
-(defmethod define-module :crux.indexer/kv-indexer [_] [start-kv-indexer
-                                                       [:kv-store :tx-log :object-store]])
-
 (defn- start-order [system]
-  (let [g (reduce-kv (fn [g k v]
-                       (let [module-def (define-module v)]
-                         (assert module-def (str "Crux module not found: " k))
-                         (reduce (fn [g d] (dep/depend g k d)) g (second module-def))))
+  (let [g (reduce-kv (fn [g k module-def]
+                       (reduce (fn [g d] (dep/depend g k d)) g (second module-def)))
                      (dep/graph)
                      system)
         dep-order (dep/topo-sort g)
@@ -203,7 +187,7 @@
         start-order (start-order node-system)
         started-modules (try
                           (for [k start-order]
-                            (let [[start-fn deps spec] (define-module (node-system k))
+                            (let [[start-fn deps spec] (node-system k)
                                   deps (select-keys @started deps)]
                               (when spec
                                 (s/assert spec options))
@@ -224,10 +208,15 @@
                   :b (fn [deps] :start-b)
                   :c (fn [deps] :start-c)}))
 
-(def base-node-config {:kv-store :crux.kv/kv-store
-                       :raw-object-store ::raw-object-store
-                       :object-store ::object-store
-                       :indexer :crux.indexer/kv-indexer})
+(def raw-object-store [start-raw-object-store [:kv-store] (s/keys :opt-un [:crux.db/object-store])])
+(def object-store [start-cached-object-store [:kv-store] (s/keys :opt-un [:crux.lru/doc-cache-size])])
+(def kv-indexer [start-kv-indexer [:kv-store :tx-log :object-store]])
+(def kv-store [start-kv-store [] :crux.kv/options])
+
+(def base-node-config {:kv-store kv-store
+                       :raw-object-store raw-object-store
+                       :object-store object-store
+                       :indexer kv-indexer})
 
 (defn start-node ^ICruxAPI [node-config options]
   (let [options (merge default-options options)

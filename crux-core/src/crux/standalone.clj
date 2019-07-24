@@ -2,13 +2,10 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.bootstrap :as b]
-            [crux.moberg :as moberg]
-            [crux.tx.polling :as p]
             [crux.kv :as kv]
-            [crux.lru :as lru]
-            [crux.tx :as tx])
-  (:import java.io.Closeable
-           crux.api.ICruxAPI))
+            [crux.moberg :as moberg]
+            [crux.tx.polling :as p])
+  (:import java.io.Closeable))
 
 (s/def ::event-log-sync-interval-ms nat-int?)
 (s/def ::event-log-fsync-opts (s/keys :opt-un [:crux.kv/sync?]
@@ -32,8 +29,6 @@
         (reset! running? false)
         (some-> fsync-thread (.join fsync-thread))))))
 
-(defmethod b/define-module ::event-log-sync [_] [start-event-log-fsync [:event-log-kv] ::event-log-fsync-opts])
-
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
 (s/def ::event-log-kv-opts (s/keys :req-un [:crux.kv/db-dir
@@ -53,25 +48,24 @@
       :sync? event-log-sync?
       :crux.index/check-and-store-index-version false})))
 
-(defmethod b/define-module ::event-log-kv [_] [start-event-log-kv [] ::event-log-kv-opts])
-
 (defn- start-event-log-consumer [{:keys [event-log-kv indexer]} _]
   (when event-log-kv
     (p/start-event-log-consumer indexer
                                 (moberg/map->MobergEventLogConsumer {:event-log-kv event-log-kv
                                                                      :batch-size 100}))))
 
-(defmethod b/define-module ::event-log-consumer [_] [start-event-log-consumer [:event-log-kv :indexer]])
-
 (defn- start-moberg-event-log [{:keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
-(defmethod b/define-module ::tx-log [_] [start-moberg-event-log [:event-log-kv]])
+(def event-log-kv [start-event-log-kv [] ::event-log-kv-opts])
+(def event-log-sync [start-event-log-fsync [:event-log-kv] ::event-log-fsync-opts])
+(def event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]])
+(def tx-log [start-moberg-event-log [:event-log-kv]])
 
-(def node-config {:event-log-kv ::event-log-kv
-                  :event-log-sync ::event-log-sync
-                  :event-log-consumer ::event-log-consumer
-                  :tx-log ::tx-log})
+(def node-config {:event-log-kv event-log-kv
+                  :event-log-sync event-log-sync
+                  :event-log-consumer event-log-consumer
+                  :tx-log tx-log})
 
 (comment
   ;; Start a Standalone node:
