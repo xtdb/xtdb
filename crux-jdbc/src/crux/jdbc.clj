@@ -29,9 +29,9 @@
     (java.util.Date. (.getTime ^java.sql.Timestamp t))))
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
-  (let [tx-result (if (= "sqlite" dbtype)
+  (let [tx-result (if (#{"sqlite" "mysql"} dbtype)
                     (let [id (first (vals tx-result))]
-                      (jdbc/execute-one! ds ["SELECT * FROM TX_EVENTS WHERE EVENT_OFFSET = ?" id]
+                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
     (let [tx-id (:event_offset tx-result)
@@ -40,7 +40,7 @@
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO TX_EVENTS (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic]
+    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (defrecord JdbcLogQueryContext [running?]
@@ -53,7 +53,7 @@
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)
           ^Tx result (tx-result->tx-data ds dbtype (insert-event! ds id  doc "docs"))]
-      (jdbc/execute! ds ["DELETE FROM TX_EVENTS WHERE TOPIC = 'docs' AND EVENT_KEY = ? AND EVENT_OFFSET < ?" id (.id result)])))
+      (jdbc/execute! ds ["DELETE FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ? AND EVENT_OFFSET < ?" id (.id result)])))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
@@ -80,7 +80,7 @@
                         nil
                         (reduced nil)))
                     nil
-                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
+                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
                                    (or from-tx-id 0)]
                                {:builder-fn jdbcr/as-unqualified-lower-maps}))
           (catch Throwable t
@@ -109,11 +109,11 @@
                      (->date dbtype (:tx_time result))
                      (:event_key result)
                      {:crux.tx/sub-topic (keyword (:topic result))}))
-         (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM TX_EVENTS WHERE EVENT_OFFSET >= ?" next-offset]
+         (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
                         {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))
 
   (end-offset [this]
-    (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM TX_EVENTS"]))))))
+    (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
 
 (defn- setup-schema! [ds dbtype]
   (jdbc/execute! ds [(condp contains? dbtype
@@ -122,6 +122,12 @@
   event_offset int auto_increment PRIMARY KEY, event_key VARCHAR,
   tx_time datetime default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v BINARY NOT NULL)"
+
+                       #{"mysql"}
+                       "create table if not exists tx_events (
+  event_offset int auto_increment PRIMARY KEY, event_key VARCHAR(255),
+  tx_time datetime(3) default CURRENT_TIMESTAMP, topic VARCHAR(255) NOT NULL,
+  v BLOB NOT NULL)"
 
                        #{"sqlite"}
                        "create table if not exists tx_events (

@@ -18,7 +18,12 @@
   (t/testing "SQLite Database"
     (fj/with-jdbc-node :sqlite f))
   (t/testing "Postgresql Database"
-    (fp/with-embedded-postgres f)))
+    (fp/with-embedded-postgres f))
+  ;; You need to setup mysql first with the respective user, and
+  ;; create the db cruxtest:
+  #_(t/testing "MYSQL Database"
+    (fj/with-jdbc-node :mysql f {:user "cruxtest"
+                                 :password "cruxtest"})))
 
 (t/use-fixtures :each with-each-jdbc-node)
 
@@ -27,7 +32,6 @@
         submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
     (.sync *api* (:crux.tx/tx-time submitted-tx) nil)
     (t/is (.entity (.db *api*) :origin-man))
-
     (t/testing "Tx log"
       (with-open [tx-log-context (.newTxLogContext *api*)]
         (t/is (= [{:crux.tx/tx-id 2,
@@ -39,7 +43,7 @@
                  (.txLog *api* tx-log-context 0 false)))))))
 
 (defn- docs [ds id]
-  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM TX_EVENTS WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
+  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
                                            {:builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (t/deftest test-docs-retention
