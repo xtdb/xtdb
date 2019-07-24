@@ -1,6 +1,8 @@
 {:ig/system
- {:juxt.crux-ui.server.main/read-write {:node #ig/ref :juxt.crux.ig/node}
-  :juxt.crux-ui.server.main/home {:node #ig/ref :juxt.crux.ig/node}
+
+ {:juxt.crux-ui.server.main/read-write {:system #ig/ref :juxt.crux.ig/node}
+  [:edge.yada.ig/redirect :juxt.crux-ui.server/home] {:target :juxt.crux-ui.server.main/console}
+
   :juxt.crux-ui.server.main/query-perf {:node #ig/ref :juxt.crux.ig/node}
   :juxt.crux-ui.server.main/console {:node #ig/ref :juxt.crux.ig/node}
   :juxt.crux.ig.node/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"
@@ -8,15 +10,17 @@
                                  :db-dir "data/db-dir-1"
                                  :http-opts {:server-port 8080}}
   :edge.yada.ig/listener {:handler #ig/ref :edge.bidi.ig/vhost
-                          :port 8300}
+                          :port #profile {:dev 8300
+                                          :prod 5000}}
 
   [:juxt.crux-ui.server.main/cljsjs :edge.yada.ig/resources] {:path "cljsjs/"}
   [:juxt.crux-ui.server.main/static :edge.yada.ig/resources] {:path "static/"}
   [:juxt.crux-ui.server/assets :edge.yada.ig/resources] {:path "public/"}
 
-  :edge.bidi.ig/vhost [["http://localhost:8300"
+  :edge.bidi.ig/vhost [[#profile {:prod "http://console.crux.cloud"
+                                  :dev "http://localhost:8300"}
                         [""
-                         [["/" #ig/ref :juxt.crux-ui.server.main/home]
+                         [["/" #ig/ref :juxt.crux-ui.server/home]
                           ["/query-perf" #ig/ref :juxt.crux-ui.server.main/query-perf]
                           ["/console" #ig/ref :juxt.crux-ui.server.main/console]
                           ["/static/" #ig/ref [:juxt.crux-ui.server.main/static :edge.yada.ig/resources]]

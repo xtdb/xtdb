@@ -4,14 +4,14 @@
   ;
   #?(:cljs (:require [cljs.reader :as edn]
                      [clojure.string :as s]
-                     [promesa.core :as p]
+                     [promesa.core :as p :refer-macros [alet]]
                      [juxt.crux-lib.http-functions :as hf]
                      [promesa.async-cljs :refer-macros [async]]
                      [goog.string :as gs]))
   ;
   #?(:clj  (:require [clojure.tools.reader.edn :as edn]
                      [clojure.string :as s]
-                     [promesa.core :as p]
+                     [promesa.core :as p :refer-macros [alet]]
                      [clojure.java.io :as io]
                      [promesa.async :refer [async]]
                      [clojure.instant :as instant]))

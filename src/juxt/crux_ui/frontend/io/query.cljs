@@ -11,7 +11,9 @@
        :body body
        :headers #js {:Content-Type "application/edn"}})
 
-(def node-client (crux-api/new-api-client "http://localhost:8080"))
+(def debug? (and (some? (aget js/window "goog")) (some? (aget (aget js/window "goog") "DEBUG"))))
+
+(def node-client (crux-api/new-api-client (if debug? "http://localhost:8080" "/crux")))
 
 (defn on-exec-success [resp]
   (rf/dispatch [:evt.io/query-success resp]))

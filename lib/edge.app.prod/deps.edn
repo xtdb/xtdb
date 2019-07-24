@@ -1,0 +1,5 @@
+{:paths ["src"]
+ :deps
+ {juxt.edge/edge.system {:local/root "../edge.system"}
+  juxt.edge/lib.socket-server {:local/root "../edge.socket-server"}
+  integrant/integrant {:mvn/version "0.7.0"}}}

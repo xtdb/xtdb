@@ -7,12 +7,6 @@
 (defn pprint-str [edn]
   (with-out-str (pprint/pprint edn)))
 
-(defn fetch [path c & [opts]]
-  (.then (.then (js/fetch (str "http://localhost:8080/" path) opts) #(.text %)) #(async/put! c %)))
-
-(defn fetch2 [path c & [opts]]
-  (.then (.then (js/fetch (str "http://localhost:8080/" path) opts) #(.text %)) #(do (async/put! c %) (async/close! c))))
-
 (defn merge-with-keep [a]
   (apply merge-with (fn [v1 v2] ((if (vector? v1) conj vector) v1 v2)) a))
 
