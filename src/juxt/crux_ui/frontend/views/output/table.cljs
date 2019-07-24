@@ -61,6 +61,7 @@
      [:style style]
      [:div.q-grid__head
       (for [h headers]
+        ^{:key h}
         [:div.q-grid__head-cell (pr-str h)])]
      [:div.q-grid__body
       (map-indexed table-row rows)]]))
