@@ -4,8 +4,8 @@
 test/test-start-uberjar.sh &
 
 # Sleep for enough time to run:
-# -> tests intermittently fail at 10s, safe so far at 15s, may need to increase.
-sleep 15
+# -> tests intermittently fail at 15s, safe so far at 20s, may need to increase.
+sleep 20
 
 # Cancel the process - avoid closing other java processes
 jps | grep "crux" | grep ".jar" | awk '{print $1}' | xargs kill -TERM

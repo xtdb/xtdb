@@ -4,7 +4,9 @@
             [clojure.java.shell :as sh]))
 
 (t/deftest test-uberjar-can-start
-  (let [_ (sh/sh "test/test-uberjar.sh")
+  (let [_ (sh/sh "chmod" "+x" "test/test-uberjar.sh")
+        _ (sh/sh "chmod" "+x" "test/test-start-uberjar.sh")
+        _ (sh/sh "test/test-uberjar.sh")
         file "uberjar-test-results"
         results (slurp file)]
 
