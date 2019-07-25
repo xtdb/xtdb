@@ -9,6 +9,8 @@ resources/static/crux-ui/compiled
 resources/static/crux-ui/test
 node_modules
 .shadow-cljs
+ebs/ebs-uber.jar
+ebs/ebs-upload.zip
 
 # pack'd output
 /*.jar
