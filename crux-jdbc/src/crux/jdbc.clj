@@ -101,7 +101,6 @@
 
   (next-events [this context next-offset]
     (map (fn [result]
-           (println result)
            (Message. (nippy/thaw
                       (:v result))
                      nil
