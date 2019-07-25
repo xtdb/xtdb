@@ -1,2 +1,2 @@
 #! /usr/bin/env sh
-shadow-cljs compile app
+shadow-cljs release app
