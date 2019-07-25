@@ -18,4 +18,6 @@
 
 (defn root []
   [:div.tx-history
-    [charts/plotly-wrapper @-sub-tx-history tx-layout]])
+    (if-let [tx-history @-sub-tx-history]
+      [charts/plotly-wrapper tx-history tx-layout]
+      "No data to display, try to run a query")])

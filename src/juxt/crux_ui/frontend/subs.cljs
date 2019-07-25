@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.frontend.subs
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.example-queries :as ex]
+            [juxt.crux-ui.frontend.logic.plotting-data-calc :as pd]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]))
 
 
@@ -8,8 +9,14 @@
 ; this is to force editor rerenders
 (rf/reg-sub :subs.ui/editor-key  (fnil :db.ui/editor-key 0))
 
-(rf/reg-sub :subs.db.ui/output-side-tab (fnil :db.ui/output-side-tab :db.ui.output-tab/table))
-(rf/reg-sub :subs.db.ui/output-main-tab (fnil :db.ui/output-main-tab :db.ui.output-tab/table))
+(rf/reg-sub :subs.db.ui/output-side-tab
+            (fnil :db.ui/output-side-tab
+                  {:db.ui/output-side-tab
+                   :db.ui.output-tab/table}))
+(rf/reg-sub :subs.db.ui/output-main-tab
+            (fnil :db.ui/output-main-tab
+                  {:db.ui/output-main-tab
+                   :db.ui.output-tab/table}))
 
 (rf/reg-sub
   :subs.ui/root-tab
@@ -22,17 +29,17 @@
 
 ; query related root subscriptions
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
-(rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  false))
-(rf/reg-sub :subs.query/input  (fnil :db.query/input  false))
+(rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  {}))
+(rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
-(rf/reg-sub :subs.query/result (fnil :db.query/result false))
-(rf/reg-sub :subs.query/error  (fnil :db.query/error  false))
-(rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed false))
-(rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis false))
+(rf/reg-sub :subs.query/result (fnil :db.query/result {}))
+(rf/reg-sub :subs.query/error  (fnil :db.query/error  {}))
+(rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
+(rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
 
 ; returns a map entity-id->simple-histories
-(rf/reg-sub :subs.query/entities-simple-histories (fnil :db.query/eid->simple-history false))
-(rf/reg-sub :subs.query/entities-txes (fnil :db.query/histories false))
+(rf/reg-sub :subs.query/entities-simple-histories (fnil :db.query/eid->simple-history {}))
+(rf/reg-sub :subs.query/entities-txes (fnil :db.query/histories {}))
 
 
 ; query derivatives
@@ -94,33 +101,23 @@
              (into [[:crux.db/id (:crux.db/id stats)]]
                    (dissoc stats :crux.db/id)))}))
 
-(defn calc-plotly-trace [attr-key eid simple-history]
-  {:name (name eid)
-   :type "scatter"
-   :x (map :crux.db/valid-time simple-history)
-   :y (map attr-key simple-history)})
-
-(defn calc-plotly-trace--tx-scatter [eid tx]
-  {:name (name eid)
-   :mode "markers"
-   :type "scatter"
-   :x     (map :crux.db/valid-time tx)
-   :y     (map :crux.tx/tx-time tx)})
 
 (rf/reg-sub
   :subs.output/tx-history-plot-data
   :<- [:subs.query/entities-txes]
   (fn [eids->txes]
-    (map (fn [[k v]] (calc-plotly-trace--tx-scatter k v)) eids->txes)))
+    (if eids->txes
+      (map (fn [[k v]] (pd/calc-plotly-trace--tx-scatter k v)) eids->txes))))
 
 (rf/reg-sub
   :subs.query/attr-history-plot-data
   :<- [:subs.query/result-analysis]
   :<- [:subs.query/entities-simple-histories]
   (fn [[result-analysis eids->simple-history]]
-    (if-let [first-numeric (first (:ra/numeric-attrs result-analysis))]
-      {:attribute first-numeric
-       :traces (map (fn [[k v]] (calc-plotly-trace first-numeric k v)) eids->simple-history)})))
+    (let [first-numeric (first (:ra/numeric-attrs result-analysis))]
+      (if (and first-numeric (map? eids->simple-history))
+        {:attribute first-numeric
+         :traces (map (fn [[k v]] (pd/calc-plotly-trace--attr first-numeric k v)) eids->simple-history)}))))
 
 (rf/reg-sub
   :subs.query/examples

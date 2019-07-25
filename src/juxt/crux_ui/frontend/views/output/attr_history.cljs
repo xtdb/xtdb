@@ -19,5 +19,7 @@
 (defn root []
   [:div.attr-history
    (let [{:keys [traces attribute] :as p-data} @-sub-plotly-data]
-     [charts/plotly-wrapper traces (attr-layout attribute)])])
+     (if p-data
+       [charts/plotly-wrapper traces (attr-layout attribute)]
+       "No data to display, try to run a query that will include a numeric attribute"))])
 
