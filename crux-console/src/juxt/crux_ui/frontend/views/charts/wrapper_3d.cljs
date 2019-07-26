@@ -1,6 +1,6 @@
-(ns juxt.crux-ui.frontend.views.charts.core
+(ns juxt.crux-ui.frontend.views.charts.wrapper-3d
   (:require [reagent.core :as r]
-            ["plotly.js-dist" :as Plotly]
+            ["plotly.js-gl3d-dist" :as Plotly]
             [garden.core :as garden]))
 
 

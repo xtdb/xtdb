@@ -13,7 +13,7 @@
 
 (def debug? (and (some? (aget js/window "goog")) (some? (aget (aget js/window "goog") "DEBUG"))))
 
-(def node-client (crux-api/new-api-client (if debug? "http://localhost:8080" "/crux")))
+(def node-client (crux-api/new-api-client (if-not debug? "http://localhost:8080" "/crux")))
 
 (defn on-exec-success [resp]
   (rf/dispatch [:evt.io/query-success resp]))

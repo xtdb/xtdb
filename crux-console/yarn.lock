@@ -2210,9 +2210,9 @@ is-iexplorer@^1.0.0:
   integrity sha1-HXK8ZtP+Iur2Fw3ajPEJQySM/HY=
 
 is-mobile@^2.0.0:
-  version "2.0.1"
-  resolved "https://registry.yarnpkg.com/is-mobile/-/is-mobile-2.0.1.tgz#7e307cf066030e5c1241b53521ceaa999d1f1a2f"
-  integrity sha512-JNaoIFM3geBseef71iOu4024vfphwjFQPFGD64cziXbbyHdrF9zLTqxj2VEbrdOS/gkiQ5b3HldPf4eYPu8g/g==
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/is-mobile/-/is-mobile-2.1.0.tgz#4c0cab72f3358dd9986007389b30729fae80da0b"
+  integrity sha512-M5OhlZwh+aTlmRUvDg0Wq3uWVNa+w4DyZ2SjbrS+BhSLu9Po+JXHendC305ZEu+Hh7lywb19Zu4kYXu3L1Oo8A==
 
 is-obj@^1.0.1:
   version "1.0.1"
@@ -2778,9 +2778,9 @@ parchment@^1.1.4:
   integrity sha512-J5FBQt/pM2inLzg4hEWmzQx/8h8D0CiDxaG3vyp9rKrQRSDgBlhjdP5jQGgosEajXPSQouXGHOmVdgo7QmJuOg==
 
 parenthesis@^3.1.5:
-  version "3.1.6"
-  resolved "https://registry.yarnpkg.com/parenthesis/-/parenthesis-3.1.6.tgz#47c7c72da3221fae11cdbbede2ed1bcb767e9fc1"
-  integrity sha512-2fobSoJQTFoIKJ2kXw8QupNtKJ93lNwRgwBxf8YxMNWnWwvMVzqs/baseqWhHP1bRQGf0cv75UtO71nUO5dFuA==
+  version "3.1.7"
+  resolved "https://registry.yarnpkg.com/parenthesis/-/parenthesis-3.1.7.tgz#01c89b603a2a6a262ec47554e74ed154a9be2aa6"
+  integrity sha512-iMtu+HCbLXVrpf6Ys/4YKhcFxbux3xK4ZVB9r+a2kMSqeeQWQoDNYlXIsOjwlT2ldYXZ3k5PVeBnYn7fbAo/Bg==
 
 parse-asn1@^5.0.0:
   version "5.1.4"
@@ -2891,6 +2891,11 @@ planar-graph-to-polyline@^1.0.0:
     two-product "^1.0.0"
     uniq "^1.0.0"
 
+plotly.js-basic-dist@^1.49.0:
+  version "1.49.0"
+  resolved "https://registry.yarnpkg.com/plotly.js-basic-dist/-/plotly.js-basic-dist-1.49.0.tgz#9afb2fc60dfd918d7e33923914a7b4e57c8e2a09"
+  integrity sha512-DOijRdWq1M5K4PNFUSSmaXcd4bfc2K8DCSg6ZLP5ACdE6VOB9CXBKaEyafyJd82HaJDjqfHe7tmUdwlOSoIgCQ==
+
 plotly.js-dist@^1.48.3:
   version "1.49.0"
   resolved "https://registry.yarnpkg.com/plotly.js-dist/-/plotly.js-dist-1.49.0.tgz#ba86defdcff8c68c7d7574919af352fb844a8cd6"
@@ -2901,7 +2906,7 @@ plotly.js-gl3d-dist@^1.48.3:
   resolved "https://registry.yarnpkg.com/plotly.js-gl3d-dist/-/plotly.js-gl3d-dist-1.49.0.tgz#76c2c1542ad6248fe11cca8170d5c892e49d1b63"
   integrity sha512-Jj3oLxBdkb4NW42SiTtG6y6CHBB8CWCTVQwe+ujkZ6nWwOf6v7bZWvJJvFi/gXVnXeXapS7pjcZXEZfZinnjfg==
 
-plotly.js@^1.48.3:
+plotly.js@^1.49.0:
   version "1.49.0"
   resolved "https://registry.yarnpkg.com/plotly.js/-/plotly.js-1.49.0.tgz#6a160c39f539dca7d523fd0c4c01ef477a18c34e"
   integrity sha512-zKM4AwLVfqeqRDn3Y+7DzNHdV7svJYD4j8M6mwFN5UGEq7WhEgmGexu3E5Xw12sNWwQ/adeemlAIo+4zkGUORA==

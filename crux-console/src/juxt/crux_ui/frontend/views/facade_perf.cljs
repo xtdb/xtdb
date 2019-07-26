@@ -1,12 +1,9 @@
-(ns juxt.crux-ui.frontend.views.facade
+(ns juxt.crux-ui.frontend.views.facade-perf
   (:require [garden.core :as garden]
-            [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.views.query-ui :as q]
+            [juxt.crux-ui.frontend.views.query-perf :as query-perf]
             [juxt.crux-ui.frontend.views.header :as header]
             [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.svg-icons :as icon]))
-
-(def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
 
 (def ^:private root-styles
   [:style
@@ -44,12 +41,10 @@
 
 
 (defn root []
-  (let [root-tab @-sub-root-tab]
-    [:div#root.root {:class (if (= :subs.ui.root-tab/query-perf root-tab) "root--page")}
-     root-styles
-     [:div.root__header
-       [header/root]]
-     [:div.root__body {:class (if (= :subs.ui.root-tab/query-perf root-tab) "root__body--page")}
-       (case root-tab
-         :subs.ui.root-tab/query-ui [q/query-ui]
-         [q/query-ui])]]))
+  [:div#root.root.root--page
+   root-styles
+   [:div.root__header
+     [header/root]]
+   [:div.root__body.root__body--page
+     [query-perf/root]]])
+

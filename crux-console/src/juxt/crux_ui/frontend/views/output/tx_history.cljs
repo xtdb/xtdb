@@ -1,7 +1,7 @@
 (ns juxt.crux-ui.frontend.views.output.tx-history
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
-            [juxt.crux-ui.frontend.views.charts.core :as charts]))
+            [juxt.crux-ui.frontend.views.charts.wrapper-basic :as charts]))
 
 (def ^:private -sub-tx-history (rf/subscribe [:subs.output/tx-history-plot-data]))
 
