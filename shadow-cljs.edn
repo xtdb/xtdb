@@ -16,7 +16,14 @@
  :builds
  {:app
   {:target :browser
-   :modules {:app {:init-fn juxt.crux-ui.frontend.main/init}}
+   :modules {:main {:init-fn juxt.crux-ui.frontend.main/init}}
+   :output-dir "resources/static/crux-ui/compiled"
+   :compiler-options {:optimizations :advanced}
+   :asset-path "/static/crux-ui/compiled"}
+
+  :app-perf
+  {:target :browser
+   :modules {:main-perf {:init-fn juxt.crux-ui.frontend.main-perf/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :compiler-options {:optimizations :advanced}
    :asset-path "/static/crux-ui/compiled"}
@@ -33,17 +40,28 @@
 
   :dev
   {:target :browser
-   :modules
-   {:app {:init-fn juxt.crux-ui.frontend.main/init}}
+   :modules {:main {:init-fn juxt.crux-ui.frontend.main/init}}
    :output-dir "resources/static/crux-ui/compiled"
    :asset-path "/static/crux-ui/compiled"
    :compiler-options {:closure-warnings {:global-this :off}
                       :closure-defines  {re-frame.trace.trace-enabled? true}
                       :optimizations :none}
+   :devtools
+   {:after-load juxt.crux-ui.frontend.main/reload!
+    :preloads   [day8.re-frame-10x.preload]}}
 
-    :devtools
-    {:after-load juxt.crux-ui.frontend.main/reload!
-     :preloads   [day8.re-frame-10x.preload]}}}
+  :dev-perf
+  {:target :browser
+   :modules
+   {:main-perf {:init-fn juxt.crux-ui.frontend.main-perf/init}}
+   :output-dir "resources/static/crux-ui/compiled"
+   :asset-path "/static/crux-ui/compiled"
+   :compiler-options {:closure-warnings {:global-this :off}
+                      :closure-defines  {re-frame.trace.trace-enabled? true}
+                      :optimizations :none}
+   :devtools
+   {:after-load juxt.crux-ui.frontend.main-perf/reload!
+    :preloads   [day8.re-frame-10x.preload]}}}
 
  :nrepl {:port 55000
          :init-ns juxt.crux-ui.frontend.main}}

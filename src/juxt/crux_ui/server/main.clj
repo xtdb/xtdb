@@ -26,7 +26,7 @@
         "/static/styles/codemirror.css"
         "/static/styles/monokai.css"
         "/static/styles/eclipse.css"]
-     :script "/static/crux-ui/compiled/app.js"
+     :script "/static/crux-ui/compiled/main.js"
      :head-tags
      [[:style#_stylefy-constant-styles_]
       [:style#_stylefy-styles_]
@@ -39,7 +39,7 @@
      :lang             "en"
      :doc-attrs        {:data-scenario :perf-plot}
      :stylesheet-async "/static/styles/reset.css"
-     :script      "/static/crux-ui/compiled/app.js"
+     :script      "/static/crux-ui/compiled/main-perf.js"
      :head-tags
      [[:script {:id "plots-data" :type "text/edn"}
        (slurp (io/resource "static/plots-data.edn"))]]

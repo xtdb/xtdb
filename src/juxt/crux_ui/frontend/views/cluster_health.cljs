@@ -1,4 +1,6 @@
-(ns juxt.crux-ui.frontend.views.cluster-health)
+(ns juxt.crux-ui.frontend.views.cluster-health
+  (:require [cljs.pprint]))
+
 
 
 (def cluster-mock
@@ -27,17 +29,17 @@
                      :margin-right "auto"
                      :margin-left "auto"
                      :grid-template-columns "2em auto auto auto"
-                     :grid-row-gap "1em"
-                     }}
+                     :grid-row-gap "1em"}}
+
       (mapcat identity
               (for [n cluster-mock]
                 [
                  [:div {:key (str n 0)} [:a {:style {:text-decoration "none" :font-weight "bold" :font-size "1.3em"}} "↻"]]
                  [:div {:key (str n 1)}[:a (nth n 0)]]
                  [:div {:key (str n 2)}(nth n 1)]
-                 [:div {:key (str n 3)}[:pre (with-out-str (cljs.pprint/pprint (nth n 2)))]]
-                 ]
-                ))
+                 [:div {:key (str n 3)}[:pre (with-out-str (cljs.pprint/pprint (nth n 2)))]]]))
+
+
 
     [:div {:style {:height "1em"}}]
     [:a "Refresh All"]]])

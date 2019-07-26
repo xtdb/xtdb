@@ -10,6 +10,8 @@
     "codemirror": "5.47.0",
     "create-react-class": "^15.6.3",
     "highlight.js": "9.15.8",
+    "plotly.js": "^1.49.0",
+    "plotly.js-basic-dist": "^1.49.0",
     "plotly.js-dist": "^1.48.3",
     "plotly.js-gl3d-dist": "^1.48.3",
     "process": "^0.11.10",
