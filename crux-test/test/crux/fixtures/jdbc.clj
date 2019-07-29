@@ -14,9 +14,12 @@
                         :jdbc-event-log-dir jdbc-event-log-dir}
                        opts)
         ds (jdbc/get-datasource options)]
+
     (case dbtype
       :h2
       (jdbc/execute! ds ["DROP ALL OBJECTS"])
+      :oracle
+      (jdbc/execute! ds ["BEGIN EXECUTE IMMEDIATE 'DROP TABLE tx_events'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;"])
       ;; Default
       (jdbc/execute! ds ["DROP TABLE IF EXISTS tx_events"]))
     (try

@@ -20,20 +20,40 @@
 
 (deftype Tx [^Date time ^long id])
 
+(def oracle-blob-type (memoize (fn [] (Class/forName "oracle.sql.BLOB"))))
+(defn- ->v [dbtype v]
+  (case dbtype
+    "oracle"
+    (nippy/thaw
+     (let [v (cast (oracle-blob-type) v)]
+       (-> v .getBinaryStream)))
+    (nippy/thaw v)))
+
+(def oracle-date-type (memoize (fn [] (Class/forName "oracle.sql.TIMESTAMP"))))
 (def ^SimpleDateFormat sqlite-df (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss.SSS"))
 (defn- ->date [dbtype t]
   (assert t)
   (case dbtype
     "sqlite"
     (.parse sqlite-df ^String t)
+    "oracle"
+    (.dateValue (cast (oracle-date-type) t))
     (java.util.Date. (.getTime ^java.sql.Timestamp t))))
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
-  (let [tx-result (if (#{"sqlite" "mysql"} dbtype)
+  (let [tx-result (condp contains? dbtype
+                    #{"sqlite" "mysql"}
                     (let [id (first (vals tx-result))]
                       (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE EVENT_OFFSET = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
+
+                    #{"oracle"}
+                    (let [id (first (vals tx-result))]
+                      (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE ROWID = ?" id]
+                                         {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
+
+    (println "here" tx-result)
     (let [tx-id (:event_offset tx-result)
           tx-time (:tx_time tx-result)]
       (Tx. (->date dbtype tx-time) tx-id))))
@@ -100,16 +120,16 @@
       (close [_])))
 
   (next-events [this context next-offset]
-    (map (fn [result]
-           (Message. (nippy/thaw
-                      (:v result))
-                     nil
-                     (:event_offset result)
-                     (->date dbtype (:tx_time result))
-                     (:event_key result)
-                     {:crux.tx/sub-topic (keyword (:topic result))}))
-         (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
-                        {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))
+    (eduction
+     (map (fn [result]
+            (Message. (->v dbtype (:v result))
+                      nil
+                      (:event_offset result)
+                      (->date dbtype (:tx_time result))
+                      (:event_key result)
+                      {:crux.tx/sub-topic (keyword (:topic result))})))
+     (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
+                    {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))
 
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
@@ -138,7 +158,13 @@
                        "create table tx_events (
   event_offset serial PRIMARY KEY, event_key VARCHAR,
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
-  v bytea NOT NULL)")]))
+  v bytea NOT NULL)"
+
+                       #{"oracle"}
+                       "create table tx_events (
+  event_offset NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
+  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
+  v BLOB NOT NULL)")]))
 
 (defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
   (let [ds (jdbc/get-datasource options)]
@@ -160,5 +186,5 @@
                   :event-log-consumer event-log-consumer})
 
 (comment
-  ;; Start a JDBC node:
-  (b/start-node node-config some-options))
+;; Start a JDBC node:
+(b/start-node node-config some-options))

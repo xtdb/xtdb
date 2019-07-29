@@ -19,6 +19,7 @@
                  [com.opentable.components/otj-pg-embedded "0.13.1"]
                  [org.xerial/sqlite-jdbc "3.7.2"]
                  [mysql/mysql-connector-java "8.0.17"]
+                 [com.oracle/ojdbc "12.2.0.1"]
 
                  ;; General:
                  [org.clojure/test.check "0.10.0-alpha3"]
