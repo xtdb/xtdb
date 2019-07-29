@@ -11,6 +11,6 @@ sleep 20
 jps | grep "crux" | grep ".jar" | awk '{print $1}' | xargs kill -TERM
 
 # Remove the LOCK (this seems a dodgy thing to do?)
-rm data/LOCK
+rm -f data/LOCK
 
 exit 0

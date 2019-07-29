@@ -3,11 +3,15 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]))
 
+(def file "uberjar-test-results")
+
 (t/deftest test-uberjar-can-start
+  (when (.exists (io/file file))
+    (io/delete-file file))
+
   (let [_ (sh/sh "chmod" "+x" "test/test-uberjar.sh")
         _ (sh/sh "chmod" "+x" "test/test-start-uberjar.sh")
         _ (sh/sh "test/test-uberjar.sh")
-        file "uberjar-test-results"
         results (slurp file)]
 
     (t/testing "Results exist"
@@ -26,7 +30,4 @@
 
     ;; Not sure how this will stand the test of time - joa
     (t/testing "Kafka attempted"
-      (t/is (.contains results "kafka-producer")))
-
-    (io/delete-file file)))
-
+      (t/is (.contains results "kafka-producer")))))
