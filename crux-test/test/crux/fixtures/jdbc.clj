@@ -8,16 +8,17 @@
 (def ^:dynamic *dbtype* nil)
 
 (defn with-jdbc-node [dbtype f & [opts]]
-  (binding [*dbtype* dbtype]
-    (let [db-dir (str (cio/create-tmpdir "kv-store"))
-          jdbc-event-log-dir (str (cio/create-tmpdir "jdbc-event-log-dir"))
-          options (merge {:dbtype (name dbtype)
-                          :dbname "cruxtest"
-                          :db-dir db-dir
-                          :kv-backend "crux.kv.memdb.MemKv"
-                          :jdbc-event-log-dir jdbc-event-log-dir}
-                         opts)
-          ds (jdbc/get-datasource options)]
+  (let [dbtype (name dbtype)
+        db-dir (str (cio/create-tmpdir "kv-store"))
+        jdbc-event-log-dir (str (cio/create-tmpdir "jdbc-event-log-dir"))
+        options (merge {:dbtype (name dbtype)
+                        :dbname "cruxtest"
+                        :db-dir db-dir
+                        :kv-backend "crux.kv.memdb.MemKv"
+                        :jdbc-event-log-dir jdbc-event-log-dir}
+                       opts)
+        ds (jdbc/get-datasource options)]
+    (binding [*dbtype* dbtype]
       (j/prep-for-tests! dbtype ds)
       (try
         (with-open [standalone-node (Crux/startJDBCNode options)]
