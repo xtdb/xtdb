@@ -1,5 +1,5 @@
 (ns crux.http-server
-  "HTTP API for Crux.
+  "HTTP API for one or more Crux nodes.
 
   The optional SPARQL handler requires juxt.crux/rdf."
   (:require [clojure.edn :as edn]
@@ -29,6 +29,11 @@
 
 ;; ---------------------------------------------------
 ;; Utils
+
+(defn- map-vals [f m]
+  (reduce-kv (fn [m k v]
+               (assoc m k (f v)))
+             {} m))
 
 (defn- body->edn [request]
   (->> request
@@ -93,19 +98,22 @@
                 {"Content-Type" "application/edn"}
                 (pr-str status-map)))))
 
+(defn- list-nodes [crux-nodes]
+  (success-response (map-vals #(.status %) crux-nodes)))
+
 (defn- document [^ICruxAPI crux-node request]
-  (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
+  (let [[_ content-hash] (re-find #"^/.+/document/(.+)$" (req/path-info request))]
     (success-response
      (.document crux-node (c/new-id content-hash)))))
 
 (defn- history [^ICruxAPI crux-node request]
-  (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
+  (let [[_ eid] (re-find #"^/.+/history/(.+)$" (req/path-info request))
         history (.history crux-node (c/new-id eid))]
     (-> (success-response history)
         (add-last-modified (:crux.tx/tx-time (first history))))))
 
 (defn- parse-history-range-params [{:keys [query-params] :as request}]
-  (let [[_ eid] (re-find #"^/history-range/(.+)$" (req/path-info request))
+  (let [[_ eid] (re-find #"^/.+/history-range/(.+)$" (req/path-info request))
         times (map #(some-> (get query-params %) not-empty cio/parse-rfc3339-or-millis-date)
                    ["valid-time-start" "transaction-time-start" "valid-time-end" "transaction-time-end"])]
     (cons eid times)))
@@ -252,56 +260,70 @@
 ;; ---------------------------------------------------
 ;; Jetty server
 
+(def unsupported
+  {:status 400
+   :headers {"Content-Type" "text/plain"}
+   :body "Unsupported method on this address."})
+
 (defn- handler [crux-node request]
   (condp check-path request
-    [#"^/$" [:get]]
+    [#"^/.+/$" [:get]]
     (status crux-node)
 
-    [#"^/document/.+$" [:get :post]]
+    [#"^/.+/document/.+$" [:get :post]]
     (document crux-node request)
 
-    [#"^/entity$" [:post]]
+    [#"^/.+/entity$" [:post]]
     (entity crux-node request)
 
-    [#"^/entity-tx$" [:post]]
+    [#"^/.+/entity-tx$" [:post]]
     (entity-tx crux-node request)
 
-    [#"^/history/.+$" [:get :post]]
+    [#"^/.+/history/.+$" [:get :post]]
     (history crux-node request)
 
-    [#"^/history-range/.+$" [:get]]
+    [#"^/.+/history-range/.+$" [:get]]
     (history-range crux-node request)
 
-    [#"^/history-ascending$" [:post]]
+    [#"^/.+/history-ascending$" [:post]]
     (history-ascending crux-node request)
 
-    [#"^/history-descending$" [:post]]
+    [#"^/.+/history-descending$" [:post]]
     (history-descending crux-node request)
 
-    [#"^/query$" [:post]]
+    [#"^/.+/query$" [:post]]
     (query crux-node request)
 
-    [#"^/query-stream$" [:post]]
+    [#"^/.+/query-stream$" [:post]]
     (query-stream crux-node request)
 
-    [#"^/attribute-stats" [:get]]
+    [#"^/.+/attribute-stats" [:get]]
     (attribute-stats crux-node)
 
-    [#"^/sync$" [:get]]
+    [#"^/.+/sync$" [:get]]
     (sync-handler crux-node request)
 
-    [#"^/tx-log$" [:get]]
+    [#"^/.+/tx-log$" [:get]]
     (tx-log crux-node request)
 
-    [#"^/tx-log$" [:post]]
+    [#"^/.+/tx-log$" [:post]]
     (transact crux-node request)
 
-    (if (and (check-path [#"^/sparql/?$" [:get :post]] request)
+    (if (and (check-path [#"^/.+/sparql/?$" [:get :post]] request)
              sparql-available?)
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node request)
-      {:status 400
-       :headers {"Content-Type" "text/plain"}
-       :body "Unsupported method on this address."})))
+      unsupported)))
+
+(defn- nodes-handler [crux-nodes request]
+  (let [[_ node-id] (re-find #"^/(.+)/.*$" (req/path-info request))]
+    (condp check-path request
+      [#"^/$" [:get]]
+      (list-nodes crux-nodes)
+
+      [#"^/.*$" [:get :post]]
+      (if-let [node (and (some? node-id) ((keyword node-id) crux-nodes))]
+        (handler node request)
+        unsupported))))
 
 (s/def ::server-port :crux.io/port)
 
@@ -317,11 +339,11 @@
   the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
   dependencies explicitly as arguments (internal use)."
   ^java.io.Closeable
-  [crux-node {:keys [server-port cors-access-control]
+  [crux-nodes {:keys [server-port cors-access-control]
               :or {server-port 3000 cors-access-control []}
               :as options}]
   (s/assert ::options options)
-  (let [server (j/run-jetty (-> (partial handler crux-node)
+  (let [server (j/run-jetty (-> (partial nodes-handler crux-nodes)
                                 (#(apply wrap-cors (into [%] cors-access-control)))
                                 (p/wrap-params)
                                 (wrap-exception-handling))
