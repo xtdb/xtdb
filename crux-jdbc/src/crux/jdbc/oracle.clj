@@ -11,8 +11,6 @@
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
   v BLOB NOT NULL)"]))
 
-(def oracle-date-type (memoize (fn [] (Class/forName "oracle.sql.TIMESTAMP"))))
-
 (defmethod j/->date :oracle [dbtype ^TIMESTAMP d]
   (assert d)
   (.dateValue d))
