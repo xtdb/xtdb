@@ -7,7 +7,6 @@
   (:import [oracle.sql TIMESTAMP BLOB]))
 
 (defmethod j/setup-schema! :oracle [_ ds]
-  (println "SUADNIUSAHDAS")
   (jdbc/execute! ds ["create table tx_events (
   event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
