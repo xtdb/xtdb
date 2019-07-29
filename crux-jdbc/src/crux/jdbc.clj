@@ -14,30 +14,30 @@
             [taoensso.nippy :as nippy])
   (:import crux.tx.consumer.Message
            java.io.Closeable
-           java.text.SimpleDateFormat
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
 
-(deftype Tx [^Date time ^long id])
+(defn- dbtype->crux-jdbc-dialect [dbtype]
+  (condp contains? dbtype
+    #{"h2"} :h2
+    #{"mysql"} :mysql
+    #{"sqlite"} :sqlite
+    #{"postgresql" "pgsql"} :psql
+    #{"oracle"} :oracle))
 
-(def oracle-blob-type (memoize (fn [] (Class/forName "oracle.sql.BLOB"))))
-(defn- ->v [dbtype v]
-  (case dbtype
-    "oracle"
-    (let [v (cast (oracle-blob-type) v)]
-      (-> v .getBinaryStream .readAllBytes nippy/thaw))
-    (nippy/thaw v)))
+(defmulti setup-schema! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
 
-(def oracle-date-type (memoize (fn [] (Class/forName "oracle.sql.TIMESTAMP"))))
-(def ^SimpleDateFormat sqlite-df (SimpleDateFormat. "yyyy-MM-dd HH:mm:ss.SSS"))
-(defn- ->date [dbtype t]
+(defmulti ->date (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
+
+(defmethod ->date :default [_ t]
   (assert t)
-  (case dbtype
-    "sqlite"
-    (.parse sqlite-df ^String t)
-    "oracle"
-    (.dateValue (cast (oracle-date-type) t))
-    (java.util.Date. (.getTime ^java.sql.Timestamp t))))
+  (java.util.Date. (.getTime ^java.sql.Timestamp t)))
+
+(defmulti ->v (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
+
+(defmethod ->v :default [_ v] (nippy/thaw v))
+
+(deftype Tx [^Date time ^long id])
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
   (let [tx-result (condp contains? dbtype
@@ -134,41 +134,10 @@
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
 
-(defn- setup-schema! [ds dbtype]
-  (jdbc/execute! ds [(condp contains? dbtype
-                       #{"h2"}
-                       "create table if not exists tx_events (
-  event_offset int auto_increment PRIMARY KEY, event_key VARCHAR,
-  tx_time datetime default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
-  v BINARY NOT NULL)"
-
-                       #{"mysql"}
-                       "create table if not exists tx_events (
-  event_offset int auto_increment PRIMARY KEY, event_key VARCHAR(255),
-  tx_time datetime(3) default CURRENT_TIMESTAMP, topic VARCHAR(255) NOT NULL,
-  v BLOB NOT NULL)"
-
-                       #{"sqlite"}
-                       "create table if not exists tx_events (
-  event_offset integer PRIMARY KEY, event_key VARCHAR,
-  tx_time datetime DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')), topic VARCHAR NOT NULL,
-  v BINARY NOT NULL)"
-
-                       #{"postgresql" "pgsql"}
-                       "create table tx_events (
-  event_offset serial PRIMARY KEY, event_key VARCHAR,
-  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
-  v bytea NOT NULL)"
-
-                       #{"oracle"}
-                       "create table tx_events (
-  event_offset NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
-  tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
-  v BLOB NOT NULL)")]))
-
 (defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
+  (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
   (let [ds (jdbc/get-datasource options)]
-    (setup-schema! ds dbtype)
+    (setup-schema! dbtype ds)
     ds))
 
 (defn- start-tx-log [{:keys [ds]} {:keys [dbtype]}]
