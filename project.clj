@@ -18,7 +18,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :middleware [leiningen.project-version/middleware]
   :plugins [[lein-sub "0.3.0"]]
-  :sub modules
+  :sub ~modules
   :aliases {"check" ["sub" "-s" ~(clojure.string/join ":" (remove #{"crux-jdbc"} modules)) "check"]
             "build" ["do" ["sub" "install"] ["sub" "test"]]}
   :repositories [["snapshots" {:url "https://repo.clojars.org"
