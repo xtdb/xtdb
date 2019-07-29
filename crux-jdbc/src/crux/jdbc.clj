@@ -24,9 +24,8 @@
 (defn- ->v [dbtype v]
   (case dbtype
     "oracle"
-    (nippy/thaw
-     (let [v (cast (oracle-blob-type) v)]
-       (-> v .getBinaryStream)))
+    (let [v (cast (oracle-blob-type) v)]
+      (-> v .getBinaryStream .readAllBytes nippy/thaw))
     (nippy/thaw v)))
 
 (def oracle-date-type (memoize (fn [] (Class/forName "oracle.sql.TIMESTAMP"))))
@@ -120,16 +119,17 @@
       (close [_])))
 
   (next-events [this context next-offset]
-    (eduction
-     (map (fn [result]
-            (Message. (->v dbtype (:v result))
-                      nil
-                      (:event_offset result)
-                      (->date dbtype (:tx_time result))
-                      (:event_key result)
-                      {:crux.tx/sub-topic (keyword (:topic result))})))
-     (jdbc/execute! ds ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
-                    {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))
+    (jdbc/with-transaction [t ds]
+      (doall
+       (map (fn [result]
+              (Message. (->v dbtype (:v result))
+                        nil
+                        (:event_offset result)
+                        (->date dbtype (:tx_time result))
+                        (:event_key result)
+                        {:crux.tx/sub-topic (keyword (:topic result))}))
+            (jdbc/execute! t ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
+                           {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))))
 
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
