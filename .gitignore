@@ -29,3 +29,5 @@ bench/datomic-data/**/*
 /example/imdb/data/**/*
 .projectile
 /crux-uberjar/data
+/crux-dev/.testing-oracle.edn
+/crux-dev/.testing-mysql.edn

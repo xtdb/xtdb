@@ -27,6 +27,10 @@
 
 (defmulti setup-schema! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
 
+(defmulti prep-for-tests! (fn [dbtype ds] (dbtype->crux-jdbc-dialect dbtype)))
+
+(defmethod prep-for-tests! :default [_ ds] (jdbc/execute! ds ["DROP TABLE IF EXISTS tx_events"]))
+
 (defmulti ->date (fn [dbtype d] (dbtype->crux-jdbc-dialect dbtype)))
 
 (defmethod ->date :default [_ t]
@@ -51,8 +55,6 @@
                       (jdbc/execute-one! ds ["SELECT * FROM tx_events WHERE ROWID = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
-
-    (println "here" tx-result)
     (let [tx-id (:event_offset tx-result)
           tx-time (:tx_time tx-result)]
       (Tx. (->date dbtype tx-time) tx-id))))
@@ -92,9 +94,9 @@
       (future
         (try
           (r/reduce (fn [_ y]
-                      (.put q {:crux.tx/tx-id (:event_offset y)
+                      (.put q {:crux.tx/tx-id (int (:event_offset y))
                                :crux.tx/tx-time (->date dbtype (:tx_time y))
-                               :crux.api/tx-ops (nippy/thaw (:v y))})
+                               :crux.api/tx-ops (->v dbtype (:v y))})
                       (if @running?
                         nil
                         (reduced nil)))

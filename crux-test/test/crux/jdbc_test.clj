@@ -14,16 +14,21 @@
 
 (defn- with-each-jdbc-node [f]
   (t/testing "H2 Database"
-    (fj/with-jdbc-node :h2 f))
+    (fj/with-jdbc-node "h2" f))
   (t/testing "SQLite Database"
-    (fj/with-jdbc-node :sqlite f))
+    (fj/with-jdbc-node "sqlite" f))
   (t/testing "Postgresql Database"
     (fp/with-embedded-postgres f))
-  ;; You need to setup mysql first with the respective user, and
-  ;; create the db cruxtest:
-  #_(t/testing "MYSQL Database"
-    (fj/with-jdbc-node :mysql f {:user "cruxtest"
-                                 :password "cruxtest"})))
+
+  ;; Optional:
+  (when (.exists (clojure.java.io/file ".testing-mysql.edn"))
+    (t/testing "MYSQL Database"
+      (fj/with-jdbc-node "mysql" f
+        (read-string (slurp ".testing-mysql.edn")))))
+  (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
+    (t/testing "Oracle Database"
+      (fj/with-jdbc-node "oracle" f
+        (read-string (slurp ".testing-oracle.edn"))))))
 
 (t/use-fixtures :each with-each-jdbc-node)
 
@@ -42,9 +47,11 @@
                      (str (c/new-id doc))]]}]
                  (.txLog *api* tx-log-context 0 false)))))))
 
-(defn- docs [ds id]
-  (map (comp nippy/thaw :v) (jdbc/execute! ds ["SELECT V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
-                                           {:builder-fn jdbcr/as-unqualified-lower-maps})))
+(defn- docs [dbtype ds id]
+  (jdbc/with-transaction [t ds]
+    (doall (map (comp (partial j/->v dbtype) :v)
+                (jdbc/execute! t ["SELECT V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ?" id]
+                               {:builder-fn jdbcr/as-unqualified-lower-maps})))))
 
 (t/deftest test-docs-retention
   (let [tx-log (:tx-log *api*)
@@ -54,9 +61,19 @@
 
         tx-1 (db/submit-tx tx-log [[:crux.tx/put doc]])]
 
-    (t/is (= 1 (count (docs (:ds (:tx-log *api*)) doc-hash))))
-    (t/is (= [doc] (docs (:ds (:tx-log *api*)) doc-hash)))
+    (t/is (= 1 (count (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+    (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))
 
     (t/testing "Compaction"
       (db/submit-doc tx-log doc-hash {:crux.db/id (c/new-id :some-id) :a :evicted})
-      (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs (:ds (:tx-log *api*)) doc-hash))))))
+      (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))))
+
+;; TODO:
+;; Microbench:
+;;   Throughput (write 1m messages)
+;;   Read it back out.
+;;   Test deletion
+;; Txes
+;;   What should be done as a transaction?
+;; Performance
+;;   Add indices
