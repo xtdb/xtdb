@@ -2,7 +2,6 @@
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [clojure.spec.alpha :as s]
-            [crux.kafka :as k]
             [taoensso.nippy :as nippy])
   (:import [oracle.sql TIMESTAMP BLOB]))
 
