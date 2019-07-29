@@ -30,4 +30,6 @@
 
     ;; Not sure how this will stand the test of time - joa
     (t/testing "Kafka attempted"
-      (t/is (.contains results "kafka-producer")))))
+      (t/is (.contains results "kafka-producer")))
+
+    (io/delete-file file)))

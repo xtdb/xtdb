@@ -9,6 +9,9 @@ JAR=$(awk 'END {print $NF}' tmp-jar)
 # Remove temp file
 rm tmp-jar
 
+echo "STARTING $JAR"
+
 # Start the uberjar - print output to file
 java -jar ${JAR} > uberjar-test-results
 
+echo "Finished"
