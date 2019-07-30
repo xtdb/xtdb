@@ -9,7 +9,8 @@
             [crux.fixtures.postgres :as fp]
             [crux.codec :as c]
             [crux.kafka :as k]
-            [next.jdbc.result-set :as jdbcr])
+            [next.jdbc.result-set :as jdbcr]
+            [prof])
   (:import crux.api.ICruxAPI))
 
 (defn- with-each-jdbc-node [f]
@@ -68,12 +69,15 @@
       (db/submit-doc tx-log doc-hash {:crux.db/id (c/new-id :some-id) :a :evicted})
       (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))))
 
-;; TODO:
-;; Microbench:
-;;   Throughput (write 1m messages)
-;;   Read it back out.
-;;   Test deletion
-;; Txes
-;;   What should be done as a transaction?
-;; Performance
-;;   Add indices
+(t/deftest test-micro-bench
+  (prof/profile! 'crux.jdbc)
+  (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
+    (let [n 1000
+          last-tx (atom nil)]
+      (time
+       (dotimes [n n]
+         (reset! last-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id (keyword (str n))}]]))))
+
+      (time
+       (.sync *api* (:crux.tx/tx-time last-tx) nil))))
+  (t/is true))
