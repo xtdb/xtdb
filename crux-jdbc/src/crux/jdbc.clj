@@ -69,12 +69,15 @@
   (close [_]
     (reset! running? false)))
 
+(defn- compact-docs! [ds k offset]
+  (jdbc/execute! ds ["DELETE FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ? AND EVENT_OFFSET < ?" k offset]))
+
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)
-          ^Tx result (tx-result->tx-data ds dbtype (insert-event! ds id  doc "docs"))]
-      (jdbc/execute! ds ["DELETE FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ? AND EVENT_OFFSET < ?" id (.id result)])))
+          ^Tx result (tx-result->tx-data ds dbtype (insert-event! ds id doc "docs"))]
+      (compact-docs! ds id (.id result))))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
@@ -90,20 +93,21 @@
 
   (tx-log [this tx-log-context from-tx-id]
     (let [^LinkedBlockingQueue q (LinkedBlockingQueue. 1000)
-          running? (:running? tx-log-context)]
+          running? (:running? tx-log-context)
+          consumer-f (fn [_ y]
+                       (.put q {:crux.tx/tx-id (int (:event_offset y))
+                                :crux.tx/tx-time (->date dbtype (:tx_time y))
+                                :crux.api/tx-ops (->v dbtype (:v y))})
+                       (if @running?
+                         nil
+                         (reduced nil)))]
       (future
         (try
-          (r/reduce (fn [_ y]
-                      (.put q {:crux.tx/tx-id (int (:event_offset y))
-                               :crux.tx/tx-time (->date dbtype (:tx_time y))
-                               :crux.api/tx-ops (->v dbtype (:v y))})
-                      (if @running?
-                        nil
-                        (reduced nil)))
-                    nil
-                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
-                                   (or from-tx-id 0)]
-                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
+          (r/reduce consumer-f
+           nil
+           (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
+                          (or from-tx-id 0)]
+                      {:builder-fn jdbcr/as-unqualified-lower-maps}))
           (catch Throwable t
             (log/error t "Exception occured reading event log")))
         (.put q -1))
@@ -112,6 +116,14 @@
           (when-let [x (.poll q 5000 TimeUnit/MILLISECONDS)]
             (when (not= -1 x)
               (cons x (step))))))))))
+
+(defn- event-result->message [dbtype result]
+  (Message. (->v dbtype (:v result))
+            nil
+            (:event_offset result)
+            (->date dbtype (:tx_time result))
+            (:event_key result)
+            {:crux.tx/sub-topic (keyword (:topic result))}))
 
 (defrecord JDBCEventLogConsumer [ds dbtype]
   crux.tx.consumer/PolledEventLog
@@ -123,13 +135,7 @@
   (next-events [this context next-offset]
     (jdbc/with-transaction [t ds]
       (doall
-       (map (fn [result]
-              (Message. (->v dbtype (:v result))
-                        nil
-                        (:event_offset result)
-                        (->date dbtype (:tx_time result))
-                        (:event_key result)
-                        {:crux.tx/sub-topic (keyword (:topic result))}))
+       (map (partial event-result->message dbtype)
             (jdbc/execute! t ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
                            {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))))
 
