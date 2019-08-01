@@ -10,12 +10,10 @@
 (defn with-jdbc-node [dbtype f & [opts]]
   (let [dbtype (name dbtype)
         db-dir (str (cio/create-tmpdir "kv-store"))
-        jdbc-event-log-dir (str (cio/create-tmpdir "jdbc-event-log-dir"))
         options (merge {:dbtype (name dbtype)
                         :dbname "cruxtest"
                         :db-dir db-dir
-                        :kv-backend "crux.kv.memdb.MemKv"
-                        :jdbc-event-log-dir jdbc-event-log-dir}
+                        :kv-backend "crux.kv.memdb.MemKv"}
                        opts)
         ds (jdbc/get-datasource options)]
     (binding [*dbtype* dbtype]
@@ -25,5 +23,4 @@
           (binding [*api* standalone-node]
             (f)))
         (finally
-          (cio/delete-dir db-dir)
-          (cio/delete-dir jdbc-event-log-dir))))))
+          (cio/delete-dir db-dir))))))
