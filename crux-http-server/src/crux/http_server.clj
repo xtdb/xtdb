@@ -321,9 +321,11 @@
               :or {server-port 3000 cors-access-control []}
               :as options}]
   (s/assert ::options options)
-  (let [server (j/run-jetty (-> (partial handler crux-node)
-                                (#(apply wrap-cors (into [%] cors-access-control)))
+  (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
+        server (j/run-jetty (-> (partial handler crux-node)
+                                (wrap-exception-handling)
                                 (p/wrap-params)
+                                (wrap-cors')
                                 (wrap-exception-handling))
                             {:port server-port
                              :join? false})]
