@@ -65,8 +65,12 @@
     (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))
 
     (t/testing "Compaction"
-      (db/submit-doc tx-log doc-hash {:crux.db/id (c/new-id :some-id) :a :evicted})
-      (t/is (= [{:crux.db/id (c/new-id :some-id) :a :evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))))
+      (db/submit-doc tx-log doc-hash :some-val)
+      (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+
+    (t/testing "Eviction"
+      (db/submit-doc tx-log doc-hash {:crux.db/id :crux.db/evicted})
+      (t/is (= [{:crux.db/id :crux.db/evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))))
 
 (t/deftest test-micro-bench
   (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))

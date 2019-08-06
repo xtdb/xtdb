@@ -26,7 +26,6 @@
             {:keys [crux.tx/tx-time]} (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
         (api/sync api tx-time nil)
         (f/transact! api [{:crux.db/id :foo}])
-        (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])
         (.close api)
 
         (with-open [api2 (Crux/startJDBCNode opts)]

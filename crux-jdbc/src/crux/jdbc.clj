@@ -69,15 +69,23 @@
   (close [_]
     (reset! running? false)))
 
-(defn- compact-docs! [ds k offset]
-  (jdbc/execute! ds ["DELETE FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY = ? AND EVENT_OFFSET < ?" k offset]))
+(defn- doc-exists? [ds k]
+  (not-empty (jdbc/execute! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ?" k])))
+
+(def tombstone (nippy/freeze {:crux.db/id :crux.db/evicted}))
+
+(defn- evict-docs! [ds k]
+  (jdbc/execute! ds ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-doc [this content-hash doc]
-    (let [id (str content-hash)
-          ^Tx result (tx-result->tx-data ds dbtype (insert-event! ds id doc "docs"))]
-      (compact-docs! ds id (.id result))))
+    (let [id (str content-hash)]
+      (if (tx/evicted-doc? doc)
+        (evict-docs! ds id)
+        (if-not (doc-exists? ds id)
+          (insert-event! ds id doc "docs")
+          (log/infof "Skipping doc insert %s" id)))))
 
   (submit-tx [this tx-ops]
     (s/assert :crux.api/tx-ops tx-ops)
@@ -104,10 +112,10 @@
       (future
         (try
           (r/reduce consumer-f
-           nil
-           (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
-                          (or from-tx-id 0)]
-                      {:builder-fn jdbcr/as-unqualified-lower-maps}))
+                    nil
+                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
+                                   (or from-tx-id 0)]
+                               {:builder-fn jdbcr/as-unqualified-lower-maps}))
           (catch Throwable t
             (log/error t "Exception occured reading event log")))
         (.put q -1))
@@ -163,5 +171,12 @@
                   :event-log-consumer event-log-consumer})
 
 (comment
-;; Start a JDBC node:
-(b/start-node node-config some-options))
+  ;; Start a JDBC node:
+  (b/start-node node-config some-options))
+
+;; option parallel consumers - doesn't exploit the jdbc, jeremy's is more iterative, and worth learning about
+;; jeremy's approach - update with a tombstone. Do we then do a compaction, which would cause the same problem?
+;;   do a reverse compaction - simply do not add if the document already exists, unless, it's not a tombstone
+;;    weird in the case of put evict put (how does the evict window play into this)
+;;   simplest to start with, be good to eventually do as part of the same query, but nice to get it working first.
+;; How to start with a failing test?
