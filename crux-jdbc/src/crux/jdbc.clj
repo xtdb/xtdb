@@ -69,10 +69,10 @@
   (close [_]
     (reset! running? false)))
 
-(defn- doc-exists? [ds k]
-  (not-empty (jdbc/execute! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ?" k])))
-
 (def tombstone (nippy/freeze {:crux.db/id :crux.db/evicted}))
+
+(defn- doc-exists? [ds k]
+  (not-empty (jdbc/execute! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND V != ?" k tombstone])))
 
 (defn- evict-docs! [ds k]
   (jdbc/execute! ds ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
@@ -175,10 +175,3 @@
 (comment
   ;; Start a JDBC node:
   (b/start-node node-config some-options))
-
-;; option parallel consumers - doesn't exploit the jdbc, jeremy's is more iterative, and worth learning about
-;; jeremy's approach - update with a tombstone. Do we then do a compaction, which would cause the same problem?
-;;   do a reverse compaction - simply do not add if the document already exists, unless, it's not a tombstone
-;;    weird in the case of put evict put (how does the evict window play into this)
-;;   simplest to start with, be good to eventually do as part of the same query, but nice to get it working first.
-;; How to start with a failing test?

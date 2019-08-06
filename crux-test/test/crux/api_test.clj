@@ -10,7 +10,8 @@
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.cluster-node :as cn]
             [crux.fixtures.http-server :as fh]
-            [crux.rdf :as rdf])
+            [crux.rdf :as rdf]
+            [crux.api :as api])
   (:import clojure.lang.LazySeq
            java.util.Date
            java.time.Duration
@@ -246,7 +247,15 @@
               (Thread/sleep 500))
 
             (let [stats (.attributeStats *api*)]
-              (t/is (= 0 (:name stats))))))))))
+              (t/is (= 0 (:name stats))))))
+
+        (t/testing "Add back evicted document"
+          (assert (not (.entity (.db *api*) :ivan)))
+          (let [valid-time (Date.)
+                {:keys [crux.tx/tx-time]
+                 :as submitted-tx} (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+            (t/is (.sync *api* tx-time nil))
+            (t/is (.entity (.db *api*) :ivan))))))))
 
 (t/deftest test-document-bug-123
   (let [version-1-submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1}]])]

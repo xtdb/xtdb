@@ -9,7 +9,8 @@
             [crux.fixtures.postgres :as fp]
             [crux.codec :as c]
             [crux.kafka :as k]
-            [next.jdbc.result-set :as jdbcr])
+            [next.jdbc.result-set :as jdbcr]
+            [crux.api :as api])
   (:import crux.api.ICruxAPI))
 
 (defn- with-each-jdbc-node [f]
@@ -73,9 +74,12 @@
       (t/is (= [{:crux.db/id :crux.db/evicted}
                 {:crux.db/id :crux.db/evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
-
-    ;; TODO test adding it again....
-    ))
+    (t/testing "Resurrect Document"
+      (let [tx-2 (db/submit-tx tx-log [[:crux.tx/put doc]])]
+        (t/is (= [{:crux.db/id :crux.db/evicted}
+                  {:crux.db/id :crux.db/evicted}
+                  doc]
+                 (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))))))
 
 (t/deftest test-micro-bench
   (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
