@@ -70,7 +70,12 @@
 
     (t/testing "Eviction"
       (db/submit-doc tx-log doc-hash {:crux.db/id :crux.db/evicted})
-      (t/is (= [{:crux.db/id :crux.db/evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))))
+      (t/is (= [{:crux.db/id :crux.db/evicted}
+                {:crux.db/id :crux.db/evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+
+
+    ;; TODO test adding it again....
+    ))
 
 (t/deftest test-micro-bench
   (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))

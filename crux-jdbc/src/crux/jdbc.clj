@@ -82,7 +82,9 @@
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)]
       (if (tx/evicted-doc? doc)
-        (evict-docs! ds id)
+        (do
+          (insert-event! ds id doc "docs")
+          (evict-docs! ds id))
         (if-not (doc-exists? ds id)
           (insert-event! ds id doc "docs")
           (log/infof "Skipping doc insert %s" id)))))
