@@ -1155,7 +1155,6 @@
 
 (t/deftest test-query-limits-bug-71
   (dotimes [i 10]
-    (println "Attempt " i)
     (f/transact! *api* (f/people [{:name "Ivan" :last-name "Ivanov"}
                                   {:name "Petr" :last-name "Petrov"}
                                   {:name "Petr" :last-name "Ivanov"}]))
