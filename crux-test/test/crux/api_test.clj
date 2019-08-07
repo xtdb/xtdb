@@ -157,7 +157,7 @@
                                              :full-results? true})]
                 (t/is (instance? LazySeq result))
                 (t/is (not (realized? result)))
-                (t/is (= '([{:crux.query/var e, :crux.query/value :ivan, :crux.query/doc {:crux.db/id :ivan, :name "Ivan"}}]) result))
+                (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}]) result))
                 (t/is (realized? result))))))
 
         (t/testing "SPARQL query"

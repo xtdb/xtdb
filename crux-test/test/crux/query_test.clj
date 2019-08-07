@@ -62,21 +62,41 @@
                                                         [p1 :last-name name]
                                                         [p1 :name "Smith"]]})))))
 
-(t/deftest test-basic-query-returning-meta
-  (f/transact! *api* (f/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}]))
+(t/deftest test-basic-query-returning-full-results
+  (f/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
 
-  (t/testing "Can retrieve meta data via results"
-    (let [m (-> (meta (first (api/q (api/db *api*) '{:find [e]
-                                                     :where [[e :name "Ivan"]]}))))]
-      (t/is (= {:var 'e :value :ivan}
-               (select-keys (get m 'e) [:var :value])))
-      (t/is (= "Ivanov" (get-in m ['e :doc :last-name])))))
+  (t/testing "Can retrieve full results"
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+              "Ivan"] (first (api/q (api/db *api*)
+                                    '{:find [e first-name]
+                                      :where [[e :name first-name]]
+                                      :full-results? true})))))
 
-  (t/testing "Can retrieve meta data directly"
-    (t/is (= ['e 'first-name] (map :crux.query/var (first (api/q (api/db *api*)
-                                                                 '{:find [e first-name]
-                                                                   :where [[e :name first-name]]
-                                                                   :full-results? true})))))))
+  (t/testing "Can retrieve full results in or-join"
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+              "Ivan"] (first (api/q (api/db *api*)
+                                    '{:find [e first-name]
+                                      :where [(or-join [e first-name]
+                                                       [e :name first-name])]
+                                      :full-results? true})))))
+
+  (t/testing "Can retrieve full results in or"
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+              "Ivan"] (first (api/q (api/db *api*)
+                                    '{:find [e first-name]
+                                      :where [(or [e :name first-name])]
+                                      :rules [[(my-rule e first-name)
+                                               (or [e :name first-name])]]
+                                      :full-results? true})))))
+
+  (t/testing "Can retrieve full results in rule"
+    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+              "Ivan"] (first (api/q (api/db *api*)
+                                    '{:find [e first-name]
+                                      :where [(my-rule e first-name)]
+                                      :rules [[(my-rule e first-name)
+                                               [e :name first-name]]]
+                                      :full-results? true}))))))
 
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (f/transact! *api* (f/people [{:name "Ivan" :last-name "Ivanov"}

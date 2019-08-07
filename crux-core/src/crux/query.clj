@@ -1034,6 +1034,14 @@
    (let [{:keys [where args rules]} (s/conform ::query q)]
      (compile-sub-query where (arg-vars args) (rule-name->rules rules) stats))))
 
+(defn- build-full-results [{:keys [object-store entity-as-of-idx]} snapshot bound-result-tuple]
+  (vec (for [^BoundResult bound-result bound-result-tuple
+             :let [value (.value bound-result)]]
+         (if-let [entity-tx (and (c/valid-id? value)
+                                 (idx/entity-at entity-as-of-idx value))]
+           (db/get-single-object object-store snapshot (.content-hash ^EntityTx entity-tx))
+           value))))
+
 (def default-query-timeout 30000)
 
 (def default-entity-cache-size 10000)
@@ -1083,10 +1091,10 @@
      (validate-args args)
      (let [rule-name->rules (rule-name->rules rules)
            entity-as-of-idx (idx/new-entity-as-of-index snapshot valid-time transact-time)
-           cached (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
-           db (assoc db :entity-as-of-idx (if *with-entities-cache?*
-                                            cached
-                                            entity-as-of-idx))
+           entity-as-of-idx (if *with-entities-cache?*
+                              (lru/new-cached-index entity-as-of-idx default-entity-cache-size)
+                              entity-as-of-idx)
+           db (assoc db :entity-as-of-idx entity-as-of-idx)
            {:keys [n-ary-join
                    var->bindings]} (build-sub-query snapshot db where args rule-name->rules stats)]
        (doseq [var find
@@ -1101,10 +1109,8 @@
                       :let [bound-result-tuple (for [var find]
                                                  (bound-result-for-var snapshot object-store var->bindings join-keys join-results var))]]
                   (if full-results?
-                    (vec bound-result-tuple)
-                    (with-meta
-                      (mapv #(.value ^BoundResult %) bound-result-tuple)
-                      (zipmap (map #(.var ^BoundResult %) bound-result-tuple) bound-result-tuple))))
+                    (build-full-results db snapshot bound-result-tuple)
+                    (mapv #(.value ^BoundResult %) bound-result-tuple)))
          order-by (cio/external-sort (order-by-comparator find order-by))
          (or offset limit) dedupe
          offset (drop offset)
@@ -1122,18 +1128,6 @@
     (let [entity-tx (entity-tx snapshot db eid)]
       (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defn- bounded-result-tuples->edn
-  [tuples q]
-  (if (:full-results? (s/conform ::query q))
-    (map (fn [tuple]
-           (mapv (fn [^BoundResult bound-result]
-                   {:crux.query/var (:var bound-result)
-                    :crux.query/value (:value bound-result)
-                    :crux.query/doc (:doc bound-result)})
-                 tuple))
-         tuples)
-    tuples))
-
 (defrecord QueryDatasource [kv query-cache object-store valid-time transact-time entity-as-of-idx]
   ICruxDatasource
   (entity [this eid]
@@ -1146,14 +1140,10 @@
     (lru/new-cached-snapshot (kv/new-snapshot (:kv this)) true))
 
   (q [this q]
-    (-> this
-        (crux.query/q q)
-        (bounded-result-tuples->edn q)))
+    (crux.query/q this q))
 
   (q [this snapshot q]
-    (-> this
-        (crux.query/q snapshot q)
-        (bounded-result-tuples->edn q)))
+    (crux.query/q this snapshot q))
 
   (historyAscending [this snapshot eid]
     (for [^EntityTx entity-tx (idx/entity-history-seq-ascending (kv/new-iterator snapshot) eid valid-time transact-time)]

@@ -596,10 +596,14 @@
 (defn new-entity-as-of-index [snapshot valid-time transaction-time]
   (->EntityAsOfIndex (kv/new-iterator snapshot) valid-time transaction-time))
 
+(defn entity-at [entity-as-of-idx eid]
+  (let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
+    entity-tx))
+
 (defn entities-at [snapshot eids valid-time transact-time]
   (let [entity-as-of-idx (new-entity-as-of-index snapshot valid-time transact-time)]
     (some->> (for [eid eids
-                   :let [[_ entity-tx] (db/seek-values entity-as-of-idx (c/->id-buffer eid))]
+                   :let [entity-tx (entity-at entity-as-of-idx eid)]
                    :when entity-tx]
                entity-tx)
              (not-empty)
