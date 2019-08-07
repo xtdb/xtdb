@@ -88,7 +88,7 @@
       {:headers q-headers
        :rows (if (:full-results? q-info)
                (->> q-res
-                    (map :crux.query/doc)
+                    (map first)
                     (map #(map % q-headers)))
                q-res)})))
 

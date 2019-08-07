@@ -16,7 +16,7 @@
         sample (if (> res-count 50)
                  (random-sample (/ 50 res-count) query-results-seq)
                  query-results-seq)]
-    (set (flatten (map (comp keys :crux.query/doc) sample)))))
+    (set (flatten (map (comp keys first) sample)))))
 
 (defn query-vec->map [qv]
   (let [raw-map
@@ -128,14 +128,14 @@
           ids-received? (or (attr-set :crux.db/id) (:full-results? query-info))
           full-results? (:full-results? query-info)
           first-res (if full-results?
-                      (-> results first :crux.query/doc)
+                      (-> results first first)
                       (-> results first))
           first-res-map (if full-results?
                           first-res
                           (zipmap attr-vec first-res))
           ids-pluck
           (cond
-            full-results? (comp :crux.db/id :crux.query/doc)
+            full-results? (comp :crux.db/id first)
             ids-received? first
             :else identity)
           numeric-attrs (disj (set (calc-numeric-keys first-res-map)) :crux.db/id)
