@@ -12,6 +12,6 @@ rm tmp-jar
 echo "STARTING $JAR"
 
 # Start the uberjar - print output to file
-java -jar ${JAR} > uberjar-test-results
+java -jar ${JAR} > target/uberjar-test-results
 
 echo "Finished"
