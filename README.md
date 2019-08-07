@@ -122,7 +122,7 @@ Useful for experimentation and testing.
 
 #### crux-lmdb
 
-Better read performance for intensive querying. 
+Better read performance for intensive querying.
 
 [![Clojars Project](https://img.shields.io/clojars/v/juxt/crux-lmdb.svg)](https://clojars.org/juxt/crux-lmdb)
 
@@ -198,7 +198,7 @@ Start a standalone in-memory (i.e. not persisted anywhere) node:
 (def my-document
   {:crux.db/id :some/fancy-id
    :arbitrary-key ["an untyped value" 123]
-   {:maps "can be" :keys 2} {"and values" :can-be-arbitrarily-nested}})
+   :nested-map {"and values" :can-be-arbitrarily-nested}})
 
 (crux/submit-tx my-node [[:crux.tx/put my-document]])
 ```
