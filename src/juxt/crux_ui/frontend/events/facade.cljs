@@ -97,7 +97,6 @@
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
-          res    (if (:full-results? q-info) (flatten res) res)
           res-analysis (qa/analyse-results q-info res)
           nums?  (:ra/has-numeric-attrs? res-analysis)
           db     (assoc db :db.query/result res
