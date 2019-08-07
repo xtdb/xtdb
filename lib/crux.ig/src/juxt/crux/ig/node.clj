@@ -44,18 +44,20 @@
 (defmethod ig/init-key ::standalone
   [_ opts]
   (let [n (crux.api/start-standalone-node opts)
-        nhttp (srv/start-http-server n (assoc (:http-opts n)
-                                                  :server-port 8080
-                                                  :cors-access-control
-                                                  [:access-control-allow-origin [#".*"]
-                                                   :access-control-allow-headers ["X-Requested-With"
-                                                                                  "Content-Type"
-                                                                                  "Cache-Control"
-                                                                                  "Origin"
-                                                                                  "Accept"
-                                                                                  "Authorization"
-                                                                                  "X-Custom-Header"]
-                                                   :access-control-allow-methods [:get :put :post :delete]]))]
+        res-opts
+        (assoc (:http-opts n)
+          :server-port 8080
+          :cors-access-control
+          [:access-control-allow-origin [#".*"]
+           :access-control-allow-headers ["X-Requested-With"
+                                          "Content-Type"
+                                          "Cache-Control"
+                                          "Origin"
+                                          "Accept"
+                                          "Authorization"
+                                          "X-Custom-Header"]
+           :access-control-allow-methods [:get :options :head :post]])
+        nhttp (srv/start-http-server n res-opts)]
     (println "The Crux demo HTTP API is now available at http://localhost:8080")
     (def nhttp nhttp)
     n))

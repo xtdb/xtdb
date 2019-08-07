@@ -4,53 +4,72 @@
             [re-frame.core :as rf]
             [medley.core :as m]
             [juxt.crux-lib.async-http-client :as crux-api]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [cljs.reader :as reader]
+            [juxt.crux-ui.frontend.logging :as log]))
+
 
 (defn post-opts [body]
   #js {:method "POST"
        :body body
        :headers #js {:Content-Type "application/edn"}})
 
-(def debug? (and (some? (aget js/window "goog")) (some? (aget (aget js/window "goog") "DEBUG"))))
 
-(def node-client (crux-api/new-api-client (if-not debug? "http://localhost:8080" "/crux")))
+(def debug? ^boolean goog.DEBUG)
 
-(defn on-exec-success [resp]
+(def ^:private node-client
+  (crux-api/new-api-client
+    (if-not false "http://localhost:8080" "/crux")))
+
+(defn- on-exec-success [resp]
+  (println :on-exec-success resp)
   (rf/dispatch [:evt.io/query-success resp]))
 
-(defn on-stats-success [resp]
+(defn- on-stats-success [resp]
   (rf/dispatch [:evt.io/stats-success resp]))
 
-(defn on-tx-success [resp]
+(defn- on-tx-success [resp]
   (rf/dispatch [:evt.io/tx-success resp]))
 
-(defn on-histories-success [eid->history]
+(defn- on-histories-success [eid->history]
   (rf/dispatch [:evt.io/histories-fetch-success eid->history]))
 
-(defn on-histories-docs-success [eid->history]
+(defn- on-histories-docs-success [eid->history]
   (rf/dispatch [:evt.io/histories-with-docs-fetch-success eid->history]))
 
+(defn- on-error [query-type err]
+  (rf/dispatch [:evt.io/query-error
+                {:evt/query-type query-type
+                 :evt/error      (.-data err)}]))
+
+(defn- on-error--query [err]
+  (on-error :crux.ui.query-type/query err))
+
+(defn- on-error--tx [err]
+  (on-error :crux.ui.query-type/tx err))
 
 
 (defn exec-q [query-text vt tt]
   (-> node-client
       (crux-api/db vt tt)
       (crux-api/q query-text)
-      (p/then on-exec-success)))
+      (p/then on-exec-success)
+      (p/catch on-error--query)))
 
 (defn exec-tx [query-text]
   (-> node-client
       (crux-api/submitTx query-text)
-      (p/then on-tx-success)))
+      (p/then on-tx-success)
+      (p/catch on-error--tx)))
 
 (defn exec [{:keys [query-vt query-tt raw-input query-analysis] :as query}]
   (let [qtype (:crux.ui/query-type query-analysis)]
-    (if (false? query-analysis)
+    (if-not query-analysis
       (println "err") ; TODO feedback to UI, or rather, UI shouldn't let it get this far
       (case qtype
-        :crux.ui.query-type/query     (exec-q raw-input query-vt query-tt)
-        :crux.ui.query-type/tx-multi  (exec-tx raw-input)
-        :crux.ui.query-type/tx-single (exec-tx raw-input)))))
+        :crux.ui.query-type/query (exec-q raw-input query-vt query-tt)
+        :crux.ui.query-type/tx (exec-tx raw-input)))))
+
 
 (defn fetch-stats []
   (-> node-client
@@ -104,14 +123,17 @@
         (p/then (fn [hash->doc] (merge-docs-into-histories eids->histories hash->doc)))
         (p/then on-histories-docs-success)
         (p/catch on-histories-docs-error))))
-
-
 #_(fetch-histories-docs
     {:ids/fashion-ticker-2
      [{:crux.db/content-hash "49556fb568926e9f4d1d053f65fe86969baed9ab"}
       {:crux.db/content-hash "41f5d2050100fa23c0084042bda7a59d8d41d07b"}]})
 
 (comment
-  (exec-q (pr-str '{:full-results? true
-                    :find [e]
-                    :where [[e :name "Pablo"]]})))
+
+  terr
+
+  (-> '{:find [e]
+        :args [{}]
+        :where [[e :crux.db/id :ids/tech-ticker-2]]}
+      pr-str
+      exec-q))

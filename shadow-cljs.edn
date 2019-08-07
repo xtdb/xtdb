@@ -63,5 +63,5 @@
    {:after-load juxt.crux-ui.frontend.main-perf/reload!
     :preloads   [day8.re-frame-10x.preload]}}}
 
- :nrepl {:port 55000
+ :nrepl {:port 55300
          :init-ns juxt.crux-ui.frontend.main}}

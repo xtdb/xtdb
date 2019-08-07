@@ -2,7 +2,8 @@
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.logic.plotting-data-calc :as pd]
-            [juxt.crux-ui.frontend.logic.query-analysis :as qa]))
+            [juxt.crux-ui.frontend.logic.query-analysis :as qa]
+            [cljs.reader :as reader]))
 
 
 
@@ -33,7 +34,7 @@
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result (fnil :db.query/result {}))
-(rf/reg-sub :subs.query/error  (fnil :db.query/error  {}))
+(rf/reg-sub :subs.query/error  #(:db.query/error % false))
 (rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
 
@@ -140,16 +141,36 @@
       :else   :db.ui.output-tab/attr-stats)))
 
 (rf/reg-sub
+  :subs.query/error-improved
+  :<- [:subs.query/error]
+  (fn [err-event]
+    (when err-event
+      (let [fetch-err (:evt/error err-event)
+            status    (:status fetch-err)
+            body-raw  (:body fetch-err)
+            body-edn  (reader/read-string body-raw)]
+
+        {:query-type (:evt/query-type err-event)
+         :err/http-status  status
+         :err/type
+         (if (<= 500 status)
+           :err.type/server
+           :err.type/client)
+         :err/exception body-edn}))))
+
+(rf/reg-sub
   :subs.ui/output-main-tab
   :<- [:subs.db.ui/output-main-tab]
   :<- [:subs.query/analysis-committed]
   :<- [:subs.query/result]
-  (fn [[out-tab q-info q-res :as args]]
+  :<- [:subs.query/error]
+  (fn [[out-tab q-info q-res q-err :as args]]
     (cond
-      (not q-res)         :db.ui.output-tab/empty
+      q-err :db.ui.output-tab/error
+      (not q-res) :db.ui.output-tab/empty
       (= 0 (count q-res)) :db.ui.output-tab/empty
       out-tab out-tab
-      (= :crux.ui.query-type/tx-multi (:crux.ui/query-type q-info)) :db.ui.output-tab/edn
+      (= :crux.ui.query-type/tx (:crux.ui/query-type q-info)) :db.ui.output-tab/edn
       (= 1 (count q-res)) :db.ui.output-tab/tree
-      :else    :db.ui.output-tab/table)))
+      :else :db.ui.output-tab/table)))
 

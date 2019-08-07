@@ -152,11 +152,12 @@
        :else
        (throw (ex-info (str "HTTP status " status) result))))))
 
-(comment (defrecord RemoteApiStream [streams-state]
-  Closeable
-  (close [_]
-    (doseq [stream @streams-state]
-      (.close ^Closeable stream)))))
+(comment
+  (defrecord RemoteApiStream [streams-state]
+    Closeable
+    (close [_]
+      (doseq [stream @streams-state]
+        (.close ^Closeable stream)))))
 
 (defn- register-stream-with-remote-stream! [snapshot in]
   (swap! (:streams-state snapshot) conj in))
@@ -174,8 +175,7 @@
      (historyAscending [this snapshot eid])
      (historyDescending [this snapshot eid])
      (validTime [_])
-     (transactionTime [_])
-     ))
+     (transactionTime [_])))
 
 (defrecord RemoteDatasource [url valid-time transact-time]
   ICruxDatasource
