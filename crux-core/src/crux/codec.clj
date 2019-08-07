@@ -398,8 +398,8 @@
 (nippy/extend-freeze
  EDNId
  :crux.codec/edn-id
- [x data-output]
- (nippy/freeze-to-out! data-output (new-id x)))
+ [^EDNId x data-output]
+ (nippy/freeze-to-out! data-output (or (.original-id x) (.hex x))))
 
 (nippy/extend-thaw
  :crux.codec/edn-id
