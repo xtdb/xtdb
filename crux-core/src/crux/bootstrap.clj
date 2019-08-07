@@ -127,15 +127,15 @@
   (close [_]
     (when close-fn (close-fn))))
 
-(defn start-kv-store ^java.io.Closeable
-  ([_ options]
+(defn start-kv-store
+  (^java.io.Closeable [_ options]
    (start-kv-store options))
-  ([{:keys [db-dir
-            kv-backend
-            sync?
-            crux.index/check-and-store-index-version]
-     :as options
-     :or {check-and-store-index-version true}}]
+  (^java.io.Closeable [{:keys [db-dir
+                               kv-backend
+                               sync?
+                               crux.index/check-and-store-index-version]
+                        :as options
+                        :or {check-and-store-index-version true}}]
    (s/assert :crux.kv/options options)
    (let [kv (-> (kv/new-kv-store kv-backend)
                 (lru/new-cache-providing-kv-store)
