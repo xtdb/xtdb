@@ -5,8 +5,8 @@
 (defmulti fetch type)
 
 (defmethod fetch :default [{:keys [method url] :as opts}]
-  (assert (#{nil :post :get} method) (str "Unsupported HTTP method: " (:method opts)))
-  (p/alet [fp (js/fetch url (-> opts (update :method (fnil name :get)) clj->js))
+  (if method (assert (#{:post :get} method) (str "Unsupported HTTP method: " (:method opts))))
+  (p/alet [fp (js/fetch url (clj->js (update opts :method (fnil name :get))))
            resp (p/await fp)
            headers (.-headers resp)
            content-type (.get headers "Content-Type")

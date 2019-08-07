@@ -89,6 +89,10 @@
 
 (def ^:const ui--history-max-entities 7)
 
+
+
+; --- io ---
+
 (rf/reg-event-fx
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
@@ -97,18 +101,22 @@
           res-analysis (qa/analyse-results q-info res)
           nums?  (:ra/has-numeric-attrs? res-analysis)
           db     (assoc db :db.query/result res
+                           :db.query/error nil
                            :db.query/result-analysis res-analysis)]
 
       (cond-> {:db db}
               nums? (assoc :fx.query/history
                            (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))
 
-
 (rf/reg-event-fx
   :evt.io/gist-err
   (fn [ctx [_ res]]
     (assoc ctx :fx.ui/alert "Gist import didn't go well")))
 
+(rf/reg-event-db
+  :evt.io/query-error
+  (fn [db [_ {:evt/keys [query-type error] :as evt}]]
+    (assoc db :db.query/error evt)))
 
 (rf/reg-event-fx
   :evt.io/gist-success
@@ -119,13 +127,11 @@
           (update :db o-set-example (some-> edn first :query pr-str)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
 
-
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
   (fn [{db :db :as ctx} [_ eid->history-range]]
     {:db (assoc db :db.query/histories eid->history-range)
      :fx.query/histories-docs eid->history-range}))
-
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
@@ -135,7 +141,6 @@
       {:db (assoc db :db.query/histories eid->history-range
                      :db.query/eid->simple-history ts)})))
 
-
 (rf/reg-event-db
   :evt.io/tx-success
   (fn [db [_ res]]
@@ -144,12 +149,18 @@
                 (if (:full-results? q-info)
                   (flatten res) res)))))
 
-;
+
+
+; --- keyboard shortcuts ---
 
 (rf/reg-event-fx
   :evt.keyboard/ctrl-enter
   (fn []
     {:dispatch [:evt.ui/query-submit]}))
+
+
+
+; --- ui ---
 
 (rf/reg-event-fx
   :evt.ui/query-submit

@@ -30,7 +30,7 @@
         (update :where vec))))
 
 (defn single-tx-vec->map [[type doc-id doc vt tt]]
-  {:crux.ui/query-type :crux.ui.query-type/tx-single
+  {:crux.ui/query-type :crux.ui.query-type/tx
    :crux.tx/type type
    :crux.db/id   doc-id
    :crux.db/doc  doc
@@ -39,9 +39,9 @@
 
 (defn multi-tx-vec->map [txes-vector]
   (let [tx-infos (map single-tx-vec->map txes-vector)]
-    {:crux.ui/query-type :crux.ui.query-type/tx-multi
-     :tx-count (count tx-infos)
-     :tx-infos tx-infos}))
+    {:crux.ui/query-type :crux.ui.query-type/tx
+     :tx-count           (count tx-infos)
+     :tx-infos           tx-infos}))
 
 (defn try-read-string [input-str]
   (try
@@ -109,13 +109,12 @@
 (defn analyse-query [input-edn]
   (cond
     (query-vector? input-edn)     (with-query-map-data (query-vec->map input-edn))
-    (single-tx-vector? input-edn) (single-tx-vec->map input-edn)
     (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
     (query-map? input-edn)        (with-query-map-data input-edn)
     :else                         false))
 
-(defn- calc-numeric-keys [m]
-  (map first (filter (comp number? second) m)))
+(defn- calc-numeric-keys [result-map]
+  (map first (filter (comp number? second) result-map)))
 
 (defn analyse-results
   [{:query/keys
@@ -123,7 +122,6 @@
      attr-vec]
     :as query-info}
    results]
-  (def args [query-info results])
   (if (and (= (:crux.ui/query-type query-info) :crux.ui.query-type/query)
            (not-empty results))
     (let [r-count (count results)
