@@ -11,7 +11,7 @@
             [crux.status :as status])
   (:import crux.api.NonMonotonicTimeException))
 
-(t/use-fixtures :each fkv/with-each-kv-store-implementation fkv/without-kv-index-version fkv/with-kv-store f/with-silent-test-check)
+(t/use-fixtures :each fkv/with-rocksdb fkv/without-kv-index-version fkv/with-kv-store f/with-silent-test-check)
 
 (t/deftest test-can-send-and-receive-message
   (t/is (= 1 (moberg/end-message-id-offset *kv* :my-topic)))
