@@ -9,7 +9,8 @@
            java.time.Duration))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
-(s/def ::doc (s/keys :req [:crux.db/id]))
+(s/def ::doc (s/and (s/map-of keyword? (constantly true))
+                    (s/keys :req [:crux.db/id])))
 
 (def ^:private date? (partial instance? Date))
 
