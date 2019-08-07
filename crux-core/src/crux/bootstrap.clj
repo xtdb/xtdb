@@ -1,6 +1,7 @@
 (ns crux.bootstrap
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
+            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [com.stuartsierra.dependency :as dep]
             [crux.backup :as backup]
@@ -22,9 +23,9 @@
                    true))
 
 (def default-options {:bootstrap-servers "localhost:9092"
-                      :group-id (.trim ^String (or (System/getenv "HOSTNAME")
-                                                   (System/getenv "COMPUTERNAME")
-                                                   (.toString (java.util.UUID/randomUUID))))
+                      :group-id (str/trim (or (System/getenv "HOSTNAME")
+                                              (System/getenv "COMPUTERNAME")
+                                              (.toString (java.util.UUID/randomUUID))))
                       :tx-topic "crux-transaction-log"
                       :doc-topic "crux-docs"
                       :create-topics true
