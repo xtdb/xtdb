@@ -15,7 +15,7 @@ target
 /docs/javadoc
 /crux-test/test/watdiv/data
 /crux-test/test/ts/data
-/crux-test/cruxtest*
+/crux-*/cruxtest*
 /docs/nav.html
 /docs/img/diagram-classes.png
 /docs/.asciidoctor/
