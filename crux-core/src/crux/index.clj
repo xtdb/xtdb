@@ -117,16 +117,17 @@
 (defrecord DocAttributeValueEntityEntityIndex [snapshot i ^DirectBuffer attr value-entity-value-idx entity-as-of-idx prefix-eb peek-eb ^DocAttributeValueEntityEntityIndexState peek-state]
   db/Index
   (seek-values [this k]
-    (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
-          value (.value value+prefix-iterator)
-          i (.prefix-iterator value+prefix-iterator)]
-      (when-let [k (->> (c/encode-attribute+value+entity+content-hash-key-to
-                         (.get seek-buffer-tl)
-                         attr
-                         value
-                         (or k c/empty-buffer))
-                        (kv/seek i))]
-        (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state))))
+    (when (c/valid-id? k)
+      (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
+            value (.value value+prefix-iterator)
+            i (.prefix-iterator value+prefix-iterator)]
+        (when-let [k (->> (c/encode-attribute+value+entity+content-hash-key-to
+                           (.get seek-buffer-tl)
+                           attr
+                           value
+                           (or k c/empty-buffer))
+                          (kv/seek i))]
+          (attribute-value-entity-entity+value snapshot i k attr value entity-as-of-idx peek-eb peek-state)))))
 
   (next-values [this]
     (let [value+prefix-iterator (attribute-value-value+prefix-iterator i value-entity-value-idx attr prefix-eb)
@@ -155,15 +156,16 @@
 (defrecord DocAttributeEntityValueEntityIndex [i ^DirectBuffer attr entity-as-of-idx ^EntityValueEntityPeekState peek-state]
   db/Index
   (seek-values [this k]
-    (when-let [k (->> (c/encode-attribute+entity+content-hash+value-key-to
-                       (.get seek-buffer-tl)
-                       attr
-                       (or k c/empty-buffer))
-                      (kv/seek i))]
-      (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
-        (if (= ::deleted-entity placeholder)
-          (db/next-values this)
-          placeholder))))
+    (when (c/valid-id? k)
+      (when-let [k (->> (c/encode-attribute+entity+content-hash+value-key-to
+                         (.get seek-buffer-tl)
+                         attr
+                         (or k c/empty-buffer))
+                        (kv/seek i))]
+        (let [placeholder (attribute-entity+placeholder k attr entity-as-of-idx peek-state)]
+          (if (= ::deleted-entity placeholder)
+            (db/next-values this)
+            placeholder)))))
 
   (next-values [this]
     (let [last-k (.last-k peek-state)

@@ -409,8 +409,7 @@
 
 (defn valid-id? [x]
   (try
-    (->id-buffer x)
-    true
+    (= id-size (.capacity (->id-buffer x)))
     (catch IllegalArgumentException _
       false)))
 

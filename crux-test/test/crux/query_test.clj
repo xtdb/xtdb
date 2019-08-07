@@ -1204,6 +1204,12 @@
              #"Spec assertion failed"
              (f/transact! *api* (f/people [{:crux.db/id id-str :name "Ivan" :version 2}])))))))
 
+(t/deftest test-arguments-bug-247
+  (t/is (= #{} (api/q (api/db *api*)
+                      '{:find [?x]
+                        :where [[?x :name]]
+                        :args [{:?x "Clojure"}]}))))
+
 (t/deftest test-query-and-cas
   (t/testing "can create new user"
     (let [{:crux.tx/keys [tx-time
