@@ -968,11 +968,12 @@
     (doseq [[_ idx] idx-id->idx
             :when (instance? BinaryJoinLayeredVirtualIndex idx)]
       (update-binary-index! snapshot db idx vars-in-join-order v-var->range-constraints))
-    (when (seq args)
-      (idx/update-relation-virtual-index! (get idx-id->idx args-idx-id)
-                                          (vec (for [arg (distinct args)]
-                                                 (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
-                                          (mapv v-var->range-constraints arg-vars-in-join-order)))
+    (when (and (seq args) args-idx-id)
+      (idx/update-relation-virtual-index!
+       (get idx-id->idx args-idx-id)
+       (vec (for [arg (distinct args)]
+              (mapv #(arg-for-var arg %) arg-vars-in-join-order)))
+       (mapv v-var->range-constraints arg-vars-in-join-order)))
     (log/debug :where (pr-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
     (log/debug :attr-stats (pr-str attr-stats))

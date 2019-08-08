@@ -1230,6 +1230,13 @@
                         :where [[?x :name]]
                         :args [{:?x "Clojure"}]}))))
 
+(t/deftest test-npe-arguments-bug-314
+  (t/is (= #{} (api/q (api/db *api*)
+                      '{:find [e]
+                        :where
+                        [[e :crux.db/id _]]
+                        :args [{}]}))))
+
 (t/deftest test-query-and-cas
   (t/testing "can create new user"
     (let [{:crux.tx/keys [tx-time
