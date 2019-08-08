@@ -29,7 +29,7 @@ configuration>>.
 Alternatively, if you simply want to experiment with Crux using a demo Docker
 container from Docker Hub (no JVM/JDK/Clojure install required, only Docker!)
 then please see the
-https://github.com/juxt/crux/tree/master/example/standalone_webservice[standalone
+https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
 web service example]. You can also use this self-contained demonstration image to
 experiment with the <<rest.adoc#,REST API>>.
 
