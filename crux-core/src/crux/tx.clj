@@ -115,22 +115,28 @@
 (declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
 
 (defn tx-command-fn [kv object-store snapshot tx-log [op f & args] transact-time tx-id]
-  (let [db (crux.query/db kv)
-        tx-ops (apply (eval f) db (map eval args))
-        _ (doseq [doc (tx-ops->docs tx-ops)
+  (let [tx-ops-or-t (try
+                      (apply (eval f) (crux.query/db kv) (map eval args))
+                      (catch Throwable t
+                        t))]
+    (if (instance? Throwable tx-ops-or-t)
+      {:pre-commit-fn (fn []
+                        (log/warn tx-ops-or-t "TX Fn failure:")
+                        false)}
+      (do (doseq [doc (tx-ops->docs tx-ops-or-t)
                   :let [content-hash (c/new-id doc)]]
             (db/put-objects object-store {content-hash doc})
             (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
-        result-ops (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
-                          ((get tx-op->command op tx-command-unknown)
-                           kv object-store snapshot tx-log tx-op transact-time tx-id)))]
-    {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
-                                         :when pre-commit-fn]
-                                     (pre-commit-fn)))
-     :kvs (vec (apply concat (map :kvs result-ops)))
-     :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
-                              :when post-commit-fn]
-                        (post-commit-fn))}))
+          (let [result-ops (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops-or-t)]
+                                  ((get tx-op->command op tx-command-unknown)
+                                   kv object-store snapshot tx-log tx-op transact-time tx-id)))]
+            {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
+                                                 :when pre-commit-fn]
+                                             (pre-commit-fn)))
+             :kvs (vec (apply concat (map :kvs result-ops)))
+             :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
+                                      :when post-commit-fn]
+                                (post-commit-fn))})))))
 
 (defn tx-command-unknown [kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
