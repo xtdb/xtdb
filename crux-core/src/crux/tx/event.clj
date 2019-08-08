@@ -32,6 +32,10 @@
                                               :keep-latest? (s/? boolean?)
                                               :keep-earliest? (s/? boolean?)))
 
+(defmethod tx-event :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
+                                           :fn list?
+                                           :args (s/* any?)))
+
 
 (s/def ::tx-event (s/multi-spec tx-event first))
 (s/def ::tx-events (s/coll-of ::tx-event))

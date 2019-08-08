@@ -38,6 +38,10 @@
                                            :keep-latest? (s/? boolean?)
                                            :keep-earliest? (s/? boolean?)))
 
+(defmethod tx-op :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
+                                        :fn list?
+                                        :args (s/* any?)))
+
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))
 
