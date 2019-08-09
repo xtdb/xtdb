@@ -437,31 +437,49 @@
 (defn- sync-submit-tx [node tx-ops]
   (api/sync node (:crux.tx/tx-time (api/submit-tx node tx-ops)) nil))
 
+[[:crux.tx/put
+  {:crux.db/id :update-attribute-fn
+   :crux.db.fn/body
+   '(fn [db eid k f]
+      [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]]
+
+[[:crux.tx/fn :update-attribute-fn
+  {:crux.db/id :inc-ivans-age
+   :crux.db.fn/args [:ivan
+                     :age
+                     inc]}]]
+
 (t/deftest test-can-apply-transaction-fn
-  (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}]
-    (sync-submit-tx *api* [[:crux.tx/put v1-ivan]
-                           [:crux.tx/put
-                            {:crux.db/id :update-attribute-fn
-                             :crux.db.fn/body
-                             '(fn [db eid k f]
-                                [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]])
-    (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
+  (let [exception (atom nil)
+        latest-exception #(let [e @exception]
+                            (reset! exception nil)
+                            e)
+        rethrow-latest-exception (fn []
+                                   (throw (latest-exception)))]
+    (with-redefs [crux.tx/log-tx-fn-error (fn [t & args]
+                                            (reset! exception t))]
+      (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
+            update-attribute-fn {:crux.db/id :update-attribute-fn
+                                 :crux.db.fn/body
+                                 '(fn [db eid k f]
+                                    [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]
+        (sync-submit-tx *api* [[:crux.tx/put v1-ivan]
+                               [:crux.tx/put update-attribute-fn]])
+        (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
+        (t/is (= update-attribute-fn (api/entity (api/db *api*) :update-attribute-fn)))
+        (t/is (nil? (latest-exception)))
 
-    (let [v2-ivan (assoc v1-ivan :age 41)]
-      (sync-submit-tx *api* '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :inc-ivans-age
-                                                                 :crux.db.fn/args [:ivan
-                                                                                   :age
-                                                                                   inc]}]])
-      (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
+        (let [v2-ivan (assoc v1-ivan :age 41)
+              inc-ivans-age '{:crux.db/id :inc-ivans-age
+                              :crux.db.fn/args [:ivan
+                                                :age
+                                                inc]}]
+          (sync-submit-tx *api* [[:crux.tx/fn :update-attribute-fn inc-ivans-age]])
+          (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
+          (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
+          (t/is (nil? (latest-exception)))
 
-      (t/testing "exceptions"
-        (let [exception (atom nil)
-              rethrow-latest-exception (fn []
-                                         (let [e @exception]
-                                           (reset! exception nil)
-                                           (throw e)))]
-          (with-redefs [crux.tx/log-tx-fn-error (fn [t & args]
-                                                  (reset! exception t))]
+          (t/testing "exceptions"
             (t/testing "non existing tx fn"
               (sync-submit-tx *api* '[[:crux.tx/fn :non-existing-fn]])
               (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
@@ -472,6 +490,7 @@
                                                                          :crux.db.fn/args [:ivan
                                                                                            :age
                                                                                            foo]}]])
+              (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
               (t/is (thrown? clojure.lang.Compiler$CompilerException (rethrow-latest-exception))))
 
             (t/testing "invalid results"
@@ -498,4 +517,5 @@
                                                                            :crux.db.fn/args [:ivan
                                                                                              :age
                                                                                              dec]}]])
+                (t/is (nil? (latest-exception)))
                 (t/is (= v3-ivan (api/entity (api/db *api*) :ivan)))))))))))

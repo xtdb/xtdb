@@ -138,13 +138,12 @@
                         (log-tx-fn-error fn-result fn-id body args-id args)
                         false)}
       (let [{:keys [docs result-ops]} fn-result]
-        (doseq [doc docs
-                :let [content-hash (c/new-id doc)]]
-          (db/put-objects object-store {content-hash doc})
-          (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
-        {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
-                                             :when pre-commit-fn]
-                                         (pre-commit-fn)))
+        {:pre-commit-fn #(do (doseq [doc docs
+                                     :let [content-hash (c/new-id doc)]]
+                               (db/put-objects object-store {content-hash doc}))
+                             (every? true? (for [{:keys [pre-commit-fn]} result-ops
+                                                 :when pre-commit-fn]
+                                             (pre-commit-fn))))
          :kvs (vec (apply concat
                           (when args-doc
                             [[(c/encode-entity+vt+tt+tx-id-key-to
@@ -161,9 +160,12 @@
                                tx-id)
                               (c/->id-buffer args-v)]])
                           (map :kvs result-ops)))
-         :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
-                                  :when post-commit-fn]
-                            (post-commit-fn))}))))
+         :post-commit-fn #(do (doseq [doc docs
+                                      :let [content-hash (c/new-id doc)]]
+                                (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
+                              (doseq [{:keys [post-commit-fn]} result-ops
+                                      :when post-commit-fn]
+                                (post-commit-fn)))}))))
 
 (defn tx-command-unknown [kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
