@@ -6,6 +6,6 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "0.4.1"]
                  [juxt/crux-core "derived-from-git"]
-                 [org.apache.kafka/kafka-clients "2.2.0"]]
+                 [org.apache.kafka/kafka-clients "2.3.0"]]
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"])

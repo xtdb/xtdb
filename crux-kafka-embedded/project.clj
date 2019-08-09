@@ -7,7 +7,7 @@
 
                  [juxt/crux-core "derived-from-git"]
 
-                 [org.apache.kafka/kafka_2.12 "2.2.0"]
+                 [org.apache.kafka/kafka_2.12 "2.3.0"]
                  [org.apache.zookeeper/zookeeper "3.4.14"
                   :exclusions [io.netty/netty
                                jline
