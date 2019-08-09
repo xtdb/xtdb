@@ -28,10 +28,15 @@ Steps to get running, in 3 different terminals:
 ```
 (cd $KAFKA_HOME; ./bin/zookeeper-server-start.sh config/zookeeper.properties)
 (cd $KAFKA_HOME; ./bin/kafka-server-start.sh config/server.properties)
-(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/local-file-source.properties config/local-crux-sink.properties)
+
+# Start the Connect worker:
+(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/connect-file-source.properties config/local-crux-sink.properties)
 ```
 
-Write a line to
+(The two first steps should be possible to replace by using
+crux-kafka-embedded in the REPL.)
+
+Write a line to `test.txt`:
 
 ```
 echo Hello >> $KAFKA_HOME/test.txt
