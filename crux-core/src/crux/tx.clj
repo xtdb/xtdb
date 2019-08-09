@@ -141,19 +141,20 @@
                                                  :when pre-commit-fn]
                                              (pre-commit-fn)))
              :kvs (vec (apply concat
-                              [[(c/encode-entity+vt+tt+tx-id-key-to
-                                 nil
-                                 (c/->id-buffer args-eid)
-                                 transact-time
-                                 transact-time
-                                 tx-id)
-                                (c/->id-buffer args-v)]
-                               [(c/encode-entity+z+tx-id-key-to
-                                 nil
-                                 (c/->id-buffer args-eid)
-                                 (c/encode-entity-tx-z-number transact-time transact-time)
-                                 tx-id)
-                                (c/->id-buffer args-v)]]
+                              (when args-doc
+                                [[(c/encode-entity+vt+tt+tx-id-key-to
+                                   nil
+                                   (c/->id-buffer args-eid)
+                                   transact-time
+                                   transact-time
+                                   tx-id)
+                                  (c/->id-buffer args-v)]
+                                 [(c/encode-entity+z+tx-id-key-to
+                                   nil
+                                   (c/->id-buffer args-eid)
+                                   (c/encode-entity-tx-z-number transact-time transact-time)
+                                   tx-id)
+                                  (c/->id-buffer args-v)]])
                               (map :kvs result-ops)))
              :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
                                       :when post-commit-fn]
