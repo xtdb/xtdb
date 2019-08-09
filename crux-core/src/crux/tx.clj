@@ -116,12 +116,15 @@
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
+(defn log-tx-fn-error [fn-result fn-id body args-id args]
+  (log/warn fn-result "TX Fn failure:" fn-id (pr-str body) args-id (pr-str args)))
+
 (defn tx-command-fn [kv object-store snapshot tx-log [op k args-v] transact-time tx-id]
   (let [fn-id (c/new-id k)
         db (q/db kv)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
-        args-eid (:crux.db/id args-doc)
+        args-id (:crux.db/id args-doc)
         fn-result (try
                     (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))]
                       {:docs (tx-ops->docs tx-ops)
@@ -132,7 +135,7 @@
                       t))]
     (if (instance? Throwable fn-result)
       {:pre-commit-fn (fn []
-                        (log/warn fn-result "TX Fn failure:" fn-id (pr-str body) args-eid (pr-str args))
+                        (log-tx-fn-error fn-result fn-id body args-id args)
                         false)}
       (let [{:keys [docs result-ops]} fn-result]
         (doseq [doc docs
@@ -146,14 +149,14 @@
                           (when args-doc
                             [[(c/encode-entity+vt+tt+tx-id-key-to
                                nil
-                               (c/->id-buffer args-eid)
+                               (c/->id-buffer args-id)
                                transact-time
                                transact-time
                                tx-id)
                               (c/->id-buffer args-v)]
                              [(c/encode-entity+z+tx-id-key-to
                                nil
-                               (c/->id-buffer args-eid)
+                               (c/->id-buffer args-id)
                                (c/encode-entity-tx-z-number transact-time transact-time)
                                tx-id)
                               (c/->id-buffer args-v)]])
