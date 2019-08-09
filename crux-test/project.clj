@@ -8,6 +8,7 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-lmdb "derived-from-git"]
                  [juxt/crux-kafka "derived-from-git"]
+                 [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
                  [juxt/crux-http-server "derived-from-git"]

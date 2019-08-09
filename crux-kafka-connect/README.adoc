@@ -1,0 +1,41 @@
+= crux-kafka-connect
+
+**NOT WORKING YET**
+
+This project contains `crux.kafka.connect.CruxSinkConnector` which is
+an implementation of `org.apache.kafka.connect.sink.SinkConnector`.
+
+Currently doesn't write anything to Crux and is just a copy of the
+example file sink with added upper case transform:
+https://github.com/apache/kafka/blob/trunk/connect/file/src/main/java/org/apache/kafka/connect/file
+
+The idea is to use `crux-http-client` initially as a proof of concept.
+
+See also: https://kafka.apache.org/documentation/#connect
+
+Download Kafka from https://kafka.apache.org/downloads
+
+Building the sink connector:
+```
+export KAFKA_HOME=...
+lein uberjar
+cp target/*-standalone.jar $KAFKA_HOME/libs
+cp test-resources/*.properties $KAFKA_HOME/config
+```
+
+Steps to get running, in 3 different terminals:
+
+```
+(cd $KAFKA_HOME; ./bin/zookeeper-server-start.sh config/zookeeper.properties)
+(cd $KAFKA_HOME; ./bin/kafka-server-start.sh config/server.properties)
+(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/local-file-source.properties config/local-crux-sink.properties)
+```
+
+Write a line to
+
+```
+echo Hello >> $KAFKA_HOME/test.txt
+tail -n1 $KAFKA_HOME/test.sink.txt
+```
+
+This should output `HELLO`.
