@@ -437,17 +437,20 @@
 (t/deftest test-can-apply-transaction-fn
   (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
         {v1-tx-time :crux.tx/tx-time}
-        (api/submit-tx *api* [[:crux.tx/put v1-ivan]])]
+        (api/submit-tx *api* [[:crux.tx/put v1-ivan]
+                              [:crux.tx/put
+                               {:crux.db/id :update-attribute-fn
+                                :crux.db.fn/body
+                                '(fn [db eid k f]
+                                   [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]])]
     (api/sync *api* v1-tx-time nil)
     (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
 
     (let [v2-ivan (assoc v1-ivan :age 41)
           {v2-tx-time :crux.tx/tx-time}
-          (api/submit-tx *api* '[[:crux.tx/fn
-                                  (fn [db eid k f]
-                                    [[:crux.tx/put (update (crux.api/entity db eid) k f)]])
-                                  :ivan
-                                  :age
-                                  inc]])]
+          (api/submit-tx *api* '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :inc-ivans-age
+                                                                    :crux.db.fn/args [:ivan
+                                                                                      :age
+                                                                                      inc]}]])]
       (api/sync *api* v2-tx-time nil)
       (t/is (= v2-ivan (api/entity (api/db *api*) :ivan))))))

@@ -13,7 +13,7 @@
             [crux.tx.polling :as p]
             crux.api
             crux.tx.event
-            crux.query
+            [crux.query :as q]
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
            crux.tx.consumer.Message
@@ -114,14 +114,21 @@
 
 (declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
 
-(defn tx-command-fn [kv object-store snapshot tx-log [op f & args] transact-time tx-id]
-  (let [tx-ops-or-t (try
-                      (apply (eval f) (crux.query/db kv) (map eval args))
+(def ^:private tx-fn-eval-cache (memoize eval))
+
+(defn tx-command-fn [kv object-store snapshot tx-log [op k args-v] transact-time tx-id]
+  (let [fn-id (c/new-id k)
+        db (q/db kv)
+        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
+        {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
+        args-eid (:crux.db/id args-doc)
+        tx-ops-or-t (try
+                      (apply (tx-fn-eval-cache body) db (eval args))
                       (catch Throwable t
                         t))]
     (if (instance? Throwable tx-ops-or-t)
       {:pre-commit-fn (fn []
-                        (log/warn tx-ops-or-t "TX Fn failure:")
+                        (log/warn tx-ops-or-t "TX Fn failure:" fn-id (pr-str body) args-eid (pr-str args))
                         false)}
       (do (doseq [doc (tx-ops->docs tx-ops-or-t)
                   :let [content-hash (c/new-id doc)]]
@@ -133,7 +140,21 @@
             {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
                                                  :when pre-commit-fn]
                                              (pre-commit-fn)))
-             :kvs (vec (apply concat (map :kvs result-ops)))
+             :kvs (vec (apply concat
+                              [[(c/encode-entity+vt+tt+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-eid)
+                                 transact-time
+                                 transact-time
+                                 tx-id)
+                                (c/->id-buffer args-v)]
+                               [(c/encode-entity+z+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-eid)
+                                 (c/encode-entity-tx-z-number transact-time transact-time)
+                                 tx-id)
+                                (c/->id-buffer args-v)]]
+                              (map :kvs result-ops)))
              :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
                                       :when post-commit-fn]
                                 (post-commit-fn))})))))
@@ -231,9 +252,7 @@
 (defn tx-ops->tx-events [tx-ops]
   (let [conformed-tx-ops (into [] (for [tx-op tx-ops] (conform-tx-op tx-op)))
         tx-events (mapv (fn [[op id & args]]
-                          (into [op (if (= :crux.tx/fn op)
-                                      id
-                                      (str (c/new-id id)))]
+                          (into [op (str (c/new-id id))]
                                 (for [arg args]
                                   (if (map? arg)
                                     (-> arg c/new-id str)
