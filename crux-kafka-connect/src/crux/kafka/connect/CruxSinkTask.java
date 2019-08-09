@@ -25,6 +25,7 @@ public class CruxSinkTask extends SinkTask {
 
     private String filename;
     private PrintStream outputStream;
+    private Map<String,String> props;
 
     public CruxSinkTask() {
     }
@@ -42,6 +43,7 @@ public class CruxSinkTask extends SinkTask {
 
     @Override
     public void start(Map<String, String> props) {
+        this.props = props;
         filename = props.get(CruxSinkConnector.FILE_CONFIG);
         if (filename == null) {
             outputStream = System.out;
@@ -68,7 +70,7 @@ public class CruxSinkTask extends SinkTask {
     public void put(Collection<SinkRecord> sinkRecords) {
         for (SinkRecord record : sinkRecords) {
             log.trace("Writing line to {}: {}", logFilename(), record.value());
-            outputStream.println(transformSinkRecord.invoke(record));
+            outputStream.println(transformSinkRecord.invoke(props, record));
         }
     }
 
