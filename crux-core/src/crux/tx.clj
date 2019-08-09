@@ -122,43 +122,45 @@
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-eid (:crux.db/id args-doc)
-        tx-ops-or-t (try
-                      (apply (tx-fn-eval-cache body) db (eval args))
-                      (catch Throwable t
-                        t))]
-    (if (instance? Throwable tx-ops-or-t)
+        fn-result (try
+                    (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))]
+                      {:docs (tx-ops->docs tx-ops)
+                       :result-ops (vec (for [[op :as tx-op]  (tx-ops->tx-events tx-ops)]
+                                          ((get tx-op->command op tx-command-unknown)
+                                           kv object-store snapshot tx-log tx-op transact-time tx-id)))})
+                    (catch Throwable t
+                      t))]
+    (if (instance? Throwable fn-result)
       {:pre-commit-fn (fn []
-                        (log/warn tx-ops-or-t "TX Fn failure:" fn-id (pr-str body) args-eid (pr-str args))
+                        (log/warn fn-result "TX Fn failure:" fn-id (pr-str body) args-eid (pr-str args))
                         false)}
-      (do (doseq [doc (tx-ops->docs tx-ops-or-t)
-                  :let [content-hash (c/new-id doc)]]
-            (db/put-objects object-store {content-hash doc})
-            (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
-          (let [result-ops (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops-or-t)]
-                                  ((get tx-op->command op tx-command-unknown)
-                                   kv object-store snapshot tx-log tx-op transact-time tx-id)))]
-            {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
-                                                 :when pre-commit-fn]
-                                             (pre-commit-fn)))
-             :kvs (vec (apply concat
-                              (when args-doc
-                                [[(c/encode-entity+vt+tt+tx-id-key-to
-                                   nil
-                                   (c/->id-buffer args-eid)
-                                   transact-time
-                                   transact-time
-                                   tx-id)
-                                  (c/->id-buffer args-v)]
-                                 [(c/encode-entity+z+tx-id-key-to
-                                   nil
-                                   (c/->id-buffer args-eid)
-                                   (c/encode-entity-tx-z-number transact-time transact-time)
-                                   tx-id)
-                                  (c/->id-buffer args-v)]])
-                              (map :kvs result-ops)))
-             :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
-                                      :when post-commit-fn]
-                                (post-commit-fn))})))))
+      (let [{:keys [docs result-ops]} fn-result]
+        (doseq [doc docs
+                :let [content-hash (c/new-id doc)]]
+          (db/put-objects object-store {content-hash doc})
+          (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
+        {:pre-commit-fn #(every? true? (for [{:keys [pre-commit-fn]} result-ops
+                                             :when pre-commit-fn]
+                                         (pre-commit-fn)))
+         :kvs (vec (apply concat
+                          (when args-doc
+                            [[(c/encode-entity+vt+tt+tx-id-key-to
+                               nil
+                               (c/->id-buffer args-eid)
+                               transact-time
+                               transact-time
+                               tx-id)
+                              (c/->id-buffer args-v)]
+                             [(c/encode-entity+z+tx-id-key-to
+                               nil
+                               (c/->id-buffer args-eid)
+                               (c/encode-entity-tx-z-number transact-time transact-time)
+                               tx-id)
+                              (c/->id-buffer args-v)]])
+                          (map :kvs result-ops)))
+         :post-commit-fn #(doseq [{:keys [post-commit-fn]} result-ops
+                                  :when post-commit-fn]
+                            (post-commit-fn))}))))
 
 (defn tx-command-unknown [kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))

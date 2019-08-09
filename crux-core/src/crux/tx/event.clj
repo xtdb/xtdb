@@ -34,7 +34,7 @@
 
 (defmethod tx-event :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
                                            :fn-id id?
-                                           :args-doc id?))
+                                           :args-doc (s/? id?)))
 
 (s/def ::tx-event (s/multi-spec tx-event first))
 (s/def ::tx-events (s/coll-of ::tx-event))
