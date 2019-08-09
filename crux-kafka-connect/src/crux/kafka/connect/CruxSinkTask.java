@@ -9,6 +9,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
+import crux.api.Crux;
+import crux.api.ICruxAPI;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -26,6 +28,7 @@ public class CruxSinkTask extends SinkTask {
     private String filename;
     private PrintStream outputStream;
     private Map<String,String> props;
+    private ICruxAPI api;
 
     public CruxSinkTask() {
     }
@@ -44,6 +47,7 @@ public class CruxSinkTask extends SinkTask {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
+        this.api = Crux.newApiClient(props.get(CruxSinkConnector.URL_CONFIG));
         filename = props.get(CruxSinkConnector.FILE_CONFIG);
         if (filename == null) {
             outputStream = System.out;
@@ -60,10 +64,12 @@ public class CruxSinkTask extends SinkTask {
     }
 
     private static IFn transformSinkRecord;
+    private static IFn submitSinkRecords;
 
     static {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.connect"));
         transformSinkRecord = Clojure.var("crux.kafka.connect/transform-sink-record");
+        submitSinkRecords = Clojure.var("crux.kafka.connect/submit-sink-records");
     }
 
     @Override
@@ -72,6 +78,7 @@ public class CruxSinkTask extends SinkTask {
             log.trace("Writing line to {}: {}", logFilename(), record.value());
             outputStream.println(transformSinkRecord.invoke(props, record));
         }
+        submitSinkRecords.invoke(api, props, sinkRecords);
     }
 
     @Override
@@ -84,6 +91,12 @@ public class CruxSinkTask extends SinkTask {
     public void stop() {
         if (outputStream != null && outputStream != System.out)
             outputStream.close();
+        if (api != null)
+            try {
+                api.close();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
     }
 
     private String logFilename() {

@@ -1,15 +1,13 @@
 = crux-kafka-connect
 
-**NOT WORKING YET**
+**EXPERIMENTAL**
 
 This project contains `crux.kafka.connect.CruxSinkConnector` which is
 an implementation of `org.apache.kafka.connect.sink.SinkConnector`.
 
-Currently doesn't write anything to Crux and is just a copy of the
-example file sink with added upper case transform:
+Reads JSON and posts it to a Crux node using `crux-http-client`. Also
+outputs it to a file like the example file sink:
 https://github.com/apache/kafka/blob/trunk/connect/file/src/main/java/org/apache/kafka/connect/file
-
-The idea is to use `crux-http-client` initially as a proof of concept.
 
 See also: https://kafka.apache.org/documentation/#connect
 
@@ -23,24 +21,39 @@ cp target/*-standalone.jar $KAFKA_HOME/libs
 cp test-resources/*.properties $KAFKA_HOME/config
 ```
 
-Steps to get running, in 3 different terminals:
+Steps to get running:
+
+Start a local Crux node with embedded Kafka in the REPL:
 
 ```
-(cd $KAFKA_HOME; ./bin/zookeeper-server-start.sh config/zookeeper.properties)
-(cd $KAFKA_HOME; ./bin/kafka-server-start.sh config/server.properties)
+(dev)
+(start)
+```
 
-# Start the Connect worker:
+Start the Connect worker, which will connect to the embedded Kafka:
+
+```
 (cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/connect-file-source.properties config/local-crux-sink.properties)
 ```
 
-(The two first steps should be possible to replace by using
-crux-kafka-embedded in the REPL.)
+Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
 
-Write a line to `test.txt`:
+
+Write a line of JSON to `test.txt`:
 
 ```
-echo Hello >> $KAFKA_HOME/test.txt
+echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
 tail -n1 $KAFKA_HOME/test.sink.txt
 ```
 
-This should output `HELLO`.
+This should output:
+```
+[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "bar"}]
+```
+
+Verify the entity was transacted in the REPL:
+
+```
+(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+;=> {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "bar"}
+```
