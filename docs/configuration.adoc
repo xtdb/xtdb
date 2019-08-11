@@ -4,7 +4,7 @@
 
 To start a Crux node, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
-https://github.com/juxt/crux/blob/master/src/crux/api.clj[`crux.api`].
+https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
 
 There are two types of Crux nodes: *cluster* and *standalone*. Use a
 cluster node when horizontal scalability is required or when
