@@ -21,8 +21,8 @@
   (throw (UnsupportedOperationException. "Struct conversion not yet supported.")))
 
 (defn- record->edn [^SinkRecord record]
-  (let [value (.value record)
-        schema (.valueSchema record)]
+  (let [schema (.valueSchema record)
+        value (.value record)]
     (cond
       (and (instance? Struct value) schema)
       (struct->edn schema value)
@@ -51,12 +51,13 @@
       (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
 
 (defn- find-eid [props ^SinkRecord record doc]
-  (let [id (or (.key record)
-               (get doc (or (some-> (get props CruxSinkConnector/ID_KEY_CONFIG)
-                                    (keyword))
-                            :crux.db/id)))]
+  (let [id (or (get doc :crux.db/id)
+               (some->> (get props CruxSinkConnector/ID_KEY_CONFIG)
+                        (keyword)
+                        (get doc))
+               (.key record))]
     (cond
-      (c/valid-id? id)
+      (and id (c/valid-id? id))
       (c/id-edn-reader id)
       (string? id)
       (keyword id)
