@@ -3,7 +3,8 @@
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.logic.plotting-data-calc :as pd]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [juxt.crux-ui.frontend.logic.time :as time]))
 
 
 
@@ -64,6 +65,16 @@
   :subs.query.time/tt
   :<- [:subs.query/time]
   #(:time/tt % (js/Date.)))
+
+(rf/reg-sub
+  :subs.query.time/vtc
+  :<- [:subs.query.time/vt]
+  time/date->comps)
+
+(rf/reg-sub
+  :subs.query.time/ttc
+  :<- [:subs.query.time/tt]
+  time/date->comps)
 
 (rf/reg-sub
   :subs.query/input-malformed?
