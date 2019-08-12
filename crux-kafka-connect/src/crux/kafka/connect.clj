@@ -49,25 +49,31 @@
       :else
       (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
 
+(defn- coerce-eid [id]
+  (cond
+    (and id (c/valid-id? id))
+    (c/id-edn-reader id)
+
+    (string? id)
+    (keyword id)))
+
 (defn- find-eid [props ^SinkRecord record doc]
   (let [id (or (get doc :crux.db/id)
                (some->> (get props CruxSinkConnector/ID_KEY_CONFIG)
                         (keyword)
                         (get doc))
                (.key record))]
-    (cond
-      (and id (c/valid-id? id))
-      (c/id-edn-reader id)
-      (string? id)
-      (keyword id)
-      :else
-      (UUID/randomUUID))))
+    (or (coerce-eid id)
+        (UUID/randomUUID))))
 
 (defn transform-sink-record [props ^SinkRecord record]
   (log/info "sink record:" record)
-  (let [doc (record->edn record)
-        id (find-eid props record doc)
-        tx-op [:crux.tx/put (assoc doc :crux.db/id id)]]
+  (let [tx-op (if (and (nil? (.value record))
+                       (.key record))
+                [:crux.tx/delete (coerce-eid (.key record))]
+                (let [doc (record->edn record)
+                      id (find-eid props record doc)]
+                  [:crux.tx/put (assoc doc :crux.db/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
