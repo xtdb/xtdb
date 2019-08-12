@@ -1,6 +1,5 @@
 (ns crux.kafka.connect
   (:require [cheshire.core :as json]
-            [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.codec :as c])
   (:import [org.apache.kafka.connect.data Schema Struct]
