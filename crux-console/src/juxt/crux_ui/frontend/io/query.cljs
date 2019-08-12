@@ -22,7 +22,6 @@
     (if-not false "http://localhost:8080" "/crux")))
 
 (defn- on-exec-success [resp]
-  (println :on-exec-success resp)
   (rf/dispatch [:evt.io/query-success resp]))
 
 (defn- on-stats-success [resp]

@@ -80,7 +80,7 @@
         :height :100%
         :display :grid
         :position :relative
-        :grid-template "'side main' 1fr / minmax(200px, 300px) 1fr"}
+        :grid-template "'side main' / minmax(280px, 400px) 1fr"}
        [:&__side
         {:border-right s/q-ui-border
          :grid-area :side
@@ -112,7 +112,7 @@
         :justify-content :center}]
       (gs/at-media {:max-width :1000px}
         [:.q-output
-         {:grid-template "'main main' 1fr / minmax(200px, 300px) 1fr"}
+         {:grid-template "'main main' 1fr / minmax(280px, 300px) 1fr"}
          [:&__side
           {:display :none}]]))])
 
