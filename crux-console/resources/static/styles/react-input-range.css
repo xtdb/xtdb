@@ -38,6 +38,7 @@
 
 .input-range__label--min,
 .input-range__label--max {
+    display: none
 }
 
 .input-range__label--min {
@@ -48,9 +49,21 @@
   grid-area: r;
   right: 0; }
 
-.input-range__label--value {
-  top: -1.8rem; }
+.input-range__label--value,
+.input-range__label--value-year {
+  top: -0.92em;
+  position: absolute;
+  left: 1em;
+  text-align: right;
+  width: 1.8em;
+  color: black;
+  font-size: 1.0em;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;}
 
+.input-range__label--value-year {
+  left: 1.7em
+}
 
 .input-range__label-container {
   left: -50%;
@@ -85,5 +98,5 @@
   height: 1rem;
   position: relative;
   display: grid;
-  grid-template: 'l c r' / 30px 1fr 30px;
+  grid-template: 'l c r' / 0px 1fr 30px;
   width: 100%; }
