@@ -24,8 +24,8 @@
   :subs.ui/root-tab
   (fn [db]
     (case js/location.pathname
-      "/query-perf" :subs.ui.root-tab/query-perf
-      :subs.ui.root-tab/query-ui)))
+      "/query-perf" :db.ui.root-tab/query-perf
+      (:db.ui/root-tab db))))
 
 
 

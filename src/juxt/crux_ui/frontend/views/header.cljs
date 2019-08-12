@@ -1,7 +1,10 @@
 (ns juxt.crux-ui.frontend.views.header
   (:require [garden.core :as garden]
-            [garden.stylesheet :as gs]))
+            [garden.stylesheet :as gs]
+            [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
+            [re-frame.core :as rf]))
 
+(def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
 
 (def header-styles
   [:style
@@ -28,24 +31,8 @@
        [:&__links
         {:display :none}]]))])
 
-
-(def tabs-styles
-  [:style (garden/css
-    [:.tabs
-      {:display "flex"
-       :justify-content "space-between"
-       :font-size "20px"
-       :align-items "center"}
-      [:&__sep
-        {:padding "16px"}]])])
-
-
-(defn tabs []
-  [:div.tabs
-   tabs-styles
-   [:div.tabs__item [:b "Query UI"]]
-   #_[:div.tabs__sep "/"]
-   #_[:div.tabs__item "Cluster"]])
+(defn on-tab-activate [tab-id]
+  (rf/dispatch [:evt.ui/root-tab-switch tab-id]))
 
 (defn root []
   [:header.header
@@ -54,7 +41,15 @@
      [:div.logo [:a {:href "/"}
                  [:img.logo-img {:width 200 :src "/static/img/console-logo.svg"}]]]]
    [:div.header__tabs
-     [tabs]]
+     [tabs/root
+      {:on-tab-activate on-tab-activate
+       :active-tab-id @-tab-sub
+       :tabs
+        [{:id :db.ui.root-tab/query-ui
+          :title "Query UI"}
+         {:id :db.ui.root-tab/settings
+          :title "Settings"}]}]]
+
    [:div.header__links
     [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}
      [:span.n "Docs"]]

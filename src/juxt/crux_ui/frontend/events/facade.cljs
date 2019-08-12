@@ -231,6 +231,11 @@
     {:db db
      :fx/get-github-gist link}))
 
+(rf/reg-event-fx
+  :evt.ui/root-tab-switch
+  (fn [{:keys [db] :as ctx} [_ root-tab-id]]
+    {:db (assoc db :db.ui/root-tab root-tab-id)}))
+
 (rf/reg-event-db
   :evt.ui.editor/set-example
   (fn [db [_ ex-title]]
