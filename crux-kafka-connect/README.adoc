@@ -1,7 +1,5 @@
 = crux-kafka-connect
 
-**EXPERIMENTAL**
-
 This project contains `crux.kafka.connect.CruxSinkConnector` which is
 an implementation of `org.apache.kafka.connect.sink.SinkConnector`.
 
