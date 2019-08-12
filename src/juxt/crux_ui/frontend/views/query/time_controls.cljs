@@ -45,7 +45,9 @@
        :justify-content :space-between
        :padding         "24px 24px"}
       [:&__item
-       {:margin-bottom :32px}]])])
+       {:margin-bottom :32px}]
+      [:&__switcher
+       {:margin-top :16px}]])])
 
 (defn native-pickers []
   [:<>
@@ -73,14 +75,16 @@
           :value @-sub-vtc
           :on-change-complete on-vt-commit
           :on-change on-vt-change}]
-        [:label {:on-click toggle-time} "Tx time: " (str @-sub-tt)]]
+        [:label.time-controls__switcher
+         {:on-click toggle-time} "Tx time: " (str @-sub-tt)]]
        [:<>
         [sdt/root-simple
          {:label "Tx time"
           :value @-sub-ttc
           :on-change-complete on-tt-commit
           :on-change on-tt-change}]
-        [:label {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
+        [:label.time-controls__switcher
+         {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
 
 
 
