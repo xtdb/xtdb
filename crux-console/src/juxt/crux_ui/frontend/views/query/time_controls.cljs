@@ -9,6 +9,8 @@
 (def -sub-time (rf/subscribe [:subs.query/time]))
 (def -sub-vt (rf/subscribe [:subs.query.time/vt]))
 (def -sub-tt (rf/subscribe [:subs.query.time/tt]))
+(def -sub-vtc (rf/subscribe [:subs.query.time/vtc]))
+(def -sub-ttc (rf/subscribe [:subs.query.time/ttc]))
 
 (defn on-time-commit [^keyword time-type ^js/Date time]
   (rf/dispatch [:evt.ui.query/time-commit time-type time]))
@@ -66,16 +68,16 @@
     (fn []
       (if (= ::pickers-vt @active-picker)
        [:<>
-        [sdt/root
+        [sdt/root-simple
          {:label "Valid time"
-          :value-sub -sub-vt
+          :value @-sub-vtc
           :on-change-complete on-vt-commit
           :on-change on-vt-change}]
         [:label {:on-click toggle-time} "Tx time: " (str @-sub-tt)]]
        [:<>
-        [sdt/root
+        [sdt/root-simple
          {:label "Tx time"
-          :value-sub -sub-tt
+          :value @-sub-ttc
           :on-change-complete on-tt-commit
           :on-change on-tt-change}]
         [:label {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
