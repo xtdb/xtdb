@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [crux.codec :as c])
-  (:import org.apache.kafka.connect.data.Struct
+  (:import [org.apache.kafka.connect.data Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
            [java.util UUID Map]
            crux.kafka.connect.CruxSinkConnector
@@ -17,18 +17,18 @@
             v)])
        (into {})))
 
-(defn- struct->edn [^Struct s]
-  (throw (UnsupportedOperationException. "Avro conversion not yet supported.")))
+(defn- struct->edn [^Schema schema ^Struct s]
+  (throw (UnsupportedOperationException. "Struct conversion not yet supported.")))
 
 (defn- record->edn [^SinkRecord record]
-  (let [value (.value record)]
+  (let [value (.value record)
+        schema (.valueSchema record)]
     (cond
-      (and (instance? Struct value)
-           (.valueSchema record))
-      (struct->edn value)
+      (and (instance? Struct value) schema)
+      (struct->edn schema value)
 
       (and (instance? Map value)
-           (nil? (.valueSchema record))
+           (nil? schema)
            (= #{"payload" "schema"} (set (keys value))))
       (let [payload (.get ^Map value "payload")]
         (cond
