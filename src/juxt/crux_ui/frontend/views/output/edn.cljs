@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.views.output.edn
-  (:require [cljs.pprint :refer [pprint]]
-            [juxt.crux-ui.frontend.views.codemirror :as cm]))
+  (:require [cljs.pprint :as pp]
+            [juxt.crux-ui.frontend.better-printer :as bp]
+            [juxt.crux-ui.frontend.views.codemirror :as cm]
+            [clojure.string :as s]))
 
 (defn root [edn]
-  (let [fmt (with-out-str (pprint edn))]
-    [cm/code-mirror fmt {:read-only? true}]))
+  [cm/code-mirror (bp/better-printer edn) {:read-only? true}])

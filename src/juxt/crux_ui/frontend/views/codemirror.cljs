@@ -7,21 +7,19 @@
             ["/codemirror/addon/edit/closebrackets.js"]
             ["/codemirror/addon/edit/matchbrackets.js"]
             ["/codemirror/addon/hint/show-hint"]
-            ["/codemirror/addon/hint/anyword-hint"]
-            ))
+            ["/codemirror/addon/hint/anyword-hint"]))
 
 
 (def code-mirror-styling
   (garden/css
     [[:.code-mirror-container
-       {:font-size :17px
-        :padding "0px 0px"
-        :height :100%}]
+      {:font-size :17px
+       :padding "0px 0px"
+       :height :100%}]
      [:.CodeMirror
       {:border-radius :2px
-      ;:border "1px solid hsl(0, 0%, 90%)"
-       :height :100%
-       }]]))
+       ;:border "1px solid hsl(0, 0%, 90%)"
+       :height :100%}]]))
 
 (defn escape-re [input]
   (let [re (js/RegExp. "([.*+?^=!:${}()|[\\]\\/\\\\])" "g")]
@@ -31,7 +29,13 @@
   (-> (reduce (fn [s c] (str s (escape-re c) ".*")) "" input)
       (js/RegExp "i")))
 
-(defn autocomplete [index cm options]
+(def ^{:private true :const true} crux-builtin-keywords
+ [:find :where :args :rules :offset :limit :order-by
+  :timeout :full-results? :not :not-join :or :or-join
+  :range :unify :rule :pred])
+
+
+(defn- autocomplete [index cm options]
   (let [cur    (.getCursor cm)
         line   (.-line cur)
         ch     (.-ch cur)
@@ -40,21 +44,15 @@
         blank? (#{"[" "{" " " "("} reg)
         start  (if blank? cur (.Pos codemirror line (gobj/get token "start")))
         end    (if blank? cur (.Pos codemirror line (gobj/get token "end")))
-;        words  (->> (cm-completions index cm) (mapv first))
-        words (concat [:find :where :args :rules :offset :limit :order-by
-                       :timeout :full-results? :not :not-join :or :or-join
-                       :range :unify :rule :pred] index)]
-    (if words
-      (let [fuzzy (if blank? #".*" (fuzzy-re reg))]
-        (clj->js {:list ;index
-             (->> words
-                        (map str)
-                        (filter #(re-find fuzzy %))
-                        ;sort
-                        clj->js)
-             :from start
-             :to   end
-             })))))
+        words  (concat crux-builtin-keywords index)
+        fuzzy  (if blank? #".*" (fuzzy-re reg))
+        words  (->> words
+                    (map str)
+                    (filter #(re-find fuzzy %)))]
+    (clj->js {:list words
+              :from start
+              :to   end})))
+
 
 (defn code-mirror
   [initial-value {:keys [read-only? stats on-change on-cm-init]}]
