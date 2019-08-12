@@ -11,7 +11,7 @@ See also: https://kafka.apache.org/documentation/#connect
 
 Download Kafka from https://kafka.apache.org/downloads
 
-Building the sink connector:
+Building and installing the sink connector:
 ```
 export KAFKA_HOME=...
 lein uberjar
@@ -39,7 +39,7 @@ Start the Connect worker, which will connect to the embedded Kafka:
 Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
 
 
-Write a line of JSON to `test.txt`:
+Write a line of JSON to `test.txt` file source:
 
 ```
 echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
@@ -51,3 +51,7 @@ Verify the entity was transacted in the REPL:
 (crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
 ;=> {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ```
+
+The connector can also use the message key as id. In this case, a key
+with nil value acts as a deletion of the entity in Crux, similar to
+how compaction in Kafka works.
