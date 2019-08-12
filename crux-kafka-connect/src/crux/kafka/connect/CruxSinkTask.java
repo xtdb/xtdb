@@ -2,41 +2,23 @@ package crux.kafka.connect;
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
 import crux.api.Crux;
 import crux.api.ICruxAPI;
 
 import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.util.Collection;
 import java.util.Map;
 
 
 public class CruxSinkTask extends SinkTask {
-    private static final Logger log = LoggerFactory.getLogger(CruxSinkTask.class);
-
-    private String filename;
-    private PrintStream outputStream;
     private Map<String,String> props;
     private ICruxAPI api;
 
     public CruxSinkTask() {
-    }
-
-    // for testing
-    public CruxSinkTask(PrintStream outputStream) {
-        filename = null;
-        this.outputStream = outputStream;
     }
 
     @Override
@@ -48,58 +30,31 @@ public class CruxSinkTask extends SinkTask {
     public void start(Map<String, String> props) {
         this.props = props;
         this.api = Crux.newApiClient(props.get(CruxSinkConnector.URL_CONFIG));
-        filename = props.get(CruxSinkConnector.FILE_CONFIG);
-        if (filename == null) {
-            outputStream = System.out;
-        } else {
-            try {
-                outputStream = new PrintStream(
-                    Files.newOutputStream(Paths.get(filename), StandardOpenOption.CREATE, StandardOpenOption.APPEND),
-                    false,
-                    StandardCharsets.UTF_8.name());
-            } catch (IOException e) {
-                throw new ConnectException("Couldn't find or create file '" + filename + "' for CruxSinkTask", e);
-            }
-        }
     }
 
-    private static IFn transformSinkRecord;
     private static IFn submitSinkRecords;
 
     static {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.connect"));
-        transformSinkRecord = Clojure.var("crux.kafka.connect/transform-sink-record");
         submitSinkRecords = Clojure.var("crux.kafka.connect/submit-sink-records");
     }
 
     @Override
     public void put(Collection<SinkRecord> sinkRecords) {
-        for (SinkRecord record : sinkRecords) {
-            log.trace("Writing line to {}: {}", logFilename(), record.value());
-            outputStream.println(transformSinkRecord.invoke(props, record));
-        }
         submitSinkRecords.invoke(api, props, sinkRecords);
     }
 
     @Override
     public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-        log.trace("Flushing output stream for {}", logFilename());
-        outputStream.flush();
     }
 
     @Override
     public void stop() {
-        if (outputStream != null && outputStream != System.out)
-            outputStream.close();
         if (api != null)
             try {
                 api.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-    }
-
-    private String logFilename() {
-        return filename == null ? "stdout" : filename;
     }
 }

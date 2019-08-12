@@ -6,6 +6,7 @@
   (:import org.apache.kafka.connect.data.Struct
            org.apache.kafka.connect.sink.SinkRecord
            [java.util UUID Map]
+           crux.kafka.connect.CruxSinkConnector
            crux.api.ICruxAPI))
 
 (defn- map->edn [m]
@@ -16,33 +17,59 @@
             v)])
        (into {})))
 
+(defn- struct->edn [^Struct s]
+  (throw (UnsupportedOperationException. "Avro conversion not yet supported.")))
+
 (defn- record->edn [^SinkRecord record]
   (let [value (.value record)]
-    (log/info "Raw Value:" value)
     (cond
       (and (instance? Struct value)
            (.valueSchema record))
-      (throw (UnsupportedOperationException. "Avro conversion not yet supported."))
+      (struct->edn value)
+
+      (and (instance? Map value)
+           (nil? (.valueSchema record))
+           (= #{"payload" "schema"} (set (keys value))))
+      (let [payload (.get ^Map value "payload")]
+        (cond
+          (string? payload)
+          (json/parse-string payload true)
+
+          (instance? Map payload)
+          (map->edn payload)
+
+          :else
+          (throw (IllegalArgumentException. (str "Unknown JSON payload type: " record)))))
+
       (instance? Map value)
       (map->edn value)
+
       (string? value)
-      (json/parse-string (.value record) true)
+      (json/parse-string value true)
+
       :else
       (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
 
+(defn- find-eid [props ^SinkRecord record doc]
+  (let [id (or (.key record)
+               (get doc (or (some-> (get props CruxSinkConnector/ID_KEY_CONFIG)
+                                    (keyword))
+                            :crux.db/id)))]
+    (cond
+      (c/valid-id? id)
+      (c/id-edn-reader id)
+      (string? id)
+      (keyword id)
+      :else
+      (UUID/randomUUID))))
+
 (defn transform-sink-record [props ^SinkRecord record]
+  (log/info "sink record:" record)
   (let [doc (record->edn record)
-        id (or (.key record)
-               (get doc (or (some-> (get props "id.key") (keyword))
-                            :crux.db/id)))
-        id (cond
-             (c/valid-id? id)
-             (c/id-edn-reader id)
-             (string? id)
-             (keyword id)
-             :else
-             (UUID/randomUUID))]
-    [:crux.tx/put (assoc doc :crux.db/id id)]))
+        id (find-eid props record doc)
+        tx-op [:crux.tx/put (assoc doc :crux.db/id id)]]
+    (log/info "tx op:" tx-op)
+    tx-op))
 
 (defn submit-sink-records [^ICruxAPI api props records]
   (when (seq records)
