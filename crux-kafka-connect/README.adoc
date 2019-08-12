@@ -23,11 +23,13 @@ cp test-resources/*.properties $KAFKA_HOME/config
 
 Steps to get running:
 
-Start a local Crux node with embedded Kafka in the REPL:
+Start a local Crux node with embedded Kafka in the REPL and create the
+test topic:
 
 ```
 (dev)
 (start)
+(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
 ```
 
 Start the Connect worker, which will connect to the embedded Kafka:
@@ -48,12 +50,12 @@ tail -n1 $KAFKA_HOME/test.sink.txt
 
 This should output:
 ```
-[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "bar"}]
+[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]
 ```
 
 Verify the entity was transacted in the REPL:
 
 ```
 (crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
-;=> {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "bar"}
+;=> {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ```
