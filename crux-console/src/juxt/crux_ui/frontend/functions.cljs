@@ -17,6 +17,17 @@
     ;; We use apply here to support functions of various arities
     (fn [& args] (.apply (.-fire dbnc) dbnc (to-array args)))))
 
+(defn index-by
+  "indexes a finite collection"
+  [key-fn coll]
+  (loop [remaining-items (seq coll)
+         index-map (transient {})]
+    (if-let [x (first remaining-items)]
+      (recur (next remaining-items)
+             (assoc! index-map (key-fn x) x))
+      (persistent! index-map))))
+
+
 (defn map-map-values-vec [f m]
   (into {} (for [[k vs] m] [k (mapv f vs)])))
 
