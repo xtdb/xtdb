@@ -437,18 +437,6 @@
 (defn- sync-submit-tx [node tx-ops]
   (api/sync node (:crux.tx/tx-time (api/submit-tx node tx-ops)) nil))
 
-[[:crux.tx/put
-  {:crux.db/id :update-attribute-fn
-   :crux.db.fn/body
-   '(fn [db eid k f]
-      [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]]
-
-[[:crux.tx/fn :update-attribute-fn
-  {:crux.db/id :inc-ivans-age
-   :crux.db.fn/args [:ivan
-                     :age
-                     inc]}]]
-
 (t/deftest test-can-apply-transaction-fn
   (let [exception (atom nil)
         latest-exception #(let [e @exception]
