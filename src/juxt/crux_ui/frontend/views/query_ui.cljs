@@ -2,96 +2,72 @@
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
             [garden.stylesheet :as gs]
-            [juxt.crux-ui.frontend.views.cluster-health :as cluster-health]
             [juxt.crux-ui.frontend.views.query.form :as q-form]
             [juxt.crux-ui.frontend.views.query.output :as q-output]
-            [juxt.crux-ui.frontend.views.query.time-controls :as time-controls]
-            [juxt.crux-ui.frontend.views.style :as s]
-            [juxt.crux-ui.frontend.subs :as sub]))
+            [juxt.crux-ui.frontend.views.style :as s]))
 
+(def ^:private query-ui-styles
+  [:style
+   (garden/css
+     [:.query-ui
+       {:font-size :16px
+        :border-radius :2px
+        :margin "0 auto"
+        :border s/q-ui-border
+        :max-width :1600px
+        :width :100%
+        :height "calc(100% - 8px)"
+        :margin-bottom :8px
+       ;:max-height :100%
+        :display :grid
+        :place-items :stretch
 
-(def q-ui-border s/q-ui-border)
+        :grid-template
+        "'output' calc(100% - 330px)
+         'form' 330px"}
 
+       [:&__output
+         {:padding "0px 0"
+          :grid-area :output
+          :border-bottom s/q-ui-border}]
 
+       [:&__controls
+         {:padding "16px 0"
+          :border-right s/q-ui-border
+          :grid-area :controls}]
+         ;:border "1px solid orange"
 
-(def query-ui-styles
-  (garden/css
-    [:.query-ui
-      {:font-size :16px
-       :border-radius :2px
-       :margin "0 auto"
-       :border q-ui-border
-       :max-width :1600px
-       :width :100%
-       :height "calc(100% - 8px)"
-       :margin-bottom :8px
-      ;:max-height :100%
-       :display :grid
-       :place-items :stretch
-
-       :grid-template
-       "'output output' calc(100% - 330px)
-       'controls form' 330px
-        / minmax(200px, 300px) 1fr"}
-
-      [:&__output
-        {:padding "0px 0"
-         :grid-area :output
-         :border-bottom q-ui-border}]
-
-      [:&__controls
-        {:padding "16px 0"
-         :border-right q-ui-border
-         :grid-area :controls}]
-        ;:border "1px solid orange"
-
-      [:&__form
-        {:padding "0px 0"
-         :grid-area :form}]
-      [:&--form-minimised
-       {:grid-template
-        "'output output' calc(100% - 50px)
-         'controls form' 50px
-         / minmax(200px, 50px) 1fr"}]]
-
-    (gs/at-media
-      {:max-width :1000px}
-      [:.query-ui
-       {:grid-template
-        "'output output' calc(100% - 330px)
-        'form form' 330px
-        / 1fr 1fr"
-        :margin-bottom 0}
+       [:&__form
+         {:padding "0px 0"
+          :grid-area :form}]
        [:&--form-minimised
         {:grid-template
-         "'output output' calc(100% - 50px)
+         "'output' calc(100% - 50px)
+         'form' 50px"}]]
+
+     (gs/at-media
+       {:max-width :1000px}
+       [:.query-ui
+        {:grid-template
+         "'output output' calc(100% - 330px)
+        'form form' 330px
+        / 1fr 1fr"
+         :margin-bottom 0}
+        [:&--form-minimised
+         {:grid-template
+          "'output output' calc(100% - 50px)
          'form form' 50px
          / 1fr 1fr"}]
-       [:&__controls
-        {:display :none}]])))
-        ;:border "1px solid green"
+        [:&__controls
+         {:display :none}]]))])
+         ;:border "1px solid green"
 
 
 (defn query-ui []
   [:div.query-ui
-   [:style query-ui-styles]
+   query-ui-styles
    [:div.query-ui__output
     [q-output/root]]
-   [:div.query-ui__controls
-    [time-controls/root]]
    [:div.query-ui__form
     [q-form/root]]])
 
-
-(defn query [r]
-  (let [q []
-        ;conformed-query (s/conform :crux.query/query q)
-        ;query-invalid? (= :clojure.spec.alpha/invalid conformed-query)
-        ;start-time (System/currentTimeMillis)
-        ;result (when-not query-invalid?
-        ;         (api/q db q))
-        ;query-time (- (System/currentTimeMillis) start-time)
-        invalid? false; (and query-invalid? (not (str/blank? q)))
-        on-cm-change-js "cm.save();"]
-    [:div.query-editor {:style {:padding "2em"}}
-     [cluster-health/root]]))

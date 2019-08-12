@@ -1,6 +1,8 @@
 (ns juxt.crux-ui.frontend.functions
   (:require [cljs.core.async :as async]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint])
+  (:import [goog.object]
+           [goog.async Debouncer]))
 
 (def jsget goog.object/getValueByKeys)
 
@@ -9,6 +11,11 @@
 
 (defn merge-with-keep [a]
   (apply merge-with (fn [v1 v2] ((if (vector? v1) conj vector) v1 v2)) a))
+
+(defn debounce [f interval]
+  (let [dbnc (Debouncer. f interval)]
+    ;; We use apply here to support functions of various arities
+    (fn [& args] (.apply (.-fire dbnc) dbnc (to-array args)))))
 
 (defn map-map-values-vec [f m]
   (into {} (for [[k vs] m] [k (mapv f vs)])))
