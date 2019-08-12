@@ -78,7 +78,7 @@
                         :theme "eclipse" ; or "monokai"
                         :autoCloseBrackets true
                         :hintOptions #js {:hint (partial autocomplete indexes)
-                                      :completeSingle false}
+                                          :completeSingle false}
                         :extraKeys {"Ctrl-Space" "autocomplete"} ;need to leave this in for `:` to work, there's probably a better way!
                         :matchBrackets true
                         :mode "clojure"}

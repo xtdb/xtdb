@@ -31,6 +31,7 @@
 ; query related root subscriptions
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  {}))
+(rf/reg-sub :subs.query/time  #(:db.query/time % {}))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result (fnil :db.query/result {}))
@@ -53,6 +54,16 @@
   :subs.query/input-edn
   :<- [:subs.query/input]
   qa/try-read-string)
+
+(rf/reg-sub
+  :subs.query.time/vt
+  :<- [:subs.query/time]
+  #(:time/vt % (js/Date.)))
+
+(rf/reg-sub
+  :subs.query.time/tt
+  :<- [:subs.query/time]
+  #(:time/tt % (js/Date.)))
 
 (rf/reg-sub
   :subs.query/input-malformed?

@@ -1,4 +1,8 @@
 (ns juxt.crux-ui.frontend.events.facade
+  "This ns keeps all events.
+  Events for central state can be considered as FSM transitions.
+  Hence ideally all state computations should be moved out of ns, but all state
+  transitions (read `(rf/dispatch [:wew])`) should be kept in here."
   (:require [re-frame.core :as rf]
             [cljs.tools.reader.edn :as edn]
             [medley.core :as m]
@@ -22,6 +26,39 @@
       (update :db.ui/editor-key inc)
       (assoc :db.query/input str
              :db.query/input-committed str)))
+(defn o-reset-results [db]
+  (assoc db
+    :db.query/result nil
+    :db.query/result-analysis nil
+    :db.query/histories nil
+    :db.query/eid->simple-history nil
+    :db.query/analysis-committed nil
+    :db.query/input-committed nil
+    :db.query/error nil))
+
+(defn query-is-valid? [query-string]
+  (not (:error (qa/try-read-string query-string))))
+
+(defn o-commit-input [db input]
+  (let [input    (:db.query/input db)
+        edn      (qa/try-read-string input)
+        analysis (and (not (:error edn)) (qa/analyse-query edn))]
+    (-> db
+        (update :db.query/key inc)
+        (assoc :db.query/input-committed input
+               :db.query/analysis-committed analysis
+               :db.query/edn-committed edn))))
+
+(defn calc-query-params
+  [{:db.query/keys
+        [analysis-committed time
+         input-committed]
+    :as db}]
+  (if analysis-committed
+    {:raw-input      input-committed
+     :query-vt       (:time/vt time)
+     :query-tt       (:time/tt time)
+     :query-analysis analysis-committed}))
 
 
 ; ----- effects -----
@@ -29,7 +66,8 @@
 (rf/reg-fx
   :fx/query-exec
   (fn [{:keys [raw-input query-analysis] :as query}]
-    (q/exec query)))
+    (if query
+      (q/exec query))))
 
 (rf/reg-fx
   :fx/query-stats
@@ -45,7 +83,6 @@
   :fx.query/histories-docs
   (fn [eids->histories]
     (q/fetch-histories-docs eids->histories)))
-
 
 (rf/reg-fx
   :fx.sys/set-cookie
@@ -87,11 +124,11 @@
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
-(def ^:const ui--history-max-entities 7)
-
 
 
 ; --- io ---
+
+(def ^:const ui--history-max-entities 7)
 
 (rf/reg-event-fx
   :evt.io/query-success
@@ -164,22 +201,13 @@
 (rf/reg-event-fx
   :evt.ui/query-submit
   (fn [{:keys [db] :as ctx}]
-    (let [input (:db.query/input db)
-          edn (qa/try-read-string input)
-          query-times (:db.query/time db)
-          vt (:crux.ui.time-type/vt query-times)
-          tt (:crux.ui.time-type/tt query-times)
-          analysis (and (not (:error edn)) (qa/analyse-query edn))]
-      {:db            (-> db
-                          (update :db.query/key inc)
-                          (assoc :db.query/input-committed input
-                                 :db.query/analysis-committed analysis
-                                 :db.query/edn-committed edn
-                                 :db.query/result nil))
-       :fx/query-exec {:raw-input      input
-                       :query-vt vt
-                       :query-tt tt
-                       :query-analysis analysis}})))
+    (if (query-is-valid? (:db.query/input db))
+      (let [new-db
+            (-> db
+                (o-reset-results)
+                (o-commit-input (:db.query/input db)))]
+        {:db new-db
+         :fx/query-exec (calc-query-params new-db)}))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
@@ -204,6 +232,11 @@
   :evt.ui.query/time-change
   (fn [db [_ time-type time]]
     (assoc-in db [:db.query/time time-type] time)))
+
+(rf/reg-event-fx
+  :evt.ui.query/time-commit
+  (fn [{:keys [db] :as ctx} [_ time-type time]]
+    {:dispatch [:evt.ui/query-submit]}))
 
 (rf/reg-event-db
   :evt.ui.query/time-reset

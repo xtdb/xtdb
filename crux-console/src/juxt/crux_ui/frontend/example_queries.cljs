@@ -69,16 +69,13 @@
    :examples/put-w-valid
    (fn []
      (let [ticker (gen-ticker)]
-       (mapv #(gen-put-with-offset-days (alter-ticker ticker) %) (range -10 1 1))))
+       (mapv #(gen-put-with-offset-days (alter-ticker ticker) %) (range -1000 1 1))))
 
    :examples/query
    (fn []
      '{:find [e p]
        :where [[e :crux.db/id _]
                [e :ticker/price p]]})
-
-   :examples/crux-night
-   (fn [] [[:crux.tx/put {:crux.db/id :github/some-username :crux-night/question "Where can I find the docs for Crux?"}]])
 
    :examples/query-w-full-res
    (fn []
@@ -108,8 +105,6 @@
     :generator (:examples/query generators)}
    {:title "query with full-results"
     :generator (:examples/query-w-full-res generators)}
-   {:title "Hello Crux Night"
-    :generator (:examples/crux-night generators)}
    {:title "delete"
     :generator (:examples/delete generators)}
    {:title "evict"
