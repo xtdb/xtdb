@@ -29,6 +29,7 @@
                "../crux-rocksdb/test"
                "../crux-lmdb/test"
                "../crux-kafka-embedded/test"
+               "../crux-kafka-connect/test"
                "../crux-kafka/test"
                "../crux-jdbc/test"
                "../crux-http-client/test"
