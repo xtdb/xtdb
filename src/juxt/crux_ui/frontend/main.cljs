@@ -16,8 +16,11 @@
            "; options"
            " :full-results? true}"]))
 
+(def ^:private now (js/Date.))
+
 (def default-db
   {:db.query/input           example-query-str
+   :db.query/time            {:time/vt now :time/tt now}
    :db.query/input-committed example-query-str
    :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
    :db.ui/output-main-tab    nil ;:db.ui.output-tab/table
