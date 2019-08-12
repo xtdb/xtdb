@@ -27,7 +27,7 @@
       [:&__row
        {:display :flex
         :align-items :center
-        :height :40px}
+        :height :28px}
        [:&-label
         {:flex "0 0 60px"
          :text-transform :lowercase
@@ -63,6 +63,17 @@
       [:div.slider-date-time-picker__row-slider
        [:> ir {:value            (get value :time/year)
                :step             1
+               :classNames      #js  {:activeTrack "input-range__track input-range__track--active",
+                                      :disabledInputRange "input-range input-range--disabled",
+                                      :inputRange "input-range",
+                                      :labelContainer "input-range__label-container",
+                                      :maxLabel "input-range__label input-range__label--max",
+                                      :minLabel "input-range__label input-range__label--min",
+                                      :slider "input-range__slider",
+                                      :sliderContainer "input-range__slider-container",
+                                      :track "input-range__track input-range__track--background",
+                                      :valueLabel "input-range__label input-range__label--value-year",}
+
                :minValue         1970
                :maxValue         2020
                :onChangeComplete #(on-change-internal :time/year % true)
@@ -81,7 +92,7 @@
       [:div.slider-date-time-picker__row-slider
        [:> ir {:value            (get value :time/date)
                :step             1
-               :minValue         0
+               :minValue         1
                :maxValue         31
                :onChangeComplete #(on-change-internal :time/date % true)
                :onChange         #(on-change-internal :time/date %)}]]]

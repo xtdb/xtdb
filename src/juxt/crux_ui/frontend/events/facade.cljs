@@ -129,20 +129,35 @@
 ; --- io ---
 
 (def ^:const ui--history-max-entities 7)
+(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
+
+(defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
+  (if-not (history-tabs-set (:db.ui/output-main-tab db))
+    new-ctx
+    (assoc new-ctx :fx.query/history
+                   (take ui--history-max-entities
+                         (:ra/entity-ids (:db.query/result-analysis db))))))
+
+(defn- ctx-autoload-history-docs [{:keys [db] :as new-ctx}]
+  (let [histories (:db.query/histories db)
+        res-an    (:db.query/result-analysis db)]
+    (if-not (and histories
+                 (:ra/has-numeric-attrs? res-an)
+                 (history-tabs-set (:db.ui/output-main-tab db)))
+      new-ctx
+      (assoc new-ctx :fx.query/histories-docs histories))))
+
 
 (rf/reg-event-fx
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
           res-analysis (qa/analyse-results q-info res)
-          nums?  (:ra/has-numeric-attrs? res-analysis)
           db     (assoc db :db.query/result res
                            :db.query/error nil
                            :db.query/result-analysis res-analysis)]
 
-      (cond-> {:db db}
-              nums? (assoc :fx.query/history
-                           (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))
+      (ctx-autoload-history {:db db}))))
 
 (rf/reg-event-fx
   :evt.io/gist-err
@@ -166,8 +181,7 @@
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
   (fn [{db :db :as ctx} [_ eid->history-range]]
-    {:db (assoc db :db.query/histories eid->history-range)
-     :fx.query/histories-docs eid->history-range}))
+    (ctx-autoload-history-docs {:db (assoc db :db.query/histories eid->history-range)})))
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
@@ -243,10 +257,10 @@
   (fn [db [_ time-type]]
     (update db :db.query/time dissoc time-type)))
 
-(rf/reg-event-db
+(rf/reg-event-fx
   :evt.ui.output/main-tab-switch
-  (fn [db [_ new-tab-id]]
-    (assoc db :db.ui/output-main-tab new-tab-id)))
+  (fn [{:keys [db] :as ctx} [_ new-tab-id]]
+    (ctx-autoload-history {:db (assoc db :db.ui/output-main-tab new-tab-id)})))
 
 (rf/reg-event-db
   :evt.ui.output/side-tab-switch
