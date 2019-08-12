@@ -17,8 +17,11 @@ import java.util.Map;
 public class CruxSinkTask extends SinkTask {
     private Map<String,String> props;
     private ICruxAPI api;
+    private static IFn submitSinkRecords;
 
-    public CruxSinkTask() {
+    static {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.connect"));
+        submitSinkRecords = Clojure.var("crux.kafka.connect/submit-sink-records");
     }
 
     @Override
@@ -30,13 +33,6 @@ public class CruxSinkTask extends SinkTask {
     public void start(Map<String, String> props) {
         this.props = props;
         this.api = Crux.newApiClient(props.get(CruxSinkConnector.URL_CONFIG));
-    }
-
-    private static IFn submitSinkRecords;
-
-    static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.connect"));
-        submitSinkRecords = Clojure.var("crux.kafka.connect/submit-sink-records");
     }
 
     @Override
