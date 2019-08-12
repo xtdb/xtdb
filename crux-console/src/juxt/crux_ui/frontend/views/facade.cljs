@@ -4,6 +4,7 @@
             [juxt.crux-ui.frontend.views.query-ui :as q]
             [juxt.crux-ui.frontend.views.header :as header]
             [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.views.settings :as settings]
             [juxt.crux-ui.frontend.svg-icons :as icon]))
 
 (def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
@@ -45,11 +46,12 @@
 
 (defn root []
   (let [root-tab @-sub-root-tab]
-    [:div#root.root {:class (if (= :subs.ui.root-tab/query-perf root-tab) "root--page")}
+    [:div#root.root {:class (if (= :db.ui.root-tab/query-perf root-tab) "root--page")}
      root-styles
      [:div.root__header
        [header/root]]
-     [:div.root__body {:class (if (= :subs.ui.root-tab/query-perf root-tab) "root__body--page")}
+     [:div.root__body {:class (if (= :db.ui.root-tab/query-perf root-tab) "root__body--page")}
        (case root-tab
-         :subs.ui.root-tab/query-ui [q/query-ui]
+         :db.ui.root-tab/query-ui [q/query-ui]
+         :db.ui.root-tab/settings [settings/root]
          [q/query-ui])]]))
