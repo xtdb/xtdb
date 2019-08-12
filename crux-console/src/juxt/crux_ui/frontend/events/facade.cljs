@@ -13,7 +13,8 @@
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
-            [juxt.crux-lib.http-functions :as hf]))
+            [juxt.crux-lib.http-functions :as hf]
+            [juxt.crux-ui.frontend.better-printer :as bp]))
 
 
 (defn calc-query [db ex-title]
@@ -26,6 +27,7 @@
       (update :db.ui/editor-key inc)
       (assoc :db.query/input str
              :db.query/input-committed str)))
+
 (defn o-reset-results [db]
   (assoc db
     :db.query/result nil
@@ -175,7 +177,7 @@
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
       (-> ctx
           (assoc-in [:db :db.ui.examples/imported] edn)
-          (update :db o-set-example (some-> edn first :query pr-str)))
+          (update :db o-set-example (some-> edn first :query bp/better-printer)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
 
 (rf/reg-event-fx
@@ -233,7 +235,7 @@
   :evt.ui.editor/set-example
   (fn [db [_ ex-title]]
     (let [query (calc-query db ex-title)
-          str   (f/pprint-str query)]
+          str   (bp/better-printer query)]
       (o-set-example db str))))
 
 (rf/reg-event-fx
