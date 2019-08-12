@@ -5,9 +5,7 @@
 This project contains `crux.kafka.connect.CruxSinkConnector` which is
 an implementation of `org.apache.kafka.connect.sink.SinkConnector`.
 
-Reads JSON and posts it to a Crux node using `crux-http-client`. Also
-outputs it to a file like the example file sink:
-https://github.com/apache/kafka/blob/trunk/connect/file/src/main/java/org/apache/kafka/connect/file
+Reads JSON and posts it to a Crux node using `crux-http-client`.
 
 See also: https://kafka.apache.org/documentation/#connect
 
@@ -45,12 +43,6 @@ Write a line of JSON to `test.txt`:
 
 ```
 echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
-tail -n1 $KAFKA_HOME/test.sink.txt
-```
-
-This should output:
-```
-[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]
 ```
 
 Verify the entity was transacted in the REPL:
