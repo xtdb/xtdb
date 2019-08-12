@@ -467,6 +467,10 @@
           (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
           (t/is (nil? (latest-exception)))
 
+          (t/testing "resulting documents are indexed"
+            (t/is (= #{[41]} (api/q (api/db *api*)
+                                    '[:find age :where [e :name "Ivan"] [e :age age]]))))
+
           (t/testing "exceptions"
             (t/testing "non existing tx fn"
               (sync-submit-tx *api* '[[:crux.tx/fn :non-existing-fn]])

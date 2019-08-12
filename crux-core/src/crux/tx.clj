@@ -53,7 +53,7 @@
                    content-hash]])
                (reduce into []))}))
 
-(defn tx-command-put [kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
                                correct-state? (db/known-keys? object-store snapshot [content-hash])]
@@ -61,10 +61,10 @@
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
 
-(defn tx-command-delete [kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
   (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
 
-(defn tx-command-cas [kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
+(defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)
         {:keys [content-hash]
@@ -91,7 +91,7 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defn tx-command-evict [kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-valid-time (or start-valid-time (some-> ^EntityTx (last history-descending) (.vt)))
@@ -119,7 +119,7 @@
 (defn log-tx-fn-error [fn-result fn-id body args-id args]
   (log/warn fn-result "TX Fn failure:" fn-id (pr-str body) args-id (pr-str args)))
 
-(defn tx-command-fn [kv object-store snapshot tx-log [op k args-v] transact-time tx-id]
+(defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v] transact-time tx-id]
   (let [fn-id (c/new-id k)
         db (q/db kv)
         {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
@@ -128,20 +128,20 @@
         fn-result (try
                     (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))]
                       {:docs (tx-ops->docs tx-ops)
-                       :result-ops (vec (for [[op :as tx-op]  (tx-ops->tx-events tx-ops)]
+                       :ops-result (vec (for [[op :as tx-op]  (tx-ops->tx-events tx-ops)]
                                           ((get tx-op->command op tx-command-unknown)
-                                           kv object-store snapshot tx-log tx-op transact-time tx-id)))})
+                                           indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
                     (catch Throwable t
                       t))]
     (if (instance? Throwable fn-result)
       {:pre-commit-fn (fn []
                         (log-tx-fn-error fn-result fn-id body args-id args)
                         false)}
-      (let [{:keys [docs result-ops]} fn-result]
+      (let [{:keys [docs ops-result]} fn-result]
         {:pre-commit-fn #(do (doseq [doc docs
                                      :let [content-hash (c/new-id doc)]]
-                               (db/put-objects object-store {content-hash doc}))
-                             (every? true? (for [{:keys [pre-commit-fn]} result-ops
+                               (db/index-doc indexer content-hash doc ))
+                             (every? true? (for [{:keys [pre-commit-fn]} ops-result
                                                  :when pre-commit-fn]
                                              (pre-commit-fn))))
          :kvs (vec (apply concat
@@ -159,15 +159,12 @@
                                (c/encode-entity-tx-z-number transact-time transact-time)
                                tx-id)
                               (c/->id-buffer args-v)]])
-                          (map :kvs result-ops)))
-         :post-commit-fn #(do (doseq [doc docs
-                                      :let [content-hash (c/new-id doc)]]
-                                (.submit_doc ^crux.db.TxLog tx-log content-hash doc))
-                              (doseq [{:keys [post-commit-fn]} result-ops
-                                      :when post-commit-fn]
-                                (post-commit-fn)))}))))
+                          (map :kvs ops-result)))
+         :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
+                                  :when post-commit-fn]
+                            (post-commit-fn))}))))
 
-(defn tx-command-unknown [kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-unknown [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
 
 (def ^:private tx-op->command
@@ -200,12 +197,12 @@
           (idx/delete-doc-from-index kv content-hash existing-doc))
         (idx/index-doc kv content-hash doc))))
 
-  (index-tx [_ tx-ops tx-time tx-id]
+  (index-tx [this tx-ops tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-ops)
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (vec (for [[op :as tx-op] tx-ops]
                                       ((get tx-op->command op tx-command-unknown)
-                                       kv object-store snapshot tx-log tx-op tx-time tx-id)))]
+                                       this kv object-store snapshot tx-log tx-op tx-time tx-id)))]
         (log/debug "Indexing tx-id:" tx-id "tx-ops:" (count tx-ops))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
