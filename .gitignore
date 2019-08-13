@@ -22,13 +22,10 @@ target
 /docs/.asciidoctor/
 /dev/hraberg.clj
 
-/example/standalone_webservice/data/*
-/example/standalone_webservice/backup/**/*
 crux-bench/data/**/*
 crux-bench/datomic-data/**/*
 /crux-bench/watdiv_*
 
-/example/imdb/data/**/*
 .projectile
 /crux-uberjar/data
 /crux-dev/.testing-oracle.edn
