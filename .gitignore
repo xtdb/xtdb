@@ -24,9 +24,9 @@ target
 
 /example/standalone_webservice/data/*
 /example/standalone_webservice/backup/**/*
-bench/data/**/*
-bench/datomic-data/**/*
-/bench/watdiv_*
+crux-bench/data/**/*
+crux-bench/datomic-data/**/*
+/crux-bench/watdiv_*
 
 /example/imdb/data/**/*
 .projectile
