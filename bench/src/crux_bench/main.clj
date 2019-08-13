@@ -226,7 +226,7 @@
   [{:keys [server-port] :as options} with-node-fn]
   (with-open [crux-node (case (System/getenv "CRUX_MODE")
                             "CLUSTER_NODE" (api/start-cluster-node options)
-                            (api/start-standalone-system options))
+                            (api/start-standalone-node options))
 
               benchmark-runner (bench-mark-runner crux-node)
 
