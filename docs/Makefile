@@ -13,8 +13,8 @@ docs.zip: index.html javadoc
 crux.epub:	index.html
 	pandoc $< -o $@
 
-javadoc:
-	javadoc -cp `cd ..; lein classpath` -d $@ -sourcepath ../src -exclude crux crux.api
+javadoc: ../crux-core/src/crux/api/*.java
+	javadoc -cp `cd ../crux-core; lein classpath` -d $@ -sourcepath ../crux-core/src -exclude crux crux.api
 
 clean:
 	rm -rf index.html javadoc docs.zip
