@@ -319,7 +319,7 @@
    :doc-cache-size     131072
    :object-store       \"crux.index.KvObjectStore\"}
 
-   returns the started local node that implements ICruxAPI and
+   returns the started cluster node that implements ICruxAPI and
    java.io.Closeable. Latter allows the node to be stopped
    by calling `(.close node)`.
 

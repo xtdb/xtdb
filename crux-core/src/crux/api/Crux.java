@@ -38,7 +38,7 @@ public class Crux {
      * deployments.
      *
      * @param options see crux.bootstrap/cli-options.
-     * @return        the started local node.
+     * @return        the started cluster node.
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
@@ -82,10 +82,19 @@ public class Crux {
     }
 
     /**
-     * Some interested javadocs. Also, this doesn't belong here at all.
+     * Starts a query node in local library mode using JDBC.
+     *
+     * Returns a ICruxAPI component that implements
+     * java.io.Closeable, which allows the node to be stopped by
+     * calling close.
+     *
+     * @param options see crux.jdbc
+     * @return        a cluster node backed by JDBC.
+     * @throws IndexVersionOutOfSyncException if the index needs
+     * rebuilding.
      */
     @SuppressWarnings("unchecked")
-    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
         IFn deref = Clojure.var("clojure.core", "deref");
         Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
