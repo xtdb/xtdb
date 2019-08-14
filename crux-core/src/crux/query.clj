@@ -1066,9 +1066,10 @@
                            (let [q (normalize-query (s/assert ::query q))]
                              (->ConformedQuery q (s/conform ::query q)))))]
     (if args
-      (-> conformed-query
-          (assoc-in [:q-normalized :args] args)
-          (assoc-in [:q-conformed :args] args))
+      (do (s/assert ::args args)
+          (-> conformed-query
+              (assoc-in [:q-normalized :args] args)
+              (assoc-in [:q-conformed :args] args)))
       conformed-query)))
 
 ;; TODO: Move future here to a bounded thread pool.
