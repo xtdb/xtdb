@@ -14,7 +14,8 @@
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
             [juxt.crux-lib.http-functions :as hf]
-            [juxt.crux-ui.frontend.better-printer :as bp]))
+            [juxt.crux-ui.frontend.better-printer :as bp]
+            [juxt.crux-lib.functions :as fns]))
 
 
 (defn calc-query [db ex-title]
@@ -44,7 +45,7 @@
 (defn o-commit-input [db input]
   (let [input    (:db.query/input db)
         edn      (qa/try-read-string input)
-        analysis (and (not (:error edn)) (qa/analyse-query edn))]
+        analysis (and (not (:error edn)) (qa/analyse-any-query edn))]
     (-> db
         (update :db.query/key inc)
         (assoc :db.query/input-committed input
@@ -53,14 +54,18 @@
 
 (defn calc-query-params
   [{:db.query/keys
-        [analysis-committed time
-         input-committed]
+    [analysis-committed time limit]
     :as db}]
-  (if analysis-committed
-    {:raw-input      input-committed
-     :query-vt       (:time/vt time)
-     :query-tt       (:time/tt time)
-     :query-analysis analysis-committed}))
+  (when analysis-committed
+    (let [normalized-query (:query/normalized-edn analysis-committed)
+          safeguarded-query
+          (if (:limit normalized-query)
+            normalized-query
+            (assoc normalized-query :limit limit))]
+      {:raw-input      safeguarded-query
+       :query-vt       (:time/vt time)
+       :query-tt       (:time/tt time)
+       :query-analysis analysis-committed})))
 
 
 ; ----- effects -----
