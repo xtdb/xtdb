@@ -24,7 +24,7 @@ public class Crux {
      * java.io.Closeable, which allows the node to be stopped by
      * calling close.
      *
-     * NOTE: requires any KV store dependencies and kafka-clients on
+     * NOTE: requires any KV store dependencies and crux-kafka on
      * the classpath. The crux.kv.memdb.MemKv KV backend works without
      * additional dependencies.
      *
@@ -106,7 +106,7 @@ public class Crux {
      * requires valid and transaction time to be specified for all
      * calls to {@link ICruxAPI#db()}.
      *
-     * NOTE: requires either clj-http or http-kit on the classpath,
+     * NOTE: requires crux-http-client on the classpath,
      * see crux.bootstrap.remove-api-client/*internal-http-request-fn*
      * for more information.
      *

@@ -291,7 +291,7 @@
    specified as keywords using their long format name, like
    :bootstrap-servers etc.
 
-   NOTE: requires any KV store dependencies and kafka-clients on
+   NOTE: requires any KV store dependencies and crux-kafka on
    the classpath. The crux.kv.memdb.MemKv KV backend works without
    additional dependencies.
 
@@ -361,9 +361,9 @@
   requires valid and transaction time to be specified for all
   calls to `db`.
 
-  NOTE: requires either clj-http or http-kit on the classpath,
-  see crux.bootstrap.remote-api-client/*internal-http-request-fn*
-  for more information.
+  NOTE: requires crux-http-client on the classpath, see
+  crux.bootstrap.remote-api-client/*internal-http-request-fn* for more
+  information.
 
   url the URL to a Crux HTTP end-point.
 
