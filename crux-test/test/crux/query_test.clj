@@ -1327,6 +1327,9 @@
                                      {:crux.db/id :ivan
                                       :name "Ivan 4th"}]])
               updated? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)]
+
+          ;; NOTE: adding tx log to failure message to help debug #321
+          ;; "Duplicate CAS failure".
           (t/is (true? updated?)
                 (when-not updated?
                   (with-open [tx-log-context (api/new-tx-log-context *api*)]
