@@ -17,7 +17,10 @@
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.199"]
-                 [com.opentable.components/otj-pg-embedded "0.13.1"]
+                 [com.opentable.components/otj-pg-embedded "0.13.1" :exclusions [org.slf4j/slf4j-api
+                                                                                 org.tukaani/xz
+                                                                                 com.github.spotbugs/spotbugs-annotations
+                                                                                 org.apache.commons/commons-lang3]]
                  [org.xerial/sqlite-jdbc "3.7.2"]
                  [mysql/mysql-connector-java "8.0.17"]
 
@@ -26,6 +29,7 @@
 
                  ;; General:
                  [org.clojure/test.check "0.10.0-alpha3"]
+                 [org.slf4j/slf4j-api "1.7.26"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  ;; Outer tests:
