@@ -15,12 +15,13 @@
 (defn root [{:keys [tabs on-tab-activate active-tab-id]}]
   [:div.tabs
    tabs-styles
-   (interpose
-     [:div.tabs__sep "/"]
-     (for [{:keys [id title] :as tab} tabs]
-       ^{:key id}
-       [:div.tabs__item
-        (if (= id active-tab-id)
-          {:class "tabs__item--active"}
-          {:on-click #(on-tab-activate id)})
-        title]))])
+   (butlast
+    (interleave
+      (for [{:keys [id title] :as tab} tabs]
+        ^{:key id}
+        [:div.tabs__item
+         (if (= id active-tab-id)
+           {:class "tabs__item--active"}
+           {:on-click #(on-tab-activate id)})
+         title])
+      (map (fn [i] ^{:key i} [:div.tabs__sep "/"]) (range))))])

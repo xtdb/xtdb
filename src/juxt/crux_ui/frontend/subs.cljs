@@ -33,6 +33,9 @@
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  {}))
 (rf/reg-sub :subs.query/time  #(:db.query/time % {}))
+(rf/reg-sub :subs.query/limit  #(:db.query/limit % 10000))
+(rf/reg-sub :subs.sys/host  #(:db.sys/host % nil))
+(rf/reg-sub :subs.sys.host/status  #(:db.sys.host/status % nil))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result (fnil :db.query/result {}))
@@ -50,6 +53,16 @@
   :subs.query/input-edn-committed
   :<- [:subs.query/input-committed]
   qa/try-read-string)
+
+(rf/reg-sub
+  :subs.sys/settings
+  :<- [:subs.sys/host]
+  :<- [:subs.sys.host/status]
+  :<- [:subs.query/limit]
+  (fn [[host status limit]]
+    {:db.sys/host host
+     :db.sys.host/status status
+     :db.query/limit limit}))
 
 (rf/reg-sub
   :subs.query/input-edn
