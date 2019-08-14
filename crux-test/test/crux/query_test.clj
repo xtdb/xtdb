@@ -1242,8 +1242,8 @@
 (t/deftest test-non-entity-id-lookup-issue-287
   (let [ivan {:crux.db/id :ivan :name "Ivan"}
         number-of-docs 500
-        id-slowdown-factor 1.5
-        entity-slowdown-factor 4
+        id-slowdown-factor 2
+        entity-slowdown-factor 5
         {tx-time :crux.tx/tx-time}
         (api/submit-tx *api* (vec (for [n (range number-of-docs)]
                                     [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
