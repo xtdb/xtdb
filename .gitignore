@@ -20,6 +20,9 @@ target
 /docs/nav.html
 /docs/img/diagram-classes.png
 /docs/.asciidoctor/
+/docs/example/standalone_webservice/data
+/docs/example/imdb/data
+/docs/example/imdb/dev-storage
 /dev/hraberg.clj
 
 crux-bench/data/**/*
