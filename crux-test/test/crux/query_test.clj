@@ -1241,7 +1241,6 @@
 ;; slowdown factors can be tweaked to force it to fail.
 (t/deftest test-non-entity-id-lookup-issue-287
   (let [ivan {:crux.db/id :ivan :name "Ivan"}
-        start-valid-time #inst "2019"
         number-of-docs 500
         id-slowdown-factor 1.5
         entity-slowdown-factor 4
