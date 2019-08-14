@@ -1250,16 +1250,16 @@
                                     [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
         _ (api/sync *api* tx-time nil)
         db (api/db *api*)
+        entity-time (let [start-time (System/nanoTime)]
+                      (t/testing "entity id lookup"
+                        (t/is (= :ivan-2 (:crux.db/id (api/entity db :ivan-2)))))
+                      (- (System/nanoTime) start-time))
         id-time (let [start-time (System/nanoTime)]
                   (t/testing "query based on primary key"
                     (t/is (= #{[:ivan-1]} (api/q db
                                                  '{:find [e]
                                                    :where [[e :crux.db/id :ivan-1]]}))))
                   (- (System/nanoTime) start-time))
-        entity-time (let [start-time (System/nanoTime)]
-                      (t/testing "entity id lookup"
-                        (t/is (= :ivan-2 (:crux.db/id (api/entity db :ivan-2)))))
-                      (- (System/nanoTime) start-time))
         secondary-time (let [start-time (System/nanoTime)]
                          (t/testing "query based on secondary attribute"
                            (t/is (= #{[:ivan-3]} (api/q db
