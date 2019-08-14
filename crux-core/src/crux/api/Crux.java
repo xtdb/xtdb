@@ -135,7 +135,7 @@ public class Crux {
      */
     @SuppressWarnings("unchecked")
     public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.bootstrap"));
-        return (ICruxAsyncIngestAPI) Clojure.var("crux.kafka.bootstrap/new-ingest-client").invoke(options);
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.kafka-ingest-client"));
+        return (ICruxAsyncIngestAPI) Clojure.var("crux.bootstrap.kafka-ingest-client/new-ingest-client").invoke(options);
     }
 }

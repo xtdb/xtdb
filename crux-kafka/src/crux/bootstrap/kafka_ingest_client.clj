@@ -1,4 +1,4 @@
-(ns crux.kafka.bootstrap
+(ns crux.bootstrap.kafka-ingest-client
   (:require [crux.bootstrap :as b]
             [crux.db :as db]
             [crux.kafka :as k])
