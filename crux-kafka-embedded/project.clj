@@ -15,4 +15,5 @@
                                org.apache.yetus/audience-annotations
                                org.slf4j/slf4j-log4j12
                                log4j]]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware])

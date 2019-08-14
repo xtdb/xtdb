@@ -11,4 +11,5 @@
                  [ring/ring-jetty-adapter "1.7.1"]
                  [ring/ring-codec "1.1.2"]
                  [ring-cors "0.1.13"]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware])

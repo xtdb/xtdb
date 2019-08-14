@@ -7,5 +7,6 @@
                  [org.clojure/tools.logging "0.4.1"]
                  [juxt/crux-core "derived-from-git"]
                  [org.apache.kafka/kafka-clients "2.3.0"]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"])

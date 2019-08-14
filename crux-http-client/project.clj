@@ -7,4 +7,5 @@
                  [clj-http "3.10.0"]
 
                  [juxt/crux-core "derived-from-git"]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware])
