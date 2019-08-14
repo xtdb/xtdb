@@ -27,18 +27,18 @@
                  ;; [com.oracle/ojdbc "12.2.0.1"]
 
                  ;; General:
-                 [org.clojure/test.check "0.10.0-alpha3"]
+                 [org.clojure/test.check "0.10.0"]
                  [org.slf4j/slf4j-api "1.7.26"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  ;; Outer tests:
-                 [org.eclipse.rdf4j/rdf4j-repository-sparql "2.5.1"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sparql "2.5.4"]
                  [criterium "0.4.5"]
 
                  ;; Watdiv:
                  [com.datomic/datomic-free "0.9.5697"
                   :exclusions [org.slf4j/slf4j-nop]]
-                 [org.neo4j/neo4j "3.5.5"
+                 [org.neo4j/neo4j "3.5.8"
                   :exclusions [com.github.ben-manes.caffeine/caffeine
                                com.github.luben/zstd-jni
                                io.netty/netty-all
@@ -47,8 +47,8 @@
                                org.ow2.asm/asm-tree
                                org.ow2.asm/asm-util]]
 
-                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.5.1"]
-                 [org.eclipse.rdf4j/rdf4j-repository-sail "2.5.1"
+                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.5.4"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sail "2.5.4"
                   :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
   :jvm-opts
   ["-server" "-Xmx8g"

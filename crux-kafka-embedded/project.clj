@@ -4,9 +4,7 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.1"]
-
                  [juxt/crux-core "derived-from-git"]
-
                  [org.apache.kafka/kafka_2.12 "2.3.0"]
                  [com.fasterxml.jackson.core/jackson-annotations "2.9.9"]
                  [org.apache.zookeeper/zookeeper "3.4.14"
