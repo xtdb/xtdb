@@ -54,10 +54,10 @@
   (on-error :crux.ui.query-type/tx err))
 
 
-(defn exec-q [query-text vt tt]
+(defn exec-q [query-edn vt tt]
   (-> @node-client
       (crux-api/db vt tt)
-      (crux-api/q query-text)
+      (crux-api/q query-edn)
       (p/then on-exec-success)
       (p/catch on-error--query)))
 

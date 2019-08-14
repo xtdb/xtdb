@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.logic.query-analysis
   (:require [medley.core :as m]
             [clojure.set :as cset]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [juxt.crux-lib.functions :as fns]))
 
 
 (defn calc-vector-headers [query-vector]
@@ -11,23 +12,12 @@
        (take-while #(not= (keyword? %)))))
 
 
-(defn analyze-full-results-headers [query-results-seq]
+(defn analyse-full-results-headers [query-results-seq]
   (let [res-count (count query-results-seq)
         sample (if (> res-count 50)
                  (random-sample (/ 50 res-count) query-results-seq)
                  query-results-seq)]
     (set (flatten (map (comp keys first) sample)))))
-
-(defn query-vec->map [qv]
-  (let [raw-map
-          (->> qv
-               (partition-by keyword?)
-               (partition 2)
-               (into {}))]
-    (-> raw-map
-        (update :find vec)
-        (m/update-existing :full-results? first)
-        (update :where vec))))
 
 (defn single-tx-vec->map [[type doc-id doc vt tt]]
   {:crux.ui/query-type :crux.ui.query-type/tx
@@ -68,8 +58,7 @@
   (nth coll 2 nil))
 
 (defn infer-symbol-attr-map
-  "Given a simple datalog query map returns a map symbol -> attribute
-  "
+  "Given a simple datalog query map returns a map symbol -> attribute"
   [qmap]
   (let [symbols-queried   (set (:find qmap))
         where-vec         (:where qmap)
@@ -89,8 +78,9 @@
     symbol->attr))
 
 
-(defn with-query-map-data [{:keys [full-results?] :as qmap}]
-  (let [s->a (infer-symbol-attr-map qmap)
+(defn analyse-query [input-edn]
+  (let [qmap (fns/normalize-query input-edn)
+        s->a (infer-symbol-attr-map qmap)
         a->s (cset/map-invert s->a)
         attr-seq (vals s->a)
         attr-set (set attr-seq)
@@ -100,17 +90,19 @@
     (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
                 :query/ids-queried? (attr-set :crux.db/id)
                 :query/symbol-positions symbol-positions
+                :query/original-edn input-edn
+                :query/normalized-edn qmap
                 :query/attr-set attr-set
                 :query/attr-vec (mapv s->a find-vec)
                 :query/attr-positions attr-positions
                 :query/pos->attr (cset/map-invert attr-positions)
                 :query/attributes s->a)))
 
-(defn analyse-query [input-edn]
+(defn analyse-any-query [input-edn]
   (cond
-    (query-vector? input-edn)     (with-query-map-data (query-vec->map input-edn))
+    (query-vector? input-edn)     (analyse-query input-edn)
     (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
-    (query-map? input-edn)        (with-query-map-data input-edn)
+    (query-map? input-edn)        (analyse-query input-edn)
     :else                         false))
 
 (defn- calc-numeric-keys [result-map]
