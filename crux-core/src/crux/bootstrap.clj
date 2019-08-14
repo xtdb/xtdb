@@ -183,7 +183,7 @@
                        (into dep-order))]
     dep-order))
 
-(defn- start-modules [node-system options]
+(defn start-modules [node-system options]
   (let [started (atom {})
         start-order (start-order node-system)
         started-modules (try

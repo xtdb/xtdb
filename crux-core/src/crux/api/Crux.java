@@ -108,4 +108,25 @@ public class Crux {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.remote-api-client"));
         return (ICruxAPI) Clojure.var("crux.bootstrap.remote-api-client/new-api-client").invoke(url);
     }
+
+    /**
+     * Starts an ingest client for transacting into Kafka without
+     * running a full local node with index.
+     *
+     * For valid options, see crux.bootstrap/cli-options. Options are
+     * specified as keywords using their long format name, like
+     * :bootstrap-servers etc.
+     *
+     * Returns a crux.api.ICruxAsyncIngestAPI component that
+     * implements java.io.Closeable, which allows the client to be
+     * stopped by calling close.
+     *
+     * @param options see crux.bootstrap/cli-options.
+     * @return        the started ingest client node.
+     */
+    @SuppressWarnings("unchecked")
+    public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.bootstrap"));
+        return (ICruxAsyncIngestAPI) Clojure.var("crux.kafka.bootstrap/new-ingest-client").invoke(options);
+    }
 }
