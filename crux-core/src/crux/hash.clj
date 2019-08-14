@@ -34,7 +34,7 @@
     (catch ClassNotFoundException e
       false)))
 
-(when-not (bound? #'id-hash)
+(defn id-hash [to buffer]
   (if (and (= "SHA1" id-hash-algorithm)
            byte-utils-sha1-enabled?)
     (do (log/info "Using ByteUtils/sha1 for ID hashing.")
@@ -53,4 +53,5 @@
         (do (log/info "Using libgcrypt for ID hashing.")
             (def id-hash gcrypt-id-hash-buffer))
         (do (log/info "Using java.security.MessageDigest for ID hashing.")
-            (def id-hash message-digest-id-hash-buffer))))))
+            (def id-hash message-digest-id-hash-buffer)))))
+  (id-hash to buffer))
