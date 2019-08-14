@@ -2,7 +2,6 @@
   :dependencies
     [[org.clojure/clojure         "1.10.0"]
      [org.clojure/clojurescript   "1.10.520"]
-     [cljs.bean                   "1.3.0"]
      [reagent                     "0.8.1"]
      [garden                      "1.3.9"]
      [re-frame                    "0.10.8"]

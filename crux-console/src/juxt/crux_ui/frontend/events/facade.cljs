@@ -71,10 +71,19 @@
     (if query
       (q/exec query))))
 
+(defn qs [_]
+  (q/fetch-stats))
+
+(rf/reg-fx :fx/query-stats qs)
+
+
 (rf/reg-fx
-  :fx/query-stats
-  (fn [_]
-    (q/fetch-stats)))
+  :fx/set-node
+  (fn [node-addr]
+    (when node-addr
+      (q/set-node! (str "http://" node-addr))
+      (q/ping-status)
+      (q/fetch-stats))))
 
 (rf/reg-fx
   :fx.query/history
@@ -115,8 +124,8 @@
 (rf/reg-event-fx
   :evt.db/init
   (fn [_ [_ db]]
-    {:db             db
-     :fx/query-stats nil}))
+    {:db          db
+     :fx/set-node (:db.sys/host db)}))
 
 
 ; queries
@@ -125,6 +134,11 @@
   :evt.io/stats-success
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
+
+(rf/reg-event-db
+  :evt.io/status-success
+  (fn [db [_ status]]
+    (assoc db :db.sys.host/status status)))
 
 
 
@@ -158,7 +172,6 @@
           db     (assoc db :db.query/result res
                            :db.query/error nil
                            :db.query/result-analysis res-analysis)]
-
       (ctx-autoload-history {:db db}))))
 
 (rf/reg-event-fx
@@ -170,6 +183,24 @@
   :evt.io/query-error
   (fn [db [_ {:evt/keys [query-type error] :as evt}]]
     (assoc db :db.query/error evt)))
+
+(rf/reg-event-db
+  :evt.db/prop-change
+  (fn [db [_ {:evt/keys [prop-name value] :as evt}]]
+    (assoc db prop-name value)))
+
+(defn db-set-host [db new-host]
+  (assoc db
+    :db.sys/host new-host
+    :db.sys.host/status nil))
+
+(rf/reg-event-fx
+  :evt.db/host-change
+  (fn [{:keys [db] :as ctx} [_ new-host]]
+    (println :evt.db/host-change new-host)
+    (let [db (db-set-host db new-host)]
+      {:db db
+       :fx/set-node new-host})))
 
 (rf/reg-event-fx
   :evt.io/gist-success
