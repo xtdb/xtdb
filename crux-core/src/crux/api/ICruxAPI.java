@@ -10,7 +10,7 @@ import clojure.lang.Keyword;
 /**
  *  Provides API access to Crux.
  */
-public interface ICruxAPI extends Closeable {
+public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     /**
      * Returns a db as of now. Will return the latest consistent
      * snapshot of the db currently known. Does not block.
@@ -88,14 +88,6 @@ public interface ICruxAPI extends Closeable {
     // todo elaborate
 
     /**
-     * Writes transactions to the log for processing.
-     *
-     * @param txOps the transactions to be processed.
-     * @return      a map with details about the submitted transaction.
-     */
-    public Map<Keyword,?> submitTx(List<List<?>> txOps);
-
-    /**
      * Checks if a submitted tx did update an entity.
      *
      * @param submittedTx must be a map returned from {@link
@@ -140,29 +132,6 @@ public interface ICruxAPI extends Closeable {
      * @return        the latest known transaction time.
      */
     public Date sync(Date transactionTime, Duration timeout);
-
-    /**
-     * Returns a new transaction log context allowing for lazy reading
-     * of the transaction log in a try-with-resources block using
-     * {@link #txLog(Closeable txLogContext, Long fromTxId, boolean
-     * withDocuments)}.
-     *
-     * @return an implementation specific context.
-     */
-    public Closeable newTxLogContext();
-
-    /**
-     * Reads the transaction log lazily. Optionally includes
-     * documents, which allow the contents under the :crux.api/tx-ops
-     * key to be piped into {@link #submitTx(List txOps)} of another
-     * Crux instance.
-     *
-     * @param txLogContext     a context from {@link #newTxLogContext()}.
-     * @param fromTxId         optional transaction id to start from.
-     * @param withDocuments    should the documents be included?
-     * @return                 a lazy sequence of the transaction log.
-     */
-    public Iterable<List<?>> txLog(Closeable txLogContext, Long fromTxId, boolean withDocuments);
 
     /**
      * Return frequencies of indexed attributes.
