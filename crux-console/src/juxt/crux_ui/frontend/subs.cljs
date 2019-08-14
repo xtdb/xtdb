@@ -101,7 +101,7 @@
     (cond
       (not input-edn) nil
       (:error input-edn) nil
-      :else (qa/analyse-query input-edn))))
+      :else (qa/analyse-any-query input-edn))))
 
 (rf/reg-sub
   :subs.query/headers
@@ -110,7 +110,7 @@
   (fn [[q-res q-info]]
     (when q-info
       (if (:full-results? q-info)
-         (qa/analyze-full-results-headers q-res)
+         (qa/analyse-full-results-headers q-res)
          (:find q-info)))))
 
 (rf/reg-sub
