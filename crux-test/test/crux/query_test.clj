@@ -1325,9 +1325,14 @@
                                      {:crux.db/id :ivan
                                       :name "Ivan 2nd"}
                                      {:crux.db/id :ivan
-                                      :name "Ivan 4th"}]])]
-
-          (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
+                                      :name "Ivan 4th"}]])
+              updated? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)]
+          (t/is (true? updated?)
+                (when-not updated?
+                  (with-open [tx-log-context (api/new-tx-log-context *api*)]
+                    (with-out-str
+                      (doseq [tx (api/tx-log *api* tx-log-context nil true)]
+                        (prn tx))))))
           (t/is (= #{["Ivan 4th"]} (api/q (api/db *api* tx-time
                                                   tx-time) '{:find [n]
                                                   :where [[:ivan :name n]]})))))
