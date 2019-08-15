@@ -13,6 +13,7 @@
   <logger name="crux.hash" level="WARN" />
   <logger name="crux.http-server" level="WARN" />
   <logger name="crux.kafka" level="WARN" />
+  <logger name="crux.jdbc" level="WARN" />
   <logger name="crux.kv.memdb" level="ERROR" />
   <logger name="crux.rdf" level="ERROR" />
   <logger name="crux.tx" level="WARN" />
