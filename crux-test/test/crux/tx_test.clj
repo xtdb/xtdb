@@ -510,4 +510,18 @@
                                                                                              :age
                                                                                              dec]}]])
                 (t/is (nil? (latest-exception)))
-                (t/is (= v3-ivan (api/entity (api/db *api*) :ivan)))))))))))
+                (t/is (= v3-ivan (api/entity (api/db *api*) :ivan)))))
+
+            (t/testing "function ops can return other function ops"
+              (let [v4-ivan (assoc v1-ivan :name "IVAN")
+                    returns-fn {:crux.db/id :returns-fn
+                                :crux.db.fn/body
+                                '(fn [db]
+                                   '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :upcase-ivans-name
+                                                                        :crux.db.fn/args [:ivan
+                                                                                          :name
+                                                                                          clojure.string/upper-case]}]])}]
+                (sync-submit-tx *api* [[:crux.tx/put returns-fn]])
+                (sync-submit-tx *api* [[:crux.tx/fn :returns-fn]])
+                (t/is (nil? (latest-exception)))
+                (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))))))))

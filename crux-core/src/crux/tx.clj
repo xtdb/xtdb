@@ -126,9 +126,18 @@
         {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
         args-id (:crux.db/id args-doc)
         fn-result (try
-                    (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))]
-                      {:docs (tx-ops->docs tx-ops)
-                       :ops-result (vec (for [[op :as tx-op]  (tx-ops->tx-events tx-ops)]
+                    (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
+                          docs (tx-ops->docs tx-ops)
+                          {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
+                      ;; TODO: might lead to orphaned and unevictable
+                      ;; argument docs if the transaction fails. As
+                      ;; these nested docs never go to the doc topic,
+                      ;; it's slightly less of an issue. It's done
+                      ;; this way to support nested fns.
+                      (doseq [arg-doc arg-docs]
+                        (db/index-doc indexer (c/new-id arg-doc) arg-doc))
+                      {:docs (vec docs)
+                       :ops-result (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
                                           ((get tx-op->command op tx-command-unknown)
                                            indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
                     (catch Throwable t
@@ -138,9 +147,8 @@
                         (log-tx-fn-error fn-result fn-id body args-id args)
                         false)}
       (let [{:keys [docs ops-result]} fn-result]
-        {:pre-commit-fn #(do (doseq [doc docs
-                                     :let [content-hash (c/new-id doc)]]
-                               (db/index-doc indexer content-hash doc ))
+        {:pre-commit-fn #(do (doseq [doc docs]
+                               (db/index-doc indexer (c/new-id doc) doc))
                              (every? true? (for [{:keys [pre-commit-fn]} ops-result
                                                  :when pre-commit-fn]
                                              (pre-commit-fn))))
@@ -165,7 +173,7 @@
                             (post-commit-fn))}))))
 
 (defn tx-command-unknown [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
-  (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
+  (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
 
 (def ^:private tx-op->command
   {:crux.tx/put tx-command-put
