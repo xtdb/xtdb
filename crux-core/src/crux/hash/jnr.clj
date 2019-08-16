@@ -13,6 +13,11 @@
 ;; off heap before hashing it, so we don't gain the potential speed up
 ;; from using this. The target is always off heap.
 
+(def ^ThreadLocal buffer-tl (ThreadLocal/withInitial
+                             (reify Supplier
+                               (get [_]
+                                 (ExpandableDirectByteBuffer.)))))
+
 ;; Uses libgcrypt to do the SHA1 native, can be 30% faster than
 ;; MessageDigest, but not necessarily with sane realistic allocation
 ;; patterns, might be easier to integrate once everything is in
@@ -23,12 +28,12 @@
 ;; https://www.gnupg.org/documentation/manuals/gcrypt/Hashing.html#Hashing
 ;; https://ubuntuforums.org/archive/index.php/t-337664.html
 
-(def ^ThreadLocal buffer-tl (ThreadLocal/withInitial
-                             (reify Supplier
-                               (get [_]
-                                 (ExpandableDirectByteBuffer.)))))
+;; Not properly initialised, requires varargs for gcry_control:
+;; https://www.gnupg.org/documentation/manuals/gcrypt/Initializing-the-library.html#Initializing-the-library
+;; https://github.com/gpg/libgcrypt/blob/master/src/gcrypt.h.in
 
 (definterface GCrypt
+  (^String gcry_check_version [^String req-version])
   (^int gcry_md_map_name [^String name])
   (^int gcry_md_get_algo_dlen [^int algo])
   (^void gcry_md_hash_buffer [^int algo
@@ -40,6 +45,7 @@
   (try
     (let [^GCrypt gcrypt (.load (LibraryLoader/create GCrypt) "gcrypt")
           gcrypt-rt (jnr.ffi.Runtime/getRuntime gcrypt)
+          _ (.gcry_check_version gcrypt nil)
           gcrypt-hash-algo (.gcry_md_map_name gcrypt hash/id-hash-algorithm)]
       (if (zero? gcrypt-hash-algo)
         (log/warn "libgcrypt does not support algorithm: " hash/id-hash-algorithm)
