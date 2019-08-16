@@ -444,8 +444,9 @@
                             e)
         rethrow-latest-exception (fn []
                                    (throw (latest-exception)))]
-    (with-redefs [crux.tx/log-tx-fn-error (fn [t & args]
-                                            (reset! exception t))]
+    (with-redefs [tx/tx-fns-enabled? true
+                  tx/log-tx-fn-error (fn [t & args]
+                                       (reset! exception t))]
       (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
             update-attribute-fn {:crux.db/id :update-attribute-fn
                                  :crux.db.fn/body

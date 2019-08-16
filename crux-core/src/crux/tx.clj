@@ -117,60 +117,64 @@
 (def ^:private tx-fn-eval-cache (memoize eval))
 
 (defn log-tx-fn-error [fn-result fn-id body args-id args]
-  (log/warn fn-result "TX Fn failure:" fn-id (pr-str body) args-id (pr-str args)))
+  (log/warn fn-result "Transaction function failure:" fn-id (pr-str body) args-id (pr-str args)))
 
-(defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v] transact-time tx-id]
-  (let [fn-id (c/new-id k)
-        db (q/db kv)
-        {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
-        {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
-        args-id (:crux.db/id args-doc)
-        fn-result (try
-                    (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
-                          docs (tx-ops->docs tx-ops)
-                          {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
-                      ;; TODO: might lead to orphaned and unevictable
-                      ;; argument docs if the transaction fails. As
-                      ;; these nested docs never go to the doc topic,
-                      ;; it's slightly less of an issue. It's done
-                      ;; this way to support nested fns.
-                      (doseq [arg-doc arg-docs]
-                        (db/index-doc indexer (c/new-id arg-doc) arg-doc))
-                      {:docs (vec docs)
-                       :ops-result (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
-                                          ((get tx-op->command op tx-command-unknown)
-                                           indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
-                    (catch Throwable t
-                      t))]
-    (if (instance? Throwable fn-result)
-      {:pre-commit-fn (fn []
-                        (log-tx-fn-error fn-result fn-id body args-id args)
-                        false)}
-      (let [{:keys [docs ops-result]} fn-result]
-        {:pre-commit-fn #(do (doseq [doc docs]
-                               (db/index-doc indexer (c/new-id doc) doc))
-                             (every? true? (for [{:keys [pre-commit-fn]} ops-result
-                                                 :when pre-commit-fn]
-                                             (pre-commit-fn))))
-         :kvs (vec (apply concat
-                          (when args-doc
-                            [[(c/encode-entity+vt+tt+tx-id-key-to
-                               nil
-                               (c/->id-buffer args-id)
-                               transact-time
-                               transact-time
-                               tx-id)
-                              (c/->id-buffer args-v)]
-                             [(c/encode-entity+z+tx-id-key-to
-                               nil
-                               (c/->id-buffer args-id)
-                               (c/encode-entity-tx-z-number transact-time transact-time)
-                               tx-id)
-                              (c/->id-buffer args-v)]])
-                          (map :kvs ops-result)))
-         :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
-                                  :when post-commit-fn]
-                            (post-commit-fn))}))))
+(def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
+
+(defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v :as tx-op] transact-time tx-id]
+  (if-not tx-fns-enabled?
+    (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (pr-str tx-op))))
+    (let [fn-id (c/new-id k)
+          db (q/db kv)
+          {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
+          {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
+          args-id (:crux.db/id args-doc)
+          fn-result (try
+                      (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
+                            docs (tx-ops->docs tx-ops)
+                            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
+                        ;; TODO: might lead to orphaned and unevictable
+                        ;; argument docs if the transaction fails. As
+                        ;; these nested docs never go to the doc topic,
+                        ;; it's slightly less of an issue. It's done
+                        ;; this way to support nested fns.
+                        (doseq [arg-doc arg-docs]
+                          (db/index-doc indexer (c/new-id arg-doc) arg-doc))
+                        {:docs (vec docs)
+                         :ops-result (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
+                                            ((get tx-op->command op tx-command-unknown)
+                                             indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
+                      (catch Throwable t
+                        t))]
+      (if (instance? Throwable fn-result)
+        {:pre-commit-fn (fn []
+                          (log-tx-fn-error fn-result fn-id body args-id args)
+                          false)}
+        (let [{:keys [docs ops-result]} fn-result]
+          {:pre-commit-fn #(do (doseq [doc docs]
+                                 (db/index-doc indexer (c/new-id doc) doc))
+                               (every? true? (for [{:keys [pre-commit-fn]} ops-result
+                                                   :when pre-commit-fn]
+                                               (pre-commit-fn))))
+           :kvs (vec (apply concat
+                            (when args-doc
+                              [[(c/encode-entity+vt+tt+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-id)
+                                 transact-time
+                                 transact-time
+                                 tx-id)
+                                (c/->id-buffer args-v)]
+                               [(c/encode-entity+z+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-id)
+                                 (c/encode-entity-tx-z-number transact-time transact-time)
+                                 tx-id)
+                                (c/->id-buffer args-v)]])
+                            (map :kvs ops-result)))
+           :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
+                                    :when post-commit-fn]
+                              (post-commit-fn))})))))
 
 (defn tx-command-unknown [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
