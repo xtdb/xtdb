@@ -122,8 +122,10 @@
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
-        (doseq [[content-hash doc] content-hash->doc]
-          (db/submit-doc this (str content-hash) doc))
+        (doseq [f (->> (for [[content-hash doc] content-hash->doc]
+                         (db/submit-doc this (str content-hash) doc))
+                       (doall))]
+          @f)
         (.flush producer)
         (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
                                     (-> (.headers) (.add (str :crux.tx/docs)
