@@ -9,7 +9,7 @@
   [:style
    (garden/css
      [:.tx-history
-      {}])])
+      {:height :100%}])])
 
 (def tx-layout
   {:title "Queried entities transactions"
@@ -18,6 +18,7 @@
 
 (defn root []
   [:div.tx-history
-    (if-let [tx-history @-sub-tx-history]
-      [charts/plotly-wrapper tx-history tx-layout]
-      "No data to display, try to run a query")])
+   root-styles
+   (if-let [tx-history @-sub-tx-history]
+     [charts/plotly-wrapper tx-history tx-layout]
+     "No data to display, try to run a query")])
