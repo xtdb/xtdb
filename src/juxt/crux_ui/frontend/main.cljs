@@ -3,7 +3,8 @@
             [juxt.crux-ui.frontend.subs]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.facade :as views]
-            [juxt.crux-ui.frontend.events.facade :as events]
+            [juxt.crux-ui.frontend.events.facade]
+            [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.events.default-db :as d]
             [clojure.string :as s]))
 
@@ -30,6 +31,7 @@
 (defn init []
   (js/window.addEventListener "keydown" listen-keyboard-shortcuts)
   (rf/dispatch-sync [:evt.db/init d/default-db])
+  (routes/init)
   (lookup-gist)
   (mount-root))
 
