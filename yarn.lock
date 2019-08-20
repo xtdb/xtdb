@@ -1617,10 +1617,10 @@ gl-plot2d@^1.4.2:
     glslify "^7.0.0"
     text-cache "^4.2.1"
 
-gl-plot3d@^2.2.1:
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/gl-plot3d/-/gl-plot3d-2.2.1.tgz#36d802f6821c7d9c6a0968c7c7d056b6ab54227c"
-  integrity sha512-WSzZ9118mUal3uW/9bCPqdrlncmD/T0zWoOY9PiskIOAJ5dxKhzPbY2XkjDs+jGh/ce1yCSEh6LO9aB9SirGow==
+gl-plot3d@^2.2.2:
+  version "2.2.2"
+  resolved "https://registry.yarnpkg.com/gl-plot3d/-/gl-plot3d-2.2.2.tgz#4c84b53278801d0d8a2ccb4a5c8dfd2a5134b31c"
+  integrity sha512-is8RoDVUEbUM7kJ2qjhKJlfGLECH3ML9pTCW1V7ylUdmUACmcZ4lzJrQr/NIRkHC5WcUNOp3QJKPjBND3ngZ2A==
   dependencies:
     "3d-view" "^2.0.0"
     a-big-triangle "^1.0.3"
@@ -1629,10 +1629,10 @@ gl-plot3d@^2.2.1:
     gl-mat4 "^1.2.0"
     gl-select-static "^2.0.4"
     gl-shader "^4.2.1"
-    gl-spikes3d "^1.0.8"
+    gl-spikes3d "^1.0.9"
     glslify "^7.0.0"
     has-passive-events "^1.0.0"
-    is-mobile "^2.0.0"
+    is-mobile "^2.1.0"
     mouse-change "^1.4.0"
     mouse-event-offset "^3.0.2"
     mouse-wheel "^1.2.0"
@@ -1658,10 +1658,10 @@ gl-quat@^1.0.0:
     gl-vec3 "^1.0.3"
     gl-vec4 "^1.0.0"
 
-gl-scatter3d@^1.2.1:
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/gl-scatter3d/-/gl-scatter3d-1.2.1.tgz#149950900ad3002364e40925f0df0c7347662240"
-  integrity sha512-bGeCkqWOvjE+CM6eJGapTfZcVAjAVdUoi3LjRtvnVmpaTBeMF+HWG5mTa1pWKHu+DNEosH3Yjr52wNenYHMUdg==
+gl-scatter3d@^1.2.2:
+  version "1.2.2"
+  resolved "https://registry.yarnpkg.com/gl-scatter3d/-/gl-scatter3d-1.2.2.tgz#9a4d4d096b5ed3537588ccf9744afd4f8591e7ed"
+  integrity sha512-oZh3WQ0bVXnpASpZmYmiEp7eUiD0oU6J4G5C9KUOhUo5d2gucvZEILAtfWmzCT3zsOltoROn4jGuuP2tlLN88Q==
   dependencies:
     gl-buffer "^2.0.6"
     gl-mat4 "^1.0.0"
@@ -1706,7 +1706,7 @@ gl-spikes2d@^1.0.2:
   resolved "https://registry.yarnpkg.com/gl-spikes2d/-/gl-spikes2d-1.0.2.tgz#ef8dbcff6c7451dec2b751d7a3c593d09ad5457f"
   integrity sha512-QVeOZsi9nQuJJl7NB3132CCv5KA10BWxAY2QgJNsKqbLsG53B/TrGJpjIAohnJftdZ4fT6b3ZojWgeaXk8bOOA==
 
-gl-spikes3d@^1.0.8:
+gl-spikes3d@^1.0.9:
   version "1.0.9"
   resolved "https://registry.yarnpkg.com/gl-spikes3d/-/gl-spikes3d-1.0.9.tgz#9c3967ec3c8bcbe2e376ebf3357c7c26990fe736"
   integrity sha512-laMxydgGdnE8kvd1YD9cNWrx0uSmrPj1Oi02cHhnxWIklut97w3F7mZKnmLMEyUkxpRLkEeQ7YkYy7Y+aUEblw==
@@ -2199,7 +2199,7 @@ is-iexplorer@^1.0.0:
   resolved "https://registry.yarnpkg.com/is-iexplorer/-/is-iexplorer-1.0.0.tgz#1d72bc66d3fe22eaf6170dda8cf10943248cfc76"
   integrity sha1-HXK8ZtP+Iur2Fw3ajPEJQySM/HY=
 
-is-mobile@^2.0.0:
+is-mobile@^2.1.0:
   version "2.1.0"
   resolved "https://registry.yarnpkg.com/is-mobile/-/is-mobile-2.1.0.tgz#4c0cab72f3358dd9986007389b30729fae80da0b"
   integrity sha512-M5OhlZwh+aTlmRUvDg0Wq3uWVNa+w4DyZ2SjbrS+BhSLu9Po+JXHendC305ZEu+Hh7lywb19Zu4kYXu3L1Oo8A==
@@ -2337,10 +2337,10 @@ map-limit@0.0.1:
   dependencies:
     once "~1.3.0"
 
-mapbox-gl@^1.1.1:
-  version "1.2.0"
-  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-1.2.0.tgz#2bb281dfe20cf8fcf66486d46fb6a8607355633a"
-  integrity sha512-RDo0kMuo9gs6HFX2Maj+tYO5bUT6WFTQkFbJoKdfe2pK8SY/RgyG3SNJRgZypdBR8loxGCG9geeOwc+JJqblHQ==
+mapbox-gl@1.1.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/mapbox-gl/-/mapbox-gl-1.1.1.tgz#b8e8e1dfa34edd92a7b834887831dbd1761550b8"
+  integrity sha512-i57kASg8J/U/lJzBePyqTP2ImKUcx8FkHyCjb3ssWYaBBXHUeZ4STGXXfU9u1AQU9170PjDIJLubUUB1vLLSBQ==
   dependencies:
     "@mapbox/geojson-rewind" "^0.4.0"
     "@mapbox/geojson-types" "^1.0.2"
@@ -2881,10 +2881,10 @@ planar-graph-to-polyline@^1.0.0:
     two-product "^1.0.0"
     uniq "^1.0.0"
 
-plotly.js@^1.49.0:
-  version "1.49.0"
-  resolved "https://registry.yarnpkg.com/plotly.js/-/plotly.js-1.49.0.tgz#6a160c39f539dca7d523fd0c4c01ef477a18c34e"
-  integrity sha512-zKM4AwLVfqeqRDn3Y+7DzNHdV7svJYD4j8M6mwFN5UGEq7WhEgmGexu3E5Xw12sNWwQ/adeemlAIo+4zkGUORA==
+plotly.js@^1.49.3:
+  version "1.49.3"
+  resolved "https://registry.yarnpkg.com/plotly.js/-/plotly.js-1.49.3.tgz#36ad965922eceb30fb0737cdcbb6ff1e0ac9673c"
+  integrity sha512-NoIgk3NFyKlEk9Psqe+p1Hkp7BuZY24YVVQM6aS4ZVx0qED+3zD4AkRG8Egxgx5ZD5qq1zqt6Ca4PfrqVRwt/Q==
   dependencies:
     "@plotly/d3-sankey" "0.7.2"
     "@plotly/d3-sankey-circular" "0.33.1"
@@ -2910,9 +2910,9 @@ plotly.js@^1.49.0:
     gl-mat4 "^1.2.0"
     gl-mesh3d "^2.1.1"
     gl-plot2d "^1.4.2"
-    gl-plot3d "^2.2.1"
+    gl-plot3d "^2.2.2"
     gl-pointcloud2d "^1.0.2"
-    gl-scatter3d "^1.2.1"
+    gl-scatter3d "^1.2.2"
     gl-select-box "^1.0.3"
     gl-spikes2d "^1.0.2"
     gl-streamtube3d "^1.2.1"
@@ -2921,7 +2921,7 @@ plotly.js@^1.49.0:
     glslify "^7.0.0"
     has-hover "^1.0.1"
     has-passive-events "^1.0.0"
-    mapbox-gl "^1.1.1"
+    mapbox-gl "1.1.1"
     matrix-camera-controller "^2.1.3"
     mouse-change "^1.4.0"
     mouse-event-offset "^3.0.2"

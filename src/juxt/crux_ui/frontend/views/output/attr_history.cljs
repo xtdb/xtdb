@@ -9,7 +9,7 @@
   [:style
    (garden/css
      [:.attr-history
-      {}])])
+      {:height :100%}])])
 
 (defn attr-layout [attr]
   {:title (str (pr-str attr) " over time")
@@ -18,6 +18,7 @@
 
 (defn root []
   [:div.attr-history
+   root-styles
    (let [{:keys [traces attribute] :as p-data} @-sub-plotly-data]
      (if p-data
        [charts/plotly-wrapper traces (attr-layout attribute)]
