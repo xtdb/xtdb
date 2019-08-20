@@ -128,9 +128,14 @@
 ; node and lifecycle
 (rf/reg-event-fx
   :evt.db/init
-  (fn [_ [_ db]]
-    {:db          db
-     :fx/set-node (:db.sys/host db)}))
+  (fn [{:keys [db]} [_ new-db]]
+    {:db          new-db
+     :fx/set-node (:db.sys/host new-db)}))
+
+(rf/reg-event-fx
+  :evt.sys/set-route
+  (fn [{:keys [db]} [_ route]]
+    {:db (assoc db :db.sys/route route)}))
 
 
 ; queries
