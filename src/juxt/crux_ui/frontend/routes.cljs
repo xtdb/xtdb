@@ -1,6 +1,8 @@
 (ns juxt.crux-ui.frontend.routes
   (:require [bidi.bidi :as bidi]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.logging :as log]
+            [juxt.crux-ui.frontend.views.commons.dom :as dom]))
 
 (def routes
   ["/console"
@@ -12,7 +14,7 @@
 
     ["/example/" :rd/example-id] :rd/query-ui}])
 
-(def match (partial bidi/match-route routes))
+(def match-route (partial bidi/match-route routes))
 (def path-for (partial bidi/path-for routes))
 
 (comment
@@ -22,6 +24,26 @@
   (bidi/match-route routes "/console/example/network")
   (bidi/path-for routes :rd/settings))
 
+(defn- on-pop-state [evt]
+  (log/log :on-pop-state evt)
+  (let [route-data (match-route js/location.pathname)]
+    (rf/dispatch [:evt.sys/set-route route-data])))
+
+(defn- on-link-clicks [click-evt]
+  (let [target (dom/jsget click-evt "target")
+        tagname (dom/jsget target "tagName")
+        href (dom/jsget target "href")
+        url (js/URL. href)
+        pathname (dom/jsget url "pathname")
+        rd (and pathname (match-route pathname))]
+    (log/log :click-evt click-evt tagname href)
+    (when (and (= "A" tagname) rd)
+      (.preventDefault click-evt)
+      (js/history.pushState nil "Console" href)
+      (rf/dispatch [:evt.sys/set-route rd]))))
+
 (defn init []
-  (let [route-data (match js/location.pathname)]
+  (js/window.addEventListener "popstate" on-pop-state false)
+  (js/window.addEventListener "click" on-link-clicks true)
+  (let [route-data (match-route js/location.pathname)]
     (rf/dispatch [:evt.sys/set-route route-data])))
