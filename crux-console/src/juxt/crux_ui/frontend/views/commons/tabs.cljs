@@ -17,11 +17,12 @@
    tabs-styles
    (butlast
     (interleave
-      (for [{:keys [id title] :as tab} tabs]
+      (for [{:keys [id title href] :as tab} tabs]
         ^{:key id}
-        [:div.tabs__item
-         (if (= id active-tab-id)
-           {:class "tabs__item--active"}
-           {:on-click #(on-tab-activate id)})
+        [:a.tabs__item.g-nolink
+         {:href href}
+         #_(if (= id active-tab-id)
+             {:class "tabs__item--active"}
+             {:on-click #(on-tab-activate id)})
          title])
       (map (fn [i] ^{:key i} [:div.tabs__sep "/"]) (range))))])
