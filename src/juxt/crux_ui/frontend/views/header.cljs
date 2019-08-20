@@ -2,7 +2,8 @@
   (:require [garden.core :as garden]
             [garden.stylesheet :as gs]
             [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.routes :as routes]))
 
 (def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
 
@@ -43,12 +44,14 @@
    [:div.header__tabs
      [tabs/root
       {:on-tab-activate on-tab-activate
-       :active-tab-id @-tab-sub
+       :active-tab-id   @-tab-sub
        :tabs
-        [{:id :db.ui.root-tab/query-ui
-          :title "Query UI"}
-         {:id :db.ui.root-tab/settings
-          :title "Settings"}]}]]
+                        [{:id    :db.ui.root-tab/query-ui
+                          :href  (routes/path-for :rd/query-ui)
+                          :title "Query UI"}
+                         {:id    :db.ui.root-tab/settings
+                          :href  (routes/path-for :rd/settings)
+                          :title "Settings"}]}]]
 
    [:div.header__links
     [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}
