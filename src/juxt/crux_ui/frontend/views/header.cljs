@@ -32,9 +32,6 @@
        [:&__links
         {:display :none}]]))])
 
-(defn on-tab-activate [tab-id]
-  (rf/dispatch [:evt.ui/root-tab-switch tab-id]))
-
 (defn root []
   [:header.header
    header-styles
@@ -43,8 +40,7 @@
                  [:img.logo-img {:width 200 :src "/static/img/console-logo.svg"}]]]]
    [:div.header__tabs
      [tabs/root
-      {:on-tab-activate on-tab-activate
-       :active-tab-id   @-tab-sub
+      {:active-tab-id   @-tab-sub
        :tabs
                         [{:id    :db.ui.root-tab/query-ui
                           :href  (routes/path-for :rd/query-ui)
