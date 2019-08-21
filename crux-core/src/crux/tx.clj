@@ -161,7 +161,8 @@
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
                 (post-commit-fn)))
-          (log/warn "Transaction aborted:" (pr-str tx-ops) (pr-str tx-time) tx-id)))))
+          (do (log/warn "Transaction aborted:" (pr-str tx-ops) (pr-str tx-time) tx-id)
+              (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))))))
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]

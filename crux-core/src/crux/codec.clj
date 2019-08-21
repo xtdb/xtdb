@@ -52,8 +52,9 @@
 ; for crux own needs
 (def ^:const ^:private meta-key->value-index-id 4)
 
-; for internal (tx-log used for testing)
-(def ^:const ^:private tx-id->tx-index-id 5)
+; Repurpose old id from internal tx-log used for testing for failed tx
+; ids.
+(def ^:const ^:private failed-tx-id-index-id 5)
 
 ; to allow crux upgrades. rebuild indexes from kafka on backward incompatible
 (def ^:const ^:private index-version-index-id 6)
@@ -645,26 +646,21 @@
      :crux.tx/tx-time (.tt entity-tx)
      :crux.tx/tx-id (.tx-id entity-tx)}))
 
-(defn encode-tx-log-key-to
+(defn encode-failed-tx-id-key-to
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
-   (encode-tx-log-key-to b nil nil))
+   (encode-failed-tx-id-key-to b nil))
   (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b tx-id]
-   (encode-tx-log-key-to b tx-id nil))
-  (^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^Long tx-id ^Date tx-time]
-   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size (maybe-long-size tx-id) (maybe-long-size tx-time))))]
-     (.putByte b 0 tx-id->tx-index-id)
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ index-id-size (maybe-long-size tx-id))))]
+     (.putByte b 0 failed-tx-id-index-id)
      (when tx-id
        (.putLong b index-id-size tx-id ByteOrder/BIG_ENDIAN))
-     (when tx-time
-       (.putLong b (+ index-id-size Long/BYTES) (.getTime tx-time) ByteOrder/BIG_ENDIAN))
-     (mem/limit-buffer b (+ index-id-size (maybe-long-size tx-id) (maybe-long-size tx-time))))))
+     (mem/limit-buffer b (+ index-id-size (maybe-long-size tx-id))))))
 
-(defn decode-tx-log-key-from [^DirectBuffer k]
-  (assert (= (+ index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
+(defn decode-failed-tx-id-key-from [^DirectBuffer k]
+  (assert (= (+ index-id-size Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (let [index-id (.getByte k 0)]
-    (assert (= tx-id->tx-index-id index-id))
-    {:crux.tx/tx-id (.getLong k index-id-size ByteOrder/BIG_ENDIAN)
-     :crux.tx/tx-time (Date. (.getLong k (+ index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))}))
+    (assert (= failed-tx-id-index-id index-id))
+    (.getLong k index-id-size ByteOrder/BIG_ENDIAN)))
 
 (defn encode-index-version-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer index-id-size))]
