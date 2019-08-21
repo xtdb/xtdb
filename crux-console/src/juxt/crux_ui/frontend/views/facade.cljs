@@ -15,6 +15,11 @@
       [[:a
         {:color "hsl(32, 91%, 54%)"}
         [:&:visited {:color "hsl(32, 91%, 54%)"}]]
+       [:.g-nolink
+        :.g-nolink:active
+        :.g-nolink:visited
+        {:text-decoration :inherit
+         :color :inherit}]
        [:button
          {:font-size :1rem}]
        icon/styles
