@@ -52,20 +52,28 @@
                :db.query/analysis-committed analysis
                :db.query/edn-committed edn))))
 
+(defn- safeguard-query [analysis-committed time limit]
+  (let [normalized-query (:query/normalized-edn analysis-committed)
+        safeguarded-query
+        (if (:limit normalized-query)
+          normalized-query
+          (assoc normalized-query :limit limit))]
+    {:raw-input      safeguarded-query
+     :query-vt       (:time/vt time)
+     :query-tt       (:time/tt time)
+     :query-analysis analysis-committed}))
+
 (defn calc-query-params
   [{:db.query/keys
-    [analysis-committed time limit]
+    [edn-committed
+     analysis-committed
+     time limit]
     :as db}]
   (when analysis-committed
-    (let [normalized-query (:query/normalized-edn analysis-committed)
-          safeguarded-query
-          (if (:limit normalized-query)
-            normalized-query
-            (assoc normalized-query :limit limit))]
-      {:raw-input      safeguarded-query
-       :query-vt       (:time/vt time)
-       :query-tt       (:time/tt time)
-       :query-analysis analysis-committed})))
+    (case (:crux.ui/query-type analysis-committed)
+      :crux.ui.query-type/query (safeguard-query analysis-committed time limit)
+      :crux.ui.query-type/tx    {:raw-input edn-committed :query-analysis analysis-committed})))
+
 
 
 ; ----- effects -----
