@@ -8,7 +8,12 @@
       {:display "flex"
        :justify-content "space-between"
        :font-size "20px"
+       :letter-spacing ".03em"
        :align-items "center"}
+      [:&__item
+       {}
+       [:&--active
+        {:font-weight 400}]]
       [:&__sep
        {:padding "16px"}]])])
 
