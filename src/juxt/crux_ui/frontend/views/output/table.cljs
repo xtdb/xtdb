@@ -9,20 +9,19 @@
   [:style
     (garden/css
       [:.q-grid
-       {:border  s/q-ui-border
-        :border-top :none
-        :border-left :none
-        :border-collapse :separate
+       {:border-collapse :separate
         :border-radius :2px
         :display :block
         :width :100%
         :height :100%
         :position :relative}
        [:&--table
-        {:display :table}
+        {:display :table
+         :border-collapse :collapse}
         [:>.q-grid__head
-         :>.q-grid__body
-         {:display :initial}]
+         {:display :table-header-group}]
+        [:>.q-grid__body
+         {:display :table-row-group}]
         [:.q-grid__head-row
          :.q-grid__body-row
          {:display :table-row}]
@@ -54,7 +53,8 @@
        [:&__body
         {:overflow :auto
          :display :block
-         :height :100%}
+         :height :100%
+         :padding-bottom :10em}
         [:&-row
          {:display :grid
           :border-top  s/q-ui-border
