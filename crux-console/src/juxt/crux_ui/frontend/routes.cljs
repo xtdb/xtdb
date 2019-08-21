@@ -2,7 +2,8 @@
   (:require [bidi.bidi :as bidi]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.logging :as log]
-            [juxt.crux-ui.frontend.views.commons.dom :as dom]))
+            [juxt.crux-ui.frontend.views.commons.dom :as dom]
+            [juxt.crux-ui.frontend.functions :as f]))
 
 (def routes
   ["/console"
@@ -14,7 +15,10 @@
 
     ["/example/" :rd/example-id] :rd/query-ui}])
 
-(def match-route (partial bidi/match-route routes))
+(defn- prefix-keys [route]
+  (f/map-keys #(keyword "r" (name %)) route))
+
+(def match-route (comp prefix-keys (partial bidi/match-route routes)))
 (def path-for (partial bidi/path-for routes))
 
 (comment

@@ -22,7 +22,9 @@
                         [""
                          [["/" #ig/ref :juxt.crux-ui.server/home]
                           ["/query-perf" #ig/ref :juxt.crux-ui.server.main/query-perf]
-                          ["/console" #ig/ref :juxt.crux-ui.server.main/console]
+                          ["/console"
+                           {"" #ig/ref :juxt.crux-ui.server.main/console
+                            ["/" :rd/tab] #ig/ref :juxt.crux-ui.server.main/console}]
                           ["/static/" #ig/ref [:juxt.crux-ui.server.main/static :edge.yada.ig/resources]]
                           ["/cljsjs/" #ig/ref [:juxt.crux-ui.server.main/cljsjs :edge.yada.ig/resources]]
                           ["/rw" #ig/ref :juxt.crux-ui.server.main/read-write]

@@ -31,6 +31,9 @@
 (defn map-map-values-vec [f m]
   (into {} (for [[k vs] m] [k (mapv f vs)])))
 
+(defn map-keys [f m]
+  (into {} (for [[k v] m] [(f k) v])))
+
 (defn map-values [f m]
   (into {} (for [[k v] m] [k (f v)])))
 
