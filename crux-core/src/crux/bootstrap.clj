@@ -100,7 +100,9 @@
     (db/new-tx-log-context tx-log))
 
   (txLog [_ tx-log-context from-tx-id with-documents?]
-    (for [tx-log-entry (db/tx-log tx-log tx-log-context from-tx-id)]
+    (for [{:keys [crux.tx/tx-id] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
+          :when (with-open [snapshot (kv/new-snapshot kv-store)]
+                  (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
       (if with-documents?
         (update tx-log-entry
                 :crux.api/tx-ops

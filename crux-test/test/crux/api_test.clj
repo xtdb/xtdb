@@ -271,6 +271,23 @@
              (for [content-hash (map :crux.db/content-hash history)]
                (.document *api* content-hash))))))
 
+(t/deftest test-tx-log-skips-failed-transactions
+  (let [valid-time (Date.)
+        submitted-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+    (t/is (true? (.hasSubmittedTxUpdatedEntity *api* submitted-tx :ivan)))
+    (let [version-2-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan2"} {:crux.db/id :ivan :name "Ivan3"}]])]
+      (t/is (false? (.hasSubmittedTxUpdatedEntity *api* version-2-submitted-tx :ivan)))
+      (with-open [ctx (.newTxLogContext *api*)]
+        (let [result (.txLog *api* ctx nil false)]
+          (t/is (= [(assoc submitted-tx
+                           :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]))))
+
+      (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
+        (t/is (true? (.hasSubmittedTxUpdatedEntity *api* version-3-submitted-tx :ivan)))
+        (with-open [ctx (.newTxLogContext *api*)]
+          (let [result (.txLog *api* ctx nil false)]
+            (t/is (= 2 (count result)))))))))
+
 (t/deftest test-db-history-api
   (let [version-1-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 1} #inst "2019-02-01"]])) nil)
         version-2-submitted-tx-time (.sync *api* (:crux.tx/tx-time (.submitTx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :version 2} #inst "2019-02-02"]])) nil)
