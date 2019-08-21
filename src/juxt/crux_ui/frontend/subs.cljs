@@ -10,6 +10,7 @@
 
 ; this is to force editor rerenders
 (rf/reg-sub :subs.ui/editor-key  (fnil :db.ui/editor-key 0))
+(rf/reg-sub :subs.sys/route  #(:db.sys/route % {:r/handler :rd/query-ui}))
 
 (rf/reg-sub :subs.db.ui/output-side-tab
             (fnil :db.ui/output-side-tab
@@ -22,10 +23,13 @@
 
 (rf/reg-sub
   :subs.ui/root-tab
-  (fn [db]
-    (case js/location.pathname
-      "/query-perf" :db.ui.root-tab/query-perf
-      (:db.ui/root-tab db))))
+  :<- [:subs.sys/route]
+  (fn [route]
+    (case (:r/handler route)
+      :rd/query-perf :db.ui.root-tab/query-perf
+      :rd/query-ui :db.ui.root-tab/query-ui
+      :rd/settings :db.ui.root-tab/settings
+      :db.ui.root-tab/query-ui)))
 
 
 
