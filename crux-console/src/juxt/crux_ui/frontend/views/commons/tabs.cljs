@@ -20,9 +20,9 @@
       (for [{:keys [id title href] :as tab} tabs]
         ^{:key id}
         [:a.tabs__item.g-nolink
-         {:href href}
-         #_(if (= id active-tab-id)
-             {:class "tabs__item--active"}
-             {:on-click #(on-tab-activate id)})
+         (cond->
+           {:class (if (= id active-tab-id) "tabs__item--active")}
+           href (assoc :href href)
+           (not href) (assoc :on-click on-tab-activate))
          title])
       (map (fn [i] ^{:key i} [:div.tabs__sep "/"]) (range))))])
