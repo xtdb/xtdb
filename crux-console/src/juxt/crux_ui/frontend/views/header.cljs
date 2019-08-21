@@ -1,13 +1,14 @@
 (ns juxt.crux-ui.frontend.views.header
   (:require [garden.core :as garden]
             [garden.stylesheet :as gs]
-            [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
             [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
+            [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
             [juxt.crux-ui.frontend.routes :as routes]))
 
 (def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
 
-(def header-styles
+(def ^:private header-styles
   [:style
    (garden/css
     [:.header
@@ -36,8 +37,7 @@
   [:header.header
    header-styles
    [:div.header__logo
-     [:div.logo [:a {:href "/"}
-                 [:img.logo-img {:width 200 :src "/static/img/console-logo.svg"}]]]]
+    [css-logo/root]]
    [:div.header__tabs
      [tabs/root
       {:active-tab-id   @-tab-sub
