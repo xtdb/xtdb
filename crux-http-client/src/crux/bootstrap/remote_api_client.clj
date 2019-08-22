@@ -15,7 +15,8 @@
     (when-not (= (int open-paren) (.read in))
       (throw (RuntimeException. "Expected delimiter: (")))
     (->> (repeatedly #(try
-                        (edn/read {:eof ::eof} in)
+                        (edn/read {:readers {'crux/id c/id-edn-reader}
+                                   :eof ::eof} in)
                         (catch RuntimeException e
                           (if (= "Unmatched delimiter: )" (.getMessage e))
                             ::eof
