@@ -42,7 +42,7 @@ public class CruxSourceTask extends SourceTask {
             sourceOffset = context.offsetStorageReader().offset(Collections.singletonMap(CruxSourceConnector.URL_CONFIG,
                                                                                          props.get(CruxSourceConnector.URL_CONFIG)));
         }
-        List<SourceRecord> records = pollSourceRecords.invoke(api, sourceOffset, props);
+        List<SourceRecord> records = (List<SourceRecord>) pollSourceRecords.invoke(api, sourceOffset, props);
         if (!records.isEmpty()) {
             sourceOffset = records.get(records.size() - 1).sourceOffset();
         }
