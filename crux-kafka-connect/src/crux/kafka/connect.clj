@@ -4,8 +4,10 @@
             [crux.codec :as c])
   (:import [org.apache.kafka.connect.data Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
+           org.apache.kafka.connect.source.SourceRecord
            [java.util UUID Map]
            crux.kafka.connect.CruxSinkConnector
+           crux.kafka.connect.CruxSourceConnector
            crux.api.ICruxAPI))
 
 (defn- map->edn [m]
@@ -81,3 +83,26 @@
   (when (seq records)
     (.submitTx api (vec (for [record records]
                           (transform-sink-record props record))))))
+
+(defn poll-source-records [^ICruxAPI api source-offset props]
+  (with-open [tx-log-context (.newTxLogContext api)]
+    (let [url (get props CruxSourceConnector/URL_CONFIG)
+          topic (get props CruxSourceConnector/TOPIC_CONFIG)
+          batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
+          from-tx-id (inc (long (or (get source-offset "offset") -1)))]
+      (log/info "source offset:" source-offset)
+      (log/info "tx-id:" from-tx-id)
+      (vec (for [{:keys [crux.api/tx-ops
+                         crux.tx/tx-id
+                         crux.tx/tx-time]
+                  :as tx} (->> (.txLog api tx-log-context from-tx-id true)
+                               (take (Long/parseLong batch-size)))]
+             (SourceRecord. {"url" url}
+                            {"offset" tx-id}
+                            topic
+                            nil
+                            nil
+                            nil
+                            Schema/STRING_SCHEMA
+                            (pr-str tx-ops)
+                            (inst-ms tx-time)))))))

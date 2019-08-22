@@ -20,7 +20,7 @@ cp test-resources/*.properties $KAFKA_HOME/config
 Steps to get running:
 
 Start a local Crux node with embedded Kafka in the REPL and create the
-test topic:
+test topic (from `crux-dev`):
 
 ```
 (dev)
@@ -28,14 +28,15 @@ test topic:
 (k/create-topic (:admin-client node) "connect-test" 1 1 nil)
 ```
 
+Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
+
+== Sink
+
 Start the Connect worker, which will connect to the embedded Kafka:
 
 ```
 (cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/connect-file-source.properties config/local-crux-sink.properties)
 ```
-
-Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
-
 
 Write a line of JSON to `test.txt` file source:
 
@@ -53,3 +54,27 @@ Verify the entity was transacted in the REPL:
 The connector can also use the message key as id. In this case, a key
 with nil value acts as a deletion of the entity in Crux, similar to
 how compaction in Kafka works.
+
+
+== Source
+
+Start the Connect worker, which will connect to the embedded Kafka:
+
+```
+(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties)
+```
+
+Transact an entity in the REPL:
+```
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]])
+```
+
+Check it was submitted to the topic:
+```
+tail $KAFKA_HOME/test.sink.txt
+```
+
+Should output:
+```
+[[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]]
+```
