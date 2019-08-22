@@ -308,7 +308,8 @@
                               (first)
                               :tx-id)))))
 
-    (let [corrected-ivan (assoc ivan :version 4)
+    (let [v4-valid-time #inst "2018-11-30"
+          corrected-ivan (assoc ivan :version 4)
           corrected-start-valid-time #inst "2018-11-27"
           corrected-end-valid-time #inst "2018-11-29"
           {corrected-tx-time :crux.tx/tx-time
@@ -333,6 +334,13 @@
           (t/is (= {:content-hash (c/new-id corrected-ivan)
                     :tx-id corrected-tx-id}
                    (-> (idx/entities-at snapshot [:ivan] v3-valid-time corrected-tx-time)
+                       (first)
+                       (select-keys [:tx-id :content-hash])))))
+
+        (t/testing "fourth version of entity is still valid"
+          (t/is (= {:content-hash (c/new-id corrected-ivan)
+                    :tx-id corrected-tx-id}
+                   (-> (idx/entities-at snapshot [:ivan] v4-valid-time corrected-tx-time)
                        (first)
                        (select-keys [:tx-id :content-hash]))))))
 
