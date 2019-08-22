@@ -10,4 +10,8 @@
                  [cheshire "5.9.0"]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
-  :java-source-paths ["src"])
+  :java-source-paths ["src"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"])

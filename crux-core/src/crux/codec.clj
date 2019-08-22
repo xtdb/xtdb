@@ -387,13 +387,16 @@
 (defn id-edn-reader ^crux.codec.EDNId [id]
   (->EDNId (str (new-id id)) id))
 
+(defn edn-id->original-id [^EDNId id]
+  (str (or (.original-id id) (.hex id))))
+
 (defmethod print-method EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (str (or (.original-id id) (.hex id))))))
+  (.write w (pr-str (edn-id->original-id id))))
 
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#crux/id ")
-  (.write w (pr-str (str (or (.original-id id) (.hex id))))))
+  (.write w (pr-str (edn-id->original-id id))))
 
 (nippy/extend-freeze
  EDNId

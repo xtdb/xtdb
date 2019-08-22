@@ -1,14 +1,22 @@
 (ns crux.kafka.connect
   (:require [cheshire.core :as json]
+            [cheshire.generate]
             [clojure.tools.logging :as log]
             [crux.codec :as c])
   (:import [org.apache.kafka.connect.data Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
            [java.util UUID Map]
+           com.fasterxml.jackson.core.JsonGenerator
            crux.kafka.connect.CruxSinkConnector
            crux.kafka.connect.CruxSourceConnector
+           crux.codec.EDNId
            crux.api.ICruxAPI))
+
+(cheshire.generate/add-encoder
+ EDNId
+ (fn [c ^JsonGenerator json-generator]
+   (.writeString json-generator (c/edn-id->original-id c))))
 
 (defn- map->edn [m]
   (->> (for [[k v] m]
@@ -88,10 +96,10 @@
   (with-open [tx-log-context (.newTxLogContext api)]
     (let [url (get props CruxSourceConnector/URL_CONFIG)
           topic (get props CruxSourceConnector/TOPIC_CONFIG)
+          format (get props CruxSourceConnector/FORMAT_CONFIG)
           batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
           from-tx-id (inc (long (or (get source-offset "offset") -1)))]
-      (log/info "source offset:" source-offset)
-      (log/info "tx-id:" from-tx-id)
+      (log/info "source offset:" source-offset "tx-id:" from-tx-id "format:" format)
       (vec (for [{:keys [crux.api/tx-ops
                          crux.tx/tx-id
                          crux.tx/tx-time]
@@ -104,5 +112,7 @@
                             nil
                             nil
                             Schema/STRING_SCHEMA
-                            (pr-str tx-ops)
+                            (case format
+                              "edn" (pr-str tx-ops)
+                              "json" (json/generate-string tx-ops))
                             (inst-ms tx-time)))))))

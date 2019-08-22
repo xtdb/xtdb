@@ -17,18 +17,22 @@ import java.util.Map;
 public class CruxSourceConnector extends SourceConnector {
     public static final String URL_CONFIG = "url";
     public static final String TOPIC_CONFIG = "topic";
+    public static final String FORMAT_CONFIG = "format";
     public static final String TASK_BATCH_SIZE_CONFIG = "batch.size";
 
     public static final int DEFAULT_TASK_BATCH_SIZE = 2000;
+    public static final String DEFAULT_FORMAT = "edn";
 
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
         .define(URL_CONFIG, Type.STRING, "http://localhost:3000", Importance.HIGH, "Destination URL of Crux HTTP end point.")
         .define(TOPIC_CONFIG, Type.STRING, Importance.HIGH, "The topic to publish data to")
+        .define(FORMAT_CONFIG, Type.STRING, DEFAULT_FORMAT, ConfigDef.ValidString.in("edn", "json"), Importance.LOW, "Format to use, edn or json")
         .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,
                 "The maximum number of records the Source task can read from Crux at one time");
 
     private String url;
     private String topic;
+    private String format;
     private int batchSize;
 
     @Override
@@ -41,6 +45,7 @@ public class CruxSourceConnector extends SourceConnector {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
         topic = parsedConfig.getString(TOPIC_CONFIG);
         url = parsedConfig.getString(URL_CONFIG);
+        format = parsedConfig.getString(FORMAT_CONFIG);
         batchSize = parsedConfig.getInt(TASK_BATCH_SIZE_CONFIG);
     }
 
@@ -56,6 +61,7 @@ public class CruxSourceConnector extends SourceConnector {
         Map<String, String> config = new HashMap<>();
         config.put(TOPIC_CONFIG, topic);
         config.put(URL_CONFIG, url);
+        config.put(FORMAT_CONFIG, format);
         config.put(TASK_BATCH_SIZE_CONFIG, String.valueOf(batchSize));
         configs.add(config);
         return configs;
