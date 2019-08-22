@@ -23,7 +23,7 @@ public class CruxSourceConnector extends SourceConnector {
 
     private static final ConfigDef CONFIG_DEF = new ConfigDef()
         .define(URL_CONFIG, Type.STRING, "http://localhost:3000", Importance.HIGH, "Destination URL of Crux HTTP end point.")
-        .define(TOPIC_CONFIG, Type.LIST, Importance.HIGH, "The topic to publish data to")
+        .define(TOPIC_CONFIG, Type.STRING, Importance.HIGH, "The topic to publish data to")
         .define(TASK_BATCH_SIZE_CONFIG, Type.INT, DEFAULT_TASK_BATCH_SIZE, Importance.LOW,
                 "The maximum number of records the Source task can read from Crux at one time");
 
@@ -39,11 +39,7 @@ public class CruxSourceConnector extends SourceConnector {
     @Override
     public void start(Map<String, String> props) {
         AbstractConfig parsedConfig = new AbstractConfig(CONFIG_DEF, props);
-        List<String> topics = parsedConfig.getList(TOPIC_CONFIG);
-        if (topics.size() != 1) {
-            throw new ConfigException("'topic' in CruxSourceConnector configuration requires definition of a single topic");
-        }
-        topic = topics.get(0);
+        topic = parsedConfig.getString(TOPIC_CONFIG);
         url = parsedConfig.getString(URL_CONFIG);
         batchSize = parsedConfig.getInt(TASK_BATCH_SIZE_CONFIG);
     }
