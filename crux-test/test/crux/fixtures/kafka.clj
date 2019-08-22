@@ -3,6 +3,7 @@
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.api]
+            [crux.fixtures.kv :refer [*kv-backend*]]
             [crux.kafka.embedded :as ek])
   (:import [java.util Properties UUID]
            org.apache.kafka.clients.admin.AdminClient
@@ -73,7 +74,7 @@
               *doc-topic* (str "doc-topic-" test-id)]
       (try
         (with-open [cluster-node (Crux/startClusterNode {:db-dir db-dir
-                                                         :kv-backend "crux.kv.memdb.MemKv"
+                                                         :kv-backend *kv-backend*
                                                          :tx-topic *tx-topic*
                                                          :doc-topic *doc-topic*
                                                          :bootstrap-servers *kafka-bootstrap-servers*})]
