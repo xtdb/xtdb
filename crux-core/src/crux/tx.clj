@@ -291,7 +291,8 @@
                                        (db/get-single-object object-store snapshot arg))
                                      arg))
                         (contains? #{:crux.tx/delete
-                                     :crux.tx/evict} op) (cons (c/new-id id))
+                                     :crux.tx/evict
+                                     :crux.tx/fn} op) (cons (c/new-id id))
                         true (cons op)
                         true (vec))))]
     (s/assert :crux.api/tx-ops tx-ops)
