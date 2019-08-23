@@ -98,8 +98,8 @@ The source connector has a config `mode` which can take two values:
 * `tx` emits tx operations verbatim from the API. (default)
 * `doc` turns the tx operations into a message per document, keyed by
 its `:crux.db/id` hash. This means that each transaction can result in
-more than one message.  `:crux.tx/delete` and `:crux.db/put` results
-in `nil` values in the message.
+more than one message.  `:crux.tx/delete` and `:crux.db/evict` results
+in `nil` values in the message. Does ignore bitemporal operations.
 
 In `doc` mode the above should have outputted:
 ```
