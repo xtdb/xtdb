@@ -15,13 +15,17 @@
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
             [juxt.crux-lib.http-functions :as hf]
             [juxt.crux-ui.frontend.better-printer :as bp]
-            [juxt.crux-lib.functions :as fns]))
+            [juxt.crux-lib.functions :as fns]
+            [juxt.crux-ui.frontend.logging :as log]))
 
 
 (defn calc-query [db ex-title]
   (if-let [imported (:db.ui.examples/imported db)]
     (:query (m/find-first #(= (:title %) ex-title) imported))
     (ex/generate ex-title)))
+
+(defn- node-disconnected? [db]
+  (not (:db.sys.host/status db)))
 
 (defn o-set-example [db str]
   (-> db
@@ -266,13 +270,19 @@
 (rf/reg-event-fx
   :evt.ui/query-submit
   (fn [{:keys [db] :as ctx}]
-    (if (query-is-valid? (:db.query/input db))
+    (cond
+      (node-disconnected? db)
+      {:fx.ui/alert "Cannot execute query until connected to a node"}
+      ;
+      (query-is-valid? (:db.query/input db))
       (let [new-db
             (-> db
                 (o-reset-results)
                 (o-commit-input (:db.query/input db)))]
         {:db new-db
-         :fx/query-exec (calc-query-params new-db)}))))
+         :fx/query-exec (calc-query-params new-db)})
+      ;
+      :else nil)))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
