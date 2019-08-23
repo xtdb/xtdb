@@ -220,12 +220,14 @@
 
 (defn tx-events->tx-ops [snapshot object-store tx-events]
   (let [tx-ops (vec (for [[op id & args] tx-events]
-                      (->> (for [arg args]
-                                   (or (when (satisfies? c/IdToBuffer arg)
-                                         (db/get-single-object object-store snapshot arg))
-                                       arg))
-                           (cons op)
-                           (vec))))]
+                      (cond->> (for [arg args]
+                                 (or (when (satisfies? c/IdToBuffer arg)
+                                       (db/get-single-object object-store snapshot arg))
+                                     arg))
+                        (contains? #{:crux.tx/delete
+                                     :crux.tx/evict} op) (cons (c/new-id id))
+                        true (cons op)
+                        true (vec))))]
     (s/assert :crux.api/tx-ops tx-ops)
     tx-ops))
 
