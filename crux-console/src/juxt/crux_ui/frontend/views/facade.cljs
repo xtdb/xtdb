@@ -5,7 +5,8 @@
             [juxt.crux-ui.frontend.views.header :as header]
             [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.views.settings :as settings]
-            [juxt.crux-ui.frontend.svg-icons :as icon]))
+            [juxt.crux-ui.frontend.svg-icons :as icon]
+            [juxt.crux-ui.frontend.views.commons.input :as input]))
 
 (def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
 
@@ -22,6 +23,7 @@
          :color :inherit}]
        [:button
          {:font-size :1rem}]
+       input/styles
        icon/styles
        comps/button-textual-styles
        [:html :body :#app

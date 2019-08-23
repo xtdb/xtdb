@@ -26,7 +26,6 @@
     ^{:key s}
     [:div.settings
      root-styles
-     input/styles
      [:div.settings__line
       [fl/line
        {:label "Crux HTTP-Server Host and port"

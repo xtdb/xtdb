@@ -11,17 +11,15 @@
   (into {} (map -data-attrs-mapper hmap)))
 
 (def styles
-  [:style
-   (garden/css
-     [:.crux-ui-input
-      {:padding        :4px
-       :border-radius  :2px
-       :border         :none
-       :letter-spacing :.09em
-       :font-size      :inherit
-       :font-family    :inherit
-       :display        :inline-block
-       :margin-top     :4px}])])
+  [:.crux-ui-input
+   {:padding        :4px
+    :border-radius  :2px
+    :border         :none
+    :letter-spacing :.09em
+    :font-size      :inherit
+    :font-family    :inherit
+    :display        :inline-block
+    :margin-top     :4px}])
 
 
 (defn text
