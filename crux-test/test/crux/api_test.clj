@@ -194,17 +194,17 @@
             (t/is (instance? LazySeq result))
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
-                             :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
             (t/is (realized? result))))
 
-        (t/testing "with documents"
+        (t/testing "with ops"
           (with-open [ctx (.newTxLogContext *api*)]
             (let [result (.txLog *api* ctx nil true)]
               (t/is (instance? LazySeq result))
               (t/is (not (realized? result)))
               (t/is (= [(assoc submitted-tx
-                               :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+                               :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
                        result))
               (t/is (realized? result)))))
 
@@ -280,7 +280,8 @@
       (with-open [ctx (.newTxLogContext *api*)]
         (let [result (.txLog *api* ctx nil false)]
           (t/is (= [(assoc submitted-tx
-                           :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]))))
+                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
+                   result))))
 
       (let [version-3-submitted-tx (.submitTx *api* [[:crux.tx/cas {:crux.db/id :ivan :name "Ivan"} {:crux.db/id :ivan :name "Ivan3"}]])]
         (t/is (true? (.hasSubmittedTxUpdatedEntity *api* version-3-submitted-tx :ivan)))
@@ -365,7 +366,7 @@
             (t/is (instance? LazySeq result))
             (t/is (not (realized? result)))
             (t/is (= [(assoc submitted-tx
-                             :crux.api/tx-ops [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
+                             :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
                      result))
             (t/is (realized? result))))
 
