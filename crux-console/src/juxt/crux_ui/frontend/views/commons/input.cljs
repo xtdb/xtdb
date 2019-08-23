@@ -18,8 +18,7 @@
     :letter-spacing :.09em
     :font-size      :inherit
     :font-family    :inherit
-    :display        :inline-block
-    :margin-top     :4px}])
+    :display        :inline-block}])
 
 
 (defn text
