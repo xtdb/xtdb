@@ -130,14 +130,15 @@
   (log/info "tx-ops:" tx-ops)
   (for [tx-op tx-ops
         :let [[id doc] (tx-op->id+doc tx-op)
-              _ (log/info "tx-op:" tx-op "id:" id "hex id:" (str (c/new-id id)) "doc:" doc)]
+              hashed-id (str (c/new-id id))
+              _ (log/info "tx-op:" tx-op "id:" id "hashed id:" hashed-id "doc:" doc)]
         :when id]
     (SourceRecord. source-partition
                    {"offset" tx-id}
                    topic
                    nil
                    Schema/STRING_SCHEMA
-                   (str (c/new-id id))
+                   hashed-id
                    Schema/OPTIONAL_STRING_SCHEMA
                    (some-> doc (formatter))
                    (inst-ms tx-time))))
