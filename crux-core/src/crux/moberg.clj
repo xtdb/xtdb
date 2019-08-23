@@ -229,7 +229,7 @@
                               (take-while identity)
                               (cons m))
               :when (= :txs (get (.headers m) :crux.tx/sub-topic))]
-          {:crux.api/tx-ops (.body m)
+          {:crux.tx.event/tx-events (.body m)
            :crux.tx/tx-id (.message-id m)
            :crux.tx/tx-time (.message-time m)}))))
 

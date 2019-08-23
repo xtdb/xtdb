@@ -107,7 +107,7 @@
           consumer-f (fn [_ y]
                        (.put q {:crux.tx/tx-id (int (:event_offset y))
                                 :crux.tx/tx-time (->date dbtype (:tx_time y))
-                                :crux.api/tx-ops (->v dbtype (:v y))})
+                                :crux.tx.event/tx-events (->v dbtype (:v y))})
                        (if @running?
                          nil
                          (reduced nil)))]

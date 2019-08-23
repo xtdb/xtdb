@@ -123,19 +123,19 @@
   (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
     of the transaction log in a try-with-resources block using
-    (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-documents?).
+    (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-ops?).
 
     Returns an implementation specific context.")
 
-  (tx-log [node tx-log-context from-tx-id with-documents?]
+  (tx-log [node tx-log-context from-tx-id with-ops?]
     "Reads the transaction log lazily. Optionally includes
-    documents, which allow the contents under the :crux.api/tx-ops
+    operations, which allow the contents under the :crux.api/tx-ops
     key to be piped into (submit-tx tx-ops) of another
     Crux instance.
 
     tx-log-context  a context from (new-tx-log-context node)
     from-tx-id      optional transaction id to start from.
-    with-documents? should the documents be included?
+    with-ops?       should the operations with documents be included?
 
     Returns a lazy sequence of the transaction log."))
 
@@ -184,8 +184,8 @@
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
 
-  (tx-log [this tx-log-context from-tx-id with-documents?]
-    (.txLog this tx-log-context from-tx-id with-documents?)))
+  (tx-log [this tx-log-context from-tx-id with-ops?]
+    (.txLog this tx-log-context from-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and

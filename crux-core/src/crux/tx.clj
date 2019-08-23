@@ -22,6 +22,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def ^:private date? (partial instance? Date))
+
+(s/def ::tx-id nat-int?)
+(s/def ::tx-time date?)
+
 (defn- in-range-pred [start end]
   #(and (or (nil? start)
             (not (pos? (compare start %))))
@@ -74,7 +79,7 @@
                          (when-not correct-state?
                            (log/error "CAS, incorrect doc state for:" (c/new-id new-v) "tx id:" tx-id))
                          correct-state?)
-                       (do (log/warn "CAS failure:" (pr-str cas-op))
+                       (do (log/warn "CAS failure:" (pr-str cas-op) "was:" (c/new-id content-hash))
                            false))
      :kvs [[(c/encode-entity+vt+tt+tx-id-key-to
              nil
@@ -143,13 +148,13 @@
           (idx/delete-doc-from-index kv content-hash existing-doc))
         (idx/index-doc kv content-hash doc))))
 
-  (index-tx [_ tx-ops tx-time tx-id]
-    (s/assert :crux.tx.event/tx-events tx-ops)
+  (index-tx [_ tx-events tx-time tx-id]
+    (s/assert :crux.tx.event/tx-events tx-events)
     (with-open [snapshot (kv/new-snapshot kv)]
-      (let [tx-command-results (vec (for [[op :as tx-op] tx-ops]
+      (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
                                       ((get tx-op->command op tx-command-unknown)
-                                       object-store snapshot tx-log tx-op tx-time tx-id)))]
-        (log/debug "Indexing tx-id:" tx-id "tx-ops:" (count tx-ops))
+                                       object-store snapshot tx-log tx-event tx-time tx-id)))]
+        (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
                    (pre-commit-fn))
@@ -161,7 +166,7 @@
               (doseq [{:keys [post-commit-fn]} tx-command-results
                       :when post-commit-fn]
                 (post-commit-fn)))
-          (do (log/warn "Transaction aborted:" (pr-str tx-ops) (pr-str tx-time) tx-id)
+          (do (log/warn "Transaction aborted:" (pr-str tx-events) (pr-str tx-time) tx-id)
               (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))))))
 
   (docs-exist? [_ content-hashes]
@@ -213,12 +218,16 @@
     (s/assert :crux.tx.event/tx-events tx-events)
     tx-events))
 
-(defn enrich-tx-ops-with-documents [snapshot object-store tx-ops]
-  (vec (for [op tx-ops]
-         (vec (for [x op]
-                (or (when (satisfies? c/IdToBuffer x)
-                      (db/get-single-object object-store snapshot x))
-                    x))))))
+(defn tx-events->tx-ops [snapshot object-store tx-events]
+  (let [tx-ops (vec (for [[op id & args] tx-events]
+                      (->> (for [arg args]
+                                   (or (when (satisfies? c/IdToBuffer arg)
+                                         (db/get-single-object object-store snapshot arg))
+                                       arg))
+                           (cons op)
+                           (vec))))]
+    (s/assert :crux.api/tx-ops tx-ops)
+    tx-ops))
 
 (def ^:const default-await-tx-timeout 10000)
 
