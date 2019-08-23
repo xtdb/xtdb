@@ -92,6 +92,12 @@ its `:crux.db/id`. This means that each transaction can result in more
 than one message.  `:crux.tx/delete` and `:crux.db/put` results in
 `nil` values in the message.
 
+In `doc` mode the above should have outputted:
+```
+{:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+```
+
+
 The source connector also has a config `format` which can be either
 `edn` (default) or `json`. The mapping to JSON is lossy. It also has a
 config `batch.size` which controls the max number of transactions to
