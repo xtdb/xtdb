@@ -1,0 +1,112 @@
+= crux-kafka-connect
+
+*ALPHA*
+
+This project contains both `crux.kafka.connect.CruxSinkConnector`
+which is an implementation of
+`org.apache.kafka.connect.sink.SinkConnector` and
+`crux.kafka.connect.CruxSourceConnector` which is an implementation of
+`org.apache.kafka.connect.source.SourceConnector` .
+
+See also: https://kafka.apache.org/documentation/#connect
+
+Download Kafka from https://kafka.apache.org/downloads
+
+Building and installing the connectors:
+```
+export KAFKA_HOME=...
+lein uberjar
+cp target/*-standalone.jar $KAFKA_HOME/libs
+cp test-resources/*.properties $KAFKA_HOME/config
+```
+
+Steps to get running:
+
+Start a local Crux node with embedded Kafka in the REPL and create the
+test topic (from `crux-dev`):
+
+```
+(dev)
+(start)
+(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
+```
+
+Alternatively, this can be done using an existing Kafka cluster,
+potentially running out of the same `KAFKA_HOME` as the connector
+worker itself.
+
+Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
+
+Both connectors take the following configs
+
+* `url` the HTTP API end point of Crux.
+* `topic` the Kafka topic to read or write from.
+
+== Sink
+
+Reads JSON and posts it to a Crux node using `crux-http-client`.
+
+Start the Connect worker, which will connect to the embedded Kafka:
+
+```
+(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/connect-file-source.properties config/local-crux-sink.properties)
+```
+
+Write a line of JSON to `test.txt` file source:
+
+```
+echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
+```
+
+Verify the entity was transacted in the REPL:
+
+```
+(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+;=> {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+```
+
+The connector can also use the message key as id. In this case, a key
+with nil value acts as a deletion of the entity in Crux, similar to
+how compaction in Kafka works.
+
+
+== Source
+
+Start the Connect worker, which will connect to the embedded Kafka:
+
+```
+(cd $KAFKA_HOME; ./bin/connect-standalone.sh config/connect-standalone.properties config/local-crux-source.properties config/connect-file-sink.properties)
+```
+
+Transact an entity in the REPL:
+```
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]])
+```
+
+Check it was submitted to the topic:
+```
+tail $KAFKA_HOME/test.sink.txt
+```
+
+Should output:
+```
+[[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]]
+```
+
+The source connector has a config `mode` which can take two values:
+
+* `tx` emits tx operations verbatim from the API. (default)
+* `doc` turns the tx operations into a message per document, keyed by
+its `:crux.db/id` hash. This means that each transaction can result in
+more than one message.  `:crux.tx/delete` and `:crux.db/evict` results
+in `nil` values in the message. Does ignore bitemporal operations.
+
+In `doc` mode the above should have outputted:
+```
+{:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+```
+
+The source connector also has a config `format` which can be either
+`edn` (default) or `json`. The mapping to JSON is lossy. It also has a
+config `batch.size` which controls the max number of transactions to
+read before generating source records at a given time.

@@ -1,8 +1,8 @@
 (ns juxt.crux-lib.async-http-client
 ; @author refset
 ; this ns has been adapted from https://github.com/juxt/crux/blob/master/src/crux/bootstrap/remote_api_client.clj
-  ;
   #?(:cljs (:require [cljs.reader :as edn]
+                     [juxt.crux-lib.functions :as fns]
                      [clojure.string :as s]
                      [promesa.core :as p :refer-macros [alet]]
                      [juxt.crux-lib.http-functions :as hf]
@@ -10,6 +10,7 @@
                      [goog.string :as gs]))
   ;
   #?(:clj  (:require [clojure.tools.reader.edn :as edn]
+                     [juxt.crux-lib.functions :as fns]
                      [clojure.string :as s]
                      [promesa.core :as p :refer-macros [alet]]
                      [clojure.java.io :as io]
@@ -47,24 +48,6 @@
        (when d
          (.format ^SimpleDateFormat (.get ^ThreadLocal @#'instant/thread-local-utc-date-format) d)))))
 
-
-(defn- normalize-query [q]
-  (cond
-    (vector? q) (into {} (for [[[k] v] (->> (partition-by keyword? q)
-                                            (partition-all 2))]
-                           [k (if (and (nat-int? (first v))
-                                       (= 1 (count v)))
-                                (first v)
-                                (vec v))]))
-    (string? q) (if-let [q (try
-                             (edn/read-string q)
-                             #?(:cljs (catch :default e e)
-                                :clj (catch Exception e)))]
-                  (normalize-query q)
-                  q)
-    :else
-    q))
-; adapted from https://github.com/juxt/crux/blob/3368595d7fcaec726b1a602a9ec75e325b49ecd6/src/crux/query.clj#L1013
 
 
 (def edn-list->lazy-seq
@@ -193,12 +176,12 @@
   (q [this q]
     (api-request-async (str url "/query")
                       (assoc (as-of-map this)
-                             :query (normalize-query q))))
+                             :query (fns/normalize-query q))))
 
   (q [this snapshot q]
     (let [in (api-request-async (str url "/query-stream")
                                (assoc (as-of-map this)
-                                      :query (normalize-query q))
+                                      :query (fns/normalize-query q))
                                {:as :stream})]
       (register-stream-with-remote-stream! snapshot in)
       (edn-list->lazy-seq in)))

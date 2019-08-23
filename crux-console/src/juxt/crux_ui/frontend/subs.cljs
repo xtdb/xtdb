@@ -3,12 +3,14 @@
             [juxt.crux-ui.frontend.example-queries :as ex]
             [juxt.crux-ui.frontend.logic.plotting-data-calc :as pd]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [juxt.crux-ui.frontend.logic.time :as time]))
 
 
 
 ; this is to force editor rerenders
 (rf/reg-sub :subs.ui/editor-key  (fnil :db.ui/editor-key 0))
+(rf/reg-sub :subs.sys/route  #(:db.sys/route % {:r/handler :rd/query-ui}))
 
 (rf/reg-sub :subs.db.ui/output-side-tab
             (fnil :db.ui/output-side-tab
@@ -21,16 +23,23 @@
 
 (rf/reg-sub
   :subs.ui/root-tab
-  (fn [db]
-    (case js/location.pathname
-      "/query-perf" :subs.ui.root-tab/query-perf
-      :subs.ui.root-tab/query-ui)))
+  :<- [:subs.sys/route]
+  (fn [route]
+    (case (:r/handler route)
+      :rd/query-perf :db.ui.root-tab/query-perf
+      :rd/query-ui :db.ui.root-tab/query-ui
+      :rd/settings :db.ui.root-tab/settings
+      :db.ui.root-tab/query-ui)))
 
 
 
 ; query related root subscriptions
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  {}))
+(rf/reg-sub :subs.query/time  #(:db.query/time % {}))
+(rf/reg-sub :subs.query/limit  #(:db.query/limit % 10000))
+(rf/reg-sub :subs.sys/host  #(:db.sys/host % nil))
+(rf/reg-sub :subs.sys.host/status  #(:db.sys.host/status % nil))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result (fnil :db.query/result {}))
@@ -50,9 +59,39 @@
   qa/try-read-string)
 
 (rf/reg-sub
+  :subs.sys/settings
+  :<- [:subs.sys/host]
+  :<- [:subs.sys.host/status]
+  :<- [:subs.query/limit]
+  (fn [[host status limit]]
+    {:db.sys/host host
+     :db.sys.host/status status
+     :db.query/limit limit}))
+
+(rf/reg-sub
   :subs.query/input-edn
   :<- [:subs.query/input]
   qa/try-read-string)
+
+(rf/reg-sub
+  :subs.query.time/vt
+  :<- [:subs.query/time]
+  #(:time/vt % (js/Date.)))
+
+(rf/reg-sub
+  :subs.query.time/tt
+  :<- [:subs.query/time]
+  #(:time/tt % (js/Date.)))
+
+(rf/reg-sub
+  :subs.query.time/vtc
+  :<- [:subs.query.time/vt]
+  time/date->comps)
+
+(rf/reg-sub
+  :subs.query.time/ttc
+  :<- [:subs.query.time/tt]
+  time/date->comps)
 
 (rf/reg-sub
   :subs.query/input-malformed?
@@ -66,7 +105,7 @@
     (cond
       (not input-edn) nil
       (:error input-edn) nil
-      :else (qa/analyse-query input-edn))))
+      :else (qa/analyse-any-query input-edn))))
 
 (rf/reg-sub
   :subs.query/headers
@@ -75,7 +114,7 @@
   (fn [[q-res q-info]]
     (when q-info
       (if (:full-results? q-info)
-         (qa/analyze-full-results-headers q-res)
+         (qa/analyse-full-results-headers q-res)
          (:find q-info)))))
 
 (rf/reg-sub

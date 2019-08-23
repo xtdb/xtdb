@@ -42,7 +42,7 @@
       (with-open [tx-log-context (.newTxLogContext *api*)]
         (t/is (= [{:crux.tx/tx-id 2,
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
-                   :crux.api/tx-ops
+                   :crux.tx.event/tx-events
                    [[:crux.tx/put
                      (str (c/new-id (:crux.db/id doc)))
                      (str (c/new-id doc))]]}]

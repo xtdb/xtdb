@@ -3,7 +3,8 @@
   (:refer-clojure :exclude [sync])
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as c])
-  (:import [crux.api Crux ICruxAPI ICruxDatasource]
+  (:import [crux.api Crux ICruxAPI ICruxIngestAPI
+            ICruxAsyncIngestAPI ICruxDatasource]
            java.io.Closeable
            java.util.Date
            java.time.Duration))
@@ -85,17 +86,11 @@
     first. Includes corrections, but does not include the actual
     documents.
 
-    Giving null as any of the date arguments makes the range open
+    Giving nil as any of the date arguments makes the range open
     ended for that value.")
 
   (status [node]
     "Returns the status of this node as a map.")
-
-  (submit-tx [node tx-ops]
-    "Writes transactions to the log for processing
-     tx-ops datalog style transactions.
-     Returns a map with details about the submitted transaction,
-     including tx-time and tx-id.")
 
   (submitted-tx-updated-entity? [node submitted-tx eid]
     "Checks if a submitted tx did update an entity.
@@ -121,30 +116,38 @@
     call. This can be used as the second parameter in (db valid-time,
     transaction-time) for consistent reads.
 
-    timeout – max time to wait, can be null for the default.
+    timeout – max time to wait, can be nil for the default.
     Returns the latest known transaction time.")
+
+  (attribute-stats [node]
+    "Returns frequencies map for indexed attributes"))
+
+(defprotocol PCruxIngestClient
+  "Provides API access to Crux ingestion."
+  (submit-tx [node tx-ops]
+    "Writes transactions to the log for processing
+     tx-ops datalog style transactions.
+     Returns a map with details about the submitted transaction,
+     including tx-time and tx-id.")
 
   (new-tx-log-context ^java.io.Closeable [node]
     "Returns a new transaction log context allowing for lazy reading
     of the transaction log in a try-with-resources block using
-    (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-documents?).
+    (tx-log ^Closeable tx-Log-context, from-tx-id, boolean with-ops?).
 
     Returns an implementation specific context.")
 
-  (tx-log [node tx-log-context from-tx-id with-documents?]
+  (tx-log [node tx-log-context from-tx-id with-ops?]
     "Reads the transaction log lazily. Optionally includes
-    documents, which allow the contents under the :crux.api/tx-ops
+    operations, which allow the contents under the :crux.api/tx-ops
     key to be piped into (submit-tx tx-ops) of another
     Crux instance.
 
     tx-log-context  a context from (new-tx-log-context node)
     from-tx-id      optional transaction id to start from.
-    with-documents? should the documents be included?
+    with-ops?       should the operations with documents be included?
 
-    Returns a lazy sequence of the transaction log.")
-
-  (attribute-stats [node]
-    "Returns frequencies map for indexed attributes"))
+    Returns a lazy sequence of the transaction log."))
 
 (extend-protocol PCruxNode
   ICruxAPI
@@ -168,9 +171,6 @@
   (status [this]
     (.status this))
 
-  (submit-tx [this tx-ops]
-    (.submitTx this tx-ops))
-
   (submitted-tx-updated-entity? [this submitted-tx eid]
     (.hasSubmittedTxUpdatedEntity this submitted-tx eid))
 
@@ -183,14 +183,19 @@
     ([this transaction-time timeout]
      (.sync this transaction-time timeout)))
 
+  (attribute-stats [this]
+    (.attributeStats this)))
+
+(extend-protocol PCruxIngestClient
+  ICruxIngestAPI
+  (submit-tx [this tx-ops]
+    (.submitTx this tx-ops))
+
   (new-tx-log-context ^java.io.Closeable [this]
     (.newTxLogContext this))
 
-  (tx-log [this tx-log-context from-tx-id with-documents?]
-    (.txLog this tx-log-context from-tx-id with-documents?))
-
-  (attribute-stats [this]
-    (.attributeStats this)))
+  (tx-log [this tx-log-context from-tx-id with-ops?]
+    (.txLog this tx-log-context from-tx-id with-ops?)))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -276,6 +281,19 @@
   (transaction-time [this]
     (.transactionTime this)))
 
+(defprotocol PCruxAsyncIngestClient
+  "Provides API access to Crux async ingestion."
+  (submit-tx-async [node tx-ops]
+    "Writes transactions to the log for processing tx-ops datalog
+     style transactions. Non-blocking.  Returns a deref with map with
+     details about the submitted transaction, including tx-time and
+     tx-id."))
+
+(extend-protocol PCruxAsyncIngestClient
+  ICruxAsyncIngestAPI
+  (submit-tx-async [this tx-ops]
+    (.submitTxAsync this tx-ops)))
+
 (defn start-cluster-node
   "Starts a query node in local library mode.
 
@@ -283,7 +301,7 @@
    specified as keywords using their long format name, like
    :bootstrap-servers etc.
 
-   NOTE: requires any KV store dependencies and kafka-clients on
+   NOTE: requires any KV store dependencies and crux-kafka on
    the classpath. The crux.kv.memdb.MemKv KV backend works without
    additional dependencies.
 
@@ -311,7 +329,7 @@
    :doc-cache-size     131072
    :object-store       \"crux.index.KvObjectStore\"}
 
-   returns the started local node that implements ICruxAPI and
+   returns the started cluster node that implements ICruxAPI and
    java.io.Closeable. Latter allows the node to be stopped
    by calling `(.close node)`.
 
@@ -353,12 +371,35 @@
   requires valid and transaction time to be specified for all
   calls to `db`.
 
-  NOTE: requires either clj-http or http-kit on the classpath,
-  see crux.bootstrap.remote-api-client/*internal-http-request-fn*
-  for more information.
+  NOTE: requires crux-http-client on the classpath, see
+  crux.bootstrap.remote-api-client/*internal-http-request-fn* for more
+  information.
 
   url the URL to a Crux HTTP end-point.
 
   returns a remote API client."
   ^ICruxAPI [url]
   (Crux/newApiClient url))
+
+(defn new-ingest-client
+  "Starts an ingest client for transacting into Kafka without running a
+  full local node with index.
+
+  For valid options, see crux.bootstrap/cli-options. Options are
+  specified as keywords using their long format name, like
+  :bootstrap-servers etc.
+
+  options
+  {:bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
+   :group-id           \"group-id\"
+   :tx-topic           \"crux-transaction-log\"
+   :doc-topic          \"crux-docs\"
+   :create-topics      true
+   :doc-partitions     1
+   :replication-factor 1}
+
+  Returns a crux.api.ICruxIngestAPI component that implements
+  java.io.Closeable, which allows the client to be stopped by calling
+  close."
+  ^ICruxAsyncIngestAPI [options]
+  (Crux/newIngestClient options))

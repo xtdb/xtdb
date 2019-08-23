@@ -24,7 +24,7 @@ public class Crux {
      * java.io.Closeable, which allows the node to be stopped by
      * calling close.
      *
-     * NOTE: requires any KV store dependencies and kafka-clients on
+     * NOTE: requires any KV store dependencies and crux-kafka on
      * the classpath. The crux.kv.memdb.MemKv KV backend works without
      * additional dependencies.
      *
@@ -38,7 +38,7 @@ public class Crux {
      * deployments.
      *
      * @param options see crux.bootstrap/cli-options.
-     * @return        the started local node.
+     * @return        the started cluster node.
      * @throws IndexVersionOutOfSyncException if the index needs
      * rebuilding.
      */
@@ -82,10 +82,19 @@ public class Crux {
     }
 
     /**
-     * Some interested javadocs. Also, this doesn't belong here at all.
+     * Starts a query node in local library mode using JDBC.
+     *
+     * Returns a ICruxAPI component that implements
+     * java.io.Closeable, which allows the node to be stopped by
+     * calling close.
+     *
+     * @param options see crux.jdbc
+     * @return        a cluster node backed by JDBC.
+     * @throws IndexVersionOutOfSyncException if the index needs
+     * rebuilding.
      */
     @SuppressWarnings("unchecked")
-    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
+    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
         IFn deref = Clojure.var("clojure.core", "deref");
         Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
@@ -97,7 +106,7 @@ public class Crux {
      * requires valid and transaction time to be specified for all
      * calls to {@link ICruxAPI#db()}.
      *
-     * NOTE: requires either clj-http or http-kit on the classpath,
+     * NOTE: requires crux-http-client on the classpath,
      * see crux.bootstrap.remove-api-client/*internal-http-request-fn*
      * for more information.
      *
@@ -107,5 +116,26 @@ public class Crux {
     public static ICruxAPI newApiClient(String url) {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.remote-api-client"));
         return (ICruxAPI) Clojure.var("crux.bootstrap.remote-api-client/new-api-client").invoke(url);
+    }
+
+    /**
+     * Starts an ingest client for transacting into Kafka without
+     * running a full local node with index.
+     *
+     * For valid options, see crux.bootstrap/cli-options. Options are
+     * specified as keywords using their long format name, like
+     * :bootstrap-servers etc.
+     *
+     * Returns a crux.api.ICruxAsyncIngestAPI component that
+     * implements java.io.Closeable, which allows the client to be
+     * stopped by calling close.
+     *
+     * @param options see crux.bootstrap/cli-options.
+     * @return        the started ingest client node.
+     */
+    @SuppressWarnings("unchecked")
+    public static ICruxAsyncIngestAPI newIngestClient(Map<Keyword,?> options) {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap.kafka-ingest-client"));
+        return (ICruxAsyncIngestAPI) Clojure.var("crux.bootstrap.kafka-ingest-client/new-ingest-client").invoke(options);
     }
 }

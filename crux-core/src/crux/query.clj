@@ -41,7 +41,7 @@
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(or (some-> % resolve var-get) %))
+                        (s/conformer #(or (some->> % (ns-resolve 'clojure.core) var-get) %))
                         (some-fn fn? logic-var?)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and list?
                                                  (s/cat :pred-fn ::pred-fn
@@ -1049,11 +1049,34 @@
 
 (def ^:dynamic *with-entities-cache?* true)
 
+(defrecord ConformedQuery [q-normalized q-conformed])
+
+(defn- normalize-and-conform-query ^ConformedQuery [conform-cache q]
+  (let [{:keys [args] :as q} (try
+                               (normalize-query q)
+                               (catch Exception e
+                                 q))
+        conformed-query (lru/compute-if-absent
+                         conform-cache
+                         (if (map? q)
+                           (dissoc q :args)
+                           q)
+                         identity
+                         (fn [q]
+                           (let [q (normalize-query (s/assert ::query q))]
+                             (->ConformedQuery q (s/conform ::query q)))))]
+    (if args
+      (do (s/assert ::args args)
+          (-> conformed-query
+              (assoc-in [:q-normalized :args] args)
+              (assoc-in [:q-conformed :args] args)))
+      conformed-query)))
+
 ;; TODO: Move future here to a bounded thread pool.
 (defn q
-  ([{:keys [kv] :as db} q]
+  ([{:keys [kv conform-cache] :as db} q]
    (let [start-time (System/currentTimeMillis)
-         q (normalize-query (s/assert ::query q))
+         q (.q-normalized (normalize-and-conform-query conform-cache q))
          query-future (future
                         (try
                           (with-open [snapshot (lru/new-cached-snapshot (kv/new-snapshot kv) true)]
@@ -1084,9 +1107,11 @@
      (if (instance? Throwable result)
        (throw result)
        result)))
-  ([{:keys [object-store kv valid-time transact-time] :as db} snapshot q]
-   (let [q (normalize-query (s/assert ::query q))
-         {:keys [find where args rules offset limit order-by full-results?] :as q-conformed} (s/conform ::query q)
+  ([{:keys [object-store conform-cache kv valid-time transact-time] :as db} snapshot q]
+   (let [conformed-query (normalize-and-conform-query conform-cache q)
+         q (.q-normalized conformed-query)
+         q-conformed (.q-conformed conformed-query)
+         {:keys [find where args rules offset limit order-by full-results?]} q-conformed
          stats (idx/read-meta kv :crux.kv/stats)]
      (log/debug :query (pr-str q))
      (validate-args args)
@@ -1129,7 +1154,7 @@
     (let [entity-tx (entity-tx snapshot db eid)]
       (db/get-single-object object-store snapshot (:crux.db/content-hash entity-tx)))))
 
-(defrecord QueryDatasource [kv query-cache object-store valid-time transact-time entity-as-of-idx]
+(defrecord QueryDatasource [kv query-cache conform-cache object-store valid-time transact-time entity-as-of-idx]
   ICruxDatasource
   (entity [this eid]
     (entity this eid))
@@ -1183,6 +1208,7 @@
    (let [now (cio/next-monotonic-date)]
      (->QueryDatasource kv
                         (lru/get-named-cache kv ::query-cache query-cache-size)
+                        (lru/get-named-cache kv ::conform-cache query-cache-size)
                         (or object-store (lru/new-cached-object-store kv doc-cache-size))
                         (or valid-time now)
                         (or transact-time now)

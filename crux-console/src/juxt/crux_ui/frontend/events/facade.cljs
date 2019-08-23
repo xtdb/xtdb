@@ -1,4 +1,8 @@
 (ns juxt.crux-ui.frontend.events.facade
+  "This ns keeps all events.
+  Events for central state can be considered as FSM transitions.
+  Hence ideally all state computations should be moved out of ns, but all state
+  transitions (read `(rf/dispatch [:wew])`) should be kept in here."
   (:require [re-frame.core :as rf]
             [cljs.tools.reader.edn :as edn]
             [medley.core :as m]
@@ -9,7 +13,9 @@
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
-            [juxt.crux-lib.http-functions :as hf]))
+            [juxt.crux-lib.http-functions :as hf]
+            [juxt.crux-ui.frontend.better-printer :as bp]
+            [juxt.crux-lib.functions :as fns]))
 
 
 (defn calc-query [db ex-title]
@@ -23,18 +29,74 @@
       (assoc :db.query/input str
              :db.query/input-committed str)))
 
+(defn o-reset-results [db]
+  (assoc db
+    :db.query/result nil
+    :db.query/result-analysis nil
+    :db.query/histories nil
+    :db.query/eid->simple-history nil
+    :db.query/analysis-committed nil
+    :db.query/input-committed nil
+    :db.query/error nil))
+
+(defn query-is-valid? [query-string]
+  (not (:error (qa/try-read-string query-string))))
+
+(defn o-commit-input [db input]
+  (let [input    (:db.query/input db)
+        edn      (qa/try-read-string input)
+        analysis (and (not (:error edn)) (qa/analyse-any-query edn))]
+    (-> db
+        (update :db.query/key inc)
+        (assoc :db.query/input-committed input
+               :db.query/analysis-committed analysis
+               :db.query/edn-committed edn))))
+
+(defn- safeguard-query [analysis-committed time limit]
+  (let [normalized-query (:query/normalized-edn analysis-committed)
+        safeguarded-query
+        (if (:limit normalized-query)
+          normalized-query
+          (assoc normalized-query :limit limit))]
+    {:raw-input      safeguarded-query
+     :query-vt       (:time/vt time)
+     :query-tt       (:time/tt time)
+     :query-analysis analysis-committed}))
+
+(defn calc-query-params
+  [{:db.query/keys
+    [edn-committed
+     analysis-committed
+     time limit]
+    :as db}]
+  (when analysis-committed
+    (case (:crux.ui/query-type analysis-committed)
+      :crux.ui.query-type/query (safeguard-query analysis-committed time limit)
+      :crux.ui.query-type/tx    {:raw-input edn-committed :query-analysis analysis-committed})))
+
+
 
 ; ----- effects -----
 
 (rf/reg-fx
   :fx/query-exec
   (fn [{:keys [raw-input query-analysis] :as query}]
-    (q/exec query)))
+    (if query
+      (q/exec query))))
+
+(defn qs [_]
+  (q/fetch-stats))
+
+(rf/reg-fx :fx/query-stats qs)
+
 
 (rf/reg-fx
-  :fx/query-stats
-  (fn [_]
-    (q/fetch-stats)))
+  :fx/set-node
+  (fn [node-addr]
+    (when node-addr
+      (q/set-node! (str "http://" node-addr))
+      (q/ping-status)
+      (q/fetch-stats))))
 
 (rf/reg-fx
   :fx.query/history
@@ -45,7 +107,6 @@
   :fx.query/histories-docs
   (fn [eids->histories]
     (q/fetch-histories-docs eids->histories)))
-
 
 (rf/reg-fx
   :fx.sys/set-cookie
@@ -75,9 +136,14 @@
 ; node and lifecycle
 (rf/reg-event-fx
   :evt.db/init
-  (fn [_ [_ db]]
-    {:db             db
-     :fx/query-stats nil}))
+  (fn [{:keys [db]} [_ new-db]]
+    {:db          new-db
+     :fx/set-node (:db.sys/host new-db)}))
+
+(rf/reg-event-fx
+  :evt.sys/set-route
+  (fn [{:keys [db]} [_ route]]
+    {:db (assoc db :db.sys/route route)}))
 
 
 ; queries
@@ -87,25 +153,44 @@
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
-(def ^:const ui--history-max-entities 7)
+(rf/reg-event-db
+  :evt.io/status-success
+  (fn [db [_ status]]
+    (assoc db :db.sys.host/status status)))
 
 
 
 ; --- io ---
+
+(def ^:const ui--history-max-entities 7)
+(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
+
+(defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
+  (if-not (history-tabs-set (:db.ui/output-main-tab db))
+    new-ctx
+    (assoc new-ctx :fx.query/history
+                   (take ui--history-max-entities
+                         (:ra/entity-ids (:db.query/result-analysis db))))))
+
+(defn- ctx-autoload-history-docs [{:keys [db] :as new-ctx}]
+  (let [histories (:db.query/histories db)
+        res-an    (:db.query/result-analysis db)]
+    (if-not (and histories
+                 (:ra/has-numeric-attrs? res-an)
+                 (history-tabs-set (:db.ui/output-main-tab db)))
+      new-ctx
+      (assoc new-ctx :fx.query/histories-docs histories))))
+
 
 (rf/reg-event-fx
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
           res-analysis (qa/analyse-results q-info res)
-          nums?  (:ra/has-numeric-attrs? res-analysis)
           db     (assoc db :db.query/result res
                            :db.query/error nil
                            :db.query/result-analysis res-analysis)]
-
-      (cond-> {:db db}
-              nums? (assoc :fx.query/history
-                           (take ui--history-max-entities (:ra/entity-ids res-analysis)))))))
+      (ctx-autoload-history {:db db}))))
 
 (rf/reg-event-fx
   :evt.io/gist-err
@@ -117,20 +202,37 @@
   (fn [db [_ {:evt/keys [query-type error] :as evt}]]
     (assoc db :db.query/error evt)))
 
+(rf/reg-event-db
+  :evt.db/prop-change
+  (fn [db [_ {:evt/keys [prop-name value] :as evt}]]
+    (assoc db prop-name value)))
+
+(defn db-set-host [db new-host]
+  (assoc db
+    :db.sys/host new-host
+    :db.sys.host/status nil))
+
+(rf/reg-event-fx
+  :evt.db/host-change
+  (fn [{:keys [db] :as ctx} [_ new-host]]
+    (println :evt.db/host-change new-host)
+    (let [db (db-set-host db new-host)]
+      {:db db
+       :fx/set-node new-host})))
+
 (rf/reg-event-fx
   :evt.io/gist-success
   (fn [{:keys [db] :as ctx} [_ res]]
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
       (-> ctx
           (assoc-in [:db :db.ui.examples/imported] edn)
-          (update :db o-set-example (some-> edn first :query pr-str)))
+          (update :db o-set-example (some-> edn first :query bp/better-printer)))
       (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
 
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
   (fn [{db :db :as ctx} [_ eid->history-range]]
-    {:db (assoc db :db.query/histories eid->history-range)
-     :fx.query/histories-docs eid->history-range}))
+    (ctx-autoload-history-docs {:db (assoc db :db.query/histories eid->history-range)})))
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
@@ -164,22 +266,13 @@
 (rf/reg-event-fx
   :evt.ui/query-submit
   (fn [{:keys [db] :as ctx}]
-    (let [input (:db.query/input db)
-          edn (qa/try-read-string input)
-          query-times (:db.query/time db)
-          vt (:crux.ui.time-type/vt query-times)
-          tt (:crux.ui.time-type/tt query-times)
-          analysis (and (not (:error edn)) (qa/analyse-query edn))]
-      {:db            (-> db
-                          (update :db.query/key inc)
-                          (assoc :db.query/input-committed input
-                                 :db.query/analysis-committed analysis
-                                 :db.query/edn-committed edn
-                                 :db.query/result nil))
-       :fx/query-exec {:raw-input      input
-                       :query-vt vt
-                       :query-tt tt
-                       :query-analysis analysis}})))
+    (if (query-is-valid? (:db.query/input db))
+      (let [new-db
+            (-> db
+                (o-reset-results)
+                (o-commit-input (:db.query/input db)))]
+        {:db new-db
+         :fx/query-exec (calc-query-params new-db)}))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
@@ -187,11 +280,16 @@
     {:db db
      :fx/get-github-gist link}))
 
+(rf/reg-event-fx
+  :evt.ui/root-tab-switch
+  (fn [{:keys [db] :as ctx} [_ root-tab-id]]
+    {:db (assoc db :db.ui/root-tab root-tab-id)}))
+
 (rf/reg-event-db
   :evt.ui.editor/set-example
   (fn [db [_ ex-title]]
     (let [query (calc-query db ex-title)
-          str   (f/pprint-str query)]
+          str   (bp/better-printer query)]
       (o-set-example db str))))
 
 (rf/reg-event-fx
@@ -205,15 +303,20 @@
   (fn [db [_ time-type time]]
     (assoc-in db [:db.query/time time-type] time)))
 
+(rf/reg-event-fx
+  :evt.ui.query/time-commit
+  (fn [{:keys [db] :as ctx} [_ time-type time]]
+    {:dispatch [:evt.ui/query-submit]}))
+
 (rf/reg-event-db
   :evt.ui.query/time-reset
   (fn [db [_ time-type]]
     (update db :db.query/time dissoc time-type)))
 
-(rf/reg-event-db
+(rf/reg-event-fx
   :evt.ui.output/main-tab-switch
-  (fn [db [_ new-tab-id]]
-    (assoc db :db.ui/output-main-tab new-tab-id)))
+  (fn [{:keys [db] :as ctx} [_ new-tab-id]]
+    (ctx-autoload-history {:db (assoc db :db.ui/output-main-tab new-tab-id)})))
 
 (rf/reg-event-db
   :evt.ui.output/side-tab-switch

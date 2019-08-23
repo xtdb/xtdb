@@ -21,7 +21,7 @@
       (rf/dispatch [:evt.ui/github-examples-request gh-link])
       (js/alert "Please ensure it's a raw gist link"))))
 
-(def q-form-styles
+(def ^:private q-form-styles
   [:style
     (garden/css
       [:.examples
@@ -47,12 +47,17 @@
         [:.examples
          {:display :none}]))])
 
+(def ^{:private true :const true} examples-close-text
+  "Tap to close examples. You can always get them by by resetting the cookies on this host.")
+
 (defn root []
   (if-let [examples @-sub-examples]
     [:div.examples
      q-form-styles
-     [:div.examples__close {:on-click dispatch-examples-close} icon/close]
-     [:div.examples__title "Examples: "]
+     [:div.examples__close
+      {:title examples-close-text
+       :on-click dispatch-examples-close} icon/close]
+     [:div.examples__title"Examples: "]
      (for [{ex-title :title} examples]
        ^{:key ex-title}
        [:div.examples__item

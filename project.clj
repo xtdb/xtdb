@@ -3,6 +3,7 @@
               "crux-rocksdb"
               "crux-lmdb"
               "crux-kafka-embedded"
+              "crux-kafka-connect"
               "crux-kafka"
               "crux-jdbc"
               "crux-http-client"

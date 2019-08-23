@@ -100,9 +100,9 @@
      false)})
 
 (defn tx-record->tx-log-entry [^ConsumerRecord record]
-  {:crux.tx/tx-time (Date. (.timestamp record))
-   :crux.api/tx-ops (.value record)
-   :crux.tx/tx-id (.offset record)})
+  {:crux.tx.event/tx-events (.value record)
+   :crux.tx/tx-id (.offset record)
+   :crux.tx/tx-time (Date. (.timestamp record))})
 
 ;;; Transacting Producer
 
@@ -122,8 +122,10 @@
             content-hash->doc (->> (for [doc (tx/tx-ops->docs tx-ops)]
                                      [(c/new-id doc) doc])
                                    (into {}))]
-        (doseq [[content-hash doc] content-hash->doc]
-          (db/submit-doc this (str content-hash) doc))
+        (doseq [f (->> (for [[content-hash doc] content-hash->doc]
+                         (db/submit-doc this (str content-hash) doc))
+                       (doall))]
+          @f)
         (.flush producer)
         (let [tx-send-future (->> (doto (ProducerRecord. tx-topic nil tx-events)
                                     (-> (.headers) (.add (str :crux.tx/docs)
@@ -211,9 +213,9 @@
   (let [record (tx-record->tx-log-entry record)
         {:crux.tx/keys [tx-time
                         tx-id]} record
-        {:crux.api/keys [tx-ops]} record]
-    (db/index-tx indexer tx-ops tx-time tx-id)
-    tx-ops))
+        {:crux.tx.event/keys [tx-events]} record]
+    (db/index-tx indexer tx-events tx-time tx-id)
+    tx-events))
 
 (defn consume-and-index-entities
   [{:keys [indexer ^KafkaConsumer consumer pending-txs-state
@@ -239,7 +241,6 @@
                                                      (nippy/fast-thaw))
                                  ready? (db/docs-exist? indexer content-hashes)
                                  {:crux.tx/keys [tx-time
-                                                 tx-ops
                                                  tx-id]} (tx-record->tx-log-entry tx-record)]
                              (if ready?
                                (log/info "Ready for indexing of tx" tx-id (pr-str tx-time))

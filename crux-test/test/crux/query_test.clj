@@ -1237,6 +1237,37 @@
                         [[e :crux.db/id _]]
                         :args [{}]}))))
 
+;; NOTE: Micro-benchmark that shows relative bounds, acceptable
+;; slowdown factors can be tweaked to force it to fail.
+(t/deftest test-non-entity-id-lookup-issue-287
+  (let [ivan {:crux.db/id :ivan :name "Ivan"}
+        number-of-docs 500
+        id-slowdown-factor 2
+        entity-slowdown-factor 5
+        {tx-time :crux.tx/tx-time}
+        (api/submit-tx *api* (vec (for [n (range number-of-docs)]
+                                    [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
+        _ (api/sync *api* tx-time nil)
+        db (api/db *api*)
+        entity-time (let [start-time (System/nanoTime)]
+                      (t/testing "entity id lookup"
+                        (t/is (= :ivan-2 (:crux.db/id (api/entity db :ivan-2)))))
+                      (- (System/nanoTime) start-time))
+        id-time (let [start-time (System/nanoTime)]
+                  (t/testing "query based on primary key"
+                    (t/is (= #{[:ivan-1]} (api/q db
+                                                 '{:find [e]
+                                                   :where [[e :crux.db/id :ivan-1]]}))))
+                  (- (System/nanoTime) start-time))
+        secondary-time (let [start-time (System/nanoTime)]
+                         (t/testing "query based on secondary attribute"
+                           (t/is (= #{[:ivan-3]} (api/q db
+                                                        '{:find [e]
+                                                          :where [[e :id 3]]}))))
+                         (- (System/nanoTime) start-time))]
+    (t/is (<= secondary-time (* entity-slowdown-factor entity-time)))
+    (t/is (<= secondary-time (* id-slowdown-factor id-time)))))
+
 (t/deftest test-query-and-cas
   (t/testing "can create new user"
     (let [{:crux.tx/keys [tx-time
@@ -1294,9 +1325,17 @@
                                      {:crux.db/id :ivan
                                       :name "Ivan 2nd"}
                                      {:crux.db/id :ivan
-                                      :name "Ivan 4th"}]])]
+                                      :name "Ivan 4th"}]])
+              updated? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)]
 
-          (t/is (true? (api/submitted-tx-updated-entity? *api* submitted-tx :ivan)))
+          ;; NOTE: adding tx log to failure message to help debug #321
+          ;; "Duplicate CAS failure".
+          (t/is (true? updated?)
+                (when-not updated?
+                  (with-open [tx-log-context (api/new-tx-log-context *api*)]
+                    (with-out-str
+                      (doseq [tx (api/tx-log *api* tx-log-context nil true)]
+                        (prn tx))))))
           (t/is (= #{["Ivan 4th"]} (api/q (api/db *api* tx-time
                                                   tx-time) '{:find [n]
                                                   :where [[:ivan :name n]]})))))

@@ -99,13 +99,17 @@
   (newTxLogContext [_]
     (db/new-tx-log-context tx-log))
 
-  (txLog [_ tx-log-context from-tx-id with-documents?]
-    (for [tx-log-entry (db/tx-log tx-log tx-log-context from-tx-id)]
-      (if with-documents?
-        (update tx-log-entry
-                :crux.api/tx-ops
-                #(with-open [snapshot (kv/new-snapshot kv-store)]
-                   (tx/enrich-tx-ops-with-documents snapshot object-store %)))
+  (txLog [_ tx-log-context from-tx-id with-ops?]
+    (for [{:keys [crux.tx/tx-id
+                  crux.tx.event/tx-events] :as tx-log-entry} (db/tx-log tx-log tx-log-context from-tx-id)
+          :when (with-open [snapshot (kv/new-snapshot kv-store)]
+                  (nil? (kv/get-value snapshot (c/encode-failed-tx-id-key-to nil tx-id))))]
+      (if with-ops?
+        (-> tx-log-entry
+            (dissoc :crux.tx.event/tx-events)
+            (assoc :crux.api/tx-ops
+                   (with-open [snapshot (kv/new-snapshot kv-store)]
+                     (tx/tx-events->tx-ops snapshot object-store tx-events))))
         tx-log-entry)))
 
   (sync [_ timeout]
@@ -183,7 +187,7 @@
                        (into dep-order))]
     dep-order))
 
-(defn- start-modules [node-system options]
+(defn start-modules [node-system options]
   (let [started (atom {})
         start-order (start-order node-system)
         started-modules (try

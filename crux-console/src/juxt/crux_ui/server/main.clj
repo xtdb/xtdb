@@ -23,6 +23,7 @@
      :lang "en"
      :stylesheet-async
        ["/static/styles/reset.css"
+        "/static/styles/react-input-range.css"
         "/static/styles/codemirror.css"
         "/static/styles/monokai.css"
         "/static/styles/eclipse.css"]

@@ -283,39 +283,6 @@
                  (kv/next i))
           (persistent! acc))))))
 
-(t/deftest test-performance-on-heap
-  (if (and (System/getenv "CRUX_KV_PERFORMANCE")
-           (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
-             (= backend *kv-backend*)
-             true))
-    (do (println *kv-backend* "on-heap")
-        (let [n 1000000
-              ks (vec (for [n (range n)]
-                        (.getBytes (format "%020x" n))))]
-          (t/is (= n (count ks)))
-
-          (System/gc)
-          (println "Writing")
-          (time
-           (kv/store *kv* (for [k ks]
-                              [k k])))
-
-          (System/gc)
-          (println "Reading")
-          (time
-           (do (dotimes [_ 10]
-                 (time
-                  (with-open [snapshot (kv/new-snapshot *kv*)
-                              i (kv/new-iterator snapshot)]
-                    (dotimes [idx n]
-                      (let [idx (- (dec n) idx)
-                            k (get ks idx)]
-                        (assert (bu/bytes=? k (kv/seek i k)))
-                        (assert (bu/bytes=? k (kv/value i))))))))
-               (println "Done")))
-          (println)))
-    (t/is true)))
-
 (t/deftest test-performance-off-heap
   (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]

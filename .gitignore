@@ -20,15 +20,15 @@ target
 /docs/nav.html
 /docs/img/diagram-classes.png
 /docs/.asciidoctor/
+/docs/example/standalone_webservice/data
+/docs/example/imdb/data
+/docs/example/imdb/dev-storage
 /dev/hraberg.clj
 
-/example/standalone_webservice/data/*
-/example/standalone_webservice/backup/**/*
-bench/data/**/*
-bench/datomic-data/**/*
-/bench/watdiv_*
+crux-bench/data/**/*
+crux-bench/datomic-data/**/*
+/crux-bench/watdiv_*
 
-/example/imdb/data/**/*
 .projectile
 /crux-uberjar/data
 /crux-dev/.testing-oracle.edn

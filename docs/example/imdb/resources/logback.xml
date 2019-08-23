@@ -8,15 +8,7 @@
     <appender-ref ref="STDOUT" />
   </root>
   <logger name="crux" level="INFO" />
-  <logger name="crux.bootstrap" level="WARN" />
-  <logger name="crux.standalone" level="ERROR" />
-  <logger name="crux.hash" level="WARN" />
-  <logger name="crux.http-server" level="WARN" />
-  <logger name="crux.kafka" level="WARN" />
-  <logger name="crux.jdbc" level="WARN" />
-  <logger name="crux.kv.memdb" level="ERROR" />
-  <logger name="crux.rdf" level="ERROR" />
-  <logger name="crux.tx" level="ERROR" />
+  <logger name="imdb" level="INFO" />
   <logger name="org.apache.kafka" level="ERROR" />
   <logger name="org.apache.zookeeper" level="ERROR" />
 </configuration>

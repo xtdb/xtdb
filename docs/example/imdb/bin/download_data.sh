@@ -10,4 +10,4 @@ curl https://datasets.imdbws.com/title.episode.tsv.gz -o data/title.episode.tsv.
 curl https://datasets.imdbws.com/title.principals.tsv.gz -o data/title.principals.tsv.gz
 curl https://datasets.imdbws.com/title.ratings.tsv.gz -o data/title.ratings.tsv.gz
 
-gunzip data/*
+gunzip data/*.tsv.gz

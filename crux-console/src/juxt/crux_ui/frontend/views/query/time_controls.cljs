@@ -1,54 +1,98 @@
 (ns juxt.crux-ui.frontend.views.query.time-controls
   (:require [garden.core :as garden]
-            [juxt.crux-ui.frontend.functions :as f]
-            [juxt.crux-ui.frontend.logging :as log]
-            [re-frame.core :as rf]))
+            [juxt.crux-ui.frontend.views.query.datepicker-native :as ndt]
+            [juxt.crux-ui.frontend.views.query.datepicker-slider :as sdt]
+            [re-frame.core :as rf]
+            [reagent.core :as r]
+            [juxt.crux-ui.frontend.functions :as f]))
+
+(def -sub-time (rf/subscribe [:subs.query/time]))
+(def -sub-vt (rf/subscribe [:subs.query.time/vt]))
+(def -sub-tt (rf/subscribe [:subs.query.time/tt]))
+(def -sub-vtc (rf/subscribe [:subs.query.time/vtc]))
+(def -sub-ttc (rf/subscribe [:subs.query.time/ttc]))
+
+(defn on-time-commit [^keyword time-type ^js/Date time]
+  (rf/dispatch [:evt.ui.query/time-commit time-type time]))
+
+(def on-time-commit-debounced
+  (f/debounce on-time-commit 1000))
 
 
-(defn- on-time-change [time-type evt]
-  (try
-    (let [v (f/jsget evt "target" "value")
-          d (js/Date. v)]
-      (log/log "value parsed" d)
-      (if (js/isNaN d)
-        (rf/dispatch [:evt.ui.query/time-reset time-type])
-        (rf/dispatch [:evt.ui.query/time-change time-type d])))
-    (catch js/Error err
-      (rf/dispatch [:evt.ui.query/time-reset time-type])
-      (log/error err))))
+(defn on-vt-change [d]
+  (println :on-vt-change d)
+  (on-time-commit-debounced :time/vt d)
+  (rf/dispatch [:evt.ui.query/time-change :time/vt d]))
+
+(defn on-vt-commit [d]
+  (println :on-vt-commit d)
+  (on-time-commit :time/vt d))
+
+(defn on-tt-commit [d]
+  (on-time-commit :time/tt d))
+
+(defn on-tt-change [d]
+  (on-time-commit-debounced :time/tt d)
+  (rf/dispatch [:evt.ui.query/time-change :time/tt d]))
 
 
-(defn- on-vt-change [evt]
-  (on-time-change :crux.ui.time-type/vt evt))
-
-(defn- on-tt-change [evt]
-  (on-time-change :crux.ui.time-type/tt evt))
-
-(def ^:private query-controls-styles
+(def ^:private time-controls-styles
   [:style
    (garden/css
-     [:.query-controls
+     [:.time-controls
       {:display         :flex
        :flex-direction  :column
        :justify-content :space-between
-       :padding         "8px 24px"}
+       :padding         "24px 24px"}
       [:&__item
-       {:margin-bottom :16px}]
-      [:&__item>label
-       {:letter-spacing :.04em}]
-      [:&__item>input
-       {:padding       :4px
-        :border-radius :2px
-        :margin-top    :4px
-        :border        "1px solid hsl(0, 0%, 85%)"}]])])
+       {:margin-bottom :32px}]
+      [:&__switcher
+       {:margin-top :16px}]])])
+
+(defn native-pickers []
+  [:<>
+   [:div.time-controls__item
+    [ndt/picker
+     {:label "Valid time"
+      :value @-sub-vt
+      :on-change on-vt-change}]]
+   [:div.time-controls__item
+    [ndt/picker
+     {:label "Transaction Time"
+      :value @-sub-tt
+      :on-change on-tt-change}]]])
+
+(defn range-pickers []
+  (let [active-picker (r/atom ::pickers-vt)
+        toggle {::pickers-vt ::pickers-tt
+                ::pickers-tt ::pickers-vt}
+        toggle-time #(swap! active-picker toggle)]
+    (fn []
+      (if (= ::pickers-vt @active-picker)
+       [:<>
+        [sdt/root-simple
+         {:label "Valid time"
+          :value @-sub-vtc
+          :on-change-complete on-vt-commit
+          :on-change on-vt-change}]
+        [:label.time-controls__switcher
+         {:on-click toggle-time} "Tx time: " (str @-sub-tt)]]
+       [:<>
+        [sdt/root-simple
+         {:label "Tx time"
+          :value @-sub-ttc
+          :on-change-complete on-tt-commit
+          :on-change on-tt-change}]
+        [:label.time-controls__switcher
+         {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
+
 
 
 (defn root []
-  [:div.query-controls
-   query-controls-styles
-   [:div.query-controls__item
-    [:label "Valid Time (optional)"]
-    [:input {:type "datetime-local" :name "vt" :on-change on-vt-change}]]
-   [:div.query-controls__item
-    [:label "Transaction Time (optional)"]
-    [:input {:type "datetime-local" :name "tt" :on-change on-tt-change}]]])
+  [:div.time-controls
+   sdt/style
+   ndt/style
+   time-controls-styles
+   #_[native-pickers]
+   [range-pickers]])
+

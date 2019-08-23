@@ -17,16 +17,21 @@
 
 (def debug? ^boolean goog.DEBUG)
 
-(def ^:private node-client
-  (crux-api/new-api-client
-    (if-not false "http://localhost:8080" "/crux")))
+(def ^:private node-client (atom nil))
+
+(defn set-node!
+  "node-address crux node "
+  [^js/String node-address]
+  (reset! node-client (crux-api/new-api-client node-address)))
 
 (defn- on-exec-success [resp]
-  (println :on-exec-success resp)
   (rf/dispatch [:evt.io/query-success resp]))
 
 (defn- on-stats-success [resp]
   (rf/dispatch [:evt.io/stats-success resp]))
+
+(defn- on-status-success [resp]
+  (rf/dispatch [:evt.io/status-success resp]))
 
 (defn- on-tx-success [resp]
   (rf/dispatch [:evt.io/tx-success resp]))
@@ -49,15 +54,15 @@
   (on-error :crux.ui.query-type/tx err))
 
 
-(defn exec-q [query-text vt tt]
-  (-> node-client
+(defn exec-q [query-edn vt tt]
+  (-> @node-client
       (crux-api/db vt tt)
-      (crux-api/q query-text)
+      (crux-api/q query-edn)
       (p/then on-exec-success)
       (p/catch on-error--query)))
 
 (defn exec-tx [query-text]
-  (-> node-client
+  (-> @node-client
       (crux-api/submitTx query-text)
       (p/then on-tx-success)
       (p/catch on-error--tx)))
@@ -72,12 +77,17 @@
 
 
 (defn fetch-stats []
-  (-> node-client
+  (-> @node-client
       (crux-api/attributeStats)
       (p/then on-stats-success)))
 
+(defn ping-status []
+  (-> @node-client
+      (crux-api/status)
+      (p/then on-status-success)))
+
 (defn fetch-history [eid]
-  (crux-api/historyRange node-client eid nil nil nil nil))
+  (crux-api/historyRange @node-client eid nil nil nil nil))
 ; (fetch-history :ids/fashion-ticker-2)
 
 (defn fetch-histories
@@ -89,7 +99,7 @@
 ; (fetch-histories [:ids/fashion-ticker-2])
 
 (defn fetch-docs [hashes]
-  (p/all (map #(crux-api/document node-client %) hashes)))
+  (p/all (map #(crux-api/document @node-client %) hashes)))
 
 (defn- merge-docs-into-histories [eids->histories hash->doc]
   (let [with-doc
