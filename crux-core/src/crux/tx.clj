@@ -219,7 +219,7 @@
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
                                       ((get tx-op->command op tx-command-unknown)
-                                       this kv object-store snapshot tx-log tx-op tx-time tx-id)))]
+                                       this kv object-store snapshot tx-log tx-event tx-time tx-id)))]
         (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
