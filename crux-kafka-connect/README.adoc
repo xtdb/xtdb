@@ -30,6 +30,11 @@ test topic (from `crux-dev`):
 
 Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
 
+Both connectors take the following configs
+
+* `url` the HTTP API end point of Crux.
+* `topic` the Kafka topic to read or write from.
+
 == Sink
 
 Start the Connect worker, which will connect to the embedded Kafka:
@@ -78,3 +83,16 @@ Should output:
 ```
 [[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]]
 ```
+
+The source connector has a config `mode` which can take two values:
+
+* `tx` emits tx operations verbatim from the API. (default)
+* `doc` turns the tx operations into a message per document, keyed by
+its `:crux.db/id`. This means that each transaction can result in more
+than one message.  `:crux.tx/delete` and `:crux.db/put` results in
+`nil` values in the message.
+
+The source connector also has a config `format` which can be either
+`edn` (default) or `json`. The mapping to JSON is lossy. It also has a
+config `batch.size` which controls the max number of transactions to
+read before generating source records at a given time.
