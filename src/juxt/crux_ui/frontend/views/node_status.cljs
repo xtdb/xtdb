@@ -4,6 +4,7 @@
             [garden.core :as garden]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.views.functions :as vf]
+            [juxt.crux-ui.frontend.views.output.edn :as edn]
             [juxt.crux-ui.frontend.views.style :as s]))
 
 
@@ -39,8 +40,11 @@
          {:position      :absolute
           :background    :white
           :padding :8px
+         ;:max-width :500px
+          :font-family "monospace"
           :display :block
-          :z-index       1
+          :z-index       100
+          :font-size :1.2rem
           :border-radius :2px
           :border        s/q-ui-border
           :top           :32px}]]
@@ -60,7 +64,7 @@
    [:div.node__led [led (boolean @-sub-node-status)]]
    [:div.node__status
     (if-let [node-info @-sub-node-status]
-      [:pre (f/pprint-str node-info)]
+      [:pre (f/pprint-str node-info)] ; alternatively [edn/root node-info]
       [:pre "Cannot connect to the specified node address"])]
    [:div.node__addr
     [input/text :ui.settings/host
