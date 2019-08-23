@@ -2,9 +2,11 @@
   (:require [garden.core :as garden]
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
             [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
-            [juxt.crux-ui.frontend.routes :as routes]))
+            [juxt.crux-ui.frontend.views.node-status :as node-status]
+            [juxt.crux-ui.frontend.views.commons.input :as input]))
 
 (def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
 
@@ -33,21 +35,26 @@
        [:&__links
         {:display :none}]]))])
 
+(defn header-tabs []
+  [:div.header__tabs
+   [tabs/root
+    {:active-tab-id   @-tab-sub
+     :tabs
+     [{:id :db.ui.root-tab/query-ui
+       :href  (routes/path-for :rd/query-ui)
+       :title "Query UI"}
+      {:id    :db.ui.root-tab/settings
+       :href  (routes/path-for :rd/settings)
+       :title "Settings"}]}]])
+
+
 (defn root []
   [:header.header
    header-styles
    [:div.header__logo
     [css-logo/root]]
-   [:div.header__tabs
-     [tabs/root
-      {:active-tab-id   @-tab-sub
-       :tabs
-                        [{:id    :db.ui.root-tab/query-ui
-                          :href  (routes/path-for :rd/query-ui)
-                          :title "Query UI"}
-                         {:id    :db.ui.root-tab/settings
-                          :href  (routes/path-for :rd/settings)
-                          :title "Settings"}]}]]
+   [:div.header__status
+    [node-status/node-status]]
 
    [:div.header__links
     [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}
