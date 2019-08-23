@@ -37,14 +37,18 @@
   (let [target (dom/jsget click-evt "target")
         tagname (dom/jsget target "tagName")
         href (dom/jsget target "href")
-        url (js/URL. href)
-        pathname (dom/jsget url "pathname")
-        rd (and pathname (match-route pathname))]
+        url (try
+              (js/URL. href)
+              (catch js/Error e
+                (log/error "can't parse link url, will ignore it" href)
+                nil))
+        pathname (and url (dom/jsget url "pathname"))
+        route-data (and pathname (match-route pathname))]
     (log/log :click-evt click-evt tagname href)
-    (when (and (= "A" tagname) rd)
+    (when (and url (= "A" tagname) route-data)
       (.preventDefault click-evt)
       (js/history.pushState nil "Console" href)
-      (rf/dispatch [:evt.sys/set-route rd]))))
+      (rf/dispatch [:evt.sys/set-route route-data]))))
 
 (defn init []
   (js/window.addEventListener "popstate" on-pop-state false)
