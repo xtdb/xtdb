@@ -1,15 +1,18 @@
 = crux-kafka-connect
 
-This project contains `crux.kafka.connect.CruxSinkConnector` which is
-an implementation of `org.apache.kafka.connect.sink.SinkConnector`.
+*ALPHA*
 
-Reads JSON and posts it to a Crux node using `crux-http-client`.
+This project contains both `crux.kafka.connect.CruxSinkConnector`
+which is an implementation of
+`org.apache.kafka.connect.sink.SinkConnector` and
+`crux.kafka.connect.CruxSourceConnector` which is an implementation of
+`org.apache.kafka.connect.source.SourceConnector` .
 
 See also: https://kafka.apache.org/documentation/#connect
 
 Download Kafka from https://kafka.apache.org/downloads
 
-Building and installing the sink connector:
+Building and installing the connectors:
 ```
 export KAFKA_HOME=...
 lein uberjar
@@ -28,6 +31,10 @@ test topic (from `crux-dev`):
 (k/create-topic (:admin-client node) "connect-test" 1 1 nil)
 ```
 
+Alternatively, this can be done using an existing Kafka cluster,
+potentially running out of the same `KAFKA_HOME` as the connector
+worker itself.
+
 Beware of the `/tmp/connect.offsets` file when restarting the Kafka cluster from scratch.
 
 Both connectors take the following configs
@@ -36,6 +43,8 @@ Both connectors take the following configs
 * `topic` the Kafka topic to read or write from.
 
 == Sink
+
+Reads JSON and posts it to a Crux node using `crux-http-client`.
 
 Start the Connect worker, which will connect to the embedded Kafka:
 
@@ -96,7 +105,6 @@ In `doc` mode the above should have outputted:
 ```
 {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ```
-
 
 The source connector also has a config `format` which can be either
 `edn` (default) or `json`. The mapping to JSON is lossy. It also has a
