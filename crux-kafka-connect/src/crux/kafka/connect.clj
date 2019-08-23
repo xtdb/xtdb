@@ -92,27 +92,33 @@
     (.submitTx api (vec (for [record records]
                           (transform-sink-record props record))))))
 
+(defn- tx-log-entry->source-records [source-partition topic formatter {:keys [crux.api/tx-ops
+                                                                              crux.tx/tx-id
+                                                                              crux.tx/tx-time]
+                                                                       :as tx}]
+  [(SourceRecord. source-partition
+                  {"offset" tx-id}
+                  topic
+                  nil
+                  nil
+                  nil
+                  Schema/STRING_SCHEMA
+                  (formatter tx-ops)
+                  (inst-ms tx-time))])
+
 (defn poll-source-records [^ICruxAPI api source-offset props]
   (with-open [tx-log-context (.newTxLogContext api)]
     (let [url (get props CruxSourceConnector/URL_CONFIG)
           topic (get props CruxSourceConnector/TOPIC_CONFIG)
           format (get props CruxSourceConnector/FORMAT_CONFIG)
           batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
+          source-partition {"url" url}
+          formatter (case format
+                      "edn" pr-str
+                      "json" json/generate-string)
           from-tx-id (inc (long (or (get source-offset "offset") -1)))]
       (log/info "source offset:" source-offset "tx-id:" from-tx-id "format:" format)
-      (vec (for [{:keys [crux.api/tx-ops
-                         crux.tx/tx-id
-                         crux.tx/tx-time]
-                  :as tx} (->> (.txLog api tx-log-context from-tx-id true)
-                               (take (Long/parseLong batch-size)))]
-             (SourceRecord. {"url" url}
-                            {"offset" tx-id}
-                            topic
-                            nil
-                            nil
-                            nil
-                            Schema/STRING_SCHEMA
-                            (case format
-                              "edn" (pr-str tx-ops)
-                              "json" (json/generate-string tx-ops))
-                            (inst-ms tx-time)))))))
+      (->> (.txLog api tx-log-context from-tx-id true)
+           (take (Long/parseLong batch-size))
+           (map #(tx-log-entry->source-records source-partition topic formatter %))
+           (reduce into [])))))
