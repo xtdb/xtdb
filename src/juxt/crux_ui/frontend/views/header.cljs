@@ -14,21 +14,26 @@
   [:style
    (garden/css
     [:.header
-      {:display :flex
-       :justify-content :space-between
-       :align-items :center
-       :padding "16px 42px"
+      {:display :grid
+       :grid-template "'logo status spacer links' / 180px 100px 1fr 260px"
+       :place-items "center start"
+       :padding "12px 42px"
        :width "100%"}
       [:&__logo
         {:display :flex
+         :grid-area :logo
          :justify-content :space-between
          :flex "0 0 200px"
          :align-items :center}]
-      [:&__links
-       {:display "flex"
-        :justify-content "space-between"
-        :flex "0 0 250px"
-        :align-items "center"}]]
+      [:&__status
+        {:grid-area :status}]
+     [:&__links
+      {:display "flex"
+       :grid-area :links
+       :place-self "center stretch"
+       :justify-content "space-between"
+       :flex "0 0 250px"
+       :align-items "center"}]]
     (gs/at-media {:max-width :1000px}
       [:.header
        {:padding "16px"}
