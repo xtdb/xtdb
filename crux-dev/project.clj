@@ -8,6 +8,7 @@
                  [juxt/crux-rocksdb "derived-from-git"]
                  [juxt/crux-lmdb "derived-from-git"]
                  [juxt/crux-kafka "derived-from-git"]
+                 [juxt/crux-kafka-connect "derived-from-git"]
                  [juxt/crux-kafka-embedded "derived-from-git"]
                  [juxt/crux-jdbc "derived-from-git"]
                  [juxt/crux-http-server "derived-from-git"]
@@ -27,6 +28,7 @@
                "../crux-rdf/test"
                "../crux-rocksdb/test"
                "../crux-lmdb/test"
+               "../crux-kafka-connect/test"
                "../crux-kafka-embedded/test"
                "../crux-kafka/test"
                "../crux-jdbc/test"
