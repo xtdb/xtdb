@@ -49,6 +49,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword,?> document(Object contentHash);
 
+    public Map<String,?> documents(Object contentHashSet);
+
     /**
      * Returns the transaction history of an entity, in reverse
      * chronological order. Includes corrections, but does not include

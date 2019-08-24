@@ -84,6 +84,7 @@ curl -X GET $nodeURL/
 
 NOTE: `estimate-num-keys` is an (over)estimate of the number of transactions in the log (each of which is a key in RocksDB). RocksDB https://github.com/facebook/rocksdb/wiki/RocksDB-FAQ[does not provide] an exact key count.
 
+
 [#document]
 === GET/POST `/document/[content-hash]`
 
@@ -91,13 +92,39 @@ Returns the document stored under that hash, if it exists.
 
 [source,bash]
 ----
-curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
+
+curl -X GET $nodeURL/document/686c3e1f00fb8ccabd43e93f5cd2da546d50d80d
+
 ----
 [source,clj]
 ----
 {:crux.db/id :foobar, :name "FooBar"}
 ----
 NOTE: Hashes for older versions of a document can be obtained with `/history`, under the `:crux.db/content-hash` keys.
+
+
+[#documents]
+=== GET/POST `/documents`
+
+Returns the documents map for ids set.
+
+[source,bash]
+----
+
+curl -X POST $nodeURL/documents \
+     -H "Content-Type: application/edn" \
+    -d '#{"686c3e1f00fb8ccabd43e93f5cd2da546d50d80d"
+          "773d1c878c512d5d50bb1e74e46d4e5e315046de"}'
+
+----
+[source,clj]
+----
+{:crux.db/id :foobar, :name "FooBar"}
+----
+NOTE: Hashes for older versions of a document can be obtained with `/history`, under the `:crux.db/content-hash` keys.
+
+
+
 
 [#entity]
 === POST `/entity`

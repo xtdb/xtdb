@@ -1,4 +1,4 @@
-(ns ivan
+(ns ivan.stocks
   (:require [clojure.test :as t]
             [crux.bench :as bench]
             [crux.fixtures :as f]

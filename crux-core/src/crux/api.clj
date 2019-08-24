@@ -57,6 +57,10 @@
      as of the valid and transaction time. Will block until the transaction
      time is present in the index.")
 
+  (documents [node content-hashes-set]
+    "Reads the set of documents from the document store based on their
+    respective content hashes. Returns a map content-hash->document")
+
   (document [node content-hash]
     "Reads a document from the document store based on its
     content hash.")
@@ -151,6 +155,9 @@
 
   (document [this content-hash]
     (.document this content-hash))
+
+  (documents [this content-hash-set]
+    (.documents this content-hash-set))
 
   (history [this eid]
     (.history this eid))
