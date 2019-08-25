@@ -86,18 +86,19 @@
 
   (get-single-object [this snapshot k]
     (let [doc-key (str (c/new-id k))]
-      (when-let [{:bitcask-kafka/keys [partition offset]} (get @keydir doc-key)]
-        (lru/compute-if-absent
-         object-cache
-         [doc-key partition offset]
-         identity
-         (fn [_]
-           (let [^KafkaConsumer consumer (.get consumer-tl)
-                 topic-partition (TopicPartition. (get options :data-topic) partition)]
-             (.assign consumer [topic-partition])
-             (.seek consumer topic-partition (long offset))
-             (when-let [^ConsumerRecord record (first (.poll consumer (Duration/ofMillis 1000)))]
-               (.value record))))))))
+      (when-let [{:bitcask-kafka/keys [partition offset deleted?]} (get @keydir doc-key)]
+        (when-not deleted?
+          (lru/compute-if-absent
+           object-cache
+           [doc-key partition offset]
+           identity
+           (fn [_]
+             (let [^KafkaConsumer consumer (.get consumer-tl)
+                   topic-partition (TopicPartition. (get options :data-topic) partition)]
+               (.assign consumer [topic-partition])
+               (.seek consumer topic-partition (long offset))
+               (when-let [^ConsumerRecord record (first (.poll consumer (Duration/ofMillis 1000)))]
+                 (.value record)))))))))
 
   (get-objects [this snapshot ks]
     (->> (for [k ks
