@@ -115,13 +115,19 @@
                          (not (get-in keydir [% :bitcask-kafka/deleted?])))))))
 
   (put-objects [this kvs]
-    (let [{:keys [data-topic hint-topic]} options]
-      (doseq [[k v] kvs
-              :let [doc-key (str (c/new-id k))
-                    ^RecordMetadata metadata @(.send producer (ProducerRecord. data-topic doc-key v))
+    (let [{:keys [data-topic hint-topic]} options
+          k+deleted?+mds (->> (for [[k v] kvs
+                                    :let [doc-key (str (c/new-id k))]]
+                                [doc-key
+                                 (nil? v)
+                                 (.send producer (ProducerRecord. data-topic doc-key v))])
+                              (doall))]
+      (.flush producer)
+      (doseq [[doc-key deleted? md] k+deleted?+mds
+              :let [^RecordMetadata metadata @md
                     hint {:bitcask-kafka/partition (.partition metadata)
                           :bitcask-kafka/offset (.offset metadata)
-                          :bitcask-kafka/deleted? (nil? v)}]]
+                          :bitcask-kafka/deleted? deleted?}]]
         @(.send producer (ProducerRecord. hint-topic doc-key hint))
         (swap! keydir assoc doc-key hint))))
 
