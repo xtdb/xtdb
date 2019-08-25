@@ -131,7 +131,7 @@
   Closeable
   (close [this]
     (reset! running? false)
-    (.join worker-thread)1
+    (.join worker-thread)
     (some-> producer (.close))
     (doseq [^KafkaConsumer consumer @consumers]
       (.close consumer))
