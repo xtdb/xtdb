@@ -12,6 +12,7 @@
     (try
       (with-open [standalone-node (Crux/startStandaloneNode {:db-dir db-dir
                                                              :kv-backend *kv-backend*
+                                                             :crux.standalone/event-log-kv-backend *kv-backend*
                                                              :event-log-dir event-log-dir})]
         (binding [*api* standalone-node]
           (f)))
