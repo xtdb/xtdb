@@ -15,7 +15,7 @@
                                                  {:keys [sync? crux.standalone/event-log-sync-interval-ms]}]
   (log/debug "Using event log fsync interval ms:" event-log-sync-interval-ms)
   (let [running? (atom true)
-        fsync-thread (when (and sync? event-log-sync-interval-ms)
+        fsync-thread (when event-log-sync-interval-ms
                        (doto (Thread. #(while @running?
                                          (try
                                            (Thread/sleep event-log-sync-interval-ms)
@@ -27,7 +27,7 @@
     (reify Closeable
       (close [_]
         (reset! running? false)
-        (some-> fsync-thread (.join fsync-thread))))))
+        (some-> fsync-thread (.join))))))
 
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
