@@ -1,11 +1,25 @@
 # Crux Console
 
+
+## Release flow
+1. `lein build` will produce you production ready assets
+2. `lein build-ebs` does the build above and packs it into
+    ebs which we upload to AWS to see console.crux.cloud
+
+
+## Dev flow
 To launch development REPL
 
 ```sh
+# once
 yarn install
+
 dev/shadow-dev &
-dev/run.sh
+# will launch shadow-cljs watch build
+# it runs a local version
+
+dev/run.sh 
+# will launch the server
 ```
 
 #### Plotly

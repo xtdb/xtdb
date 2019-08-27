@@ -2,9 +2,9 @@
 
 rm -r resources/static/crux-ui/compiled
 
-shadow-cljs release :app
+node_modules/.bin/shadow-cljs release app
 
-shadow-cljs release :app-perf
+node_modules/.bin/shadow-cljs release app-perf
 
 gzip -9k resources/static/crux-ui/compiled/*
 
