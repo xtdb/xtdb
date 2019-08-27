@@ -441,3 +441,96 @@
                    :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id tx2-ivan) tx2-valid-time]
                                              [:crux.tx/put (c/new-id :petr) (c/new-id tx2-petr) tx2-valid-time]]}]
                  log))))))
+
+(defn- sync-submit-tx [node tx-ops]
+  (api/sync node (:crux.tx/tx-time (api/submit-tx node tx-ops)) nil))
+
+(t/deftest test-can-apply-transaction-fn
+  (let [exception (atom nil)
+        latest-exception #(let [e @exception]
+                            (reset! exception nil)
+                            e)
+        rethrow-latest-exception (fn []
+                                   (throw (latest-exception)))]
+    (with-redefs [tx/tx-fns-enabled? true
+                  tx/log-tx-fn-error (fn [t & args]
+                                       (reset! exception t))]
+      (let [v1-ivan {:crux.db/id :ivan :name "Ivan" :age 40}
+            update-attribute-fn {:crux.db/id :update-attribute-fn
+                                 :crux.db.fn/body
+                                 '(fn [db eid k f]
+                                    [[:crux.tx/put (update (crux.api/entity db eid) k f)]])}]
+        (sync-submit-tx *api* [[:crux.tx/put v1-ivan]
+                               [:crux.tx/put update-attribute-fn]])
+        (t/is (= v1-ivan (api/entity (api/db *api*) :ivan)))
+        (t/is (= update-attribute-fn (api/entity (api/db *api*) :update-attribute-fn)))
+        (t/is (nil? (latest-exception)))
+
+        (let [v2-ivan (assoc v1-ivan :age 41)
+              inc-ivans-age '{:crux.db/id :inc-ivans-age
+                              :crux.db.fn/args [:ivan
+                                                :age
+                                                inc]}]
+          (sync-submit-tx *api* [[:crux.tx/fn :update-attribute-fn inc-ivans-age]])
+          (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
+          (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
+          (t/is (nil? (latest-exception)))
+
+          (t/testing "resulting documents are indexed"
+            (t/is (= #{[41]} (api/q (api/db *api*)
+                                    '[:find age :where [e :name "Ivan"] [e :age age]]))))
+
+          (t/testing "exceptions"
+            (t/testing "non existing tx fn"
+              (sync-submit-tx *api* '[[:crux.tx/fn :non-existing-fn]])
+              (t/is (= v2-ivan (api/entity (api/db *api*) :ivan)))
+              (t/is (thrown?  NullPointerException (rethrow-latest-exception))))
+
+            (t/testing "invalid arguments"
+              (sync-submit-tx *api* '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :inc-ivans-age
+                                                                         :crux.db.fn/args [:ivan
+                                                                                           :age
+                                                                                           foo]}]])
+              (t/is (= inc-ivans-age (api/entity (api/db *api*) :inc-ivans-age)))
+              (t/is (thrown? clojure.lang.Compiler$CompilerException (rethrow-latest-exception))))
+
+            (t/testing "invalid results"
+              (sync-submit-tx *api* [[:crux.tx/put
+                                      {:crux.db/id :invalid-fn
+                                       :crux.db.fn/body
+                                       '(fn [db]
+                                          [[:crux.tx/foo]])}]])
+              (sync-submit-tx *api* '[[:crux.tx/fn :invalid-fn]])
+              (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #"Spec assertion failed" (rethrow-latest-exception))))
+
+            (t/testing "exception thrown"
+              (sync-submit-tx *api* [[:crux.tx/put
+                                      {:crux.db/id :exception-fn
+                                       :crux.db.fn/body
+                                       '(fn [db]
+                                          (throw (RuntimeException. "foo")))}]])
+              (sync-submit-tx *api* '[[:crux.tx/fn :exception-fn]])
+              (t/is (thrown-with-msg? RuntimeException #"foo" (rethrow-latest-exception))))
+
+            (t/testing "still working after errors"
+              (let [v3-ivan (assoc v1-ivan :age 40)]
+                (sync-submit-tx *api* '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :dec-ivans-age
+                                                                           :crux.db.fn/args [:ivan
+                                                                                             :age
+                                                                                             dec]}]])
+                (t/is (nil? (latest-exception)))
+                (t/is (= v3-ivan (api/entity (api/db *api*) :ivan)))))
+
+            (t/testing "function ops can return other function ops"
+              (let [v4-ivan (assoc v1-ivan :name "IVAN")
+                    returns-fn {:crux.db/id :returns-fn
+                                :crux.db.fn/body
+                                '(fn [db]
+                                   '[[:crux.tx/fn :update-attribute-fn {:crux.db/id :upcase-ivans-name
+                                                                        :crux.db.fn/args [:ivan
+                                                                                          :name
+                                                                                          clojure.string/upper-case]}]])}]
+                (sync-submit-tx *api* [[:crux.tx/put returns-fn]])
+                (sync-submit-tx *api* [[:crux.tx/fn :returns-fn]])
+                (t/is (nil? (latest-exception)))
+                (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))))))))

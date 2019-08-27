@@ -13,6 +13,7 @@
             [crux.tx.polling :as p]
             crux.api
             crux.tx.event
+            [crux.query :as q]
             [taoensso.nippy :as nippy])
   (:import crux.codec.EntityTx
            crux.tx.consumer.Message
@@ -57,7 +58,7 @@
                    content-hash]])
                (reduce into []))}))
 
-(defn tx-command-put [object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-put [indexer kv object-store snapshot tx-log [op k v start-valid-time end-valid-time] transact-time tx-id]
   (assoc (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/->id-buffer (c/new-id v)))
          :pre-commit-fn #(let [content-hash (c/new-id v)
                                correct-state? (db/known-keys? object-store snapshot [content-hash])]
@@ -65,10 +66,10 @@
                              (log/error "Put, incorrect doc state for:" content-hash "tx id:" tx-id))
                            correct-state?)))
 
-(defn tx-command-delete [object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
+(defn tx-command-delete [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time] transact-time tx-id]
   (put-delete-kvs object-store snapshot k start-valid-time end-valid-time transact-time tx-id (c/nil-id-buffer)))
 
-(defn tx-command-cas [object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
+(defn tx-command-cas [indexer kv object-store snapshot tx-log [op k old-v new-v at-valid-time :as cas-op] transact-time tx-id]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time transact-time)
         {:keys [content-hash]
@@ -95,7 +96,7 @@
              tx-id)
             (c/->id-buffer new-v)]]}))
 
-(defn tx-command-evict [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+(defn tx-command-evict [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
   (let [eid (c/new-id k)
         history-descending (idx/entity-history snapshot eid)
         start-valid-time (or start-valid-time (some-> ^EntityTx (last history-descending) (.vt)))
@@ -116,14 +117,79 @@
                               (.content-hash entity-tx)
                               {:crux.db/id :crux.db/evicted}))))}))
 
-(defn tx-command-unknown [object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
-  (throw (IllegalArgumentException. (str "Unknown tx-op:" op))))
+(declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
+
+(def ^:private tx-fn-eval-cache (memoize eval))
+
+(defn log-tx-fn-error [fn-result fn-id body args-id args]
+  (log/warn fn-result "Transaction function failure:" fn-id (pr-str body) args-id (pr-str args)))
+
+(def tx-fns-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_TX_FNS")))
+
+(defn tx-command-fn [indexer kv object-store snapshot tx-log [op k args-v :as tx-op] transact-time tx-id]
+  (if-not tx-fns-enabled?
+    (throw (IllegalArgumentException. (str "Transaction functions not enabled: " (pr-str tx-op))))
+    (let [fn-id (c/new-id k)
+          db (q/db kv)
+          {:crux.db.fn/keys [body] :as fn-doc} (q/entity db fn-id)
+          {:crux.db.fn/keys [args] :as args-doc} (db/get-single-object object-store snapshot (c/new-id args-v))
+          args-id (:crux.db/id args-doc)
+          fn-result (try
+                      (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
+                            docs (tx-ops->docs tx-ops)
+                            {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
+                        ;; TODO: might lead to orphaned and unevictable
+                        ;; argument docs if the transaction fails. As
+                        ;; these nested docs never go to the doc topic,
+                        ;; it's slightly less of an issue. It's done
+                        ;; this way to support nested fns.
+                        (doseq [arg-doc arg-docs]
+                          (db/index-doc indexer (c/new-id arg-doc) arg-doc))
+                        {:docs (vec docs)
+                         :ops-result (vec (for [[op :as tx-op] (tx-ops->tx-events tx-ops)]
+                                            ((get tx-op->command op tx-command-unknown)
+                                             indexer kv object-store snapshot tx-log tx-op transact-time tx-id)))})
+                      (catch Throwable t
+                        t))]
+      (if (instance? Throwable fn-result)
+        {:pre-commit-fn (fn []
+                          (log-tx-fn-error fn-result fn-id body args-id args)
+                          false)}
+        (let [{:keys [docs ops-result]} fn-result]
+          {:pre-commit-fn #(do (doseq [doc docs]
+                                 (db/index-doc indexer (c/new-id doc) doc))
+                               (every? true? (for [{:keys [pre-commit-fn]} ops-result
+                                                   :when pre-commit-fn]
+                                               (pre-commit-fn))))
+           :kvs (vec (apply concat
+                            (when args-doc
+                              [[(c/encode-entity+vt+tt+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-id)
+                                 transact-time
+                                 transact-time
+                                 tx-id)
+                                (c/->id-buffer args-v)]
+                               [(c/encode-entity+z+tx-id-key-to
+                                 nil
+                                 (c/->id-buffer args-id)
+                                 (c/encode-entity-tx-z-number transact-time transact-time)
+                                 tx-id)
+                                (c/->id-buffer args-v)]])
+                            (map :kvs ops-result)))
+           :post-commit-fn #(doseq [{:keys [post-commit-fn]} ops-result
+                                    :when post-commit-fn]
+                              (post-commit-fn))})))))
+
+(defn tx-command-unknown [indexer kv object-store snapshot tx-log [op k start-valid-time end-valid-time keep-latest? keep-earliest?] transact-time tx-id]
+  (throw (IllegalArgumentException. (str "Unknown tx-op: " op))))
 
 (def ^:private tx-op->command
   {:crux.tx/put tx-command-put
    :crux.tx/delete tx-command-delete
    :crux.tx/cas tx-command-cas
-   :crux.tx/evict tx-command-evict})
+   :crux.tx/evict tx-command-evict
+   :crux.tx/fn tx-command-fn})
 
 (defn evicted-doc?
   [doc]
@@ -153,7 +219,7 @@
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
                                       ((get tx-op->command op tx-command-unknown)
-                                       object-store snapshot tx-log tx-event tx-time tx-id)))]
+                                       this kv object-store snapshot tx-log tx-event tx-time tx-id)))]
         (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
         (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
                        :when pre-commit-fn]
@@ -225,7 +291,8 @@
                                        (db/get-single-object object-store snapshot arg))
                                      arg))
                         (contains? #{:crux.tx/delete
-                                     :crux.tx/evict} op) (cons (c/new-id id))
+                                     :crux.tx/evict
+                                     :crux.tx/fn} op) (cons (c/new-id id))
                         true (cons op)
                         true (vec))))]
     (s/assert :crux.api/tx-ops tx-ops)

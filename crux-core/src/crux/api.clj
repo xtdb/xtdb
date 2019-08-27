@@ -10,8 +10,12 @@
            java.time.Duration))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
+(s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
+(s/def :crux.db.fn/body (s/cat :fn #{'fn}
+                               :args (s/coll-of symbol? :kind vector? :min-count 1)
+                               :body (s/* any?)))
 (s/def ::doc (s/and (s/map-of keyword? any?)
-                    (s/keys :req [:crux.db/id])))
+                    (s/keys :req [:crux.db/id] :opt [:crux.db.fn/body :crux.db.fn/args])))
 
 (def ^:private date? (partial instance? Date))
 
@@ -38,6 +42,12 @@
                                            :end-valid-time (s/? date?)
                                            :keep-latest? (s/? boolean?)
                                            :keep-earliest? (s/? boolean?)))
+
+(s/def ::args-doc (s/and ::doc (s/keys :req [:crux.db.fn/args])))
+
+(defmethod tx-op :crux.tx/fn [_] (s/cat :op #{:crux.tx/fn}
+                                        :id :crux.db/id
+                                        :args-doc (s/? ::args-doc)))
 
 (s/def ::tx-op (s/multi-spec tx-op first))
 (s/def ::tx-ops (s/coll-of ::tx-op :kind vector?))

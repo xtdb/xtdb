@@ -128,7 +128,8 @@
                                                                                   crux.tx/tx-time]
                                                                            :as tx}]
   (log/info "tx-ops:" tx-ops)
-  (for [tx-op tx-ops
+  (for [[op :as tx-op] tx-ops
+        :when (not= :crux.tx/fn op)
         :let [[id doc] (tx-op->id+doc tx-op)
               hashed-id (str (c/new-id id))
               _ (log/info "tx-op:" tx-op "id:" id "hashed id:" hashed-id "doc:" doc)]
