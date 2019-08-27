@@ -214,7 +214,7 @@
           (idx/delete-doc-from-index kv content-hash existing-doc))
         (idx/index-doc kv content-hash doc))))
 
-  (index-tx [_ tx-events tx-time tx-id]
+  (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
     (with-open [snapshot (kv/new-snapshot kv)]
       (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
