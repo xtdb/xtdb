@@ -99,6 +99,7 @@
      (.document crux-node (c/new-id content-hash)))))
 
 (defn- documents [^ICruxAPI crux-node request]
+  ; TODO support for GET
   (let [content-hashes-set (body->edn request)
         ids-set (map c/new-id content-hashes-set)]
     (success-response (.documents crux-node ids-set))))

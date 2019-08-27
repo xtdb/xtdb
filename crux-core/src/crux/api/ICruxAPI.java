@@ -5,6 +5,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.time.Duration;
+import java.util.Set;
+
 import clojure.lang.Keyword;
 
 /**
@@ -57,7 +59,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * hashes.
      * @return            a map from hashable objects to the corresponding documents.
      */
-    public Map<String,?> documents(Object contentHashSet);
+    public Map<String,Map<String,?>> documents(Set<?> contentHashSet);
 
     /**
      * Returns the transaction history of an entity, in reverse
