@@ -90,7 +90,7 @@ tail $KAFKA_HOME/test.sink.txt
 
 Should output:
 ```
-[[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}]]
+[[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"} #inst "<original-tx-time>"]]
 ```
 
 The source connector has a config `mode` which can take two values:

@@ -16,7 +16,7 @@
 (cheshire.generate/add-encoder
  EDNId
  (fn [c ^JsonGenerator json-generator]
-   (.writeString json-generator (c/edn-id->original-id c))))
+   (.writeString json-generator (str (c/edn-id->original-id c)))))
 
 (defn- map->edn [m]
   (->> (for [[k v] m]
@@ -92,6 +92,19 @@
     (.submitTx api (vec (for [record records]
                           (transform-sink-record props record))))))
 
+(defn- tx-op-with-explicit-valid-time [[op :as tx-op] tx-time]
+  (or (case op
+        :crux.tx/put
+        (when (= 2 (count tx-op))
+          (conj tx-op tx-time))
+        :crux.tx/delete
+        (when (= 2 (count tx-op))
+          (conj tx-op tx-time))
+        :crux.tx/cas
+        (when (= 3 (count tx-op))
+          (conj tx-op tx-time)))
+      tx-op))
+
 (defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [crux.api/tx-ops
                                                                                  crux.tx/tx-id
                                                                                  crux.tx/tx-time]
@@ -103,7 +116,10 @@
                   nil
                   nil
                   Schema/STRING_SCHEMA
-                  (formatter tx-ops)
+                  (->> (for [tx-op tx-ops]
+                         (tx-op-with-explicit-valid-time tx-op tx-time))
+                       (vec)
+                       (formatter))
                   (inst-ms tx-time))])
 
 (defn- tx-op->id+doc [[op :as tx-op]]
