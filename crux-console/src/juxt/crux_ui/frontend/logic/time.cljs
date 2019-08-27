@@ -1,7 +1,7 @@
 (ns juxt.crux-ui.frontend.logic.time
   (:require [goog.string :as gs]))
 
-(defn format-iso-8601--utc [d]
+(defn format-iso-8601--utc [^js/Date d]
   (str ""  (.getUTCFullYear d)
        "-" (gs/padNumber (inc (.getUTCMonth d)) 2)
        "-" (gs/padNumber (.getUTCDate d) 2)
@@ -11,7 +11,7 @@
        "." (gs/padNumber (.getUTCMilliseconds d) 3)
        "Z"))
 
-(defn format-for-dt-local [d]
+(defn format-for-dt-local [^js/Date d]
   (str ""  (.getFullYear d)
        "-" (gs/padNumber (inc (.getMonth d)) 2)
        "-" (gs/padNumber (.getDate d) 2)
