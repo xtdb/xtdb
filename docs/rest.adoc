@@ -97,7 +97,23 @@ curl -X GET $nodeURL/document/7af0444315845ab3efdfbdfa516e68952c1486f2
 ----
 {:crux.db/id :foobar, :name "FooBar"}
 ----
-NOTE: Hashes for older versions of a document can be obtained with `/history`, under the `:crux.db/content-hash` keys.
+NOTE: Hashes for older versions of a document can be obtained with `/history-range` or `/history`, under the `:crux.db/content-hash` keys.
+
+[#documents]
+=== GET/POST `/documents`
+
+Returns a map from the documents ids to the documents for ids set.
+
+[source,bash]
+----
+curl -X POST $nodeURL/documents \
+     -H "Content-Type: application/edn" \
+     -d '#{"7af0444315845ab3efdfbdfa516e68952c1486f2"}'
+----
+[source,clj]
+----
+{"7af0444315845ab3efdfbdfa516e68952c1486f2" {:crux.db/id :foobar, :name "FooBar"}}
+----
 
 [#entity]
 === POST `/entity`

@@ -32,8 +32,8 @@
 
 (defn- body->edn [request]
   (->> request
-      req/body-string
-      (edn/read-string {:readers {'crux/id c/id-edn-reader}})))
+       req/body-string
+       (edn/read-string {:readers {'crux/id c/id-edn-reader}})))
 
 (defn- check-path [[path-pattern valid-methods] request]
   (let [path (req/path-info request)
@@ -97,6 +97,12 @@
   (let [[_ content-hash] (re-find #"^/document/(.+)$" (req/path-info request))]
     (success-response
      (.document crux-node (c/new-id content-hash)))))
+
+(defn- documents [^ICruxAPI crux-node request]
+  ; TODO support for GET
+  (let [content-hashes-set (body->edn request)
+        ids-set (map c/new-id content-hashes-set)]
+    (success-response (.documents crux-node ids-set))))
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
@@ -260,6 +266,9 @@
     [#"^/document/.+$" [:get :post]]
     (document crux-node request)
 
+    [#"^/documents" [:post]]
+    (documents crux-node request)
+
     [#"^/entity$" [:post]]
     (entity crux-node request)
 
@@ -317,17 +326,18 @@
   the Crux HTTP API. Takes a either a crux.api.ICruxAPI or its
   dependencies explicitly as arguments (internal use)."
   ^java.io.Closeable
-  [crux-node {:keys [server-port cors-access-control]
-              :or {server-port 3000 cors-access-control []}
-              :as options}]
-  (s/assert ::options options)
-  (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
-        server (j/run-jetty (-> (partial handler crux-node)
-                                (wrap-exception-handling)
-                                (p/wrap-params)
-                                (wrap-cors')
-                                (wrap-exception-handling))
-                            {:port server-port
-                             :join? false})]
-    (log/info "HTTP server started on port: " server-port)
-    (->HTTPServer server options)))
+  ([crux-node] (start-http-server crux-node {}))
+  ([crux-node
+    {:keys [server-port cors-access-control]
+     :or {server-port 3000 cors-access-control []}
+     :as options}]
+   (let [wrap-cors' #(apply wrap-cors (cons % cors-access-control))
+         server (j/run-jetty (-> (partial handler crux-node)
+                                 (wrap-exception-handling)
+                                 (p/wrap-params)
+                                 (wrap-cors')
+                                 (wrap-exception-handling))
+                             {:port server-port
+                              :join? false})]
+     (log/info "HTTP server started on port: " server-port)
+     (->HTTPServer server options))))

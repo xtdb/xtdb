@@ -39,7 +39,7 @@
        :dynamic true}
   *internal-http-request-fn*)
 
-(defn- init-intrnal-http-request-fn []
+(defn- init-internal-http-request-fn []
   (when (not (bound? #'*internal-http-request-fn*))
     (alter-var-root
      #'*internal-http-request-fn*
@@ -162,6 +162,9 @@
   (document [_ content-hash]
     (api-request-sync (str url "/document/" content-hash) nil {:method :get}))
 
+  (documents [_ content-hash-set]
+    (api-request-sync (str url "/documents") content-hash-set {:method :post}))
+
   (history [_ eid]
     (api-request-sync (str url "/history/" eid) nil {:method :get}))
 
@@ -222,5 +225,5 @@
   (close [_]))
 
 (defn new-api-client ^ICruxAPI [url]
-  (init-intrnal-http-request-fn)
+  (init-internal-http-request-fn)
   (->RemoteApiClient url))

@@ -70,6 +70,10 @@
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (db/get-single-object object-store snapshot (c/new-id content-hash))))
 
+  (documents [_ content-hash-set]
+    (with-open [snapshot (kv/new-snapshot kv-store)]
+      (db/get-objects object-store snapshot (map c/new-id content-hash-set))))
+
   (history [_ eid]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (mapv c/entity-tx->edn (idx/entity-history snapshot eid))))

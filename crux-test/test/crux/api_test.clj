@@ -175,13 +175,16 @@
         (t/is (nil? (.entity (.db *api* #inst "1999") :ivan))))
 
       (t/testing "entity-tx, document and history"
-        (let [entity-tx (.entityTx (.db *api*) :ivan)]
+        (let [entity-tx (.entityTx (.db *api*) :ivan)
+              ivan {:crux.db/id :ivan :name "Ivan"}
+              ivan-crux-id (c/new-id ivan)]
           (t/is (= (merge submitted-tx
-                          {:crux.db/id (str (c/new-id :ivan))
-                           :crux.db/content-hash (str (c/new-id {:crux.db/id :ivan :name "Ivan"}))
-                           :crux.db/valid-time valid-time})
+                          {:crux.db/id           (str (c/new-id :ivan))
+                           :crux.db/content-hash (str ivan-crux-id)
+                           :crux.db/valid-time   valid-time})
                    entity-tx))
-          (t/is (= {:crux.db/id :ivan :name "Ivan"} (.document *api* (:crux.db/content-hash entity-tx))))
+          (t/is (= ivan (.document *api* (:crux.db/content-hash entity-tx))))
+          (t/is (= {ivan-crux-id ivan} (.documents *api* #{(:crux.db/content-hash entity-tx)})))
           (t/is (= [entity-tx] (.history *api* :ivan)))
           (t/is (= [entity-tx] (.historyRange *api* :ivan #inst "1990" #inst "1990" (:crux.tx/tx-time submitted-tx) (:crux.tx/tx-time submitted-tx))))
 
