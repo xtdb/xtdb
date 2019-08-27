@@ -1,6 +1,7 @@
 (ns crux.fixtures.jdbc
   (:require [next.jdbc :as jdbc]
             [crux.fixtures.api :refer [*api*]]
+            [crux.fixtures.kv :refer [*kv-backend*]]
             [crux.io :as cio]
             [crux.jdbc :as j])
   (:import [crux.api Crux ICruxAPI]))
@@ -13,7 +14,7 @@
         options (merge {:dbtype (name dbtype)
                         :dbname "cruxtest"
                         :db-dir db-dir
-                        :kv-backend "crux.kv.memdb.MemKv"}
+                        :kv-backend *kv-backend*}
                        opts)
         ds (jdbc/get-datasource options)]
     (binding [*dbtype* dbtype]
