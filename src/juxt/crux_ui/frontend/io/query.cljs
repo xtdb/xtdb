@@ -1,7 +1,5 @@
 (ns juxt.crux-ui.frontend.io.query
-  (:require [clojure.core.async :as async
-             :refer [take! put! <! >! timeout chan alt! go go-loop]]
-            [re-frame.core :as rf]
+  (:require [re-frame.core :as rf]
             [medley.core :as m]
             [juxt.crux-lib.async-http-client :as crux-api]
             [promesa.core :as p]
