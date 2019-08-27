@@ -57,13 +57,13 @@
      as of the valid and transaction time. Will block until the transaction
      time is present in the index.")
 
-  (documents [node content-hashes-set]
-    "Reads the set of documents from the document store based on their
-    respective content hashes. Returns a map content-hash->document")
-
   (document [node content-hash]
     "Reads a document from the document store based on its
     content hash.")
+
+  (documents [node content-hashes-set]
+    "Reads the set of documents from the document store based on their
+    respective content hashes. Returns a map content-hash->document")
 
   (history [node eid]
     "Returns the transaction history of an entity, in reverse

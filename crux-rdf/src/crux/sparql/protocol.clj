@@ -70,7 +70,7 @@
                                     value)))
                         (str/join ", "))
                    "}"))
-            (str/join ", " ))
+            (str/join ", "))
        "]}}"))
 
 (defn sparql-query [^ICruxAPI crux-node request]

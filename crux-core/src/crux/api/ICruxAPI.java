@@ -49,6 +49,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     public Map<Keyword,?> document(Object contentHash);
 
+    /**
+     *  Reads a document from the document store based on its
+     *  content hash.
+     *
+     * @param contentHashSet a set of objects that can be coerced into a content
+     * hashes.
+     * @return            a map from hashable objects to the corresponding documents.
+     */
     public Map<String,?> documents(Object contentHashSet);
 
     /**

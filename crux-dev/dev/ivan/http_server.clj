@@ -39,4 +39,7 @@
          :where
          [[e :crux.db/id _]]})
 
-(api/documents client-node #{})
+(api/documents
+  simple-node
+  #{"686c3e1f00fb8ccabd43e93f5cd2da546d50d80d"
+    "773d1c878c512d5d50bb1e74e46d4e5e315046de"})
