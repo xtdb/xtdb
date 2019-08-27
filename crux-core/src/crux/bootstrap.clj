@@ -14,7 +14,7 @@
             [crux.query :as q]
             [crux.status :as status]
             [crux.tx :as tx])
-  (:import crux.api.ICruxAPI
+  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
            java.util.UUID))
 
@@ -124,6 +124,10 @@
 
   (sync [_ tx-time timeout]
     (tx/await-tx-time indexer tx-time (when timeout {:crux.tx-log/await-tx-timeout (.toMillis timeout)})))
+
+  ICruxAsyncIngestAPI
+  (submitTxAsync [_ tx-ops]
+    (db/submit-tx tx-log tx-ops))
 
   backup/INodeBackup
   (write-checkpoint [this {:keys [crux.backup/checkpoint-directory] :as opts}]
