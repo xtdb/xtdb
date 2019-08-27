@@ -99,13 +99,9 @@
      (.document crux-node (c/new-id content-hash)))))
 
 (defn- documents [^ICruxAPI crux-node request]
-  (let [content-hashes-set (body->edn request)]
-    (success-response
-      (persistent!
-        (reduce
-          (fn [m hash] (assoc! m hash (.document crux-node hash)))
-          (transient {})
-          content-hashes-set)))))
+  (let [content-hashes-set (body->edn request)
+        ids-set (map c/new-id content-hashes-set)]
+    (success-response (.documents crux-node ids-set))))
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))
