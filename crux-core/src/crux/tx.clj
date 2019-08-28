@@ -199,7 +199,7 @@
   Closeable
   (close [_]
     (when stats-executor
-      (doto  ^ExecutorService stats-executor
+      (doto stats-executor
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS))))
 
