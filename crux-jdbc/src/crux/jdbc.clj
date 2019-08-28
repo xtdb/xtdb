@@ -149,11 +149,10 @@
       (close [_])))
 
   (next-events [this context next-offset]
-    (jdbc/with-transaction [t ds]
-      (mapv (partial event-result->message dbtype)
-            (jdbc/execute! t
-                           ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
-                           {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps}))))
+    (mapv (partial event-result->message dbtype)
+          (jdbc/execute! ds
+                         ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
+                         {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps})))
 
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
