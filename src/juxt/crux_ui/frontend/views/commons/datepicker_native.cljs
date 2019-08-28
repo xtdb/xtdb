@@ -1,8 +1,9 @@
-(ns juxt.crux-ui.frontend.views.query.datepicker-native
+(ns juxt.crux-ui.frontend.views.commons.datepicker-native
   (:require [garden.core :as garden]
             [juxt.crux-ui.frontend.logging :as log]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.logic.time :as time]
+            [juxt.crux-ui.frontend.views.commons.input :as input]
             [reagent.core :as r]))
 
 
@@ -30,14 +31,8 @@
         :letter-spacing :.04em}]
 
       [:&__input
-       {:padding       :4px
-        :border-radius :2px
-        :letter-spacing :.09em
-        :font-size     :inherit
-        :font-family   :inherit
-        :display :inline-block
-        :text-align :right
-        :margin-top    :4px}]]
+       (conj input/styles-src
+             {:margin-top    :4px})]]
 
      [:.native-date-time-picker
       [:&__input

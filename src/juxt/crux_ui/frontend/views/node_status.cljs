@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.views.node-status
   (:require [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.views.commons.input :as input]
             [garden.core :as garden]
+            [juxt.crux-ui.frontend.views.commons.input :as input]
+            [juxt.crux-ui.frontend.views.commons.contenteditable :as editable]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.views.functions :as vf]
             [juxt.crux-ui.frontend.views.output.edn :as edn]
@@ -51,7 +52,7 @@
       [:&__addr
        {:display "flex"
         :justify-content "space-between"
-        :flex "0 0 250px"
+        :flex "1 0 120px"
         :align-items "center"}]])])
 
 
@@ -67,6 +68,7 @@
       [:pre (f/pprint-str node-info)] ; alternatively [edn/root node-info]
       [:pre "Cannot connect to the specified node address"])]
    [:div.node__addr
-    [input/text :ui.settings/host
+    [editable/div ::host-input
      {:on-change-complete on-host-change
+      :placeholder "Node hostname/and-path"
       :value @-sub-node-addr}]]])

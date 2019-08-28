@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.views.commons.input
   (:require [reagent.core :as r]
             [juxt.crux-ui.frontend.views.commons.user-intents :as user-intents]
-            [garden.core :as garden]))
+            [garden.core :as garden]
+            [juxt.crux-ui.frontend.views.style :as s]))
 
 
 (defn- -data-attrs-mapper [[k v]]
@@ -10,15 +11,26 @@
 (defn render-data-attrs [hmap]
   (into {} (map -data-attrs-mapper hmap)))
 
+
+(def styles-src
+  (list
+    {:border         :none}
+    {:border-bottom  s/q-ui-border}
+    {:padding        :4px
+     :border-radius  :2px
+     :width          :100%
+     :letter-spacing :.09em
+     :outline        :none
+     :font-size      :inherit
+     :font-family    :inherit
+     :display        :inline-block}
+    ["&:empty"
+     {:min-width :220px}]
+    ["&:empty::before"
+     {:content "attr(placeholder)"}]))
+
 (def styles
-  [:.crux-ui-input
-   {:padding        :4px
-    :border-radius  :2px
-    :border         :none
-    :letter-spacing :.09em
-    :font-size      :inherit
-    :font-family    :inherit
-    :display        :inline-block}])
+  [:.crux-ui-input styles-src])
 
 
 (defn text

@@ -2,7 +2,7 @@
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.logging :as log]
             [juxt.crux-ui.frontend.logic.time :as time]
-            [juxt.crux-ui.frontend.views.query.datepicker-native :as dpn]
+            [juxt.crux-ui.frontend.views.commons.datepicker-native :as dpn]
             ["react-input-range" :as ir]
             [reagent.core :as r]
             [garden.core :as garden]))

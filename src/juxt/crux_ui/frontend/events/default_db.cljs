@@ -16,7 +16,7 @@
   (let [hs js/location.hostname]
     (case hs
       "localhost" "localhost:8080"
-      hs)))
+      (str hs "/crux"))))
 
 (def default-db
   {:db.query/input           example-query-str
