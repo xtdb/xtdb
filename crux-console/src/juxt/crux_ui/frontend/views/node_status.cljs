@@ -1,12 +1,12 @@
 (ns juxt.crux-ui.frontend.views.node-status
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
-            [juxt.crux-ui.frontend.views.commons.input :as input]
             [juxt.crux-ui.frontend.views.commons.contenteditable :as editable]
             [juxt.crux-ui.frontend.functions :as f]
+            [juxt.crux-ui.frontend.views.commons.keycodes :as kc]
             [juxt.crux-ui.frontend.views.functions :as vf]
-            [juxt.crux-ui.frontend.views.output.edn :as edn]
-            [juxt.crux-ui.frontend.views.style :as s]))
+            [juxt.crux-ui.frontend.views.style :as s]
+            [juxt.crux-ui.frontend.views.commons.dom :as dom]))
 
 
 
@@ -70,5 +70,8 @@
    [:div.node__addr
     [editable/div ::host-input
      {:on-change-complete on-host-change
-      :placeholder "Node hostname/and-path"
-      :value @-sub-node-addr}]]])
+      :on-key-down
+      (dom/dispatch-on-keycode
+        {::kc/enter #(some-> % (.-target) (.blur))})
+      :placeholder        "Node hostname/and-path"
+      :value              @-sub-node-addr}]]])
