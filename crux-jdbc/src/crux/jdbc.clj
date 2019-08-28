@@ -115,7 +115,7 @@
         (try
           (r/reduce consumer-f
                     nil
-                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ?"
+                    (jdbc/plan ds ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET"
                                    (or from-tx-id 0)]
                                {:builder-fn jdbcr/as-unqualified-lower-maps}))
           (catch Throwable t
@@ -146,7 +146,7 @@
     (jdbc/with-transaction [t ds]
       (doall
        (map (partial event-result->message dbtype)
-            (jdbc/execute! t ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ?" next-offset]
+            (jdbc/execute! t ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
                            {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))))
 
   (end-offset [this]
