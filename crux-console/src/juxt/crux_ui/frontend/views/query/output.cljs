@@ -11,7 +11,8 @@
             [juxt.crux-ui.frontend.views.output.table :as q-results-table]
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.attr-stats :as attr-stats]
-            [juxt.crux-ui.frontend.views.codemirror :as cm]))
+            [juxt.crux-ui.frontend.views.codemirror :as cm]
+            [reagent.core :as r]))
 
 
 (def ^:private -sub-err             (rf/subscribe [:subs.query/error-improved]))
@@ -50,8 +51,8 @@
   [:div.output-tabs.output-tabs--side
    q-output-tabs-styles
    (->>
-     (for [tab-type [:db.ui.output-tab/tree :db.ui.output-tab/attr-stats]]
-         [out-tab-item tab-type active-tab #(set-side-tab tab-type)])
+     (for [tab-type [#_:db.ui.output-tab/tree :db.ui.output-tab/attr-stats]]
+       [out-tab-item tab-type active-tab (r/partial set-side-tab tab-type)])
      (interpose [:div.output-tabs__sep "/"])
      (map-indexed #(with-meta %2 {:key %1})))])
 
@@ -66,7 +67,7 @@
                      :db.ui.output-tab/tx-history
                      :db.ui.output-tab/edn]]
        ^{:key tab-type}
-       [out-tab-item tab-type active-tab #(set-main-tab tab-type)])
+       [out-tab-item tab-type active-tab (r/partial set-main-tab tab-type)])
      (interpose [:div.output-tabs__sep "/"])
      (map-indexed #(with-meta %2 {:key %1})))])
 
@@ -80,7 +81,7 @@
         :height :100%
         :display :grid
         :position :relative
-        :grid-template "'side main' / minmax(280px, 400px) 1fr"}
+        :grid-template "'side main' / minmax(280px, 300px) 1fr"}
        [:&__side
         {:border-right s/q-ui-border
          :grid-area :side

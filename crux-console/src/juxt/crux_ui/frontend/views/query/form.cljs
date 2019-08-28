@@ -40,7 +40,7 @@
          :display  :grid
          :overflow :hidden
          :grid-template
-         "'time-controls editor' / minmax(280px, 400px) 1fr"
+         "'time-controls editor' / minmax(280px, 300px) 1fr"
          :height   :100%}
 
         [:&__time-controls
@@ -71,7 +71,7 @@
 
         (gs/at-media {:max-width :1000px}
           [:.q-output
-           {:grid-template "'editor editor' 1fr / minmax(280px, 400px) 1fr"}
+           {:grid-template "'editor editor' / minmax(280px, 400px) 1fr"}
            [:&__side
             {:display :none}]])]])])
 
