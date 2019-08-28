@@ -9,6 +9,7 @@
 
 
 (def ^:private -sub-editor-key (rf/subscribe [:subs.ui/editor-key]))
+(def ^:private -sub-query-analysis (rf/subscribe [:subs.query/analysis]))
 
 (defn- on-submit [e]
   (rf/dispatch [:evt.ui/query-submit]))
@@ -61,8 +62,12 @@
         [:&__submit-btn
          (btn-cta-styles)
          {:background "hsla(190, 50%, 65%, .3)"}
+         [:&--cta
+          {:background "hsla(190, 50%, 65%, .8)"}]
          [:&:hover
-          {:background "hsla(190, 50%, 65%, .8)"}]]
+          {:background "hsla(190, 60%, 65%, .9)"}]
+         [:&:active
+          {:background "hsla(190, 70%, 65%, 1.0)"}]]
 
         (gs/at-media {:max-width :1000px}
           [:.q-output
@@ -80,5 +85,9 @@
     ^{:key @-sub-editor-key}
     [q-editor/root]]
    [:div.q-form__submit
-    [:button.q-form__submit-btn {:on-click on-submit} "Run Query [ctrl + enter]"]]])
+    (let [qa @-sub-query-analysis]
+      [:button.q-form__submit-btn
+       {:on-click on-submit
+        :class (if qa "q-form__submit-btn--cta")}
+       "Run Query [ctrl + enter]"])]])
 
