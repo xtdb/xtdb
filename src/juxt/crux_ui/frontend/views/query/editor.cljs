@@ -28,7 +28,7 @@
          :top      :8px
          :z-index  10}]
 
-       [:&__err
+       [:&__error
         :&__examples
         {:position :absolute
          :left     :8px
@@ -47,7 +47,7 @@
    query-ui-styles
    [:div.q-editor__query-type (name (:crux.ui/query-type @-sub-query-analysis ""))]
    (if-let [e @-sub-query-input-malformed]
-     [:div.q-editor__editor-err
+     [:div.q-editor__error
       "Query input appears to be malformed: " (.-message e)]
      [:div.q-editor__examples
       [query-examples/root]])

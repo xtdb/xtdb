@@ -112,10 +112,10 @@
           [:table.q-grid
            style
            [:thead.q-grid__head
-            [:th.q-grid__head-row
+            [:tr.q-grid__head-row
               (for [h headers]
                 ^{:key h}
-                [:td.q-grid__head-cell (pr-str h)])]]
+                [:th.q-grid__head-cell (pr-str h)])]]
            [:tbody.q-grid__body
             (map-indexed table-row rows)]]))})))
 
