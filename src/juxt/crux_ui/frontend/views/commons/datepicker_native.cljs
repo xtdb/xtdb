@@ -22,22 +22,16 @@
 (def style
   [:style
    (garden/css
-
      [:.native-date-time-picker
       [:&__label
        {:width :100%
         :display :block
         :font-size :1.1em
         :letter-spacing :.04em}]
-
       [:&__input
-       (conj input/styles-src
-             {:margin-top    :4px})]]
-
-     [:.native-date-time-picker
-      [:&__input
-        {:display :inline-block
-         :border :none}]])])
+       input/styles-src
+       {:padding "4px 0"
+        :width :auto}]])])
 
 
 (defn picker [{:keys [label ^js/Date value on-change] :as prms}]
