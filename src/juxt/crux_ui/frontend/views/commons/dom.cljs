@@ -1,6 +1,8 @@
 (ns juxt.crux-ui.frontend.views.commons.dom
   (:require [clojure.string :as s]
-            [juxt.crux-ui.frontend.functions :as f]))
+            [juxt.crux-ui.frontend.functions :as f]
+            [reagent.core :as r]
+            [juxt.crux-ui.frontend.views.commons.keycodes :as kc]))
 
 (def window js/window)
 (def doc js/document)
@@ -13,6 +15,17 @@
   (.-width (.getBoundingClientRect (.-body js/document))))
 
 (def jsget goog.object/getValueByKeys)
+
+(defn evt->keycode-kw [react-evt]
+  (kc/kc->kw (^js .-keyCode react-evt)))
+
+(defn- -dispatch-on-keycode [dipatch-map evt]
+  (when-let [f (get dipatch-map (evt->keycode-kw evt))]
+    (^js .preventDefault evt)
+    (f evt)))
+
+(defn dispatch-on-keycode [dispatch-map]
+  (r/partial -dispatch-on-keycode dispatch-map))
 
 (defn get-elem-pos [elem]
   (let [rect (.getBoundingClientRect elem)]
