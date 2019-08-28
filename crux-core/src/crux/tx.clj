@@ -211,7 +211,6 @@
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
           evicted? (evicted-doc? doc)]
-      (db/put-objects object-store [[content-hash doc]])
       (when-let [normalized-doc (if evicted?
                                   (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                                                             (db/get-single-object object-store snapshot content-hash))]
@@ -220,7 +219,8 @@
         (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
           (if stats-executor
             (.submit stats-executor ^Runnable stats-fn)
-            (stats-fn))))))
+            (stats-fn))))
+      (db/put-objects object-store [[content-hash doc]])))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
