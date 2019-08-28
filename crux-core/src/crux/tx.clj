@@ -205,12 +205,11 @@
     (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
-    (let [content-hash (c/new-id content-hash)
-          existing-doc (with-open [snapshot (kv/new-snapshot kv)]
-                         (db/get-single-object object-store snapshot content-hash))]
+    (let [content-hash (c/new-id content-hash)]
       (db/put-objects object-store [[content-hash doc]])
       (if (evicted-doc? doc)
-        (when existing-doc
+        (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
+                                  (db/get-single-object object-store snapshot content-hash))]
           (idx/delete-doc-from-index kv content-hash existing-doc))
         (idx/index-doc kv content-hash doc))))
 
