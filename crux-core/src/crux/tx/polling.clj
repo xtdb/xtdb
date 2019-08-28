@@ -15,32 +15,33 @@
                                                       :next-offset 0
                                                       :time nil}}))
   (while @running?
-    (with-open [context (consumer/new-event-log-context event-log-consumer)]
-      (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [:crux.tx/event-log :next-offset])]
-        (when-let [^Message last-message (reduce (fn [last-message ^Message m]
-                                                   (case (get (.headers m) :crux.tx/sub-topic)
-                                                     :docs
-                                                     (db/index-doc indexer (.key m) (.body m))
-                                                     :txs
-                                                     (db/index-tx indexer
-                                                                  (.body m)
-                                                                  (.message-time m)
-                                                                  (.message-id m)))
-                                                   m)
-                                                 nil
-                                                 (consumer/next-events event-log-consumer context next-offset))]
-          (let [end-offset (consumer/end-offset event-log-consumer)
-                next-offset (inc (long (.message-id last-message)))
-                lag (- end-offset next-offset)
-                _ (when (pos? lag)
-                    (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
-                consumer-state {:crux.tx/event-log
-                                {:lag lag
-                                 :next-offset next-offset
-                                 :time (.message-time last-message)}}]
-            (log/debug "Event log consumer state:" (pr-str consumer-state))
-            (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))))
-    (Thread/sleep idle-sleep-ms)))
+    (let [idle? (with-open [context (consumer/new-event-log-context event-log-consumer)]
+                  (let [next-offset (get-in (db/read-index-meta indexer :crux.tx-log/consumer-state) [:crux.tx/event-log :next-offset])
+                        messages (consumer/next-events event-log-consumer context next-offset)]
+                    (doseq [^Message m messages]
+                      (case (get (.headers m) :crux.tx/sub-topic)
+                        :docs
+                        (db/index-doc indexer (.key m) (.body m))
+                        :txs
+                        (db/index-tx indexer
+                                     (.body m)
+                                     (.message-time m)
+                                     (.message-id m))))
+                    (when-let [^Message last-message (last messages)]
+                      (let [end-offset (consumer/end-offset event-log-consumer)
+                            next-offset (inc (long (.message-id last-message)))
+                            lag (- end-offset next-offset)
+                            _ (when (pos? lag)
+                                (log/debug "Falling behind" ::event-log "at:" next-offset "end:" end-offset))
+                            consumer-state {:crux.tx/event-log
+                                            {:lag lag
+                                             :next-offset next-offset
+                                             :time (.message-time last-message)}}]
+                        (log/debug "Event log consumer state:" (pr-str consumer-state))
+                        (db/store-index-meta indexer :crux.tx-log/consumer-state consumer-state)))
+                    (empty? messages)))]
+      (when idle?
+        (Thread/sleep idle-sleep-ms)))))
 
 (defn start-event-log-consumer ^java.io.Closeable [indexer event-log-consumer]
   (let [running? (atom true)
