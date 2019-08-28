@@ -49,6 +49,7 @@
       [:&__switcher
        {:margin-top :16px}]])])
 
+
 (defn native-pickers []
   [:<>
    [:div.time-controls__item
@@ -58,9 +59,10 @@
       :on-change on-vt-change}]]
    [:div.time-controls__item
     [ndt/picker
-     {:label "Transaction Time"
+     {:label "Transaction time"
       :value @-sub-tt
       :on-change on-tt-change}]]])
+
 
 (defn range-pickers []
   (let [active-picker (r/atom ::pickers-vt)
@@ -87,12 +89,11 @@
          {:on-click toggle-time} "Valid time: " (str @-sub-vt)]]))))
 
 
-
 (defn root []
   [:div.time-controls
    sdt/style
    ndt/style
    time-controls-styles
-   #_[native-pickers]
-   [range-pickers]])
+   [native-pickers]
+   #_[range-pickers]])
 
