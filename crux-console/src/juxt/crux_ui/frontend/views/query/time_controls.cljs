@@ -1,6 +1,6 @@
 (ns juxt.crux-ui.frontend.views.query.time-controls
   (:require [garden.core :as garden]
-            [juxt.crux-ui.frontend.views.query.datepicker-native :as ndt]
+            [juxt.crux-ui.frontend.views.commons.datepicker-native :as ndt]
             [juxt.crux-ui.frontend.views.query.datepicker-slider :as sdt]
             [re-frame.core :as rf]
             [reagent.core :as r]
