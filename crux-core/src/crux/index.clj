@@ -319,10 +319,13 @@
          [k (count v)])
        (into {})))
 
-(defn- update-predicate-stats [kv f normalized-doc]
-  (->> (doc-predicate-stats normalized-doc)
-       (merge-with f (read-meta kv :crux.kv/stats))
-       (store-meta kv :crux.kv/stats)))
+(defn update-predicate-stats [kv deleted? normalized-doc]
+  (let [op (if deleted?
+             -
+             +)]
+    (->> (doc-predicate-stats normalized-doc)
+         (merge-with op (read-meta kv :crux.kv/stats))
+         (store-meta kv :crux.kv/stats))))
 
 (defn index-doc [kv content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
@@ -338,7 +341,7 @@
                          [(c/encode-attribute+entity+content-hash+value-key-to nil k id content-hash v)
                           c/empty-buffer]])
                       (reduce into [])))
-    (update-predicate-stats kv + normalized-doc)))
+    normalized-doc))
 
 (defn delete-doc-from-index [kv content-hash doc]
   (let [id (c/->id-buffer (:crux.db/id doc))
@@ -352,7 +355,7 @@
                          [(c/encode-attribute+value+entity+content-hash-key-to nil k v id content-hash)
                           (c/encode-attribute+entity+content-hash+value-key-to nil k id content-hash v)])
                        (reduce into [])))
-    (update-predicate-stats kv - normalized-doc)))
+    normalized-doc))
 
 (defn keep-non-evicted-doc
   [doc]

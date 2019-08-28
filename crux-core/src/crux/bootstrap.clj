@@ -16,6 +16,7 @@
             [crux.tx :as tx])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI]
            java.io.Closeable
+           java.util.concurrent.Executors
            java.util.UUID))
 
 (s/check-asserts (if-let [check-asserts (System/getProperty "clojure.spec.compile-asserts")]
@@ -182,7 +183,7 @@
          (log/error throwable "Uncaught exception:"))))))
 
 (defn- start-kv-indexer [{:keys [kv-store tx-log object-store]} _]
-  (tx/->KvIndexer kv-store tx-log object-store))
+  (tx/->KvIndexer kv-store tx-log object-store (Executors/newSingleThreadExecutor)))
 
 (defn- start-order [system]
   (let [g (reduce-kv (fn [g k module-def]

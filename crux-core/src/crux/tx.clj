@@ -18,7 +18,7 @@
   (:import crux.codec.EntityTx
            crux.tx.consumer.Message
            java.io.Closeable
-           java.util.concurrent.TimeoutException
+           [java.util.concurrent ExecutorService Executors TimeoutException TimeUnit]
            java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -195,9 +195,13 @@
   [doc]
   (= :crux.db/evicted (:crux.db/id doc)))
 
-(defrecord KvIndexer [kv tx-log object-store]
+(defrecord KvIndexer [kv tx-log object-store ^ExecutorService stats-executor]
   Closeable
-  (close [_])
+  (close [_]
+    (when stats-executor
+      (doto  ^ExecutorService stats-executor
+        (.shutdown)
+        (.awaitTermination 60000 TimeUnit/MILLISECONDS))))
 
   db/Indexer
   (index-doc [_ content-hash doc]
@@ -205,13 +209,18 @@
     (when (not (contains? doc :crux.db/id))
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
-    (let [content-hash (c/new-id content-hash)]
+    (let [content-hash (c/new-id content-hash)
+          evicted? (evicted-doc? doc)]
       (db/put-objects object-store [[content-hash doc]])
-      (if (evicted-doc? doc)
-        (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
-                                  (db/get-single-object object-store snapshot content-hash))]
-          (idx/delete-doc-from-index kv content-hash existing-doc))
-        (idx/index-doc kv content-hash doc))))
+      (when-let [normalized-doc (if evicted?
+                                  (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
+                                                            (db/get-single-object object-store snapshot content-hash))]
+                                    (idx/delete-doc-from-index kv content-hash existing-doc))
+                                  (idx/index-doc kv content-hash doc))]
+        (let [stats-fn #(idx/update-predicate-stats kv evicted? normalized-doc)]
+          (if stats-executor
+            (.submit stats-executor ^Runnable stats-fn)
+            (stats-fn))))))
 
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
