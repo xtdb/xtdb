@@ -176,7 +176,7 @@
   (fn [[q-res out-tab]]
     (cond
       out-tab out-tab
-      q-res   :db.ui.output-tab/tree
+      ;q-res   :db.ui.output-tab/tree
       :else   :db.ui.output-tab/attr-stats)))
 
 (rf/reg-sub
