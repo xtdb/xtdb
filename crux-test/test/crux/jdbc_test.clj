@@ -9,7 +9,6 @@
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.lubm :as fl]
             [crux.fixtures.postgres :as fp]
-            [crux.lubm-test]
             [crux.codec :as c]
             [crux.kafka :as k]
             [next.jdbc.result-set :as jdbcr]
