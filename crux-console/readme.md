@@ -1,7 +1,7 @@
 # Crux Console
 
 Console is a webapp that gives allows you to query Crux and see data from different perpectives.
-
+![Screenshot of Crux Console](./resources/screenshot-1.png)
 
 ## How to build or develop
 
