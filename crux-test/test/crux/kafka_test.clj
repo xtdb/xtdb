@@ -7,6 +7,7 @@
             [crux.db :as db]
             [crux.index :as idx]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.kv :as fkv :refer [*kv*]]
             [crux.kafka :as k]
             [crux.query :as q]
             [crux.rdf :as rdf]
@@ -18,20 +19,8 @@
            org.apache.kafka.common.TopicPartition
            java.io.Closeable))
 
-(def ^:dynamic *kv*)
-
-(defn- with-kv-store [f]
-  (let [db-dir (cio/create-tmpdir "kv-store")]
-    (try
-      (binding [*kv* (b/start-kv-store {:db-dir (str db-dir)
-                                        :kv-backend "crux.kv.memdb.MemKv"})]
-        (with-open [*kv* ^Closeable *kv*]
-          (f)))
-      (finally
-        (cio/delete-dir db-dir)))))
-
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
-(t/use-fixtures :each fk/with-kafka-client with-kv-store)
+(t/use-fixtures :each fk/with-kafka-client fkv/with-memdb fkv/with-kv-store)
 
 (t/deftest test-can-produce-and-consume-message-using-embedded-kafka
   (let [topic "test-can-produce-and-consume-message-using-embedded-kafka-topic"
@@ -171,7 +160,7 @@
           (binding [fk/*consumer-options* {"max.poll.records" "1"}]
             (fk/with-kafka-client
               (fn []
-                (with-kv-store
+                (fkv/with-kv-store
                   (fn []
                     (let [object-store (idx/->KvObjectStore *kv*)
                           indexer (tx/->KvIndexer *kv* tx-log object-store nil)
