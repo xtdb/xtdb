@@ -9,7 +9,8 @@
   (jdbc/execute! ds ["create table tx_events (
   event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
-  v BLOB NOT NULL)"]))
+  v BLOB NOT NULL, compacted INTEGER NOT NULL)"])
+  (jdbc/execute! ds ["create index if not exists tx_events_event_key_idx on tx_events(compacted, event_key)"]))
 
 (defmethod j/->date :oracle [dbtype ^TIMESTAMP d]
   (assert d)

@@ -11,6 +11,7 @@
             [crux.tx.polling :as p]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as jdbcr]
+            [next.jdbc.connection :as jdbcc]
             [taoensso.nippy :as nippy])
   (:import crux.tx.consumer.Message
            java.io.Closeable
@@ -41,6 +42,11 @@
 
 (defmethod ->v :default [_ v] (nippy/thaw v))
 
+(defmulti ->pool-options (fn [dbtype options] (dbtype->crux-jdbc-dialect dbtype)))
+
+(defmethod ->pool-options :default [_ options] options)
+
+
 (deftype Tx [^Date time ^long id])
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
@@ -61,7 +67,7 @@
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC) VALUES (?,?,?)" event-key b topic]
+    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?, 0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (defrecord JdbcLogQueryContext [running?]
@@ -72,10 +78,10 @@
 (def tombstone (nippy/freeze {:crux.db/id :crux.db/evicted}))
 
 (defn- doc-exists? [ds k]
-  (not-empty (jdbc/execute! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND V != ?" k tombstone])))
+  (not-empty (jdbc/execute-one! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
 (defn- evict-docs! [ds k]
-  (jdbc/execute! ds ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
+  (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
@@ -144,17 +150,22 @@
 
   (next-events [this context next-offset]
     (jdbc/with-transaction [t ds]
-      (doall
-       (map (partial event-result->message dbtype)
-            (jdbc/execute! t ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
-                           {:max-rows 10 :builder-fn jdbcr/as-unqualified-lower-maps})))))
+      (mapv (partial event-result->message dbtype)
+            (jdbc/execute! t
+                           ["SELECT EVENT_OFFSET, EVENT_KEY, TX_TIME, V, TOPIC FROM tx_events WHERE EVENT_OFFSET >= ? ORDER BY EVENT_OFFSET" next-offset]
+                           {:max-rows 100 :builder-fn jdbcr/as-unqualified-lower-maps}))))
 
   (end-offset [this]
     (inc (val (first (jdbc/execute-one! ds ["SELECT max(EVENT_OFFSET) FROM tx_events"]))))))
 
 (defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
   (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
-  (let [ds (jdbc/get-datasource options)]
+  (let [ds (try
+             (jdbcc/->pool (import 'com.zaxxer.hikari.HikariDataSource)
+                           (->pool-options dbtype options))
+             (catch ClassNotFoundException e
+               (log/warn "Could not load Hikari, not using connection pool.")
+               (jdbc/get-datasource options)))]
     (setup-schema! dbtype ds)
     ds))
 

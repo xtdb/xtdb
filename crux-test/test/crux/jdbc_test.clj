@@ -4,9 +4,12 @@
             [crux.jdbc :as j]
             [taoensso.nippy :as nippy]
             [next.jdbc :as jdbc]
+            [crux.fixtures]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
+            [crux.fixtures.lubm :as fl]
             [crux.fixtures.postgres :as fp]
+            [crux.lubm-test]
             [crux.codec :as c]
             [crux.kafka :as k]
             [next.jdbc.result-set :as jdbcr]
@@ -91,4 +94,13 @@
 
       (time
        (.sync *api* (:crux.tx/tx-time last-tx) nil))))
+  (t/is true))
+
+(t/deftest test-ingest-bench
+  (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
+    (fl/with-lubm-data
+      #(t/is (= 1650
+                (:num_docs (jdbc/execute-one! (:ds (:tx-log *api*))
+                                              ["SELECT count(EVENT_KEY) AS num_docs FROM tx_events WHERE TOPIC = 'docs'"]
+                                              {:builder-fn jdbcr/as-unqualified-lower-maps}))))))
   (t/is true))

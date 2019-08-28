@@ -2,9 +2,9 @@
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
-            [crux.fixtures :as f]
             [crux.fixtures.api :refer [*api*]]
             [crux.fixtures.kafka :as fk]
+            [crux.fixtures.lubm :as fl]
             [crux.fixtures.cluster-node :as cn]
             [crux.api :as api]))
 
@@ -27,27 +27,15 @@
 ;; 8519 test/lubm/University0_0.ntriples
 ;; 100543 test/lubm/lubm10.ntriples
 
-(def ^:const lubm-triples-resource "lubm/University0_0.ntriples")
-
-(defn with-lubm-data [f]
-  (let [tx-ops (->> (concat (rdf/->tx-ops (rdf/ntriples "lubm/univ-bench.ntriples"))
-                            (rdf/->tx-ops (rdf/ntriples lubm-triples-resource)))
-                    (rdf/->default-language)
-                    vec)]
-    (doseq [tx-ops (partition-all 1000 tx-ops)]
-      (api/submit-tx *api* (vec tx-ops)))
-    (api/sync *api* nil)
-    (f)))
-
 ;; NOTE: Test order isn't alphabetic, this can be mitigated by
 ;; defining a test-ns-hook (see bottom of this file) which runs the
 ;; tests in order, but this isn't compatible with fixtures or running
 ;; individual tests.
 (t/use-fixtures :once
-                fk/with-embedded-kafka-cluster
-                fk/with-kafka-client
-                cn/with-cluster-node
-                with-lubm-data)
+  fk/with-embedded-kafka-cluster
+  fk/with-kafka-client
+  cn/with-cluster-node
+  fl/with-lubm-data)
 
 ;; This query bears large input and high selectivity. It queries about just one class and
 ;; one property and does not assume any hierarchy information or inference.

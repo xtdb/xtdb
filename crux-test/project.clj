@@ -16,12 +16,14 @@
                  [juxt/crux-decorators "derived-from-git"]
 
                  ;; JDBC
+                 [com.zaxxer/HikariCP "3.3.1"]
+
                  [com.h2database/h2 "1.4.199"]
                  [com.opentable.components/otj-pg-embedded "0.13.1" :exclusions [org.slf4j/slf4j-api
                                                                                  org.tukaani/xz
                                                                                  com.github.spotbugs/spotbugs-annotations
                                                                                  org.apache.commons/commons-lang3]]
-                 [org.xerial/sqlite-jdbc "3.7.2"]
+                 [org.xerial/sqlite-jdbc "3.28.0"]
                  [mysql/mysql-connector-java "8.0.17"]
 
                  ;; Uncomment to test Oracle, you'll need to locally install the JAR:
