@@ -21,17 +21,23 @@
   :min-lein-version "2.9.1"
   :repositories [["clojars" "https://repo.clojars.org"]]
   :plugins [;[lein-shadow "0.1.5"] ; nasty guy, deletes original shadow-cljs config if you run it
-            [lein-shell  "0.5.0"]]
+            [lein-shell  "0.5.0"]] ; https://github.com/hypirion/lein-shell
   :aliases
-  {"build"
+  {"yarn"
+   ["do" ["shell" "yarn" "install"]]
+
+   "shadow"
+   ["shell" "node_modules/.bin/shadow-cljs"]
+
+   "build"
    ["do"
     ["clean"]
-    ["shell" "yarn" "install"]
-    ["shell" "node_modules/.bin/shadow-cljs" "release" "app"]       ; compile
-    ["shell" "node_modules/.bin/shadow-cljs" "release" "app-perf"]] ; compile production ready performance charts app
+    ["yarn"]
+    ["shadow" "release" "app"]       ; compile
+    ["shadow" "release" "app-perf"]] ; compile production ready performance charts app
 
    "ebs"
-   ["shell" "sh" "./dev/build-ebs.sh"]
+   ["do" ["shell" "sh" "./dev/build-ebs.sh"]]
 
    "build-ebs"
    ["do"
@@ -40,8 +46,18 @@
 
    "cljs-dev"
    ["do"
-    ["shell" "yarn" "install"]
-    ["shell" "node_modules/.bin/shadow-cljs" "watch" "app"]]}
+    ["yarn"]
+    ["shadow" "watch" "app"]]
+
+   "dep-tree"
+   ["do"
+    ["yarn"]
+    ["shadow" "pom"]
+    ["shell" "mvn" "dependency:tree"]]
+
+   "build-report"
+   [["yarn"]
+    ["shadow" "run" "shadow.cljs.build-report" "app" "report.html"]]}
 
   :clean-targets ^{:protect false} ["target" "resources/static/crux-ui/compiled"]
 
