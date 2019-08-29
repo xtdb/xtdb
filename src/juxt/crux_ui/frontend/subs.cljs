@@ -115,7 +115,7 @@
   (fn [[q-res q-info]]
     (when q-info
       (if (:full-results? q-info)
-         (qa/analyse-full-results-headers q-res)
+         (vec (qa/analyse-full-results-headers q-res))
          (:find q-info)))))
 
 (rf/reg-sub

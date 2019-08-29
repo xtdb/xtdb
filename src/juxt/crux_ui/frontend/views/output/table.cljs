@@ -67,12 +67,14 @@
          [:&:first-child
           {:border-left :none}]]]])])
 
-(defn table-row [i r]
+(defn table-row [headers i row-items]
   ^{:key i}
   [:tr.q-grid__body-row
-   (for [c r]
-     ^{:key c}
-     [:td.q-grid__body-cell (and c (pr-str c))])])
+   (for [j (range (count row-items))
+         :let [cell-content (nth row-items j)
+               cell-id (nth headers j)]]
+     ^{:key cell-id}
+     [:td.q-grid__body-cell (and cell-content (pr-str cell-content))])])
 
 (defn root [table-data]
   (let [instance-state
@@ -108,15 +110,14 @@
 
        :reagent-render
        (fn [{:keys [headers rows] :as table-data}]
-        (let []
-          [:table.q-grid
-           style
-           [:thead.q-grid__head
-            [:tr.q-grid__head-row
-              (for [h headers]
-                ^{:key h}
-                [:th.q-grid__head-cell (pr-str h)])]]
-           [:tbody.q-grid__body
-            (map-indexed table-row rows)]]))})))
+         [:table.q-grid
+          style
+          [:thead.q-grid__head
+           [:tr.q-grid__head-row
+             (for [h headers]
+               ^{:key h}
+               [:th.q-grid__head-cell (pr-str h)])]]
+          [:tbody.q-grid__body
+           (map-indexed (partial table-row headers) rows)]])})))
 
 
