@@ -36,6 +36,7 @@
 ; query related root subscriptions
 (rf/reg-sub :subs.query/stats  (fnil :db.meta/stats {}))
 (rf/reg-sub :subs.query/input-committed  (fnil :db.query/input-committed  {}))
+(rf/reg-sub :subs.query/network-in-progress?  #(:db.query/network-in-progress? % false))
 (rf/reg-sub :subs.query/time  #(:db.query/time % {}))
 (rf/reg-sub :subs.query/limit  #(:db.query/limit % 10000))
 (rf/reg-sub :subs.sys/host  #(:db.sys/host % nil))

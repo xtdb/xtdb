@@ -35,7 +35,6 @@
        {:display "flex"
         :justify-content "space-between"
         :letter-spacing "0.15em"
-        :margin-left :1.0em
         :font-weight "400"
         :flex "0 0 250px"
         :align-items "center"}]])])

@@ -4,32 +4,34 @@
             [garden.core :as garden]
             [juxt.crux-ui.frontend.views.functions :as vu]))
 
+
+(def color-gray "rgb(201, 201, 201)")
+(def color-black "rgb(1, 1, 1)")
+
+
+(def kf-pulse-gray-orange
+  (let [frame1
+        {:stroke color-gray
+         :fill color-gray}]
+    (gs/at-keyframes :pulse-gray-orange
+                     [:0% frame1]
+                     [:33% {:stroke :orange
+                            :fill :orange}]
+                     [:66% frame1])))
+
+(def kf-pulse-black-orange
+  (let [frame1
+        {:stroke color-black
+         :fill color-black}]
+    (gs/at-keyframes :pulse-black-orange
+                     [:0% frame1]
+                     [:33% {:stroke :orange
+                            :fill :orange}]
+                     [:66% frame1]
+                     [:100% frame1])))
+
 (def cube-animation
-  (let [color-gray "rgb(201, 201, 201)"
-        color-black "rgb(1, 1, 1)"
-
-        pulse-gray-orange
-        (let [frame1
-              {:stroke color-gray
-               :fill color-gray}]
-          (gs/at-keyframes :pulse-gray-orange
-                           [:0% frame1]
-                           [:33% {:stroke :orange
-                                  :fill :orange}]
-                           [:66% frame1]))
-
-        pulse-black-orange
-        (let [frame1
-              {:stroke color-black
-               :fill color-black}]
-          (gs/at-keyframes :pulse-black-orange
-                           [:0% frame1]
-                           [:33% {:stroke :orange
-                                                :fill :orange}]
-                           [:66% frame1]
-                           [:100% frame1]))
-
-        anim-for-gray "pulse-gray-orange"
+  (let [anim-for-gray "pulse-gray-orange"
         anim-for-black "pulse-black-orange"
         duration-ms 1000
 
@@ -45,9 +47,7 @@
                      "infinite"])))
 
         animated
-        [pulse-black-orange
-         pulse-gray-orange
-
+        (list
          [:.rib--grey.rib--bottom-left
           {:animation (ae anim-for-gray 0)}]
          [:.rib--bottom-front
@@ -68,30 +68,30 @@
           :.rib--top-back
           :.rib--top-left
           :.rib--orange.rib--top-right
-          {:animation (ae anim-for-black 2)}]]]
+          {:animation (ae anim-for-black 2)}])]
     animated))
 
 (def style
-  (let [w 500
-        h 599
-        ar (/ 500 599)]
-    [:style
-     (garden/css
-       [:.svg-cube
-        {:width :50px
-         :height :60px}]
-       [:.rib--grey
-        {:stroke  "rgb(201, 201, 201)"
-         :stroke-width "5px"
-         :stroke-miterlimit "10px"}]
-       [:.rib6
-        {:stroke-width "6px"}]
-       [:.rib--black
-        {:stroke "#000"}]
-       [:.rib--orange
-        {:fill "rgb(248, 150, 29)"}]
-       [:&--animating
-        cube-animation])]))
+  [:style
+   (garden/css
+     kf-pulse-black-orange
+     kf-pulse-gray-orange
+     [:.svg-cube
+      {:width :83.3%
+       :height :100%}
+      [:&--animating
+       cube-animation]]
+     [:.rib--grey
+      {:stroke  "rgb(201, 201, 201)"
+       :stroke-width "5px"
+       :stroke-miterlimit "10px"}]
+     [:.rib6
+      {:stroke-width "6px"}]
+     [:.rib--black
+      {:stroke "#000"}]
+     [:.rib--orange
+      {:fill "rgb(248, 150, 29)"}])])
+
 
 
 (defn cube [{:keys [animating?]}]

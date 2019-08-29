@@ -8,6 +8,7 @@
             [juxt.crux-ui.frontend.views.output.attr-history :as output-attr-history]
             [juxt.crux-ui.frontend.views.output.edn :as output-edn]
             [juxt.crux-ui.frontend.views.output.error :as q-err]
+            [juxt.crux-ui.frontend.views.commons.cube-svg :as cube]
             [juxt.crux-ui.frontend.views.output.table :as q-results-table]
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.attr-stats :as attr-stats]
@@ -18,6 +19,7 @@
 (def ^:private -sub-err             (rf/subscribe [:subs.query/error-improved]))
 (def ^:private -sub-query-res-raw   (rf/subscribe [:subs.query/result]))
 (def ^:private -sub-output-tab      (rf/subscribe [:subs.ui/output-main-tab]))
+(def ^:private -sub-nw-progress      (rf/subscribe [:subs.query/network-in-progress?]))
 (def ^:private -sub-output-side-tab (rf/subscribe [:subs.ui/output-side-tab]))
 (def ^:private -sub-results-table   (rf/subscribe [:subs.query/results-table]))
 
@@ -111,14 +113,27 @@
         :color s/color-placeholder
         :align-items :center
         :justify-content :center}]
+      [:.q-preloader
+       {:width :100%
+        :height :100%
+        :display :flex
+        :align-items :center
+        :justify-content :center}
+       [:&__cube
+        {:width :200px
+         :height :200px}]]
       (gs/at-media {:max-width :1000px}
         [:.q-output
          {:grid-template "'main main' 1fr / minmax(280px, 300px) 1fr"}
          [:&__side
           {:display :none}]]))])
 
+(defn- output-preloader []
+  [:div.q-preloader
+   [:div.q-preloader__cube
+    [cube/cube {:animating? true}]]])
+
 (defn root []
-  (let [main-tab @-sub-output-tab]
     [:div.q-output
      q-output-styles
 
@@ -134,17 +149,19 @@
              [side-output-tabs out-tab]]])]
 
      [:div.q-output__main
-      (if main-tab
-        [:<>
-         (case main-tab
-           :db.ui.output-tab/error          [q-err/root @-sub-err]
-           :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
-           :db.ui.output-tab/tree           [q-results-tree/root]
-           :db.ui.output-tab/tx-history     [output-txes/root]
-           :db.ui.output-tab/attr-history   [output-attr-history/root]
-           :db.ui.output-tab/edn            [output-edn/root @-sub-query-res-raw]
-           :db.ui.output-tab/empty          empty-placeholder
-           [q-results-table/root @-sub-results-table])
-         [:div.q-output__main__links
-          [main-output-tabs main-tab]]]
-        empty-placeholder)]]))
+      (let [main-tab @-sub-output-tab]
+        (cond
+          @-sub-nw-progress [output-preloader]
+          main-tab [:<>
+                    (case main-tab
+                      :db.ui.output-tab/error          [q-err/root @-sub-err]
+                      :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
+                      :db.ui.output-tab/tree           [q-results-tree/root]
+                      :db.ui.output-tab/tx-history     [output-txes/root]
+                      :db.ui.output-tab/attr-history   [output-attr-history/root]
+                      :db.ui.output-tab/edn            [output-edn/root @-sub-query-res-raw]
+                      :db.ui.output-tab/empty          empty-placeholder
+                      [q-results-table/root @-sub-results-table])
+                    [:div.q-output__main__links
+                     [main-output-tabs main-tab]]]
+          :else empty-placeholder))]])
