@@ -10,12 +10,12 @@
   [:style
     (garden/css
       [:.attr-stats
-       [:&__header
-        {:padding :16px
-         :border-bottom s/q-ui-border}]])])
+       [:&__footer
+        {:text-align :center
+         :padding :16px}]])])
 
 (defn root []
   [:div.attr-stats
    style
-   [:header.attr-stats__header [:strong "Indexed attributes frequencies"]]
-   [q-results-table/root @-sub-attr-stats]])
+   [q-results-table/root @-sub-attr-stats]
+   [:footer.attr-stats__footer [:strong "Indexed attributes frequencies"]]])

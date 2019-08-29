@@ -1,33 +1,104 @@
-(ns juxt.crux-ui.frontend.views.commons.cube-svg)
+(ns juxt.crux-ui.frontend.views.commons.cube-svg
+  (:require [garden.stylesheet :as gs]
+            [clojure.string :as s]
+            [garden.core :as garden]
+            [juxt.crux-ui.frontend.views.functions :as vu]))
+
+(def cube-animation
+  (let [color-gray "rgb(201, 201, 201)"
+        color-black "rgb(1, 1, 1)"
+
+        pulse-gray-orange
+        (let [frame1
+              {:stroke color-gray
+               :fill color-gray}]
+          (gs/at-keyframes :pulse-gray-orange
+                           [:0% frame1]
+                           [:33% {:stroke :orange
+                                  :fill :orange}]
+                           [:66% frame1]))
+
+        pulse-black-orange
+        (let [frame1
+              {:stroke color-black
+               :fill color-black}]
+          (gs/at-keyframes :pulse-black-orange
+                           [:0% frame1]
+                           [:33% {:stroke :orange
+                                                :fill :orange}]
+                           [:66% frame1]
+                           [:100% frame1]))
+
+        anim-for-gray "pulse-gray-orange"
+        anim-for-black "pulse-black-orange"
+        duration-ms 1000
+
+        ms #(str % "ms")
+
+        ae
+        (fn [anim-name animation-order]
+          (let [delay-ms (* (/ duration-ms 3) animation-order)]
+            (s/join " "
+                    [anim-name
+                     (ms duration-ms)
+                     (ms delay-ms)
+                     "infinite"])))
+
+        animated
+        [pulse-black-orange
+         pulse-gray-orange
+
+         [:.rib--grey.rib--bottom-left
+          {:animation (ae anim-for-gray 0)}]
+         [:.rib--bottom-front
+          {:animation (ae anim-for-black 0)}]
+         [:.rib--bottom-right
+          {:animation (ae anim-for-black 0)}]
+         [:.rib--grey.rib--bottom-back
+          {:animation (ae anim-for-gray 0)}]
+
+
+         [:.rib--grey.rib--center-back-left
+          {:animation (ae anim-for-gray 1)}]
+         [:.rib--black.rib--center-right
+          {:animation (ae anim-for-black 1)}]
+
+
+         [:.rib--top-front
+          :.rib--top-back
+          :.rib--top-left
+          :.rib--orange.rib--top-right
+          {:animation (ae anim-for-black 2)}]]]
+    animated))
 
 (def style
   (let [w 500
         h 599
         ar (/ 500 599)]
-
     [:style
-     (str ".svg-cube {
-       width: 50px;
-       height: 60px;
-     }"
-          ".rib--grey {
-    stroke: rgb(201, 201, 201);
-    stroke-width: 5px;
-    stroke-miterlimit: 10px;
-}
-.rib6 {
-    stroke-width: 6px;
-}
-.rib--black {
-    stroke: #000;
-}
-.rib--orange {
-    fill: rgb(248, 150, 29);
-}")]))
+     (garden/css
+       [:.svg-cube
+        {:width :50px
+         :height :60px}]
+       [:.rib--grey
+        {:stroke  "rgb(201, 201, 201)"
+         :stroke-width "5px"
+         :stroke-miterlimit "10px"}]
+       [:.rib6
+        {:stroke-width "6px"}]
+       [:.rib--black
+        {:stroke "#000"}]
+       [:.rib--orange
+        {:fill "rgb(248, 150, 29)"}]
+       [:&--animating
+        cube-animation])]))
 
-(def cube
-  [:svg.svg-cube
-   {:version "1.1" :x "0px" :y "0px" :viewBox "0 0 500 598.837"  :xmlns "http://www.w3.org/2000/svg"}
+
+(defn cube [{:keys [animating?]}]
+  [:svg
+   {:class (vu/bem-str :svg-cube {:animating animating?})
+    :version "1.1" :x "0px" :y "0px" :viewBox "0 0 500 598.837"
+    :xmlns "http://www.w3.org/2000/svg"}
    style
    [:line.rib.rib--grey.rib--bottom-left {:x1 "250.911" :y1 "249.156" :x2 "19.097" :y2 "421.962"}]
    [:line#line14.rib.rib--grey.rib--center-back-left {:x1 "249.528" :y1 "252.244" :x2 "250.555" :y2 "4.264"}]

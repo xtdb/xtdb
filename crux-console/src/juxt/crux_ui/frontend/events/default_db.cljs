@@ -20,7 +20,7 @@
 
 (def default-db
   {:db.query/input           example-query-str
-   :db.query/time            {:time/vt now :time/tt now}
+   :db.query/time            {:time/vt nil :time/tt nil}
    :db.query/input-committed example-query-str
    :db.query/limit           10000
    :db.sys/host              (calc-initial-host)

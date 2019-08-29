@@ -130,8 +130,8 @@
                 :db.ui.output-tab/attr-stats [attr-stats/root]
                 :db.ui.output-tab/empty empty-placeholder
                 [q-results-tree/root])]
-          [:div.q-output__side__links
-           [side-output-tabs out-tab]]])]
+          #_[:div.q-output__side__links
+             [side-output-tabs out-tab]]])]
 
      [:div.q-output__main
       (if main-tab
