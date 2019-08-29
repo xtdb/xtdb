@@ -98,11 +98,21 @@
     (success-response
      (.document crux-node (c/new-id content-hash)))))
 
-(defn- documents [^ICruxAPI crux-node request]
+(defn- stringify-keys [m]
+  (persistent!
+    (reduce-kv
+      (fn [m k v] (assoc! m (str k) v))
+      (transient {})
+      m)))
+
+(defn- documents [^ICruxAPI crux-node  {:keys [query-params] :as request}]
   ; TODO support for GET
-  (let [content-hashes-set (body->edn request)
-        ids-set (map c/new-id content-hashes-set)]
-    (success-response (.documents crux-node ids-set))))
+  (let [preserve-ids? (Boolean/parseBoolean (get query-params "preserve-crux-ids" "false"))
+        content-hashes-set (body->edn request)
+        ids-set (set (map c/new-id content-hashes-set))]
+    (success-response
+      (cond-> (.documents crux-node ids-set)
+              (not preserve-ids?) stringify-keys))))
 
 (defn- history [^ICruxAPI crux-node request]
   (let [[_ eid] (re-find #"^/history/(.+)$" (req/path-info request))

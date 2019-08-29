@@ -1,8 +1,7 @@
 (ns ivan.http-server
-  "Barbarious bootstrap for http server"
+  "Barbarous bootstrap for http server"
   (:require [crux.api :as api]
-            [crux.http-server :as http-server]
-            [crux.bootstrap.remote-api-client :as http-client]))
+            [crux.http-server :as http-server]))
 
 
 (def opts
@@ -15,10 +14,6 @@
 
 (def srv
   (http-server/start-http-server simple-node))
-
-
-(def client-node
-  (http-client/new-api-client "localhost:3000"))
 
 (api/submit-tx
   simple-node

@@ -210,6 +210,7 @@
 (defprotocol ICruxAPI
   (db [_] [_ valid-time] [_ valid-time transact-time])
   (document [_ content-hash])
+  (documents [_ content-hash-set])
   (history [_ eid])
   (historyRange [_ eid valid-time-start transaction-time-start valid-time-end transaction-time-end])
   (status [_])
@@ -238,6 +239,9 @@
 
   (document [_ content-hash]
     (api-request-async (str url "/document/" content-hash) nil {:method :get}))
+
+  (documents [_ content-hash-set]
+    (api-request-async (str url "/documents") content-hash-set {:method :post}))
 
   (history [_ eid]
     (api-request-async (str url "/history/" eid) nil {:method :get}))

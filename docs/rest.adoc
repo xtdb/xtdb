@@ -46,6 +46,7 @@ otherwise restrict the execution of queries.
 |uri|method|description
 |<<#home,`/`>>|GET|returns various details about the state of the database
 |<<#document, `/document/[content-hash]`>>|GET or POST|returns the document for a given hash
+|<<#documents `/documents`>>|POST|returns a map of document ids and respective documents for a given set of content hashes submitted in the request body
 |<<#entity, `/entity`>>|POST|Returns an entity for a given ID and optional valid-time/transaction-time co-ordinates
 |<<#entity-tx, `/entity-tx`>>|POST|Returns the `:put` or `:cas` transaction that most recently set a key
 |<<#history, `/history/[:key]`>>|GET OR POST|Returns the transaction history of a key
@@ -103,6 +104,8 @@ NOTE: Hashes for older versions of a document can be obtained with `/history-ran
 === GET/POST `/documents`
 
 Returns a map from the documents ids to the documents for ids set.
+Possible to get map keys as #crux/id literals if preserve-crux-ids param
+is set to "true"
 
 [source,bash]
 ----

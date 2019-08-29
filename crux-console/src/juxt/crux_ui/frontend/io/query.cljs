@@ -97,7 +97,7 @@
 ; (fetch-histories [:ids/fashion-ticker-2])
 
 (defn fetch-docs [hashes]
-  (p/all (map #(crux-api/document @node-client %) hashes)))
+  (crux-api/documents @node-client hashes))
 
 (defn- merge-docs-into-histories [eids->histories hash->doc]
   (let [with-doc
@@ -126,8 +126,7 @@
   "Fetches histories, without docs"
   [eids->histories]
   (let [doc-hashes (->> eids->histories vals flatten (map :crux.db/content-hash))]
-    (-> (fetch-docs doc-hashes)
-        (p/then #(zipmap doc-hashes %))
+    (-> (fetch-docs (set doc-hashes))
         (p/then (fn [hash->doc] (merge-docs-into-histories eids->histories hash->doc)))
         (p/then on-histories-docs-success)
         (p/catch on-histories-docs-error))))
