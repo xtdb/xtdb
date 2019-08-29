@@ -56,6 +56,11 @@
                :db.query/analysis-committed analysis
                :db.query/edn-committed edn))))
 
+(defn- o-db-set-host [db new-host]
+  (assoc db
+    :db.sys/host new-host
+    :db.sys.host/status nil))
+
 (defn- safeguard-query [analysis-committed time limit]
   (let [normalized-query (:query/normalized-edn analysis-committed)
         safeguarded-query
@@ -92,7 +97,6 @@
   (q/fetch-stats))
 
 (rf/reg-fx :fx/query-stats qs)
-
 
 (rf/reg-fx
   :fx/set-node
@@ -152,6 +156,13 @@
 
 ; queries
 
+
+
+; --- io ---
+
+(def ^:const ui--history-max-entities 7)
+(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
+
 (rf/reg-event-db
   :evt.io/stats-success
   (fn [db [_ stats]]
@@ -161,13 +172,6 @@
   :evt.io/status-success
   (fn [db [_ status]]
     (assoc db :db.sys.host/status status)))
-
-
-
-; --- io ---
-
-(def ^:const ui--history-max-entities 7)
-(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
 
 (defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
   (if-not (history-tabs-set (:db.ui/output-main-tab db))
@@ -192,6 +196,7 @@
     (let [q-info (:db.query/analysis-committed db)
           res-analysis (qa/analyse-results q-info res)
           db     (assoc db :db.query/result res
+                           :db.query/network-in-progress? false
                            :db.query/error nil
                            :db.query/result-analysis res-analysis)]
       (ctx-autoload-history {:db db}))))
@@ -211,16 +216,11 @@
   (fn [db [_ {:evt/keys [prop-name value] :as evt}]]
     (assoc db prop-name value)))
 
-(defn db-set-host [db new-host]
-  (assoc db
-    :db.sys/host new-host
-    :db.sys.host/status nil))
-
 (rf/reg-event-fx
   :evt.db/host-change
   (fn [{:keys [db] :as ctx} [_ new-host]]
     (println :evt.db/host-change new-host)
-    (let [db (db-set-host db new-host)]
+    (let [db (o-db-set-host db new-host)]
       {:db db
        :fx/set-node new-host})))
 
@@ -236,7 +236,10 @@
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
   (fn [{db :db :as ctx} [_ eid->history-range]]
-    (ctx-autoload-history-docs {:db (assoc db :db.query/histories eid->history-range)})))
+    (ctx-autoload-history-docs
+      {:db (assoc db
+             :db.query/network-in-progress? false
+             :db.query/histories eid->history-range)})))
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
@@ -244,15 +247,16 @@
     (let [ra (:db.query/result-analysis db)
           ts (hp/calc-entity-time-series (:ra/numeric-attrs ra) eid->history-range)]
       {:db (assoc db :db.query/histories eid->history-range
+                     :db.query/network-in-progress? false
                      :db.query/eid->simple-history ts)})))
 
 (rf/reg-event-db
   :evt.io/tx-success
   (fn [db [_ res]]
     (let [q-info (:db.query/analysis-committed db)]
-      (assoc db :db.query/result
-                (if (:full-results? q-info)
-                  (flatten res) res)))))
+      (assoc db
+        :db.query/result (if (:full-results? q-info) (flatten res) res)
+        :db.query/network-in-progress? false))))
 
 
 
@@ -278,6 +282,7 @@
       (let [new-db
             (-> db
                 (o-reset-results)
+                (assoc :db.query/network-in-progress? true)
                 (o-commit-input (:db.query/input db)))]
         {:db new-db
          :fx/query-exec (calc-query-params new-db)})
