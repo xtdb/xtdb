@@ -43,7 +43,7 @@
 (rf/reg-sub :subs.sys.host/status  #(:db.sys.host/status % nil))
 (rf/reg-sub :subs.query/input  (fnil :db.query/input  {}))
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
-(rf/reg-sub :subs.query/result (fnil :db.query/result {}))
+(rf/reg-sub :subs.query/result #(:db.query/result % nil))
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
 (rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
@@ -73,6 +73,66 @@
   :subs.query/input-edn
   :<- [:subs.query/input]
   qa/try-read-string)
+
+(defn scalar? [v]
+  (or (string? v) (number? v) (keyword? v)))
+
+(defmulti make-tree
+  (fn [m]
+    (cond
+      (map? m) :type/map
+      (scalar? m) :type/scalar
+      (seq m) :type/seq
+      :else :type/unknown)))
+
+(defmethod make-tree :type/map [m]
+  (reduce-kv
+    (fn [m k v]
+      (conj
+        m
+        (if (scalar? v)
+          {:title (str k " " v)
+           :leaf true}
+          {:title (str k)
+           :children (make-tree v)})))
+    []
+    m))
+
+(defmethod make-tree :type/seq [m]
+  (reduce-kv
+    (fn [m k v]
+      (conj
+        m
+        (if (scalar? v)
+          {:title (str k " " v)
+           :leaf true}
+          {:title (str k)
+           :children (make-tree v)})))
+    []
+    (vec m)))
+
+(defmethod make-tree :default [m]
+  {:title (pr-str m)})
+
+; {:children (make-tree {:price 1})}
+
+; (make-tree [0 011])
+
+; (sequential? [0 12 3])
+
+
+(rf/reg-sub
+  :subs.query/result-tree
+  :<- [:subs.query/result]
+  (fn [result]
+    (try
+      (if (< (count result) 2)
+        {:title "results"
+         :children (make-tree (first result))}
+        {:title "results"
+         :children (make-tree result)})
+      (catch js/Error e
+        {:title "Failed to produce a tree"}))))
 
 (rf/reg-sub
   :subs.query.time/vt

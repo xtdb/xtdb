@@ -10,10 +10,9 @@
    (garden/css
      [:.react-tree
       {:min-width :100px
-       :min-height :100px
-       :outline "1px solid orange"}])])
+       :min-height :100px}])])
 
-(defn root []
+(defn root [tree-struct]
   [:div.react-tree
    style
    [:> ReactTree
@@ -24,12 +23,5 @@
         (println :render-node node)
         (.-title node))
 
-      :tree {:title "react-ui-tree",
-             :children
-             [{:collapsed true,
-               :title "dist",
-               :children
-               [{:title ":doc/id"
-                 :value "eee"
-                 :leaf true}]}]}}]])
+      :tree (clj->js tree-struct)}]])
 
