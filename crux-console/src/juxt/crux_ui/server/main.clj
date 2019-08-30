@@ -21,10 +21,11 @@
   {:title "Crux Console"
    :lang "en"
    :theme-color "hsl(32, 91%, 54%)"
-   :link-apple-icon "/img/cube-on-white-192.png"
-   :link-apple-startup-image "/img/cube-on-white-512.png"
-   :link-image-src "/img/cube-on-white-512.png"
+   :link-apple-icon "/static/img/cube-on-white-192.png"
+   :link-apple-startup-image "/static/img/cube-on-white-512.png"
+   :link-image-src "/static/img/cube-on-white-512.png"
    :service-worker "/service-worker-for-console.js"
+   :favicon "/static/img/cube-on-white-120.png"
    :sw-default-url "/console"
    :stylesheet-async
    ["/static/styles/reset.css"
@@ -34,7 +35,7 @@
     "/static/styles/monokai.css"
     "/static/styles/eclipse.css"]
    :script "/static/crux-ui/compiled/main.js"
-   :manifest "/manifest-console.json"
+   :manifest "/static/manifest-console.json"
    :head-tags
    [[:style#_stylefy-constant-styles_]
     [:style#_stylefy-styles_]
@@ -45,7 +46,7 @@
   (pr/render-page console-assets-frame))
 
 (defn- gen-service-worker [ctx]
-  (pr/respond-service-worker console-assets-frame))
+  (pr/generate-service-worker console-assets-frame))
 
 
 (defn- q-perf-page [ctx]
