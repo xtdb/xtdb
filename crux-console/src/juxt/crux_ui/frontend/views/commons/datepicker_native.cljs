@@ -3,6 +3,7 @@
             [juxt.crux-ui.frontend.logging :as log]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.logic.time :as time]
+            [juxt.crux-ui.frontend.config :as cfg]
             [juxt.crux-ui.frontend.views.commons.input :as input]
             [juxt.crux-ui.frontend.views.commons.keycodes :as kc]
             [reagent.core :as r]
@@ -51,7 +52,7 @@
        [:input.native-date-time-picker__input
         (let [v (:value @state)]
           {:type         "datetime-local"
-           :placeholder  "dd/mm/yyyy, --:--"
+           :placeholder  (if-not cfg/supports-input-datetime? "dd/mm/yyyy, --:--")
            :defaultValue (if v (time/format-for-dt-local v))
            :on-key-down
            (dom/dispatch-on-keycode
