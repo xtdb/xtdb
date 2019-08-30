@@ -11,28 +11,42 @@
     [clojure.java.shell :refer [sh]]
     [juxt.crux-ui.server.preloader :as preloader]
     [yada.yada :as yada]
-    [page-renderer.core :as pr]
+    [page-renderer.api :as pr]
     [integrant.core :as ig]
     [clojure.java.io :as io]))
 
 (def id #uuid "50005565-299f-4c08-86d0-b1919bf4b7a9")
 
+(def console-assets-frame
+  {:title "Crux Console"
+   :lang "en"
+   :theme-color "hsl(32, 91%, 54%)"
+   :link-apple-icon "/img/cube-on-white-192.png"
+   :link-apple-startup-image "/img/cube-on-white-512.png"
+   :link-image-src "/img/cube-on-white-512.png"
+   :service-worker "/service-worker-for-console.js"
+   :sw-default-url "/console"
+   :stylesheet-async
+   ["/static/styles/reset.css"
+    "/static/styles/react-input-range.css"
+    "/static/styles/react-ui-tree.css"
+    "/static/styles/codemirror.css"
+    "/static/styles/monokai.css"
+    "/static/styles/eclipse.css"]
+   :script "/static/crux-ui/compiled/main.js"
+   :manifest "/manifest-console.json"
+   :head-tags
+   [[:style#_stylefy-constant-styles_]
+    [:style#_stylefy-styles_]
+    [:meta {:name "google" :content "notranslate"}]]
+   :body [:body [:div#app preloader/root]]})
+
 (defn- gen-console-page [ctx]
-  (pr/render-page
-    {:title "Crux Console"
-     :lang "en"
-     :stylesheet-async
-       ["/static/styles/reset.css"
-        "/static/styles/react-input-range.css"
-        "/static/styles/codemirror.css"
-        "/static/styles/monokai.css"
-        "/static/styles/eclipse.css"]
-     :script "/static/crux-ui/compiled/main.js"
-     :head-tags
-     [[:style#_stylefy-constant-styles_]
-      [:style#_stylefy-styles_]
-      [:meta {:name "google" :content "notranslate"}]]
-     :body [:body [:div#app preloader/root]]}))
+  (pr/render-page console-assets-frame))
+
+(defn- gen-service-worker [ctx]
+  (pr/respond-service-worker console-assets-frame))
+
 
 (defn- q-perf-page [ctx]
   (pr/render-page
@@ -78,6 +92,15 @@
      {:get
       {:produces ["text/html"]
        :response gen-console-page}}}))
+
+(defmethod ig/init-key ::service-worker-for-console
+  [_ {:keys [node]}]
+  (yada/resource
+    {:id  ::service-worker-for-console
+     :methods
+         {:get
+          {:produces ["text/javascript"]
+           :response gen-service-worker}}}))
 
 (defmethod ig/init-key ::query-perf
   [_ {:keys [system]}]

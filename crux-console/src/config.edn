@@ -5,6 +5,7 @@
 
   :juxt.crux-ui.server.main/query-perf {:node #ig/ref :juxt.crux.ig/node}
   :juxt.crux-ui.server.main/console {:node #ig/ref :juxt.crux.ig/node}
+  :juxt.crux-ui.server.main/service-worker-for-console {:node #ig/ref :juxt.crux.ig/node}
   :juxt.crux.ig.node/standalone {:kv-backend "crux.kv.rocksdb.RocksKv"
                                  :event-log-dir "data/eventlog-1"
                                  :db-dir "data/db-dir-1"
@@ -22,6 +23,7 @@
                         [""
                          [["/" #ig/ref :juxt.crux-ui.server/home]
                           ["/query-perf" #ig/ref :juxt.crux-ui.server.main/query-perf]
+                          ["/service-worker-for-console.js" #ig/ref :juxt.crux-ui.server.main/service-worker-for-console]
                           ["/console"
                            {"" #ig/ref :juxt.crux-ui.server.main/console
                             ["/" :rd/tab] #ig/ref :juxt.crux-ui.server.main/console}]

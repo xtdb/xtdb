@@ -3,7 +3,7 @@
             [garden.stylesheet :as gs]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.comps :as comps]
-            [juxt.crux-ui.frontend.views.output.tree :as q-results-tree]
+            [juxt.crux-ui.frontend.views.output.react-tree :as q-results-tree]
             [juxt.crux-ui.frontend.views.output.tx-history :as output-txes]
             [juxt.crux-ui.frontend.views.output.attr-history :as output-attr-history]
             [juxt.crux-ui.frontend.views.output.edn :as output-edn]
