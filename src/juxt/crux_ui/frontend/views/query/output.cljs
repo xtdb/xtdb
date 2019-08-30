@@ -18,6 +18,7 @@
 
 (def ^:private -sub-err             (rf/subscribe [:subs.query/error-improved]))
 (def ^:private -sub-query-res-raw   (rf/subscribe [:subs.query/result]))
+(def ^:private -sub-result-tree   (rf/subscribe [:subs.query/result-tree]))
 (def ^:private -sub-output-tab      (rf/subscribe [:subs.ui/output-main-tab]))
 (def ^:private -sub-nw-progress      (rf/subscribe [:subs.query/network-in-progress?]))
 (def ^:private -sub-output-side-tab (rf/subscribe [:subs.ui/output-side-tab]))
@@ -156,7 +157,7 @@
                     (case main-tab
                       :db.ui.output-tab/error          [q-err/root @-sub-err]
                       :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
-                      :db.ui.output-tab/tree           [q-results-tree/root]
+                      :db.ui.output-tab/tree           [q-results-tree/root @-sub-result-tree]
                       :db.ui.output-tab/tx-history     [output-txes/root]
                       :db.ui.output-tab/attr-history   [output-attr-history/root]
                       :db.ui.output-tab/edn            [output-edn/root @-sub-query-res-raw]
