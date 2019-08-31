@@ -10,7 +10,7 @@
   event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_key VARCHAR2(255),
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR2(255) NOT NULL,
   v BLOB NOT NULL, compacted INTEGER NOT NULL)"])
-  (jdbc/execute! ds ["create index if not exists tx_events_event_key_idx on tx_events(compacted, event_key)"]))
+  (jdbc/execute! ds ["create index tx_events_event_key_idx on tx_events(compacted, event_key)"]))
 
 (defmethod j/->date :oracle [dbtype ^TIMESTAMP d]
   (assert d)
@@ -20,4 +20,8 @@
   (-> v .getBinaryStream .readAllBytes nippy/thaw))
 
 (defmethod j/prep-for-tests! :oracle [_ ds]
-  (jdbc/execute! ds ["BEGIN EXECUTE IMMEDIATE 'DROP TABLE tx_events'; EXCEPTION WHEN OTHERS THEN IF SQLCODE != -942 THEN RAISE; END IF; END;"]))
+  (when (< 0 (val (first (jdbc/execute-one! ds ["SELECT COUNT(*) FROM user_tables where table_name = 'TX_EVENTS'"]))))
+    (jdbc/execute! ds ["DROP TABLE tx_events"])))
+
+(defmethod j/->pool-options :oracle [_ {:keys [username user] :as options}]
+  (assoc options :username (or username user)))
