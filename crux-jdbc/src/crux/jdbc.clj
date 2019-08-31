@@ -10,10 +10,11 @@
             crux.tx.consumer
             [crux.tx.polling :as p]
             [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as jdbcr]
             [next.jdbc.connection :as jdbcc]
+            [next.jdbc.result-set :as jdbcr]
             [taoensso.nippy :as nippy])
-  (:import crux.tx.consumer.Message
+  (:import com.zaxxer.hikari.HikariDataSource
+           crux.tx.consumer.Message
            java.io.Closeable
            [java.util.concurrent LinkedBlockingQueue TimeUnit]
            java.util.Date))
@@ -46,7 +47,6 @@
 
 (defmethod ->pool-options :default [_ options] options)
 
-
 (deftype Tx [^Date time ^long id])
 
 (defn- tx-result->tx-data [ds dbtype tx-result]
@@ -67,7 +67,7 @@
 
 (defn- insert-event! [ds event-key v topic]
   (let [b (nippy/freeze v)]
-    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?, 0)" event-key b topic]
+    (jdbc/execute-one! ds ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
 
 (defrecord JdbcLogQueryContext [running?]
@@ -159,12 +159,7 @@
 
 (defn- start-jdbc-ds [_ {:keys [dbtype] :as options}]
   (require (symbol (str "crux.jdbc." (name (dbtype->crux-jdbc-dialect dbtype)))))
-  (let [ds (try
-             (jdbcc/->pool (import 'com.zaxxer.hikari.HikariDataSource)
-                           (->pool-options dbtype options))
-             (catch ClassNotFoundException e
-               (log/warn "Could not load Hikari, not using connection pool.")
-               (jdbc/get-datasource options)))]
+  (let [ds (jdbcc/->pool HikariDataSource (->pool-options dbtype options))]
     (setup-schema! dbtype ds)
     ds))
 
