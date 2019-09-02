@@ -12,7 +12,7 @@ public class TransitDeserializer implements Deserializer<Object> {
     private static final IFn read;
     private static final IFn reader;
     private static final Object jsonVerbose;
-    private static final Map<?, ?> options;
+    private static final Map<Object, Object> options;
 
     static {
         Clojure.var("clojure.core/require").invoke(Clojure.read("cognitect.transit"));
@@ -22,16 +22,10 @@ public class TransitDeserializer implements Deserializer<Object> {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
         IFn idEdnReader = Clojure.var("crux.codec/id-edn-reader");
         jsonVerbose = Clojure.read(":json-verbose");
-        options = new HashMap<Object, Object>() {
-                {
-                    put(Clojure.read(":handlers"),
-                        new HashMap<Object, Object>() {
-                            {
-                                put("crux/id", readHandler.invoke(idEdnReader));
-                            }
-                        });
-
-                }};
+        Map<Object, Object> handlers = new HashMap<>();
+        handlers.put("crux/id", readHandler.invoke(idEdnReader));
+        options = new HashMap<>();
+        options.put(Clojure.read(":handlers"), handlers);
     }
 
     public void close() {

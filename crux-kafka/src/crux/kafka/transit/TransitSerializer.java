@@ -17,7 +17,7 @@ public class TransitSerializer implements Serializer<Object> {
     private static final IFn writeHandler;
     private static final IFn ednIdToOriginalId;
     private static final Object jsonVerbose;
-    private static final Map<?, ?> options;
+    private static final Map<Object, Object> options;
 
     static {
         Clojure.var("clojure.core/require").invoke(Clojure.read("cognitect.transit"));
@@ -27,16 +27,11 @@ public class TransitSerializer implements Serializer<Object> {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
         ednIdToOriginalId = (IFn) ((IDeref) Clojure.var("crux.codec/edn-id->original-id")).deref();
         jsonVerbose = Clojure.read(":json-verbose");
-        options = new HashMap<Object, Object>() {
-                {
-                    put(Clojure.read(":handlers"),
-                        new HashMap<Object, Object>() {
-                            {
-                                put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId")),
-                                    writeHandler.invoke("crux/id", ednIdToOriginalId));
-                            }
-                        });
-                }};
+        Map<Object, Object> handlers = new HashMap<>();
+        handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId")),
+                     writeHandler.invoke("crux/id", ednIdToOriginalId));
+        options = new HashMap<>();
+        options.put(Clojure.read(":handlers"), handlers);
     }
 
     public void close() {
