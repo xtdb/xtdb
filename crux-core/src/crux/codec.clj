@@ -390,7 +390,7 @@
   (->EDNId (str (new-id id)) id))
 
 (defn read-edn-string-with-readers [s]
-  (edn/read-string s {:readers {'crux/id id-edn-reader}}))
+  (edn/read-string {:readers {'crux/id id-edn-reader}} s))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
