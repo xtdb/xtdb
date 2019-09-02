@@ -1,5 +1,6 @@
 (ns crux.codec
-  (:require [crux.byte-utils :as bu]
+  (:require [clojure.edn :as edn]
+            [crux.byte-utils :as bu]
             [crux.hash :as hash]
             [crux.memory :as mem]
             [crux.morton :as morton]
@@ -388,6 +389,9 @@
 (defn id-edn-reader ^crux.codec.EDNId [id]
   (->EDNId (str (new-id id)) id))
 
+(defn read-edn-string-with-readers [s]
+  (edn/read-string s {:readers {'crux/id id-edn-reader}}))
+
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
 
@@ -409,7 +413,6 @@
  :crux.codec/edn-id
  [data-input]
  (id-edn-reader (nippy/thaw-from-in! data-input)))
-
 
 (defn valid-id? [x]
   (try

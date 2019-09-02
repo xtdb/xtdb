@@ -82,7 +82,7 @@
        (and (<= 200 status) (< status 400)
             (= "application/edn" (:content-type headers)))
        (if (string? body)
-         (edn/read-string {:readers {'crux/id c/id-edn-reader}} body)
+         (c/read-edn-string-with-readers body)
          body)
 
        :else

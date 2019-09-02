@@ -33,7 +33,7 @@
 (defn- body->edn [request]
   (->> request
        req/body-string
-       (edn/read-string {:readers {'crux/id c/id-edn-reader}})))
+       (c/read-edn-string-with-readers)))
 
 (defn- check-path [[path-pattern valid-methods] request]
   (let [path (req/path-info request)

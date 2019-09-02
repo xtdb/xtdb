@@ -1020,7 +1020,7 @@
                                 (first v)
                                 (vec v))]))
     (string? q) (if-let [q (try
-                             (edn/read-string q)
+                             (c/read-edn-string-with-readers q)
                              (catch Exception e))]
                   (normalize-query q)
                   q)
