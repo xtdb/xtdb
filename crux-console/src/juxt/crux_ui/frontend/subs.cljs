@@ -1,6 +1,6 @@
 (ns juxt.crux-ui.frontend.subs
   (:require [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.example-queries :as ex]
+            [juxt.crux-ui.frontend.logic.example-queries :as ex]
             [juxt.crux-ui.frontend.logic.plotting-data-calc :as pd]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [cljs.reader :as reader]

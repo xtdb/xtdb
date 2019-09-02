@@ -1,5 +1,6 @@
-(ns juxt.crux-ui.frontend.example-queries
-  (:require [medley.core :as m]))
+(ns juxt.crux-ui.frontend.logic.example-queries
+  (:require [medley.core :as m]
+            [juxt.crux-ui.frontend.logic.example-txes-amzn :as amzn-data]))
 
 
 (def currencies
@@ -60,16 +61,20 @@
 (defn- int-rand-inc [x]
   (+ x (rand-int 7)))
 
-(defn- alter-ticker [ticker]
-  (update ticker :ticker/price int-rand-inc))
+(defn- alter-ticker [ticker amzn-close-price]
+  (assoc ticker :ticker/price amzn-close-price))
 
 (def generators
   {:examples/put (fn [] [[:crux.tx/put (gen-ticker)]])
    :examples/put-10 (fn [] (mapv (fn [_] [:crux.tx/put (gen-ticker)]) (range 10)))
    :examples/put-w-valid
    (fn []
-     (let [ticker (gen-ticker)]
-       (mapv #(gen-put-with-offset-days (alter-ticker ticker) %) (range -1000 1 1))))
+     (let [ticker (gen-ticker)
+           mfn (fn [offset-days amzn-close-price]
+                 (gen-put-with-offset-days
+                   (alter-ticker ticker amzn-close-price)
+                   offset-days))]
+       (mapv mfn (range -500 1 1) (reverse amzn-data/amzn-close-prices))))
 
    :examples/query
    (fn []

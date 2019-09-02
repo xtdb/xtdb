@@ -9,7 +9,7 @@
             [promesa.core :as p]
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
-            [juxt.crux-ui.frontend.example-queries :as ex]
+            [juxt.crux-ui.frontend.logic.example-queries :as ex]
             [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
