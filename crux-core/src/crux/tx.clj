@@ -136,6 +136,7 @@
           args-id (:crux.db/id args-doc)
           fn-result (try
                       (let [tx-ops (apply (tx-fn-eval-cache body) db (eval args))
+                            _ (s/assert :crux.api/tx-ops tx-ops)
                             docs (tx-ops->docs tx-ops)
                             {arg-docs true docs false} (group-by (comp boolean :crux.db.fn/args) docs)]
                         ;; TODO: might lead to orphaned and unevictable
@@ -195,6 +196,8 @@
   [doc]
   (= :crux.db/evicted (:crux.db/id doc)))
 
+(def ^:dynamic *current-tx*)
+
 (defrecord KvIndexer [kv tx-log object-store ^ExecutorService stats-executor]
   Closeable
   (close [_]
@@ -225,23 +228,26 @@
   (index-tx [this tx-events tx-time tx-id]
     (s/assert :crux.tx.event/tx-events tx-events)
     (with-open [snapshot (kv/new-snapshot kv)]
-      (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
-                                      ((get tx-op->command op tx-command-unknown)
-                                       this kv object-store snapshot tx-log tx-event tx-time tx-id)))]
-        (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
-        (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
-                       :when pre-commit-fn]
-                   (pre-commit-fn))
-                 (doall)
-                 (every? true?))
-          (do (->> (map :kvs tx-command-results)
-                   (reduce into (sorted-map-by mem/buffer-comparator))
-                   (kv/store kv))
-              (doseq [{:keys [post-commit-fn]} tx-command-results
-                      :when post-commit-fn]
-                (post-commit-fn)))
-          (do (log/warn "Transaction aborted:" (pr-str tx-events) (pr-str tx-time) tx-id)
-              (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]]))))))
+      (binding [*current-tx* {:crux.tx/tx-id tx-id
+                              :crux.tx/tx-time tx-time
+                              :crux.tx.event/tx-events tx-events}]
+        (let [tx-command-results (vec (for [[op :as tx-event] tx-events]
+                                        ((get tx-op->command op tx-command-unknown)
+                                         this kv object-store snapshot tx-log tx-event tx-time tx-id)))]
+          (log/debug "Indexing tx-id:" tx-id "tx-events:" (count tx-events))
+          (if (->> (for [{:keys [pre-commit-fn]} tx-command-results
+                         :when pre-commit-fn]
+                     (pre-commit-fn))
+                   (doall)
+                   (every? true?))
+            (do (->> (map :kvs tx-command-results)
+                     (reduce into (sorted-map-by mem/buffer-comparator))
+                     (kv/store kv))
+                (doseq [{:keys [post-commit-fn]} tx-command-results
+                        :when post-commit-fn]
+                  (post-commit-fn)))
+            (do (log/warn "Transaction aborted:" (pr-str tx-events) (pr-str tx-time) tx-id)
+                (kv/store kv [[(c/encode-failed-tx-id-key-to nil tx-id) c/empty-buffer]])))))))
 
   (docs-exist? [_ content-hashes]
     (with-open [snapshot (kv/new-snapshot kv)]

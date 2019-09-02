@@ -443,7 +443,9 @@
                  log))))))
 
 (defn- sync-submit-tx [node tx-ops]
-  (api/sync node (:crux.tx/tx-time (api/submit-tx node tx-ops)) nil))
+  (let [submitted-tx (api/submit-tx node tx-ops)]
+    (api/sync node (:crux.tx/tx-time submitted-tx) nil)
+    submitted-tx))
 
 (t/deftest test-can-apply-transaction-fn
   (let [exception (atom nil)
@@ -533,4 +535,17 @@
                 (sync-submit-tx *api* [[:crux.tx/put returns-fn]])
                 (sync-submit-tx *api* [[:crux.tx/fn :returns-fn]])
                 (t/is (nil? (latest-exception)))
-                (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))))))))
+                (t/is (= v4-ivan (api/entity (api/db *api*) :ivan)))))
+
+            (t/testing "can access current transaction as dynamic var"
+              (sync-submit-tx *api*
+                              [[:crux.tx/put
+                                {:crux.db/id :tx-metadata-fn
+                                 :crux.db.fn/body
+                                 '(fn [db]
+                                    [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx crux.tx/*current-tx*}]])}]])
+              (let [submitted-tx (sync-submit-tx *api* '[[:crux.tx/fn :tx-metadata-fn]])]
+                (t/is (nil? (latest-exception)))
+                (t/is (= {:crux.db/id :tx-metadata
+                          :crux.tx/current-tx (assoc submitted-tx :crux.tx.event/tx-events [[:crux.tx/fn (str (c/new-id :tx-metadata-fn))]])}
+                         (api/entity (api/db *api*) :tx-metadata)))))))))))
