@@ -114,11 +114,13 @@
 (defmethod make-tree :default [m]
   {:title (pr-str m)})
 
-; {:children (make-tree {:price 1})}
+#_{:children (make-tree {:price 1
+                         :child {:dd {:ee 33}}})}
 
 ; (make-tree [0 011])
 
 ; (sequential? [0 12 3])
+
 
 
 (rf/reg-sub

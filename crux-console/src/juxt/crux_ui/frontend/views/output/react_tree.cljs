@@ -10,7 +10,10 @@
    (garden/css
      [:.react-tree
       {:min-width :100px
-       :min-height :100px}])])
+       :min-height :100px
+       :height :100%
+       :overflow :auto
+       :padding "16px 24px"}])])
 
 (defn root [tree-struct]
   [:div.react-tree
