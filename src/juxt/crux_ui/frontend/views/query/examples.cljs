@@ -57,7 +57,7 @@
      [:div.examples__close
       {:title examples-close-text
        :on-click dispatch-examples-close} icon/close]
-     [:div.examples__title"Examples: "]
+     [:div.examples__title "Examples: "]
      (for [{ex-title :title} examples]
        ^{:key ex-title}
        [:div.examples__item
