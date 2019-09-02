@@ -2,12 +2,14 @@
   (:require [cheshire.core :as json]
             [cheshire.generate]
             [clojure.tools.logging :as log]
-            [crux.codec :as c])
+            [crux.codec :as c]
+            [cognitect.transit :as transit])
   (:import [org.apache.kafka.connect.data Schema Struct]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
+           java.io.ByteArrayOutputStream
            [java.util UUID Map]
-           com.fasterxml.jackson.core.JsonGenerator
+           [com.fasterxml.jackson.core JsonGenerator JsonParseException]
            crux.kafka.connect.CruxSinkConnector
            crux.kafka.connect.CruxSourceConnector
            crux.codec.EDNId
@@ -54,7 +56,11 @@
       (map->edn value)
 
       (string? value)
-      (json/parse-string value true)
+      (try
+        (json/parse-string value true)
+        (catch JsonParseException e
+          (log/debug e "Failed to parse as JSON, trying EDN: " value)
+          (c/read-edn-string-with-readers value)))
 
       :else
       (throw (IllegalArgumentException. (str "Unknown message type: " record))))))
@@ -91,6 +97,17 @@
   (when (seq records)
     (.submitTx api (vec (for [record records]
                           (transform-sink-record props record))))))
+
+(defn- write-transit [x]
+  (with-open [out (ByteArrayOutputStream.)]
+    (let [writer (transit/writer out :json-verbose
+                                 {:handlers
+                                  {EDNId
+                                   (transit/write-handler
+                                    "crux/id"
+                                    c/edn-id->original-id)}})]
+      (transit/write writer x)
+      (.toString out))))
 
 (defn- tx-op-with-explicit-valid-time [[op :as tx-op] tx-time]
   (or (case op
@@ -170,7 +187,8 @@
           source-partition {"url" url}
           formatter (case format
                       "edn" pr-str
-                      "json" json/generate-string)
+                      "json" json/generate-string
+                      "transit" write-transit)
           tx-log-entry->source-records (case mode
                                          "tx" tx-log-entry->tx-source-records
                                          "doc" tx-log-entry->doc-source-records)
