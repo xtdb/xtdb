@@ -22,5 +22,6 @@
    (let [{:keys [traces attribute] :as p-data} @-sub-plotly-data]
      (if p-data
        [charts/plotly-wrapper traces (attr-layout attribute)]
-       "No data to display, try to run a query that will include a numeric attribute"))])
+       [:div.q-output-empty
+        "No data to display, try to run a query that will include a numeric attribute"]))])
 

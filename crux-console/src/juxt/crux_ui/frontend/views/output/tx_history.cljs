@@ -21,4 +21,4 @@
    root-styles
    (if-let [tx-history @-sub-tx-history]
      [charts/plotly-wrapper tx-history tx-layout]
-     "No data to display, try to run a query")])
+     [:div.q-output-empty "No data to display, try to run a query"])])
