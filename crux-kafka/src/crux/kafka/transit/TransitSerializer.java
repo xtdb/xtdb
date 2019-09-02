@@ -27,10 +27,10 @@ public class TransitSerializer implements Serializer<Object> {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
         ednIdToOriginalId = (IFn) ((IDeref) Clojure.var("crux.codec/edn-id->original-id")).deref();
         jsonVerbose = Clojure.read(":json-verbose");
-        options = new HashMap<>() {
+        options = new HashMap<Object, Object>() {
                 {
                     put(Clojure.read(":handlers"),
-                        new HashMap<>() {
+                        new HashMap<Object, Object>() {
                             {
                                 put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId")),
                                     writeHandler.invoke("crux/id", ednIdToOriginalId));

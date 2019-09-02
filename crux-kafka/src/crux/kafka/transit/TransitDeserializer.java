@@ -22,10 +22,10 @@ public class TransitDeserializer implements Deserializer<Object> {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
         IFn idEdnReader = Clojure.var("crux.codec/id-edn-reader");
         jsonVerbose = Clojure.read(":json-verbose");
-        options = new HashMap<>() {
+        options = new HashMap<Object, Object>() {
                 {
                     put(Clojure.read(":handlers"),
-                        new HashMap<>() {
+                        new HashMap<Object, Object>() {
                             {
                                 put("crux/id", readHandler.invoke(idEdnReader));
                             }

@@ -11,4 +11,8 @@
                  [com.cognitect/transit-clj "0.8.313" :exclusions [org.msgpack/msgpack]]]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
-  :java-source-paths ["src"])
+  :java-source-paths ["src"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"])
