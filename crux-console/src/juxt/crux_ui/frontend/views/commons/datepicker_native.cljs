@@ -26,8 +26,10 @@
   [:style
    (garden/css
      [:.native-date-time-picker
+      {:display :flex
+       :align-items :center}
       [:&__label
-       {:width :100%
+       {:width :160px
         :display :block
         :font-size :1.1em
         :letter-spacing :.04em}]

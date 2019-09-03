@@ -43,9 +43,9 @@
       {:display         :flex
        :flex-direction  :column
        :justify-content :space-between
-       :padding         "24px 24px"}
+       :padding         "0 24px 8px"}
       [:&__item
-       {:margin-bottom :32px}]
+       {:margin "8px 0"}]
       [:&__switcher
        {:margin-top :16px}]])])
 
