@@ -192,25 +192,26 @@
 
 
 (rf/reg-event-fx
+  :evt.io/gist-err
+  (fn [ctx [_ res]]
+    (assoc ctx :fx.ui/alert "Gist import didn't go well")))
+
+(rf/reg-event-fx
   :evt.io/query-success
   (fn [{db :db :as ctx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
           res-analysis (qa/analyse-results q-info res)
           db     (assoc db :db.query/result res
+                           :db.query/result-analysis res-analysis
                            :db.query/network-in-progress? false
-                           :db.query/error nil
-                           :db.query/result-analysis res-analysis)]
+                           :db.query/error nil)]
       (ctx-autoload-history {:db db}))))
-
-(rf/reg-event-fx
-  :evt.io/gist-err
-  (fn [ctx [_ res]]
-    (assoc ctx :fx.ui/alert "Gist import didn't go well")))
 
 (rf/reg-event-db
   :evt.io/query-error
   (fn [db [_ {:evt/keys [query-type error] :as evt}]]
-    (assoc db :db.query/error evt)))
+    (assoc db :db.query/error evt
+              :db.query/network-in-progress? false)))
 
 (rf/reg-event-db
   :evt.db/prop-change
