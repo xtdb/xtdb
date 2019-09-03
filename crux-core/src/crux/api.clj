@@ -369,19 +369,18 @@
 
   throws IndexVersionOutOfSyncException if the index needs rebuilding.
   throws NonMonotonicTimeException if the clock has moved backwards since
-    last run. Only applicable when using the event log.
+    last run. Only applicable when using the event log."
   ^ICruxAPI [options]
   (Crux/startStandaloneNode options))
 
 (defn start-jdbc-node
-
-  returns a JDBC node which implements ICruxAPI and
+  "returns a JDBC node which implements ICruxAPI and
   java.io.Closeable. Latter allows the node to be stopped
    by calling `(.close node)`.
 
-  throws IndexVersionOutOfSyncException if the index needs rebuilding.
-  ^ICruxAPI [options])
-(Crux/startJDBCNode options)
+  throws IndexVersionOutOfSyncException if the index needs rebuilding."
+  ^ICruxAPI [options]
+  (Crux/startJDBCNode options))
 
 (defn new-api-client
   "Creates a new remote API client ICruxAPI. The remote client
