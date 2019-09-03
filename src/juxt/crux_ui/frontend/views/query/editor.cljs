@@ -44,8 +44,9 @@
        [:&__error
         {:position :absolute
          :color :grey
+         :background :white
          :bottom :8px
-         :z-index 1
+         :z-index 10
          :left :24px}]])])
 
 
