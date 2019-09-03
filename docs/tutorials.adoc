@@ -1,15 +1,6 @@
 = Tutorials
 
-== A Bitemporal Tale
-
-For an interactive no-install browser-based tutorial see the
-https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition of the
-Tale].
-
-Otherwise, see the original the version in
-https://juxt.pro/blog/posts/a-bitemporal-tale.html[our blog post].
-
-== Space Adventure Tutorial
+== Space Adventure
 
 The "choose your own adventure" style tutorial series is an interactive story
 that you can follow along with and complete assignments.
@@ -19,6 +10,15 @@ link:https://nextjournal.com/crux-tutorial/[Nextjournal edition].
 
 Otherwise, visit the original version in
 link:https://juxt.pro/blog/posts/crux-tutorial-setup.html[our blog post].
+
+== A Bitemporal Tale
+
+For an interactive no-install browser-based tutorial see the
+https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition of the
+Tale].
+
+Otherwise, see the original the version in
+https://juxt.pro/blog/posts/a-bitemporal-tale.html[our blog post].
 
 == Essential EDN
 

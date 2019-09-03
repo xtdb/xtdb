@@ -6,8 +6,8 @@
 
 (def ^crux.api.ICruxAPI node
   (crux/start-standalone-node {:kv-backend "crux.kv.memdb.MemKv"
-                                 :db-dir "data/db-dir-1"
-                                 :event-log-dir "data/eventlog-1"}))
+                               :db-dir "data/db-dir-1"
+                               :event-log-dir "data/eventlog-1"}))
 ;; end::start-node[]
 
 ;; tag::close-node[]

@@ -22,16 +22,25 @@ https://clojure.org/[See Clojure.org].
 
 == Setting Up
 
-If you want to start interacting with Crux in your environment then it is
-advised you run Crux in a <<configuration.adoc#standalone,standalone
-configuration>>.
+Follow the below steps to quickly set yourself up a Crux playground:
 
-Alternatively, if you simply want to experiment with Crux using a demo Docker
-container from Docker Hub (no JVM/JDK/Clojure install required, only Docker!)
-then please see the
-https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
-web service example]. You can also use this self-contained demonstration image to
-experiment with the <<rest.adoc#,REST API>>.
+== Project Dependency
+
+First add Crux as a project dependency:
+
+[source,clj]
+----
+include::./deps.edn[tags=CruxDep]
+----
+
+=== Start a Crux node
+
+[source,clj]
+----
+include::./examples.clj[tags=start-node]
+----
+
+For the purposes of this Hello World, we are using the simplest configuration of Crux, where all of the pluggable components are in-memory. There is no Kafka or RocksDB to worry about.
 
 == Transacting
 
@@ -68,4 +77,4 @@ include::./examples.clj[tags=should-get-entity]
 
 == Next Steps
 
-Now you know the basics of how to interact with Crux you may want to dive into a https://juxt.pro/blog/posts/a-bitemporal-tale.html[REPL-based tutorial] (or use the interactive no-install browser-based https://nextjournal.com/crux/a-bitemporal-tale[Nextjournal edition]!). Otherwise, let's take a look at the kinds of things you are able to do with <<queries.adoc#,Queries>>.
+Now you know the basics of how to interact with Crux you may want to dive into our <<tutorials.adoc#, tutorials>>. Otherwise, let's take a look at the kinds of things you are able to do with <<queries.adoc#,Queries>>.
