@@ -5,14 +5,12 @@
 * <<clojure_api.adoc#,Clojure API>>
 * <<api.adoc#,Javadocs>>
 * <<bitemp.adoc#,Bitemporality>>
-* <<advanced_queries.adoc#,Queries (advanced)>>
 * <<deployment.adoc#,Deployment>>
 * <<rest.adoc#,REST API>>
-* <<decorators.adoc#,Decorators>>
-* <<patterns.adoc#,Patterns>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<support.adoc#,Support>>
 * <<about.adoc#,About>>
 * <<design.adoc#,Design>>
 * <<contributing.adoc#,Contributing>>
+* <<advanced.adoc#,Advanced>>
