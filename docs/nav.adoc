@@ -9,8 +9,5 @@
 * <<rest.adoc#,REST API>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
-* <<support.adoc#,Support>>
 * <<about.adoc#,About>>
-* <<design.adoc#,Design>>
-* <<contributing.adoc#,Contributing>>
-* <<advanced.adoc#,Advanced>>
+* <<advanced.adoc#,Advanced Usage>>

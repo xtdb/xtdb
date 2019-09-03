@@ -2,7 +2,7 @@
 
 == Background
 
-JUXT has been working on Crux since 2017, following a set of experiences where bitemporality proved challenging to implement at-scale using existing off-the-shelf technologies. Crux has been built by a very small core team who have, by necessity, had to keep the requirements and implemented scope to a minimum. Crux represents a strong foundation for further research and development efforts and provides a basis on which JUXT can release and support a broad variety of open source software products. 
+JUXT has been working on Crux since 2017, following a set of experiences where bitemporality proved challenging to implement at-scale using existing off-the-shelf technologies. Crux has been built by a very small core team who have, by necessity, had to keep the requirements and implemented scope to a minimum. Crux represents a strong foundation for further research and development efforts and provides a basis on which JUXT can release and support a broad variety of open source software products.
 
 == Vision
 
@@ -10,33 +10,28 @@ Crux ultimately aims to make the use of bitemporal modelling intuitive and acces
 
 == Team
 
-See: https://juxt.pro/team.html
+See: https://github.com/juxt/crux/graphs/contributors
 
-== Product Roadmap
-  
-=== Long-term 
+= Support
 
-The Crux roadmap is not opaque and JUXT is open to community involvement in defining our objectives. We currently use a private Clubhouse instance to evaluate priorities and track long-term objectives, but we hope to migrate this information into an open forum in the near future. We expect that the majority of technical changes for the rest of 2019 will be in the layers of features that sit above the Crux core.
+For any questions relating to Software Support or Managed Hosting, contact us: crux@juxt.pro
 
-=== Enterprise and Cloud Offering
+== Software
 
-JUXT is working to develop enterprise-level capabilities for operating Crux clusters and managing data across clusters. Crux can already be deployed to Kubernetes and we are aiming to provide self-service cloud instances to support production customer usage. JUXT currently offers flexible Managed Hosting for Crux. Please feel free to contact us: crux@juxt.pro
+JUXT currently offers bespoke support packages for Crux with SLAs that can be customised to meet your requirements.
 
-=== Community Contribution
+== Reseller
 
-Crux is an open source product that JUXT will support throughout its evolution. As the community continutes to grow we will incorporate quality community-led contributions into the core. However, because of Crux's unbundled architecture, we expect that substantial contributions can be made outside of the core. JUXT aims to promote and help all community-led activities around Crux.
+Are you looking to implement Crux as part of a solution for your client(s)? JUXT can provide Software Support and Managed Hosting on your behalf. Please consider joining our reseller program.
 
-<<contributing.adoc#,Read more about contributing.>>
+== Deployment
 
+Engage JUXT for Deployment Services Support if you need help with the initial process of installing and configuring Crux in your environment.
+
+= Contributing
+
+include::contributing.adoc[leveloffset=+1]
 
 == Releases
 
 For technical changes, see:https://github.com/juxt/crux/blob/master/CHANGELOG.md
-
-=== crux-19.04 alpha
-
-19 April 2019
-
-This inaugural public alpha release serves to validate the API and overall
-design with a wide audience of users and possible contributors.
-

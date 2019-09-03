@@ -1,5 +1,3 @@
-= Contributing
-
 == Thanks
 
 Crux would not exist without the community of vibrant open source projects on
