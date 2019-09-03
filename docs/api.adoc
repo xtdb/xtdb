@@ -1,7 +1,15 @@
-= Javadocs
+= API
 
-== API
+== Javadocs
 
 Please consult the Javadocs for the official Crux API.
 
 https://juxt.pro/crux/docs/javadoc/index.html[API Javadocs]
+
+== REST
+
+include::rest.adoc[leveloffset=+1]
+
+== Clojure
+
+include::clojure_api.adoc[leveloffset=+1]

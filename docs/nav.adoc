@@ -2,11 +2,9 @@
 * <<queries.adoc#,Queries>>
 * <<transactions.adoc#,Transactions>>
 * <<configuration.adoc#,Configuration>>
-* <<clojure_api.adoc#,Clojure API>>
-* <<api.adoc#,Javadocs>>
-* <<rest.adoc#,REST API>>
 * <<bitemp.adoc#,Bitemporality>>
 * <<tutorials.adoc#,Tutorials>>
 * <<faq.adoc#,FAQ>>
 * <<about.adoc#,About>>
+* <<api.adoc#,API>>
 * <<advanced.adoc#,Advanced Usage>>
