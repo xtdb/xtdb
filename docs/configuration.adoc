@@ -58,9 +58,9 @@ you've started a standalone Crux instance as described below, you can
 then follow the <<get_started.adoc#,getting started
 example>>.
 
-=== Project Dependency
+image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
 
-To add Crux as a project dependency:
+=== Project Dependency
 
 [source,clj]
 ----
@@ -74,10 +74,6 @@ include::./deps.edn[tags=CruxDep]
 include::./examples.clj[tags=start-node]
 ----
 
-For the purposes of this Hello World, we are using the simplest
-configuration of Crux, where all of the pluggable components are
-in-memory. There is no Kafka or RocksDB to worry about.
-
 You can later stop the node if you wish:
 
 [source,clj]
@@ -85,19 +81,19 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
-== Cluster Nodes 
+== Cluster Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
 via a Kafka cluster.
 
-Add Crux as a project dependency:
+image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+
+=== Project Dependencies
 
 [source,clj]
 ----
 include::./deps.edn[tags=CruxDep]
 ----
-
-And Kafka Clients:
 
 [source,clj,subs="normal"]
 ----
@@ -161,17 +157,46 @@ Crux can be used programmatically as a library, but Crux also ships
 with an embedded HTTP server, that allows clients to use the API
 remotely via REST.
 
+image::remote-cluster-mode.svg[Remote Cluster Mode,width=70%,align="center"]
+
 Set the `server-port` configuration property on a Crux node to
 expose a HTTP port that will accept REST requests.
 
 Visit the guide on using the <<rest#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
 
+== Docker
+
+If you want to experiment with Crux using a demo Docker container from
+Docker Hub (no JVM/JDK/Clojure install required, only Docker!)  then
+please see the
+https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice[standalone
+web service example]. You can also use this self-contained
+demonstration image to experiment with the <<rest.adoc#,REST API>>.
+
+== Backup and Restore
+
+Crux provides utility APIs for local backup and restore when you are
+using the standalone mode. For an example of usage, see
+https://github.com/juxt/crux/blob/e5e21352b7a466d20a7b57518e129770191de352/example/standalone_webservice/src/example_standalone_webservice/main.clj#L744[the
+standalone web service example].
+
+An additional example of backup and restore is provided that only
+applies to a stopped standalone node
+https://github.com/juxt/crux/tree/master/docs/example/backup-restore[here].
+
+In a clustered deployment, only Kafka's
+https://docs.confluent.io/current/kafka/post-deployment.html#backup-and-restoration[official
+backup and restore] functionality should be relied on to provide safe
+durability. The standalone mode's backup and restore operations can
+instead be used for creating operational snapshots of a node's indexes
+for scaling purposes.
+
 == Extras
 
 === Embedded Kafka
 
-Crux is ready to work with an embedded Kafka for when you don't have a indendepently
+Crux is ready to work with an embedded Kafka for when you don't have a indepently
 running Kafka available to connect to (such as during development).
 
 Add `crux-kafka-embedded` to your project dependencies:
