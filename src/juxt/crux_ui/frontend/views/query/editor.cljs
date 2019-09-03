@@ -42,7 +42,11 @@
          :z-index  10}]
 
        [:&__error
-        {}]])])
+        {:position :absolute
+         :color :grey
+         :bottom :8px
+         :z-index 1
+         :left :24px}]])])
 
 
 
@@ -53,8 +57,7 @@
    [:div.q-editor__query-type (name (:crux.ui/query-type @-sub-query-analysis ""))]
    (if-let [e @-sub-query-input-malformed]
      [:div.q-editor__error
-      "Query input appears to be malformed: " (.-message e)]
-     [:div.q-editor__examples])
+      "Query input appears to be malformed: " (.-message e)])
 
    ^{:key @-stats}
     [cm/code-mirror

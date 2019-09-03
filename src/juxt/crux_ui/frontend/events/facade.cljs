@@ -10,13 +10,10 @@
             [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.logic.example-queries :as ex]
-            [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
             [juxt.crux-lib.http-functions :as hf]
-            [juxt.crux-ui.frontend.better-printer :as bp]
-            [juxt.crux-lib.functions :as fns]
-            [juxt.crux-ui.frontend.logging :as log]))
+            [juxt.crux-ui.frontend.better-printer :as bp]))
 
 
 (defn calc-query [db ex-title]
@@ -43,8 +40,10 @@
     :db.query/input-committed nil
     :db.query/error nil))
 
-(defn query-is-valid? [query-string]
-  (not (:error (qa/try-read-string query-string))))
+(defn query-invalid? [query-string]
+  (let [edn (qa/try-read-string query-string)]
+    (or (:error edn)
+        (not (:crux.ui/query-type (qa/analyse-any-query edn))))))
 
 (defn o-commit-input [db input]
   (let [input    (:db.query/input db)
@@ -96,7 +95,9 @@
 (defn qs [_]
   (q/fetch-stats))
 
-(rf/reg-fx :fx/query-stats qs)
+(rf/reg-fx
+  :fx/query-stats
+  qs)
 
 (rf/reg-fx
   :fx/set-node
@@ -265,29 +266,30 @@
 (rf/reg-event-fx
   :evt.keyboard/ctrl-enter
   (fn []
-    {:dispatch [:evt.ui/query-submit]}))
+    {:dispatch [:evt.ui.query/submit]}))
 
 
 
 ; --- ui ---
 
 (rf/reg-event-fx
-  :evt.ui/query-submit
+  :evt.ui.query/submit
   (fn [{:keys [db] :as ctx}]
     (cond
       (node-disconnected? db)
       {:fx.ui/alert "Cannot execute query until connected to a node"}
       ;
-      (query-is-valid? (:db.query/input db))
+      (query-invalid? (:db.query/input db))
+      {:fx.ui/alert "Query appears to be invalid"}
+      ;
+      :else
       (let [new-db
             (-> db
                 (o-reset-results)
                 (assoc :db.query/network-in-progress? true)
                 (o-commit-input (:db.query/input db)))]
         {:db new-db
-         :fx/query-exec (calc-query-params new-db)})
-      ;
-      :else nil)))
+         :fx/query-exec (calc-query-params new-db)}))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
@@ -321,7 +323,7 @@
 (rf/reg-event-fx
   :evt.ui.query/time-commit
   (fn [{:keys [db] :as ctx} [_ time-type time]]
-    {:dispatch [:evt.ui/query-submit]}))
+    {:dispatch [:evt.ui.query/submit]}))
 
 (rf/reg-event-db
   :evt.ui.query/time-reset
