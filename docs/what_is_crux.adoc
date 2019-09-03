@@ -1,12 +1,34 @@
 == What is Crux?
 
+Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
+database.
+
+[quote, Martin Kleppmann (2014)]
+____
+What do we have to gain from turning the database inside out? Simpler code,
+better scalability, better robustness, lower latency, and more flexibility for
+doing interesting things with data.
+____
+
+It is a database turned inside out, using:
+
+* Apache Kafka for the primary storage of transactions and documents
+as semi-immutable logs.
+* RocksDB or LMDB to host indexes for rich query support.
+
+This decoupled design enables Crux to be maintained as a small and efficient
+core that can be scaled and evolved to support a large variety of use-cases.
+
+image::crux-node-1.svg[Crux Kafka Node Diagram,970,443]
+
 Crux is an open source document database with bitemporal graph queries.
 
-Crux has been available as a *Public Alpha* since 19^th^ April 2019. The Public
-Alpha period will continue until Crux is released as a Generally Available open
-source software product by JUXT later in 2019.
+image::crux-venn-1.svg[Document database with graph queries,width=450,align="center"]
 
-image::crux-venn-1.svg[Document database with graph queries,width=55%,align="center"]
+== Get Started
+
+Reading the documentation is a good way to learn about Crux, so you are in
+the right place! <<get_started.adoc#,Let's continue the journey.>>
 
 == Bitemporal
 
@@ -48,29 +70,6 @@ be owned by the service using Crux to query the data. This design enables
 schema-on-write and/or schema-on-read to be achieved outside of the core of
 Crux to meet the exact application requirements.
 
-== Unbundled
-
-Crux—to use Martin Kleppmann’s phrase—is an _unbundled_
-database. 
-
-[quote, Martin Kleppmann (2014)]
-____
-What do we have to gain from turning the database inside out? Simpler code,
-better scalability, better robustness, lower latency, and more flexibility for
-doing interesting things with data.
-____
-
-It is a database turned inside out, using:
-
-* Apache Kafka for the primary storage of transactions and documents
-as semi-immutable logs.
-* RocksDB or LMDB to host indexes for rich query support.
-
-This decoupled design enables Crux to be maintained as a small and efficient
-core that can be scaled and evolved to support a large variety of use-cases. 
-
-image::crux-node-1.svg[Crux Kafka Node Diagram,970,443]
-
 == Distributed
 
 Nodes can come and go, with local indexes stored in a Key/Value store such as
@@ -91,8 +90,3 @@ compliance for information privacy regulations.
 The main transaction log contains only hashes and is immutable. All document
 content is stored in a dedicated document log that can be evicted by
 compaction.
-
-== Get Started
-
-Reading the documentation is a good way to learn about Crux, so you are in
-the right place! <<get_started.adoc#,Let's continue the journey.>>
