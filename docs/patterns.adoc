@@ -14,69 +14,6 @@ PRs are welcome, see <<contributing.adoc#,Contributing>> for guidelines. If you 
 not to sign up to our CLA just point us towards your GitHub gist and we can
 link to it.
 
-== Updating Documents
-
-```
-; A macro for doing CAS updates to multiple documents
-
-(defmacro update!
- [[node-binding get-node
-   & bindings]
-  & body]
- (let [[entity-binding get-entities] (take-last 2 bindings)
-       bindings (drop-last 2 bindings)]
-   `(let [node# ~get-node
-          ~node-binding node#]
-      (loop [count# 0]
-        (if (>= count# *max-update!-count*)
-          (throw (ex-info "Exhausted attempts at CAS" {:count count#}))
-          (let [~@bindings
-                entities# ~get-entities
-                ~entity-binding entities#
-                txs# (mapv
-                       (fn [old-ent# ent#]
-                         [:crux.tx/cas
-                          old-ent#
-                          ent#])
-                       entities#
-                       (do ~@body))]
-            (let [submitted-tx# (crux.api/submit-tx
-                                  node#
-                                  txs#)]
-              (if (txs-succeeded? node# txs# submitted-tx#)
-                submitted-tx#
-                (recur (inc count#))))))))))
-
-;; usage for a single entity
-
-(let [eid #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"]
-   (update!
-     [node (::standalone dev-extras/node)
-      [entity] [(crux.api/entity (crux.api/db node) eid)]]
-     [(update entity :magic-value inc)]))
-
-;; usage for a set of entities returned by a query
-
-(update!
-  [node (::standalone dev-extras/node)
-   db (crux.api/db node)
-   q (crux.api/q
-       db
-       '{:find [?e]
-         :where [[?e :name _]]})
-   entities (map #(crux.api/entity db %) (map first q))]
-  entities)
-
-; Works like `let`
-; This macro is not ideal as it requires you to return the list of entities in
-; the same order that you query them in. It is still somewhat complex in that
-; it requires the first binding to be the node, and the last binding to be
-; your entities (and everything in the middle will be rerun on CAS failure).
-; The middle is a good place for running `(crux/db)`.
-
-; by @SevereOverfl0w
-```
-
 ```
 (defn entity-update
   [entity-id new-attrs valid-time]
