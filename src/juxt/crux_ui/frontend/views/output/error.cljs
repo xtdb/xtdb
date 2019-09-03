@@ -31,7 +31,7 @@
       [:h1.err-info__title http-status " Error"]
       [:h2.err-info__subtitle
         (case type
-          :err.type/case "Server considered the query malformed"
+          :err.type/client "Server considered the query malformed"
           :err.type/server "HTTP Server produced an error while executing the query")]]
      [:div.err-info__raw
        [cm/code-mirror fmt {:read-only? true}]]]))

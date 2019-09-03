@@ -60,7 +60,7 @@
         {:background "hsla(190, 60%, 65%, .9)"}]
        [:&:active
         {:background "hsla(190, 70%, 65%, 1.0)"}]
-       [:>smaller
+       [:>small
         {:font-size :0.8em}]]
 
       [:&__examples
@@ -98,5 +98,5 @@
        {:on-click on-submit
         :class (if qa "q-form__submit-btn--cta")}
        [:span "Run Query"][:br]
-       [:smaller "[ctrl + enter]"]])]])
+       [:small "[ctrl + enter]"]])]])
 
