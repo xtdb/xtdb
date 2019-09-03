@@ -29,18 +29,18 @@
        [:html :body :#app
         {:font-family "Helvetica Neue, Helvetica, BlinkMacSystemFont, -apple-system, Roboto, 'Segoe UI', sans-serif"
          :height "100%"
-         :font-weight 300}]
+         :font-weight 400}]
 
        [:.root
         {:display :grid
          :place-items :stretch
          :height "100%"
          :grid-template
-         "'header' 100px
-          'body' calc(100% - 100px)"}
+         "'header' 84px
+          'body' calc(100% - 84px)"}
         [:&--page
           {:grid-template
-           "'header' 100px
+           "'header' 84px
             'body' 1fr"}]
         [:&__header
          {:grid-area :header}]

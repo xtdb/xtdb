@@ -17,7 +17,7 @@
       {:display :grid
        :grid-template "'logo status spacer links' / 180px 100px 1fr 260px"
        :place-items "center start"
-       :padding "12px 42px"
+       :padding "12px 1rem"
        :width "100%"}
       [:&__logo
         {:display :flex
@@ -43,14 +43,14 @@
 (defn header-tabs []
   [:div.header__tabs
    [tabs/root
-    {:active-tab-id   @-tab-sub
-     :tabs
-     [{:id :db.ui.root-tab/query-ui
-       :href  (routes/path-for :rd/query-ui)
-       :title "Query UI"}
-      {:id    :db.ui.root-tab/settings
-       :href  (routes/path-for :rd/settings)
-       :title "Settings"}]}]])
+    {:tabs/active-tab-id   @-tab-sub
+     :tabs/tabs
+     [{:tabs/id :db.ui.root-tab/query-ui
+       :tabs/href  (routes/path-for :rd/query-ui)
+       :tabs/title "Query UI"}
+      {:tabs/id    :db.ui.root-tab/settings
+       :tabs/href  (routes/path-for :rd/settings)
+       :tabs/title "Settings"}]}]])
 
 
 (defn root []

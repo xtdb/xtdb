@@ -2,7 +2,8 @@
   (:require [juxt.crux-ui.frontend.views.codemirror :as cm]
             [garden.core :as garden]
             [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.views.query.examples :as query-examples]))
+            [juxt.crux-ui.frontend.views.query.examples :as query-examples]
+            [garden.stylesheet :as gs]))
 
 (def ^:private -sub-query-input (rf/subscribe [:subs.query/input]))
 (def ^:private -sub-query-analysis (rf/subscribe [:subs.query/analysis]))
@@ -15,11 +16,23 @@
 (def query-ui-styles
   [:style
     (garden/css
+      [[:.examples
+        {:display :flex
+         :overflow :scroll
+         :width :max-content}
+        [:&__item
+         {:padding :8px}
+         [:&:hover
+          {:color :black}]]]
+       (gs/at-media {:max-width :1000px}
+          [:.examples
+           {:display :none}])]
+
       [:.q-editor
        {:padding "16px"
         :position :relative
         :max-height :100%
-        :overflow :scroll
+       ;:overflow :scroll
         :height :100%}
 
        [:&__query-type
@@ -29,17 +42,9 @@
          :z-index  10}]
 
        [:&__error
-        :&__examples
-        {:position :absolute
-         :left     :8px
-         :max-width :80%
-         :overflow :scroll
-         :border-radius :2px
-         :background :white
-         :padding  :8px
-         :bottom   :0px
-         :color    "hsl(0,0%,50%)"
-         :z-index  10}]])])
+        {}]])])
+
+
 
 
 (defn root []
@@ -49,8 +54,8 @@
    (if-let [e @-sub-query-input-malformed]
      [:div.q-editor__error
       "Query input appears to be malformed: " (.-message e)]
-     [:div.q-editor__examples
-      [query-examples/root]])
+     [:div.q-editor__examples])
+
    ^{:key @-stats}
     [cm/code-mirror
      @-sub-query-input
