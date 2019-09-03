@@ -37,15 +37,16 @@
   (let [target (dom/jsget click-evt "target")
         tagname (dom/jsget target "tagName")
         href (dom/jsget target "href")
-        url (try
-              (js/URL. href)
-              (catch js/Error e
-                (log/error "can't parse link url, will ignore it" href)
-                nil))
+        is-anchor? (= "A" tagname)
+        url (if is-anchor?
+              (try
+                (js/URL. href)
+                (catch js/Error e
+                  (log/error "can't parse link url, will ignore it" href)
+                  nil)))
         pathname (and url (dom/jsget url "pathname"))
         route-data (and pathname (match-route pathname))]
-    (log/log :click-evt click-evt tagname href)
-    (when (and url (= "A" tagname) route-data)
+    (when (and url is-anchor? route-data)
       (.preventDefault click-evt)
       (js/history.pushState nil "Console" href)
       (rf/dispatch [:evt.sys/set-route route-data]))))
