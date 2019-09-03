@@ -16,5 +16,9 @@
   juxt/crux-rocksdb {:mvn/version "19.07-1.3.0-alpha"}
   ;; end::RocksDeps[]
 
+  ;; tag::JDBCDeps[]
+  juxt/crux-jdbc {:mvn/version "19.07-1.3.0-alpha"}
+  ;; end::JDBCDeps[]
+
   integrant/integrant {:mvn/version "0.6.3"}
   }}

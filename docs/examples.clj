@@ -27,6 +27,15 @@
                                  :event-log-dir "data/eventlog-1"}))
 ;; end::start-standalone-with-rocks[]
 
+;; tag::start-jdbc-node[]
+(def ^crux.api.ICruxAPI node
+  (crux/start-jdbc-node {:dbtype "postgresql"
+                         :dbname "cruxdb"
+                         :host "<host>"
+                         :user "<user>"
+                         :password "<password>"}))
+;; end::start-jdbc-node[]
+
 ;; tag::submit-tx[]
 (crux/submit-tx
  node

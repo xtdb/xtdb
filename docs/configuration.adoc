@@ -6,26 +6,32 @@ To start a Crux node, use the
 https://juxt.pro/crux/docs/javadoc/index.html[Java API] or the Clojure
 https://github.com/juxt/crux/blob/master/crux-core/src/crux/api.clj[`crux.api`].
 
-There are two types of Crux nodes: *cluster* and *standalone*. Use a
-cluster node when horizontal scalability is required or when
+There are different configurations of a Crux node:
+
+.Crux Nodes
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Name|Transaction Log|Java API
+|Cluster|Uses Kafka|`Crux.startClusterNode options;`
+|JDBC|Uses JDBC event log|`Crux.startJDBCNode options;`
+|Standalone|Uses local event log|`Crux.startStandaloneNode options;`
+|===
+
+Use a cluster node when horizontal scalability is required or when
 you want the guarantees that Kafka offers in terms of resiliency,
 availability, and retention of data.
 
 Multiple cluster nodes participate in a cluster using Kafka as the primary
 store and as the central means of coordination.
 
+The JDBC node is for when you don't want the overhead of maintaining a
+Kafka cluster. Read more about the motivations of this setup
+https://juxt.pro/blog/posts/crux-jdbc.html[here].
+
 The Standalone node is where a single Crux instance has everything
 it needs locally. This is good for experimenting with Crux and
 for small to medium sized deployments, where running a single instance
 is permissible.
-
-.Crux Nodes
-[#table-conversion%header,cols="d,d,d"]
-|===
-|Name|Transaction Log|Java API
-|Cluster Node|Uses Kafka|`Crux.startClusterNode options;`
-|Standalone|Uses local event log|`Crux.startStandaloneNode options;`
-|===
 
 Crux nodes implement the `ICruxAPI` interface and are the
 starting point for making use of Crux. Nodes also implement
@@ -38,16 +44,16 @@ Integrant node].
 
 == Properties
 
-Crux Nodes will use the following properties:
+The follow properties are required for any type of Crux Node:
 
 .Nodes Configuration
-[#table-conversion%header,cols="d,d,d,d"]
+[#table-conversion%header,cols="d,d,d"]
 |===
-|Node|Component|Property|Description
-|Both|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
-|Both|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
-|Standalone|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
-|Standalone|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|Component|Property|Description
+|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
+|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
+|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
+|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
 |===
 
 [#standalone]
@@ -59,6 +65,13 @@ then follow the <<get_started.adoc#,getting started
 example>>.
 
 image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+
+.Standalone Configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Component|Property|Description
+|tx-log|`event-log-dir`|where to store events locally, i.e. `"data/eventlog-1"`
+|===
 
 === Project Dependency
 
@@ -81,12 +94,21 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
-== Cluster Nodes
+== Kakfa Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
 via a Kafka cluster.
 
 image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+
+The following properties are required for a Kafka Cluster Node:
+
+.Cluster Node Configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Component|Property|Description
+|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
+|===
 
 === Project Dependencies
 
@@ -119,6 +141,42 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
+== JDBC Nodes
+
+JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
+internally and pass through the relevant configuration options that
+you can find
+https://github.com/seancorfield/next-jdbc/blob/master/doc/all-the-options.md[here].
+
+Below is the minimal configuration you will need:
+
+.JDBC Configuration
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Description
+|`dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
+|`dbname`|Database Name
+|`host`|Database Host
+|`user`|Database Username
+|`password`|Database Password
+|`db-dir`|For h2 and sqlite
+|===
+
+Add `crux-jdbc` to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=JDBCDeps]
+----
+
+Use the API to start a JDBC node, configuring it with the required
+parameters:
+
+[source,clj]
+----
+include::./examples.clj[tags=start-jdbc-node]
+----
+
 == RocksDB
 
 [#rocksdep]
@@ -133,7 +191,7 @@ include::./deps.edn[tags=RocksDeps]
 
 === Configuration
 
-Set the following properties when configuring Crux nodes:
+Set the following properties when configuring RocksDB in Crux:
 
 .Rocks Configuration
 [#table-conversion%header,cols="d,d"]
@@ -141,7 +199,6 @@ Set the following properties when configuring Crux nodes:
 |Property|Value
 |`kv-backend`|`"crux.kv.rocksdb.RocksKv"`
 |`db-dir`|i.e. `"data/db-dir-1"`
-|`event-log-dir`|i.e. `"data/eventlog-1"`
 |===
 
 For example when constructing the standalone node:
@@ -160,7 +217,14 @@ remotely via REST.
 image::remote-cluster-mode.svg[Remote Cluster Mode,width=70%,align="center"]
 
 Set the `server-port` configuration property on a Crux node to
-expose a HTTP port that will accept REST requests.
+expose a HTTP port that will accept REST requests:
+
+.HTTP Nodes Configuration
+[#table-conversion%header,cols="d,d,d"]
+|===
+|Component|Property|Description
+|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|===
 
 Visit the guide on using the <<rest#rest,REST api>> for examples
 of how to interact with Crux over HTTP.
