@@ -137,7 +137,7 @@ Datomic requires explicit modelling of order for cardinality-many attributes.
 The main downside of Crux's document model is that re-transacting entire
 documents to update a single field can be considered inefficient, but this
 could be mitigated using lower-level compression techniques and
-content-addressable storage. Retractions in are implicit and deleted documents
+content-addressable storage. Retractions in Crux are implicit and deleted documents
 are simply replaced with empty documents
 . Datomic enforces a simple information schema for attributes including
 explicit reference types and cardinality constraints. Crux is schemaless as we
