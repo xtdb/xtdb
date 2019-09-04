@@ -10,7 +10,11 @@
   [:style
     (garden/css
       [:.q-grid-wrapper
-       {:overflow :scroll}]
+       {:overflow :scroll}
+       ["> ::-webkit-scrollbar"
+        "> ::-moz-scrollbar"
+        "> ::scrollbar"
+        {:display :none} ]]
       [:.q-grid
        {:border-collapse :collapse
         :border-radius :2px
