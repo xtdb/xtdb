@@ -30,7 +30,7 @@ image::environment-overview.png[]
 == Create an API key
 
 Under "Data In/Out > Clients" click "Create Kafka Cluster API key & secret" and
-copy the credentials now embedded in the Java snippet into a `.properties` file
+copy the credentials now embedded in the configuration snippet into a `.properties` file
 in a safe location that is accessible from your Crux REPL.
 
 == Start a Clojure REPL
@@ -53,8 +53,8 @@ code to connect to your cluster and make a transaction:
     :doc-topic "doc-1" ; choose your doc-topic name
     :replication-factor 3 ; Confluent Cloud requires this to be `3`
     :doc-partitions 6 ; Confluent Cloud default -- you are limited to 2048 partitions per topic for a non-Enterprise cluster
-    :bootstrap-servers "" ; your `bootstrap.servers` value found in the generated properties file
-    :kafka-properties-file "path/to/my-kafka.properties"})) ; the path of the your properties file
+    :bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
+    :kafka-properties-file "path/to/my-kafka.properties"})) ; the path of your properties file
 
 ; you can also use `:kafka-properties-map` although this increases the risk of
 ; checking-in your SASL secrets!

@@ -25,6 +25,12 @@
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
+    #inst "1881-10-25T09:20:27.966-00:00"]
+   [:crux.tx/put
+    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
+     :name "Pablo"
+     :last-name "Picasso"
+     :location "Sain2"}
     #inst "1881-10-25T09:20:27.966-00:00"]]) ; valid time, Picasso's birth
 
 

@@ -1,5 +1,20 @@
 # Changelog
 
+## 19.09-1.4.0-alpha
+
+### Changes
+* [#285](https://github.com/juxt/crux/issues/285): Various doc and tx spec enhancements 
+* [#287](https://github.com/juxt/crux/issues/287): Caching checking of specs for queries, 30% speed up for simple queries
+
+### New features
+* [PR #297](https://github.com/juxt/crux/pull/297): Support for PostgreSQL, MySQL, Oracle, SQLite, H2 via `crux-jdbc` (see subsequent commits on `master`)
+* [PR #319](https://github.com/juxt/crux/pull/318): Kafka source and sink connectors
+* [#176](https://github.com/juxt/crux/issues/176): Ingest API for some operations (without full node / indexes)
+* [PR #320](https://github.com/juxt/crux/pull/320): *Experimental* support for transaction functions (disabled by default)
+
+### Bug fixes
+* [#314](https://github.com/juxt/crux/issues/314): NPE when submitting a query with empty args
+
 ## 19.07-1.3.0-alpha
 
 ### Changes
@@ -67,3 +82,13 @@
 * [#180](https://github.com/juxt/crux/issues/180): Fix indexer replay of eviction transactions
 * [#189](https://github.com/juxt/crux/issues/189): Fix evictions in standalone mode
 * [#184](https://github.com/juxt/crux/issues/184): Improved testing for document eviction support
+
+## (Changelog Template)
+
+### Changes
+* [PR #N](https://github.com/juxt/crux/pull/N): *Breaking* example
+* [#N](https://github.com/juxt/crux/issues/N): issue example
+
+### New features
+
+### Bug fixes
