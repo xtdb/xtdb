@@ -20,7 +20,7 @@ Additionally the use of EDN Datalog from Clojure makes queries "much more
 programmable" than the equivalent of building SQL strings in any other
 language, as explained in
 http://vvvvalvalval.github.io/posts/2018-01-06-so-yeah-about-clojures-syntax.html[this
-blog post]. 
+blog post].
 +
 We plan to provide limited SQL/JDBC support for Crux in the future, potentially
 using https://calcite.apache.org/docs/index.html[Apache Calcite].
@@ -46,7 +46,7 @@ databases do not provide a consistent "basis" for running these declarative
 queries because they do not store and maintain views of historical data by
 default
 . Client-server considerations should not affect how queries are constructed
-. Recording history is valuable 
+. Recording history is valuable
 . All systems should clearly separate reaction and perception: a transactional
 component that accepts novelty and passes it to an indexer that integrates
 novelty into the indexed view of the world (reaction) + a query support
@@ -99,7 +99,7 @@ as the primary distributed store for content and transaction logs.
 . Datomic peers lazily read from the global index and therefore automatically
 cache their dynamic working sets. Crux does not use a global index and
 currently does not offer any node-level sharding either so each node must
-contain the full database. Crux will support manual node-level sharding in the
+contain the full database. Crux may support manual node-level sharding in the
 future via simple configuration. One benefit of manual sharding is that both
 the size of the Crux node on disk and the long-tail query latency will be more
 predictable
@@ -167,7 +167,7 @@ queries.
 
 Is Crux eventually consistent? Strongly consistent? Or something else?::
 
-  An _easy_ answer is that Crux is "strongly consistent" with ACID semantics. 
+  An _easy_ answer is that Crux is "strongly consistent" with ACID semantics.
 
 What consistency does Crux provide?::
 
@@ -189,7 +189,7 @@ consume the log in the same order, but nodes may be at different points. A
 client using the same node will have a consistent view. Reading your own
 writes can be achieved by providing the transaction time Kafka assigned
 to the submitted transaction, which is returned in a promise from
-`crux.tx/submit-tx`, in the call to `crux.query/db`. This will block
+`crux.api/submit-tx`, in the call to `crux.api/sync`. This will block
 until this transaction time has been seen by the cluster node.
 +
 Write consistency across nodes is provided via the `:crux.db/cas`
@@ -216,14 +216,12 @@ to enable exploration of the data from different sources early. This
 exploration can also help discover and define the common schema of
 interest.
 +
-Enforcing constraints on the data to avoid indexing all attributes can
-be done with `crux.index.ValueToBytes`. Crux does this internally via
-`crux.index.ValueToBytes` for strings for example, only indexing the
-full string with range query support up to 128 characters, and as an
-opaque hash above that limit. Returning an empty byte array does not
-index a value. We are aiming to extend this to give further control over
-what to index. This is useful both to increase throughput and to save
-disk space. A smaller index also leads to more efficient queries.
+Crux only indexes top-level attributes in a document, so to avoid
+indexing certain attributes, one can currently move them down into a
+nested map, as nested values aren't indexed. This is useful both to
+increase throughput and to save disk space. A smaller index also leads
+to more efficient queries. We are considering to eventually give
+further control over what to index more explicitly.
 
 How does Crux deal with time?::
 
@@ -257,15 +255,15 @@ the core team.
 
 Does Crux provide transaction functions?::
 
-  Not directly, currently. As the log is ingested in the same order at all
-nodes, purely functional transformations of the tx-ops are possible. The
-current transaction operations are implemented via a multi-method,
-`crux.tx/tx-command` which is possible to extend with further implementations.
-To make this work the spec `:crux.tx/tx-op` also needs to be extended to accept
-the new operation. A transaction command returns a map containing the keys
-`:kvs` `:pre-condition-fn` and `:post-condition-fn` (the functions are
-optional). Alternatively you may use a "gatekeeper" pattern to enforce the
-desired level of transaction function consistency required.
+  Not directly, currently. You may use a "gatekeeper" pattern to
+enforce the desired level of transaction function consistency
+required.
+
+  As the log is ingested in the same order at all nodes, purely
+functional transformations of the tx-ops are possible. Enabling
+experimental support for transaction functions, which are subject to
+change and undocumented, can be done via the environment variable
+feature flag `CRUX_ENABLE_TX_FNS`.
 
 Does Crux support the full Datomic/DataScript dialect of Datalog?::
 
@@ -305,7 +303,7 @@ Does Crux support pull expressions?::
   No. As each Crux node is its own document store, the
 documents are local to the query node and can easily be accessed
 directly via the lower level read operations. We aim to make this more
-convenient soon. 
+convenient soon.
 +
 We are also considering support for remote document stores via the
 `crux.db.ObjectStore` interface, mainly to support larger data sets, but
