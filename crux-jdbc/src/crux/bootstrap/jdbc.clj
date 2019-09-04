@@ -24,7 +24,7 @@
   v BINARY NOT NULL)"
 
                        #{"postgresql" "pgsql"}
-                       "create table tx_events (
+                       "create table if not exists tx_events (
   event_offset serial PRIMARY KEY, event_key VARCHAR,
   tx_time timestamp default CURRENT_TIMESTAMP, topic VARCHAR NOT NULL,
   v bytea NOT NULL)")]))
