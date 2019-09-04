@@ -64,7 +64,7 @@ you've started a standalone Crux instance as described below, you can
 then follow the <<get_started.adoc#,getting started
 example>>.
 
-image::local-cluster-mode.svg[Local Cluster Mode,width=70%,align="center"]
+image::local-standalone-mode.svg[Local Standalone Mode,width=70%,align="center"]
 
 .Standalone Configuration
 [#table-conversion%header,cols="d,d,d"]
@@ -94,7 +94,7 @@ You can later stop the node if you wish:
 include::./examples.clj[tags=close-node]
 ----
 
-== Kakfa Nodes
+== Kafka Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
 via a Kafka cluster.
