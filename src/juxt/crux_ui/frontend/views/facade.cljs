@@ -34,7 +34,7 @@
        [:.root
         {:display :grid
          :place-items :stretch
-         :height "100%"
+         :height :100%
          :grid-template
          "'header' 84px
           'body' calc(100% - 84px)"}
@@ -47,6 +47,7 @@
         [:&__body
          {:grid-area :body
           :display :flex
+          :overflow :hidden
           :align-items :center
           :justify-content :center}]]])])
 

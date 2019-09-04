@@ -5,62 +5,45 @@
             [reagent.core :as r]
             [juxt.crux-ui.frontend.logging :as log]))
 
-(def ^:private style
+
+(def ^:private table-style
   [:style
     (garden/css
+      [:.q-grid-wrapper
+       {:overflow :scroll}]
       [:.q-grid
-       {:border-collapse :separate
+       {:border-collapse :collapse
         :border-radius :2px
-        :display :block
         :width :100%
         :height :100%
-        :overflow :hidden
+        :overflow :visible
         :position :relative}
-       [:&--table
-        {:display :table
-         :border-collapse :collapse}
-        [:>.q-grid__head
-         {:display :table-header-group}]
-        [:>.q-grid__body
-         {:display :table-row-group}]
-        [:.q-grid__head-row
-         :.q-grid__body-row
-         {:display :table-row}]
-        [:.q-grid__head-cell
-         :.q-grid__body-cell
-         {:display :table-cell}]]
-
        [:&__head
-        {:display :block}
+        {}
         [:&-row
-         {:display :grid
-          :grid-auto-flow :column
-          :grid-auto-columns :1fr
-          :border-bottom s/q-ui-border}]]
+         {:border-bottom s/q-ui-border}]]
 
        ["&__body-cell"
         "&__head-cell"
          {:border-left s/q-ui-border
-          :display :block
           :padding "6px 12px"}]
        ["&__head-cell"
         {:border-top :none
          :background :white
+         :position :sticky
+         :top 0
          :text-align :center
+         :border-bottom s/q-ui-border
          :font-weight 400
-         :letter-spacing :.09em}
+         :letter-spacing :.10em}
         [:&:first-child
          {:border-left :none}]]
        [:&__body
         {:overflow :auto
-         :display :block
          :height :100%
          :padding-bottom :10em}
         [:&-row
-         {:display :grid
-          :border-top  s/q-ui-border
-          :grid-auto-flow :column
-          :grid-auto-columns :1fr}
+         {:border-top  s/q-ui-border}
          [:&:first-child
           {:border-top  :none}]]
         [:&-cell
@@ -111,14 +94,15 @@
 
        :reagent-render
        (fn [{:keys [headers rows] :as table-data}]
-         [:table.q-grid
-          style
-          [:thead.q-grid__head
-           [:tr.q-grid__head-row
-             (for [h headers]
-               ^{:key h}
-               [:th.q-grid__head-cell (pr-str h)])]]
-          [:tbody.q-grid__body
-           (map-indexed (partial table-row headers) rows)]])})))
+         [:div.q-grid-wrapper
+          [:table.q-grid
+           table-style
+           [:thead.q-grid__head
+            [:tr.q-grid__head-row
+              (for [h headers]
+                ^{:key h}
+                [:th.q-grid__head-cell (pr-str h)])]]
+           [:tbody.q-grid__body
+            (map-indexed (partial table-row headers) rows)]]])})))
 
 

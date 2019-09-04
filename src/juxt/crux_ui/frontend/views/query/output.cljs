@@ -63,7 +63,7 @@
         :height :100%
         :display :grid
         :position :relative
-        :overflow :hidden
+        :overflow :scroll
         :padding-bottom :20px
         :grid-template "'main' / 1fr"}
        [:&__side
