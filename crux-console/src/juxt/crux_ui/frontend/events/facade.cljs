@@ -103,7 +103,7 @@
   :fx/set-node
   (fn [node-addr]
     (when node-addr
-      (q/set-node! (str "http://" node-addr))
+      (q/set-node! (str "//" node-addr))
       (q/ping-status)
       (q/fetch-stats))))
 
