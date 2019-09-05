@@ -26,6 +26,7 @@
     (garden/css
       [:.examples
        {:display :flex
+         :width :max-content
         :font-size :13px}
        [:&__item
         :&__close

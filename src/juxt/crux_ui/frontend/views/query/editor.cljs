@@ -16,18 +16,6 @@
 (def query-ui-styles
   [:style
     (garden/css
-      [[:.examples
-        {:display :flex
-         :overflow :scroll
-         :width :max-content}
-        [:&__item
-         {:padding :8px}
-         [:&:hover
-          {:color :black}]]]
-       (gs/at-media {:max-width :1000px}
-          [:.examples
-           {:display :none}])]
-
       [:.q-editor
        {:padding "16px"
         :position :relative

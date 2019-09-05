@@ -65,14 +65,16 @@
 
       [:&__examples
        {:grid-area :examples
-        :overflow :scroll
+        :overflow :auto
         :width "calc(100% - 32px)"
         :border-radius :2px
         :background :white
         :padding  "0px 16px"
         :color    "hsl(0,0%,50%)"
         :z-index  10}
-       ["::-webkit-scrollbar"
+       ["> ::scrollbar"
+        "> ::-moz-scrollbar"
+        "> ::-webkit-scrollbar"
         {:display :none}]
 
        (gs/at-media {:max-width :1000px}

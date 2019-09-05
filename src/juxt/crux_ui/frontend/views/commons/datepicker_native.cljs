@@ -27,11 +27,11 @@
    (garden/css
      [:.native-date-time-picker
       {:display :flex
+       :font-size :14px
        :align-items :center}
       [:&__label
-       {:width :160px
+       {:width :136px
         :display :block
-        :font-size :1.1em
         :letter-spacing :.04em}]
       [:&__input
        input/styles-src
