@@ -15,3 +15,8 @@ ebs/ebs-upload.zip
 # pack'd output
 /*.jar
 **/*.jar
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
