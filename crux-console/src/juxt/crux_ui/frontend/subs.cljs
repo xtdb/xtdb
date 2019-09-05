@@ -243,6 +243,12 @@
       :else   :db.ui.output-tab/attr-stats)))
 
 (rf/reg-sub
+  :subs.db.ui/screen-size
+  #(:db.ui/screen-size %
+     {:ui.screen/inner-height 1
+      :ui.screen/inner-width 1}))
+
+(rf/reg-sub
   :subs.query/error-improved
   :<- [:subs.query/error]
   (fn [err-event]
