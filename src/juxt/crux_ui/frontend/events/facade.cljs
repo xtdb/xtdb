@@ -273,6 +273,11 @@
 
 ; --- ui ---
 
+(rf/reg-event-db
+  :evt.ui/screen-resize
+  (fn [db [_ new-size]]
+    (assoc db :db.ui/screen-size new-size)))
+
 (rf/reg-event-fx
   :evt.ui.query/submit
   (fn [{:keys [db] :as ctx}]

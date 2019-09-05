@@ -6,7 +6,8 @@
             [juxt.crux-ui.frontend.events.facade]
             [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.events.default-db :as d]
-            [clojure.string :as s]))
+            [clojure.string :as s]
+            [juxt.crux-ui.frontend.logging :as log]))
 
 
 
@@ -19,6 +20,13 @@
   (when (and (.-ctrlKey evt) (= 13 (.-keyCode evt)))
     (rf/dispatch [:evt.keyboard/ctrl-enter])))
 
+(defn- on-window-resize [evt]
+  (when evt
+    (rf/dispatch
+      [:evt.ui/screen-resize
+       {:ui.screen/inner-height js/window.innerHeight
+        :ui.screen/inner-width js/window.innerWidth}])))
+
 (defn lookup-gist []
   (let [search js/location.search
         re-expls #"\?examples-gist="]
@@ -30,6 +38,7 @@
 
 (defn init []
   (js/window.addEventListener "keydown" listen-keyboard-shortcuts)
+  (js/window.addEventListener "resize" on-window-resize)
   (rf/dispatch-sync [:evt.db/init d/default-db])
   (routes/init)
   (lookup-gist)
