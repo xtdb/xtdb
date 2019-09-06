@@ -1,5 +1,6 @@
 (ns juxt.crux-ui.frontend.views.facade
   (:require [garden.core :as garden]
+            [garden.stylesheet :as gs]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.query-ui :as q]
             [juxt.crux-ui.frontend.views.header :as header]
@@ -54,7 +55,12 @@
           :display :flex
           :overflow :hidden
           :align-items :center
-          :justify-content :center}]]])])
+          :justify-content :center}]]
+       (gs/at-media {:max-width :375px}
+         [:.root
+          {:grid-template
+           "'header' 64px
+            'body' calc(100% - 64px)"}])])])
 
 
 (defn root []

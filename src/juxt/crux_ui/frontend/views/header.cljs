@@ -26,7 +26,8 @@
        :justify-content :space-between
        :align-items :center}]
      [:&__status
-      {:grid-area :status}]
+      {:grid-area :status
+       :overflow :hidden}]
      [:&__display-mode-toggle
       {:display :none}]
      [:&__links
@@ -50,7 +51,14 @@
     (gs/at-media {:max-width :600px}
       [:.header
        {:padding "16px"
-        :grid-template "'logo status toggle' / auto auto auto"}]))])
+        :grid-template "'logo status toggle' / auto auto auto"}])
+    (gs/at-media {:max-width :400px}
+      [:.header
+       {:padding "16px"
+        :grid-template "'logo status toggle' / auto minmax(auto, 120px) auto"}
+       [:&__status
+        {:justify-self :stretch
+         :max-width :100%}]]))])
 
 (defn header-tabs []
   [:div.header__tabs

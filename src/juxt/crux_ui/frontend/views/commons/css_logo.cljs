@@ -14,20 +14,10 @@
        :justify-content :space-between
        :align-items :center
        :width "100%"}
-      #_{:background :white
-         :z-index 10
-         :width :50vh
-         :height :50vh}
-
       [:&__cube
        {:width :60px
         :height :60px
         :flex "0 0 60px"}
-       #_{:position :fixed
-          :background :white
-          :top :70px
-          :width :80%
-          :height :80%}
        [:>.svg-cube
         {:height :100%
          :width :83.3%}]]
@@ -37,7 +27,15 @@
         :letter-spacing "0.15em"
         :font-weight "400"
         :flex "0 0 250px"
-        :align-items "center"}]])])
+        :align-items "center"}]]
+     (gs/at-media {:max-width :500px}
+      [:.css-logo__text
+       {:display :none}])
+     (gs/at-media {:max-width :375px}
+      [:.css-logo__cube
+       {:width :40px
+        :height :40px
+        :flex "0 0 40px"}]))])
 
 
 (defn root []

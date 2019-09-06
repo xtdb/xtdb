@@ -94,6 +94,8 @@
           :height :100%}]]
        [:&__tabs
         {:position :absolute
+         :max-width :100%
+         :overflow :auto
          :z-index 10
          :background :white
          :padding :8px
@@ -107,6 +109,7 @@
         :color s/color-placeholder
         :align-items :center
         :justify-content :center}]
+
       [:.q-preloader
        {:width :100%
         :height :100%
@@ -116,12 +119,24 @@
        [:&__cube
         {:width :200px
          :height :200px}]]
+
+      [:.output-tabs
+       {:width :max-content}]
+
       (gs/at-media {:max-width :1000px}
         [:.q-output
          {:grid-template "'main' 1fr / 1fr"
           :padding-bottom :4rem}
          [:&__tabs
-          {:bottom :1.5rem}]]))])
+          {:bottom :1.5rem}]])
+
+      (gs/at-media {:max-width :375px}
+        [:.q-output
+         {:grid-template "'main' 1fr / 1fr"
+          :padding-bottom :4rem}
+         [:&__tabs
+          {:bottom :1.5rem}]])
+      )])
 
 
 (defn- output-preloader []

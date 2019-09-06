@@ -249,23 +249,32 @@
       :ui.screen/inner-width 1}))
 
 (rf/reg-sub
+  :subs.ui.screen/width
+  :<- [:subs.db.ui/screen-size]
+  #(:ui.screen/inner-width % 1))
+
+(rf/reg-sub
   :subs.db.ui/display-mode
   #(:db.ui/display-mode % :ui.display-mode/query))
 
 (rf/reg-sub
   :subs.ui/display-mode
-  :<- [:subs.db.ui/screen-size]
+  :<- [:subs.ui.screen/width]
   :<- [:subs.db.ui/display-mode]
-  (fn [[{:ui.screen/keys [inner-height inner-width]} display-mode]]
+  (fn [[width display-mode]]
     (cond
-      (> inner-width 1200) :ui.display-mode/all
+      (> width 1200) :ui.display-mode/all
       :else display-mode)))
 
 (rf/reg-sub
   :subs.ui.responsive-breakpoints/width-lt-800
-  :<- [:subs.db.ui/screen-size]
-  (fn [[{:ui.screen/keys [inner-height inner-width]} display-mode]]
-    (< inner-width 800)))
+  :<- [:subs.ui.screen/width]
+  #(< % 800))
+
+(rf/reg-sub
+  :subs.ui.responsive-breakpoints/width-lt-375
+  :<- [:subs.ui.screen/width]
+  #(< % 375))
 
 
 
