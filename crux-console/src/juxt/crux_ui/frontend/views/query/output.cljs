@@ -98,7 +98,6 @@
          :overflow :auto
          :z-index 10
          :background :white
-         :padding :8px
          :bottom  :0px
          :right   :0px}]]
       [:.q-output-edn
@@ -121,7 +120,8 @@
          :height :200px}]]
 
       [:.output-tabs
-       {:width :max-content}]
+       {:width :max-content
+        :padding :8px}]
 
       (gs/at-media {:max-width :1000px}
         [:.q-output

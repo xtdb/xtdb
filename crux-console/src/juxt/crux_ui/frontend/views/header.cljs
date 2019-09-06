@@ -54,7 +54,8 @@
         :grid-template "'logo status toggle' / auto auto auto"}])
     (gs/at-media {:max-width :400px}
       [:.header
-       {:padding "16px"
+       {:padding "16px 4px 16px 16px"
+        :grid-gap :4px
         :grid-template "'logo status toggle' / auto minmax(auto, 120px) auto"}
        [:&__status
         {:justify-self :stretch
@@ -90,8 +91,8 @@
      {:on-click toggle-display-mode
       :text
       (if (= @-sub-display-mode :ui.display-mode/query)
-        "See output >"
-        "< Back to query")}]]
+        "To output >"
+        "< To query")}]]
 
    [:div.header__links
     [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}

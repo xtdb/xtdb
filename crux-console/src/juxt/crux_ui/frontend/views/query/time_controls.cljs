@@ -48,6 +48,7 @@
       [:&__switcher
        {:margin-top :16px}]])])
 
+(def ^:private -sub-bp-375 (rf/subscribe [:subs.ui.responsive-breakpoints/width-lt-375]))
 
 (defn native-pickers []
   [:<>
@@ -58,7 +59,7 @@
       :on-change on-vt-change}]]
    [:div.time-controls__item
     [ndt/picker
-     {:label "Transaction time"
+     {:label (if @-sub-bp-375 "Tx time" "Transaction time")
       :value @-sub-tt
       :on-change on-tt-change}]]])
 
