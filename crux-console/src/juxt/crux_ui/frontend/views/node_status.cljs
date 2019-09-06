@@ -52,7 +52,10 @@
       [:&__addr
        {:display "flex"
         :justify-content "space-between"
-        :flex "1 0 120px"
+        :overflow :hidden
+        :white-space :nowrap
+        :text-overflow :ellipsis
+        :flex "1 1 120px"
         :align-items "center"}]])])
 
 
