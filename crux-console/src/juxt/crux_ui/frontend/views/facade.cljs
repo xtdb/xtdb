@@ -10,12 +10,17 @@
 
 (def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
 
+(def color-link "hsl(32, 61%, 64%)")
+(def color-link--hover "hsl(32, 91%, 54%)")
+
 (def ^:private root-styles
   [:style
     (garden/css
-      [[:a
-        {:color "hsl(32, 91%, 54%)"}
-        [:&:visited {:color "hsl(32, 91%, 54%)"}]]
+      [
+       [:a
+        {:color color-link}
+        [:&:visited {:color color-link}]
+        [:&:hover {:color color-link--hover}]]
        [:.g-nolink
         :.g-nolink:active
         :.g-nolink:visited

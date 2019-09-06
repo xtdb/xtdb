@@ -28,6 +28,8 @@
    :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
    :db.ui/output-main-tab    nil ;:db.ui.output-tab/table
    :db.ui/editor-key         0
+   :db.ui/screen-size        {:ui.screen/inner-width js/window.innerWidth
+                              :ui.screen/inner-height js/window.innerHeight}
    :db.ui.examples/closed?   (c/get :db.ui.examples/closed? false)
    :db.query/key             0
    :db.query/error           nil

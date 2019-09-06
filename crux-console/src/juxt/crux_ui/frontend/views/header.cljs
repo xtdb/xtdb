@@ -6,7 +6,8 @@
             [juxt.crux-ui.frontend.views.commons.tabs :as tabs]
             [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
             [juxt.crux-ui.frontend.views.node-status :as node-status]
-            [juxt.crux-ui.frontend.views.commons.input :as input]))
+            [juxt.crux-ui.frontend.views.commons.input :as input]
+            [juxt.crux-ui.frontend.views.comps :as comps]))
 
 (def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
 
@@ -14,19 +15,20 @@
   [:style
    (garden/css
     [:.header
-      {:display :grid
-       :grid-template "'logo status spacer links' / 180px 100px 1fr 260px"
-       :place-items "center start"
-       :padding "12px 1rem"
-       :width "100%"}
-      [:&__logo
-        {:display :flex
-         :grid-area :logo
-         :justify-content :space-between
-         :flex "0 0 200px"
-         :align-items :center}]
-      [:&__status
-        {:grid-area :status}]
+     {:display :grid
+      :grid-template "'logo status spacer links' / 180px 100px 1fr 260px"
+      :place-items "center start"
+      :padding "12px 1rem"
+      :width "100%"}
+     [:&__logo
+      {:display :flex
+       :grid-area :logo
+       :justify-content :space-between
+       :align-items :center}]
+     [:&__status
+      {:grid-area :status}]
+     [:&__display-mode-toggle
+      {:display :none}]
      [:&__links
       {:display "flex"
        :grid-area :links
@@ -36,9 +38,19 @@
        :align-items "center"}]]
     (gs/at-media {:max-width :1000px}
       [:.header
-       {:padding "16px"}
+       {:padding "16px"
+        :grid-gap :8px
+        :grid-template "'logo status toggle' / 1fr 1fr 1fr"}
+       [:&__display-mode-toggle
+        {:display :block
+         :justify-self :end
+         :grid-area :toggle}]
        [:&__links
-        {:display :none}]]))])
+        {:display :none}]])
+    (gs/at-media {:max-width :600px}
+      [:.header
+       {:padding "16px"
+        :grid-template "'logo status toggle' / auto auto auto"}]))])
 
 (defn header-tabs []
   [:div.header__tabs
@@ -52,6 +64,10 @@
        :tabs/href  (routes/path-for :rd/settings)
        :tabs/title "Settings"}]}]])
 
+(defn toggle-display-mode []
+  (rf/dispatch [:evt.ui.display-mode/toggle]))
+
+(def ^:private -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
 
 (defn root []
   [:header.header
@@ -60,6 +76,14 @@
     [css-logo/root]]
    [:div.header__status
     [node-status/node-status]]
+
+   [:div.header__display-mode-toggle
+    [comps/button-textual
+     {:on-click toggle-display-mode
+      :text
+      (if (= @-sub-display-mode :ui.display-mode/query)
+        "See output >"
+        "< Back to query")}]]
 
    [:div.header__links
     [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}

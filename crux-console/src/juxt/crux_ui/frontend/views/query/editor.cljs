@@ -3,6 +3,7 @@
             [garden.core :as garden]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.query.examples :as query-examples]
+            [juxt.crux-ui.frontend.views.style :as s]
             [garden.stylesheet :as gs]))
 
 (def ^:private -sub-query-input (rf/subscribe [:subs.query/input]))
@@ -17,7 +18,7 @@
   [:style
     (garden/css
       [:.q-editor
-       {:padding "16px"
+       {:padding "8px"
         :position :relative
         :max-height :100%
        ;:overflow :scroll
@@ -26,6 +27,7 @@
        [:&__query-type
         {:position :absolute
          :right    :8px
+         :color    s/color-font-secondary
          :top      :8px
          :z-index  10}]
 
