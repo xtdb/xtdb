@@ -33,6 +33,35 @@
 (defn set-main-tab [tab-name]
   (rf/dispatch [:evt.ui.output/main-tab-switch tab-name]))
 
+(def ^:private -sub-mobile-mode (rf/subscribe [:subs.ui.responsive-breakpoints/width-lt-800]))
+
+(def desktop-tabs
+  [{:tabs/title "table"
+    :tabs/id :db.ui.output-tab/table}
+   {:tabs/title "tree"
+    :tabs/id :db.ui.output-tab/tree}
+   {:tabs/title "attribute frequencies"
+    :tabs/id :db.ui.output-tab/attr-stats}
+   {:tabs/title "attribute history"
+    :tabs/id :db.ui.output-tab/attr-history}
+   {:tabs/title "transactions"
+    :tabs/id :db.ui.output-tab/tx-history}
+   {:tabs/title "edn output"
+    :tabs/id :db.ui.output-tab/edn}])
+
+(def mobile-tabs
+  [{:tabs/title "Table"
+    :tabs/id :db.ui.output-tab/table}
+   {:tabs/title "Tree"
+    :tabs/id :db.ui.output-tab/tree}
+   {:tabs/title "Attr stats"
+    :tabs/id :db.ui.output-tab/attr-stats}
+   {:tabs/title "Attr history"
+    :tabs/id :db.ui.output-tab/attr-history}
+   {:tabs/title "Txes"
+    :tabs/id :db.ui.output-tab/tx-history}
+   {:tabs/title "EDN"
+    :tabs/id :db.ui.output-tab/edn}])
 
 (defn main-output-tabs [active-tab]
   [:div.output-tabs.output-tabs--main
@@ -40,19 +69,8 @@
    [tabs/root
     {:tabs/active-id active-tab
      :tabs/on-tab-activate set-main-tab
-     :tabs/tabs
-     [{:tabs/title "Table"
-       :tabs/id :db.ui.output-tab/table}
-      {:tabs/title "Tree"
-       :tabs/id :db.ui.output-tab/tree}
-      {:tabs/title "Attribute frequencies"
-       :tabs/id :db.ui.output-tab/attr-stats}
-      {:tabs/title "Attribute history"
-       :tabs/id :db.ui.output-tab/attr-history}
-      {:tabs/title "Transactions"
-       :tabs/id :db.ui.output-tab/tx-history}
-      {:tabs/title "EDN output"
-       :tabs/id :db.ui.output-tab/edn}]}]])
+     :tabs/tabs (if -sub-mobile-mode mobile-tabs desktop-tabs)}]])
+
 
 
 (def ^:private q-output-styles
@@ -74,13 +92,7 @@
         [:&__content
          {:overflow :auto
           :height :100%}]]
-       [:&__main
-        {:border-radius :2px
-         :grid-area :main
-         :position :relative
-         :overflow :hidden}]
-       ["&__main__links"
-        "&__side__links"
+       [:&__tabs
         {:position :absolute
          :z-index 10
          :background :white
@@ -106,9 +118,11 @@
          :height :200px}]]
       (gs/at-media {:max-width :1000px}
         [:.q-output
-         {:grid-template "'main main' 1fr / minmax(280px, 300px) 1fr"}
-         [:&__side
-          {:display :none}]]))])
+         {:grid-template "'main' 1fr / 1fr"
+          :padding-bottom :4rem}
+         [:&__tabs
+          {:bottom :1.5rem}]]))])
+
 
 (defn- output-preloader []
   [:div.q-preloader
@@ -132,6 +146,6 @@
                      :db.ui.output-tab/edn            [output-edn/root @-sub-query-res-raw]
                      :db.ui.output-tab/empty          empty-placeholder
                      [q-results-table/root @-sub-results-table])
-                   [:div.q-output__main__links
+                   [:div.q-output__tabs
                     [main-output-tabs main-tab]]]
          :else empty-placeholder))])

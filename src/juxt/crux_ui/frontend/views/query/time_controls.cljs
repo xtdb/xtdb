@@ -42,8 +42,7 @@
      [:.time-controls
       {:display         :flex
        :flex-direction  :column
-       :justify-content :space-between
-       :padding         "0 24px 8px"}
+       :justify-content :space-between}
       [:&__item
        {:margin "8px 0"}]
       [:&__switcher

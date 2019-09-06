@@ -26,12 +26,15 @@
   [:.button
    {:cursor :pointer}
    [:&--textual
-    {}]
+    {:border :none
+     :background :none}]
    [:&--active
     {:font-weight 400}]])
 
 (defn button-textual [{:keys [on-click active? text] :as params}]
-  [:div {:on-click on-click :class (vu/bem-str :button :textual {:active active?})}
+  [:button
+   {:type :button :on-click on-click
+    :class (vu/bem-str :button :textual {:active active?})}
    (if (:icon params)
      [:div.button__icon [icon' (:icon params)]])
    [:span.button__text text]])

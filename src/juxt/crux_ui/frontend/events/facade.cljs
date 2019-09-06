@@ -278,6 +278,14 @@
   (fn [db [_ new-size]]
     (assoc db :db.ui/screen-size new-size)))
 
+(rf/reg-event-db
+  :evt.ui.display-mode/toggle
+  (fn [db [_ new-size]]
+    (update db :db.ui/display-mode
+            {:ui.display-mode/output :ui.display-mode/query
+             :ui.display-mode/query :ui.display-mode/output
+             :ui.display-mode/all :ui.display-mode/all})))
+
 (rf/reg-event-fx
   :evt.ui.query/submit
   (fn [{:keys [db] :as ctx}]
@@ -293,6 +301,7 @@
             (-> db
                 (o-reset-results)
                 (assoc :db.query/network-in-progress? true)
+                (assoc :db.ui/display-mode :ui.display-mode/output)
                 (o-commit-input (:db.query/input db)))]
         {:db new-db
          :fx/query-exec (calc-query-params new-db)}))))

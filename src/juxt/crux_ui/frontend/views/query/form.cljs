@@ -30,14 +30,15 @@
        :display  :grid
        :overflow :hidden
        :grid-template
-       "'editor' 1fr
-        'time-controls' auto
-        'examples' auto
-        / 1fr"
+       "'editor editor' 1fr
+        'time-controls submit' auto
+        'examples examples' auto
+        / 1fr 128px"
        :height   :100%}
 
       [:&__time-controls
-       {:grid-area "time-controls"}]
+       {:grid-area "time-controls"
+        :padding "16px 8px 16px 16px"}]
 
       [:&__editor
        {:grid-area "editor"
@@ -45,11 +46,9 @@
         :height :100%}]
 
       [:&__submit
-       {:position :absolute
-        :right    :24px
-        :display  :inline-block
-        :bottom   :56px
-        :z-index  10}]
+       {:grid-area :submit
+        :padding "0 8px 0 0"
+        :place-self :center}]
 
       [:&__submit-btn
        (btn-cta-styles)
@@ -70,28 +69,35 @@
         :border-radius :2px
         :background :white
         :padding  "0px 16px"
-        :color    "hsl(0,0%,50%)"
+        :color    s/color-font-secondary
         :z-index  10}
        ["> ::scrollbar"
         "> ::-moz-scrollbar"
         "> ::-webkit-scrollbar"
-        {:display :none}]
+        {:display :none}]]]
 
-       (gs/at-media {:max-width :1000px}
-         [:.q-output
-          {:grid-template "'editor editor' / minmax(280px, 400px) 1fr"}
-          [:&__side
-           {:display :none}]])]])])
+     (gs/at-media {:max-width :1000px}
+       [:.q-form
+        {:padding-bottom :32px
+         :grid-template
+         "'editor' 1fr
+          'time-controls' auto
+          'submit' auto
+          'examples' auto
+           / 100%"}
+        [:&__submit
+          {:padding "0 16px"
+           :justify-self :start}]]))])
 
 
 (defn root []
   [:div.q-form
    q-form-styles
-   [:div.q-form__time-controls
-    [time-controls/root]]
    [:div.q-form__editor
     ^{:key @-sub-editor-key}
     [q-editor/root]]
+   [:div.q-form__time-controls
+    [time-controls/root]]
    [:div.q-form__examples
     [query-examples/root]]
    [:div.q-form__submit

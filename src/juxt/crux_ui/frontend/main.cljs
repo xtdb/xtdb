@@ -16,16 +16,15 @@
 (defn mount-root []
   (r/render [views/root] (js/document.getElementById "app")))
 
+(defn dispatch-screen-measurements []
+  (rf/dispatch
+    [:evt.ui/screen-resize
+     {:ui.screen/inner-height js/window.innerHeight
+      :ui.screen/inner-width js/window.innerWidth}]))
+
 (defn- listen-keyboard-shortcuts [evt]
   (when (and (.-ctrlKey evt) (= 13 (.-keyCode evt)))
     (rf/dispatch [:evt.keyboard/ctrl-enter])))
-
-(defn- on-window-resize [evt]
-  (when evt
-    (rf/dispatch
-      [:evt.ui/screen-resize
-       {:ui.screen/inner-height js/window.innerHeight
-        :ui.screen/inner-width js/window.innerWidth}])))
 
 (defn lookup-gist []
   (let [search js/location.search
@@ -38,10 +37,11 @@
 
 (defn init []
   (js/window.addEventListener "keydown" listen-keyboard-shortcuts)
-  (js/window.addEventListener "resize" on-window-resize)
+  (js/window.addEventListener "resize" dispatch-screen-measurements)
   (rf/dispatch-sync [:evt.db/init d/default-db])
   (routes/init)
   (lookup-gist)
+  (js/setTimeout dispatch-screen-measurements 50)
   (mount-root))
 
 ;; This is called every time you make a code change

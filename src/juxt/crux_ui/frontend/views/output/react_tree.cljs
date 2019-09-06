@@ -23,7 +23,6 @@
       :onChange on-tree-change
       :renderNode
       (fn [node]
-        (println :render-node node)
         (.-title node))
 
       :tree (clj->js tree-struct)}]])
