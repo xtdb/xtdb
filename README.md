@@ -58,29 +58,46 @@ round-trip overheads when running complex application queries.
 <img alt="Document database with graph queries" role="img" aria-label="Crux Venn" src="./docs/img/crux-venn-1.svg" width="500px">
 
 Crux is fundamentally a store of versioned EDN documents. The only requirement
-is that you specify a valid `:crux.db/id` key. The fields within these
-documents are automatically indexed as Entity-Attribute-Value triples to
-support efficient graph queries. Document versions are indexed by `valid-time`
-in addition to `transaction-time` which allows you to make updates into the
-past, present or future.
+is that you specify a valid `:crux.db/id` key which links the documents to
+their corresponding entities. The fields within these documents are
+automatically indexed as Entity-Attribute-Value triples to support efficient
+graph queries. Document versions are indexed by `valid-time` (in addition to
+`transaction-time`) which allows you to model updates into the past, present or
+future.
 
 Crux supports a Datalog query interface for reading data and traversing
 relationships across all documents. Queries are executed so that the results
 are lazily streamed from the underlying indexes. Queries can be made against
-point-in-time snapshots of your database (by specifying `transaction-time` and/or
-`valid-time`).
+consistent point-in-time snapshots of your database from any Crux node
+connected to the same transaction log, by specifying `transaction-time` and/or
+`valid-time`.
 
 ## Documentation
 
-Please visit our [official documentation](https://juxt.pro/crux/docs/index.html) to get started with Crux.
+Please visit our [official
+documentation](https://juxt.pro/crux/docs/index.html) to get started with Crux.
 
 ## Try it with Docker
-See [standalone webservice example](https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice)
+See [standalone webservice
+example](https://github.com/juxt/crux/tree/master/docs/example/standalone_webservice)
 for a demo Docker container.
 
 ## Community & Contact
 
 [![project chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux)
+
+### 3rd Party Modules
+* [avisi-apps/crux-xodus](https://github.com/avisi-apps/crux-xodus) - pure-JVM
+  alternative to `crux-rocksdb` and `crux-lmdb`
+* [avisi-apps/crux-active-objects](https://github.com/avisi-apps/crux-active-objects)
+  - TxLog implementation backed by Active Objects for use inside Atlassian
+    Addons
+
+### Companies using Crux
+
+* [Oscaro](https://www.oscaro.com)
+* [Avisi](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration) 
+* Yours? Let us know :)
 
 crux@juxt.pro
 
@@ -92,11 +109,11 @@ with interfaces for the pluggable storage components (Kafka, LMDB, RocksDB
 etc.). Implementations of these storage options are located in their own
 projects.
 
-Project directories are published to Clojars independently (with corresponding
-names) so that you can maintain granular dependencies on precisely the
-individual components needed for your application. Alternatively you can depend
-on `crux-uberjar` whilst in development to spend less time worrying about which
-parts of Crux you need now or in the future.
+Project directories are published to Clojars independently so that you can
+maintain granular dependencies on precisely the individual components needed
+for your application. Alternatively you can depend on `crux-uberjar` whilst in
+development to spend less time worrying about which parts of Crux you need now
+or in the future.
 
 ### Core
 

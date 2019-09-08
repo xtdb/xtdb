@@ -1,0 +1,17 @@
+= crux-jdbc
+
+This project contains `crux.jdbc` which is an implementation of `TxLog` backed
+by a JDBC-compatible database of your choosing, for strong durability
+guarantees in situations where Kafka cannot be used and scalability is less
+important. This implementation provides the same semantics as the `crux-kafka`.
+
+This module has currently has tested support for:
+* H2
+* SQLite
+* MySQL
+* PostgreSQL
+* Oracle
+
+H2 and SQLite may be embedded within your application as a standalone Crux node.
+
+For tests, see `/crux-test/test/crux/jdbc_test.clj`.
