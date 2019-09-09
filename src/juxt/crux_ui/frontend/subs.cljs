@@ -140,7 +140,7 @@
   :subs.query/result-count
   :<- [:subs.query/result]
   (fn [res]
-    (when res
+    (when (not-empty res)
       (str (count res) " rows"))))
 
 (rf/reg-sub
