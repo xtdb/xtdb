@@ -91,7 +91,7 @@
       (conj
         m
         (if (scalar? v)
-          {:title (str k " " v)
+          {:title (str k " " (pr-str v))
            :leaf true}
           {:title (str k)
            :children (make-tree v)})))
@@ -135,6 +135,13 @@
          :children (make-tree result)})
       (catch js/Error e
         {:title "Failed to produce a tree"}))))
+
+(rf/reg-sub
+  :subs.query/result-count
+  :<- [:subs.query/result]
+  (fn [res]
+    (when res
+      (str (count res) " rows"))))
 
 (rf/reg-sub
   :subs.query.time/vt
