@@ -30,7 +30,8 @@
     (garden/css
       [:.examples
        {:display :flex
-         :width :max-content
+        :width :max-content
+        :align-items :center
         :font-size :13px}
        [:&__item
         :&__close

@@ -177,6 +177,22 @@
                 " :limit 10"
                 " :offset 1}"]))
 
+   :examples/rules-and-args
+   (fn []
+     (str/join "\n"
+               ["{:find [e p]"
+                " :where"
+                " [[e :crux.db/id _]"
+                "  [e :ticker/price p]"
+                "  [(> p p-min)]"
+                "  [(<= p p-max)]"
+                "  (is-traded-in-currency e :currency/usd)]"
+                " :args [{p-min 10  p-max 80}]"
+                " :rules"
+                " [[(is-traded-in-currency ticker-id curr-id)"
+                "   [ticker-id :ticker/market m]"
+                "   [m :se/currency curr-id]]]}"]))
+
    :examples/query-w-full-res
    (fn []
      '{:find [e]
@@ -219,10 +235,12 @@
     :generator (:examples/put-w-valid generators)}
    {:title "simple query"
     :generator (:examples/query generators)}
-   {:title "join query"
+   {:title "join"
     :generator (:examples/query-w-join generators)}
-   {:title "query with full-results"
+   {:title "full-results"
     :generator (:examples/query-w-full-res generators)}
+   {:title "rules and args"
+    :generator (:examples/rules-and-args generators)}
    {:title "delete"
     :generator (:examples/delete generators)}
    {:title "evict"
