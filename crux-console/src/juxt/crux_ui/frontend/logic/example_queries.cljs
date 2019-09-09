@@ -1,5 +1,6 @@
 (ns juxt.crux-ui.frontend.logic.example-queries
   (:require [medley.core :as m]
+            [clojure.string :as str]
             [juxt.crux-ui.frontend.logic.example-txes-amzn :as amzn-data]))
 
 
@@ -50,10 +51,86 @@
   ([offset-in-days]
    (js/Date. (+ (js/Date.now) (* offset-in-days day-millis)))))
 
+(defn- gen-vt-str
+  ([] (gen-vt-str 0))
+  ([offset-in-days]
+   (pr-str (gen-vt offset-in-days))))
+
+(def ^:private stock-exchanges
+  [{:crux.db/id :se.id/NYSE
+    :se/title "New York Stock Exchange"
+    :se/currency :currency/usd
+    :se/country :se.country/USA}
+
+   {:crux.db/id :se.id/NASDAQ
+    :se/title "NASDAQ"
+    :se/country :se.country/USA
+    :se/subsidiaries
+    #{{:crux.db/id :se.id/CSE
+       :se/title "Copenhagen Stock Exchange"
+       :se/currency :currency/dkk
+       :se/country :se.country/Denmark}
+
+      {:crux.db/id :se.id/StockholmSE
+       :se/title "Stockholm Stock Exchange"
+       :se/currency :currency/skk
+       :se/country :se.country/Sweden}
+
+      {:crux.db/id :se.id/HSE
+       :se/title "Helsinki Stock Exchange"
+       :se/currency :currency/euro
+       :se/country :se.country/Finland}
+
+      {:crux.db/id :se.id/ISE
+       :se/title "Iceland Stock Exchange"
+       :se/currency :currency/skk
+       :se/country :se.country/Iceland}
+
+      {:crux.db/id :se.id/TSE
+       :se/title "Tallinn Stock Exchange"
+       :se/currency :currency/euro
+       :se/country :se.country/Estonia}
+
+      {:crux.db/id :se.id/RSE
+       :se/title "Riga Stock Exchange"
+       :se/currency :currency/euro
+       :se/country :se.country/Latvia}
+
+      {:crux.db/id :se.id/VSE
+       :se/title "Vilnius Stock Exchange"
+       :se/currency :currency/euro
+       :se/country :se.country/Lithuania}
+
+      {:crux.db/id :se.id/ASE
+       :se/title "Armenian Stock Exchange"
+       :se/currency :currency/usd
+       :se/country :se.country/Armenia}}}
+
+   {:crux.db/id :se.id/JEG
+    :se/title "Japan Exchange Group"
+    :se/country :se.country/Japan}
+
+   {:crux.db/id :se.id/SSE
+    :se/title "Shanghai Stock Exchange"
+    :se/country :se.country/China}
+
+   {:crux.db/id :se.id/HKSE
+    :se/title "Hong Kong Stock Exchange"
+    :se/country :se.country/HongKong}
+
+   {:crux.db/id :se.id/Euronext
+    :se/title "Euronext"
+    :se/country :se.country/EU}
+
+   {:crux.db/id :se.id/LSE
+    :se/title "London Stock Exchange"
+    :se/country :se.country/UK}])
+
+
 (defn- gen-ticker []
-  {:crux.db/id        (gen-id)
-   :ticker/price      (inc (rand-int 100))
-   :ticker/currency   (rand-nth currencies)})
+  {:crux.db/id     (gen-id)
+   :ticker/price   (inc (rand-int 100))
+   :ticker/market  (:crux.db/id (rand-nth stock-exchanges))})
 
 (defn- gen-put-with-offset-days [ticker offset-in-days]
   [:crux.tx/put ticker (gen-vt offset-in-days)])
@@ -65,8 +142,11 @@
   (assoc ticker :ticker/price amzn-close-price))
 
 (def generators
-  {:examples/put (fn [] [[:crux.tx/put (gen-ticker)]])
-   :examples/put-10 (fn [] (mapv (fn [_] [:crux.tx/put (gen-ticker)]) (range 10)))
+  {:examples/put
+   (fn []
+     (into (mapv (fn [x] [:crux.tx/put x]) stock-exchanges)
+           (mapv (fn [_] [:crux.tx/put (gen-ticker)]) (range 50))))
+
    :examples/put-w-valid
    (fn []
      (let [ticker (gen-ticker)
@@ -78,9 +158,24 @@
 
    :examples/query
    (fn []
-     '{:find [e p]
-       :where [[e :crux.db/id _]
-               [e :ticker/price p]]})
+     (str/join "\n"
+       ["{:find [e p]"
+        " :where"
+        " [[e :crux.db/id _]"
+        "  [e :ticker/price p]]}"]))
+
+   :examples/query-w-join
+   (fn []
+     (str/join "\n"
+               ["{:find [market-title ticker-id price]"
+                " :where"
+                " [[ticker-id :ticker/price price]"
+                "  [(> price 60)]"
+                "  [ticker-id :ticker/market m]"
+                "  [m :se/title market-title]]"
+                " :order-by [[market-title :asc]]"
+                " :limit 10"
+                " :offset 1}"]))
 
    :examples/query-w-full-res
    (fn []
@@ -89,8 +184,26 @@
        :full-results? true})
 
    :examples/delete (fn [] [[:crux.tx/delete (get-id)]])
-   :examples/evict (fn [] [[:crux.tx/evict (get-id)]])
-   :examples/evict-w-valid (fn [] [[:crux.tx/evict (get-id) (gen-vt)]])})
+   :examples/evict
+   (fn []
+     (str "[; evict all entries of the entity \n"
+          " [:crux.tx/evict " (get-id) "]\n"
+          "\n"
+          " ; evict entries from the specified valid time\n"
+          " [:crux.tx/evict " (get-id) "\n"
+          "  " (gen-vt-str) "]\n"
+          "\n"
+          " ; evict entries in the specified valid time range\n"
+          " [:crux.tx/evict " (get-id) "\n"
+          "  " (gen-vt-str -5) "\n"
+          "  " (gen-vt-str)"]\n"
+          "\n"
+          " ; evict entries in the specified vt range\n"
+          " ; but keep latest and earliest entries\n"
+          " [:crux.tx/evict " (get-id) "\n"
+          "  " (gen-vt-str -5) "\n"
+          "  " (gen-vt-str) "\n"
+          "  true true]]"))})
 
 '{:find [e p],
   :where
@@ -100,22 +213,20 @@
    [e :ticker/price p]]}
 
 (def examples
-  [{:title "[crux.tx/put :some-data]"
+  [{:title ":crux.tx/put"
     :generator (:examples/put generators)}
-   {:title "put 10"
-    :generator (:examples/put-10 generators)}
    {:title "put with valid time"
     :generator (:examples/put-w-valid generators)}
    {:title "simple query"
     :generator (:examples/query generators)}
+   {:title "join query"
+    :generator (:examples/query-w-join generators)}
    {:title "query with full-results"
     :generator (:examples/query-w-full-res generators)}
    {:title "delete"
     :generator (:examples/delete generators)}
    {:title "evict"
-    :generator (:examples/evict generators)}
-   {:title "evict with vt"
-    :generator (:examples/evict-w-valid generators)}])
+    :generator (:examples/evict generators)}])
 
 (defn generate [ex-id]
   (if-let [gen-fn (:generator (m/find-first #(= ex-id (:title %)) examples))]

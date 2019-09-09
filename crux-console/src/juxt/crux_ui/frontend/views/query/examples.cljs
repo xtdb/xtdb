@@ -3,13 +3,17 @@
             [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.svg-icons :as icon]
             [garden.core :as garden]
-            [garden.stylesheet :as gs]))
+            [garden.stylesheet :as gs]
+            [reagent.core :as r]))
 
 
 (def ^:private -sub-examples (rf/subscribe [:subs.query/examples]))
 
 (defn dispatch-examples-close []
   (rf/dispatch [:evt.ui.examples/close]))
+
+(defn- dispatch-example [ex-title]
+  (rf/dispatch [:evt.ui.editor/set-example ex-title]))
 
 (defn is-gist-link? [s]
   (let [url (js/URL. s)]
@@ -49,7 +53,7 @@
          {:display :none}]))])
 
 (def ^{:private true :const true} examples-close-text
-  "Tap to close examples. You can always get them by by resetting the cookies on this host.")
+  "Tap to close examples. You can always get them back by resetting the cookies on this host.")
 
 (defn root []
   (if-let [examples @-sub-examples]
@@ -63,8 +67,8 @@
        ^{:key ex-title}
        [:div.examples__item
         [comps/button-textual
-         {:on-click #(rf/dispatch [:evt.ui.editor/set-example ex-title])
-          :text ex-title}]])
+         {:on-click (r/partial dispatch-example ex-title)
+          :text     ex-title}]])
      [:div.examples__import
       {:on-click on-examples-add}
       "Set my examples"]]))
