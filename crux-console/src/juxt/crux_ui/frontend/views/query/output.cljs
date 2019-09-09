@@ -19,11 +19,11 @@
 
 
 (def ^:private -sub-err             (rf/subscribe [:subs.query/error-improved]))
-(def ^:private -sub-query-res-raw   (rf/subscribe [:subs.query/result]))
+(def ^:private -sub-result-raw      (rf/subscribe [:subs.query/result]))
+(def ^:private -sub-result-count    (rf/subscribe [:subs.query/result-count]))
 (def ^:private -sub-result-tree     (rf/subscribe [:subs.query/result-tree]))
 (def ^:private -sub-output-tab      (rf/subscribe [:subs.ui/output-main-tab]))
 (def ^:private -sub-nw-progress     (rf/subscribe [:subs.query/network-in-progress?]))
-(def ^:private -sub-output-side-tab (rf/subscribe [:subs.ui/output-side-tab]))
 (def ^:private -sub-results-table   (rf/subscribe [:subs.query/results-table]))
 
 
@@ -98,14 +98,23 @@
         [:&__content
          {:overflow :auto
           :height :100%}]]
-       [:&__tabs
+       [:&__status
         {:position :absolute
          :max-width :100%
          :overflow :auto
          :z-index 10
+         :display :flex
+         :justify-content :space-between
+         :align-items :center
          :background :white
          :bottom  :0px
-         :right   :0px}]]
+         :right   :0px
+         :left :0px
+         :padding-left :12px}
+        [:&__result-count
+         {:margin-right :8px
+          :white-space :pre}]]]
+
       [:.q-output-edn
        {:padding :8px}]
       [:.q-output-empty
@@ -133,15 +142,13 @@
         [:.q-output
          {:grid-template "'main' 1fr / 1fr"
           :padding-bottom :4rem}
-         [:&__tabs
+         [:&__status
           {:bottom :1.5rem}]])
 
       (gs/at-media {:max-width :375px}
         [:.q-output
          {:grid-template "'main' 1fr / 1fr"
-          :padding-bottom :4rem}
-         [:&__tabs
-          {:bottom :1.5rem}]]))])
+          :padding-bottom :4rem}]))])
 
 
 
@@ -164,9 +171,10 @@
                      :db.ui.output-tab/tx-history     [output-txes/root]
                      :db.ui.output-tab/attr-history   [output-attr-history/root]
                      :db.ui.output-tab/attr-stats     [attr-stats/root]
-                     :db.ui.output-tab/edn            [output-edn/root @-sub-query-res-raw]
+                     :db.ui.output-tab/edn            [output-edn/root @-sub-result-raw]
                      :db.ui.output-tab/empty          empty-placeholder
                      [q-results-table/root @-sub-results-table])
-                   [:div.q-output__tabs
-                    [main-output-tabs main-tab]]]
+                   [:div.q-output__status
+                    [:div.q-output__status__result-count @-sub-result-count]
+                    [:div.q-output__status__tabs [main-output-tabs main-tab]]]]
          :else empty-placeholder))])
