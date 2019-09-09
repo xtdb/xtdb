@@ -99,11 +99,14 @@
                 :query/attributes s->a)))
 
 (defn analyse-any-query [input-edn]
-  (cond
-    (query-vector? input-edn)     (analyse-query input-edn)
-    (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
-    (query-map? input-edn)        (analyse-query input-edn)
-    :else                         false))
+  (try
+    (cond
+      (query-vector? input-edn)     (analyse-query input-edn)
+      (multi-tx-vector?  input-edn) (multi-tx-vec->map input-edn)
+      (query-map? input-edn)        (analyse-query input-edn)
+      :else                         false)
+    (catch js/Error e
+      false)))
 
 (defn- calc-numeric-keys [result-map]
   (map first (filter (comp number? second) result-map)))

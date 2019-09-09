@@ -28,7 +28,13 @@
 
 
 (def empty-placeholder
-  [:div.q-output-empty "Your query or transaction results here shall be"])
+  [:pre.q-output-empty
+   "You will see the results of your query here.\n"
+   "Example query:\n"
+   "{:find [e p]\n"
+   " :where\n"
+   " [[e :ticker/price p]\n"
+   "  [(> p 50)]]}"])
 
 (defn set-main-tab [tab-name]
   (rf/dispatch [:evt.ui.output/main-tab-switch tab-name]))
@@ -135,8 +141,8 @@
          {:grid-template "'main' 1fr / 1fr"
           :padding-bottom :4rem}
          [:&__tabs
-          {:bottom :1.5rem}]])
-      )])
+          {:bottom :1.5rem}]]))])
+
 
 
 (defn- output-preloader []
