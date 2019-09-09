@@ -29,7 +29,7 @@
 
 (def empty-placeholder
   [:pre.q-output-empty
-   "You will see the results of your query here.\n"
+   "Results will be displayed here.\n"
    "Example query:\n"
    "{:find [e p]\n"
    " :where\n"
