@@ -5,6 +5,7 @@
 (defmulti better-printer
           (fn [edn]
             (cond
+              (string? edn) ::string
               (map? edn) ::map
               (vector? edn) ::vec
               :else ::default)))
@@ -16,6 +17,9 @@
 
 (defmethod better-printer ::map [edn]
   (str "{" (s/join "\n" (map-indexed print-entry edn)) "}"))
+
+(defmethod better-printer ::string [edn-str]
+  edn-str)
 
 (defmethod better-printer ::vec [edn]
   (with-out-str (pp/pprint edn)))
