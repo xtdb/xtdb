@@ -3,18 +3,33 @@
             [juxt.crux-ui.frontend.views.style :as s]
             [garden.core :as garden]
             [reagent.core :as r]
+            [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.logging :as log]))
 
 
 (def ^:private table-style
   [:style
     (garden/css
+
+      [:.g-cell-oversize-arrest
+       [:&__content
+        {:max-width :300px
+         :max-height :76px
+         :overflow :hidden}
+        [:&--expanded
+         {:max-width :none
+          :max-height :none}]]
+       [:&__expand
+        {:text-align :center
+         :cursor :pointer}]]
+
       [:.q-grid-wrapper
-       {:overflow :scroll}
+       {:overflow :scroll
+        :padding-bottom :15rem}
        ["> ::-webkit-scrollbar"
         "> ::-moz-scrollbar"
         "> ::scrollbar"
-        {:display :none} ]]
+        {:display :none}]]
       [:.q-grid
        {:border-collapse :collapse
         :border-radius :2px
@@ -43,9 +58,6 @@
         [:&:first-child
          {:border-left :none}]]
        [:&__body
-        {:overflow :auto
-         :height :100%
-         :padding-bottom :10em}
         [:&-row
          {:border-top  s/q-ui-border}
          [:&:first-child
@@ -55,14 +67,25 @@
          [:&:first-child
           {:border-left :none}]]]])])
 
+(defn- expand-sibling [click-evt]
+  (let [cl (f/jsget click-evt "target" "previousSibling" "classList")]
+    (^js .toggle cl "g-cell-oversize-arrest__content--expanded")))
+
 (defn table-row [headers i row-items]
   ^{:key i}
   [:tr.q-grid__body-row
    (for [j (range (count row-items))
-         :let [cell-content (nth row-items j)
+         :let [cell-content ^js/String (or (some-> (nth row-items j) pr-str) "")
+               cont-length (.-length cell-content)
                cell-id (nth headers j)]]
      ^{:key cell-id}
-     [:td.q-grid__body-cell (and cell-content (pr-str cell-content))])])
+     [:td.q-grid__body-cell
+      (if (> cont-length 100)
+        [:div.g-cell-oversize-arrest
+         [:div.g-cell-oversize-arrest__content cell-content]
+         [:div.g-cell-oversize-arrest__expand
+          {:on-click expand-sibling} "..."]]
+        cell-content)])])
 
 (defn root [table-data]
   (let [instance-state

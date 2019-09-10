@@ -13,7 +13,7 @@
        :min-height :100px
        :height :100%
        :overflow :auto
-       :padding "16px 24px"}])])
+       :padding "40px 32px"}])])
 
 (defn root [tree-struct]
   [:div.react-tree

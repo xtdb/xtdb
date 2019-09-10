@@ -64,13 +64,24 @@
 
       [:&__examples
        {:grid-area :examples
-        :overflow :auto
-        :width "calc(100% - 16px)"
+        :overflow :hidden
+        :width "calc(100% - 32px)"
         :border-radius :2px
         :background :white
-        :padding  "0px 16px"
+        :padding  "0px 0px"
+        :position :relative
+        :height :47px
+        :left :16px
         :color    s/color-font-secondary
         :z-index  10}
+       ["> .examples-wrapper"
+        {:margin-left "-8px"
+         :position :absolute
+         :overflow :scroll
+         :width :100%
+         :top 0
+         :padding-bottom :17px
+         :bottom "-17px"}]
        ["> ::scrollbar"
         "> ::-moz-scrollbar"
         "> ::-webkit-scrollbar"
@@ -99,7 +110,8 @@
    [:div.q-form__time-controls
     [time-controls/root]]
    [:div.q-form__examples
-    [query-examples/root]]
+    [:div.examples-wrapper
+     [query-examples/root]]]
    [:div.q-form__submit
     (let [qa @-sub-query-analysis]
       [:button.q-form__submit-btn

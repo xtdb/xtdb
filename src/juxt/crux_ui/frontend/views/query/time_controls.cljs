@@ -21,7 +21,7 @@
 
 (defn on-vt-change [d]
   (println :on-vt-change d)
-  (on-time-commit-debounced :time/vt d)
+  #_(on-time-commit-debounced :time/vt d)
   (rf/dispatch [:evt.ui.query/time-change :time/vt d]))
 
 (defn on-vt-commit [d]
@@ -32,7 +32,7 @@
   (on-time-commit :time/tt d))
 
 (defn on-tt-change [d]
-  (on-time-commit-debounced :time/tt d)
+  #_(on-time-commit-debounced :time/tt d)
   (rf/dispatch [:evt.ui.query/time-change :time/tt d]))
 
 
