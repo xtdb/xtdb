@@ -10,9 +10,9 @@ which is an implementation of
 
 See also: https://kafka.apache.org/documentation/#connect
 
-Download Kafka from https://kafka.apache.org/downloads
+Download the latest Binary of Kafka from https://kafka.apache.org/downloads
 
-Building and installing the connectors:
+Building and installing the connectors (from within `crux-kafka-connect):
 ```
 export KAFKA_HOME=...
 lein uberjar
