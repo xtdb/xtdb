@@ -25,6 +25,7 @@
 (def ^:private -sub-output-tab      (rf/subscribe [:subs.ui/output-main-tab]))
 (def ^:private -sub-nw-progress     (rf/subscribe [:subs.query/network-in-progress?]))
 (def ^:private -sub-results-table   (rf/subscribe [:subs.query/results-table]))
+(def ^:private -sub-mobile-mode     (rf/subscribe [:subs.ui.responsive-breakpoints/width-lt-800]))
 
 
 (def empty-placeholder
@@ -36,10 +37,12 @@
    " [[e :ticker/price p]\n"
    "  [(> p 50)]]}"])
 
+(def empty-results
+  [:pre.q-output-empty "Query succeeded! Zero results."])
+
+
 (defn set-main-tab [tab-name]
   (rf/dispatch [:evt.ui.output/main-tab-switch tab-name]))
-
-(def ^:private -sub-mobile-mode (rf/subscribe [:subs.ui.responsive-breakpoints/width-lt-800]))
 
 (def desktop-tabs
   [{:tabs/title "table"
@@ -75,7 +78,7 @@
    [tabs/root
     {:tabs/active-id active-tab
      :tabs/on-tab-activate set-main-tab
-     :tabs/tabs (if -sub-mobile-mode mobile-tabs desktop-tabs)}]])
+     :tabs/tabs (if @-sub-mobile-mode mobile-tabs desktop-tabs)}]])
 
 
 
@@ -173,6 +176,7 @@
                      :db.ui.output-tab/attr-stats     [attr-stats/root]
                      :db.ui.output-tab/edn            [output-edn/root @-sub-result-raw]
                      :db.ui.output-tab/empty          empty-placeholder
+                     :db.ui.output-tab/empty-result   empty-results
                      [q-results-table/root @-sub-results-table])
                    [:div.q-output__status
                     [:div.q-output__status__result-count @-sub-result-count]

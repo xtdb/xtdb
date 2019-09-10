@@ -46,6 +46,7 @@
 (rf/reg-sub :subs.query/result #(:db.query/result % nil))
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
 (rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
+(rf/reg-sub :subs.db.ui.attr-history/hint? #(:db.ui.attr-history/hint? % nil))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
 
 ; returns a map entity-id->simple-histories
@@ -222,11 +223,13 @@
 (rf/reg-sub
   :subs.query/attr-history-plot-data
   :<- [:subs.query/result-analysis]
+  :<- [:subs.db.ui.attr-history/hint?]
   :<- [:subs.query/entities-simple-histories]
-  (fn [[result-analysis eids->simple-history]]
+  (fn [[result-analysis hint? eids->simple-history]]
     (let [first-numeric (first (:ra/numeric-attrs result-analysis))]
       (if (and first-numeric (map? eids->simple-history))
         {:attribute first-numeric
+         :hint? hint?
          :traces (map (fn [[k v]] (pd/calc-plotly-trace--attr first-numeric k v)) eids->simple-history)}))))
 
 (rf/reg-sub
@@ -313,9 +316,9 @@
     (cond
       q-err :db.ui.output-tab/error
       (not q-res) :db.ui.output-tab/empty
-      (= 0 (count q-res)) :db.ui.output-tab/empty
-      out-tab out-tab
+      (= 0 (count q-res)) :db.ui.output-tab/empty-result
       (= :crux.ui.query-type/tx (:crux.ui/query-type q-info)) :db.ui.output-tab/edn
+      out-tab out-tab
       (= 1 (count q-res)) :db.ui.output-tab/tree
       :else :db.ui.output-tab/table)))
 

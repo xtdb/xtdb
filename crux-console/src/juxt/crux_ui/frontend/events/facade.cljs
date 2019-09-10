@@ -324,6 +324,11 @@
           str   (bp/better-printer query)]
       (o-set-example db str))))
 
+(rf/reg-event-db
+  :evt.ui.attr-history/disable-hint
+  (fn [db]
+    (assoc db :db.ui.attr-history/hint? false)))
+
 (rf/reg-event-fx
   :evt.ui.examples/close
   (fn [{db :db}]
