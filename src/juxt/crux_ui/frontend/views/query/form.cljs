@@ -65,7 +65,7 @@
       [:&__examples
        {:grid-area :examples
         :overflow :auto
-        :width "calc(100% - 32px)"
+        :width "calc(100% - 16px)"
         :border-radius :2px
         :background :white
         :padding  "0px 16px"

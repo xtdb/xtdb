@@ -24,7 +24,12 @@
 
 (def button-textual-styles
   [:.button
-   {:cursor :pointer}
+   {:cursor :pointer
+    :background :none
+    :padding "6px 8px"
+    :border-radius :2px
+    :user-select :none
+    :border "1px solid hsl(0, 0%, 85%)"}
    [:&--textual
     {:border :none
      :background :none}]
@@ -35,6 +40,14 @@
   [:button
    {:type :button :on-click on-click
     :class (vu/bem-str :button :textual {:active active?})}
+   (if (:icon params)
+     [:div.button__icon [icon' (:icon params)]])
+   [:span.button__text text]])
+
+(defn button-bordered [{:keys [on-click active? text] :as params}]
+  [:button
+   {:type :button :on-click on-click
+    :class (vu/bem-str :button {:active active?})}
    (if (:icon params)
      [:div.button__icon [icon' (:icon params)]])
    [:span.button__text text]])

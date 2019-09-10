@@ -139,7 +139,7 @@
   (+ x (rand-int 7)))
 
 (defn- alter-ticker [ticker amzn-close-price]
-  (assoc ticker :ticker/price amzn-close-price))
+  (assoc ticker :ticker/price (- (/ amzn-close-price 15) (* 10 (rand)))))
 
 (def generators
   {:examples/put
