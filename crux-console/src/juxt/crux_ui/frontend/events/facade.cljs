@@ -13,7 +13,9 @@
             [juxt.crux-ui.frontend.cookies :as c]
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
             [juxt.crux-lib.http-functions :as hf]
-            [juxt.crux-ui.frontend.better-printer :as bp]))
+            [juxt.crux-ui.frontend.better-printer :as bp]
+            [juxt.crux-ui.frontend.routes :as routes]
+            [juxt.crux-ui.frontend.logging :as log]))
 
 
 (defn calc-query [db ex-title]
@@ -118,6 +120,12 @@
     (q/fetch-histories-docs eids->histories)))
 
 (rf/reg-fx
+  :fx/push-query-into-url
+  (fn [^js/String query]
+    (if (< (.-length query) 2000)
+      (routes/push-query query))))
+
+(rf/reg-fx
   :fx.sys/set-cookie
   (fn [[cookie-name value]]
     (c/set! cookie-name value {:max-age 86400})))
@@ -151,8 +159,17 @@
 
 (rf/reg-event-fx
   :evt.sys/set-route
-  (fn [{:keys [db]} [_ route]]
-    {:db (assoc db :db.sys/route route)}))
+  (fn [{:keys [db]} [_ {:r/keys [query-params] :as route}]]
+    (log/log :set-route route)
+    (let [query (:rd/query query-params)
+          host-status (:db.sys.host/status db)]
+      (cond->
+        {:db (cond-> (assoc db :db.sys/route route)
+               query
+               (-> (assoc :db.query/input query)
+                   (update :db.ui/editor-key inc)))}
+        (and host-status query)
+        (assoc :dispatch [:evt.ui.query/submit--api])))))
 
 
 ; queries
@@ -230,10 +247,10 @@
   :evt.io/gist-success
   (fn [{:keys [db] :as ctx} [_ res]]
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
-      (-> ctx
-          (assoc-in [:db :db.ui.examples/imported] edn)
-          (update :db o-set-example (some-> edn first :query bp/better-printer)))
-      (assoc ctx :fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"))))
+      (let [db (-> (assoc db :db.ui.examples/imported edn)
+                   (update o-set-example (some-> edn first :query bp/better-printer)))]
+        {:db db})
+      {:fx.ui/alert "Failed to parse imported gist. Is it a good EDN?"})))
 
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
@@ -295,6 +312,27 @@
       ;
       (query-invalid? (:db.query/input db))
       {:fx.ui/alert "Query appears to be invalid"}
+      ;
+      :else
+      (let [new-db
+            (-> db
+                (o-reset-results)
+                (assoc :db.query/network-in-progress? true)
+                (assoc :db.ui/display-mode :ui.display-mode/output)
+                (o-commit-input (:db.query/input db)))]
+        {:db new-db
+         :fx/push-query-into-url (:db.query/input db)
+         :fx/query-exec (calc-query-params new-db)}))))
+
+(rf/reg-event-fx
+  :evt.ui.query/submit--api
+  (fn [{:keys [db] :as ctx}]
+    (cond
+      (node-disconnected? db)
+      nil
+      ;
+      (query-invalid? (:db.query/input db))
+      nil
       ;
       :else
       (let [new-db

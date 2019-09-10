@@ -5,7 +5,7 @@
             [juxt.crux-ui.frontend.views.commons.dom :as dom]
             [juxt.crux-ui.frontend.functions :as f]))
 
-(def routes
+(def ^:private routes
   ["/console"
    {"" :rd/query-ui
 
@@ -18,20 +18,50 @@
 (defn- prefix-keys [route]
   (f/map-keys #(keyword "r" (name %)) route))
 
-(def match-route (comp prefix-keys (partial bidi/match-route routes)))
-(def path-for (partial bidi/path-for routes))
+(def ^:private match-route (comp prefix-keys (partial bidi/match-route routes)))
+(def ^:private path-for (partial bidi/path-for routes))
+
+(defn query-str->map [^js/String query]
+  (let [raw-map (into {} (js->clj (js/Array.from (js/URLSearchParams. query))))]
+    (f/map-keys #(if (string? %) (keyword "rd" %) %) raw-map)))
+
+(defn ^js/String query-map->str [m]
+  (.toString (js/URLSearchParams. (clj->js m))))
+
+(defn- url-for [route-id query-map]
+  (let [path (path-for route-id)
+        query-str (query-map->str query-map)]
+    (str path "?" query-str)))
+
+
 
 (comment
   (bidi/match-route routes "/console")
   (bidi/match-route routes "/console/settings")
   (bidi/match-route routes "/console/settings/network")
   (bidi/match-route routes "/console/example/network")
-  (bidi/path-for routes :rd/settings))
+  (bidi/path-for routes :rd/settings)
+  (query-str->map "wewe=wee&333=33&eeqq=33&a[]=3&a[]=6")
+  (query-str->map js/location.search)
+  (query-str->map "a=b%2Cc%2Cb")
+  (query-str->map "a=%5B1%2C2%2C3%5D")
+  (url-for :rd/query-ui {:rd/query (pr-str '{:find [e p] :where []})})
+  (query-map->str
+    {:rd/query
+     (js/JSON.stringify (clj->js [1 2 3]))}))
+
+
+(defn- calc-route-data-from-location []
+  (let [route-data (match-route js/location.pathname)
+        query-map (query-str->map js/location.search)]
+     (assoc route-data :r/query-params query-map)))
 
 (defn- on-pop-state [evt]
-  (log/log :on-pop-state evt)
-  (let [route-data (match-route js/location.pathname)]
-    (rf/dispatch [:evt.sys/set-route route-data])))
+  (rf/dispatch [:evt.sys/set-route (calc-route-data-from-location)]))
+
+(defn- push-query [crux-query-str]
+  (let [url (url-for :rd/query-ui {:rd/query crux-query-str})]
+    (js/history.pushState nil "Crux Console : user query" url)))
 
 (defn- on-link-clicks [click-evt]
   (let [target (dom/jsget click-evt "target")
@@ -48,11 +78,11 @@
         route-data (and pathname (match-route pathname))]
     (when (and url is-anchor? route-data)
       (.preventDefault click-evt)
-      (js/history.pushState nil "Console" href)
+      (js/history.pushState nil "Crux Console" href)
       (rf/dispatch [:evt.sys/set-route route-data]))))
 
 (defn init []
   (js/window.addEventListener "popstate" on-pop-state false)
   (js/window.addEventListener "click" on-link-clicks true)
-  (let [route-data (match-route js/location.pathname)]
+  (let [route-data (calc-route-data-from-location)]
     (rf/dispatch [:evt.sys/set-route route-data])))
