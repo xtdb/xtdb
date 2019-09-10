@@ -107,6 +107,9 @@ In `doc` mode the above should have outputted:
 ```
 
 The source connector also has a config `format` which can be either
-`edn` (default) or `json`. The mapping to JSON is lossy. It also has a
-config `batch.size` which controls the max number of transactions to
-read before generating source records at a given time.
+`edn` (default), `json` or `transit`. The basic mapping to JSON is
+lossy, while [Transit](https://github.com/cognitect/transit-format)
+provides a JSON mapping which is more verbose but supports all of
+[EDN](https://github.com/edn-format/edn). It also has a config
+`batch.size` which controls the max number of transactions to read
+before generating source records at a given time.
