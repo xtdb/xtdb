@@ -21,8 +21,8 @@
       [:&--header
        {:font-size "20px"}
        [:>.tabs__sep
-        {:padding "16px"}]]
-      ])])
+        {:padding "16px"}]]])])
+
 
 (defn root [{:tabs/keys [tabs on-tab-activate active-id]}]
   [:div.tabs

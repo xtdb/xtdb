@@ -4,7 +4,8 @@
             [garden.core :as garden]
             [reagent.core :as r]
             [juxt.crux-ui.frontend.functions :as f]
-            [juxt.crux-ui.frontend.logging :as log]))
+            [juxt.crux-ui.frontend.logging :as log]
+            [juxt.crux-ui.frontend.views.commons.dom :as dom]))
 
 
 (def ^:private table-style
@@ -65,21 +66,52 @@
         [:&-cell
          {:letter-spacing :.04em}
          [:&:first-child
-          {:border-left :none}]]]])])
+          {:border-left :none}]
+         [:&--queryable
+          {:cursor :pointer
+           :box-shadow "inset 3px 0 3px -3px hsl(220, 80%, 70%)"}
+          [:&:hover
+           {:box-shadow "inset 5px 0 3px -3px hsl(220, 85%, 70%)"}]]]]])])
 
 (defn- expand-sibling [click-evt]
   (let [cl (f/jsget click-evt "target" "previousSibling" "classList")]
     (^js .toggle cl "g-cell-oversize-arrest__content--expanded")))
 
-(defn table-row [headers i row-items]
+(defn- on-queryable-cell-click [click-evt]
+  (let [dataset (f/prefix-keys :data (dom/event->target-data click-evt))]
+    (rf/dispatch [:evt.ui.query/submit--cell dataset])))
+
+(defn- plain-value? [v]
+  (or (boolean? v)
+      (number? v)
+      (keyword? v)
+      (and (string? v) (< (.-length v) 100))))
+
+; (pr-str (type true))
+
+(defn table-row [attr-headers value-is-the-attribute? i row-item-map]
   ^{:key i}
   [:tr.q-grid__body-row
-   (for [j (range (count row-items))
-         :let [cell-content ^js/String (or (some-> (nth row-items j) pr-str) "")
+   (for [attr attr-headers
+         :let [raw-value (get row-item-map attr)
+               cell-content ^js/String (or (some-> raw-value pr-str) "")
                cont-length (.-length cell-content)
-               cell-id (nth headers j)]]
-     ^{:key cell-id}
+               queryable? (and raw-value (plain-value? raw-value))
+               attr-str (pr-str (if value-is-the-attribute? raw-value attr))]]
+     ^{:key attr}
      [:td.q-grid__body-cell
+
+      (if queryable?
+        (cond->
+          {:class (if queryable? "q-grid__body-cell--queryable")
+           :on-click (if queryable? on-queryable-cell-click)
+           :title attr-str
+           :data-idx i
+           :data-attr attr-str}
+          ;
+          (not value-is-the-attribute?)
+          (assoc :data-value (pr-str raw-value))))
+
       (if (> cont-length 100)
         [:div.g-cell-oversize-arrest
          [:div.g-cell-oversize-arrest__content cell-content]
@@ -120,16 +152,16 @@
            (swap! instance-state assoc :i/node node)))
 
        :reagent-render
-       (fn [{:keys [headers rows] :as table-data}]
+       (fn [{:keys [headers attr-headers rows value-is-the-attribute?] :as table-data}]
          [:div.q-grid-wrapper
           [:table.q-grid
            table-style
            [:thead.q-grid__head
             [:tr.q-grid__head-row
-              (for [h headers]
+              (for [[h ha] (map vector headers attr-headers)]
                 ^{:key h}
-                [:th.q-grid__head-cell (pr-str h)])]]
+                [:th.q-grid__head-cell {:title ha} (pr-str h)])]]
            [:tbody.q-grid__body
-            (map-indexed (partial table-row headers) rows)]]])})))
+            (map-indexed (partial table-row attr-headers value-is-the-attribute?) rows)]]])})))
 
 

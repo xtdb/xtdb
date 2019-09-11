@@ -1,5 +1,6 @@
 (ns juxt.crux-ui.frontend.views.commons.dom
   (:require [clojure.string :as s]
+            [cljs.reader :as reader]
             [juxt.crux-ui.frontend.functions :as f]
             [reagent.core :as r]
             [juxt.crux-ui.frontend.views.commons.keycodes :as kc]))
@@ -153,13 +154,40 @@
 (defn parse-evt-entity-id [evt]
   (-> evt (jsget "currentTarget" "dataset" "entityId") parse-int-or-nil))
 
+(defn try-parse-int [str]
+  (let [parse-res (js/parseInt str)]
+    (if (js/isNaN parse-res)
+      str
+      parse-res)))
+
+(defn read-number-or-nil [str]
+  (try
+    (let [read-res (reader/read-string str)]
+      (if (number? read-res)
+        read-res
+        nil))
+    (catch js/Error e
+      nil)))
+
+(defn read-keyword-or-nil [str]
+  (try
+    (let [read-res (reader/read-string str)]
+      (if (keyword? read-res)
+        read-res
+        str))
+    (catch js/Error e
+      str)))
+
 (defn autoparse [str]
-  (if (or (not (seq str)) (= "nil" str) (= "null" str))
-    nil
-    (let [parse-res (js/parseInt str)]
-      (if (js/isNaN parse-res)
-        str
-        parse-res))))
+  (cond
+    (#{"null" "nil"} str) nil
+    (empty? str) nil
+    :else
+    (or
+      (read-number-or-nil str)
+      (read-keyword-or-nil str)
+      str)))
+;(autoparse "aaa:2323")
 
 (defn dataset->clj [dom-ds]
   (f/map-values autoparse (dataset->clj-raw dom-ds)))

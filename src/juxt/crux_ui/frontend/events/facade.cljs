@@ -122,7 +122,7 @@
 (rf/reg-fx
   :fx/push-query-into-url
   (fn [^js/String query]
-    (if (< (.-length query) 2000)
+    (if (and query (< (.-length query) 2000))
       (routes/push-query query))))
 
 (rf/reg-fx
@@ -157,6 +157,11 @@
     {:db          new-db
      :fx/set-node (:db.sys/host new-db)}))
 
+(defn o-set-query [db query]
+  (-> db
+      (assoc :db.query/input query)
+      (update :db.ui/editor-key inc)))
+
 (rf/reg-event-fx
   :evt.sys/set-route
   (fn [{:keys [db]} [_ {:r/keys [query-params] :as route}]]
@@ -165,11 +170,9 @@
           host-status (:db.sys.host/status db)]
       (cond->
         {:db (cond-> (assoc db :db.sys/route route)
-               query
-               (-> (assoc :db.query/input query)
-                   (update :db.ui/editor-key inc)))}
+               query (o-set-query query))}
         (and host-status query)
-        (assoc :dispatch [:evt.ui.query/submit--api])))))
+        (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])))))
 
 
 ; queries
@@ -284,7 +287,7 @@
 (rf/reg-event-fx
   :evt.keyboard/ctrl-enter
   (fn []
-    {:dispatch [:evt.ui.query/submit]}))
+    {:dispatch [:evt.ui.query/submit {:evt/push-url? true}]}))
 
 
 
@@ -303,46 +306,64 @@
              :ui.display-mode/query :ui.display-mode/output
              :ui.display-mode/all :ui.display-mode/all})))
 
-(rf/reg-event-fx
-  :evt.ui.query/submit
-  (fn [{:keys [db] :as ctx}]
-    (cond
-      (node-disconnected? db)
-      {:fx.ui/alert "Cannot execute query until connected to a node"}
-      ;
-      (query-invalid? (:db.query/input db))
-      {:fx.ui/alert "Query appears to be invalid"}
-      ;
-      :else
-      (let [new-db
-            (-> db
-                (o-reset-results)
-                (assoc :db.query/network-in-progress? true)
-                (assoc :db.ui/display-mode :ui.display-mode/output)
-                (o-commit-input (:db.query/input db)))]
-        {:db new-db
-         :fx/push-query-into-url (:db.query/input db)
-         :fx/query-exec (calc-query-params new-db)}))))
+(defn- pr-str' [s]
+  (if (string? s) s (pr-str s)))
+
+(defn- ^js/String calc-attr-query [{:data/keys [value type attr idx] :as evt}]
+ (str "{:find [e]\n"
+      " :where [[e " (pr-str' attr)
+      (if (contains? evt :data/value)
+        (str " " (pr-str' value) "]]\n"))
+      " :full-results? true}"))
+
+(rf/reg-fx
+  :fx/set-polling
+  (fn [poll-interval-in-seconds]
+    (some-> js/window.__console_polling_id js/clearInterval)
+    (when poll-interval-in-seconds
+      (let [ms (* 1000 poll-interval-in-seconds)
+            iid (js/setInterval #(rf/dispatch [:evt.ui.query/poll-tick]) ms)]
+        (set! js/window.____console_polling_id iid)))))
+
+
+(defn o-ctx-query-submit [{:keys [db] :as ctx} push-url?]
+  (cond
+    (node-disconnected? db)
+    {:fx.ui/alert "Cannot execute query until connected to a node"}
+    ;
+    (query-invalid? (:db.query/input db))
+    {:fx.ui/alert "Query appears to be invalid"}
+    ;
+    :else
+    (let [new-db
+          (-> db
+              (o-reset-results)
+              (assoc :db.query/network-in-progress? true)
+              (assoc :db.ui/display-mode :ui.display-mode/output)
+              (o-commit-input (:db.query/input db)))
+          analysis (:db.query/analysis-committed new-db)
+          poll-interval (:ui/poll-interval-seconds? analysis)]
+      {:db new-db
+       :fx/set-polling poll-interval
+       :fx/push-query-into-url (if push-url? (:db.query/input db))
+       :fx/query-exec (calc-query-params new-db)})))
 
 (rf/reg-event-fx
-  :evt.ui.query/submit--api
-  (fn [{:keys [db] :as ctx}]
-    (cond
-      (node-disconnected? db)
-      nil
-      ;
-      (query-invalid? (:db.query/input db))
-      nil
-      ;
-      :else
-      (let [new-db
-            (-> db
-                (o-reset-results)
-                (assoc :db.query/network-in-progress? true)
-                (assoc :db.ui/display-mode :ui.display-mode/output)
-                (o-commit-input (:db.query/input db)))]
-        {:db new-db
-         :fx/query-exec (calc-query-params new-db)}))))
+  :evt.ui.query/poll-tick
+  (fn [{db :db :as ctx}]
+    {:db.query/network-in-progress? true?
+     :fx/query-exec (calc-query-params db)}))
+
+(rf/reg-event-fx
+  :evt.ui.query/submit
+  (fn [{:keys [db] :as ctx} [_ {:evt/keys [push-url?] :as args}]]
+    (o-ctx-query-submit ctx push-url?)))
+
+(rf/reg-event-fx
+  :evt.ui.query/submit--cell
+  (fn [{:keys [db] :as ctx} [_ {:data/keys [value type attr idx] :as evt}]]
+    (let [query-str (calc-attr-query evt)]
+      (o-ctx-query-submit {:db (o-set-query db query-str)} true))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request

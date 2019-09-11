@@ -189,28 +189,42 @@
          (:find q-info)))))
 
 (rf/reg-sub
+  :subs.query/results-maps
+  :<- [:subs.query/analysis-committed]
+  :<- [:subs.query/result]
+  (fn [[q-info q-res :as args]]
+    (when (every? some? args)
+      (let [attr-vec (:query/attr-vec q-info)]
+        (if (:full-results? q-info)
+          (map first q-res)
+          (map #(zipmap attr-vec %) q-res))))))
+
+(rf/reg-sub
   :subs.query/results-table
   :<- [:subs.query/headers]
   :<- [:subs.query/analysis-committed]
-  :<- [:subs.query/result]
-  (fn [[q-headers q-info q-res :as args]]
+  :<- [:subs.query/results-maps]
+  (fn [[q-headers q-info res-maps :as args]]
     (when (every? some? args)
       {:headers q-headers
-       :rows (if (:full-results? q-info)
-               (->> q-res
-                    (map first)
-                    (map #(map % q-headers)))
-               q-res)})))
+       :attr-headers
+       (if (:full-results? q-info)
+         q-headers
+         (:query/attr-vec q-info))
+       :rows res-maps})))
 
 (rf/reg-sub
   :subs.query/attr-stats-table
   :<- [:subs.query/stats]
   (fn [stats]
     {:headers [:attribute :frequency]
+     :attr-headers [:attribute :frequency]
+     :value-is-the-attribute? true
      :rows (if-not (map? stats)
              []
-             (into [[:crux.db/id (:crux.db/id stats)]]
-                   (dissoc stats :crux.db/id)))}))
+             (into [{:attribute :crux.db/id
+                     :frequency (:crux.db/id stats)}]
+                   (map #(zipmap [:attribute :frequency] %) (dissoc stats :crux.db/id))))}))
 
 
 (rf/reg-sub
@@ -315,6 +329,7 @@
   (fn [[out-tab q-info q-res q-err :as args]]
     (cond
       q-err :db.ui.output-tab/error
+      (#{:db.ui.output-tab/attr-stats :db.ui.output-tab/attr-history} out-tab) out-tab
       (not q-res) :db.ui.output-tab/empty
       (= 0 (count q-res)) :db.ui.output-tab/empty-result
       (= :crux.ui.query-type/tx (:crux.ui/query-type q-info)) :db.ui.output-tab/edn

@@ -32,7 +32,7 @@
 (def ^{:private true :const true} crux-builtin-keywords
  [:find :where :args :rules :offset :limit :order-by
   :timeout :full-results? :not :not-join :or :or-join
-  :range :unify :rule :pred])
+  :range :unify :rule :pred :ui/poll-interval-seconds?])
 
 
 (defn- autocomplete [index cm options]

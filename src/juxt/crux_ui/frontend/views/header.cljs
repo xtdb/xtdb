@@ -16,7 +16,7 @@
    (garden/css
     [:.header
      {:display :grid
-      :grid-template "'logo status spacer links' / 180px 100px 1fr 260px"
+      :grid-template "'logo status spacer links' / 184px 100px 1fr 260px"
       :place-items "center start"
       :padding "12px 1rem"
       :width "100%"}

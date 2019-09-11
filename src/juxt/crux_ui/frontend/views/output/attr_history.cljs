@@ -1,13 +1,12 @@
 (ns juxt.crux-ui.frontend.views.output.attr-history
   (:require [re-frame.core :as rf]
             [garden.core :as garden]
-            [clojure.string :as str]
             [juxt.crux-ui.frontend.views.charts.wrapper-basic :as charts]
+            [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.views.comps :as comps]))
 
 (def ^:private -sub-plotly-data (rf/subscribe [:subs.query/attr-history-plot-data]))
 
-(defn lines [& lines] (str/join "\n" lines))
 
 (def ^:private root-styles
   [:style
@@ -27,7 +26,7 @@
         :overflow :hidden
         :display :grid
         :grid-template
-        (lines
+        (f/lines
           "'h h h' 1fr"
           "'l hint r' auto"
           "'l btn r' auto"
