@@ -323,7 +323,7 @@
     (when poll-interval-in-seconds
       (let [ms (* 1000 poll-interval-in-seconds)
             iid (js/setInterval #(rf/dispatch [:evt.ui.query/poll-tick]) ms)]
-        (set! js/window.____console_polling_id iid)))))
+        (set! js/window.__console_polling_id iid)))))
 
 
 (defn o-ctx-query-submit [{:keys [db] :as ctx} push-url?]
@@ -351,7 +351,7 @@
 (rf/reg-event-fx
   :evt.ui.query/poll-tick
   (fn [{db :db :as ctx}]
-    {:db.query/network-in-progress? true?
+    {:db (assoc db :db.query/network-in-progress? true)
      :fx/query-exec (calc-query-params db)}))
 
 (rf/reg-event-fx
