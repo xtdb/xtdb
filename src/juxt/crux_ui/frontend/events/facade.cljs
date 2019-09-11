@@ -84,6 +84,13 @@
       :crux.ui.query-type/query (safeguard-query analysis-committed time limit)
       :crux.ui.query-type/tx    {:raw-input edn-committed :query-analysis analysis-committed})))
 
+(defn- pr-str' [s]
+  (if (string? s) s (pr-str s)))
+
+(defn- ^js/String calc-attr-query [{:data/keys [value type attr idx] :as evt}]
+  (str "{:find [e]\n"
+       " :where [[e " (pr-str' attr) (if (contains? evt :data/value) (str " " (pr-str' value))) "]]\n"
+       " :full-results? true}"))
 
 
 ; ----- effects -----
@@ -134,6 +141,15 @@
   :fx.ui/alert
   (fn [message]
     (js/alert message)))
+
+(rf/reg-fx
+  :fx/set-polling
+  (fn [poll-interval-in-seconds]
+    (some-> js/window.__console_polling_id js/clearInterval)
+    (when poll-interval-in-seconds
+      (let [ms (* 1000 poll-interval-in-seconds)
+            iid (js/setInterval #(rf/dispatch [:evt.ui.query/poll-tick]) ms)]
+        (set! js/window.__console_polling_id iid)))))
 
 (defn grab-gh-gist [gh-link]
   (-> (hf/fetch gh-link)
@@ -306,26 +322,6 @@
              :ui.display-mode/query :ui.display-mode/output
              :ui.display-mode/all :ui.display-mode/all})))
 
-(defn- pr-str' [s]
-  (if (string? s) s (pr-str s)))
-
-(defn- ^js/String calc-attr-query [{:data/keys [value type attr idx] :as evt}]
- (str "{:find [e]\n"
-      " :where [[e " (pr-str' attr)
-      (if (contains? evt :data/value)
-        (str " " (pr-str' value) "]]\n"))
-      " :full-results? true}"))
-
-(rf/reg-fx
-  :fx/set-polling
-  (fn [poll-interval-in-seconds]
-    (some-> js/window.__console_polling_id js/clearInterval)
-    (when poll-interval-in-seconds
-      (let [ms (* 1000 poll-interval-in-seconds)
-            iid (js/setInterval #(rf/dispatch [:evt.ui.query/poll-tick]) ms)]
-        (set! js/window.__console_polling_id iid)))))
-
-
 (defn o-ctx-query-submit [{:keys [db] :as ctx} push-url?]
   (cond
     (node-disconnected? db)
@@ -362,8 +358,10 @@
 (rf/reg-event-fx
   :evt.ui.query/submit--cell
   (fn [{:keys [db] :as ctx} [_ {:data/keys [value type attr idx] :as evt}]]
-    (let [query-str (calc-attr-query evt)]
-      (o-ctx-query-submit {:db (o-set-query db query-str)} true))))
+    (let [query-str (calc-attr-query evt)
+          new-db (-> (o-set-query db query-str)
+                     (assoc :db.ui/output-main-tab :db.ui.output-tab/table))]
+      (o-ctx-query-submit {:db new-db} true))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
