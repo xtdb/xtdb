@@ -115,7 +115,7 @@
                             (.submit_doc
                               ^crux.db.TxLog tx-log
                               (.content-hash entity-tx)
-                              {:crux.db/id :crux.db/evicted}))))}))
+                              {:crux.db/id eid :crux.db/evicted? true}))))}))
 
 (declare tx-op->command tx-command-unknown tx-ops->docs tx-ops->tx-events)
 
@@ -192,10 +192,6 @@
    :crux.tx/evict tx-command-evict
    :crux.tx/fn tx-command-fn})
 
-(defn evicted-doc?
-  [doc]
-  (= :crux.db/evicted (:crux.db/id doc)))
-
 (def ^:dynamic *current-tx*)
 
 (defrecord KvIndexer [kv tx-log object-store ^ExecutorService stats-executor]
@@ -213,7 +209,7 @@
       (throw (IllegalArgumentException.
               (str "Missing required attribute :crux.db/id: " (pr-str doc)))))
     (let [content-hash (c/new-id content-hash)
-          evicted? (evicted-doc? doc)]
+          evicted? (idx/evicted-doc? doc)]
       (when-let [normalized-doc (if evicted?
                                   (when-let [existing-doc (with-open [snapshot (kv/new-snapshot kv)]
                                                             (db/get-single-object object-store snapshot content-hash))]

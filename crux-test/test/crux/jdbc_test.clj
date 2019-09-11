@@ -72,14 +72,14 @@
       (t/is (= [doc] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
     (t/testing "Eviction"
-      (db/submit-doc tx-log doc-hash {:crux.db/id :crux.db/evicted})
-      (t/is (= [{:crux.db/id :crux.db/evicted}
-                {:crux.db/id :crux.db/evicted}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
+      (db/submit-doc tx-log doc-hash {:crux.db/id :some-id :crux.db/evicted? true})
+      (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
+                {:crux.db/id :some-id :crux.db/evicted? true}] (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash))))
 
     (t/testing "Resurrect Document"
       (let [tx-2 (db/submit-tx tx-log [[:crux.tx/put doc]])]
-        (t/is (= [{:crux.db/id :crux.db/evicted}
-                  {:crux.db/id :crux.db/evicted}
+        (t/is (= [{:crux.db/id :some-id :crux.db/evicted? true}
+                  {:crux.db/id :some-id :crux.db/evicted? true}
                   doc]
                  (docs fj/*dbtype* (:ds (:tx-log *api*)) doc-hash)))))))
 

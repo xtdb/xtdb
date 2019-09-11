@@ -10,6 +10,7 @@
            java.time.Duration))
 
 (s/def :crux.db/id (s/and (complement string?) c/valid-id?))
+(s/def :crux.db/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 (s/def :crux.db.fn/body (s/cat :fn #{'fn}
                                :args (s/coll-of symbol? :kind vector? :min-count 1)

@@ -6,6 +6,7 @@
             [crux.bootstrap :as b]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.index :as idx]
             [crux.tx :as tx]
             crux.tx.consumer
             [crux.tx.polling :as p]
@@ -75,22 +76,20 @@
   (close [_]
     (reset! running? false)))
 
-(def tombstone (nippy/freeze {:crux.db/id :crux.db/evicted}))
-
 (defn- doc-exists? [ds k]
   (not-empty (jdbc/execute-one! ds ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
-(defn- evict-docs! [ds k]
+(defn- evict-docs! [ds k tombstone]
   (jdbc/execute! ds ["UPDATE tx_events SET V = ?, COMPACTED = 1 WHERE TOPIC = 'docs' AND EVENT_KEY = ?" tombstone k]))
 
 (defrecord JdbcTxLog [ds dbtype]
   db/TxLog
   (submit-doc [this content-hash doc]
     (let [id (str content-hash)]
-      (if (tx/evicted-doc? doc)
+      (if (idx/evicted-doc? doc)
         (do
           (insert-event! ds id doc "docs")
-          (evict-docs! ds id))
+          (evict-docs! ds id (nippy/freeze doc)))
         (if-not (doc-exists? ds id)
           (insert-event! ds id doc "docs")
           (log/infof "Skipping doc insert %s" id)))))
