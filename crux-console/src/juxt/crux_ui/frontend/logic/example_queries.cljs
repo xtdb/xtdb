@@ -1,6 +1,7 @@
 (ns juxt.crux-ui.frontend.logic.example-queries
   (:require [medley.core :as m]
             [clojure.string :as str]
+            [juxt.crux-ui.frontend.functions :as f]
             [juxt.crux-ui.frontend.logic.example-txes-amzn :as amzn-data]))
 
 
@@ -197,7 +198,12 @@
    (fn []
      '{:find [e]
        :where [[e :crux.db/id _]]
+       :ui/poll-interval-seconds? 30
        :full-results? true})
+
+   :examples/vector-style
+   (fn []
+     (f/lines "[:find e" " :where" " [e :crux.db/id _]" " :full-results? true]"))
 
    :examples/delete (fn [] [[:crux.tx/delete (get-id)]])
    :examples/evict
@@ -244,7 +250,9 @@
    {:title "delete"
     :generator (:examples/delete generators)}
    {:title "evict"
-    :generator (:examples/evict generators)}])
+    :generator (:examples/evict generators)}
+   {:title "vector style"
+    :generator (:examples/vector-style generators)}])
 
 (defn generate [ex-id]
   (if-let [gen-fn (:generator (m/find-first #(= ex-id (:title %)) examples))]

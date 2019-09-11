@@ -1,5 +1,6 @@
 (ns juxt.crux-ui.frontend.functions
   (:require [cljs.core.async :as async]
+            [clojure.string :as str]
             [cljs.pprint :as pprint])
   (:import [goog.object]
            [goog.async Debouncer]))
@@ -16,6 +17,8 @@
   (let [dbnc (Debouncer. f interval)]
     ;; We use apply here to support functions of various arities
     (fn [& args] (.apply (.-fire dbnc) dbnc (to-array args)))))
+
+(defn lines [& lines] (str/join "\n" lines))
 
 (defn index-by
   "indexes a finite collection"
@@ -36,6 +39,9 @@
 
 (defn map-values [f m]
   (into {} (for [[k v] m] [k (f v)])))
+
+(defn prefix-keys [prefix map]
+  (map-keys #(keyword (str (name prefix) "/" (name %))) map))
 
 (defn ks-vs-to-map [ks vs]
   (merge-with-keep (map #(zipmap ks %) vs)))

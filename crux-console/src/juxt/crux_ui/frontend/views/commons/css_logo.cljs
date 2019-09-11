@@ -17,7 +17,8 @@
       [:&__cube
        {:width :60px
         :height :60px
-        :flex "0 0 60px"}
+        :flex "0 0 60px"
+        :margin-right :8px}
        [:>.svg-cube
         {:height :100%
          :width :83.3%}]]
