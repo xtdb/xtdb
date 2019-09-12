@@ -190,6 +190,18 @@
         (and host-status query)
         (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])))))
 
+(rf/reg-event-fx
+  :evt.sys/node-connect-success
+  (fn [{db :db :as ctx} [_ status]]
+    (let [query (get-in db [:db.sys/route :r/query-params :rd/query])
+          initialized? (:db.sys/initialized? db)
+          do-query? (and (not initialized?) query)]
+      (cond->
+        {:db (assoc db :db.sys.host/status status
+                       :db.sys/initialized? true)}
+        do-query?
+        (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])))))
+
 
 ; queries
 
@@ -204,11 +216,6 @@
   :evt.io/stats-success
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
-
-(rf/reg-event-db
-  :evt.io/status-success
-  (fn [db [_ status]]
-    (assoc db :db.sys.host/status status)))
 
 (defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
   (if-not (history-tabs-set (:db.ui/output-main-tab db))
