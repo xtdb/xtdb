@@ -21,7 +21,7 @@
                                   [org.ejml/ejml-dsparse "0.38"
                                    :exclusions [com.google.code.findbugs/jsr305]]
                                   ;; Matrix:
-                                  [org.roaringbitmap/RoaringBitmap "0.8.2"]]
+                                  [org.roaringbitmap/RoaringBitmap "0.8.11"]]
                    :source-paths ["dev"]
                    :repl-options {:init-ns user}}}
   :test-paths ["../crux-core/test"
