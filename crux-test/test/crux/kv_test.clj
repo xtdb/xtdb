@@ -4,14 +4,16 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [crux.bootstrap :as b]
-            [crux.byte-utils :as bu]
             [crux.codec :as c]
             [crux.fixtures :as f]
             [crux.fixtures.kv :as fkv :refer [*kv* *kv-backend*]]
             [crux.kv :as kv]
             [crux.memory :as mem]
             [crux.io :as cio])
-  (:import [java.io Closeable]))
+  (:import java.io.Closeable
+           [java.nio ByteBuffer ByteOrder]
+           org.agrona.concurrent.UnsafeBuffer
+           crux.ByteUtils))
 
 (t/use-fixtures :each
                 fkv/with-each-kv-store-implementation
@@ -19,97 +21,97 @@
                 fkv/with-kv-store
                 f/with-silent-test-check)
 
-(declare value seek seek-and-iterate)
+(declare value seek seek-and-iterate long->bytes bytes->long compare-bytes bytes=?)
 
 (t/deftest test-store-and-value []
   (t/testing "store, retrieve and seek value"
-    (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
-    (t/is (= "Crux" (String. ^bytes (value *kv* (bu/long->bytes 1)))))
-    (t/is (= [1 "Crux"] (let [[k v] (seek *kv* (bu/long->bytes 1))]
-                          [(bu/bytes->long k) (String. ^bytes v)]))))
+    (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
+    (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))
+    (t/is (= [1 "Crux"] (let [[k v] (seek *kv* (long->bytes 1))]
+                          [(bytes->long k) (String. ^bytes v)]))))
 
   (t/testing "non existing key"
-    (t/is (nil? (value *kv* (bu/long->bytes 2))))))
+    (t/is (nil? (value *kv* (long->bytes 2))))))
 
 (t/deftest test-can-store-and-delete-all-116 []
   (let [number-of-entries 500]
     (kv/store *kv* (map (fn [i]
-                            [(bu/long->bytes i) (bu/long->bytes (inc i))])
+                            [(long->bytes i) (long->bytes (inc i))])
                           (range number-of-entries)))
     (doseq [i (range number-of-entries)]
-      (t/is (= (inc i) (bu/bytes->long (value *kv* (bu/long->bytes i))))))
+      (t/is (= (inc i) (bytes->long (value *kv* (long->bytes i))))))
 
     (t/testing "deleting all keys in random order, including non existent keys"
       (kv/delete *kv* (for [i (shuffle (range (long (* number-of-entries 1.2))))]
-                          (bu/long->bytes i)))
+                          (long->bytes i)))
       (doseq [i (range number-of-entries)]
-        (t/is (nil? (value *kv* (bu/long->bytes i))))))))
+        (t/is (nil? (value *kv* (long->bytes i))))))))
 
 (t/deftest test-seek-and-iterate-range []
   (doseq [[^String k v] {"a" 1 "b" 2 "c" 3 "d" 4}]
-    (kv/store *kv* [[(.getBytes k) (bu/long->bytes v)]]))
+    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
   (t/testing "seek range is exclusive"
     (t/is (= [["b" 2] ["c" 3]]
              (for [[^bytes k v] (seek-and-iterate *kv*
-                                                  #(neg? (bu/compare-bytes % (.getBytes "d")))
+                                                  #(neg? (compare-bytes % (.getBytes "d")))
                                                   (.getBytes "b"))]
-               [(String. k) (bu/bytes->long v)]))))
+               [(String. k) (bytes->long v)]))))
 
   (t/testing "seek range after existing keys returns empty"
-    (t/is (= [] (seek-and-iterate *kv* #(neg? (bu/compare-bytes % (.getBytes "d"))) (.getBytes "d"))))
-    (t/is (= [] (seek-and-iterate *kv* #(neg? (bu/compare-bytes % (.getBytes "f")%)) (.getBytes "e")))))
+    (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "d"))) (.getBytes "d"))))
+    (t/is (= [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "f")%)) (.getBytes "e")))))
 
   (t/testing "seek range before existing keys returns keys at start"
-    (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(neg? (bu/compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
-                         [(String. k) (bu/bytes->long v)])))))
+    (t/is (= [["a" 1]] (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(neg? (compare-bytes % (.getBytes "b"))) (.getBytes "0")))]
+                         [(String. k) (bytes->long v)])))))
 
 (t/deftest test-seek-between-keys []
   (doseq [[^String k v] {"a" 1 "c" 3}]
-    (kv/store *kv* [[(.getBytes k) (bu/long->bytes v)]]))
+    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
   (t/testing "seek returns next valid key"
     (t/is (= ["c" 3]
              (let [[^bytes k v] (seek *kv* (.getBytes "b"))]
-               [(String. k) (bu/bytes->long v)])))))
+               [(String. k) (bytes->long v)])))))
 
 (t/deftest test-seek-and-iterate-prefix []
   (doseq [[^String k v] {"aa" 1 "b" 2 "bb" 3 "bcc" 4 "bd" 5 "dd" 6}]
-    (kv/store *kv* [[(.getBytes k) (bu/long->bytes v)]]))
+    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
   (t/testing "seek within bounded prefix returns all matching keys"
     (t/is (= [["b" 2] ["bb" 3] ["bcc" 4] ["bd" 5]]
-             (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(bu/bytes=? (.getBytes "b") % (alength (.getBytes "b"))) (.getBytes "b")))]
-               [(String. k) (bu/bytes->long v)]))))
+             (for [[^bytes k v] (into [] (seek-and-iterate *kv* #(bytes=? (.getBytes "b") % (alength (.getBytes "b"))) (.getBytes "b")))]
+               [(String. k) (bytes->long v)]))))
 
   (t/testing "seek within bounded prefix before or after existing keys returns empty"
-    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bu/bytes=? (.getBytes "0")) (.getBytes "0")))))
-    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bu/bytes=? (.getBytes "e")) (.getBytes "0")))))))
+    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "0")) (.getBytes "0")))))
+    (t/is (= [] (into [] (seek-and-iterate *kv* (partial bytes=? (.getBytes "e")) (.getBytes "0")))))))
 
 (t/deftest test-delete-keys []
   (t/testing "store, retrieve and delete value"
-    (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
-    (t/is (= "Crux" (String. ^bytes (value *kv* (bu/long->bytes 1)))))
-    (kv/delete *kv* [(bu/long->bytes 1)])
-    (t/is (nil? (value *kv* (bu/long->bytes 1))))
+    (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
+    (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1)))))
+    (kv/delete *kv* [(long->bytes 1)])
+    (t/is (nil? (value *kv* (long->bytes 1))))
     (t/testing "deleting non existing key is noop"
-      (kv/delete *kv* [(bu/long->bytes 1)]))))
+      (kv/delete *kv* [(long->bytes 1)]))))
 
 (t/deftest test-backup-and-restore-db
   (let [backup-dir (cio/create-tmpdir "kv-store-backup")]
     (try
-      (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+      (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
       (cio/delete-dir backup-dir)
       (kv/backup *kv* backup-dir)
       (with-open [restored-kv (b/start-kv-store {:db-dir (str backup-dir)
                                                  :kv-backend *kv-backend*})]
-        (t/is (= "Crux" (String. ^bytes (value restored-kv (bu/long->bytes 1)))))
+        (t/is (= "Crux" (String. ^bytes (value restored-kv (long->bytes 1)))))
 
         (t/testing "backup and original are different"
-          (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Original")]])
-          (kv/store restored-kv [[(bu/long->bytes 1) (.getBytes "Backup")]])
-          (t/is (= "Original" (String. ^bytes (value *kv* (bu/long->bytes 1)))))
-          (t/is (= "Backup" (String. ^bytes (value restored-kv (bu/long->bytes 1)))))))
+          (kv/store *kv* [[(long->bytes 1) (.getBytes "Original")]])
+          (kv/store restored-kv [[(long->bytes 1) (.getBytes "Backup")]])
+          (t/is (= "Original" (String. ^bytes (value *kv* (long->bytes 1)))))
+          (t/is (= "Backup" (String. ^bytes (value restored-kv (long->bytes 1)))))))
       (finally
         (cio/delete-dir backup-dir)))))
 
@@ -119,31 +121,31 @@
       (with-open [sync-kv (b/start-kv-store {:db-dir (str sync-dir)
                                              :sync? true
                                              :kv-backend *kv-backend*})]
-        (kv/store sync-kv [[(bu/long->bytes 1) (.getBytes "Crux")]])
-        (t/is (= "Crux" (String. ^bytes (value sync-kv (bu/long->bytes 1))))))
+        (kv/store sync-kv [[(long->bytes 1) (.getBytes "Crux")]])
+        (t/is (= "Crux" (String. ^bytes (value sync-kv (long->bytes 1))))))
       (finally
         (cio/delete-dir sync-dir)))))
 
 (t/deftest test-sanity-check-can-fsync
-  (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+  (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
   (kv/fsync *kv*)
-  (t/is (= "Crux" (String. ^bytes (value *kv* (bu/long->bytes 1))))))
+  (t/is (= "Crux" (String. ^bytes (value *kv* (long->bytes 1))))))
 
 (t/deftest test-can-get-from-snapshot
-  (kv/store *kv* [[(bu/long->bytes 1) (.getBytes "Crux")]])
+  (kv/store *kv* [[(long->bytes 1) (.getBytes "Crux")]])
   (with-open [snapshot (kv/new-snapshot *kv*)]
-    (t/is (= "Crux" (String. (mem/->on-heap (kv/get-value snapshot (bu/long->bytes 1))))))
-    (t/is (nil? (kv/get-value snapshot (bu/long->bytes 2))))))
+    (t/is (= "Crux" (String. (mem/->on-heap (kv/get-value snapshot (long->bytes 1))))))
+    (t/is (nil? (kv/get-value snapshot (long->bytes 2))))))
 
 (t/deftest test-prev-and-next []
   (doseq [[^String k v] {"a" 1 "c" 3}]
-    (kv/store *kv* [[(.getBytes k) (bu/long->bytes v)]]))
+    (kv/store *kv* [[(.getBytes k) (long->bytes v)]]))
 
   (with-open [snapshot (kv/new-snapshot *kv*)
               i (kv/new-iterator snapshot)]
     (t/testing "seek returns next valid key"
       (let [k (kv/seek i (mem/as-buffer (.getBytes "b")))]
-        (t/is (= ["c" 3] [(String. (mem/->on-heap k)) (bu/bytes->long (mem/->on-heap (kv/value i)))]))))
+        (t/is (= ["c" 3] [(String. (mem/->on-heap k)) (bytes->long (mem/->on-heap (kv/value i)))]))))
     (t/testing "prev, iterators aren't bidirectional"
       (t/is (= "a" (String. (mem/->on-heap (kv/prev i)))))
       (t/is (nil? (kv/prev i))))))
@@ -282,6 +284,27 @@
           (recur (conj! acc [k (mem/->on-heap (kv/value i))])
                  (kv/next i))
           (persistent! acc))))))
+
+(defn long->bytes ^bytes [^long l]
+  (let [ub (UnsafeBuffer. (byte-array Long/BYTES))]
+    (.putLong ub 0 l ByteOrder/BIG_ENDIAN)
+    (.byteArray ub)))
+
+(defn bytes->long ^long [^bytes data]
+  (let [ub (UnsafeBuffer. data)]
+    (.getLong ub 0 ByteOrder/BIG_ENDIAN)))
+
+(defn compare-bytes
+  (^long [^bytes a ^bytes b]
+   (mem/compare-buffers (mem/as-buffer a) (mem/as-buffer b)))
+  (^long [^bytes a ^bytes b max-length]
+   (mem/compare-buffers (mem/as-buffer a) (mem/as-buffer b) max-length)))
+
+(defn bytes=?
+  ([^bytes a ^bytes b]
+   (mem/buffers=? (mem/as-buffer a) (mem/as-buffer b)))
+  ([^bytes a ^bytes b ^long max-length]
+   (mem/buffers=? (mem/as-buffer a) (mem/as-buffer b) max-length)))
 
 (t/deftest test-performance-off-heap
   (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))

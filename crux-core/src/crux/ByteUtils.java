@@ -10,7 +10,6 @@ import org.agrona.MutableDirectBuffer;
 import org.agrona.concurrent.UnsafeBuffer;
 
 public class ByteUtils {
-    public static final Comparator<byte[]> UNSIGNED_BYTES_COMPARATOR = new UnsignedBytesComparator();
     public static final Comparator<DirectBuffer> UNSIGNED_BUFFER_COMPARATOR = new UnsignedBufferComparator();
 
     private static final boolean IS_LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
@@ -36,10 +35,6 @@ public class ByteUtils {
             TWO_BYTES_TO_HEX[j + 2] = s.charAt(2);
             TWO_BYTES_TO_HEX[j + 3] = s.charAt(3);
         }
-    }
-
-    public static String bytesToHex(final byte[] bytes) {
-        return bufferToHex(new UnsafeBuffer(bytes));
     }
 
     public static String bufferToHex(final DirectBuffer buffer) {
@@ -77,10 +72,6 @@ public class ByteUtils {
         }
     }
 
-    public static byte[] hexToBytes(final String s) {
-        return hexToBuffer(s, new UnsafeBuffer(new byte[s.length() >> 1])).byteArray();
-    }
-
     public static MutableDirectBuffer hexToBuffer(final String s, MutableDirectBuffer buffer) {
         final int len = s.length();
         final byte[] acc = buffer.byteArray();
@@ -93,29 +84,7 @@ public class ByteUtils {
             UNSAFE.putByte(acc, accOffset + j, (byte) ((HEX_TO_NIBBLE[s.charAt(i)] << 4)
                                                        | HEX_TO_NIBBLE[s.charAt(i + 1)]));
         }
-        return new UnsafeBuffer(buffer, 0, len >> 2);
-    }
-
-    public static int compareBytes(final byte[] a, final byte[] b, final int maxLength) {
-        return ByteUtils.compareBuffersSlowPath(new UnsafeBuffer(a), new UnsafeBuffer(b), maxLength);
-    }
-
-    public static int compareBytes(final byte[] a, final byte[] b) {
-        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
-    }
-
-    public static boolean equalBytes(final byte[] a, final byte[] b) {
-        return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE) == 0;
-    }
-
-    public static boolean equalBytes(final byte[] a, final byte[] b, int maxLength) {
-        return ByteUtils.compareBytes(a, b, maxLength) == 0;
-    }
-
-    public static class UnsignedBytesComparator implements Comparator<byte[]> {
-        public int compare(final byte[] a, final byte[] b) {
-            return ByteUtils.compareBytes(a, b, Integer.MAX_VALUE);
-        }
+        return new UnsafeBuffer(buffer, 0, len >> 1);
     }
 
     public static int compareBuffers(final DirectBuffer a, final DirectBuffer b, final int maxLength) {

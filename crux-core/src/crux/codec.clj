@@ -1,6 +1,5 @@
 (ns crux.codec
   (:require [clojure.edn :as edn]
-            [crux.byte-utils :as bu]
             [crux.hash :as hash]
             [crux.memory :as mem]
             [crux.morton :as morton]
@@ -234,7 +233,7 @@
          (.putBytes 0 this))
        id-size)
       (throw (IllegalArgumentException.
-              (str "Not an id byte array: " (bu/bytes->hex this))))))
+              (str "Not an id byte array: " (mem/buffer->hex (mem/as-buffer this)))))))
 
   ByteBuffer
   (id->buffer [this ^MutableDirectBuffer to]
