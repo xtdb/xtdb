@@ -34,9 +34,10 @@
         struct-val (.get s field-name)
         field-key (keyword field-name)]
     (log/info "field type " (.getName (.type field-schema)))
-    (if (= (.type field-schema) Schema$Type/STRUCT)
-      {field-key (reduce conj (map #(get-val-map struct-val %) (.fields field-schema)))}
-      {field-key struct-val})))
+    (cond
+      (= (.type field-schema) Schema$Type/STRUCT) {field-key (reduce conj (map #(get-val-map struct-val %) (.fields field-schema)))}
+      (= (.type field-schema) Schema$Type/ARRAY) {field-key (vec struct-val)}g
+      :else {field-key struct-val})))
 
 (defn- struct->edn [^Schema schema ^Struct s]
   (let [fields (seq (.fields schema))
