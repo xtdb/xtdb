@@ -21,6 +21,7 @@
   {:title "Crux Console"
    :lang "en"
    :theme-color "hsl(32, 91%, 54%)"
+   :og-image "/static/img/crux-logo.svg"
    :link-apple-icon "/static/img/cube-on-white-192.png"
    :link-apple-startup-image "/static/img/cube-on-white-512.png"
    :link-image-src "/static/img/cube-on-white-512.png"
@@ -55,6 +56,7 @@
      :lang             "en"
      :doc-attrs        {:data-scenario :perf-plot}
      :stylesheet-async "/static/styles/reset.css"
+     :og-image "/static/img/crux-logo.svg"
      :script      "/static/crux-ui/compiled/main-perf.js"
      :head-tags
      [[:script {:id "plots-data" :type "text/edn"}
@@ -65,6 +67,7 @@
   (pr/render-page
     {:title "Crux Standalone Demo with HTTP"
      :lang "en"
+     :og-image "/static/img/crux-logo.svg"
      :body
       [:body
        [:header
