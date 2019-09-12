@@ -18,6 +18,9 @@
             [juxt.crux-ui.frontend.logging :as log]))
 
 
+(def ^:const ui--history-max-entities 7)
+(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
+
 (defn calc-query [db ex-title]
   (if-let [imported (:db.ui.examples/imported db)]
     (:query (m/find-first #(= (:title %) ex-title) imported))
@@ -91,6 +94,34 @@
   (str "{:find [e]\n"
        " :where [[e " (pr-str' attr) (if (contains? evt :data/value) (str " " (pr-str' value))) "]]\n"
        " :full-results? true}"))
+
+(defn get-output-tab [db]
+  (get-in db [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))
+
+(defn o-set-nw-in-progress [db]
+  (assoc db :db.query/network-in-progress? true))
+
+(defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
+  (if (or (not (history-tabs-set (get-output-tab db)))
+          (and (:db.query/histories db)
+               (:db.query/eid->simple-history db)))
+    new-ctx
+    (let [history-query
+          (take ui--history-max-entities
+                (:ra/entity-ids (:db.query/result-analysis db)))]
+      (-> new-ctx
+          (assoc :fx.query/history history-query)
+          (update :db o-set-nw-in-progress)))))
+
+
+(defn- ctx-autoload-history-docs [{:keys [db] :as new-ctx}]
+  (let [histories (:db.query/histories db)
+        res-an    (:db.query/result-analysis db)]
+    (if-not (and histories
+                 (:ra/has-numeric-attrs? res-an)
+                 (history-tabs-set (get-output-tab db)))
+      new-ctx
+      (assoc new-ctx :fx.query/histories-docs histories))))
 
 
 ; ----- effects -----
@@ -189,7 +220,9 @@
         {:db (cond-> (assoc db :db.sys/route route)
                query (o-set-query query))}
         (and host-status query)
-        (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])))))
+        (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])
+        ;
+        true (ctx-autoload-history)))))
 
 (rf/reg-event-fx
   :evt.sys/node-connect-success
@@ -210,32 +243,10 @@
 
 ; --- io ---
 
-(def ^:const ui--history-max-entities 7)
-(def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
-
 (rf/reg-event-db
   :evt.io/stats-success
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
-
-(defn get-output-tab [db]
-  (get-in db [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))
-
-(defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
-  (if-not (history-tabs-set (get-output-tab db))
-    new-ctx
-    (assoc new-ctx :fx.query/history
-                   (take ui--history-max-entities
-                         (:ra/entity-ids (:db.query/result-analysis db))))))
-
-(defn- ctx-autoload-history-docs [{:keys [db] :as new-ctx}]
-  (let [histories (:db.query/histories db)
-        res-an    (:db.query/result-analysis db)]
-    (if-not (and histories
-                 (:ra/has-numeric-attrs? res-an)
-                 (history-tabs-set (get-output-tab db)))
-      new-ctx
-      (assoc new-ctx :fx.query/histories-docs histories))))
 
 
 (rf/reg-event-fx
