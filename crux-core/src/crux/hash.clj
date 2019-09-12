@@ -27,6 +27,13 @@
     (doto ^MutableDirectBuffer (mem/limit-buffer to id-hash-size)
       (.putBytes 0 (.digest md (mem/->on-heap buffer))))))
 
+(defn- jnr-available? []
+  (try
+    (import 'jnr.ffi.Pointer)
+    true
+    (catch ClassNotFoundException e
+      false)))
+
 (defn id-hash [to buffer]
   (if (and (= "SHA1" id-hash-algorithm)
            byte-utils-sha1-enabled?)
@@ -34,11 +41,13 @@
         (def id-hash (fn [to from]
                        (ByteUtils/sha1 to from))))
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
+                                         (jnr-available?)
                                          (do (require 'crux.hash.jnr)
                                              (some-> (resolve 'crux.hash.jnr/openssl-id-hash-buffer) (deref))))]
       (do (log/info "Using libcrypto (OpenSSL) for ID hashing.")
           (def id-hash openssl-id-hash-buffer))
       (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
+                                          (jnr-available?)
                                           (do (require 'crux.hash.jnr)
                                               (some-> (resolve 'crux.hash.jnr/gcrypt-id-hash-buffer) (deref))))]
         (do (log/info "Using libgcrypt for ID hashing.")
