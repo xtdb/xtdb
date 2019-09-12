@@ -16,10 +16,9 @@
             (fnil :db.ui/output-side-tab
                   {:db.ui/output-side-tab
                    :db.ui.output-tab/table}))
-(rf/reg-sub :subs.db.ui/output-main-tab
-            (fnil :db.ui/output-main-tab
-                  {:db.ui/output-main-tab
-                   :db.ui.output-tab/table}))
+(rf/reg-sub
+  :subs.db.ui/output-main-tab
+  #(:db.ui/output-main-tab % :db.ui.output-tab/table))
 
 (rf/reg-sub
   :subs.ui/root-tab
