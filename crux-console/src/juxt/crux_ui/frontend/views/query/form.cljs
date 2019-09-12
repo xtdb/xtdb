@@ -77,11 +77,13 @@
        ["> .examples-wrapper"
         {:margin-left "-8px"
          :position :absolute
-         :overflow :scroll
          :width :100%
          :top 0
          :padding-bottom :17px
-         :bottom "-17px"}]
+         :overflow :scroll
+         :bottom "-17px"}
+        {:overflow-x :scroll
+         :overflow-y :hidden}]
        ["> ::scrollbar"
         "> ::-moz-scrollbar"
         "> ::-webkit-scrollbar"
