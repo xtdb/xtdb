@@ -32,28 +32,27 @@
         "> ::scrollbar"
         {:display :none}]]
       [:.q-grid
-       {:border-collapse :collapse
+       {:border-collapse :separate
         :border-radius :2px
         :width :100%
-        :height :100%
         :overflow :visible
         :position :relative}
        [:&__head
         {}
         [:&-row
-         {:border-bottom s/q-ui-border}]]
+         {}]]
 
        ["&__body-cell"
         "&__head-cell"
-         {:border-left s/q-ui-border
-          :padding "6px 12px"}]
+        {:border-left s/q-ui-border
+         :border-bottom s/q-ui-border
+         :padding "10px 12px"}]
        ["&__head-cell"
         {:border-top :none
          :background :white
          :position :sticky
          :top 0
          :text-align :center
-         :border-bottom s/q-ui-border
          :font-weight 400
          :letter-spacing :.10em}
         [:&:first-child
@@ -64,12 +63,13 @@
          [:&:first-child
           {:border-top  :none}]]
         [:&-cell
-         {:letter-spacing :.04em}
+         {:letter-spacing :.04em
+          :border-bottom "1px solid hsl(200,20%, 90%)"}
          [:&:first-child
           {:border-left :none}]
          [:&--queryable
           {:cursor :pointer
-           :box-shadow "inset 3px 0 3px -3px hsl(220, 80%, 70%)"}
+           :box-shadow "inset 3px 0 2px -3px hsl(220, 80%, 70%)"}
           [:&:hover
            {:box-shadow "inset 5px 0 3px -3px hsl(220, 85%, 70%)"}]]]]])])
 
