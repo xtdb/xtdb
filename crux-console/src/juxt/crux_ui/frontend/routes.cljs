@@ -3,23 +3,41 @@
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.logging :as log]
             [juxt.crux-ui.frontend.views.commons.dom :as dom]
-            [juxt.crux-ui.frontend.functions :as f]))
+            [juxt.crux-ui.frontend.functions :as f]
+            [medley.core :as m]))
 
 (def ^:private routes
   ["/console"
    {"" :rd/query-ui
 
+    "/output"
+    {"" :rd/query-ui
+     ["/" :r/output-tab] :rd/query-ui-output-tab}
+
     "/settings"
-       {"" :rd/settings
-        ["/" :rd/tab] :rd/settings}
+    {"" :rd/settings
+     ["/" :r/tab] :rd/settings}
 
     ["/example/" :rd/example-id] :rd/query-ui}])
 
 (defn- prefix-keys [route]
   (f/map-keys #(keyword "r" (name %)) route))
 
-(def ^:private match-route (comp prefix-keys (partial bidi/match-route routes)))
+(defn- match-route [path]
+  (let [route (prefix-keys (bidi/match-route routes path))]
+    (cond-> route
+            (get-in route [:r/route-params :r/output-tab])
+            (update-in [:r/route-params :r/output-tab]
+                       #(keyword "db.ui.output-tab" %)))))
+
+
 (def ^:private path-for (partial bidi/path-for routes))
+
+(defn path-for-tab [tab-name {:r/keys [search]}]
+  (str (path-for :rd/query-ui-output-tab
+                 :r/output-tab
+                 (name tab-name))
+       search))
 
 (defn query-str->map [^js/String query]
   (let [raw-map (into {} (js->clj (js/Array.from (js/URLSearchParams. query))))]
@@ -28,8 +46,8 @@
 (defn ^js/String query-map->str [m]
   (.toString (js/URLSearchParams. (clj->js m))))
 
-(defn- url-for [route-id query-map]
-  (let [path (path-for route-id)
+(defn- url-for [route-vector query-map]
+  (let [path (apply path-for route-vector)
         query-str (query-map->str query-map)]
     (str path "?" query-str)))
 
@@ -39,8 +57,14 @@
   (bidi/match-route routes "/console")
   (bidi/match-route routes "/console/settings")
   (bidi/match-route routes "/console/settings/network")
-  (bidi/match-route routes "/console/example/network")
-  (bidi/path-for routes :rd/settings)
+
+  (match-route "/console/output/network")
+  (path-for :rd/settings)
+
+  (bidi/path-for routes :rd/query-ui-output-tab :r/output-tab "network")
+
+  (path-for-tab :db.ui.output-tab/attr-stats)
+
   (query-str->map "wewe=wee&333=33&eeqq=33&a[]=3&a[]=6")
   (query-str->map js/location.search)
   (query-str->map "a=b%2Cc%2Cb")
@@ -59,9 +83,18 @@
 (defn- on-pop-state [evt]
   (rf/dispatch [:evt.sys/set-route (calc-route-data-from-location)]))
 
+(defn- calc-query-url [route-data crux-query-str]
+  (let [handler-id (route-data :r/handler)
+        route-params (-> (:r/route-params route-data)
+                         (m/update-existing :r/output-tab name))
+        route-params (vec (flatten (into [handler-id] route-params)))]
+    (println :route-params route-params)
+    (url-for route-params {:rd/query crux-query-str})))
+
+; (calc-query-url "wewew")
+
 (defn- push-query [crux-query-str]
-  (let [url (url-for :rd/query-ui {:rd/query crux-query-str})]
-    (js/history.pushState nil "Crux Console : user query" url)))
+  (js/history.pushState nil "Crux Console : user query" (calc-query-url (calc-route-data-from-location) crux-query-str)))
 
 (defn- on-link-clicks [click-evt]
   (let [target (dom/jsget click-evt "target")

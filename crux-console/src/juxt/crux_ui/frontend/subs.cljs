@@ -16,9 +16,10 @@
             (fnil :db.ui/output-side-tab
                   {:db.ui/output-side-tab
                    :db.ui.output-tab/table}))
+
 (rf/reg-sub
-  :subs.db.ui/output-main-tab
-  #(:db.ui/output-main-tab % :db.ui.output-tab/table))
+  :subs.sys.route/query-ui-tab
+  #(get-in % [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))
 
 (rf/reg-sub
   :subs.ui/root-tab
@@ -27,6 +28,7 @@
     (case (:r/handler route)
       :rd/query-perf :db.ui.root-tab/query-perf
       :rd/query-ui :db.ui.root-tab/query-ui
+      :rd/query-ui-output-tab :db.ui.root-tab/query-ui
       :rd/settings :db.ui.root-tab/settings
       :db.ui.root-tab/query-ui)))
 
@@ -321,7 +323,7 @@
 
 (rf/reg-sub
   :subs.ui/output-main-tab
-  :<- [:subs.db.ui/output-main-tab]
+  :<- [:subs.sys.route/query-ui-tab]
   :<- [:subs.query/analysis-committed]
   :<- [:subs.query/result]
   :<- [:subs.query/error]

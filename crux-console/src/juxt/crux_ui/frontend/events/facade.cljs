@@ -129,6 +129,7 @@
 (rf/reg-fx
   :fx/push-query-into-url
   (fn [^js/String query]
+    (println :push-query query)
     (if (and query (< (.-length query) 2000))
       (routes/push-query query))))
 
@@ -217,8 +218,11 @@
   (fn [db [_ stats]]
     (assoc db :db.meta/stats stats)))
 
+(defn get-output-tab [db]
+  (get-in db [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))
+
 (defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
-  (if-not (history-tabs-set (:db.ui/output-main-tab db))
+  (if-not (history-tabs-set (get-output-tab db))
     new-ctx
     (assoc new-ctx :fx.query/history
                    (take ui--history-max-entities
@@ -229,7 +233,7 @@
         res-an    (:db.query/result-analysis db)]
     (if-not (and histories
                  (:ra/has-numeric-attrs? res-an)
-                 (history-tabs-set (:db.ui/output-main-tab db)))
+                 (history-tabs-set (get-output-tab db)))
       new-ctx
       (assoc new-ctx :fx.query/histories-docs histories))))
 
@@ -367,7 +371,7 @@
   (fn [{:keys [db] :as ctx} [_ {:data/keys [value type attr idx] :as evt}]]
     (let [query-str (calc-attr-query evt)
           new-db (-> (o-set-query db query-str)
-                     (assoc :db.ui/output-main-tab :db.ui.output-tab/table))]
+                     (assoc-in [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))]
       (o-ctx-query-submit {:db new-db} true))))
 
 (rf/reg-event-fx
@@ -417,7 +421,7 @@
 (rf/reg-event-fx
   :evt.ui.output/main-tab-switch
   (fn [{:keys [db] :as ctx} [_ new-tab-id]]
-    (ctx-autoload-history {:db (assoc db :db.ui/output-main-tab new-tab-id)})))
+    (ctx-autoload-history {:db (assoc-in db [:db.sys/route :r/route-params :r/output-tab] new-tab-id)})))
 
 (rf/reg-event-db
   :evt.ui.output/side-tab-switch
