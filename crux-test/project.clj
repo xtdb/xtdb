@@ -35,7 +35,7 @@
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  ;; Outer tests:
-                 [org.eclipse.rdf4j/rdf4j-repository-sparql "2.5.4"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
                  [criterium "0.4.5"]
 
                  ;; Watdiv:
@@ -50,8 +50,8 @@
                                org.ow2.asm/asm-tree
                                org.ow2.asm/asm-util]]
 
-                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "2.5.4"]
-                 [org.eclipse.rdf4j/rdf4j-repository-sail "2.5.4"
+                 [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
+                 [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0"
                   :exclusions [org.eclipse.rdf4j/rdf4j-http-client]]]
   :jvm-opts
   ["-server" "-Xmx8g"
