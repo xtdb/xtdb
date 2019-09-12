@@ -29,7 +29,7 @@
   (rf/dispatch [:evt.io/stats-success resp]))
 
 (defn- on-status-success [resp]
-  (rf/dispatch [:evt.io/status-success resp]))
+  (rf/dispatch [:evt.sys/node-connect-success resp]))
 
 (defn- on-tx-success [resp]
   (rf/dispatch [:evt.io/tx-success resp]))

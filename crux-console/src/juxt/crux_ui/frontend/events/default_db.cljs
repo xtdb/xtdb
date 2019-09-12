@@ -24,6 +24,7 @@
    :db.query/input-committed example-query-str
    :db.query/limit           10000
    :db.sys/host              (calc-initial-host)
+   :db.sys/initialized?      false
    :db.ui/root-tab           nil
    :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
    :db.ui/output-main-tab    :db.ui.output-tab/attr-stats
