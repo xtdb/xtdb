@@ -41,7 +41,11 @@
 
 (s/def ::pred-fn (s/and symbol?
                         (complement built-ins)
-                        (s/conformer #(or (some->> % (ns-resolve 'clojure.core) var-get) %))
+                        (s/conformer #(or (some->> (if (qualified-symbol? %)
+                                                     (requiring-resolve %)
+                                                     (ns-resolve 'clojure.core %))
+                                                   (var-get))
+                                          %))
                         (some-fn fn? logic-var?)))
 (s/def ::pred (s/and vector? (s/cat :pred (s/and list?
                                                  (s/cat :pred-fn ::pred-fn
