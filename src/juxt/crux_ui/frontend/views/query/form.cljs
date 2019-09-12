@@ -12,7 +12,7 @@
 (def ^:private -sub-query-analysis (rf/subscribe [:subs.query/analysis]))
 
 (defn- on-submit [e]
-  (rf/dispatch [:evt.ui.query/submit]))
+  (rf/dispatch [:evt.ui.query/submit {:evt/push-url? true}]))
 
 (defn btn-cta-styles [] ; todo move into comps
   {:background    "hsl(190, 50%, 65%)"

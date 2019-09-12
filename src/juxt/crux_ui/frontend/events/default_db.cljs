@@ -25,9 +25,9 @@
    :db.query/limit           10000
    :db.sys/host              (calc-initial-host)
    :db.sys/initialized?      false
+   :db.sys/route             {:r/handler :rd/query-ui :r/query-params {:r/output-tab :db.ui.output-tab/table}}
    :db.ui/root-tab           :db.ui.root-tab/query-ui
    :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
-   :db.ui/output-main-tab    nil
    :db.ui/editor-key         0
    :db.ui.attr-history/hint? true
    :db.ui/display-mode       :ui.display-mode/query
