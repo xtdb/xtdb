@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [cognitect.transit :as transit])
-  (:import [org.apache.kafka.connect.data Schema Struct]
+  (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
            java.io.ByteArrayOutputStream
@@ -28,12 +28,31 @@
             v)])
        (into {})))
 
+(defn- get-val-map [^Struct s ^Field f]
+  (let [field-name (.name f)
+        field-schema (.schema f)
+        struct-val (.get s field-name)
+        field-key (keyword field-name)]
+    (log/info "field type " (.getName (.type field-schema)))
+    (if (= (.getName (.type field-schema)) "struct")
+      {field-key (reduce conj (map #(get-val-map struct-val %) (.fields field-schema)))}
+      {field-key struct-val})))
+
 (defn- struct->edn [^Schema schema ^Struct s]
-  (throw (UnsupportedOperationException. "Struct conversion not yet supported.")))
+  (let [fields (seq (.fields schema))
+        values (map #(get-val-map s %) fields)
+        output-map (reduce conj values)
+        ]
+
+    (log/info "map val: " output-map)
+    {:value output-map}))
+
 
 (defn- record->edn [^SinkRecord record]
   (let [schema (.valueSchema record)
         value (.value record)]
+    (log/info "schema " schema)
+    (log/info "data value " value)
     (cond
       (and (instance? Struct value) schema)
       (struct->edn schema value)
