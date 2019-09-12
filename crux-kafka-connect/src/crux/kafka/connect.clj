@@ -36,7 +36,7 @@
     (log/info "field type " (.getName (.type field-schema)))
     (cond
       (= (.type field-schema) Schema$Type/STRUCT) {field-key (reduce conj (map #(get-val-map struct-val %) (.fields field-schema)))}
-      (= (.type field-schema) Schema$Type/ARRAY) {field-key (vec struct-val)}g
+      (= (.type field-schema) Schema$Type/ARRAY) {field-key (vec struct-val)}
       :else {field-key struct-val})))
 
 (defn- struct->edn [^Schema schema ^Struct s]
