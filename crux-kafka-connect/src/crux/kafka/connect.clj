@@ -28,25 +28,21 @@
             v)])
        (into {})))
 
-(defn- get-val-map [^Struct s ^Field f]
-  (let [field-name (.name f)
-        field-schema (.schema f)
-        struct-val (.get s field-name)
-        field-key (keyword field-name)]
-    (log/info "field type " (.getName (.type field-schema)))
-    (cond
-      (= (.type field-schema) Schema$Type/STRUCT) {field-key (reduce conj (map #(get-val-map struct-val %) (.fields field-schema)))}
-      (= (.type field-schema) Schema$Type/ARRAY) {field-key (vec struct-val)}
-      :else {field-key struct-val})))
+(defn- get-struct-contents [val]
+  (cond
+    (instance? Struct val)
+    (let [struct-schema (.schema val)
+          struct-fields (.fields struct-schema)]
+     (reduce conj
+        (map (fn [struct-val] {(keyword (.name struct-val)) (get-struct-contents (.get val struct-val))})
+             struct-fields)))
+    (instance? java.util.ArrayList val) (into [] (map get-struct-contents val))
+    :else val))
 
 (defn- struct->edn [^Schema schema ^Struct s]
-  (let [fields (seq (.fields schema))
-        values (map #(get-val-map s %) fields)
-        output-map (reduce conj values)]
-
+  (let [ output-map (get-struct-contents s)]
     (log/info "map val: " output-map)
     {:value output-map}))
-
 
 (defn- record->edn [^SinkRecord record]
   (let [schema (.valueSchema record)
