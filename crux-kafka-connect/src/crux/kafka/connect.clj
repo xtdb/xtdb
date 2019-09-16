@@ -37,6 +37,7 @@
         (map (fn [struct-val] {(keyword (.name struct-val)) (get-struct-contents (.get val struct-val))})
              struct-fields)))
     (instance? java.util.ArrayList val) (into [] (map get-struct-contents val))
+    (instance? java.util.HashMap val) (zipmap (map keyword (.keySet val)) (map get-struct-contents (.values val)))
     :else val))
 
 (defn- struct->edn [^Schema schema ^Struct s]
