@@ -2193,3 +2193,70 @@
 ;; export PATH=$JAVA_HOME/bin:$PATH
 ;; CRUX_DISABLE_LIBGCRYPT=true CRUX_DISABLE_LIBCRYPTO=true lein with-profile graal,uberjar uberjar
 ;; native-image --no-server -H:+ReportExceptionStackTraces -H:+ReportUnsupportedElementsAtRuntime -H:ReflectionConfigurationFiles=~/dev/crux/resources/graal_reflectconfig.json -H:EnableURLProtocols=http -H:IncludeResources='.*/.*properties$' -H:IncludeResources='.*/.*so$' -H:IncludeResources='.*/.*xml$' -Dclojure.compiler.direct-linking=true -jar ./crux-0.1.0-SNAPSHOT-standalone.jar
+
+;; Priority Search Tree:
+
+;; Based on
+;; http://cs.brown.edu/courses/cs252/misc/resources/lectures/pdf/notes07.pdf
+;; https://pdfs.semanticscholar.org/ce68/4914d2ee4c870db16a2edc2dbceca4c2ad2c.pdf
+;; See also https://github.com/michalmarczyk/psq.clj
+;; https://github.com/spratt/PrioritySearchTree
+
+(def example-pst
+  [[[1 8] :n]
+   [[9 -3] :m]
+   [[10 -2] :e]
+   [[4 0] :k]
+   [[6 4] :g]
+   [[12 1] :c]
+   [[2 3] :j]
+   [[7 6] :h]
+   [[16 2] :b]
+   [[14 -1] :d]
+   [[-1 9] :f]
+   [[-2 5] :i]
+   [[15 7] :a]])
+
+(def expected-pst
+  [[[-1 9] :f 8]
+   [[[1 8] :n 3]
+    [[[-2 5] :i -2] [[[2 3] :j 2]]]
+    [[[7 6] :h 5] [[[4 0] :k 4]] [[[6 4] :g 6]]]]
+   [[[15 7] :a 11]
+    [[[10 -2] :e 10] [[[9 -3] :m 9]]]
+    [[[16 2] :b 13] [[[12 1] :c 12]] [[[14 -1] :d 14]]]]])
+
+(defn build-priority-search-tree [kvs]
+  (let [kvs (sort-by (comp second first) kvs)
+        [[x y] :as p] (last kvs)
+        s (disj (set kvs) p)]
+    (let [s (vec (sort-by ffirst s))
+          [lower upper] (split-at (quot (count s) 2) s)
+          x-of-p (if (<= (count s) 1)
+                   x
+                   (quot (+ (long (ffirst (last lower)))
+                            (long (ffirst (first upper))))
+                         2))]
+      (cond-> [(conj p x-of-p)]
+        (seq lower) (conj (build-priority-search-tree lower))
+        (seq upper) (conj (build-priority-search-tree upper))))))
+
+(def expected-pst-result
+  [[[1 8] :n 3]
+   [[7 6] :h 5]])
+
+(defn query-priority-search-tree [[[[x y] k x-of-p :as node] l r :as tree] x-min y-min x-max]
+  (when (and node (>= (double y) (double y-min)))
+    (concat
+     (when (<= x-min x x-max)
+       [node])
+     (when (< (double x-min) (double x-of-p))
+       (query-priority-search-tree l x-min y-min x-max))
+     (when (> (double x-max) (double x-of-p))
+       (query-priority-search-tree r x-min y-min x-max)))))
+
+(comment
+  (= expected-pst-result
+     (query-priority-search-tree
+      (build-priority-search-tree example-pst)
+      0 4.5 11)))
