@@ -31,13 +31,13 @@
 (defn- get-struct-contents [val]
   (cond
     (instance? Struct val)
-    (let [struct-schema (.schema val)
-          struct-fields (.fields struct-schema)]
+    (let [struct-schema (.schema ^Struct val)
+          struct-fields (.fields ^Schema struct-schema)]
      (reduce conj
-        (map (fn [struct-val] {(keyword (.name struct-val)) (get-struct-contents (.get val struct-val))})
+        (map (fn [^Field field] {(keyword (.name field)) (get-struct-contents (.get ^Struct val field))})
              struct-fields)))
     (instance? java.util.ArrayList val) (into [] (map get-struct-contents val))
-    (instance? java.util.HashMap val) (zipmap (map keyword (.keySet val)) (map get-struct-contents (.values val)))
+    (instance? java.util.HashMap val) (zipmap (map keyword (.keySet ^java.util.HashMap val)) (map get-struct-contents (.values ^java.util.HashMap val)))
     :else val))
 
 (defn- struct->edn [^Schema schema ^Struct s]
