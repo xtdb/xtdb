@@ -1,0 +1,49 @@
+(ns leiningen.archive
+  (:require [clojure.java.io :as io]
+            [clojure.java.shell :as sh]
+            [clojure.string :as string]
+            [clojure.pprint]
+            [clojure.walk :refer [postwalk]]
+            [leiningen.core.eval]
+            [leiningen.licenses :as licenses]))
+
+(defn archive [{:keys [version target-path confluent-hub-manifest group name] :as project} & args]
+  (let [manifest  (leiningen.core.eval/eval-in-project
+                   (assoc project :eval-in :leiningen)
+                   `(cheshire.core/generate-string ~confluent-hub-manifest)
+                   '(require 'cheshire.core))
+        archive-dir (io/file target-path (str group "-" name "-" version))
+        lib-dir (io/file archive-dir "lib")
+        etc-dir (io/file archive-dir "etc")
+        assets-dir (io/file archive-dir "assets")
+        doc-dir (io/file archive-dir "doc")
+        jar-filename (str name "-" version "-standalone.jar")
+        licenses (with-out-str (licenses/licenses project))
+        sorted-licenses (string/join "\n" (sort (string/split licenses #"\n")))]
+
+    (.mkdirs lib-dir)
+    (.mkdirs etc-dir)
+    (.mkdirs assets-dir)
+    (.mkdirs doc-dir)
+
+    (io/copy (io/file target-path jar-filename)
+             (io/file lib-dir jar-filename))
+    (io/copy (io/file "README.adoc")
+             (io/file doc-dir "README.adoc"))
+    (io/copy (io/file "../LICENSE")
+             (io/file doc-dir "LICENSE"))
+    (io/copy (io/file "test-resources/local-crux-source.properties")
+             (io/file etc-dir "local-crux-source.properties"))
+    (io/copy (io/file "test-resources/local-crux-sink.properties")
+             (io/file etc-dir "local-crux-sink.properties"))
+
+    (spit (io/file archive-dir "manifest.json") manifest)
+    (spit (io/file doc-dir "version.txt") version)
+    (spit (io/file doc-dir "licenses.txt") sorted-licenses)
+    (sh/sh "zip"
+           "-r"
+           (str (.getName archive-dir) ".zip")
+           (str (.getName archive-dir))
+           :dir (.getParent archive-dir)))
+
+  (println "Connector packaged successfully."))

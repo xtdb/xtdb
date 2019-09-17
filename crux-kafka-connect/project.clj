@@ -11,8 +11,28 @@
                  [com.cognitect/transit-clj "0.8.313" :exclusions [org.msgpack/msgpack]]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.3.0"]]}}
   :middleware [leiningen.project-version/middleware]
+  :aliases {"package" ["do" ["uberjar"] ["archive"]]}
+  :confluent-hub-manifest {:component_types ["sink" "source"]
+                           :description "A Kafka Connect plugin for transferring data between Crux nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
+                           :documentation-url "https://github.com/juxt/crux/tree/master/crux-kafka-connect"
+                           :license [{
+                                      :name "The MIT License (MIT)"
+                                      :url "https://opensource.org/licenses/MIT"
+                                      :logo "assets/mit_logo.png"
+                                      }]
+                           :logo "assets/crux.png"
+                           :name "crux-kafka-connect"
+                           :owner {:logo "assets/juxt_logo.png"
+                                   :name "JUXT"
+                                   :type "organization"
+                                   :url "https://juxt.pro/index.html"
+                                   :username "juxt"}
+
+                           :title "Crux Kafka Connect"
+                           :version "derived-from-git"}
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-Xlint:all,-options,-path"
                   "-Werror"
-                  "-proc:none"])
+                  "-proc:none"]
+  :plugins [[lein-licenses "0.2.2"]])
