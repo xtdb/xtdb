@@ -43,7 +43,7 @@
 (defn- struct->edn [^Schema schema ^Struct s]
   (let [ output-map (get-struct-contents s)]
     (log/info "map val: " output-map)
-    {:value output-map}))
+    output-map))
 
 (defn- record->edn [^SinkRecord record]
   (let [schema (.valueSchema record)
