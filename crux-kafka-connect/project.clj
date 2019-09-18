@@ -15,15 +15,11 @@
   :confluent-hub-manifest {:component_types ["sink" "source"]
                            :description "A Kafka Connect plugin for transferring data between Crux nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
                            :documentation-url "https://github.com/juxt/crux/tree/master/crux-kafka-connect"
-                           :license [{
-                                      :name "The MIT License (MIT)"
-                                      :url "https://opensource.org/licenses/MIT"
-                                      :logo "assets/mit_logo.png"
-                                      }]
-                           :logo "assets/crux.png"
+                           :license [{:name "The MIT License (MIT)"
+                                      :url "https://opensource.org/licenses/MIT"}]
+                           :logo "assets/crux-logo.svg"
                            :name "crux-kafka-connect"
-                           :owner {:logo "assets/juxt_logo.png"
-                                   :name "JUXT"
+                           :owner {:name "JUXT"
                                    :type "organization"
                                    :url "https://juxt.pro/index.html"
                                    :username "juxt"}
