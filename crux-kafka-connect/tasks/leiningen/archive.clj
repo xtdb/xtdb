@@ -36,6 +36,8 @@
              (io/file etc-dir "local-crux-source.properties"))
     (io/copy (io/file "test-resources/local-crux-sink.properties")
              (io/file etc-dir "local-crux-sink.properties"))
+    (io/copy (io/file "resources/crux-logo.svg")
+             (io/file assets-dir "crux-logo.svg"))
 
     (spit (io/file archive-dir "manifest.json") manifest)
     (spit (io/file doc-dir "version.txt") version)
