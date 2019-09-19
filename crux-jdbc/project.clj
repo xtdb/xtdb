@@ -8,5 +8,6 @@
                  [juxt/crux-core "derived-from-git"]
                  [seancorfield/next.jdbc "1.0.7"]
                  [com.zaxxer/HikariCP "3.3.1"]
-                 [com.taoensso/nippy "2.14.0"]]
+                 [com.taoensso/nippy "2.14.0"]
+                 [com.oracle/ojdbc "12.2.0.1"]]
   :middleware [leiningen.project-version/middleware])
