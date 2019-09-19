@@ -12,7 +12,7 @@ See also: https://kafka.apache.org/documentation/#connect
 
 Download the latest Binary of Kafka from https://kafka.apache.org/downloads
 
-Building and installing the connectors (from within `crux-kafka-connect):
+Building and installing the connectors (from within `crux-kafka-connect`):
 ```
 export KAFKA_HOME=...
 lein uberjar
@@ -108,8 +108,13 @@ In `doc` mode the above should have outputted:
 
 The source connector also has a config `format` which can be either
 `edn` (default), `json` or `transit`. The basic mapping to JSON is
-lossy, while [Transit](https://github.com/cognitect/transit-format)
+lossy, while https://github.com/cognitect/transit-format[Transit]
 provides a JSON mapping which is more verbose but supports all of
-[EDN](https://github.com/edn-format/edn). It also has a config
+https://github.com/edn-format/edn[EDN]. It also has a config
 `batch.size` which controls the max number of transactions to read
 before generating source records at a given time.
+
+== Packaging the Connector
+
+To build the connector into a zip archive (for use with confluent hub), use `lein package` in the command line.
+The generated zip archive will be within *targets*, named **juxt-crux-kafka-connect-<VERSION>.zip.**
