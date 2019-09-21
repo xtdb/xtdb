@@ -123,7 +123,7 @@ decision, receipt, notification, availability).
 
 Queries that use domain times do not automatically benefit from any kind of
 native indexes to support efficient execution, however Crux encourages you to
-build additional layers of functionality to do so. See <<decorators.adoc#,
+build additional layers of functionality to do so. See <<advanced.adoc#decorators,
 Decorators>>.
 
 == Known Uses

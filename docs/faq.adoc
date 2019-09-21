@@ -2,6 +2,18 @@
 
 [qanda]
 
+== Do I need to think about bitemporality to make use of Crux?
+
+Not at all. Many users don't have an immediate use for business-level time
+travel queries, in which case transaction time is typically regarded as
+"enough". However, use of valid time also enables operational advantages such
+as backfilling and other simple methods for migrating data between live systems
+in ways that isn't _easy_ when relying on transaction time alone (i.e. where
+logs must be replayed, merged and truncated to achieve the same effect).
+Therefore, it is sensible to use valid time in case you have these operational
+needs in the future. Valid time is recorded by default whenever you submit
+transactions.
+
 == Comparisons
 
 How does Datalog compare to SQL::
@@ -99,10 +111,12 @@ as the primary distributed store for content and transaction logs.
 . Datomic peers lazily read from the global index and therefore automatically
 cache their dynamic working sets. Crux does not use a global index and
 currently does not offer any node-level sharding either so each node must
-contain the full database. Crux may support manual node-level sharding in the
-future via simple configuration. One benefit of manual sharding is that both
-the size of the Crux node on disk and the long-tail query latency will be more
-predictable
+contain the full database. In other words, each Crux node is like an
+unpartitioned replica of the entire database, except the nodes do not store
+the transaction log locally so there is no "master". Crux may support manual
+node-level sharding in the future via simple configuration. One benefit of
+manual sharding is that both the size of the Crux node on disk and the
+long-tail query latency will be more predictable
 . Datomic uses an explicit "transactor" component, whereas the role of the
 transactor in Crux is fulfilled by a passive transaction log (e.g. a
 single-partition Kafka topic) where unconfirmed transactions are optimistically

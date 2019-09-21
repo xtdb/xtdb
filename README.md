@@ -95,8 +95,9 @@ for a demo Docker container.
 
 ### Companies using Crux
 
-* [Oscaro](https://www.oscaro.com)
-* [Avisi](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration) 
+* [Oscaro (eCommerce)](https://www.oscaro.com)
+* [Avisi (AtlasCRM)](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration) 
+* [Gnurdle (consulting)](https://gnurdle.github.io/HoppyResume2017.html)
 * Yours? Let us know :)
 
 crux@juxt.pro
