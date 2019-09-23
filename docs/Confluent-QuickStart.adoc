@@ -1,0 +1,67 @@
+= *Confluent Platform Quickstart*
+
+== Installing the connector
+
+Use `confluent-hub install zip-file-name` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
+
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *crux node* to communicate with.
+
+== Example usage
+
+Open a REPL within `crux-dev`, and run the following commands:
+
+[source,clj]
+----
+(dev)
+(start)
+(k/create-topic (:admin-client node) "connect-test" 1 1 nil)
+----
+
+This will create an embedded Kafka broker within Crux, along with *Crux node* called _node_. The topic _'connect-test'_, (used within the *local-crux-sink* and *local-crux-source* property files by default) is then created by the embedded broker, with _node_ being associated with the topic.
+
+== Sink Connector
+
+Run the following command within the base of the Confluent folder, to create a worker which connects to the _'connect-test'_ topic, ready to *send* messages to the _node_. This also makes use of *connect-file-source*, checking for changes in a file called _'test.txt'_:
+
+----
+./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-crux-kafka-connect/etc/local-crux-sink.properties etc/kafka/connect-file-source.properties
+----
+
+Run the following within your Confluent directory, to add a line of JSON to _'test.txt'_:
+
+----
+echo '{"crux.db/id": "415c45c9-7cbe-4660-801b-dab9edc60c84", "value": "baz"}' >> test.txt
+----
+
+Now, verify that this was transacted within your REPL:
+
+[source,clj]
+----
+(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+==>
+{:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
+----
+
+== Source Connector
+
+Run the following command within the base of the Confluent folder, to create a worker connects to the 'connect-test' topic, ready to *receive* messages from the _node_. This also makes use of 'connect-file-sink', outputting transactions to your _node_ within _'test.sink.txt'_:
+
+----
+./bin/connect-standalone etc/kafka/connect-standalone.properties share/confluent-hub-components/juxt-crux-kafka-connect/etc/local-crux-source.properties etc/kafka/connect-file-sink.properties
+----
+
+
+Within your REPL, transact an element into Crux:
+
+[source,clj]
+----
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
+----
+
+Check the contents of 'test.sink.txt' using the command below, and you should see that the transactions were outputted to the _'connect-test'_ topic:
+
+----
+tail test.sink.txt
+==>
+[[:crux.tx/put {:crux.db/id #crux/id "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
+----
