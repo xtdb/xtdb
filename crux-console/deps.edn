@@ -47,6 +47,4 @@
 
   :prod/build
   {:extra-paths ["target/prod"]}
-  :prepl
-  {:jvm-opts ["-Dclojure.server.repl={:port,40404,:accept,clojure.core.server/io-prepl}"]}
   }}
