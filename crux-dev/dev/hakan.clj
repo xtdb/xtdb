@@ -787,15 +787,17 @@
 
 ;; k2-tree
 
-(defn bit-str->bitset ^org.roaringbitmap.RoaringBitmap [s]
-  (let [bs (FastRankRoaringBitmap.)
-        bits (->> s
-                  (remove #{\space})
-                  (vec))]
-    (dotimes [n (count bits)]
-      (when (= \1 (get bits n))
-        (.add bs n)))
-    bs))
+(defn bit-str->bitset
+  (^org.roaringbitmap.RoaringBitmap [s]
+   (bit-str->bitset (RoaringBitmap.) s))
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap bs s]
+   (let [bits (->> s
+                   (remove #{\space})
+                   (vec))]
+     (dotimes [n (count bits)]
+       (when (= \1 (get bits n))
+         (.add bs n)))
+     bs)))
 
 (defn bitset-rank ^long [^RoaringBitmap bs ^long n]
   (if (= -1 n)
@@ -819,7 +821,7 @@
          (next-power-of n k))
     :k k
     :k2 (long (Math/pow k 2))
-    :t (bit-str->bitset tree-bit-str)
+    :t (bit-str->bitset (FastRankRoaringBitmap.) tree-bit-str)
     :t-size (->> tree-bit-str
                  (remove #{\space})
                  (count)
