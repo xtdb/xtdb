@@ -810,43 +810,48 @@
 (defn next-power-of ^long [^long x ^long y]
   (long (Math/pow 2 (long (Math/pow y (Math/log x))))))
 
+(defrecord K2Tree [^long n ^long k ^long k2 ^RoaringBitmap t ^long t-size ^RoaringBitmap l])
+
 (defn new-static-k2-tree [^long n ^long k tree-bit-str leaf-bit-str]
-  {:n (if (power-of? n k)
-        n
-        (next-power-of n k))
-   :k k
-   :k2 (long (Math/pow k 2))
-   :t (bit-str->bitset tree-bit-str)
-   :t-size (->> tree-bit-str
-                (remove #{\space})
-                (count))
-   :l (bit-str->bitset leaf-bit-str)})
+  (map->K2Tree
+   {:n (if (power-of? n k)
+         n
+         (next-power-of n k))
+    :k k
+    :k2 (long (Math/pow k 2))
+    :t (bit-str->bitset tree-bit-str)
+    :t-size (->> tree-bit-str
+                 (remove #{\space})
+                 (count)
+                 (long))
+    :l (bit-str->bitset leaf-bit-str)}))
 
 ;; http://repositorio.uchile.cl/bitstream/handle/2250/126520/Compact%20representation%20of%20Webgraphs%20with%20extended%20functionality.pdf?sequence=1
 ;; NOTE: Redefined in terms of k2-tree-range below.
-(defn k2-tree-check-link? [{:keys [^long n
-                                   ^long k
-                                   ^long k2
-                                   ^long t-size
-                                   ^RoaringBitmap t
-                                   ^RoaringBitmap l] :as k2-tree} ^long row ^long col]
-  (loop [n n
-         p row
-         q col
-         z -1]
-    (if (>= z t-size)
-      (.contains l (- z t-size))
-      (if (or (= -1 z) (.contains t z))
-        (let [n (quot n k)
-              y (* (bitset-rank t z) k2)
-              y (+ y
-                   (* (Math/abs (quot p n)) k)
-                   (Math/abs (quot q n)))]
-          (recur n
-                 (long (mod p n))
-                 (long (mod q n))
-                 y))
-        false))))
+(defn k2-tree-check-link? [^K2Tree k2-tree ^long row ^long col]
+  (let [n (.n k2-tree)
+        k (.k k2-tree)
+        k2 (.k2 k2-tree)
+        t ^RoaringBitmap (.t k2-tree)
+        t-size (.t-size k2-tree)
+        l ^RoaringBitmap (.l k2-tree)]
+    (loop [n n
+           p row
+           q col
+           z -1]
+      (if (>= z t-size)
+        (.contains l (- z t-size))
+        (if (or (= -1 z) (.contains t z))
+          (let [n (quot n k)
+                y (* (bitset-rank t z) k2)
+                y (+ y
+                     (* (Math/abs (quot p n)) k)
+                     (Math/abs (quot q n)))]
+            (recur n
+                   (long (mod p n))
+                   (long (mod q n))
+                   y))
+          false)))))
 
 ;; NOTE: All elements in a row.
 (defn k2-tree-succsessors [{:keys [^long n
@@ -929,6 +934,7 @@
    n row1 row2 col1 col2 0 0 -1))
 
 ;; NOTE: The above re-implemented in terms of k2-tree-range.
+;;       Original iterative version is order of magnitude faster.
 (defn k2-tree-check-link? [k2 row col]
   (->> (k2-tree-range k2 row row col col)
        (seq)
