@@ -6,8 +6,8 @@
   :dependencies [[org.clojure/clojure "1.10.1"]
                  [org.clojure/tools.logging "0.5.0"]
                  [juxt/crux-core "derived-from-git"]
+                 [juxt/crux-rocksdb "derived-from-git"]
                  [seancorfield/next.jdbc "1.0.7"]
                  [com.zaxxer/HikariCP "3.3.1"]
-                 [com.taoensso/nippy "2.14.0"]
-                 [com.oracle.ojdbc/ojdbc8 "19.3.0.0"]]
+                 [com.taoensso/nippy "2.14.0"]]
   :middleware [leiningen.project-version/middleware])
