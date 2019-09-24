@@ -848,8 +848,8 @@
                      (* (Math/abs (quot p n)) k)
                      (Math/abs (quot q n)))]
             (recur n
-                   (long (mod p n))
-                   (long (mod q n))
+                   (rem p n)
+                   (rem q n)
                    y))
           false)))))
 
