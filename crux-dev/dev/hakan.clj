@@ -9,7 +9,8 @@
             DMatrixSparse DMatrixSparseCSC]
            org.ejml.dense.row.CommonOps_DDRM
            [org.ejml.sparse.csc CommonOps_DSCC MatrixFeatures_DSCC]
-           org.ejml.generic.GenericMatrixOps_F64))
+           org.ejml.generic.GenericMatrixOps_F64
+           [org.roaringbitmap FastRankRoaringBitmap RoaringBitmap]))
 
 ;;; Experiment implementing a parser for a subset of Prolog using spec.
 
@@ -786,23 +787,20 @@
 
 ;; k2-tree
 
-(defn bit-str->bitset [s]
-  (let [bs (java.util.BitSet.)
+(defn bit-str->bitset ^org.roaringbitmap.RoaringBitmap [s]
+  (let [bs (FastRankRoaringBitmap.)
         bits (->> s
                   (remove #{\space})
                   (vec))]
     (dotimes [n (count bits)]
       (when (= \1 (get bits n))
-        (.set bs n true)))
+        (.add bs n)))
     bs))
 
-;; TODO: Obviously slow, should use proper data structure.
-(defn bitset-rank ^long [^java.util.BitSet bs ^long n]
-  (loop [n (.previousSetBit bs n)
-         rank 0]
-    (if (= -1 n)
-      rank
-      (recur (.previousSetBit bs (dec n)) (inc rank)))))
+(defn bitset-rank ^long [^RoaringBitmap bs ^long n]
+  (if (= -1 n)
+    0
+    (.rank bs n)))
 
 (defn power-of? [^long x ^long y]
   (if (zero? (rem x y))
@@ -830,15 +828,15 @@
                                    ^long k
                                    ^long k2
                                    ^long t-size
-                                   ^java.util.BitSet t
-                                   ^java.util.BitSet l] :as k2-tree} ^long row ^long col]
+                                   ^RoaringBitmap t
+                                   ^RoaringBitmap l] :as k2-tree} ^long row ^long col]
   (loop [n n
          p row
          q col
          z -1]
     (if (>= z t-size)
-      (.get l (- z t-size))
-      (if (or (= -1 z) (.get t z))
+      (.contains l (- z t-size))
+      (if (or (= -1 z) (.contains t z))
         (let [n (quot n k)
               y (* (bitset-rank t z) k2)
               y (+ y
@@ -855,13 +853,13 @@
                                    ^long k
                                    ^long k2
                                    ^long t-size
-                                   ^java.util.BitSet t
-                                   ^java.util.BitSet l] :as k2-tree} ^long row]
+                                   ^RoaringBitmap t
+                                   ^RoaringBitmap l] :as k2-tree} ^long row]
   ((fn step [^long n ^long p ^long q ^long z]
      (if (>= z t-size)
-       (when (.get l (- z t-size))
+       (when (.contains l (- z t-size))
          [q])
-       (when (or (= -1 z) (.get t z))
+       (when (or (= -1 z) (.contains t z))
          (let [n (quot n k)
                y (+ (* (bitset-rank t z) k2)
                     (* (Math/abs (quot p n)) k))]
@@ -875,13 +873,13 @@
                                     ^long k
                                     ^long k2
                                     ^long t-size
-                                    ^java.util.BitSet t
-                                    ^java.util.BitSet l] :as k2-tree} ^long col]
+                                    ^RoaringBitmap t
+                                    ^RoaringBitmap l] :as k2-tree} ^long col]
   ((fn step [^long n ^long q ^long p ^long z]
      (if (>= z t-size)
-       (when (.get l (- z t-size))
+       (when (.contains l (- z t-size))
          [p])
-       (when (or (= -1 z) (.get t z))
+       (when (or (= -1 z) (.contains t z))
          (let [n (quot n k)
                y (+ (* (bitset-rank t z) k2)
                     (Math/abs (quot q n)))]
@@ -895,8 +893,8 @@
                              ^long k
                              ^long k2
                              ^long t-size
-                             ^java.util.BitSet t
-                             ^java.util.BitSet l] :as k2-tree} row1 row2 col1 col2]
+                             ^RoaringBitmap t
+                             ^RoaringBitmap l] :as k2-tree} row1 row2 col1 col2]
   ((fn step [n p1 p2 q1 q2 dp dq z]
      (let [n (long n)
            z (long z)
@@ -907,9 +905,9 @@
            dp (long dp)
            dq (long dq)]
        (if (>= z t-size)
-         (when (.get l (- z t-size))
+         (when (.contains l (- z t-size))
            [[dp dq]])
-         (when (or (= -1 z) (.get t z))
+         (when (or (= -1 z) (.contains t z))
            (let [n (quot n k)
                  y (* (bitset-rank t z) k2)]
              (->> (for [^long i (range (quot p1 n) (inc (quot p2 n)))
@@ -944,38 +942,52 @@
   (->> (k2-tree-range k2 0 n col col)
        (map first)))
 
+
 ;; Matrix data form https://arxiv.org/pdf/1707.02769.pdf page 8.
 (comment
   (let [k2 (new-static-k2-tree
             10
             2
             "1110 1101 1010 0100 0110 1001 0101 0010 1010 1100"
-            "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")]
-    [;; 3rd q
-     (k2-tree-check-link? k2 9 6)
-     (k2-tree-check-link? k2 8 6)
+            "0011 0011 0010 0010 0001 0010 0100 0010 1000 0010 1010")
+        expected '[true
+                   true
+                   true
+                   true
+                   true
+                   true
+                   false
+                   ([5 8])
+                   ([1 2] [1 3] [1 4])
+                   ([3 6] [7 6] [8 6] [9 6])
+                   (2 3 4)
+                   (3 7 8 9)]]
+    (= expected
+       [;; 3rd q
+        (k2-tree-check-link? k2 9 6)
+        (k2-tree-check-link? k2 8 6)
 
-     ;; 1st q
-     (k2-tree-check-link? k2 1 2)
-     (k2-tree-check-link? k2 3 0)
+        ;; 1st q
+        (k2-tree-check-link? k2 1 2)
+        (k2-tree-check-link? k2 3 0)
 
-     ;; 2nd q
-     (k2-tree-check-link? k2 2 9)
-     (k2-tree-check-link? k2 5 8)
+        ;; 2nd q
+        (k2-tree-check-link? k2 2 9)
+        (k2-tree-check-link? k2 5 8)
 
-     ;; Should be false
-     (k2-tree-check-link? k2 0 0)
+        ;; Should be false
+        (k2-tree-check-link? k2 0 0)
 
-     (k2-tree-range k2 5 5 8 8)
+        (k2-tree-range k2 5 5 8 8)
 
-     (k2-tree-range k2 1 1 0 16)
-     (k2-tree-range k2 0 16 6 6)
+        (k2-tree-range k2 1 1 0 16)
+        (k2-tree-range k2 0 16 6 6)
 
-     ;; TODO: Does not work yet:
-     ;; Should return 2 3 4
-     (k2-tree-succsessors k2 1)
-     ;; Should return 3 7 8 9
-     (k2-tree-predecessors k2 6)]))
+        ;; TODO: Does not work yet:
+        ;; Should return 2 3 4
+        (k2-tree-succsessors k2 1)
+        ;; Should return 3 7 8 9
+        (k2-tree-predecessors k2 6)])))
 
 ;; WatDiv analysis helpers:
 
