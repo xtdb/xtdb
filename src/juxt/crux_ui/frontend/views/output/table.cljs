@@ -14,9 +14,9 @@
 
       [:.g-cell-oversize-arrest
        [:&__content
-        {:max-width :300px
+        {:max-width  :300px
          :max-height :76px
-         :overflow :hidden}
+         :overflow   :hidden}
         [:&--expanded
          {:max-width :none
           :max-height :none}]]
@@ -26,6 +26,7 @@
 
       [:.q-grid-wrapper
        {:overflow :scroll
+        :height :100%
         :padding-bottom :15rem}
        ["> ::-webkit-scrollbar"
         "> ::-moz-scrollbar"

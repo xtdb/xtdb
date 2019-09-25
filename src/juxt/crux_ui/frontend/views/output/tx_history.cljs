@@ -9,7 +9,8 @@
   [:style
    (garden/css
      [:.tx-history
-      {:height :100%}])])
+      {:height :100%
+       :padding "6px 8px"}])])
 
 (def tx-layout
   {:title "Queried entities transactions"
