@@ -160,10 +160,10 @@
    :examples/query
    (fn []
      (str/join "\n"
-       ["{:find [e p]"
-        " :where"
-        " [[e :crux.db/id _]"
-        "  [e :ticker/price p]]}"]))
+               ["{:find [e p]"
+                " :where"
+                " [[e :crux.db/id _]"
+                "  [e :ticker/price p]]}"]))
 
    :examples/query-w-join
    (fn []
@@ -198,8 +198,16 @@
    (fn []
      '{:find [e]
        :where [[e :crux.db/id _]]
-       :ui/poll-interval-seconds? 30
        :full-results? true})
+
+   :examples/query-w-full-res-refresh
+   (fn []
+     (str/join "\n"
+               ["{:find  [e]"
+                " :where [[e :crux.db/id _]]"
+                " :ui/poll-interval-seconds? 30"
+                " ;; Refreshes the UI every 30 seconds to display the most recent data"
+                " :full-results? true}"]))
 
    :examples/vector-style
    (fn []
@@ -245,6 +253,8 @@
     :generator (:examples/query-w-join generators)}
    {:title "full-results"
     :generator (:examples/query-w-full-res generators)}
+   {:title "full-results with refresh"
+    :generator (:examples/query-w-full-res-refresh generators)}
    {:title "rules and args"
     :generator (:examples/rules-and-args generators)}
    {:title "delete"

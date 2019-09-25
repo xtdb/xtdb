@@ -1,4 +1,7 @@
 = Get Started
+:experimental:
+
+My document provides...
 
 == Introduction
 
@@ -90,17 +93,8 @@ like this:
 
 This is the id of the transaction you just made to the database and the time
 you made it at. The same result you would get if running `crux` in a repl. Lets
-run that first query again to see if it works. Input the previous query into
-the panel and give it a run.
-
-[source, console]
-----
-{:find [e]
- :where
- [[e :crux.db/id _]]
-; options
- :full-results? true}
-----
+run that first query again to see if it works. Click on the example query _full
+results_ and then press kbd:[Ctrl + Enter].
 
 image::/home/tmt/img/me.jpg[TODO put query + running first one]
 
