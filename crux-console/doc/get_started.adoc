@@ -1,14 +1,15 @@
 = Get Started
 :experimental:
 
-My document provides...
-
 == Introduction
 
 Crux console is a single page application which is able to interact with a crux
 node, sending and receiving queries, and then displaying the resulting in
 tables or graphs. This guide will walk though how to get the most out of this
-application including setup and usage.
+application including setup and usage. This guild is not to teach how to use
+crux, but to give an demonstration about how crux can be used.
+
+TODO is it?
 
 == Installation
 
@@ -70,9 +71,9 @@ results._ message. This is because we have not yet entered any data into our
 database, do lets just do that now (if using the cloud version its more than
 likely that you'll see some data but lets ignore that for now).
 
-image::/home/tmt/img/me.jpg[TODO Running an empty query]
+image::resources/img/console1-runqempty.gif[TODO Running an empty query]
 
-=== Data entry
+=== Adding some data
 
 In order to get some data in our node to play around with we've provided you
 with some sample queries to use. In the bottom of the left panel you'll see a
@@ -96,15 +97,68 @@ you made it at. The same result you would get if running `crux` in a repl. Lets
 run that first query again to see if it works. Click on the example query _full
 results_ and then press kbd:[Ctrl + Enter].
 
-image::/home/tmt/img/me.jpg[TODO put query + running first one]
+image::resources/img/console1-runqempty.gif[TODO put query + running first one]
 
 This should give you a load of output including ticker prices and stock
-exchange locations. We'll cover adding data with `valid-time` and `tx-time`
-later in <<Temporal Queries>> but don't worry about that for
-now.
+exchange locations. We'll cover what that query did and adding data with
+specific `valid-time` and `tx-time` later in <<Adding more data>> but don't
+worry about that for now.
 
 === Basic Queries/Analysis
 
-The previous query
+The previous query gave us every thing currently stored in crux but lets filter
+out some stuff so we can get a better idea about what we have in here. Click on
+the simple query snippet. This will give you this query:
 
-=== Temporal Queries
+[source, console]
+----
+{:find [e p]
+ :where
+ [[e :crux.db/id _]
+  [e :ticker/price p]]}
+----
+TODO: this query is too verbose - `[e :crux.db/id _]` does nothing
+
+NOTE: The query could also be written as `{:find [i p] :where [[e :crux.db/id
+i] [e :ticker/price p]]}` i.e. where we explicitly ask for the `crux.db/id`. In
+this case, e displays the same text as i.
+
+This returns all entries with an ticker price of p and their respective entry
+id. We can see on the bottom left of the display panel we have received 50
+different results. This seems still a bit too much for us to parse. As I'm a
+bit out of pocket at the moment lets only display tickers that are under 30
+units (TODO what are they? $?). Add `[(< p 30)]` as another vector to the
+`:where` clause.
+
+image::resources/img/console1-runqempty.gif[TODO put query + running first one]
+
+This gives us just 12 results to look through. That's a bit more manageable.
+
+=== Adding more data
+
+Lets now see how console is able to display some temporal results. Stock prices
+are perfect for this but our current data only has one entry. So lets add some
+more. Click on the _put with vaild time_ example.
+
+image::resources/img/console1-runqempty.gif[TODO put query + running first one]
+
+Like last time we used put we get a 2 element map back with the transaction id
+and time. If we run the _simple query_ example again it looks like we only have
+1 extra entry. In space, that's true but in time we have just entered an entire
+stocks history. If you scroll through the results of the query you should see
+an entry with a decimal value. Click on the entries id.
+
+image::resources/img/console1-runqempty.gif[TODO put query + running first one]
+
+Clicking on an entity lists out all of the its data. In this case you should
+see `:crux.db/id`, `:ticker.price`, and `:ticker/market`. Don't worry about if
+your example doesn't match ours this example is randomly generated to produce
+random stock data (TODO: should it? it is cool but probably not needed for an
+example). In order to get an idea how the price of this has changed through
+time click the attribute history tab at the bottom of the display panel.
+
+image::resources/img/console1-runqempty.gif[TODO put query + running first one]
+
+This should give you a lovely looking visualisation, something like ours.
+Running your mouse pointer along the graph gives you details about the state of
+the entry as time has passed.
