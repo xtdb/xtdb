@@ -87,18 +87,15 @@
         :display :grid
         :position :relative
         :overflow :hidden
-        :padding-bottom :20px
-        :grid-template "'main' / 1fr"}
-       [:&__side
-        {:border-right s/q-ui-border
-         :grid-area :side
-         :overflow :hidden
-         :position :relative}
-        [:&__content
-         {:overflow :auto
-          :height :100%}]]
+        :grid-template
+        "'pane' calc(100% - 40px)
+         'status' auto
+         / 1fr"}
+       [:&__pane
+        {:grid-area :pane
+         :overflow :hidden}]
        [:&__status
-        {:position :absolute
+        {:grid-area :status
          :max-width :100%
          :overflow :auto
          :z-index 10
@@ -108,8 +105,9 @@
          :background :white
          :bottom  :0px
          :right   :0px
-         :left :0px
-         :padding-left :12px}
+         :left          :0px
+         :padding-left  :12px
+         :padding-right :12px}
         [:&__result-count
          {:margin-right :8px
           :white-space :pre}]]]
@@ -134,20 +132,19 @@
          :height :200px}]]
 
       [:.output-tabs
-       {:width :max-content
-        :padding :8px}]
+       {; :width :max-content
+        :padding "8px 0"}]
 
-      (gs/at-media {:max-width :1000px}
+      (gs/at-media {:max-width :768px}
         [:.q-output
-         {:grid-template "'main' 1fr / 1fr"
-          :padding-bottom :4rem}
+         ; add padding on mobile, cause iphones have a thumb on the bottom
+         {:padding-bottom :20px}
          [:&__status
-          {:bottom :1.5rem}]])
+          {:padding-right :12px}]])
 
       (gs/at-media {:max-width :375px}
         [:.q-output
-         {:grid-template "'main' 1fr / 1fr"
-          :padding-bottom :4rem}]))])
+         {:padding-bottom :20px}]))])
 
 
 
@@ -163,17 +160,18 @@
        (cond
          @-sub-nw-progress [output-preloader]
          main-tab [:<>
-                   (case main-tab
-                     :db.ui.output-tab/error          [q-err/root @-sub-err]
-                     :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
-                     :db.ui.output-tab/tree           [q-results-tree/root @-sub-result-tree]
-                     :db.ui.output-tab/tx-history     [output-txes/root]
-                     :db.ui.output-tab/attr-history   [output-attr-history/root]
-                     :db.ui.output-tab/attr-stats     [attr-stats/root]
-                     :db.ui.output-tab/edn            [output-edn/root @-sub-result-raw]
-                     :db.ui.output-tab/empty          empty-placeholder
-                     :db.ui.output-tab/empty-result   empty-results
-                     [q-results-table/root @-sub-results-table])
+                   [:div.q-output__pane
+                    (case main-tab
+                      :db.ui.output-tab/error          [q-err/root @-sub-err]
+                      :db.ui.output-tab/table          [q-results-table/root @-sub-results-table]
+                      :db.ui.output-tab/tree           [q-results-tree/root @-sub-result-tree]
+                      :db.ui.output-tab/tx-history     [output-txes/root]
+                      :db.ui.output-tab/attr-history   [output-attr-history/root]
+                      :db.ui.output-tab/attr-stats     [attr-stats/root]
+                      :db.ui.output-tab/edn            [output-edn/root @-sub-result-raw]
+                      :db.ui.output-tab/empty          empty-placeholder
+                      :db.ui.output-tab/empty-result   empty-results
+                      [q-results-table/root @-sub-results-table])]
                    [:div.q-output__status
                     [:div.q-output__status__result-count @-sub-result-count]
                     [:div.q-output__status__tabs [main-output-tabs main-tab]]]]

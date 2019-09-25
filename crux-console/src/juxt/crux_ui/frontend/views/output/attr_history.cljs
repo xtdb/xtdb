@@ -13,6 +13,7 @@
    (garden/css
      [:.attr-history
       {:height :100%
+       :padding "6px 8px"
        :position :relative}
       [:&__chart
        {:height :100%}]
