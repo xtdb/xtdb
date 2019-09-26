@@ -201,6 +201,12 @@
                        (into dep-order))]
     dep-order))
 
+(defn options->node-config [{:keys [crux.bootstrap/node-config]}]
+  (assert node-config)
+  (let [v (symbol node-config)]
+    (require (symbol (namespace v)))
+    (var-get (find-var v))))
+
 (defn start-modules [node-system options]
   (let [started (atom {})
         start-order (start-order node-system)
