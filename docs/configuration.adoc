@@ -44,16 +44,14 @@ Integrant node].
 
 == Properties
 
-The follow properties are required for any type of Crux Node:
+The following properties are used by any kind of Crux node:
 
 .Nodes Configuration
 [#table-conversion%header,cols="d,d,d"]
 |===
-|Component|Property|Description
-|kv-store|`kv-backend`|Sets the K/V Store to use, e.g. `"crux.kv.rocksdb.RocksKv"`
-|kv-store|`db-dir`|Sets the data-directory to use, e.g. `"data/db-dir-1"`
-|tx-log|`bootstrap-servers`|Kafka Servers to connect to e.g. `"localhost:9092"`
-|http-server|`server-port`|Port for Crux HTTP Server e.g. `8080`
+|Property|Description|Default
+|`kv-backend`|Sets the K/V Store to use|*crux.kv.rocksdb.RocksKv*
+|`db-dir`|Sets the data-directory to use|*data*
 |===
 
 == RocksDB
