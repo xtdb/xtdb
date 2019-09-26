@@ -73,11 +73,12 @@
     (binding [*tx-topic* (str "tx-topic-" test-id)
               *doc-topic* (str "doc-topic-" test-id)]
       (try
-        (with-open [cluster-node (Crux/startClusterNode {:db-dir db-dir
-                                                         :kv-backend *kv-backend*
-                                                         :tx-topic *tx-topic*
-                                                         :doc-topic *doc-topic*
-                                                         :bootstrap-servers *kafka-bootstrap-servers*})]
+        (with-open [cluster-node (Crux/startNode {:crux.bootstrap/node-config :crux.kafka/node-config
+                                                  :db-dir db-dir
+                                                  :kv-backend *kv-backend*
+                                                  :tx-topic *tx-topic*
+                                                  :doc-topic *doc-topic*
+                                                  :bootstrap-servers *kafka-bootstrap-servers*})]
           (binding [*cluster-node* cluster-node]
             (f)))
         (finally

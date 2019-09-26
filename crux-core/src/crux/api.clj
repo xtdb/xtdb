@@ -302,49 +302,6 @@
   (submit-tx-async [this tx-ops]
     (.submitTxAsync this tx-ops)))
 
-(defn start-cluster-node
-  "Starts a query node in local library mode.
-
-   For valid options, see crux.bootstrap/cli-options. Options are
-   specified as keywords using their long format name, like
-   :bootstrap-servers etc.
-
-   NOTE: requires any KV store dependencies and crux-kafka on
-   the classpath. The crux.kv.memdb.MemKv KV backend works without
-   additional dependencies.
-
-   The HTTP API can be started by passing the node to
-   crux.http-server/start-http-server. This will require further
-   dependencies on the classpath, see crux.http-server for
-   details.
-
-  options
-  {:kv-backend         \"crux.kv.rocksdb.RocksKv\" ; requires RocksDB as dep
-                       \"crux.kv.memdb.MemKv\" ; will work without addional deps
-   :bootstrap-servers  \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\"
-   :event-log-dir      \"data/eventlog-1\"
-   :db-dir             \"data/db-dir-1\"
-   :backup-dir         \"checkpoint\"
-   :group-id           \"group-id\"
-   :tx-topic           \"crux-transaction-log\"
-   :doc-topic          \"crux-docs\"
-   :create-topics      true
-   :doc-partitions     1
-   :replication-factor 1
-   :db-dir             \"data\"
-   :server-port        3000
-   :await-tx-timeout   10000
-   :doc-cache-size     131072
-   :object-store       \"crux.index.KvObjectStore\"}
-
-   returns the started cluster node that implements ICruxAPI and
-   java.io.Closeable. Latter allows the node to be stopped
-   by calling `(.close node)`.
-
-   throws IndexVersionOutOfSyncException if the index needs rebuilding."
-  ^ICruxAPI [options]
-  (Crux/startClusterNode options))
-
 (defn start-standalone-node
   "Creates a minimal standalone node writing the transaction log
   into its local KV store without relying on
@@ -362,7 +319,7 @@
    :db-dir             \"data/db-dir-1\"
    :backup-dir         \"checkpoint\"}
 
-  see start-cluster-node doc for more options
+  see start-node doc for more options
 
   returns a standalone node which implements ICruxAPI and
   java.io.Closeable. Latter allows the node to be stopped

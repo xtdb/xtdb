@@ -28,44 +28,7 @@ public class Crux {
     @SuppressWarnings("unchecked")
     public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap"));
-        Object nodeConfig = Clojure.var("clojure.bootstrap/options->node-config").invoke(options);
-        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
-    }
-
-    /**
-     * Starts a query node in local library mode.
-     *
-     * For valid options, see crux.bootstrap/cli-options. Options are
-     * specified as keywords using their long format name, like
-     * :bootstrap-servers etc.
-     *
-     * Returns a crux.api.ICruxAPI component that implements
-     * java.io.Closeable, which allows the node to be stopped by
-     * calling close.
-     *
-     * NOTE: requires any KV store dependencies and crux-kafka on
-     * the classpath. The crux.kv.memdb.MemKv KV backend works without
-     * additional dependencies.
-     *
-     * The HTTP API can be started by passing the node to
-     * crux.http-server/start-http-server. This will require further
-     * dependencies on the classpath, see crux.http-server for
-     * details.
-     *
-     * See also crux.kafka.embedded or {@link
-     * #startStandaloneNode(Map options)} for self-contained
-     * deployments.
-     *
-     * @param options see crux.bootstrap/cli-options.
-     * @return        the started cluster node.
-     * @throws IndexVersionOutOfSyncException if the index needs
-     * rebuilding.
-     */
-    @SuppressWarnings("unchecked")
-    public static ICruxAPI startClusterNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka"));
-        IFn deref = Clojure.var("clojure.core", "deref");
-        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.kafka/node-config"));
+        Object nodeConfig = Clojure.var("crux.bootstrap/options->node-config").invoke(options);
         return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
     }
 
