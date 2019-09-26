@@ -4,7 +4,7 @@
 
 Use `confluent-hub install zip-file-name` to download and install the connector from Confluent hub. The downloaded connector is then placed within your confluent install's _'share/confluent-hub-components'_ folder. +
 
-The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *crux node* to communicate with.
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
 == Example usage
 

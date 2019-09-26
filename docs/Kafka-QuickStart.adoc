@@ -4,7 +4,7 @@
 
 Download the connector from Confluent hub, then unzip the downloaded folder:
 ----
-unzip juxt-crux-kafka-connect-<version>.zip
+unzip juxt-kafka-connect-crux-<version>.zip
 ----
 
 Navigate into the base of the Kafka folder, then run the following commands:
@@ -15,7 +15,7 @@ cp $CONNECTOR_PATH/etc/*.properties $KAFKA_HOME/config
 ----
 
 
-The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *crux node* to communicate with.
+The connector can be used as either a *source* or a *sink*. In either case, there should be an associated *Crux node* to communicate with.
 
 == Example usage
 

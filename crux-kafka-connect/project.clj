@@ -18,13 +18,16 @@
                            :license [{:name "The MIT License (MIT)"
                                       :url "https://opensource.org/licenses/MIT"}]
                            :logo "assets/crux-logo.svg"
-                           :name "crux-kafka-connect"
+                           :name "kafka-connect-crux"
                            :owner {:name "JUXT"
                                    :type "organization"
                                    :url "https://juxt.pro/index.html"
                                    :username "juxt"}
 
-                           :title "Crux Kafka Connect"
+                           :title "Kafka Connect Crux"
+                           :tags ["Database"
+                                  "Crux"]
+
                            :version "derived-from-git"}
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

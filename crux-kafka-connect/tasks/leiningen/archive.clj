@@ -12,7 +12,7 @@
                    (assoc project :eval-in :leiningen)
                    `(cheshire.core/generate-string ~confluent-hub-manifest)
                    '(require 'cheshire.core))
-        archive-dir (io/file target-path (str group "-" name "-" version))
+        archive-dir (io/file target-path (str group "-" (:name confluent-hub-manifest) "-" version))
         lib-dir (io/file archive-dir "lib")
         etc-dir (io/file archive-dir "etc")
         assets-dir (io/file archive-dir "assets")
