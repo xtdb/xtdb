@@ -14,6 +14,25 @@ public class Crux {
     }
 
     /**
+     * Starts a query node.
+     *
+     * Returns a crux.api.ICruxAPI component that implements
+     * java.io.Closeable, which allows the node to be stopped by
+     * calling close.
+     *
+     * @param options TODO, how to specify options?
+     * @return        the started cluster node.
+     * @throws IndexVersionOutOfSyncException if the index needs
+     * rebuilding.
+     */
+    @SuppressWarnings("unchecked")
+    public static ICruxAPI startNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
+        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.bootstrap"));
+        Object nodeConfig = Clojure.var("clojure.bootstrap/options->node-config").invoke(options);
+        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
+    }
+
+    /**
      * Starts a query node in local library mode.
      *
      * For valid options, see crux.bootstrap/cli-options. Options are

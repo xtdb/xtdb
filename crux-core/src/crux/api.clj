@@ -381,7 +381,7 @@
 
   throws IndexVersionOutOfSyncException if the index needs rebuilding."
   ^ICruxAPI [options]
-  (Crux/startJDBCNode options))
+  (Crux/startNode (assoc options :crux.bootstrap/node-config :crux.jdbc/node-config)))
 
 (defn new-api-client
   "Creates a new remote API client ICruxAPI. The remote client
