@@ -70,9 +70,9 @@
           {:border-left :none}]
          [:&--queryable
           {:cursor :pointer
-           :box-shadow "inset 3px 0 2px -3px hsl(220, 80%, 70%)"}
+           :box-shadow "inset 5px 0 0px -3px hsla(220, 90%, 70%, 0.5)"}
           [:&:hover
-           {:box-shadow "inset 5px 0 3px -3px hsl(220, 85%, 70%)"}]]]]])])
+           {:box-shadow "inset 6px 0 0px -3px hsla(220, 90%, 70%, 1)"}]]]]])])
 
 (defn- expand-sibling [click-evt]
   (let [cl (f/jsget click-evt "target" "previousSibling" "classList")]
