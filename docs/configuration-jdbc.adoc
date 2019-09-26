@@ -1,0 +1,35 @@
+= JDBC Nodes
+
+JDBC Nodes use https://github.com/seancorfield/next-jdbc/[`next.jdbc`]
+internally and pass through the relevant configuration options that
+you can find
+https://github.com/seancorfield/next-jdbc/blob/master/doc/all-the-options.md[here].
+
+Below is the minimal configuration you will need:
+
+.JDBC Configuration
+[#table-conversion%header,cols="d,d"]
+|===
+|Property|Description
+|`dbtype`|One of: *postgresql*, *oracle*, *mysql*, *h2*, *sqlite*
+|`dbname`|Database Name
+|`host`|Database Host
+|`user`|Database Username
+|`password`|Database Password
+|`db-dir`|For h2 and sqlite
+|===
+
+Add `crux-jdbc` to your project dependencies:
+
+[source,clj,subs="normal"]
+----
+include::./deps.edn[tags=JDBCDeps]
+----
+
+Use the API to start a JDBC node, configuring it with the required
+parameters:
+
+[source,clj]
+----
+include::./examples.clj[tags=start-jdbc-node]
+----

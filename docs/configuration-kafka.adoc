@@ -1,4 +1,4 @@
-== Kafka Nodes
+= Kafka Nodes
 
 When using Crux at scale it is recommended to use multiple Crux nodes connected
 via a Kafka cluster.
