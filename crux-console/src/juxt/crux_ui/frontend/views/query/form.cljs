@@ -5,7 +5,8 @@
             [juxt.crux-ui.frontend.views.style :as s]
             [juxt.crux-ui.frontend.views.query.editor :as q-editor]
             [juxt.crux-ui.frontend.views.query.time-controls :as time-controls]
-            [juxt.crux-ui.frontend.views.query.examples :as query-examples]))
+            [juxt.crux-ui.frontend.views.query.examples :as query-examples]
+            [juxt.crux-ui.frontend.views.functions :as vu]))
 
 
 (def ^:private -sub-editor-key (rf/subscribe [:subs.ui/editor-key]))
@@ -14,12 +15,23 @@
 (defn- on-submit [e]
   (rf/dispatch [:evt.ui.query/submit {:evt/push-url? true}]))
 
+
+(def col-base {:h 197 :s 80 :l 65 :a 0.8})
+
+(def btn-color--base       (s/hsl (assoc col-base :a 0.5)))
+(def btn-color--cta        (s/hsl col-base))
+(def btn-color--cta-hover  (s/hsl (assoc col-base :a 0.9)))
+(def btn-color--cta-active (s/hsl (assoc col-base :a 1)))
+
+
+
 (defn btn-cta-styles [] ; todo move into comps
-  {:background    "hsl(190, 50%, 65%)"
-   :color         "hsl(0, 0%, 100%)"
+  {:background    btn-color--base
+   :color         "white"
    :cursor        :pointer
    :border        0
-   :padding       "12px 16px"
+   :letter-spacing "0.03em"
+   :padding       "8px 14px"
    :border-radius :2px})
 
 (def ^:private q-form-styles
@@ -32,9 +44,14 @@
        :grid-template
        "'editor editor' 1fr
         'time-controls submit' auto
-        'examples examples' auto
         / 1fr 128px"
        :height   :100%}
+      [:&--examples
+       {:grid-template
+        "'editor editor' 1fr
+         'time-controls submit' auto
+         'examples examples' auto
+         / 1fr 128px"}]
 
       [:&__time-controls
        {:grid-area "time-controls"
@@ -47,20 +64,21 @@
 
       [:&__submit
        {:grid-area :submit
-        :padding "0 8px 0 0"
-        :place-self :center}]
+        :text-align :center
+        :padding "24px 8px"
+        :place-self "end"}
+       [:>small
+        {:font-size :0.8em
+         :color s/color-font-secondary}]]
 
       [:&__submit-btn
        (btn-cta-styles)
-       {:background "hsla(190, 50%, 65%, .3)"}
        [:&--cta
-        {:background "hsla(190, 50%, 65%, .8)"}]
+        {:background btn-color--cta}]
        [:&:hover
-        {:background "hsla(190, 60%, 65%, .9)"}]
+        {:background btn-color--cta-hover}]
        [:&:active
-        {:background "hsla(190, 70%, 65%, 1.0)"}]
-       [:>small
-        {:font-size :0.8em}]]
+        {:background btn-color--cta-active}]]
 
       [:&__examples
        {:grid-area :examples
@@ -96,29 +114,37 @@
          "'editor' 1fr
           'time-controls' auto
           'submit' auto
-          'examples' auto
            / 100%"}
+        [:&--examples
+         {:grid-template
+          "'editor' 1fr
+           'time-controls' auto
+           'submit' auto
+           'examples' auto
+            / 100%"}]
         [:&__submit
           {:padding "0 16px"
            :justify-self :start}]]))])
 
 
 (defn root []
-  [:div.q-form
-   q-form-styles
-   [:div.q-form__editor
-    ^{:key @-sub-editor-key}
-    [q-editor/root]]
-   [:div.q-form__time-controls
-    [time-controls/root]]
-   [:div.q-form__examples
-    [:div.examples-wrapper
-     [query-examples/root]]]
-   [:div.q-form__submit
-    (let [qa @-sub-query-analysis]
-      [:button.q-form__submit-btn
-       {:on-click on-submit
-        :class (if qa "q-form__submit-btn--cta")}
-       [:span "Run Query"][:br]
-       [:small "[ctrl + enter]"]])]])
+  (let [ex (rf/subscribe [:subs.query/examples])]
+    (fn []
+      [:div (vu/bem :q-form  (if @ex :examples))
+       q-form-styles
+       [:div.q-form__editor
+        ^{:key @-sub-editor-key}
+        [q-editor/root]]
+       [:div.q-form__time-controls
+        [time-controls/root]]
+       (if @ex
+         [:div.q-form__examples
+          [query-examples/root]])
+       [:div.q-form__submit
+        (let [qa @-sub-query-analysis]
+          [:button.q-form__submit-btn
+           {:on-click on-submit
+            :class (if qa "q-form__submit-btn--cta")}
+           [:span "Run Query"]])
+        #_[:small "[ctrl + enter]"]]])))
 
