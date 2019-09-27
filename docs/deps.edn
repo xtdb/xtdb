@@ -19,6 +19,4 @@
   ;; tag::JDBCDeps[]
   juxt/crux-jdbc {:mvn/version "19.09-1.4.0-alpha"}
   ;; end::JDBCDeps[]
-
-  integrant/integrant {:mvn/version "0.6.3"}
   }}

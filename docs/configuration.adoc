@@ -37,11 +37,6 @@ Crux nodes implement the `ICruxAPI` interface and are the
 starting point for making use of Crux. Nodes also implement
 `java.io.Closeable` and can therefore be lifecycle managed.
 
-NOTE: To see an example of a Crux Node being integrated into a
-Clojure lifecycle management framework such as Integrant, see the
-https://github.com/juxt/crux/blob/master/docs/example_standalone_integrant_node.clj[example
-Integrant node].
-
 == Properties
 
 The follow properties are required for any type of Crux Node:
