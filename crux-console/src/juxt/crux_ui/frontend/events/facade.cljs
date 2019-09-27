@@ -94,8 +94,17 @@
 (defn get-output-tab [db]
   (get-in db [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))
 
+
+
+; ----- composable db and fx operations -----
+
 (defn o-set-nw-in-progress [db]
   (assoc db :db.query/network-in-progress? true))
+
+(defn o-set-query [db ^js/String query]
+  (-> db
+      (assoc :db.query/input query)
+      (update :db.ui/editor-key inc)))
 
 (defn- o-fx-autoload-history [{:keys [db] :as fx}]
   (if (or (not (history-tabs-set (get-output-tab db)))
@@ -109,6 +118,14 @@
           (assoc :fx.query/history history-query)
           (update :db o-set-nw-in-progress)))))
 
+(defn o-fx-disable-polling [{db :db :as fx} ^map query-edn]
+  {:db       (o-set-query db (bp/better-printer (dissoc query-edn :ui/poll-interval-seconds?)))
+   :dispatch [:evt.ui.query/submit {:evt/push-url? true}]})
+
+(defn o-fx-enable-polling [{db :db :as fx} ^map query-map]
+  {:db       (o-set-query db (bp/better-printer (assoc query-map :ui/poll-interval-seconds? 5)))
+   :dispatch [:evt.ui.query/submit {:evt/push-url? true}]})
+
 
 (defn- o-fx-autoload-history-docs [{:keys [db] :as fx}]
   (let [histories (:db.query/histories db)
@@ -120,12 +137,6 @@
       (assoc fx :fx.query/histories-docs histories))))
 
 
-; ----- effects -----
-
-
-(def url "https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/572396dec0791500c965fea443b2f26a60f500d4/examples.edn")
-
-
 
 ; ----- events -----
 
@@ -135,11 +146,6 @@
   (fn [{:keys [db]} [_ new-db]]
     {:db          new-db
      :fx/set-node (:db.sys/host new-db)}))
-
-(defn o-set-query [db ^js/String query]
-  (-> db
-      (assoc :db.query/input query)
-      (update :db.ui/editor-key inc)))
 
 (rf/reg-event-fx
   :evt.sys/set-route
@@ -278,13 +284,13 @@
   :evt.ui/toggle-polling
   (fn [{:keys [db] :as cofx}]
     (let [q (qa/try-parse-edn-string-or-nil (:db.query/input db))
-          analysis (some-> q qa/analyse-any-query)]
-      (if (and q analysis (= :crux.ui.query-type/query (:crux.ui/query-type analysis)))
-        (let [new-db
-              (-> (assoc db :db.ui/sidebar false)
-                  (o-set-query (bp/better-printer (assoc q :ui/poll-interval-seconds? 5))))]
-          {:db new-db
-           :dispatch [:evt.ui.query/submit {:evt/push-url? true}]})))))
+          analysis (some-> q qa/analyse-any-query)
+          new-db (assoc db :db.ui/sidebar false)]
+      (when (and q analysis (= :crux.ui.query-type/query (:crux.ui/query-type analysis)))
+        (if (:ui/poll-interval-seconds? q)
+          (o-fx-disable-polling {:db new-db} q)
+          (o-fx-enable-polling {:db new-db} q))))))
+
 
 (rf/reg-event-fx
   :evt.ui/fullscreen

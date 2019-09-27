@@ -94,6 +94,7 @@
         symbol-positions (into {} (map vector find-vec (range)))
         attr-positions (zipmap attr-seq (map (comp symbol-positions a->s) attr-seq))]
     (assoc qmap :crux.ui/query-type :crux.ui.query-type/query
+                :query/style (if (map? input-edn) :query.style/map :query.style/vector)
                 :query/ids-queried? (attr-set :crux.db/id)
                 :query/symbol-positions symbol-positions
                 :query/original-edn input-edn
