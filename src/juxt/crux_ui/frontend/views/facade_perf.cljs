@@ -2,7 +2,7 @@
   (:require [garden.core :as garden]
             [juxt.crux-ui.frontend.views.query-perf :as query-perf]
             [juxt.crux-ui.frontend.views.header :as header]
-            [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]
             [juxt.crux-ui.frontend.svg-icons :as icon]))
 
 (def ^:private root-styles

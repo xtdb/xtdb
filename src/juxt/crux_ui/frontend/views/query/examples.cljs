@@ -1,6 +1,6 @@
 (ns juxt.crux-ui.frontend.views.query.examples
   (:require [re-frame.core :as rf]
-            [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]
             [juxt.crux-ui.frontend.svg-icons :as icon]
             [garden.core :as garden]
             [garden.stylesheet :as gs]

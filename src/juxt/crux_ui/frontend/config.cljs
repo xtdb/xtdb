@@ -1,6 +1,11 @@
 (ns juxt.crux-ui.frontend.config
   (:require ["./ua-regexp.js" :as ua-rgx]))
 
+(def url-docs "https://juxt.pro/crux/docs/index.html")
+(def url-chat "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux")
+(def url-mail "crux@juxt.pro")
+
+
 (def ^:const ua-regex ua-rgx)
 
 (def ^:const user-agent js/navigator.userAgent)
