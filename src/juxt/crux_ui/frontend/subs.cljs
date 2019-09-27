@@ -46,7 +46,7 @@
 ; (rf/reg-sub :subs.query/examples-imported (fnil :db.ui.examples/imported false))
 (rf/reg-sub :subs.query/result #(:db.query/result % nil))
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
-(rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
+(rf/reg-sub :subs.query/analysis-committed #(:db.query/analysis-committed % nil))
 (rf/reg-sub :subs.db.ui.attr-history/hint? #(:db.ui.attr-history/hint? % nil))
 (rf/reg-sub :subs.db.ui/side-bar #(:db.ui/sidebar % false))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
@@ -179,6 +179,12 @@
       (not input-edn) nil
       (:error input-edn) nil
       :else (qa/analyse-any-query input-edn))))
+
+(rf/reg-sub
+  :subs.query/is-query-map?
+  :<- [:subs.query/analysis]
+  (fn [analysis]
+    (= :query.style/map (:query/style analysis))))
 
 (rf/reg-sub
   :subs.query/headers
