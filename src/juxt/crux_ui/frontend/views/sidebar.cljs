@@ -8,11 +8,9 @@
             [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.commons.tiny-components :as comps]
-            [juxt.crux-ui.frontend.config :as cfg]))
+            [juxt.crux-ui.frontend.config :as cfg]
+            [reagent.core :as r]))
 
-
-(defn dispatch-sidebar-toggle []
-  (rf/dispatch [:evt.ui.sidebar/toggle]))
 
 (def ^:private css-logo-styles
   [:style
@@ -25,7 +23,10 @@
        :border-radius :2px
        :padding "0px 0px"}
       [:&__item
-       {:padding "16px 24px"}
+       {:cursor :pointer
+        :padding "16px 24px"}
+       [:&:hover
+        {:background "hsla(0, 0%, 0%, 0.1)"}]
        [:&--logo
         {:padding "12px 16px"}]]]
      (gs/at-media {:max-width :500px}
@@ -38,22 +39,31 @@
         :flex "0 0 40px"}]))])
 
 
-(defn -item [attrs contents]
-  [:div.sidebar__item attrs contents])
+(defn -item [{:keys [dispatch] :as attrs} contents]
+  [:div.sidebar__item
+   (cond-> attrs
+     dispatch (-> (assoc :on-click (r/partial rf/dispatch dispatch))
+                  (dissoc :dispatch)))
+   contents])
+
+(defn overview []
+  [:div.overview
+   "Shortcuts"
+   "Query submit"
+   "Toggle editor"
+   "Fullscreen"])
 
 (defn root []
   [:div.sidebar
    css-logo-styles
-   [:div.sidebar__item.sidebar__item--logo
-    {:on-click dispatch-sidebar-toggle}
-    [css-logo/root]]
-   [-item {:on-click (rf/dispatch [:evt.ui/fullscreen])}
-    "Fullscreen"]
-   [-item {} "Polling"]
-   [-item {} "Settings"]
-   [-item {} "Shortcut"]
-   [-item {} "Console Overview"]
-   [-item {} "Restore Examples"]
+   [-item {:class "sidebar__item--logo"
+           :dispatch [:evt.ui.sidebar/toggle]} [css-logo/root]]
+   [-item {:dispatch [:evt.ui/fullscreen]} "Fullscreen"]
+   [-item {:dispatch [:evt.ui/toggle-polling]} "Toggle polling"]
+   [-item {:dispatch [:evt.ui/show-settings]} "Settings"]
+   [-item {:dispatch [:evt.ui/show-overview]} "Console Overview"]
+   [-item {:dispatch [:evt.ui/restore-examples]} "Restore Examples"]
+   [-item {:dispatch [:evt.ui/import-examples]} "Import Examples"]
    [-item {} [comps/link-outer cfg/url-docs "Crux Docs"]]
    [-item {} [comps/link-outer cfg/url-chat "Crux Chat"]]
    [-item {} [comps/link-mailto cfg/url-mail]]])

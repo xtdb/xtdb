@@ -60,7 +60,7 @@
 (rf/reg-sub
   :subs.query/input-edn-committed
   :<- [:subs.query/input-committed]
-  qa/try-read-string)
+  qa/try-parse-edn-string)
 
 (rf/reg-sub
   :subs.sys/settings
@@ -75,7 +75,7 @@
 (rf/reg-sub
   :subs.query/input-edn
   :<- [:subs.query/input]
-  qa/try-read-string)
+  qa/try-parse-edn-string)
 
 (defn scalar? [v]
   (or (string? v) (number? v) (keyword? v)))

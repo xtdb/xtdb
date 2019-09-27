@@ -27,8 +27,8 @@
 (defmethod better-printer ::default [edn]
   (with-out-str (pp/pprint edn)))
 
-(println
-  (better-printer '{:find [e p], :where [[e :crux.db/id _] [e :ticker/price p]]}))
-
-(println
-  (better-printer '[:find [e p], :where [[e :crux.db/id _] [e :ticker/price p]]]))
+(comment
+  (println
+    (better-printer '{:find [e p], :where [[e :crux.db/id _] [e :ticker/price p]]}))
+  (println
+    (better-printer '[:find [e p], :where [[e :crux.db/id _] [e :ticker/price p]]])))

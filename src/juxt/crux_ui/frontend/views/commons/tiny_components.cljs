@@ -1,7 +1,8 @@
 (ns juxt.crux-ui.frontend.views.commons.tiny-components
   (:require [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.functions :as vu]
-            [garden.core :as garden]))
+            [garden.core :as garden]
+            [juxt.crux-ui.frontend.svg-icons :as icon]))
 
 
 (defn icon' [icon-name]
@@ -11,7 +12,7 @@
   [:a {:href (str "mailto:" email)} email])
 
 (defn link-outer [href title]
-  [:a {:target "_blank" :href href :title (str "Open " title " in a new tab")} title])
+  [:a {:target "_blank" :href href :title (str "Open " title " in a new tab")} title #_icon/external])
 
 (defn link-box [{:keys [main? luminous? active? svg? round? icon icon-alt on-click class href label attrs] :as params}]
   (let [css-class
