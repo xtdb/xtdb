@@ -48,6 +48,7 @@
 (rf/reg-sub :subs.query/error  #(:db.query/error % false))
 (rf/reg-sub :subs.query/analysis-committed (fnil :db.query/analysis-committed {}))
 (rf/reg-sub :subs.db.ui.attr-history/hint? #(:db.ui.attr-history/hint? % nil))
+(rf/reg-sub :subs.db.ui/side-bar #(:db.ui/sidebar % false))
 (rf/reg-sub :subs.query/result-analysis (fnil :db.query/result-analysis {}))
 
 ; returns a map entity-id->simple-histories

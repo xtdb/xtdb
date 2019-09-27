@@ -71,4 +71,3 @@
     [q-form/root]]
    [:div.query-ui__output
     [q-output/root]]])
-
