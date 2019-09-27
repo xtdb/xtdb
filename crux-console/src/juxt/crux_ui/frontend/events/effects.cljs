@@ -55,6 +55,11 @@
     (js/alert message)))
 
 (rf/reg-fx
+  :fx.ui/prompt
+  (fn [[message event-id]]
+    (rf/dispatch [event-id (js/prompt message)])))
+
+(rf/reg-fx
   :fx.ui/toggle-fullscreen
   (fn [_]
     (if js/document.fullscreen
