@@ -3,7 +3,7 @@
             [garden.core :as garden]
             [juxt.crux-ui.frontend.views.charts.wrapper-basic :as charts]
             [juxt.crux-ui.frontend.functions :as f]
-            [juxt.crux-ui.frontend.views.comps :as comps]))
+            [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]))
 
 (def ^:private -sub-plotly-data (rf/subscribe [:subs.query/attr-history-plot-data]))
 

@@ -18,14 +18,19 @@
 (api/submit-tx
   simple-node
   [[:crux.tx/put
-    {:crux.db/id :ids/raptor}]
+    {:crux.db/id :ids/bird}
+    #inst "2017-06-09T06:59:40.829-04:00"]
    [:crux.tx/put
-    {:crux.db/id :ids/owl}]])
+    {:crux.db/id :ids/bird}
+    #inst "2017-06-09T06:59:40.829-02:00"]])
 
 (api/history-range
   simple-node
-  :ids/owl
+  :ids/bird
   nil nil nil nil)
+
+(api/q (api/db simple-node #inst "2017-06-09T06:59:40.829-01:00")
+       '{:find [e] :where [[e :crux.db/id :ids/bird]]})
 
 (api/document simple-node "686c3e1f00fb8ccabd43e93f5cd2da546d50d80d")
 

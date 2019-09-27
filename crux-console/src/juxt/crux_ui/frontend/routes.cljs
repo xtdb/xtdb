@@ -24,8 +24,8 @@
   (f/map-keys #(keyword "r" (name %)) route))
 
 (defn- match-route [path]
-  (let [route (prefix-keys (bidi/match-route routes path))]
-    (cond-> route
+  (if-let [route (bidi/match-route routes path)]
+    (cond-> (prefix-keys route)
             (get-in route [:r/route-params :r/output-tab])
             (update-in [:r/route-params :r/output-tab]
                        #(keyword "db.ui.output-tab" %)))))

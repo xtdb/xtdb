@@ -4,11 +4,12 @@
             [re-frame.core :as rf]
             [juxt.crux-ui.frontend.views.query-ui :as q]
             [juxt.crux-ui.frontend.views.header :as header]
-            [juxt.crux-ui.frontend.views.comps :as comps]
+            [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]
             [juxt.crux-ui.frontend.views.settings :as settings]
             [juxt.crux-ui.frontend.svg-icons :as icon]
             [juxt.crux-ui.frontend.views.sidebar :as sidebar]
-            [juxt.crux-ui.frontend.views.commons.input :as input]))
+            [juxt.crux-ui.frontend.views.commons.input :as input]
+            [juxt.crux-ui.frontend.functions :as f]))
 
 (def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
 (def ^:private -sub-sidebar (rf/subscribe [:subs.db.ui/side-bar]))
@@ -16,11 +17,14 @@
 (def color-link "hsl(32, 61%, 64%)")
 (def color-link--hover "hsl(32, 91%, 54%)")
 
+(defn on-sidebar-bg-click [evt]
+  (if (= "root__sidebar" (some-> evt (f/jsget "target" "id")))
+    (rf/dispatch [:evt.ui.sidebar/toggle])))
+
 (def ^:private root-styles
   [:style
     (garden/css
-      [
-       [:a
+      [[:a
         {:color color-link}
         [:&:visited {:color color-link}]
         [:&:hover {:color color-link--hover}]]
@@ -82,7 +86,7 @@
        [:div.root__header
         [header/root]]
        (if @-sub-sidebar
-         [:div.root__sidebar
+         [:div#root__sidebar.root__sidebar {:on-click on-sidebar-bg-click}
           [sidebar/root]])
        [:div.root__body
         (case @root-tab

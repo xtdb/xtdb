@@ -6,7 +6,9 @@
             [juxt.crux-ui.frontend.views.functions :as vf]
             [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
-            [re-frame.core :as rf]))
+            [re-frame.core :as rf]
+            [juxt.crux-ui.frontend.views.commons.tiny-components :as comps]
+            [juxt.crux-ui.frontend.config :as cfg]))
 
 
 (defn dispatch-sidebar-toggle []
@@ -36,6 +38,8 @@
         :flex "0 0 40px"}]))])
 
 
+(defn -item [attrs contents]
+  [:div.sidebar__item attrs contents])
 
 (defn root []
   [:div.sidebar
@@ -43,12 +47,17 @@
    [:div.sidebar__item.sidebar__item--logo
     {:on-click dispatch-sidebar-toggle}
     [css-logo/root]]
-   [:div.sidebar__item "Query UI" (routes/path-for :rd/query-ui)]
-   [:div.sidebar__item "Fullscreen"]
-   [:div.sidebar__item "Polling"]
-   [:div.sidebar__item "Settings" (routes/path-for :rd/settings)]
-   [:div.sidebar__item "Shortcuts"]
-   [:div.sidebar__item "Console Overview"]
-   [:div.sidebar__item "Crux Docs"]
-   [:div.sidebar__item "Crux Chat"]
-   [:div.sidebar__item "crux@juxt.pro"]])
+   [-item {:on-click (rf/dispatch [:evt.ui/fullscreen])}
+    "Fullscreen"]
+   [-item {} "Polling"]
+   [-item {} "Settings"]
+   [-item {} "Shortcut"]
+   [-item {} "Console Overview"]
+   [-item {} "Restore Examples"]
+   [-item {} [comps/link-outer cfg/url-docs "Crux Docs"]]
+   [-item {} [comps/link-outer cfg/url-chat "Crux Chat"]]
+   [-item {} [comps/link-mailto cfg/url-mail]]])
+
+(comment
+  (routes/path-for :rd/query-ui)
+  (routes/path-for :rd/settings))

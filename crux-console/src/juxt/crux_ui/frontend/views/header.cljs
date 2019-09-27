@@ -7,7 +7,8 @@
             [juxt.crux-ui.frontend.views.commons.css-logo :as css-logo]
             [juxt.crux-ui.frontend.views.node-status :as node-status]
             [juxt.crux-ui.frontend.views.commons.input :as input]
-            [juxt.crux-ui.frontend.views.comps :as comps]))
+            [juxt.crux-ui.frontend.views.commons.tiny-components :as comps]
+            [juxt.crux-ui.frontend.config :as cfg]))
 
 
 (def ^:private -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
@@ -86,10 +87,10 @@
         "< To query")}]]
 
    [:div.header__links
-    [:a.header__links__item {:href "https://juxt.pro/crux/docs/index.html"}
-     [:span.n "Docs"]]
-    [:a.header__links__item {:href "https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux"}
-     [:span.n "Crux Chat"]]
-    [:a.header__links__item {:href "mailto:crux@juxt.pro"}
-     [:span.n "crux@juxt.pro"]]]])
+    [:div.header__links__item
+     [comps/link-outer cfg/url-docs "Docs"]]
+    [:div.header__links__item
+     [comps/link-outer cfg/url-chat "Crux Chat"]]
+    [:div.header__links__item
+     [comps/link-mailto cfg/url-mail]]]])
 
