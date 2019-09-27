@@ -17,18 +17,19 @@
 
 (t/deftest test-compaction-leaves-replayable-log
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
-        opts {:dbtype "h2"
+        opts {:crux.bootstrap/node-config :crux.jdbc/node-config
+              :dbtype "h2"
               :dbname "cruxtest"
               :db-dir db-dir
               :kv-backend "crux.kv.memdb.MemKv"}]
     (try
-      (let [api (Crux/startJDBCNode opts)
+      (let [api (Crux/startNode opts)
             {:keys [crux.tx/tx-time]} (api/submit-tx api [[:crux.tx/put {:crux.db/id :foo}]])]
         (api/sync api tx-time nil)
         (f/transact! api [{:crux.db/id :foo}])
         (.close api)
 
-        (with-open [api2 (Crux/startJDBCNode opts)]
+        (with-open [api2 (Crux/startNode opts)]
           (api/sync api2 tx-time nil)
           (t/is (= 2 (count (api/history api2 :foo))))))
       (finally

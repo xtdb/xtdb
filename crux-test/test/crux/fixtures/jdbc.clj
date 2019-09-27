@@ -11,7 +11,8 @@
 (defn with-jdbc-node [dbtype f & [opts]]
   (let [dbtype (name dbtype)
         db-dir (str (cio/create-tmpdir "kv-store"))
-        options (merge {:dbtype (name dbtype)
+        options (merge {:crux.bootstrap/node-config :crux.jdbc/node-config
+                        :dbtype (name dbtype)
                         :dbname "cruxtest"
                         :db-dir db-dir
                         :kv-backend *kv-backend*}
@@ -20,7 +21,7 @@
     (binding [*dbtype* dbtype]
       (j/prep-for-tests! dbtype ds)
       (try
-        (with-open [standalone-node (Crux/startJDBCNode options)]
+        (with-open [standalone-node (Crux/startNode options)]
           (binding [*api* standalone-node]
             (f)))
         (finally

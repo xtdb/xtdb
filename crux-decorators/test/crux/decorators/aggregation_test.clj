@@ -29,9 +29,10 @@
   (let [db-dir (str (cio/create-tmpdir "kv-store"))
         event-log-dir (str (cio/create-tmpdir "event-log-dir"))]
     (try
-      (with-open [standalone-node (Crux/startStandaloneNode {:db-dir db-dir
-                                                                 :kv-backend "crux.kv.memdb.MemKv"
-                                                                 :event-log-dir event-log-dir})]
+      (with-open [standalone-node (Crux/startNode {:crux.bootstrap/node-config :crux.standalone/node-config
+                                                   :db-dir db-dir
+                                                   :kv-backend "crux.kv.memdb.MemKv"
+                                                   :event-log-dir event-log-dir})]
         (binding [*api* standalone-node]
           (f)))
       (finally

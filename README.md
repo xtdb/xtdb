@@ -96,7 +96,7 @@ for a demo Docker container.
 ### Companies using Crux
 
 * [Oscaro (eCommerce)](https://www.oscaro.com)
-* [Avisi (AtlasCRM)](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration) 
+* [Avisi (AtlasCRM)](https://www.avisi.nl/blog/crux-our-final-database-migration) - ["Crux: Our Final Database Migration"](https://www.avisi.nl/blog/crux-our-final-database-migration)
 * [Gnurdle (consulting)](https://gnurdle.github.io/HoppyResume2017.html)
 * Yours? Let us know :)
 
@@ -204,8 +204,9 @@ Start a standalone in-memory (i.e. not persisted anywhere) node:
 (import '[crux.api ICruxAPI])
 
 (def my-node
-  (crux/start-standalone-node
-    {:kv-backend "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
+  (crux/start-node
+    {:crux.bootstrap/node-config :crux.standalone/node-config
+     :kv-backend "crux.kv.memdb.MemKv" ; see docs for LMDB/RocksDB storage options
      :event-log-dir "data/event-log-dir-1"
      :db-dir "data/db-dir-1"}))
 ```

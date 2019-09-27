@@ -29,8 +29,9 @@
 ;; Set up system for examples
 
 (def system
-  (api/start-standalone-system
-   {:kv-backend "crux.kv.memdb.MemKv"
+  (api/start-node
+   {:crux.bootstrap/node-config :crux.standalone/node-config
+    :kv-backend "crux.kv.memdb.MemKv"
     :db-dir "data/db-dir-1"
     :event-log-dir "data/eventlog-1"}))
 
@@ -51,8 +52,8 @@
       ]
 
   (api/submit-tx system
-                  (vec (for [m maps]
-                         [:crux.tx/put m]))))
+                 (vec (for [m maps]
+                        [:crux.tx/put m]))))
 
 
 (api/q

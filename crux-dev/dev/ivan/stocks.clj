@@ -68,10 +68,11 @@
 (comment
 
   (def node
-    (crux.api/start-standalone-node
-      {:kv-backend "crux.kv.memdb.MemKv"
-       :db-dir     "data/db-dir-1"
-       :event-log-dir "data/eventlog-1"}))
+    (crux.api/start-node
+     {:crux.bootstrap/node-config :crux.standalone/node-config
+      :kv-backend "crux.kv.memdb.MemKv"
+      :db-dir     "data/db-dir-1"
+      :event-log-dir "data/eventlog-1"}))
 
   (def s #crux/id :https://thing)
 

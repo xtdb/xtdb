@@ -129,11 +129,12 @@
 ;; (ns dev)
 ;; (def storage-dir "dev-storage-standalone")
 ;; (def dev-options (merge (dev-option-defaults storage-dir)
-;;                         {:event-log-dir (str storage-dir "/event-log")
+;;                         {:crux.bootstrap/node-config :crux.standalone/node-config
+;;                          :event-log-dir (str storage-dir "/event-log")
 ;;                          :crux.standalone/event-log-sync-interval-ms 1000
 ;;                          :dev/embed-kafka? false
 ;;                          :dev/http-server? false
-;;                          :dev/node-start-fn standalone/start-standalone-node}))
+;;                          :dev/node-start-fn standalone/start-node}))
 
 (when (io/resource (str (System/getenv "USER") ".clj"))
   (load (System/getenv "USER")))

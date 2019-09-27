@@ -43,7 +43,7 @@
 
 (defmethod ig/init-key ::standalone
   [_ opts]
-  (let [n (crux.api/start-standalone-node opts)
+  (let [n (crux.api/start-node opts)
         res-opts
         (assoc (:http-opts n)
           :server-port 8080
@@ -66,4 +66,4 @@
 
 (defmethod ig/init-key ::cluster-node
   [_ opts]
-  (crux.api/start-cluster-node opts))
+  (crux.api/start-node opts))

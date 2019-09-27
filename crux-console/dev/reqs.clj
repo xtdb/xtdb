@@ -1,10 +1,11 @@
 (require '[crux.api :as crux])
 
 (def n
-  (crux/start-standalone-node
-    {:kv-backend "crux.kv.rocksdb.RocksKv"
-     :event-log-dir "data/eventlog-2"
-     :db-dir "data/db-dir-2"}))
+  (crux/start-node
+   {:crux.bootstrap/node-config :crux.standalone/node-config
+    :kv-backend "crux.kv.rocksdb.RocksKv"
+    :event-log-dir "data/eventlog-2"
+    :db-dir "data/db-dir-2"}))
 
 (crux/submit-tx n
   [[:crux.tx/put
@@ -28,5 +29,3 @@
          :in [id]
          :where [[e :crux.db/id id]]
          :limit 1})
-
-

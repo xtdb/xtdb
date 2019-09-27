@@ -33,57 +33,6 @@ public class Crux {
     }
 
     /**
-     * Creates a minimal standalone node writing the transaction log
-     * into its local KV store without relying on
-     * Kafka. Alternatively, when the event-log-dir option is
-     * provided, using two KV stores to enable rebuilding the index
-     * from the event log, being more similar to the semantics of
-     * Kafka but for a single process only.
-
-     * Returns a ICruxAPI component that implements
-     * java.io.Closeable, which allows the node to be stopped by
-     * calling close.
-
-     * NOTE: requires any KV store dependencies on the classpath. The
-     * crux.kv.memdb.MemKv KV backend works without additional dependencies.
-     *
-     * @param options see crux.bootstrap/start-kv-store.
-     * @return        a standalone node.
-     * @throws IndexVersionOutOfSyncException if the index needs
-     * rebuilding.
-     * @throws NonMonotonicTimeException if the clock has moved
-     * backwards since last run. Only applicable when using the event
-     * log.
-     */
-    @SuppressWarnings("unchecked")
-    public static ICruxAPI startStandaloneNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException, NonMonotonicTimeException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.standalone"));
-        IFn deref = Clojure.var("clojure.core", "deref");
-        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.standalone/node-config"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
-    }
-
-    /**
-     * Starts a query node in local library mode using JDBC.
-     *
-     * Returns a ICruxAPI component that implements
-     * java.io.Closeable, which allows the node to be stopped by
-     * calling close.
-     *
-     * @param options see crux.jdbc
-     * @return        a cluster node backed by JDBC.
-     * @throws IndexVersionOutOfSyncException if the index needs
-     * rebuilding.
-     */
-    @SuppressWarnings("unchecked")
-    public static ICruxAPI startJDBCNode(Map<Keyword,?> options) throws IndexVersionOutOfSyncException {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.jdbc"));
-        IFn deref = Clojure.var("clojure.core", "deref");
-        Map<Keyword,?> nodeConfig = (Map<Keyword,?>) deref.invoke(Clojure.var("crux.jdbc/node-config"));
-        return (ICruxAPI) Clojure.var("crux.bootstrap/start-node").invoke(nodeConfig, options);
-    }
-
-    /**
      * Creates a new remote API client ICruxAPI. The remote client
      * requires valid and transaction time to be specified for all
      * calls to {@link ICruxAPI#db()}.

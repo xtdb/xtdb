@@ -86,8 +86,7 @@
 (defn- status [^ICruxAPI crux-node]
   (let [status-map (.status crux-node)]
     (if (or (not (contains? status-map :crux.zk/zk-active?))
-            (:crux.zk/zk-active? status-map)
-            (not= (System/getenv "CRUX_MODE") "CLUSTER_NODE"))
+            (:crux.zk/zk-active? status-map))
       (success-response status-map)
       (response 500
                 {"Content-Type" "application/edn"}

@@ -5,9 +5,10 @@
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-standalone-node {:kv-backend "crux.kv.memdb.MemKv"
-                               :db-dir "data/db-dir-1"
-                               :event-log-dir "data/eventlog-1"}))
+  (crux/start-node {:crux.bootstrap/node-config :crux.standalone/node-config
+                    :kv-backend "crux.kv.memdb.MemKv"
+                    :db-dir "data/db-dir-1"
+                    :event-log-dir "data/eventlog-1"}))
 ;; end::start-node[]
 
 ;; tag::close-node[]
@@ -16,24 +17,27 @@
 
 ;; tag::start-cluster-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-cluster-node {:kv-backend "crux.kv.memdb.MemKv"
-                            :bootstrap-servers "localhost:29092"}))
+  (crux/start-node {:crux.bootstrap/node-config :crux.kafka/node-config
+                    :kv-backend "crux.kv.memdb.MemKv"
+                    :bootstrap-servers "localhost:29092"}))
 ;; end::start-cluster-node[]
 
 ;; tag::start-standalone-with-rocks[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-standalone-node {:kv-backend "crux.kv.rocksdb.RocksKv"
-                                 :db-dir "data/db-dir-1"
-                                 :event-log-dir "data/eventlog-1"}))
+  (crux/start-node {:crux.bootstrap/node-config :crux.standalone/node-config
+                    :kv-backend "crux.kv.rocksdb.RocksKv"
+                    :db-dir "data/db-dir-1"
+                    :event-log-dir "data/eventlog-1"}))
 ;; end::start-standalone-with-rocks[]
 
 ;; tag::start-jdbc-node[]
 (def ^crux.api.ICruxAPI node
-  (crux/start-jdbc-node {:dbtype "postgresql"
-                         :dbname "cruxdb"
-                         :host "<host>"
-                         :user "<user>"
-                         :password "<password>"}))
+  (crux/start-node {:crux.bootstrap/node-config :crux.jdbc/node-config
+                    :dbtype "postgresql"
+                    :dbname "cruxdb"
+                    :host "<host>"
+                    :user "<user>"
+                    :password "<password>"}))
 ;; end::start-jdbc-node[]
 
 ;; tag::submit-tx[]

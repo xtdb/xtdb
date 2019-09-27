@@ -294,10 +294,11 @@
   (require '[crux.api :as api])
 
   (def node
-    (api/start-standalone-node
-      {:db-dir        "console-data"
-       :event-log-dir "console-data-log"
-       :kv-backend    "crux.kv.rocksdb.RocksKv"}))
+    (api/start-node
+     {:crux.bootstrap/node-config :crux.standalone/node-config
+      :db-dir        "console-data"
+      :event-log-dir "console-data-log"
+      :kv-backend    "crux.kv.rocksdb.RocksKv"}))
 
   (api/q (api/db node) '{:find [e] :where [[e :crux.db/id]]})
 
