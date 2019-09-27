@@ -6,15 +6,11 @@
   (:require [re-frame.core :as rf]
             [cljs.tools.reader.edn :as edn]
             [medley.core :as m]
-            [promesa.core :as p]
-            [juxt.crux-ui.frontend.io.query :as q]
             [juxt.crux-ui.frontend.logic.query-analysis :as qa]
             [juxt.crux-ui.frontend.logic.example-queries :as ex]
-            [juxt.crux-ui.frontend.cookies :as c]
+            [juxt.crux-ui.frontend.events.effects] ; just to link it
             [juxt.crux-ui.frontend.logic.history-perversions :as hp]
-            [juxt.crux-lib.http-functions :as hf]
             [juxt.crux-ui.frontend.better-printer :as bp]
-            [juxt.crux-ui.frontend.routes :as routes]
             [juxt.crux-ui.frontend.logging :as log]))
 
 
@@ -46,13 +42,13 @@
     :db.query/error nil))
 
 (defn query-invalid? [query-string]
-  (let [edn (qa/try-read-string query-string)]
+  (let [edn (qa/try-parse-edn-string query-string)]
     (or (:error edn)
         (not (:crux.ui/query-type (qa/analyse-any-query edn))))))
 
 (defn o-commit-input [db input]
   (let [input    (:db.query/input db)
-        edn      (qa/try-read-string input)
+        edn      (qa/try-parse-edn-string input)
         analysis (and (not (:error edn)) (qa/analyse-any-query edn))]
     (-> db
         (update :db.query/key inc)
@@ -101,96 +97,31 @@
 (defn o-set-nw-in-progress [db]
   (assoc db :db.query/network-in-progress? true))
 
-(defn- ctx-autoload-history [{:keys [db] :as new-ctx}]
+(defn- o-fx-autoload-history [{:keys [db] :as fx}]
   (if (or (not (history-tabs-set (get-output-tab db)))
           (and (:db.query/histories db)
                (:db.query/eid->simple-history db)))
-    new-ctx
+    fx
     (let [history-query
           (take ui--history-max-entities
                 (:ra/entity-ids (:db.query/result-analysis db)))]
-      (-> new-ctx
+      (-> fx
           (assoc :fx.query/history history-query)
           (update :db o-set-nw-in-progress)))))
 
 
-(defn- ctx-autoload-history-docs [{:keys [db] :as new-ctx}]
+(defn- o-fx-autoload-history-docs [{:keys [db] :as fx}]
   (let [histories (:db.query/histories db)
         res-an    (:db.query/result-analysis db)]
     (if-not (and histories
                  (:ra/has-numeric-attrs? res-an)
                  (history-tabs-set (get-output-tab db)))
-      new-ctx
-      (assoc new-ctx :fx.query/histories-docs histories))))
+      fx
+      (assoc fx :fx.query/histories-docs histories))))
 
 
 ; ----- effects -----
 
-(rf/reg-fx
-  :fx/query-exec
-  (fn [{:keys [raw-input query-analysis] :as query}]
-    (if query
-      (q/exec query))))
-
-(defn qs [_]
-  (q/fetch-stats))
-
-(rf/reg-fx
-  :fx/query-stats
-  qs)
-
-(rf/reg-fx
-  :fx/set-node
-  (fn [node-addr]
-    (when node-addr
-      (q/set-node! (str "//" node-addr))
-      (q/ping-status)
-      (q/fetch-stats))))
-
-(rf/reg-fx
-  :fx.query/history
-  (fn [eids]
-    (q/fetch-histories eids)))
-
-(rf/reg-fx
-  :fx.query/histories-docs
-  (fn [eids->histories]
-    (q/fetch-histories-docs eids->histories)))
-
-(rf/reg-fx
-  :fx/push-query-into-url
-  (fn [^js/String query]
-    (println :push-query query)
-    (if (and query (< (.-length query) 2000))
-      (routes/push-query query))))
-
-(rf/reg-fx
-  :fx.sys/set-cookie
-  (fn [[cookie-name value]]
-    (c/set! cookie-name value {:max-age 86400})))
-
-(rf/reg-fx
-  :fx.ui/alert
-  (fn [message]
-    (js/alert message)))
-
-(rf/reg-fx
-  :fx/set-polling
-  (fn [poll-interval-in-seconds]
-    (some-> js/window.__console_polling_id js/clearInterval)
-    (when poll-interval-in-seconds
-      (let [ms (* 1000 poll-interval-in-seconds)
-            iid (js/setInterval #(rf/dispatch [:evt.ui.query/poll-tick]) ms)]
-        (set! js/window.__console_polling_id iid)))))
-
-(defn grab-gh-gist [gh-link]
-  (-> (hf/fetch gh-link)
-      (p/catch #(rf/dispatch [:evt.io/gist-err %]))
-      (p/then #(rf/dispatch [:evt.io/gist-success (:body %)]))))
-
-(rf/reg-fx
-  :fx/get-github-gist
-  grab-gh-gist)
 
 (def url "https://gist.githubusercontent.com/spacegangster/b68f72e3c81524a71af1f3033ea7507e/raw/572396dec0791500c965fea443b2f26a60f500d4/examples.edn")
 
@@ -205,7 +136,7 @@
     {:db          new-db
      :fx/set-node (:db.sys/host new-db)}))
 
-(defn o-set-query [db query]
+(defn o-set-query [db ^js/String query]
   (-> db
       (assoc :db.query/input query)
       (update :db.ui/editor-key inc)))
@@ -222,11 +153,11 @@
         (and host-status query)
         (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])
         ;
-        true (ctx-autoload-history)))))
+        true (o-fx-autoload-history)))))
 
 (rf/reg-event-fx
   :evt.sys/node-connect-success
-  (fn [{db :db :as ctx} [_ status]]
+  (fn [{db :db :as cofx} [_ status]]
     (let [query (get-in db [:db.sys/route :r/query-params :rd/query])
           initialized? (:db.sys/initialized? db)
           do-query? (and (not initialized?) query)]
@@ -251,19 +182,19 @@
 
 (rf/reg-event-fx
   :evt.io/gist-err
-  (fn [ctx [_ res]]
-    (assoc ctx :fx.ui/alert "Gist import didn't go well")))
+  (fn [cofx [_ res]]
+    {:fx.ui/alert "Gist import didn't go well"}))
 
 (rf/reg-event-fx
   :evt.io/query-success
-  (fn [{db :db :as ctx} [_ res]]
+  (fn [{db :db :as cofx} [_ res]]
     (let [q-info (:db.query/analysis-committed db)
           res-analysis (qa/analyse-results q-info res)
           db     (assoc db :db.query/result res
                            :db.query/result-analysis res-analysis
                            :db.query/network-in-progress? false
                            :db.query/error nil)]
-      (ctx-autoload-history {:db db}))))
+      (o-fx-autoload-history {:db db}))))
 
 (rf/reg-event-db
   :evt.io/query-error
@@ -278,7 +209,7 @@
 
 (rf/reg-event-fx
   :evt.db/host-change
-  (fn [{:keys [db] :as ctx} [_ new-host]]
+  (fn [{:keys [db] :as cofx} [_ new-host]]
     (println :evt.db/host-change new-host)
     (let [db (o-db-set-host db new-host)]
       {:db db
@@ -286,7 +217,7 @@
 
 (rf/reg-event-fx
   :evt.io/gist-success
-  (fn [{:keys [db] :as ctx} [_ res]]
+  (fn [{:keys [db] :as cofx} [_ res]]
     (if-let [edn (try (edn/read-string res) (catch js/Object e nil))]
       (let [db (-> (assoc db :db.ui.examples/imported edn)
                    (update o-set-example (some-> edn first :query bp/better-printer)))]
@@ -295,15 +226,15 @@
 
 (rf/reg-event-fx
   :evt.io/histories-fetch-success
-  (fn [{db :db :as ctx} [_ eid->history-range]]
-    (ctx-autoload-history-docs
+  (fn [{db :db :as cofx} [_ eid->history-range]]
+    (o-fx-autoload-history-docs
       {:db (assoc db
              :db.query/network-in-progress? false
              :db.query/histories eid->history-range)})))
 
 (rf/reg-event-fx
   :evt.io/histories-with-docs-fetch-success
-  (fn [{db :db :as ctx} [_ eid->history-range]]
+  (fn [{db :db :as cofx} [_ eid->history-range]]
     (let [ra (:db.query/result-analysis db)
           ts (hp/calc-entity-time-series (:ra/numeric-attrs ra) eid->history-range)]
       {:db (assoc db :db.query/histories eid->history-range
@@ -331,6 +262,49 @@
 
 ; --- ui ---
 
+
+
+(rf/reg-event-db
+  :evt.ui/show-settings
+  (fn [db [_ new-size]]
+    (assoc db :db.ui/screen-size new-size)))
+
+(rf/reg-event-db
+  :evt.ui/show-overview
+  (fn [db [_ new-size]]
+    (assoc db :db.ui/screen-size new-size)))
+
+(rf/reg-event-fx
+  :evt.ui/toggle-polling
+  (fn [{:keys [db] :as cofx}]
+    (let [q (qa/try-parse-edn-string-or-nil (:db.query/input db))
+          analysis (some-> q qa/analyse-any-query)]
+      (if (and q analysis (= :crux.ui.query-type/query (:crux.ui/query-type analysis)))
+        (let [new-db
+              (-> (assoc db :db.ui/sidebar false)
+                  (o-set-query (bp/better-printer (assoc q :ui/poll-interval-seconds? 5))))]
+          {:db new-db
+           :dispatch [:evt.ui.query/submit {:evt/push-url? true}]})))))
+
+(rf/reg-event-fx
+  :evt.ui/fullscreen
+  (fn [cofx]
+    {:fx.ui/toggle-fullscreen true}))
+
+(rf/reg-event-fx
+  :evt.ui/restore-examples
+  (fn [{:keys [db] :as cofx} [_ new-size]]
+    {:db (assoc db :db.ui.examples/closed? false
+                   :db.ui/sidebar false)
+     :fx.sys/set-cookie [:db.ui.examples/closed? false]}))
+
+(rf/reg-event-fx
+  :evt.ui/import-examples
+  (fn [{:keys [db] :as cofx} [_ new-size]]
+    #_todo))
+
+
+
 (rf/reg-event-db
   :evt.ui/screen-resize
   (fn [db [_ new-size]]
@@ -349,7 +323,7 @@
              :ui.display-mode/query :ui.display-mode/output
              :ui.display-mode/all :ui.display-mode/all})))
 
-(defn o-ctx-query-submit [{:keys [db] :as ctx} push-url?]
+(defn o-cofx-query-submit [{:keys [db] :as cofx} push-url?]
   (cond
     (node-disconnected? db)
     {:fx.ui/alert "Cannot execute query until connected to a node"}
@@ -373,32 +347,32 @@
 
 (rf/reg-event-fx
   :evt.ui.query/poll-tick
-  (fn [{db :db :as ctx}]
+  (fn [{db :db :as cofx}]
     {:db (assoc db :db.query/network-in-progress? true)
      :fx/query-exec (calc-query-params db)}))
 
 (rf/reg-event-fx
   :evt.ui.query/submit
-  (fn [{:keys [db] :as ctx} [_ {:evt/keys [push-url?] :as args}]]
-    (o-ctx-query-submit ctx push-url?)))
+  (fn [{:keys [db] :as cofx} [_ {:evt/keys [push-url?] :as args}]]
+    (o-cofx-query-submit cofx push-url?)))
 
 (rf/reg-event-fx
   :evt.ui.query/submit--cell
-  (fn [{:keys [db] :as ctx} [_ {:data/keys [value type attr idx] :as evt}]]
+  (fn [{:keys [db] :as cofx} [_ {:data/keys [value type attr idx] :as evt}]]
     (let [query-str (calc-attr-query evt)
           new-db (-> (o-set-query db query-str)
                      (assoc-in [:db.sys/route :r/route-params :r/output-tab] :db.ui.output-tab/table))]
-      (o-ctx-query-submit {:db new-db} true))))
+      (o-cofx-query-submit {:db new-db} true))))
 
 (rf/reg-event-fx
   :evt.ui/github-examples-request
-  (fn [{:keys [db] :as ctx} [_ link]]
+  (fn [{:keys [db] :as cofx} [_ link]]
     {:db db
      :fx/get-github-gist link}))
 
 (rf/reg-event-fx
   :evt.ui/root-tab-switch
-  (fn [{:keys [db] :as ctx} [_ root-tab-id]]
+  (fn [{:keys [db] :as cofx} [_ root-tab-id]]
     {:db (assoc db :db.ui/root-tab root-tab-id)}))
 
 (rf/reg-event-db
@@ -426,7 +400,7 @@
 
 (rf/reg-event-fx
   :evt.ui.query/time-commit
-  (fn [{:keys [db] :as ctx} [_ time-type time]]
+  (fn [{:keys [db] :as cofx} [_ time-type time]]
     {:dispatch [:evt.ui.query/submit]}))
 
 (rf/reg-event-db
@@ -436,8 +410,8 @@
 
 (rf/reg-event-fx
   :evt.ui.output/main-tab-switch
-  (fn [{:keys [db] :as ctx} [_ new-tab-id]]
-    (ctx-autoload-history {:db (assoc-in db [:db.sys/route :r/route-params :r/output-tab] new-tab-id)})))
+  (fn [{:keys [db] :as cofx} [_ new-tab-id]]
+    (o-fx-autoload-history {:db (assoc-in db [:db.sys/route :r/route-params :r/output-tab] new-tab-id)})))
 
 (rf/reg-event-db
   :evt.ui.output/side-tab-switch

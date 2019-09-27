@@ -33,9 +33,15 @@
      :tx-count           (count tx-infos)
      :tx-infos           tx-infos}))
 
-(defn try-read-string [input-str]
+(defn try-parse-edn-string-or-nil [^js/String str]
   (try
-    (reader/read-string input-str)
+    (reader/read-string str)
+    (catch js/Error e
+      nil)))
+
+(defn try-parse-edn-string [^js/String str]
+  (try
+    (reader/read-string str)
     (catch js/Error e
       {:error e})))
 
