@@ -65,8 +65,8 @@
        [-item {:dispatch [:evt.ui/fullscreen]} "Fullscreen"]
        (if @-sub-qmap?
          [-item {:dispatch [:evt.ui/toggle-polling]} "Toggle polling"])
-       [-item {:dispatch [:evt.ui/show-settings]} "Settings"]
-       [-item {:dispatch [:evt.ui/show-overview]} "Console Overview"]
+       [-item {:dispatch [:evt.ui.sidebar/show-settings]} "Settings"]
+       [-item {:dispatch [:evt.ui.sidebar/show-overview]} "Console Overview"]
        (if-not @-sub-examples
          [-item {:dispatch [:evt.ui/restore-examples]} "Restore Examples"])
        [-item {:dispatch [:evt.ui/import-examples]} "Import Examples"]

@@ -271,14 +271,14 @@
 
 
 (rf/reg-event-db
-  :evt.ui/show-settings
-  (fn [db [_ new-size]]
-    (assoc db :db.ui/screen-size new-size)))
+  :evt.ui.sidebar/show-settings
+  (fn [db]
+    (assoc db :db.ui/sidebar :db.ui.sidebar/settings)))
 
 (rf/reg-event-db
-  :evt.ui/show-overview
-  (fn [db [_ new-size]]
-    (assoc db :db.ui/screen-size new-size)))
+  :evt.ui.sidebar/show-overview
+  (fn [db]
+    (assoc db :db.ui/sidebar :db.ui.sidebar/overview)))
 
 (rf/reg-event-fx
   :evt.ui/toggle-polling
@@ -290,7 +290,6 @@
         (if (:ui/poll-interval-seconds? q)
           (o-fx-disable-polling {:db new-db} q)
           (o-fx-enable-polling {:db new-db} q))))))
-
 
 (rf/reg-event-fx
   :evt.ui/fullscreen
@@ -307,7 +306,7 @@
 (rf/reg-event-fx
   :evt.ui/import-examples
   (fn [{:keys [db] :as cofx} [_ new-size]]
-    #_todo))
+    {:fx.ui/prompt ["Your examples.edn raw link" :evt.ui/github-examples-request]}))
 
 
 
@@ -373,8 +372,7 @@
 (rf/reg-event-fx
   :evt.ui/github-examples-request
   (fn [{:keys [db] :as cofx} [_ link]]
-    {:db db
-     :fx/get-github-gist link}))
+    {:fx/get-github-gist link}))
 
 (rf/reg-event-fx
   :evt.ui/root-tab-switch
