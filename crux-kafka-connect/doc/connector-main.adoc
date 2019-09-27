@@ -10,7 +10,7 @@ The Crux *source connector* will publish transacations on a node to a Kafka topi
 |Data format|Sink/Source
 |JSON|Both
 |Avro|Sink
-|Transit|Both
+|Transit|Source
 |EDN|Both
 |===
 
