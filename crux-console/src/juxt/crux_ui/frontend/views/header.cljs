@@ -9,7 +9,15 @@
             [juxt.crux-ui.frontend.views.commons.input :as input]
             [juxt.crux-ui.frontend.views.comps :as comps]))
 
-(def ^:private -tab-sub (rf/subscribe [:subs.ui/root-tab]))
+
+(def ^:private -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
+
+(defn disable-toggle-display-mode []
+  (rf/dispatch [:evt.ui.display-mode/toggle]))
+
+(defn dispatch-sidebar-toggle []
+  (rf/dispatch [:evt.ui.sidebar/toggle]))
+
 
 (def ^:private header-styles
   [:style
@@ -61,34 +69,17 @@
         {:justify-self :stretch
          :max-width :100%}]]))])
 
-(defn header-tabs []
-  [:div.header__tabs
-   [tabs/root
-    {:tabs/active-tab-id   @-tab-sub
-     :tabs/tabs
-     [{:tabs/id :db.ui.root-tab/query-ui
-       :tabs/href  (routes/path-for :rd/query-ui)
-       :tabs/title "Query UI"}
-      {:tabs/id    :db.ui.root-tab/settings
-       :tabs/href  (routes/path-for :rd/settings)
-       :tabs/title "Settings"}]}]])
-
-(defn toggle-display-mode []
-  (rf/dispatch [:evt.ui.display-mode/toggle]))
-
-(def ^:private -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
-
 (defn root []
   [:header.header
    header-styles
-   [:div.header__logo
+   [:div.header__logo {:on-click dispatch-sidebar-toggle}
     [css-logo/root]]
    [:div.header__status
     [node-status/node-status]]
 
    [:div.header__display-mode-toggle
     [comps/button-textual
-     {:on-click toggle-display-mode
+     {:on-click disable-toggle-display-mode
       :text
       (if (= @-sub-display-mode :ui.display-mode/query)
         "To output >"

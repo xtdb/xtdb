@@ -337,6 +337,11 @@
     (assoc db :db.ui/screen-size new-size)))
 
 (rf/reg-event-db
+  :evt.ui.sidebar/toggle
+  (fn [db [_ new-size]]
+    (update db :db.ui/sidebar not)))
+
+(rf/reg-event-db
   :evt.ui.display-mode/toggle
   (fn [db [_ new-size]]
     (update db :db.ui/display-mode

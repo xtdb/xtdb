@@ -7,9 +7,11 @@
             [juxt.crux-ui.frontend.views.comps :as comps]
             [juxt.crux-ui.frontend.views.settings :as settings]
             [juxt.crux-ui.frontend.svg-icons :as icon]
+            [juxt.crux-ui.frontend.views.sidebar :as sidebar]
             [juxt.crux-ui.frontend.views.commons.input :as input]))
 
 (def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
+(def ^:private -sub-sidebar (rf/subscribe [:subs.db.ui/side-bar]))
 
 (def color-link "hsl(32, 61%, 64%)")
 (def color-link--hover "hsl(32, 91%, 54%)")
@@ -50,6 +52,15 @@
             'body' 1fr"}]
         [:&__header
          {:grid-area :header}]
+        [:&__sidebar
+         {:position :fixed
+          :top :0px
+          :bottom :0px
+          :border-radius :2px
+          :left :0px
+          :right 0
+          :z-index 100
+          :background "hsla(0, 0%, 0%, .3)"}]
         [:&__body
          {:grid-area :body
           :display :flex
@@ -64,13 +75,17 @@
 
 
 (defn root []
-  (let [root-tab @-sub-root-tab]
-    [:div#root.root {:class (if (= :db.ui.root-tab/query-perf root-tab) "root--page")}
-     root-styles
-     [:div.root__header
-       [header/root]]
-     [:div.root__body {:class (if (= :db.ui.root-tab/query-perf root-tab) "root__body--page")}
-       (case root-tab
-         :db.ui.root-tab/query-ui [q/query-ui]
-         :db.ui.root-tab/settings [settings/root]
-         [q/query-ui])]]))
+  (let [root-tab -sub-root-tab]
+    (fn []
+      [:div#root.root
+       root-styles
+       [:div.root__header
+        [header/root]]
+       (if @-sub-sidebar
+         [:div.root__sidebar
+          [sidebar/root]])
+       [:div.root__body
+        (case @root-tab
+          :db.ui.root-tab/query-ui [q/query-ui]
+          :db.ui.root-tab/settings [settings/root]
+          [q/query-ui])]])))

@@ -29,6 +29,7 @@
    :db.ui/root-tab           :db.ui.root-tab/query-ui
    :db.ui/output-side-tab    nil ;:db.ui.output-tab/table
    :db.ui/editor-key         0
+   :db.ui/sidebar            false
    :db.ui.attr-history/hint? true
    :db.ui/display-mode       :ui.display-mode/query
    :db.ui/screen-size        {:ui.screen/inner-width js/window.innerWidth
