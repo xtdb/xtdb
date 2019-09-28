@@ -7,12 +7,10 @@
             [juxt.crux-ui.frontend.views.commons.tiny-components  :as comps]
             [juxt.crux-ui.frontend.views.settings :as settings]
             [juxt.crux-ui.frontend.svg-icons :as icon]
-            [juxt.crux-ui.frontend.views.sidebar :as sidebar]
+            [juxt.crux-ui.frontend.views.second-layer :as second-layer]
             [juxt.crux-ui.frontend.views.commons.input :as input]
             [juxt.crux-ui.frontend.functions :as f]))
 
-(def ^:private -sub-root-tab (rf/subscribe [:subs.ui/root-tab]))
-(def ^:private -sub-sidebar (rf/subscribe [:subs.db.ui/side-bar]))
 
 (def color-link "hsl(32, 61%, 64%)")
 (def color-link--hover "hsl(32, 91%, 54%)")
@@ -56,7 +54,7 @@
             'body' 1fr"}]
         [:&__header
          {:grid-area :header}]
-        [:&__sidebar
+        [:&__second-layer
          {:position :fixed
           :top :0px
           :bottom :0px
@@ -79,17 +77,18 @@
 
 
 (defn root []
-  (let [root-tab -sub-root-tab]
+  (let [-sub-root-tab (rf/subscribe [:subs.ui/root-tab])
+        -sub-second-layer (rf/subscribe [:subs.db.ui/second-layer])]
     (fn []
       [:div#root.root
        root-styles
        [:div.root__header
         [header/root]]
-       (if @-sub-sidebar
-         [:div#root__sidebar.root__sidebar {:on-click on-sidebar-bg-click}
-          [sidebar/root]])
+       (if @-sub-second-layer
+         [:div#root__second-layer.root__second-layer {:on-click on-sidebar-bg-click}
+          [second-layer/root]])
        [:div.root__body
-        (case @root-tab
+        (case @-sub-root-tab
           :db.ui.root-tab/query-ui [q/query-ui]
           :db.ui.root-tab/settings [settings/root]
           [q/query-ui])]])))

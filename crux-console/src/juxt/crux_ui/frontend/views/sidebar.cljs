@@ -12,7 +12,7 @@
             [reagent.core :as r]))
 
 
-(def ^:private css-logo-styles
+(def ^:private sidebar-styles
   [:style
    (garden/css
      [:.sidebar
@@ -46,23 +46,16 @@
                   (dissoc :dispatch)))
    contents])
 
-(defn overview []
-  [:div.overview
-   "Shortcuts"
-   "Query submit"
-   "Toggle editor"
-   "Fullscreen"])
-
 
 (defn root []
   (let [-sub-examples (rf/subscribe [:subs.query/examples])
         -sub-qmap?    (rf/subscribe [:subs.query/is-query-map?])]
     (fn []
       [:div.sidebar
-       css-logo-styles
+       sidebar-styles
        [-item {:class "sidebar__item--logo"
                :dispatch [:evt.ui.sidebar/toggle]} [css-logo/root]]
-       [-item {:dispatch [:evt.ui/fullscreen]} "Fullscreen"]
+       [-item {:dispatch [:evt.ui/fullscreen]} "Fullscreen mode"]
        (if @-sub-qmap?
          [-item {:dispatch [:evt.ui/toggle-polling]} "Toggle polling"])
        [-item {:dispatch [:evt.ui.sidebar/show-settings]} "Settings"]
