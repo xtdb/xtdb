@@ -6,3 +6,6 @@
 
 (defn root [edn]
   [cm/code-mirror (bp/better-printer edn) {:read-only? true}])
+
+(defn simple-print [edn]
+  [cm/code-mirror (bp/simple-print edn) {:read-only? true}])
