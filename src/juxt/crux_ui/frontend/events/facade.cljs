@@ -136,6 +136,28 @@
       fx
       (assoc fx :fx.query/histories-docs histories))))
 
+(defn o-cofx-query-submit [{:keys [db] :as cofx} push-url?]
+  (cond
+    (node-disconnected? db)
+    {:fx.ui/alert "Cannot execute query until connected to a node"}
+    ;
+    (query-invalid? (:db.query/input db))
+    {:fx.ui/alert "Query appears to be invalid"}
+    ;
+    :else
+    (let [new-db
+          (-> db
+              (o-reset-results)
+              (assoc :db.query/network-in-progress? true)
+              (assoc :db.ui/display-mode :ui.display-mode/output)
+              (o-commit-input (:db.query/input db)))
+          analysis (:db.query/analysis-committed new-db)
+          poll-interval (:ui/poll-interval-seconds? analysis)]
+      {:db new-db
+       :fx/set-polling poll-interval
+       :fx/push-query-into-url (if push-url? (:db.query/input db))
+       :fx/query-exec (calc-query-params new-db)})))
+
 
 
 ; ----- events -----
@@ -172,9 +194,6 @@
                        :db.sys/initialized? true)}
         do-query?
         (assoc :dispatch [:evt.ui.query/submit {:evt/push-url? false}])))))
-
-
-; queries
 
 
 
@@ -268,24 +287,22 @@
 
 ; --- ui ---
 
-
-
 (rf/reg-event-db
   :evt.ui.sidebar/show-settings
   (fn [db]
-    (assoc db :db.ui/sidebar :db.ui.sidebar/settings)))
+    (assoc db :db.ui.second-layer/main-pane :db.ui.second-layer.main-pane/settings)))
 
 (rf/reg-event-db
   :evt.ui.sidebar/show-overview
   (fn [db]
-    (assoc db :db.ui/sidebar :db.ui.sidebar/overview)))
+    (assoc db :db.ui.second-layer/main-pane :db.ui.second-layer.main-pane/overview)))
 
 (rf/reg-event-fx
   :evt.ui/toggle-polling
   (fn [{:keys [db] :as cofx}]
     (let [q (qa/try-parse-edn-string-or-nil (:db.query/input db))
           analysis (some-> q qa/analyse-any-query)
-          new-db (assoc db :db.ui/sidebar false)]
+          new-db (assoc db :db.ui/second-layer false)]
       (when (and q analysis (= :crux.ui.query-type/query (:crux.ui/query-type analysis)))
         (if (:ui/poll-interval-seconds? q)
           (o-fx-disable-polling {:db new-db} q)
@@ -300,15 +317,13 @@
   :evt.ui/restore-examples
   (fn [{:keys [db] :as cofx} [_ new-size]]
     {:db (assoc db :db.ui.examples/closed? false
-                   :db.ui/sidebar false)
+                   :db.ui/second-layer false)
      :fx.sys/set-cookie [:db.ui.examples/closed? false]}))
 
 (rf/reg-event-fx
   :evt.ui/import-examples
   (fn [{:keys [db] :as cofx} [_ new-size]]
     {:fx.ui/prompt ["Your examples.edn raw link" :evt.ui/github-examples-request]}))
-
-
 
 (rf/reg-event-db
   :evt.ui/screen-resize
@@ -318,7 +333,7 @@
 (rf/reg-event-db
   :evt.ui.sidebar/toggle
   (fn [db [_ new-size]]
-    (update db :db.ui/sidebar not)))
+    (update db :db.ui/second-layer not)))
 
 (rf/reg-event-db
   :evt.ui.display-mode/toggle
@@ -327,28 +342,6 @@
             {:ui.display-mode/output :ui.display-mode/query
              :ui.display-mode/query :ui.display-mode/output
              :ui.display-mode/all :ui.display-mode/all})))
-
-(defn o-cofx-query-submit [{:keys [db] :as cofx} push-url?]
-  (cond
-    (node-disconnected? db)
-    {:fx.ui/alert "Cannot execute query until connected to a node"}
-    ;
-    (query-invalid? (:db.query/input db))
-    {:fx.ui/alert "Query appears to be invalid"}
-    ;
-    :else
-    (let [new-db
-          (-> db
-              (o-reset-results)
-              (assoc :db.query/network-in-progress? true)
-              (assoc :db.ui/display-mode :ui.display-mode/output)
-              (o-commit-input (:db.query/input db)))
-          analysis (:db.query/analysis-committed new-db)
-          poll-interval (:ui/poll-interval-seconds? analysis)]
-      {:db new-db
-       :fx/set-polling poll-interval
-       :fx/push-query-into-url (if push-url? (:db.query/input db))
-       :fx/query-exec (calc-query-params new-db)})))
 
 (rf/reg-event-fx
   :evt.ui.query/poll-tick
