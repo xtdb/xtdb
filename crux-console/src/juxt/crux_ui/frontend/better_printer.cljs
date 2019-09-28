@@ -2,24 +2,28 @@
   (:require [cljs.pprint :as pp]
             [clojure.string :as s]))
 
+
 (defmulti better-printer
-          (fn [edn]
-            (cond
-              (string? edn) ::string
-              (map? edn) ::map
-              (vector? edn) ::vec
-              :else ::default)))
+  (fn [edn]
+    (cond
+      (string? edn) ::string
+      (map? edn) ::map
+      (vector? edn) ::vec
+      :else ::default)))
+
+(defn simple-print [edn]
+  (with-out-str (pp/pprint edn)))
 
 (defn- print-entry [i [k v]]
   (if (= 0 i)
-    (str (pr-str k) "\t" (pr-str v))
-    (str " " (pr-str k) "\t" (pr-str v))))
+    (str (pr-str k) "\t" (simple-print v))
+    (str " " (pr-str k) "\t" (simple-print v))))
 
 (defmethod better-printer ::map [edn]
   (str "{" (s/join "\n" (map-indexed print-entry edn)) "}"))
 
 (defmethod better-printer ::string [edn-str]
-  edn-str)
+  (pr-str edn-str))
 
 (defmethod better-printer ::vec [edn]
   (with-out-str (pp/pprint edn)))

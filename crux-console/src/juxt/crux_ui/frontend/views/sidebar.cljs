@@ -16,9 +16,8 @@
   [:style
    (garden/css
      [:.sidebar
-      {:width :280px
+      {:width :100%
        :height :100%
-       :position :absolute
        :background :white
        :border-radius :2px
        :padding "0px 0px"}

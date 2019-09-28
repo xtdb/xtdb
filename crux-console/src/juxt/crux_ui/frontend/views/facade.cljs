@@ -26,6 +26,9 @@
         {:color color-link}
         [:&:visited {:color color-link}]
         [:&:hover {:color color-link--hover}]]
+       [:h1 :h2 :h3 :h4
+        {:font-weight 300
+         :letter-spacing :0.19em}]
        [:.g-nolink
         :.g-nolink:active
         :.g-nolink:visited
