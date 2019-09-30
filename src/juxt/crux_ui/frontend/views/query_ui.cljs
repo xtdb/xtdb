@@ -8,8 +8,6 @@
             [juxt.crux-ui.frontend.views.functions :as vu]))
 
 
-(def -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
-
 (def ^:private query-ui-styles
   [:style
    (garden/css
@@ -46,10 +44,10 @@
         {:padding "0px 0"
          :overflow :hidden
          :grid-area :form}]
+
       [:&--form-minimised
        {:grid-template
-        "'output' calc(100% - 50px)
-        'form' 50px"}]
+        "'form output' 100% / minmax(0px, 0%) 100%"}]
 
       [:&__output
         {:padding "0px 0"
@@ -64,8 +62,14 @@
   {:ui.display-mode/query "query"
    :ui.display-mode/output "output"})
 
+(def -sub-display-mode (rf/subscribe [:subs.ui/display-mode]))
+(def -sub-show-form (rf/subscribe [:subs.db.ui/show-form?]))
+
 (defn query-ui []
-  [:div (vu/bem "query-ui" (mode->class-mod @-sub-display-mode))
+  [:div
+   (vu/bem :query-ui
+           (if-not @-sub-show-form :form-minimised)
+           (mode->class-mod @-sub-display-mode))
    query-ui-styles
    [:div.query-ui__form
     [q-form/root]]

@@ -9,7 +9,18 @@
    (garden/css
      [:.overview
       {:padding "16px 32px"
-       :width :100%}])])
+       :width :100%}
+      [:label
+       {:display :inline-block
+        :width :200px}]
+      [:.g-mt-2
+       {:margin-top :16px}]
+      [:kbd
+       {:padding "4px 6px"
+        :background :white
+        :border-radius :2px
+        :box-shadow "0 0px 0px 1px hsl(0, 0%, 75%)"}]])])
+
 
 (defn root []
   [:div.overview
@@ -17,6 +28,6 @@
    [:h1.overview__title "Console Overview"]
    [:section
     [:h2.overview__header "Shortcuts"]
-    [:h3.overview__header "Query submit"]
-    [:h3.overview__header "Toggle editor"]
-    [:h3.overview__header "Fullscreen"]]])
+    [:div.g-mt-2 [:label "Query submit"] [:kbd "ctrl + enter"]]
+    [:div.g-mt-2 [:label "Toggle editor"] [:kbd "ctrl + e"]]
+    [:div.g-mt-2 [:label "Toggle fullscreen"] [:kbd "ctrl + cmd + f"]]]])
