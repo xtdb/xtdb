@@ -35,7 +35,7 @@
 (s/def ::sync? boolean?)
 (s/def :crux.index/check-and-store-index-version boolean?)
 
-(s/def ::options (s/keys :req-un [::db-dir ::kv-backend]
+(s/def ::options (s/keys :req [::kv-backend ::db-dir]
                          :opt-un [::sync?]
                          :opt [:crux.index/check-and-store-index-version]))
 

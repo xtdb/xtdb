@@ -31,20 +31,19 @@
 
 (s/def ::event-log-dir string?)
 (s/def ::event-log-kv-backend :crux.kv/kv-backend)
-(s/def ::event-log-kv-opts (s/keys :req-un [:crux.kv/db-dir
-                                            ::event-log-dir]
-                                   :opt-un [:crux.kv/kv-backend
-                                            :crux.kv/sync?]
-                                   :opt [::event-log-sync-interval-ms
-                                         ::event-log-kv-backend]))
+(s/def ::event-log-kv-opts (s/keys :req [::event-log-dir ::event-log-kv-backend]
+                                   :req-un [:crux.kv/db-dir]
+                                   :opt-un [:crux.kv/sync?]
+                                   :opt [::event-log-sync-interval-ms]))
 
 (defn- start-event-log-kv [_ {:keys [crux.standalone/event-log-kv-backend
                                      crux.standalone/event-log-sync-interval-ms
-                                     event-log-dir kv-backend sync?]}]
+                                     crux.standalone/event-log-dir
+                                     sync?]}]
   (let [event-log-sync? (boolean (or sync? (not event-log-sync-interval-ms)))]
     (b/start-kv-store
-     {:db-dir event-log-dir
-      :kv-backend (or event-log-kv-backend kv-backend)
+     {:crux.kv/db-dir event-log-dir
+      :crux.kv/kv-backend event-log-kv-backend
       :sync? event-log-sync?
       :crux.index/check-and-store-index-version false})))
 
@@ -57,7 +56,15 @@
 (defn- start-moberg-event-log [{:keys [event-log-kv]} _]
   (moberg/->MobergTxLog event-log-kv))
 
-(def event-log-kv [start-event-log-kv [] ::event-log-kv-opts])
+(def event-log-kv [start-event-log-kv
+                   []
+                   ::event-log-kv-opts
+                   {::event-log-kv-backend
+                    {:doc "Key/Value store to use for standalone event-log persistence. If not present, will use `crux.kv/kv-backend."
+                     :default "crux.kv.rocksdb.RocksKv"}
+                    ::event-log-dir
+                    {:doc "Directory used to store the event-log and used for backup/restore."}}])
+
 (def event-log-sync [start-event-log-fsync [:event-log-kv] ::event-log-fsync-opts])
 (def event-log-consumer [start-event-log-consumer [:event-log-kv :indexer]])
 (def tx-log [start-moberg-event-log [:event-log-kv]])

@@ -1,7 +1,7 @@
 (ns crux.fixtures.kafka
   (:require [clojure.java.io :as io]
             [crux.fixtures.api :as apif]
-            [crux.fixtures.kv :refer [*kv-backend*]]
+            [crux.fixtures.kv-only :refer [*kv-backend*]]
             [crux.io :as cio]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek])

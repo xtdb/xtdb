@@ -33,7 +33,6 @@
                       :doc-partitions 1
                       :replication-factor 1
                       :db-dir "data"
-                      :kv-backend "crux.kv.rocksdb.RocksKv"
                       :server-port 3000
                       :await-tx-timeout 10000})
 
@@ -142,7 +141,7 @@
   (^java.io.Closeable [_ options]
    (start-kv-store options))
   (^java.io.Closeable [{:keys [db-dir
-                               kv-backend
+                               crux.kv/kv-backend
                                sync?
                                crux.index/check-and-store-index-version]
                         :as options
@@ -209,8 +208,10 @@
                           (for [k start-order]
                             (let [[start-fn deps spec meta-args] (node-system k)
                                   deps (select-keys @started deps)
-                                  default-options (into {} (map (juxt key (comp :default val)) meta-args))
+                                  default-options (into {} (map (juxt key (comp :default val))
+                                                                (filter #(find (val %) :default) meta-args)))
                                   options (merge default-options options)]
+                              (println k options default-options)
                               (when spec
                                 (s/assert spec options))
                               [k (doto (start-fn deps options) (->> (swap! started assoc k)))]))
@@ -241,7 +242,12 @@
                    {:crux.lru/doc-cache-size {:doc "Cache size to use for document store"
                                               :default lru/default-doc-cache-size}}])
 (def kv-indexer [start-kv-indexer [:kv-store :tx-log :object-store]])
-(def kv-store [start-kv-store [] :crux.kv/options])
+(def kv-store [start-kv-store
+               []
+               :crux.kv/options
+               {:crux.kv/kv-backend
+                {:doc "Key/Value store to use for node persistence."
+                 :default "crux.kv.rocksdb.RocksKv"}}])
 
 (def base-node-config {:kv-store kv-store
                        :raw-object-store raw-object-store

@@ -152,6 +152,7 @@
       record-class)))
 
 (defn new-record ^clojure.lang.IRecord [^Class record-class]
+  (assert record-class)
   (.invoke (.getMethod record-class "create"
                        (into-array [IPersistentMap]))
            nil (object-array [{}])))
