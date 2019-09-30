@@ -15,7 +15,8 @@
   [:div.overview
    root-styles
    [:h1.overview__title "Console Overview"]
-   [:h2.overview__header "Shortcuts"]
-   [:h2.overview__header "Query submit"]
-   [:h2.overview__header "Toggle editor"]
-   [:h2.overview__header "Fullscreen"]])
+   [:section
+    [:h2.overview__header "Shortcuts"]
+    [:h3.overview__header "Query submit"]
+    [:h3.overview__header "Toggle editor"]
+    [:h3.overview__header "Fullscreen"]]])
