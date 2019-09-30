@@ -26,6 +26,12 @@
       [:.g-sticky
        {:position :sticky
         :top :0px}]
+      [:.line
+       {}
+       [:&__label
+        {:margin-bottom :4px}]
+       [:&__control
+        {:max-width :300px}]]
       [:.settings
        {:padding "0px 32px 32px"}
        [:&__title
@@ -42,53 +48,73 @@
           :font-size :20px
           :margin-bottom :8px}]]])])
 
-#_(defn- on-prop-change [prop-name {v :value :as change-complete-evt}]
-    (rf/dispatch [:evt.db/prop-change {:evt/prop-name prop-name
-                                       :evt/value v}]))
+(defn- on-prop-change [prop-name {v :value :as change-complete-evt}]
+  (rf/dispatch
+    [:evt.db/prop-change
+     {:evt/prop-name prop-name
+      :evt/value v}]))
 
 (defn- on-host-change [{v :value :as change-complete-evt}]
   (rf/dispatch [:evt.db/host-change v]))
 
+(defn- on-commit [arg]
+  (println "changes commit" (pr-str arg))
+  (rf/dispatch [:evt.db/props-change arg]))
+
+(defn close []
+  (rf/dispatch [:evt.ui.second-layer/toggle]))
+
 (defn root []
   (let [-sub-settings (rf/subscribe [:subs.sys/settings])
+        -sub-host-status (rf/subscribe [:subs.sys.host/status])
         -local-atom (r/atom @-sub-settings)
+        commit-changes #(on-commit (dissoc @-local-atom :db.sys.host/status))
+
         on-prop-change
         (fn on-prop-change [prop-name {v :value :as change-complete-evt}]
-          (swap! -local-atom prop-name v))]
+          (swap! -local-atom assoc prop-name v))
+
+        on-host-change-internal
+        (fn [{v :value :as evt}]
+          (on-host-change evt)
+          (on-prop-change :db.sys/host evt))]
+
     (fn []
-      (let [{:keys [db.sys.host/status ] :as s} @-local-atom]
-        [:div.settings
-         root-styles
-         [:h1.settings__title.g-sticky "Settings"]
-         [:div.settings__line
-          [fl/line
-           {:label "Query results limit"
-            :control
-            [input/text :ui.settings/qlimit
-             {:on-change-complete (r/partial on-prop-change :db.query/limit)
-              :value (:db.query/limit @-local-atom)}]}]]
+      [:div.settings
+       root-styles
+       [:h1.settings__title.g-sticky "Settings"]
+       [:div.settings__line
+        [fl/line
+         {:label "Query results limit"
+          :control
+          [input/text :ui.settings/qlimit
+           {:on-change-complete (r/partial on-prop-change :db.query/limit)
+            :value (:db.query/limit @-local-atom)}]}]]
 
-         [:div.settings__line
-          [fl/line
-           {:label "Crux HTTP-Server Host and port"
-            :control
-            [input/text :ui.settings/host
-             {:on-change-complete on-host-change
-              :value (:db.sys/host @-local-atom)}]}]
-          [:pre.settings__status
-           (let [s (:db.sys.host/status @-local-atom)]
-             (if status
-               [:<>
-                [:h3 "connection successful"]
-                [output-edn/simple-print status]]
-               [:h3 "connection failed"]))]]
+       [:div.settings__line
+        [fl/line
+         {:label "Crux HTTP-Server Host and port"
+          :control
+          [input/text :ui.settings/host
+           {:on-change-complete on-host-change-internal
+            :value              (:db.sys/host @-local-atom)}]}]
+        ^{:key @-sub-host-status}
+        [:pre.settings__status
+         (let [s @-sub-host-status]
+           (if s
+             [:<>
+              [:h3 "connection successful"]
+              [output-edn/simple-print s]]
+             [:h3 "connection failed"]))]]
 
-         [:div.settings__line.settings__line--submit
-          [comps/button-cta
-           {:text "Save and quit"}]
-          [:div.g-spacer-w-40]
-          [comps/button-textual
-           {:text "Cancel"}]]]))))
+       [:div.settings__line.settings__line--submit
+        [comps/button-cta
+         {:text     "Apply"
+          :on-click commit-changes}]
+        [:div.g-spacer-w-40]
+        [comps/button-textual
+         {:text "Cancel"
+          :on-click close}]]])))
 
 
 

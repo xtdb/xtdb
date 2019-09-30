@@ -19,7 +19,8 @@
        :grid-gap :16px
        :grid-template "'side main' 1fr / 264px 1fr"}
       [:&__side
-       {:grid-area :side}]
+       {:grid-area :side
+        :overflow :scroll}]
       [:&__main
        {:grid-area :main
         :background :white

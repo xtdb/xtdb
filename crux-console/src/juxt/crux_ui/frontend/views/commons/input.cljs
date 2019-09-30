@@ -16,7 +16,7 @@
   (list
     {:border         :none}
     {:border-bottom  s/q-ui-border}
-    {:padding        :4px
+    {:padding        "6px 0px"
      :border-radius  :2px
      :width          :100%
      :letter-spacing :.09em

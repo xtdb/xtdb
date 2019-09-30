@@ -119,5 +119,5 @@
         (let [qa @-sub-query-analysis]
           [comps/button-cta
            {:on-click on-submit
-            :css-mods [(if qa "cta" "inactive")]
-            :label "Run Query"}])]])))
+            :css-mods [(if-not qa "inactive")]
+            :text "Run Query"}])]])))
