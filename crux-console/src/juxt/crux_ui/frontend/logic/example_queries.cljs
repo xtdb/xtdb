@@ -196,9 +196,10 @@
 
    :examples/query-w-full-res
    (fn []
-     '{:find [e]
-       :where [[e :crux.db/id _]]
-       :full-results? true})
+     (str/join "\n"
+       ["{:find [e]"
+        " :where [[e :crux.db/id _]]"
+        " :full-results? true}"]))
 
    :examples/query-w-full-res-refresh
    (fn []
@@ -206,7 +207,8 @@
                ["{:find  [e]"
                 " :where [[e :crux.db/id _]]"
                 " :ui/poll-interval-seconds? 30"
-                " ;; Refreshes the UI every 30 seconds to display the most recent data"
+                " ;; Refreshes the UI every 30 seconds"
+                " ;; to display the most recent data"
                 " :full-results? true}"]))
 
    :examples/vector-style

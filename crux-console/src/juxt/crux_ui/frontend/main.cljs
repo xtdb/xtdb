@@ -38,7 +38,7 @@
 ; (lookup-gist)
 
 (defn init []
-  (js/window.addEventListener "keydown" listen-keyboard-shortcuts)
+  (js/window.addEventListener "keydown" listen-keyboard-shortcuts true)
   (js/window.addEventListener "resize" dispatch-screen-measurements)
   (rf/dispatch-sync [:evt.db/init d/default-db])
   (routes/init)

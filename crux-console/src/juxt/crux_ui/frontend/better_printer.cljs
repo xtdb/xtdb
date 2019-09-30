@@ -16,8 +16,8 @@
 
 (defn- print-entry [i [k v]]
   (if (= 0 i)
-    (str (pr-str k) "\t" (simple-print v))
-    (str " " (pr-str k) "\t" (simple-print v))))
+    (str (pr-str k) "\t" (pr-str v))
+    (str " " (pr-str k) "\t" (pr-str v))))
 
 (defmethod better-printer ::map [edn]
   (str "{" (s/join "\n" (map-indexed print-entry edn)) "}"))

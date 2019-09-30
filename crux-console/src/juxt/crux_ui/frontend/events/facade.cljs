@@ -17,10 +17,13 @@
 (def ^:const ui--history-max-entities 7)
 (def ^:const history-tabs-set #{:db.ui.output-tab/attr-history :db.ui.output-tab/tx-history})
 
-(defn calc-query [db ex-title]
+(defn ^js/String calc-query [db ex-title]
   (if-let [imported (:db.ui.examples/imported db)]
-    (:query (m/find-first #(= (:title %) ex-title) imported))
-    (ex/generate ex-title)))
+    (bp/simple-print (:query (m/find-first #(= (:title %) ex-title) imported)))
+    (let [generated (ex/generate ex-title)]
+      (if (string? generated)
+        generated
+        (bp/simple-print generated)))))
 
 (defn- node-disconnected? [db]
   (not (:db.sys.host/status db)))
@@ -391,9 +394,7 @@
 (rf/reg-event-db
   :evt.ui.editor/set-example
   (fn [db [_ ex-title]]
-    (let [query (calc-query db ex-title)
-          str   (bp/better-printer query)]
-      (o-set-example db str))))
+    (o-set-example db (calc-query db ex-title))))
 
 (rf/reg-event-db
   :evt.ui.attr-history/disable-hint
